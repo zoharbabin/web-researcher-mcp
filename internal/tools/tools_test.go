@@ -277,6 +277,104 @@ func TestPatentSearchWithFilters(t *testing.T) {
 	}
 }
 
+func TestPatentSearchFilterRejectsNonMatching(t *testing.T) {
+	srv := server.NewMCPServer("test-server", "1.0.0")
+	deps := setupTestDeps()
+	deps.Search = &mockProviderWithURL{url: "https://patents.google.com/patent/EP1234567B1/en"}
+	RegisterAll(srv, deps)
+
+	result := callTool(t, srv, "patent_search", map[string]any{
+		"query":         "machine learning",
+		"patent_office": "US",
+	})
+
+	var output map[string]any
+	if err := json.Unmarshal([]byte(result), &output); err != nil {
+		t.Fatalf("failed to parse output: %v", err)
+	}
+	if output["resultCount"].(float64) != 0 {
+		t.Fatalf("expected 0 results (EP patent filtered by US office), got %v", output["resultCount"])
+	}
+}
+
+func TestPatentSearchFilterAllowsAll(t *testing.T) {
+	srv := server.NewMCPServer("test-server", "1.0.0")
+	deps := setupTestDeps()
+	deps.Search = &mockProviderWithURL{url: "https://patents.google.com/patent/EP1234567B1/en"}
+	RegisterAll(srv, deps)
+
+	result := callTool(t, srv, "patent_search", map[string]any{
+		"query":         "machine learning",
+		"patent_office": "all",
+	})
+
+	var output map[string]any
+	if err := json.Unmarshal([]byte(result), &output); err != nil {
+		t.Fatalf("failed to parse output: %v", err)
+	}
+	if output["resultCount"].(float64) != 1 {
+		t.Fatalf("expected 1 result with 'all' office, got %v", output["resultCount"])
+	}
+}
+
+func TestPatentSearchFilterNoOffice(t *testing.T) {
+	srv := server.NewMCPServer("test-server", "1.0.0")
+	deps := setupTestDeps()
+	deps.Search = &mockProviderWithURL{url: "https://patents.google.com/patent/WO2021123456A1/en"}
+	RegisterAll(srv, deps)
+
+	result := callTool(t, srv, "patent_search", map[string]any{
+		"query": "machine learning",
+	})
+
+	var output map[string]any
+	if err := json.Unmarshal([]byte(result), &output); err != nil {
+		t.Fatalf("failed to parse output: %v", err)
+	}
+	if output["resultCount"].(float64) != 1 {
+		t.Fatalf("expected 1 result with no office filter, got %v", output["resultCount"])
+	}
+}
+
+func TestPatentSearchFilterMultipleOffices(t *testing.T) {
+	offices := []struct {
+		office string
+		url    string
+		expect float64
+	}{
+		{"US", "https://patents.google.com/patent/US10123456B2/en", 1},
+		{"EP", "https://patents.google.com/patent/EP3456789A1/en", 1},
+		{"WO", "https://patents.google.com/patent/WO2022000001A1/en", 1},
+		{"JP", "https://patents.google.com/patent/JP6789012B2/en", 1},
+		{"CN", "https://patents.google.com/patent/CN112345678A/en", 1},
+		{"KR", "https://patents.google.com/patent/KR20200012345A/en", 1},
+		{"US", "https://patents.google.com/patent/CN112345678A/en", 0},
+		{"EP", "https://patents.google.com/patent/US10123456B2/en", 0},
+	}
+
+	for _, tt := range offices {
+		t.Run(tt.office+"_"+tt.url, func(t *testing.T) {
+			srv := server.NewMCPServer("test-server", "1.0.0")
+			deps := setupTestDeps()
+			deps.Search = &mockProviderWithURL{url: tt.url}
+			RegisterAll(srv, deps)
+
+			result := callTool(t, srv, "patent_search", map[string]any{
+				"query":         "test",
+				"patent_office": tt.office,
+			})
+
+			var output map[string]any
+			if err := json.Unmarshal([]byte(result), &output); err != nil {
+				t.Fatalf("failed to parse output: %v", err)
+			}
+			if output["resultCount"].(float64) != tt.expect {
+				t.Fatalf("office=%s url=%s: expected %v results, got %v", tt.office, tt.url, tt.expect, output["resultCount"])
+			}
+		})
+	}
+}
+
 func TestScrapePageTool(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")

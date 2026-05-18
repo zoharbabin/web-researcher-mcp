@@ -900,3 +900,549 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+// =============================================================================
+// Stealth Scraper (Tier 2) Tests
+// =============================================================================
+
+func TestScrapeStealth_ExtractsArticleContent(t *testing.T) {
+	html := `<!DOCTYPE html>
+<html>
+<head><title>Stealth Test Page</title></head>
+<body>
+<nav>Nav to remove</nav>
+<article>
+<h1>Stealth Article</h1>
+<p>This is substantial article content extracted via the stealth HTTP client. It must be long enough to exceed the 200 character threshold for article selectors and the 100 character threshold for the pipeline to accept it as valid content from the stealth tier.</p>
+<p>Additional paragraph providing more depth to the article content for proper extraction testing.</p>
+</article>
+<footer>Footer noise</footer>
+<script>alert('removed')</script>
+</body>
+</html>`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(html))
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	result, err := p.scrapeStealth(context.Background(), ts.URL, 50000)
+	if err != nil {
+		t.Fatalf("scrapeStealth error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result.Title != "Stealth Test Page" {
+		t.Errorf("expected title 'Stealth Test Page', got %q", result.Title)
+	}
+	if !strings.Contains(result.Content, "Stealth Article") {
+		t.Error("expected content to contain 'Stealth Article'")
+	}
+	if strings.Contains(result.Content, "Nav to remove") {
+		t.Error("expected nav to be removed")
+	}
+	if strings.Contains(result.Content, "Footer noise") {
+		t.Error("expected footer to be removed")
+	}
+}
+
+func TestScrapeStealth_ReturnsNilForThinContent(t *testing.T) {
+	html := `<!DOCTYPE html><html><head><title>Thin</title></head><body><p>Short.</p></body></html>`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(html))
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	result, err := p.scrapeStealth(context.Background(), ts.URL, 50000)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != nil {
+		t.Error("expected nil result for thin content")
+	}
+}
+
+func TestScrapeStealth_Truncation(t *testing.T) {
+	html := `<!DOCTYPE html><html><head><title>Truncate</title></head><body>
+<article><p>` + strings.Repeat("A", 5000) + `</p></article>
+</body></html>`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(html))
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	result, err := p.scrapeStealth(context.Background(), ts.URL, 500)
+	if err != nil {
+		t.Fatalf("scrapeStealth error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if !result.Truncated {
+		t.Error("expected Truncated=true")
+	}
+	if len(result.Content) > 500 {
+		t.Errorf("content length %d exceeds maxLength 500", len(result.Content))
+	}
+}
+
+func TestScrapeStealth_HTTP4xxError(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	_, err := p.scrapeStealth(context.Background(), ts.URL, 50000)
+	if err == nil {
+		t.Fatal("expected error for 403 response")
+	}
+	httpErr, ok := err.(*httpError)
+	if !ok {
+		t.Fatalf("expected *httpError, got %T", err)
+	}
+	if httpErr.statusCode != 403 {
+		t.Errorf("expected status 403, got %d", httpErr.statusCode)
+	}
+}
+
+func TestScrapeStealth_BrowserHeaders(t *testing.T) {
+	var receivedHeaders http.Header
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedHeaders = r.Header
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<!DOCTYPE html><html><body><article>` + strings.Repeat("Content. ", 50) + `</article></body></html>`))
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	_, _ = p.scrapeStealth(context.Background(), ts.URL, 50000)
+
+	if receivedHeaders == nil {
+		t.Fatal("no headers received")
+	}
+	ua := receivedHeaders.Get("User-Agent")
+	if !strings.Contains(ua, "Chrome") {
+		t.Errorf("expected Chrome user-agent, got %q", ua)
+	}
+	if receivedHeaders.Get("Sec-Fetch-Dest") != "document" {
+		t.Errorf("expected Sec-Fetch-Dest=document, got %q", receivedHeaders.Get("Sec-Fetch-Dest"))
+	}
+	if receivedHeaders.Get("Sec-Ch-Ua-Platform") == "" {
+		t.Error("expected Sec-Ch-Ua-Platform header to be set")
+	}
+}
+
+func TestScrapeStealth_FallsBackToBody(t *testing.T) {
+	html := `<!DOCTYPE html><html><head><title>No Article</title></head>
+<body>
+<div>` + strings.Repeat("Body content paragraph. ", 30) + `</div>
+</body></html>`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(html))
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	result, err := p.scrapeStealth(context.Background(), ts.URL, 50000)
+	if err != nil {
+		t.Fatalf("scrapeStealth error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result when body has enough content")
+	}
+	if !strings.Contains(result.Content, "Body content paragraph") {
+		t.Error("expected body content to be extracted")
+	}
+}
+
+func TestNewStealthClient_SSRFProtection(t *testing.T) {
+	client := newStealthClient(false)
+	if client == nil {
+		t.Fatal("expected non-nil client")
+	}
+	if client.Timeout != 20*time.Second {
+		t.Errorf("expected 20s timeout, got %v", client.Timeout)
+	}
+}
+
+func TestNewStealthClient_AllowsPrivateIPs(t *testing.T) {
+	client := newStealthClient(true)
+	if client == nil {
+		t.Fatal("expected non-nil client")
+	}
+}
+
+func TestExtractArticleContent_Selectors(t *testing.T) {
+	tests := []struct {
+		name     string
+		html     string
+		contains string
+	}{
+		{
+			name:     "article tag",
+			html:     `<html><body><article>` + strings.Repeat("Article selector content. ", 20) + `</article></body></html>`,
+			contains: "Article selector content",
+		},
+		{
+			name:     "role=main",
+			html:     `<html><body><div role="main">` + strings.Repeat("Main role content. ", 20) + `</div></body></html>`,
+			contains: "Main role content",
+		},
+		{
+			name:     "main tag",
+			html:     `<html><body><main>` + strings.Repeat("Main tag content. ", 20) + `</main></body></html>`,
+			contains: "Main tag content",
+		},
+		{
+			name:     ".entry-content",
+			html:     `<html><body><div class="entry-content">` + strings.Repeat("Entry content class. ", 20) + `</div></body></html>`,
+			contains: "Entry content class",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/html")
+				w.Write([]byte(tt.html))
+			}))
+			defer ts.Close()
+
+			p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+			result, err := p.scrapeStealth(context.Background(), ts.URL, 50000)
+			if err != nil {
+				t.Fatalf("error: %v", err)
+			}
+			if result == nil {
+				t.Fatal("expected non-nil result")
+			}
+			if !strings.Contains(result.Content, tt.contains) {
+				t.Errorf("expected content to contain %q", tt.contains)
+			}
+		})
+	}
+}
+
+// =============================================================================
+// YouTube Transcript Fallback Tests
+// =============================================================================
+
+func TestExtractDescription_Valid(t *testing.T) {
+	html := `<script>var data = {"shortDescription":"This is a long video description with enough content to pass the minimum threshold and be returned as a valid fallback."};</script>`
+	desc := extractDescription(html)
+	if desc == "" {
+		t.Fatal("expected non-empty description")
+	}
+	if !strings.Contains(desc, "long video description") {
+		t.Errorf("unexpected description: %q", desc)
+	}
+}
+
+func TestExtractDescription_EscapedCharacters(t *testing.T) {
+	// In the actual YouTube page, JSON has escape sequences like \n, \/, \"
+	// In Go backtick strings, a single backslash is literal, so \\n in backtick = two chars: \ and n
+	// The regex captures the inner content, then extractDescription replaces \\n -> \n etc.
+	// We need to simulate what the regex actually captures from real YouTube JSON.
+	html := `<script>var data = {"shortDescription":"Line one\nLine two\nURL: https:\/\/example.com\nQuote: \"hello\""};</script>`
+	desc := extractDescription(html)
+	if !strings.Contains(desc, "Line one\nLine two") {
+		t.Errorf("expected newlines to be unescaped, got %q", desc)
+	}
+	if !strings.Contains(desc, "https://example.com") {
+		t.Errorf("expected slashes to be unescaped, got %q", desc)
+	}
+	if !strings.Contains(desc, `"hello"`) {
+		t.Errorf("expected quotes to be unescaped, got %q", desc)
+	}
+}
+
+func TestExtractDescription_TooShort(t *testing.T) {
+	html := `<script>var data = {"shortDescription":"short"};</script>`
+	desc := extractDescription(html)
+	if desc != "" {
+		t.Errorf("expected empty for short description, got %q", desc)
+	}
+}
+
+func TestExtractDescription_NotFound(t *testing.T) {
+	html := `<script>var data = {"title":"No description here"};</script>`
+	desc := extractDescription(html)
+	if desc != "" {
+		t.Errorf("expected empty when no shortDescription, got %q", desc)
+	}
+}
+
+func TestFetchTimedTextAPI_Success(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "timedtext") || strings.Contains(r.URL.RawQuery, "timedtext") {
+			w.Header().Set("Content-Type", "text/xml")
+			w.Write([]byte(`<transcript>` +
+				`<text start="0" dur="2">First segment of the video transcript.</text>` +
+				`<text start="2" dur="3">Second segment with more content here.</text>` +
+				`<text start="5" dur="2">Third segment to exceed the character threshold required.</text>` +
+				`<text start="7" dur="4">Fourth segment adding even more text to ensure we have enough.</text>` +
+				`</transcript>`))
+			return
+		}
+		w.WriteHeader(404)
+	}))
+	defer ts.Close()
+
+	client := ts.Client()
+	// Override the URL by using a custom transport that rewrites the host
+	origTransport := client.Transport
+	client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		req.URL.Scheme = "http"
+		req.URL.Host = ts.Listener.Addr().String()
+		if origTransport != nil {
+			return origTransport.RoundTrip(req)
+		}
+		return http.DefaultTransport.RoundTrip(req)
+	})
+
+	result, err := fetchTimedTextAPI(context.Background(), client, "testVideo123")
+	if err != nil {
+		t.Fatalf("fetchTimedTextAPI error: %v", err)
+	}
+	if len(result) < 100 {
+		t.Fatalf("expected transcript >100 chars, got %d", len(result))
+	}
+	if !strings.Contains(result, "First segment") {
+		t.Error("expected transcript to contain 'First segment'")
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func TestFetchTimedTextAPI_NoTranscript(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(404)
+	}))
+	defer ts.Close()
+
+	client := ts.Client()
+	client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		req.URL.Scheme = "http"
+		req.URL.Host = ts.Listener.Addr().String()
+		return http.DefaultTransport.RoundTrip(req)
+	})
+
+	_, err := fetchTimedTextAPI(context.Background(), client, "noTranscript1")
+	if err == nil {
+		t.Fatal("expected error when no transcript available")
+	}
+}
+
+func TestExtractTranscript_AlternateRegex(t *testing.T) {
+	captionXML := `<transcript><text start="0" dur="2">Alternate regex caption text that needs to be long enough.</text>` +
+		`<text start="2" dur="3">More caption content to meet threshold requirements for valid extraction.</text>` +
+		`<text start="5" dur="4">Even more text to ensure we exceed the minimum character limit.</text></transcript>`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/xml")
+		w.Write([]byte(captionXML))
+	}))
+	defer ts.Close()
+
+	playerResp := `{"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"baseUrl":"` + ts.URL + `","languageCode":"en"}]}}}`
+	pageHTML := `<script>var ytInitialPlayerResponse = ` + playerResp + `;</script>`
+
+	result, err := extractTranscript(context.Background(), ts.Client(), pageHTML)
+	if err != nil {
+		t.Fatalf("extractTranscript error: %v", err)
+	}
+	if !strings.Contains(result, "Alternate regex caption") {
+		t.Errorf("expected caption text, got %q", result)
+	}
+}
+
+func TestExtractTranscript_PrimaryRegex(t *testing.T) {
+	captionXML := `<transcript><text start="0" dur="2">Primary regex caption text for testing.</text>` +
+		`<text start="2" dur="3">Additional content to meet the minimum character threshold.</text>` +
+		`<text start="5" dur="2">Third segment making sure we have enough characters total.</text></transcript>`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/xml")
+		w.Write([]byte(captionXML))
+	}))
+	defer ts.Close()
+
+	playerResp := `{"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"baseUrl":"` + ts.URL + `","languageCode":"en"}]}}}`
+	pageHTML := `<script>ytInitialPlayerResponse = ` + playerResp + `;</script>`
+
+	result, err := extractTranscript(context.Background(), ts.Client(), pageHTML)
+	if err != nil {
+		t.Fatalf("extractTranscript error: %v", err)
+	}
+	if !strings.Contains(result, "Primary regex caption") {
+		t.Errorf("expected caption text, got %q", result)
+	}
+}
+
+func TestExtractTranscript_NoCaptions(t *testing.T) {
+	pageHTML := `<script>ytInitialPlayerResponse = {"playabilityStatus":{"status":"OK"}};</script>`
+	_, err := extractTranscript(context.Background(), http.DefaultClient, pageHTML)
+	if err == nil {
+		t.Fatal("expected error when no captions found")
+	}
+}
+
+func TestExtractTranscript_NoPlayerResponse_ErrorMessage(t *testing.T) {
+	pageHTML := `<html><body>No player response here</body></html>`
+	_, err := extractTranscript(context.Background(), http.DefaultClient, pageHTML)
+	if err == nil {
+		t.Fatal("expected error when no player response")
+	}
+	if !strings.Contains(err.Error(), "player response not found") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestYouTubeScrape_DescriptionFallback(t *testing.T) {
+	pageHTML := `<!DOCTYPE html><html><head><title>Description Only Video - YouTube</title></head>
+<body>
+<script>
+ytInitialPlayerResponse = {"playabilityStatus":{"status":"OK"},"videoDetails":{"shortDescription":"This is a detailed video description that serves as fallback content when no transcript is available. It provides enough information about the video for the user to understand what it covers."}};
+</script>
+</body></html>`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "watch") || r.URL.Query().Get("v") != "" {
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte(pageHTML))
+			return
+		}
+		w.WriteHeader(404)
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	p.client = ts.Client()
+	// Override transport to route youtube.com requests to test server
+	p.client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		req.URL.Scheme = "http"
+		req.URL.Host = ts.Listener.Addr().String()
+		return http.DefaultTransport.RoundTrip(req)
+	})
+
+	result, err := p.scrapeYouTube(context.Background(), "https://www.youtube.com/watch?v=abc123def45", 50000)
+	if err != nil {
+		t.Fatalf("scrapeYouTube error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result from description fallback")
+	}
+	if !strings.Contains(result.Content, "detailed video description") {
+		t.Errorf("expected description content, got %q", result.Content)
+	}
+	if result.ContentType != "youtube" {
+		t.Errorf("expected content type 'youtube', got %q", result.ContentType)
+	}
+}
+
+func TestYouTubeScrape_TranscriptStrategy1(t *testing.T) {
+	captionXML := `<transcript>` +
+		`<text start="0" dur="3">Welcome to this video about testing strategies in Go.</text>` +
+		`<text start="3" dur="4">We will cover unit tests, integration tests, and more.</text>` +
+		`<text start="7" dur="3">Let us begin with the basics of test coverage.</text>` +
+		`</transcript>`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "watch") || r.URL.Query().Get("v") != "" {
+			captionURL := "http://" + r.Host + "/captions"
+			playerResp := `{"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"baseUrl":"` + captionURL + `","languageCode":"en"}]}}}`
+			html := `<!DOCTYPE html><html><head><title>Go Testing - YouTube</title></head><body>
+<script>ytInitialPlayerResponse = ` + playerResp + `;</script>
+</body></html>`
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte(html))
+			return
+		}
+		if strings.Contains(r.URL.Path, "captions") {
+			w.Header().Set("Content-Type", "text/xml")
+			w.Write([]byte(captionXML))
+			return
+		}
+		w.WriteHeader(404)
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	p.client = ts.Client()
+	p.client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		req.URL.Scheme = "http"
+		req.URL.Host = ts.Listener.Addr().String()
+		return http.DefaultTransport.RoundTrip(req)
+	})
+
+	result, err := p.scrapeYouTube(context.Background(), "https://www.youtube.com/watch?v=abc123def45", 50000)
+	if err != nil {
+		t.Fatalf("scrapeYouTube error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if !strings.Contains(result.Content, "Welcome to this video") {
+		t.Errorf("expected transcript content, got %q", result.Content)
+	}
+	if result.Title != "Go Testing" {
+		t.Errorf("expected title 'Go Testing', got %q", result.Title)
+	}
+}
+
+func TestParseTranscriptXML_NewlineEntity(t *testing.T) {
+	xml := `<transcript><text start="10" dur="2">Line one&#10;Line two</text></transcript>`
+	result := parseTranscriptXML(xml)
+	if !strings.Contains(result, "Line one\nLine two") {
+		t.Errorf("expected &#10; to be decoded as newline, got %q", result)
+	}
+}
+
+// =============================================================================
+// Pipeline Tier Integration Tests
+// =============================================================================
+
+func TestPipeline_StealthTierIntercepts(t *testing.T) {
+	html := `<!DOCTYPE html><html><head><title>Stealth Intercept</title></head>
+<body><article><p>` + strings.Repeat("Stealth intercepted content. ", 20) + `</p></article></body></html>`
+
+	var requestCount atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		if r.Header.Get("Accept") == "text/markdown" {
+			w.WriteHeader(406)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(html))
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	result, err := p.Scrape(context.Background(), ts.URL, 50000)
+	if err != nil {
+		t.Fatalf("Scrape error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if !strings.Contains(result.Content, "Stealth intercepted content") {
+		t.Error("expected stealth tier to have provided the content")
+	}
+}
