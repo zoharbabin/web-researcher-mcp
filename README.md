@@ -20,7 +20,7 @@ AI assistants are only as good as the information they can access. **web-researc
 
 - **8 specialized research tools** in a single server
 - **4 pluggable search backends** (Google, Brave, Serper, SearXNG)
-- **Tiered content extraction** -- markdown negotiation, HTML parsing, headless browser, document parsing
+- **4-tier content extraction** -- markdown negotiation, stealth HTTP, HTML parsing, headless browser (go-rod + stealth)
 - **Search lenses** for domain-focused research (programming, news, legal, medical, and more)
 - **Single static binary** (~20MB) with zero runtime dependencies
 - **Enterprise-ready** with OAuth 2.1, multi-tenancy, rate limiting, and audit logging
@@ -34,12 +34,12 @@ Works with Claude Code, Claude Desktop, Cursor, and any MCP-compatible client.
 | Tool | Description |
 |------|-------------|
 | `web_search` | General web search with optional search lenses for domain-focused results |
-| `scrape_page` | Extract content from any URL -- web pages, PDFs, DOCX, PPTX, YouTube transcripts |
+| `scrape_page` | Extract content from any URL -- web pages, PDFs, DOCX, PPTX, YouTube transcripts (3-strategy fallback) |
 | `search_and_scrape` | Combined search + extraction pipeline with quality scoring and deduplication |
 | `image_search` | Search for images with size, type, color, and file format filters |
 | `news_search` | Search news sources with freshness controls and source filtering |
 | `academic_search` | Search academic papers via Scholar, arXiv, and PubMed |
-| `patent_search` | Search patent databases with CPC classification for prior art and IP research |
+| `patent_search` | Search patent databases with CPC classification, strict office filtering (US/EP/WO/JP/CN/KR) |
 | `sequential_search` | Multi-step research tracking with session state for iterative investigation |
 
 ---
@@ -60,15 +60,15 @@ Download the latest release for your platform from [Releases](https://github.com
 
 ```bash
 # macOS (Apple Silicon)
-curl -L https://github.com/zoharbabin/web-researcher-mcp/releases/latest/download/web-researcher-mcp-darwin-arm64 -o web-researcher-mcp
+curl -L https://github.com/zoharbabin/web-researcher-mcp/releases/latest/download/web-researcher-mcp_1.0.0_darwin_arm64.tar.gz | tar xz
 chmod +x web-researcher-mcp
 
 # macOS (Intel)
-curl -L https://github.com/zoharbabin/web-researcher-mcp/releases/latest/download/web-researcher-mcp-darwin-amd64 -o web-researcher-mcp
+curl -L https://github.com/zoharbabin/web-researcher-mcp/releases/latest/download/web-researcher-mcp_1.0.0_darwin_amd64.tar.gz | tar xz
 chmod +x web-researcher-mcp
 
 # Linux (x86_64)
-curl -L https://github.com/zoharbabin/web-researcher-mcp/releases/latest/download/web-researcher-mcp-linux-amd64 -o web-researcher-mcp
+curl -L https://github.com/zoharbabin/web-researcher-mcp/releases/latest/download/web-researcher-mcp_1.0.0_linux_amd64.tar.gz | tar xz
 chmod +x web-researcher-mcp
 ```
 
@@ -77,8 +77,10 @@ chmod +x web-researcher-mcp
 ```bash
 docker run -e GOOGLE_CUSTOM_SEARCH_API_KEY=YOUR_KEY \
            -e GOOGLE_CUSTOM_SEARCH_ID=YOUR_CX \
-           zoharbabin/web-researcher-mcp
+           docker.io/zoharbabin/web-researcher-mcp:latest
 ```
+
+Also available from GHCR: `ghcr.io/zoharbabin/web-researcher-mcp:latest`
 
 ### Option 3: Build from Source
 
@@ -180,7 +182,7 @@ web-researcher-mcp/
 │   ├── server/                 # MCP server lifecycle + signal handling
 │   ├── tools/                  # Tool handlers (one file per tool)
 │   ├── search/                 # Pluggable search providers + lens routing
-│   ├── scraper/                # Tiered scraping pipeline
+│   ├── scraper/                # 4-tier scraping pipeline (markdown → stealth → HTML → browser)
 │   ├── documents/              # PDF, DOCX, PPTX parsing
 │   ├── cache/                  # Hybrid cache (ristretto + disk + optional Redis)
 │   ├── auth/                   # OAuth 2.1 middleware + JWKS
@@ -227,9 +229,9 @@ web-researcher-mcp/
 │  └────┬────┘ └───┬────┘ └───────┘ └────────┘ └────────────┘   │
 │       │          │                                               │
 │  ┌────▼─────┐ ┌─▼──────────────────────────────────┐           │
-│  │ Brave    │ │  Scraper Tiers                      │           │
-│  │ Google   │ │  markdown > HTML > browser > docs   │           │
-│  │ Serper   │ │  + YouTube transcripts              │           │
+│  │ Brave    │ │  Scraper Tiers (4-tier pipeline)     │           │
+│  │ Google   │ │  markdown > stealth > HTML > browser│           │
+│  │ Serper   │ │  + YouTube (3-strategy) + documents │           │
 │  │ SearXNG  │ └─────────────────────────────────────┘           │
 │  └──────────┘                                                    │
 └──────────────────────────────────────────────────────────────────┘
@@ -527,9 +529,11 @@ volumes:
 |-----------|-----------------|-------|
 | Search (cache hit) | < 1ms | Direct return from in-memory cache |
 | Search (API call) | 200-500ms | Circuit-breaker protected |
-| Scrape (markdown) | 100-300ms | Fastest tier via content negotiation |
-| Scrape (HTML) | 500-2000ms | goquery-based extraction |
-| Scrape (browser) | 2-10s | Headless Chrome, bounded to 3 concurrent |
+| Scrape (markdown) | 100-300ms | Tier 1: content negotiation |
+| Scrape (stealth HTTP) | 300-800ms | Tier 2: browser-like TLS + headers |
+| Scrape (HTML) | 500-2000ms | Tier 3: goquery-based extraction |
+| Scrape (browser) | 2-10s | Tier 4: go-rod headless + stealth plugin |
+| YouTube transcript | 1-5s | 3-strategy: captions → timedtext API → description |
 | search_and_scrape | 2-15s | Parallel scrape with semaphore (max 5) |
 
 ---
