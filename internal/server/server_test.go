@@ -121,7 +121,7 @@ func TestCORSMiddleware(t *testing.T) {
 
 func TestAdminFlushCache(t *testing.T) {
 	c := cache.NewMemory(cache.MemoryConfig{MaxSizeMB: 1})
-	c.Set(nil, "key1", []byte("val1"), time.Hour)
+	c.Set(context.Background(), "key1", []byte("val1"), time.Hour)
 
 	handler := handleAdminFlushCache(c)
 	req := httptest.NewRequest(http.MethodDelete, "/admin/cache", nil)
@@ -131,7 +131,7 @@ func TestAdminFlushCache(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
-	if _, ok := c.Get(nil, "key1"); ok {
+	if _, ok := c.Get(context.Background(), "key1"); ok {
 		t.Fatal("expected cache to be flushed")
 	}
 }
