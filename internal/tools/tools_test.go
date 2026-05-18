@@ -257,6 +257,7 @@ func TestPatentSearchEmptyQuery(t *testing.T) {
 func TestPatentSearchWithFilters(t *testing.T) {
 	srv := server.NewMCPServer("test-server", "1.0.0")
 	deps := setupTestDeps()
+	deps.Search = &mockProviderWithURL{url: "https://patents.google.com/patent/US20200012345A1/en"}
 	RegisterAll(srv, deps)
 
 	result := callTool(t, srv, "patent_search", map[string]any{

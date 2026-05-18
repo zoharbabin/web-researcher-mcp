@@ -57,7 +57,7 @@ func (p *Pipeline) Scrape(ctx context.Context, url string, maxLength int) (*Scra
 		return nil, fmt.Errorf("domain not in allowed list")
 	}
 
-	// Detect content type
+	// Detect content type — route to specialized scrapers
 	if isYouTubeURL(url) {
 		return p.scrapeYouTube(ctx, url, maxLength)
 	}
@@ -66,19 +66,25 @@ func (p *Pipeline) Scrape(ctx context.Context, url string, maxLength int) (*Scra
 		return p.scrapeDocument(ctx, url, maxLength)
 	}
 
-	// Tier 1: Markdown negotiation
+	// Tier 1: Markdown negotiation (fastest, zero overhead)
 	result, err := p.scrapeMarkdown(ctx, url, maxLength)
 	if err == nil && result != nil && len(result.Content) > 100 {
 		return result, nil
 	}
 
-	// Tier 2: HTML extraction via goquery
+	// Tier 2: Stealth HTTP client (browser-like TLS + headers, no JS)
+	result, err = p.scrapeStealth(ctx, url, maxLength)
+	if err == nil && result != nil && len(result.Content) > 100 {
+		return result, nil
+	}
+
+	// Tier 3: HTML extraction via goquery with standard client
 	result, err = p.scrapeHTML(ctx, url, maxLength)
 	if err == nil && result != nil && len(result.Content) > 100 {
 		return result, nil
 	}
 
-	// Tier 3: Headless browser (for SPAs)
+	// Tier 4: Headless browser with stealth (for SPAs and JS challenges)
 	if p.config.ChromePath != "" || chromeAvailable() {
 		result, err = p.scrapeBrowser(ctx, url, maxLength)
 		if err == nil && result != nil && len(result.Content) > 100 {
@@ -97,7 +103,7 @@ func (p *Pipeline) Scrape(ctx context.Context, url string, maxLength int) (*Scra
 }
 
 func (p *Pipeline) Close() {
-	// nothing to clean up without browser pool
+	closeBrowserPool()
 }
 
 func (p *Pipeline) isDomainAllowed(url string) bool {

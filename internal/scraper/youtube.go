@@ -6,23 +6,26 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
 )
 
 var (
-	videoIDRegex      = regexp.MustCompile(`(?:v=|youtu\.be/|embed/)([a-zA-Z0-9_-]{11})`)
-	playerRespRegex  = regexp.MustCompile(`ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;`)
+	videoIDRegex     = regexp.MustCompile(`(?:v=|youtu\.be/|embed/)([a-zA-Z0-9_-]{11})`)
+	playerRespRegex = regexp.MustCompile(`ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;`)
+	playerRespAlt   = regexp.MustCompile(`var\s+ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;`)
+	descriptionRe   = regexp.MustCompile(`"shortDescription"\s*:\s*"((?:[^"\\]|\\.)*)"`)
 )
 
-func (p *Pipeline) scrapeYouTube(ctx context.Context, url string, maxLength int) (*ScrapeResult, error) {
+func (p *Pipeline) scrapeYouTube(ctx context.Context, rawURL string, maxLength int) (*ScrapeResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	videoID := extractVideoID(url)
+	videoID := extractVideoID(rawURL)
 	if videoID == "" {
-		return nil, fmt.Errorf("cannot extract video ID from %s", url)
+		return nil, fmt.Errorf("cannot extract video ID from %s", rawURL)
 	}
 
 	watchURL := "https://www.youtube.com/watch?v=" + videoID
@@ -31,8 +34,9 @@ func (p *Pipeline) scrapeYouTube(ctx context.Context, url string, maxLength int)
 		return nil, err
 	}
 
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -50,30 +54,56 @@ func (p *Pipeline) scrapeYouTube(ctx context.Context, url string, maxLength int)
 	}
 
 	pageHTML := string(body)
-
-	// Extract title
 	title := extractYouTubeTitle(pageHTML)
 
-	// Try to get transcript
+	// Strategy 1: Extract transcript from player response captions
 	transcript, err := extractTranscript(ctx, p.client, pageHTML)
-	if err != nil {
-		return nil, fmt.Errorf("no transcript available for %s: %w", videoID, err)
+	if err == nil && len(transcript) > 100 {
+		if len(transcript) > maxLength {
+			transcript = transcript[:maxLength]
+		}
+		return &ScrapeResult{
+			URL:         rawURL,
+			Content:     transcript,
+			ContentType: "youtube",
+			Title:       title,
+		}, nil
 	}
 
-	if len(transcript) > maxLength {
-		transcript = transcript[:maxLength]
+	// Strategy 2: Direct timedtext API
+	transcript, err = fetchTimedTextAPI(ctx, p.client, videoID)
+	if err == nil && len(transcript) > 100 {
+		if len(transcript) > maxLength {
+			transcript = transcript[:maxLength]
+		}
+		return &ScrapeResult{
+			URL:         rawURL,
+			Content:     transcript,
+			ContentType: "youtube",
+			Title:       title,
+		}, nil
 	}
 
-	return &ScrapeResult{
-		URL:         url,
-		Content:     transcript,
-		ContentType: "youtube",
-		Title:       title,
-	}, nil
+	// Strategy 3: Fall back to video description
+	description := extractDescription(pageHTML)
+	if description != "" {
+		content := fmt.Sprintf("[Video: %s]\n\n%s", title, description)
+		if len(content) > maxLength {
+			content = content[:maxLength]
+		}
+		return &ScrapeResult{
+			URL:         rawURL,
+			Content:     content,
+			ContentType: "youtube",
+			Title:       title,
+		}, nil
+	}
+
+	return nil, fmt.Errorf("no transcript or description available for %s", videoID)
 }
 
-func extractVideoID(url string) string {
-	matches := videoIDRegex.FindStringSubmatch(url)
+func extractVideoID(rawURL string) string {
+	matches := videoIDRegex.FindStringSubmatch(rawURL)
 	if len(matches) >= 2 {
 		return matches[1]
 	}
@@ -92,7 +122,12 @@ func extractYouTubeTitle(html string) string {
 }
 
 func extractTranscript(ctx context.Context, client *http.Client, pageHTML string) (string, error) {
+	// Try primary regex
 	matches := playerRespRegex.FindStringSubmatch(pageHTML)
+	if len(matches) < 2 {
+		// Try alternate regex pattern
+		matches = playerRespAlt.FindStringSubmatch(pageHTML)
+	}
 	if len(matches) < 2 {
 		return "", fmt.Errorf("player response not found")
 	}
@@ -118,12 +153,70 @@ func extractTranscript(ctx context.Context, client *http.Client, pageHTML string
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("caption fetch returned %d", resp.StatusCode)
+	}
+
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1024*1024))
 	if err != nil {
 		return "", err
 	}
 
 	return parseTranscriptXML(string(body)), nil
+}
+
+func fetchTimedTextAPI(ctx context.Context, client *http.Client, videoID string) (string, error) {
+	languages := []string{"en", "en-US", "en-GB"}
+
+	for _, lang := range languages {
+		apiURL := fmt.Sprintf("https://www.youtube.com/api/timedtext?v=%s&lang=%s&fmt=srv3",
+			url.QueryEscape(videoID), url.QueryEscape(lang))
+
+		req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+		if err != nil {
+			continue
+		}
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			continue
+		}
+
+		body, err := io.ReadAll(io.LimitReader(resp.Body, 1024*1024))
+		resp.Body.Close()
+		if err != nil {
+			continue
+		}
+
+		if resp.StatusCode == 200 && len(body) > 50 {
+			text := parseTranscriptXML(string(body))
+			if len(text) > 100 {
+				return text, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("timedtext API returned no transcript")
+}
+
+func extractDescription(pageHTML string) string {
+	matches := descriptionRe.FindStringSubmatch(pageHTML)
+	if len(matches) < 2 {
+		return ""
+	}
+
+	desc := matches[1]
+	desc = strings.ReplaceAll(desc, "\\n", "\n")
+	desc = strings.ReplaceAll(desc, "\\\"", "\"")
+	desc = strings.ReplaceAll(desc, "\\/", "/")
+	desc = strings.ReplaceAll(desc, "\\\\", "\\")
+	desc = strings.TrimSpace(desc)
+
+	if len(desc) < 20 {
+		return ""
+	}
+	return desc
 }
 
 func findCaptionURL(playerResp map[string]any) string {
@@ -149,9 +242,9 @@ func findCaptionURL(playerResp map[string]any) string {
 			continue
 		}
 		langCode, _ := track["languageCode"].(string)
-		if langCode == "en" {
-			url, _ := track["baseUrl"].(string)
-			return url
+		if langCode == "en" || strings.HasPrefix(langCode, "en-") {
+			u, _ := track["baseUrl"].(string)
+			return u
 		}
 	}
 
@@ -160,8 +253,8 @@ func findCaptionURL(playerResp map[string]any) string {
 	if !ok {
 		return ""
 	}
-	url, _ := track["baseUrl"].(string)
-	return url
+	u, _ := track["baseUrl"].(string)
+	return u
 }
 
 func parseTranscriptXML(xml string) string {
@@ -177,6 +270,7 @@ func parseTranscriptXML(xml string) string {
 			text = strings.ReplaceAll(text, "&gt;", ">")
 			text = strings.ReplaceAll(text, "&#39;", "'")
 			text = strings.ReplaceAll(text, "&quot;", "\"")
+			text = strings.ReplaceAll(text, "&#10;", "\n")
 			text = strings.TrimSpace(text)
 			if text != "" {
 				startSec := parseSeconds(m[1])

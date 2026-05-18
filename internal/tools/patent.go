@@ -69,10 +69,14 @@ func registerPatentSearch(srv *server.MCPServer, deps Dependencies) {
 
 		patents := make([]map[string]any, 0, len(results))
 		for _, r := range results {
+			number := extractPatentNumber(r.URL)
+			if patentOffice != "" && patentOffice != "all" && !matchesPatentOffice(number, patentOffice) {
+				continue
+			}
 			patent := map[string]any{
 				"title":  r.Title,
 				"url":    r.URL,
-				"number": extractPatentNumber(r.URL),
+				"number": number,
 			}
 			if r.Snippet != "" {
 				patent["abstract"] = r.Snippet
@@ -90,7 +94,7 @@ func registerPatentSearch(srv *server.MCPServer, deps Dependencies) {
 		jsonBytes, _ := json.Marshal(output)
 		deps.Cache.Set(ctx, cacheKey, jsonBytes, 24*time.Hour)
 		deps.Metrics.RecordToolCall("patent_search", time.Since(start), nil, "", false)
-			auditToolCall(deps, "patent_search", time.Since(start), nil, "")
+		auditToolCall(deps, "patent_search", time.Since(start), nil, "")
 
 		return mcp.NewToolResultText(string(jsonBytes)), nil
 	})
@@ -158,4 +162,33 @@ func extractPatentNumber(url string) string {
 		return number
 	}
 	return ""
+}
+
+func matchesPatentOffice(patentNumber, office string) bool {
+	if patentNumber == "" {
+		return false
+	}
+	prefix := strings.ToUpper(office)
+	number := strings.ToUpper(patentNumber)
+
+	officePrefixes := map[string][]string{
+		"US": {"US"},
+		"EP": {"EP"},
+		"WO": {"WO"},
+		"JP": {"JP"},
+		"CN": {"CN"},
+		"KR": {"KR"},
+	}
+
+	prefixes, ok := officePrefixes[prefix]
+	if !ok {
+		return true
+	}
+
+	for _, p := range prefixes {
+		if strings.HasPrefix(number, p) {
+			return true
+		}
+	}
+	return false
 }
