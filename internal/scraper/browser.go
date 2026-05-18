@@ -115,10 +115,7 @@ func (p *Pipeline) scrapeBrowser(ctx context.Context, url string, maxLength int)
 		return nil, fmt.Errorf("navigation failed: %w", err)
 	}
 
-	err = page.WaitStable(500 * time.Millisecond)
-	if err != nil {
-		// Not fatal — page might still have content
-	}
+	_ = page.WaitStable(500 * time.Millisecond)
 
 	// Extract content via JavaScript
 	content, err := extractPageContent(page)
