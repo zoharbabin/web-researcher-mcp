@@ -1,0 +1,19 @@
+FROM alpine:3.19
+
+RUN apk add --no-cache ca-certificates curl
+
+LABEL org.opencontainers.image.title="web-researcher-mcp"
+LABEL org.opencontainers.image.description="MCP server providing web search, content extraction, and multi-source research tools"
+LABEL org.opencontainers.image.source="https://github.com/zoharbabin/web-researcher-mcp"
+LABEL org.opencontainers.image.licenses="MIT"
+
+COPY web-researcher-mcp /usr/local/bin/web-researcher-mcp
+
+USER 65534:65534
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health/live || exit 1
+
+ENTRYPOINT ["web-researcher-mcp"]
