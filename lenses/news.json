@@ -1,0 +1,17 @@
+{
+  "name": "news",
+  "description": "Major international news sources",
+  "domains": [
+    "reuters.com",
+    "apnews.com",
+    "bbc.com",
+    "nytimes.com",
+    "theguardian.com",
+    "aljazeera.com",
+    "npr.org",
+    "cnn.com",
+    "washingtonpost.com",
+    "ft.com"
+  ],
+  "cx": ""
+}

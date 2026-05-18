@@ -1,0 +1,129 @@
+name: Bug Report
+description: Report a bug or unexpected behavior
+title: "[Bug]: "
+labels: ["bug", "triage"]
+assignees:
+  - zoharbabin
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to report a bug. Please fill out the information below to help us diagnose and fix the issue.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of what the bug is.
+      placeholder: Describe the bug...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior.
+      placeholder: |
+        1. Configure with '...'
+        2. Call tool '...'
+        3. Pass parameters '...'
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen.
+      placeholder: Describe what should happen...
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened (include error messages, logs, etc.)
+      placeholder: Describe what actually happened...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: transport
+    attributes:
+      label: Transport Mode
+      description: How are you running the MCP server?
+      options:
+        - STDIO (default)
+        - HTTP/SSE
+        - Docker
+    validations:
+      required: true
+
+  - type: dropdown
+    id: search-provider
+    attributes:
+      label: Search Provider
+      description: Which search provider are you using?
+      options:
+        - Google Custom Search (default)
+        - Brave Search
+        - Serper
+        - SearXNG
+        - Not applicable
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: What version of web-researcher-mcp are you using? (run with --version or check your Docker tag)
+      placeholder: "v1.0.0"
+    validations:
+      required: true
+
+  - type: input
+    id: go-version
+    attributes:
+      label: Go Version (if building from source)
+      description: Output of `go version`
+      placeholder: "go1.23.0 linux/amd64"
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - Linux (amd64)
+        - Linux (arm64)
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Windows
+        - Docker
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration
+      description: Relevant environment variables (redact API keys)
+      render: shell
+      placeholder: |
+        SEARCH_PROVIDER=google
+        PORT=8080
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs
+      description: Any relevant log output (redact sensitive information)
+      render: text
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other context about the problem (screenshots, related issues, etc.)

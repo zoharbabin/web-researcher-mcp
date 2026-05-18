@@ -1,0 +1,25 @@
+# Binary
+web-researcher-mcp
+/dist/
+
+# Environment
+.env
+
+# Cache
+/cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+coverage.out
+*.test
+
+# Vendor (if using)
+/vendor/

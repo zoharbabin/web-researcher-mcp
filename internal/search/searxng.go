@@ -1,0 +1,184 @@
+package search
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strconv"
+)
+
+type SearXNGProvider struct {
+	baseURL string
+	deps    Deps
+}
+
+func NewSearXNGProvider(baseURL string, deps Deps) *SearXNGProvider {
+	return &SearXNGProvider{baseURL: baseURL, deps: deps}
+}
+
+func (s *SearXNGProvider) Name() string { return "searxng" }
+
+func (s *SearXNGProvider) Web(ctx context.Context, params WebSearchParams) ([]SearchResult, error) {
+	q := url.Values{}
+	q.Set("q", buildQuery(params))
+	q.Set("format", "json")
+	q.Set("categories", "general")
+
+	if params.Language != "" {
+		q.Set("language", params.Language)
+	}
+	if params.TimeRange != "" {
+		q.Set("time_range", mapSearXNGTimeRange(params.TimeRange))
+	}
+
+	apiURL := s.baseURL + "/search?" + q.Encode()
+	body, err := s.doRequest(ctx, apiURL)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp searxngResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("failed to parse searxng response: %w", err)
+	}
+
+	num := clamp(params.NumResults, 1, 10)
+	var results []SearchResult
+	for i, r := range resp.Results {
+		if i >= num {
+			break
+		}
+		results = append(results, SearchResult{
+			Title:       r.Title,
+			URL:         r.URL,
+			Snippet:     r.Content,
+			DisplayLink: r.URL,
+		})
+	}
+	return results, nil
+}
+
+func (s *SearXNGProvider) Images(ctx context.Context, params ImageSearchParams) ([]ImageResult, error) {
+	q := url.Values{}
+	q.Set("q", params.Query)
+	q.Set("format", "json")
+	q.Set("categories", "images")
+
+	apiURL := s.baseURL + "/search?" + q.Encode()
+	body, err := s.doRequest(ctx, apiURL)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp searxngResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("failed to parse searxng image response: %w", err)
+	}
+
+	num := clamp(params.NumResults, 1, 10)
+	var results []ImageResult
+	for i, r := range resp.Results {
+		if i >= num {
+			break
+		}
+		results = append(results, ImageResult{
+			Title:         r.Title,
+			Link:          r.ImgSrc,
+			ThumbnailLink: r.ThumbnailSrc,
+			DisplayLink:   r.URL,
+		})
+	}
+	return results, nil
+}
+
+func (s *SearXNGProvider) News(ctx context.Context, params NewsSearchParams) ([]NewsResult, error) {
+	q := url.Values{}
+	q.Set("q", params.Query)
+	q.Set("format", "json")
+	q.Set("categories", "news")
+
+	if params.Freshness != "" {
+		q.Set("time_range", mapSearXNGTimeRange(params.Freshness))
+	}
+
+	apiURL := s.baseURL + "/search?" + q.Encode()
+	body, err := s.doRequest(ctx, apiURL)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp searxngResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("failed to parse searxng news response: %w", err)
+	}
+
+	num := clamp(params.NumResults, 1, 10)
+	var results []NewsResult
+	for i, r := range resp.Results {
+		if i >= num {
+			break
+		}
+		results = append(results, NewsResult{
+			Title:       r.Title,
+			URL:         r.URL,
+			Source:      r.Engine,
+			PublishedAt: r.PublishedDate,
+			Snippet:     r.Content,
+		})
+	}
+	return results, nil
+}
+
+func (s *SearXNGProvider) doRequest(ctx context.Context, apiURL string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := s.deps.HTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("searxng error %d", resp.StatusCode)
+	}
+
+	return io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
+}
+
+func mapSearXNGTimeRange(tr string) string {
+	switch tr {
+	case "hour", "day":
+		return "day"
+	case "week":
+		return "week"
+	case "month":
+		return "month"
+	case "year":
+		return "year"
+	default:
+		return ""
+	}
+}
+
+// Ensure NumResults is used from params (not exposed in SearXNG directly)
+var _ = strconv.Itoa
+
+type searxngResponse struct {
+	Results []searxngResult `json:"results"`
+}
+
+type searxngResult struct {
+	Title         string `json:"title"`
+	URL           string `json:"url"`
+	Content       string `json:"content"`
+	Engine        string `json:"engine"`
+	PublishedDate string `json:"publishedDate,omitempty"`
+	ImgSrc        string `json:"img_src,omitempty"`
+	ThumbnailSrc  string `json:"thumbnail_src,omitempty"`
+}

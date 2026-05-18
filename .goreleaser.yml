@@ -1,0 +1,216 @@
+version: 2
+
+project_name: web-researcher-mcp
+
+before:
+  hooks:
+    - go mod tidy
+    - go mod verify
+
+builds:
+  - id: web-researcher-mcp
+    main: ./cmd/web-researcher-mcp
+    binary: web-researcher-mcp
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: default
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE*
+      - lenses/**/*
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+sboms:
+  - artifacts: archive
+
+dockers:
+  # GHCR images
+  - image_templates:
+      - "ghcr.io/zoharbabin/web-researcher-mcp:{{ .Version }}-amd64"
+      - "ghcr.io/zoharbabin/web-researcher-mcp:latest-amd64"
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.description=MCP server for web search, content extraction, and multi-source research"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.source=https://github.com/zoharbabin/web-researcher-mcp"
+      - "--label=org.opencontainers.image.licenses=MIT"
+    dockerfile: Dockerfile
+    goarch: amd64
+    goos: linux
+
+  - image_templates:
+      - "ghcr.io/zoharbabin/web-researcher-mcp:{{ .Version }}-arm64"
+      - "ghcr.io/zoharbabin/web-researcher-mcp:latest-arm64"
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.description=MCP server for web search, content extraction, and multi-source research"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.source=https://github.com/zoharbabin/web-researcher-mcp"
+      - "--label=org.opencontainers.image.licenses=MIT"
+    dockerfile: Dockerfile
+    goarch: arm64
+    goos: linux
+
+  # Docker Hub images
+  - image_templates:
+      - "docker.io/zoharbabin/web-researcher-mcp:{{ .Version }}-amd64"
+      - "docker.io/zoharbabin/web-researcher-mcp:latest-amd64"
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.description=MCP server for web search, content extraction, and multi-source research"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.source=https://github.com/zoharbabin/web-researcher-mcp"
+      - "--label=org.opencontainers.image.licenses=MIT"
+    dockerfile: Dockerfile
+    goarch: amd64
+    goos: linux
+
+  - image_templates:
+      - "docker.io/zoharbabin/web-researcher-mcp:{{ .Version }}-arm64"
+      - "docker.io/zoharbabin/web-researcher-mcp:latest-arm64"
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.description=MCP server for web search, content extraction, and multi-source research"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.source=https://github.com/zoharbabin/web-researcher-mcp"
+      - "--label=org.opencontainers.image.licenses=MIT"
+    dockerfile: Dockerfile
+    goarch: arm64
+    goos: linux
+
+docker_manifests:
+  # GHCR manifests
+  - name_template: "ghcr.io/zoharbabin/web-researcher-mcp:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/zoharbabin/web-researcher-mcp:{{ .Version }}-amd64"
+      - "ghcr.io/zoharbabin/web-researcher-mcp:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/zoharbabin/web-researcher-mcp:latest"
+    image_templates:
+      - "ghcr.io/zoharbabin/web-researcher-mcp:latest-amd64"
+      - "ghcr.io/zoharbabin/web-researcher-mcp:latest-arm64"
+  # Docker Hub manifests
+  - name_template: "docker.io/zoharbabin/web-researcher-mcp:{{ .Version }}"
+    image_templates:
+      - "docker.io/zoharbabin/web-researcher-mcp:{{ .Version }}-amd64"
+      - "docker.io/zoharbabin/web-researcher-mcp:{{ .Version }}-arm64"
+  - name_template: "docker.io/zoharbabin/web-researcher-mcp:latest"
+    image_templates:
+      - "docker.io/zoharbabin/web-researcher-mcp:latest-amd64"
+      - "docker.io/zoharbabin/web-researcher-mcp:latest-arm64"
+
+brews:
+  - name: web-researcher-mcp
+    repository:
+      owner: zoharbabin
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/zoharbabin/web-researcher-mcp"
+    description: "MCP server providing web search, content extraction, and multi-source research tools for AI assistants"
+    license: "MIT"
+    test: |
+      system "#{bin}/web-researcher-mcp", "--help"
+    install: |
+      bin.install "web-researcher-mcp"
+      (share/"web-researcher-mcp/lenses").install Dir["lenses/*"] if Dir.exist?("lenses")
+
+changelog:
+  sort: asc
+  use: github
+  groups:
+    - title: "New Features"
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: "Bug Fixes"
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: "Performance"
+      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: "Other"
+      order: 999
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+      - "^style:"
+
+release:
+  github:
+    owner: zoharbabin
+    name: web-researcher-mcp
+  draft: false
+  prerelease: auto
+  name_template: "{{.ProjectName}} v{{.Version}}"
+  header: |
+    ## What's Changed
+
+    Full changelog: https://github.com/zoharbabin/web-researcher-mcp/compare/{{ .PreviousTag }}...{{ .Tag }}
+  footer: |
+    ---
+
+    ### Docker Images
+
+    ```bash
+    # GitHub Container Registry
+    docker pull ghcr.io/zoharbabin/web-researcher-mcp:{{ .Version }}
+
+    # Docker Hub
+    docker pull docker.io/zoharbabin/web-researcher-mcp:{{ .Version }}
+    ```
+
+    ### Homebrew
+
+    ```bash
+    brew install zoharbabin/tap/web-researcher-mcp
+    ```
+
+    ### Verify Checksums
+
+    ```bash
+    sha256sum -c checksums.txt
+    ```

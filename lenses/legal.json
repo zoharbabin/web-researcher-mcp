@@ -1,0 +1,15 @@
+{
+  "name": "legal",
+  "description": "Legal research and case law",
+  "domains": [
+    "law.cornell.edu",
+    "courtlistener.com",
+    "findlaw.com",
+    "justia.com",
+    "supremecourt.gov",
+    "law.com",
+    "lexisnexis.com",
+    "westlaw.com"
+  ],
+  "cx": ""
+}

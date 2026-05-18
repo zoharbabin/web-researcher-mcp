@@ -1,0 +1,17 @@
+{
+  "name": "science",
+  "description": "Scientific research and publications",
+  "domains": [
+    "nature.com",
+    "science.org",
+    "nasa.gov",
+    "phys.org",
+    "scientificamerican.com",
+    "newscientist.com",
+    "cell.com",
+    "pnas.org",
+    "aaas.org",
+    "sciencedaily.com"
+  ],
+  "cx": ""
+}
