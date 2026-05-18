@@ -85,40 +85,30 @@ dockers:
     goarch: arm64
     goos: linux
 
-  # Docker Hub images
-  - image_templates:
-      - "docker.io/zoharbabin/web-researcher-mcp:{{ .Version }}-amd64"
-      - "docker.io/zoharbabin/web-researcher-mcp:latest-amd64"
-    use: buildx
-    build_flag_templates:
-      - "--platform=linux/amd64"
-      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
-      - "--label=org.opencontainers.image.description=MCP server for web search, content extraction, and multi-source research"
-      - "--label=org.opencontainers.image.version={{ .Version }}"
-      - "--label=org.opencontainers.image.created={{ .Date }}"
-      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
-      - "--label=org.opencontainers.image.source=https://github.com/zoharbabin/web-researcher-mcp"
-      - "--label=org.opencontainers.image.licenses=MIT"
-    dockerfile: Dockerfile
-    goarch: amd64
-    goos: linux
-
-  - image_templates:
-      - "docker.io/zoharbabin/web-researcher-mcp:{{ .Version }}-arm64"
-      - "docker.io/zoharbabin/web-researcher-mcp:latest-arm64"
-    use: buildx
-    build_flag_templates:
-      - "--platform=linux/arm64"
-      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
-      - "--label=org.opencontainers.image.description=MCP server for web search, content extraction, and multi-source research"
-      - "--label=org.opencontainers.image.version={{ .Version }}"
-      - "--label=org.opencontainers.image.created={{ .Date }}"
-      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
-      - "--label=org.opencontainers.image.source=https://github.com/zoharbabin/web-researcher-mcp"
-      - "--label=org.opencontainers.image.licenses=MIT"
-    dockerfile: Dockerfile
-    goarch: arm64
-    goos: linux
+  # Docker Hub images (requires DOCKERHUB_USERNAME/TOKEN secrets)
+  # Uncomment when Docker Hub credentials are configured:
+  # - image_templates:
+  #     - "docker.io/zoharbabin/web-researcher-mcp:{{ .Version }}-amd64"
+  #     - "docker.io/zoharbabin/web-researcher-mcp:latest-amd64"
+  #   use: buildx
+  #   build_flag_templates:
+  #     - "--platform=linux/amd64"
+  #     - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+  #     - "--label=org.opencontainers.image.version={{ .Version }}"
+  #   dockerfile: Dockerfile
+  #   goarch: amd64
+  #   goos: linux
+  # - image_templates:
+  #     - "docker.io/zoharbabin/web-researcher-mcp:{{ .Version }}-arm64"
+  #     - "docker.io/zoharbabin/web-researcher-mcp:latest-arm64"
+  #   use: buildx
+  #   build_flag_templates:
+  #     - "--platform=linux/arm64"
+  #     - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+  #     - "--label=org.opencontainers.image.version={{ .Version }}"
+  #   dockerfile: Dockerfile
+  #   goarch: arm64
+  #   goos: linux
 
 docker_manifests:
   # GHCR manifests
@@ -130,15 +120,15 @@ docker_manifests:
     image_templates:
       - "ghcr.io/zoharbabin/web-researcher-mcp:latest-amd64"
       - "ghcr.io/zoharbabin/web-researcher-mcp:latest-arm64"
-  # Docker Hub manifests
-  - name_template: "docker.io/zoharbabin/web-researcher-mcp:{{ .Version }}"
-    image_templates:
-      - "docker.io/zoharbabin/web-researcher-mcp:{{ .Version }}-amd64"
-      - "docker.io/zoharbabin/web-researcher-mcp:{{ .Version }}-arm64"
-  - name_template: "docker.io/zoharbabin/web-researcher-mcp:latest"
-    image_templates:
-      - "docker.io/zoharbabin/web-researcher-mcp:latest-amd64"
-      - "docker.io/zoharbabin/web-researcher-mcp:latest-arm64"
+  # Docker Hub manifests (uncomment when credentials are configured)
+  # - name_template: "docker.io/zoharbabin/web-researcher-mcp:{{ .Version }}"
+  #   image_templates:
+  #     - "docker.io/zoharbabin/web-researcher-mcp:{{ .Version }}-amd64"
+  #     - "docker.io/zoharbabin/web-researcher-mcp:{{ .Version }}-arm64"
+  # - name_template: "docker.io/zoharbabin/web-researcher-mcp:latest"
+  #   image_templates:
+  #     - "docker.io/zoharbabin/web-researcher-mcp:latest-amd64"
+  #     - "docker.io/zoharbabin/web-researcher-mcp:latest-arm64"
 
 brews:
   - name: web-researcher-mcp
@@ -150,6 +140,7 @@ brews:
     homepage: "https://github.com/zoharbabin/web-researcher-mcp"
     description: "MCP server providing web search, content extraction, and multi-source research tools for AI assistants"
     license: "MIT"
+    skip_upload: auto
     test: |
       system "#{bin}/web-researcher-mcp", "--help"
     install: |
@@ -196,11 +187,7 @@ release:
     ### Docker Images
 
     ```bash
-    # GitHub Container Registry
     docker pull ghcr.io/zoharbabin/web-researcher-mcp:{{ .Version }}
-
-    # Docker Hub
-    docker pull docker.io/zoharbabin/web-researcher-mcp:{{ .Version }}
     ```
 
     ### Homebrew
