@@ -182,12 +182,19 @@ web-researcher-mcp/
 ├── testdata/                           # Fixtures for tests
 ├── scripts/
 │   ├── run-e2e.sh
-│   └── release.sh
+│   ├── release.sh
+│   └── build-mcpb.sh                  # Builds .mcpb bundles (CI)
+├── mcpb/
+│   └── manifest.json                   # Claude Desktop bundle template
+├── .mcp.json                           # Claude Code / Cursor config
+├── .vscode/mcp.json                    # VS Code / GitHub Copilot config
+├── server.json                         # Official MCP Registry manifest
+├── smithery.yaml                       # Smithery.ai marketplace config
 ├── go.mod
 ├── go.sum
 ├── Makefile
 ├── Dockerfile
-├── .env.example
+├── Dockerfile.release                  # Slim Alpine image for GoReleaser
 ├── .goreleaser.yml
 ├── CLAUDE.md
 ├── README.md

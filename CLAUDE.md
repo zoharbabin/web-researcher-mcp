@@ -25,7 +25,7 @@ internal/
 ├── server/                 # MCP server lifecycle
 ├── tools/                  # Tool handlers (one file per tool)
 ├── search/                 # Pluggable search providers (Brave, Google, Serper, SearXNG)
-├── scraper/                # Tiered scraping pipeline (markdown → HTML → browser)
+├── scraper/                # Tiered scraping pipeline (markdown → stealth → HTML → browser)
 ├── documents/              # PDF, DOCX, PPTX parsing
 ├── cache/                  # Hybrid cache (ristretto + disk + optional Redis)
 ├── auth/                   # OAuth 2.1 middleware + JWKS
@@ -36,6 +36,12 @@ internal/
 ├── circuit/                # Circuit breaker
 └── resources/              # MCP Resources + Prompts
 lenses/                     # Search lens JSON files (curated domain lists)
+mcpb/manifest.json          # Claude Desktop .mcpb bundle template
+scripts/build-mcpb.sh       # Builds .mcpb bundles for all platforms (CI)
+.mcp.json                   # Claude Code / Cursor project config
+.vscode/mcp.json            # VS Code / GitHub Copilot config
+server.json                 # Official MCP Registry manifest
+smithery.yaml               # Smithery.ai marketplace config
 ```
 
 ## MCP Tools
@@ -72,13 +78,28 @@ HTTP Transport:
 4. Defense in depth — SSRF, rate limiting, content sanitization
 5. Fail loud — return errors, validate at boundaries
 
+## Release & Distribution
+
+On `v*` tag push, CI automatically:
+1. Builds cross-platform binaries via GoReleaser
+2. Pushes Docker images to GHCR + Docker Hub (multi-arch)
+3. Builds `.mcpb` bundles for all platforms (Claude Desktop)
+4. Attaches all artifacts + SBOM to GitHub Release
+5. Signs artifacts with cosign
+
+Distribution configs (auto-included in release archives):
+- `.mcp.json` — Claude Code / Cursor
+- `.vscode/mcp.json` — VS Code / GitHub Copilot
+- `server.json` — Official MCP Registry
+- `smithery.yaml` — Smithery.ai marketplace
+
 ## Key Docs
 
 - `ARCHITECTURE.md` — Full architecture overview
 - `docs/TOOLS.md` — Tool specifications
 - `docs/SECURITY.md` — Security architecture
 - `docs/SEARCH_PROVIDERS.md` — Provider system + lenses
-- `docs/DEPLOYMENT.md` — Build, Docker, Kubernetes
+- `docs/DEPLOYMENT.md` — Build, Docker, Kubernetes, client configs
 - `docs/TESTING.md` — Test strategy and patterns
 - `docs/COMPLIANCE.md` — SOC2, GDPR, FedRAMP
 - `docs/CONTRIBUTING.md` — Code style and workflow

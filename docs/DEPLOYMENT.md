@@ -321,6 +321,130 @@ The Go binary runs directly with no wrapper process — clean process lifecycle 
 
 ---
 
+## Client Configurations
+
+### Claude Code / Cursor
+
+Add to your project root as `.mcp.json` or run:
+
+```bash
+claude mcp add --scope user --transport stdio web-researcher -- web-researcher-mcp
+```
+
+Project config (`.mcp.json`):
+```json
+{
+  "mcpServers": {
+    "web-researcher": {
+      "command": "web-researcher-mcp",
+      "args": [],
+      "env": {
+        "GOOGLE_CUSTOM_SEARCH_API_KEY": "${GOOGLE_CUSTOM_SEARCH_API_KEY}",
+        "GOOGLE_CUSTOM_SEARCH_ID": "${GOOGLE_CUSTOM_SEARCH_ID}"
+      }
+    }
+  }
+}
+```
+
+### VS Code / GitHub Copilot
+
+Add `.vscode/mcp.json` to your project:
+
+```json
+{
+  "inputs": [
+    {
+      "id": "google_api_key",
+      "type": "promptString",
+      "description": "Google Custom Search API key",
+      "password": true
+    },
+    {
+      "id": "google_cx",
+      "type": "promptString",
+      "description": "Google Custom Search engine ID"
+    }
+  ],
+  "servers": {
+    "web-researcher": {
+      "command": "web-researcher-mcp",
+      "args": [],
+      "env": {
+        "GOOGLE_CUSTOM_SEARCH_API_KEY": "${input:google_api_key}",
+        "GOOGLE_CUSTOM_SEARCH_ID": "${input:google_cx}"
+      }
+    }
+  }
+}
+```
+
+### Claude Desktop
+
+Download the `.mcpb` bundle for your platform from [GitHub Releases](https://github.com/zoharbabin/web-researcher-mcp/releases) and open it in Claude Desktop. It will prompt for your API keys.
+
+Or manually add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "web-researcher": {
+      "command": "/usr/local/bin/web-researcher-mcp",
+      "env": {
+        "GOOGLE_CUSTOM_SEARCH_API_KEY": "...",
+        "GOOGLE_CUSTOM_SEARCH_ID": "..."
+      }
+    }
+  }
+}
+```
+
+### Windsurf
+
+Add to `./codeium/windsurf/model_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "web-researcher": {
+      "command": "web-researcher-mcp",
+      "args": [],
+      "env": {
+        "GOOGLE_CUSTOM_SEARCH_API_KEY": "...",
+        "GOOGLE_CUSTOM_SEARCH_ID": "..."
+      }
+    }
+  }
+}
+```
+
+### Docker (any client)
+
+```bash
+docker run -i --rm \
+  -e GOOGLE_CUSTOM_SEARCH_API_KEY=... \
+  -e GOOGLE_CUSTOM_SEARCH_ID=... \
+  zoharbabin/web-researcher-mcp:latest
+```
+
+Use with any MCP client that supports Docker transports or pipe STDIO to the container.
+
+---
+
+## MCP Registry & Marketplace
+
+This server is distributed via:
+
+| Registry | Config File | Status |
+|----------|-------------|--------|
+| Official MCP Registry | `server.json` | Publish with `mcp-publisher publish` |
+| Smithery.ai | `smithery.yaml` | Auto-detected from repo root |
+| Docker Hub | `docker.io/zoharbabin/web-researcher-mcp` | Published on release |
+| GHCR | `ghcr.io/zoharbabin/web-researcher-mcp` | Published on release |
+| GitHub Releases | `.mcpb` bundles | Attached per-platform on release |
+
+---
+
 ## Health Checks
 
 | Endpoint | Method | Response | Use |
