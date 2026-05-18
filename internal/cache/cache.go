@@ -15,9 +15,9 @@ type Cache interface {
 
 type Noop struct{}
 
-func NewNoop() *Noop                                                     { return &Noop{} }
-func (n *Noop) Get(_ context.Context, _ string) ([]byte, bool)          { return nil, false }
+func NewNoop() *Noop                                                       { return &Noop{} }
+func (n *Noop) Get(_ context.Context, _ string) ([]byte, bool)             { return nil, false }
 func (n *Noop) Set(_ context.Context, _ string, _ []byte, _ time.Duration) {}
-func (n *Noop) Delete(_ context.Context, _ string)                       {}
-func (n *Noop) Flush()                                                   {}
-func (n *Noop) Close() error                                             { return nil }
+func (n *Noop) Delete(_ context.Context, _ string)                         {}
+func (n *Noop) Flush()                                                     {}
+func (n *Noop) Close() error                                               { return nil }

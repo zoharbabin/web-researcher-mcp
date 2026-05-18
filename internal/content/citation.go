@@ -7,8 +7,8 @@ import (
 )
 
 type Citation struct {
-	URL          string          `json:"url"`
-	AccessedDate string          `json:"accessedDate"`
+	URL          string           `json:"url"`
+	AccessedDate string           `json:"accessedDate"`
 	Metadata     CitationMetadata `json:"metadata"`
 	Formatted    CitationFormats  `json:"formatted"`
 }

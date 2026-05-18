@@ -118,47 +118,82 @@ func TestLoadDefaults(t *testing.T) {
 	}
 }
 
-func TestLoadCustomValues(t *testing.T) {
+func setCustomEnv(t *testing.T) {
+	t.Helper()
 	setRequiredEnv(t)
-	t.Setenv("SEARCH_PROVIDER", "brave")
-	t.Setenv("BRAVE_API_KEY", "brave-key-123")
-	t.Setenv("PORT", "8080")
-	t.Setenv("CACHE_DIR", "/tmp/cache")
-	t.Setenv("CACHE_MAX_MEMORY_MB", "128")
-	t.Setenv("RATE_LIMIT_PER_TENANT", "60")
-	t.Setenv("RATE_LIMIT_GLOBAL", "2000")
-	t.Setenv("DAILY_QUOTA_PER_TENANT", "5000")
-	t.Setenv("MAX_SCRAPE_CONCURRENCY", "10")
-	t.Setenv("LOG_LEVEL", "debug")
-	t.Setenv("LOG_FORMAT", "text")
-	t.Setenv("METRICS_ENABLED", "false")
-	t.Setenv("ALLOW_PRIVATE_IPS", "true")
-	t.Setenv("ALLOWED_ORIGINS", "http://localhost:3000, https://example.com")
-	t.Setenv("ALLOWED_DOMAINS", "example.com,test.org")
-	t.Setenv("REDIS_URL", "redis://localhost:6379")
-	t.Setenv("CHROME_PATH", "/usr/bin/chromium")
-	t.Setenv("OAUTH_ISSUER_URL", "https://auth.example.com")
-	t.Setenv("OAUTH_AUDIENCE", "my-audience")
+	envVars := map[string]string{
+		"SEARCH_PROVIDER":        "brave",
+		"BRAVE_API_KEY":          "brave-key-123",
+		"PORT":                   "8080",
+		"CACHE_DIR":              "/tmp/cache",
+		"CACHE_MAX_MEMORY_MB":    "128",
+		"RATE_LIMIT_PER_TENANT":  "60",
+		"RATE_LIMIT_GLOBAL":      "2000",
+		"DAILY_QUOTA_PER_TENANT": "5000",
+		"MAX_SCRAPE_CONCURRENCY": "10",
+		"LOG_LEVEL":              "debug",
+		"LOG_FORMAT":             "text",
+		"METRICS_ENABLED":        "false",
+		"ALLOW_PRIVATE_IPS":      "true",
+		"ALLOWED_ORIGINS":        "http://localhost:3000, https://example.com",
+		"ALLOWED_DOMAINS":        "example.com,test.org",
+		"REDIS_URL":              "redis://localhost:6379",
+		"CHROME_PATH":            "/usr/bin/chromium",
+		"OAUTH_ISSUER_URL":       "https://auth.example.com",
+		"OAUTH_AUDIENCE":         "my-audience",
+	}
+	for k, v := range envVars {
+		t.Setenv(k, v)
+	}
+}
 
+func TestLoadCustomSearchProvider(t *testing.T) {
+	setCustomEnv(t)
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
 	if cfg.Search.Provider != "brave" {
 		t.Errorf("expected provider=brave, got %s", cfg.Search.Provider)
 	}
 	if cfg.Search.BraveAPIKey != "brave-key-123" {
 		t.Errorf("expected BraveAPIKey=brave-key-123, got %s", cfg.Search.BraveAPIKey)
 	}
+}
+
+func TestLoadCustomServerConfig(t *testing.T) {
+	setCustomEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if cfg.Port != 8080 {
 		t.Errorf("expected port=8080, got %d", cfg.Port)
+	}
+}
+
+func TestLoadCustomCacheConfig(t *testing.T) {
+	setCustomEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if cfg.CacheDir != "/tmp/cache" {
 		t.Errorf("expected CacheDir=/tmp/cache, got %s", cfg.CacheDir)
 	}
 	if cfg.CacheMaxMemoryMB != 128 {
 		t.Errorf("expected CacheMaxMemoryMB=128, got %d", cfg.CacheMaxMemoryMB)
+	}
+	if cfg.RedisURL != "redis://localhost:6379" {
+		t.Errorf("expected RedisURL=redis://localhost:6379, got %s", cfg.RedisURL)
+	}
+}
+
+func TestLoadCustomRateLimits(t *testing.T) {
+	setCustomEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if cfg.RateLimit.PerTenant != 60 {
 		t.Errorf("expected PerTenant=60, got %d", cfg.RateLimit.PerTenant)
@@ -169,8 +204,30 @@ func TestLoadCustomValues(t *testing.T) {
 	if cfg.RateLimit.DailyQuota != 5000 {
 		t.Errorf("expected DailyQuota=5000, got %d", cfg.RateLimit.DailyQuota)
 	}
+}
+
+func TestLoadCustomScrapingConfig(t *testing.T) {
+	setCustomEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if cfg.MaxScrapeConcurrency != 10 {
 		t.Errorf("expected MaxScrapeConcurrency=10, got %d", cfg.MaxScrapeConcurrency)
+	}
+	if cfg.ChromePath != "/usr/bin/chromium" {
+		t.Errorf("expected ChromePath=/usr/bin/chromium, got %s", cfg.ChromePath)
+	}
+	if !cfg.AllowPrivateIPs {
+		t.Error("expected AllowPrivateIPs=true")
+	}
+}
+
+func TestLoadCustomObservability(t *testing.T) {
+	setCustomEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if cfg.LogLevel != slog.LevelDebug {
 		t.Errorf("expected LogLevel=Debug, got %v", cfg.LogLevel)
@@ -181,8 +238,13 @@ func TestLoadCustomValues(t *testing.T) {
 	if cfg.MetricsEnabled {
 		t.Error("expected MetricsEnabled=false")
 	}
-	if !cfg.AllowPrivateIPs {
-		t.Error("expected AllowPrivateIPs=true")
+}
+
+func TestLoadCustomNetworkConfig(t *testing.T) {
+	setCustomEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(cfg.AllowedOrigins) != 2 || cfg.AllowedOrigins[0] != "http://localhost:3000" || cfg.AllowedOrigins[1] != "https://example.com" {
 		t.Errorf("unexpected AllowedOrigins: %v", cfg.AllowedOrigins)
@@ -190,11 +252,13 @@ func TestLoadCustomValues(t *testing.T) {
 	if len(cfg.AllowedDomains) != 2 || cfg.AllowedDomains[0] != "example.com" || cfg.AllowedDomains[1] != "test.org" {
 		t.Errorf("unexpected AllowedDomains: %v", cfg.AllowedDomains)
 	}
-	if cfg.RedisURL != "redis://localhost:6379" {
-		t.Errorf("expected RedisURL=redis://localhost:6379, got %s", cfg.RedisURL)
-	}
-	if cfg.ChromePath != "/usr/bin/chromium" {
-		t.Errorf("expected ChromePath=/usr/bin/chromium, got %s", cfg.ChromePath)
+}
+
+func TestLoadCustomOAuth(t *testing.T) {
+	setCustomEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if cfg.OAuth.IssuerURL != "https://auth.example.com" {
 		t.Errorf("expected OAuth.IssuerURL=https://auth.example.com, got %s", cfg.OAuth.IssuerURL)

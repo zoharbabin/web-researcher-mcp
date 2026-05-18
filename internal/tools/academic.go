@@ -136,7 +136,7 @@ func registerAcademicSearch(srv *server.MCPServer, deps Dependencies) {
 		jsonBytes, _ := json.Marshal(output)
 		deps.Cache.Set(ctx, cacheKey, jsonBytes, 24*time.Hour)
 		deps.Metrics.RecordToolCall("academic_search", time.Since(start), nil, "", false)
-			auditToolCall(deps, "academic_search", time.Since(start), nil, "")
+		auditToolCall(deps, "academic_search", time.Since(start), nil, "")
 
 		return mcp.NewToolResultText(string(jsonBytes)), nil
 	})

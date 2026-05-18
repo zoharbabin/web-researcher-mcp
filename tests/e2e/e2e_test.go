@@ -32,7 +32,6 @@ func buildBinary(t *testing.T) string {
 
 func projectRoot(t *testing.T) string {
 	t.Helper()
-	// Walk up from test file to find go.mod
 	dir, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("failed to get working directory: %v", err)
@@ -63,7 +62,18 @@ type jsonRPCResponse struct {
 	Error   json.RawMessage `json:"error,omitempty"`
 }
 
-func TestMCPLifecycle(t *testing.T) {
+type mcpTestHarness struct {
+	t       *testing.T
+	cmd     *exec.Cmd
+	scanner *bufio.Scanner
+	stdin   interface {
+		Write([]byte) (int, error)
+		Close() error
+	}
+}
+
+func newMCPTestHarness(t *testing.T) *mcpTestHarness {
+	t.Helper()
 	binPath := buildBinary(t)
 
 	cmd := exec.Command(binPath)
@@ -86,124 +96,140 @@ func TestMCPLifecycle(t *testing.T) {
 		t.Fatalf("failed to start server: %v", err)
 	}
 
-	scanner := bufio.NewScanner(stdout)
+	return &mcpTestHarness{
+		t:       t,
+		cmd:     cmd,
+		scanner: bufio.NewScanner(stdout),
+		stdin:   stdin,
+	}
+}
 
-	send := func(msg jsonRPCRequest) {
-		t.Helper()
-		data, err := json.Marshal(msg)
-		if err != nil {
-			t.Fatalf("failed to marshal request: %v", err)
+func (h *mcpTestHarness) send(msg jsonRPCRequest) {
+	h.t.Helper()
+	data, err := json.Marshal(msg)
+	if err != nil {
+		h.t.Fatalf("failed to marshal request: %v", err)
+	}
+	_, err = fmt.Fprintf(h.stdin, "%s\n", data)
+	if err != nil {
+		h.t.Fatalf("failed to write to stdin: %v", err)
+	}
+}
+
+func (h *mcpTestHarness) readResponse() jsonRPCResponse {
+	h.t.Helper()
+	if !h.scanner.Scan() {
+		if err := h.scanner.Err(); err != nil {
+			h.t.Fatalf("scanner error: %v", err)
 		}
-		_, err = fmt.Fprintf(stdin, "%s\n", data)
-		if err != nil {
-			t.Fatalf("failed to write to stdin: %v", err)
-		}
+		h.t.Fatal("no response received (EOF)")
 	}
-
-	readResponse := func() jsonRPCResponse {
-		t.Helper()
-		if !scanner.Scan() {
-			if err := scanner.Err(); err != nil {
-				t.Fatalf("scanner error: %v", err)
-			}
-			t.Fatal("no response received (EOF)")
-		}
-		var resp jsonRPCResponse
-		if err := json.Unmarshal(scanner.Bytes(), &resp); err != nil {
-			t.Fatalf("failed to parse response: %v\nraw: %s", err, scanner.Text())
-		}
-		return resp
+	var resp jsonRPCResponse
+	if err := json.Unmarshal(h.scanner.Bytes(), &resp); err != nil {
+		h.t.Fatalf("failed to parse response: %v\nraw: %s", err, h.scanner.Text())
 	}
+	return resp
+}
 
-	// Step 1: Initialize
-	send(jsonRPCRequest{
-		JSONRPC: "2.0",
-		ID:      1,
-		Method:  "initialize",
-		Params: map[string]interface{}{
-			"protocolVersion": "2024-11-05",
-			"capabilities":    map[string]interface{}{},
-			"clientInfo": map[string]interface{}{
-				"name":    "e2e-test",
-				"version": "1.0.0",
-			},
-		},
-	})
+func (h *mcpTestHarness) shutdown() {
+	h.t.Helper()
+	h.stdin.Close()
 
-	initResp := readResponse()
-	if initResp.Error != nil {
-		t.Fatalf("initialize returned error: %s", initResp.Error)
-	}
-	if initResp.ID != float64(1) {
-		t.Fatalf("expected ID 1, got %v", initResp.ID)
-	}
-
-	// Step 2: Initialized notification (no response expected)
-	send(jsonRPCRequest{
-		JSONRPC: "2.0",
-		Method:  "notifications/initialized",
-	})
-
-	// Step 3: List tools
-	send(jsonRPCRequest{
-		JSONRPC: "2.0",
-		ID:      2,
-		Method:  "tools/list",
-	})
-
-	toolsResp := readResponse()
-	if toolsResp.Error != nil {
-		t.Fatalf("tools/list returned error: %s", toolsResp.Error)
-	}
-
-	var toolsResult struct {
-		Tools []struct {
-			Name string `json:"name"`
-		} `json:"tools"`
-	}
-	if err := json.Unmarshal(toolsResp.Result, &toolsResult); err != nil {
-		t.Fatalf("failed to parse tools result: %v", err)
-	}
-	if len(toolsResult.Tools) == 0 {
-		t.Fatal("expected at least one tool registered")
-	}
-
-	// Step 4: Call web_search (expected to fail without real API key, but should not crash)
-	send(jsonRPCRequest{
-		JSONRPC: "2.0",
-		ID:      3,
-		Method:  "tools/call",
-		Params: map[string]interface{}{
-			"name": "web_search",
-			"arguments": map[string]interface{}{
-				"query": "test query",
-			},
-		},
-	})
-
-	searchResp := readResponse()
-	// The tool call may return a tool-level error (isError in content) or a JSON-RPC error.
-	// Either is acceptable as long as the server didn't crash.
-	if searchResp.ID != float64(3) {
-		t.Fatalf("expected ID 3, got %v", searchResp.ID)
-	}
-
-	// Step 5: Close stdin to signal shutdown
-	stdin.Close()
-
-	// Wait for the process to exit
 	done := make(chan error, 1)
 	go func() {
-		done <- cmd.Wait()
+		done <- h.cmd.Wait()
 	}()
 
 	select {
 	case err := <-done:
 		if err != nil {
-			t.Fatalf("server exited with error: %v", err)
+			h.t.Fatalf("server exited with error: %v", err)
 		}
 	case <-time.After(10 * time.Second):
-		cmd.Process.Kill()
-		t.Fatal("server did not shut down within 10 seconds")
+		h.cmd.Process.Kill()
+		h.t.Fatal("server did not shut down within 10 seconds")
 	}
+}
+
+func TestMCPLifecycle(t *testing.T) {
+	h := newMCPTestHarness(t)
+
+	t.Run("Initialize", func(t *testing.T) {
+		h.send(jsonRPCRequest{
+			JSONRPC: "2.0",
+			ID:      1,
+			Method:  "initialize",
+			Params: map[string]interface{}{
+				"protocolVersion": "2024-11-05",
+				"capabilities":    map[string]interface{}{},
+				"clientInfo": map[string]interface{}{
+					"name":    "e2e-test",
+					"version": "1.0.0",
+				},
+			},
+		})
+
+		resp := h.readResponse()
+		if resp.Error != nil {
+			t.Fatalf("initialize returned error: %s", resp.Error)
+		}
+		if resp.ID != float64(1) {
+			t.Fatalf("expected ID 1, got %v", resp.ID)
+		}
+	})
+
+	t.Run("Initialized", func(t *testing.T) {
+		h.send(jsonRPCRequest{
+			JSONRPC: "2.0",
+			Method:  "notifications/initialized",
+		})
+	})
+
+	t.Run("ListTools", func(t *testing.T) {
+		h.send(jsonRPCRequest{
+			JSONRPC: "2.0",
+			ID:      2,
+			Method:  "tools/list",
+		})
+
+		resp := h.readResponse()
+		if resp.Error != nil {
+			t.Fatalf("tools/list returned error: %s", resp.Error)
+		}
+
+		var result struct {
+			Tools []struct {
+				Name string `json:"name"`
+			} `json:"tools"`
+		}
+		if err := json.Unmarshal(resp.Result, &result); err != nil {
+			t.Fatalf("failed to parse tools result: %v", err)
+		}
+		if len(result.Tools) == 0 {
+			t.Fatal("expected at least one tool registered")
+		}
+	})
+
+	t.Run("CallTool", func(t *testing.T) {
+		h.send(jsonRPCRequest{
+			JSONRPC: "2.0",
+			ID:      3,
+			Method:  "tools/call",
+			Params: map[string]interface{}{
+				"name": "web_search",
+				"arguments": map[string]interface{}{
+					"query": "test query",
+				},
+			},
+		})
+
+		resp := h.readResponse()
+		if resp.ID != float64(3) {
+			t.Fatalf("expected ID 3, got %v", resp.ID)
+		}
+	})
+
+	t.Run("Shutdown", func(t *testing.T) {
+		h.shutdown()
+	})
 }

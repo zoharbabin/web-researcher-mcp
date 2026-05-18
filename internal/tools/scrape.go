@@ -84,7 +84,7 @@ func registerScrapePage(srv *server.MCPServer, deps Dependencies) {
 		jsonBytes, _ := json.Marshal(output)
 		deps.Cache.Set(ctx, cacheKey, jsonBytes, time.Hour)
 		deps.Metrics.RecordToolCall("scrape_page", time.Since(start), nil, "", false)
-			auditToolCall(deps, "scrape_page", time.Since(start), nil, "")
+		auditToolCall(deps, "scrape_page", time.Since(start), nil, "")
 
 		return mcp.NewToolResultText(string(jsonBytes)), nil
 	})

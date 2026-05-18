@@ -40,10 +40,10 @@ type ResearchStep struct {
 }
 
 type ResearchSource struct {
-	URL          string `json:"url"`
-	Title        string `json:"title,omitempty"`
-	Relevance    string `json:"relevance,omitempty"`
-	FoundInStep  int    `json:"foundInStep"`
+	URL         string `json:"url"`
+	Title       string `json:"title,omitempty"`
+	Relevance   string `json:"relevance,omitempty"`
+	FoundInStep int    `json:"foundInStep"`
 }
 
 type KnowledgeGap struct {

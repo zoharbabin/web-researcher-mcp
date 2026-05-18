@@ -10,28 +10,28 @@ import (
 )
 
 type Config struct {
-	GoogleAPIKey     string
-	GoogleCX         string
-	Search           SearchConfig
-	Port             int
-	OAuth            OAuthConfig
-	AllowedOrigins   []string
-	CacheDir         string
-	CacheMaxMemoryMB int
-	CacheEncryptionKey string
-	CacheIsolation   string
-	RedisURL         string
-	RateLimit        RateLimitConfig
-	AllowPrivateIPs  bool
-	AllowedDomains   []string
-	ChromePath       string
+	GoogleAPIKey         string
+	GoogleCX             string
+	Search               SearchConfig
+	Port                 int
+	OAuth                OAuthConfig
+	AllowedOrigins       []string
+	CacheDir             string
+	CacheMaxMemoryMB     int
+	CacheEncryptionKey   string
+	CacheIsolation       string
+	RedisURL             string
+	RateLimit            RateLimitConfig
+	AllowPrivateIPs      bool
+	AllowedDomains       []string
+	ChromePath           string
 	MaxScrapeConcurrency int
-	SessionTTL       time.Duration
-	LogLevel         slog.Level
-	LogFormat        string
-	MetricsEnabled   bool
-	CacheAdminKey    string
-	Audit            AuditConfig
+	SessionTTL           time.Duration
+	LogLevel             slog.Level
+	LogFormat            string
+	MetricsEnabled       bool
+	CacheAdminKey        string
+	Audit                AuditConfig
 }
 
 type AuditConfig struct {
@@ -120,12 +120,12 @@ func Load() (*Config, error) {
 			Audience:            os.Getenv("OAUTH_AUDIENCE"),
 			JWKSRefreshInterval: envDuration("JWKS_REFRESH_INTERVAL", 1*time.Hour),
 		},
-		AllowedOrigins:       splitCSV(os.Getenv("ALLOWED_ORIGINS")),
-		CacheDir:             envOrDefault("CACHE_DIR", "./cache"),
-		CacheMaxMemoryMB:     envInt("CACHE_MAX_MEMORY_MB", 64),
-		CacheEncryptionKey:   encKey,
-		CacheIsolation:       envOrDefault("CACHE_ISOLATION", "shared"),
-		RedisURL:             os.Getenv("REDIS_URL"),
+		AllowedOrigins:     splitCSV(os.Getenv("ALLOWED_ORIGINS")),
+		CacheDir:           envOrDefault("CACHE_DIR", "./cache"),
+		CacheMaxMemoryMB:   envInt("CACHE_MAX_MEMORY_MB", 64),
+		CacheEncryptionKey: encKey,
+		CacheIsolation:     envOrDefault("CACHE_ISOLATION", "shared"),
+		RedisURL:           os.Getenv("REDIS_URL"),
 		RateLimit: RateLimitConfig{
 			PerTenant:  envInt("RATE_LIMIT_PER_TENANT", 30),
 			Global:     envInt("RATE_LIMIT_GLOBAL", 1000),

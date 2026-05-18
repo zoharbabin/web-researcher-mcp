@@ -10,10 +10,10 @@ import (
 )
 
 type Limiter struct {
-	global     *rate.Limiter
-	tenants    sync.Map // map[string]*tenantLimiter
-	config     config.RateLimitConfig
-	cleanupMu  sync.Mutex
+	global    *rate.Limiter
+	tenants   sync.Map // map[string]*tenantLimiter
+	config    config.RateLimitConfig
+	cleanupMu sync.Mutex
 }
 
 type tenantLimiter struct {

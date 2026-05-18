@@ -125,7 +125,29 @@ func (m *Middleware) validateToken(rawToken string) (*Claims, error) {
 		return nil, errors.New("malformed JWT: expected 3 parts")
 	}
 
-	headerJSON, err := base64URLDecode(parts[0])
+	header, err := m.parseAndVerifyHeader(parts[0])
+	if err != nil {
+		return nil, err
+	}
+
+	if err := m.verifySignature(header.Kid, parts); err != nil {
+		return nil, err
+	}
+
+	payload, err := m.parsePayload(parts[1])
+	if err != nil {
+		return nil, err
+	}
+
+	if err := m.validateClaims(payload); err != nil {
+		return nil, err
+	}
+
+	return m.extractClaims(payload), nil
+}
+
+func (m *Middleware) parseAndVerifyHeader(encoded string) (*jwtHeader, error) {
+	headerJSON, err := base64URLDecode(encoded)
 	if err != nil {
 		return nil, fmt.Errorf("decode header: %w", err)
 	}
@@ -139,32 +161,36 @@ func (m *Middleware) validateToken(rawToken string) (*Claims, error) {
 		return nil, fmt.Errorf("unsupported algorithm: %s", header.Alg)
 	}
 
-	// Verify signature
-	key, err := m.jwksCache.getKey(header.Kid)
+	return &header, nil
+}
+
+func (m *Middleware) verifySignature(kid string, parts []string) error {
+	key, err := m.jwksCache.getKey(kid)
 	if err != nil {
-		// Try fetching fresh JWKS in case keys were rotated
 		if fetchErr := m.fetchJWKS(); fetchErr != nil {
-			return nil, fmt.Errorf("fetch JWKS: %w", fetchErr)
+			return fmt.Errorf("fetch JWKS: %w", fetchErr)
 		}
-		key, err = m.jwksCache.getKey(header.Kid)
+		key, err = m.jwksCache.getKey(kid)
 		if err != nil {
-			return nil, fmt.Errorf("key not found: %s", header.Kid)
+			return fmt.Errorf("key not found: %s", kid)
 		}
 	}
 
-	signingInput := parts[0] + "." + parts[1]
 	signature, err := base64URLDecode(parts[2])
 	if err != nil {
-		return nil, fmt.Errorf("decode signature: %w", err)
+		return fmt.Errorf("decode signature: %w", err)
 	}
 
-	hash := sha256.Sum256([]byte(signingInput))
+	hash := sha256.Sum256([]byte(parts[0] + "." + parts[1]))
 	if err := rsa.VerifyPKCS1v15(key, crypto.SHA256, hash[:], signature); err != nil {
-		return nil, errors.New("invalid signature")
+		return errors.New("invalid signature")
 	}
 
-	// Parse payload
-	payloadJSON, err := base64URLDecode(parts[1])
+	return nil
+}
+
+func (m *Middleware) parsePayload(encoded string) (*jwtPayload, error) {
+	payloadJSON, err := base64URLDecode(encoded)
 	if err != nil {
 		return nil, fmt.Errorf("decode payload: %w", err)
 	}
@@ -174,34 +200,35 @@ func (m *Middleware) validateToken(rawToken string) (*Claims, error) {
 		return nil, fmt.Errorf("parse payload: %w", err)
 	}
 
-	// Validate standard claims
+	return &payload, nil
+}
+
+func (m *Middleware) validateClaims(payload *jwtPayload) error {
 	now := time.Now().Unix()
 
 	if payload.Exp == 0 {
-		return nil, errors.New("missing exp claim")
+		return errors.New("missing exp claim")
 	}
 	if now > payload.Exp {
-		return nil, errors.New("token expired")
+		return errors.New("token expired")
 	}
-
 	if payload.Iat != 0 && payload.Iat > now+60 {
-		return nil, errors.New("token issued in the future")
+		return errors.New("token issued in the future")
 	}
-
 	if payload.Iss != m.config.IssuerURL {
-		return nil, fmt.Errorf("issuer mismatch: got %q, want %q", payload.Iss, m.config.IssuerURL)
+		return fmt.Errorf("issuer mismatch: got %q, want %q", payload.Iss, m.config.IssuerURL)
 	}
-
 	if !payload.hasAudience(m.config.Audience) {
-		return nil, fmt.Errorf("audience mismatch: %q not in %v", m.config.Audience, payload.Aud)
+		return fmt.Errorf("audience mismatch: %q not in %v", m.config.Audience, payload.Aud)
 	}
-
-	// Check revocation
 	if payload.Jti != "" && m.revoked.isRevoked(payload.Jti) {
-		return nil, errors.New("token has been revoked")
+		return errors.New("token has been revoked")
 	}
 
-	// Extract custom claims
+	return nil
+}
+
+func (m *Middleware) extractClaims(payload *jwtPayload) *Claims {
 	claims := &Claims{
 		TenantID:  payload.TenantID,
 		UserID:    payload.Sub,
@@ -215,7 +242,7 @@ func (m *Middleware) validateToken(rawToken string) (*Claims, error) {
 		claims.UserID = "anonymous"
 	}
 
-	return claims, nil
+	return claims
 }
 
 // refreshLoop periodically fetches fresh JWKS and cleans up expired revocations.

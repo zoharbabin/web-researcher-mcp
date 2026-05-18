@@ -75,7 +75,7 @@ func newStealthClient(allowPrivateIPs bool) *http.Client {
 
 	transport := &http.Transport{
 		DialContext:           dialer.DialContext,
-		TLSHandshakeTimeout:  10 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
 		ResponseHeaderTimeout: 15 * time.Second,
 		MaxIdleConns:          10,
 		IdleConnTimeout:       30 * time.Second,

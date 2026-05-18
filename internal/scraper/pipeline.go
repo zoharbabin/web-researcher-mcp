@@ -27,9 +27,9 @@ type ScrapeResult struct {
 }
 
 type Pipeline struct {
-	client     *http.Client
-	semaphore  chan struct{}
-	config     PipelineConfig
+	client    *http.Client
+	semaphore chan struct{}
+	config    PipelineConfig
 }
 
 func NewPipeline(cfg PipelineConfig) *Pipeline {
@@ -66,38 +66,43 @@ func (p *Pipeline) Scrape(ctx context.Context, url string, maxLength int) (*Scra
 		return p.scrapeDocument(ctx, url, maxLength)
 	}
 
-	// Tier 1: Markdown negotiation (fastest, zero overhead)
-	result, err := p.scrapeMarkdown(ctx, url, maxLength)
-	if err == nil && result != nil && len(result.Content) > 100 {
-		return result, nil
+	return p.scrapeWithTieredFallback(ctx, url, maxLength)
+}
+
+func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, maxLength int) (*ScrapeResult, error) {
+	type scrapeFunc func(context.Context, string, int) (*ScrapeResult, error)
+
+	tiers := []scrapeFunc{
+		p.scrapeMarkdown,
+		p.scrapeStealth,
+		p.scrapeHTML,
 	}
 
-	// Tier 2: Stealth HTTP client (browser-like TLS + headers, no JS)
-	result, err = p.scrapeStealth(ctx, url, maxLength)
-	if err == nil && result != nil && len(result.Content) > 100 {
-		return result, nil
-	}
-
-	// Tier 3: HTML extraction via goquery with standard client
-	result, err = p.scrapeHTML(ctx, url, maxLength)
-	if err == nil && result != nil && len(result.Content) > 100 {
-		return result, nil
-	}
-
-	// Tier 4: Headless browser with stealth (for SPAs and JS challenges)
 	if p.config.ChromePath != "" || chromeAvailable() {
-		result, err = p.scrapeBrowser(ctx, url, maxLength)
+		tiers = append(tiers, p.scrapeBrowser)
+	}
+
+	var lastResult *ScrapeResult
+	var lastErr error
+
+	for _, fn := range tiers {
+		result, err := fn(ctx, url, maxLength)
 		if err == nil && result != nil && len(result.Content) > 100 {
 			return result, nil
 		}
+		if result != nil {
+			lastResult = result
+		}
+		if err != nil {
+			lastErr = err
+		}
 	}
 
-	if result != nil && len(result.Content) > 0 {
-		return result, nil
+	if lastResult != nil && len(lastResult.Content) > 0 {
+		return lastResult, nil
 	}
-
-	if err != nil {
-		return nil, err
+	if lastErr != nil {
+		return nil, lastErr
 	}
 	return nil, fmt.Errorf("no content extracted from %s", url)
 }

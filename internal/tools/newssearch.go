@@ -70,7 +70,7 @@ func registerNewsSearch(srv *server.MCPServer, deps Dependencies) {
 		jsonBytes, _ := json.Marshal(output)
 		deps.Cache.Set(ctx, cacheKey, jsonBytes, 15*time.Minute)
 		deps.Metrics.RecordToolCall("news_search", time.Since(start), nil, "", false)
-			auditToolCall(deps, "news_search", time.Since(start), nil, "")
+		auditToolCall(deps, "news_search", time.Since(start), nil, "")
 
 		return mcp.NewToolResultText(string(jsonBytes)), nil
 	})

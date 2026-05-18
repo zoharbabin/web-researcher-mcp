@@ -104,7 +104,7 @@ func registerSequentialSearch(srv *server.MCPServer, deps Dependencies) {
 
 		jsonBytes, _ := json.Marshal(output)
 		deps.Metrics.RecordToolCall("sequential_search", time.Since(start), nil, "", false)
-			auditToolCall(deps, "sequential_search", time.Since(start), nil, "")
+		auditToolCall(deps, "sequential_search", time.Since(start), nil, "")
 
 		return mcp.NewToolResultText(string(jsonBytes)), nil
 	})

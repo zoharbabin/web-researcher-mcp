@@ -37,9 +37,9 @@ func main() {
 	slog.SetDefault(logger)
 
 	cacheStore := cache.NewHybrid(cache.HybridConfig{
-		Memory:        cache.MemoryConfig{MaxSizeMB: cfg.CacheMaxMemoryMB},
-		Disk:          cache.DiskConfig{Dir: cfg.CacheDir, EncryptionKey: cfg.CacheEncryptionKey},
-		RedisURL:      cfg.RedisURL,
+		Memory:         cache.MemoryConfig{MaxSizeMB: cfg.CacheMaxMemoryMB},
+		Disk:           cache.DiskConfig{Dir: cfg.CacheDir, EncryptionKey: cfg.CacheEncryptionKey},
+		RedisURL:       cfg.RedisURL,
 		CacheIsolation: cfg.CacheIsolation,
 	})
 	defer cacheStore.Close()

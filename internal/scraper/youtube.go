@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	videoIDRegex     = regexp.MustCompile(`(?:v=|youtu\.be/|embed/)([a-zA-Z0-9_-]{11})`)
+	videoIDRegex    = regexp.MustCompile(`(?:v=|youtu\.be/|embed/)([a-zA-Z0-9_-]{11})`)
 	playerRespRegex = regexp.MustCompile(`ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;`)
 	playerRespAlt   = regexp.MustCompile(`var\s+ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;`)
 	descriptionRe   = regexp.MustCompile(`"shortDescription"\s*:\s*"((?:[^"\\]|\\.)*)"`)

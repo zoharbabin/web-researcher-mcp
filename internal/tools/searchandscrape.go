@@ -41,7 +41,6 @@ func registerSearchAndScrape(srv *server.MCPServer, deps Dependencies) {
 		totalMaxLen := intParam(req.GetArguments(), "total_max_length", 300000)
 		filterByQuery := boolParam(req.GetArguments(), "filter_by_query", false)
 
-		// Step 1: Search
 		searchResults, err := deps.Search.Web(ctx, search.WebSearchParams{
 			Query:      query,
 			NumResults: numResults,
@@ -53,113 +52,19 @@ func registerSearchAndScrape(srv *server.MCPServer, deps Dependencies) {
 		}
 
 		if len(searchResults) == 0 {
-			output := map[string]any{
-				"query":           query,
-				"sources":         []any{},
-				"combinedContent": "",
-				"summary":         map[string]int{"urlsSearched": 0, "urlsScraped": 0, "processingTimeMs": 0},
-			}
-			jsonBytes, _ := json.Marshal(output)
-			return mcp.NewToolResultText(string(jsonBytes)), nil
+			return emptySearchResult(query)
 		}
 
-		// Step 2: Parallel scrape
-		type scrapeResult struct {
-			url     string
-			title   string
-			content string
-			cType   string
-			err     error
-		}
-
-		var wg sync.WaitGroup
-		results := make([]scrapeResult, len(searchResults))
-
-		for i, sr := range searchResults {
-			wg.Add(1)
-			go func(idx int, url, title string) {
-				defer wg.Done()
-				result, err := deps.Scraper.Scrape(ctx, url, maxLenPerSource)
-				if err != nil {
-					results[idx] = scrapeResult{url: url, title: title, err: err}
-					return
-				}
-				processedContent, _ := deps.Content.Process(result.Content, maxLenPerSource)
-				results[idx] = scrapeResult{
-					url:     url,
-					title:   title,
-					content: processedContent,
-					cType:   result.ContentType,
-				}
-			}(i, sr.URL, sr.Title)
-		}
-		wg.Wait()
-
-		// Step 3: Build sources with quality scores
-		type sourceOutput struct {
-			URL         string               `json:"url"`
-			Title       string               `json:"title,omitempty"`
-			Content     string               `json:"content"`
-			ContentType string               `json:"contentType"`
-			Scores      *content.QualityScore `json:"scores,omitempty"`
-		}
-
-		var sources []sourceOutput
-		var combinedParts []string
-		scraped := 0
-
-		for _, r := range results {
-			if r.err != nil || r.content == "" {
-				continue
-			}
-			scraped++
-
-			score := content.ScoreQuality(content.QualityInput{
-				Content: r.content,
-				URL:     r.url,
-				Title:   r.title,
-				Query:   query,
-			})
-
-			if filterByQuery && score.Relevance < 0.3 {
-				continue
-			}
-
-			src := sourceOutput{
-				URL:         r.url,
-				Title:       r.title,
-				Content:     r.content,
-				ContentType: r.cType,
-				Scores:      &score,
-			}
-			sources = append(sources, src)
-			combinedParts = append(combinedParts, r.content)
-		}
-
-		// Step 4: Dedup combined content
-		combined := ""
-		if deduplicate {
-			for i, part := range combinedParts {
-				combinedParts[i] = content.DedupContent(part)
-			}
-		}
-		for _, part := range combinedParts {
-			if len(combined)+len(part) > totalMaxLen {
-				remaining := totalMaxLen - len(combined)
-				if remaining > 0 {
-					combined += part[:remaining]
-				}
-				break
-			}
-			combined += part + "\n\n---\n\n"
-		}
+		results := parallelScrape(ctx, deps, searchResults, maxLenPerSource)
+		sources, combinedParts, scraped := buildSources(results, query, filterByQuery)
+		combined := assembleCombined(combinedParts, deduplicate, totalMaxLen)
 
 		output := map[string]any{
 			"query":           query,
 			"combinedContent": combined,
 			"summary": map[string]any{
-				"urlsSearched":    len(searchResults),
-				"urlsScraped":     scraped,
+				"urlsSearched":     len(searchResults),
+				"urlsScraped":      scraped,
 				"processingTimeMs": int(time.Since(start).Milliseconds()),
 			},
 			"sizeMetadata": map[string]any{
@@ -175,10 +80,119 @@ func registerSearchAndScrape(srv *server.MCPServer, deps Dependencies) {
 
 		jsonBytes, _ := json.Marshal(output)
 		deps.Metrics.RecordToolCall("search_and_scrape", time.Since(start), nil, "", false)
-			auditToolCall(deps, "search_and_scrape", time.Since(start), nil, "")
+		auditToolCall(deps, "search_and_scrape", time.Since(start), nil, "")
 
 		return mcp.NewToolResultText(string(jsonBytes)), nil
 	})
+}
+
+type scrapeResult struct {
+	url     string
+	title   string
+	content string
+	cType   string
+	err     error
+}
+
+type sourceOutput struct {
+	URL         string                `json:"url"`
+	Title       string                `json:"title,omitempty"`
+	Content     string                `json:"content"`
+	ContentType string                `json:"contentType"`
+	Scores      *content.QualityScore `json:"scores,omitempty"`
+}
+
+func emptySearchResult(query string) (*mcp.CallToolResult, error) {
+	output := map[string]any{
+		"query":           query,
+		"sources":         []any{},
+		"combinedContent": "",
+		"summary":         map[string]int{"urlsSearched": 0, "urlsScraped": 0, "processingTimeMs": 0},
+	}
+	jsonBytes, _ := json.Marshal(output)
+	return mcp.NewToolResultText(string(jsonBytes)), nil
+}
+
+func parallelScrape(ctx context.Context, deps Dependencies, searchResults []search.SearchResult, maxLen int) []scrapeResult {
+	var wg sync.WaitGroup
+	results := make([]scrapeResult, len(searchResults))
+
+	for i, sr := range searchResults {
+		wg.Add(1)
+		go func(idx int, url, title string) {
+			defer wg.Done()
+			result, err := deps.Scraper.Scrape(ctx, url, maxLen)
+			if err != nil {
+				results[idx] = scrapeResult{url: url, title: title, err: err}
+				return
+			}
+			processedContent, _ := deps.Content.Process(result.Content, maxLen)
+			results[idx] = scrapeResult{
+				url:     url,
+				title:   title,
+				content: processedContent,
+				cType:   result.ContentType,
+			}
+		}(i, sr.URL, sr.Title)
+	}
+	wg.Wait()
+	return results
+}
+
+func buildSources(results []scrapeResult, query string, filterByQuery bool) ([]sourceOutput, []string, int) {
+	var sources []sourceOutput
+	var combinedParts []string
+	scraped := 0
+
+	for _, r := range results {
+		if r.err != nil || r.content == "" {
+			continue
+		}
+		scraped++
+
+		score := content.ScoreQuality(content.QualityInput{
+			Content: r.content,
+			URL:     r.url,
+			Title:   r.title,
+			Query:   query,
+		})
+
+		if filterByQuery && score.Relevance < 0.3 {
+			continue
+		}
+
+		sources = append(sources, sourceOutput{
+			URL:         r.url,
+			Title:       r.title,
+			Content:     r.content,
+			ContentType: r.cType,
+			Scores:      &score,
+		})
+		combinedParts = append(combinedParts, r.content)
+	}
+
+	return sources, combinedParts, scraped
+}
+
+func assembleCombined(parts []string, deduplicate bool, totalMaxLen int) string {
+	if deduplicate {
+		for i, part := range parts {
+			parts[i] = content.DedupContent(part)
+		}
+	}
+
+	var combined string
+	for _, part := range parts {
+		if len(combined)+len(part) > totalMaxLen {
+			remaining := totalMaxLen - len(combined)
+			if remaining > 0 {
+				combined += part[:remaining]
+			}
+			break
+		}
+		combined += part + "\n\n---\n\n"
+	}
+	return combined
 }
 
 func boolParam(args map[string]any, key string, fallback bool) bool {

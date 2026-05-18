@@ -14,16 +14,16 @@ import (
 )
 
 type Collector struct {
-	toolCalls    *prometheus.CounterVec
-	toolErrors   *prometheus.CounterVec
-	toolLatency  *prometheus.HistogramVec
-	cacheHits    *prometheus.CounterVec
-	cacheMisses  *prometheus.CounterVec
-	activeConns  prometheus.Gauge
+	toolCalls   *prometheus.CounterVec
+	toolErrors  *prometheus.CounterVec
+	toolLatency *prometheus.HistogramVec
+	cacheHits   *prometheus.CounterVec
+	cacheMisses *prometheus.CounterVec
+	activeConns prometheus.Gauge
 
-	mu         sync.RWMutex
-	toolStats  map[string]*ToolMetrics
-	registry   *prometheus.Registry
+	mu        sync.RWMutex
+	toolStats map[string]*ToolMetrics
+	registry  *prometheus.Registry
 }
 
 type ToolMetrics struct {
