@@ -150,7 +150,7 @@ brews:
     homepage: "https://github.com/zoharbabin/web-researcher-mcp"
     description: "MCP server providing web search, content extraction, and multi-source research tools for AI assistants"
     license: "MIT"
-    skip_upload: auto
+    skip_upload: true
     test: |
       system "#{bin}/web-researcher-mcp", "--help"
     install: |
