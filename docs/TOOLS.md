@@ -133,19 +133,30 @@ type CitationFormats struct {
    └─ Block: loopback, link-local, RFC1918, metadata endpoints
 
 2. CONTENT TYPE DETECTION
-   ├─ YouTube URL → YouTube Transcript extractor
+   ├─ YouTube URL → YouTube extractor (3-strategy fallback):
+   │     Strategy 1: Player response captions (primary + alt regex)
+   │     Strategy 2: Direct timedtext API (en, en-US, en-GB)
+   │     Strategy 3: Video description (shortDescription JSON field)
    ├─ .pdf / application/pdf → PDF parser
    ├─ .docx / application/vnd.openxmlformats* → DOCX parser
    └─ .pptx / application/vnd.ms-powerpoint → PPTX parser
 
-3. WEB PAGE EXTRACTION (ordered by speed)
-   a) MARKDOWN NEGOTIATION (fastest, ~200ms)
+3. WEB PAGE EXTRACTION (4-tier, ordered by speed)
+   a) Tier 1: MARKDOWN NEGOTIATION (fastest, ~200ms)
       ├─ Send GET with Accept: text/markdown
       ├─ 5-second timeout
       ├─ Verify response is actually markdown (heuristic check)
       └─ If content-type mismatch or too short → next tier
 
-   b) HTML EXTRACTION via goquery (fast, ~500ms)
+   b) Tier 2: STEALTH HTTP CLIENT (fast, ~300ms)
+      ├─ Browser-like TLS fingerprint (TLS 1.2+, HTTP/2)
+      ├─ Full Chrome 131 headers (User-Agent, Sec-Ch-Ua, Sec-Fetch-*)
+      ├─ Parse with goquery (article > [role=main] > main > body)
+      ├─ Remove: script, style, nav, footer, aside, ads, popups
+      ├─ SSRF protection via safe dialer when AllowPrivateIPs=false
+      └─ If below 100-char threshold → next tier
+
+   c) Tier 3: HTML EXTRACTION via goquery (standard, ~500ms)
       ├─ Fetch page with standard Accept header
       ├─ Parse with goquery
       ├─ Extract: article > main > body (priority order)
@@ -153,11 +164,13 @@ type CitationFormats struct {
       ├─ Minimum content: 100 bytes, 10% meaningful text ratio
       └─ If below threshold → next tier
 
-   c) HEADLESS BROWSER via chromedp (slow, ~5s)
-      ├─ Used for: Known SPA domains, JS-rendered content
-      ├─ Wait for: networkidle OR 30s timeout
-      ├─ Extract: rendered DOM text content
-      └─ Special handling: Google Patents (lazy loading, selectors)
+   d) Tier 4: HEADLESS BROWSER via go-rod + stealth (slow, ~5s)
+      ├─ Browser pool with lazy init + singleton pattern
+      ├─ go-rod/stealth plugin (navigator spoofing, WebGL masking)
+      ├─ Used for: Known SPA domains, JS-rendered content, bot challenges
+      ├─ Wait for: page stability (500ms) OR 30s timeout
+      ├─ Extract: rendered DOM via JavaScript evaluation
+      └─ Graceful cleanup via Pipeline.Close()
 
 4. CONTENT PROCESSING
    ├─ Sanitize: strip hidden text, zero-width chars, dangerous patterns
@@ -403,6 +416,7 @@ type AcademicPaper struct {
 - Generate company name variations (5-8 permutations: no spaces, with suffixes, base names)
 - Map patent office to prefix codes
 - Always use Google PSE site-restricted to patents.google.com (unaffected by sunset)
+- Post-filter results by patent number prefix (US, EP, WO, JP, CN, KR) — non-matching patents are dropped when `patent_office` is specified
 
 ### Cache
 - TTL: 24 hours

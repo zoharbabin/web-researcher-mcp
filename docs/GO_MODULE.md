@@ -55,10 +55,10 @@ require (
 - **What it provides:** CSS selector-based DOM traversal and text extraction.
 - **Alternative considered:** `x/net/html` (stdlib) — too low-level for practical use.
 
-### Browser: `chromedp/chromedp` v0.11.x
-- **Why:** DevTools Protocol over WebSocket, 11K stars. No external binary beyond Chrome itself.
-- **What it provides:** Full browser automation for JS-rendered pages (SPAs, Google Patents).
-- **Alternative considered:** `go-rod/rod` (5K stars) — good but chromedp is more established in production.
+### Browser: `go-rod/rod` v0.116.2 + `go-rod/stealth` v0.4.9
+- **Why:** High-level Chrome DevTools Protocol driver, 6.9K stars. Auto-downloads Chromium, built-in stealth plugin for anti-bot detection bypass. Simpler API than chromedp.
+- **What it provides:** Headless browser automation with browser pool, stealth pages (navigator spoofing, WebGL masking), JavaScript evaluation for content extraction.
+- **Alternative considered:** `chromedp/chromedp` (11K stars) — more established but lower-level API, no built-in anti-detection. `enetx/surf` — requires Go 1.25+, not compatible with our Go 1.23 target.
 
 ### Cache: `dgraph-io/ristretto/v2`
 - **Why:** TinyLFU admission + sampled LFU eviction. Memory-bounded via cost parameter. Used in Dgraph and Badger (production databases).

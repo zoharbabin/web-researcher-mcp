@@ -118,11 +118,12 @@ web-researcher-mcp/
 │   │   ├── lenses.go                  # Search lens logic
 │   │   └── *_test.go
 │   ├── scraper/
-│   │   ├── pipeline.go                # Tiered scraping orchestrator
-│   │   ├── markdown.go                # Accept: text/markdown negotiation
-│   │   ├── html.go                    # goquery-based extraction
-│   │   ├── browser.go                 # chromedp headless extraction
-│   │   ├── youtube.go                 # YouTube transcript
+│   │   ├── pipeline.go                # 4-tier scraping orchestrator
+│   │   ├── markdown.go                # Tier 1: Accept: text/markdown negotiation
+│   │   ├── stealth.go                 # Tier 2: Browser-like TLS + Chrome headers
+│   │   ├── html.go                    # Tier 3: goquery-based extraction
+│   │   ├── browser.go                 # Tier 4: go-rod headless + stealth plugin
+│   │   ├── youtube.go                 # YouTube transcript (3-strategy fallback)
 │   │   ├── ssrf.go                    # SSRF-safe HTTP client + dialer
 │   │   └── *_test.go
 │   ├── documents/
@@ -279,7 +280,7 @@ type RequestContext struct {
 |---------|---------|-----|
 | MCP Protocol | `github.com/modelcontextprotocol/go-sdk` v1.6.0 | Official, Google-maintained |
 | HTML Parsing | `github.com/PuerkitoBio/goquery` | jQuery-style, 14k stars |
-| Headless Browser | `github.com/chromedp/chromedp` | DevTools Protocol, no binaries |
+| Headless Browser | `github.com/go-rod/rod` + `go-rod/stealth` | DevTools Protocol, auto-download Chromium, anti-detection |
 | In-Memory Cache | `github.com/dgraph-io/ristretto/v2` | TinyLFU, memory-bounded |
 | Disk Cache | `go.etcd.io/bbolt` | Single-file B+tree |
 | Redis (optional) | `github.com/redis/go-redis/v9` | Official client |
@@ -300,8 +301,9 @@ type RequestContext struct {
 | Search (API call) | 200-500ms | Circuit-breaker protected |
 | Scrape (markdown) | 100-300ms | HTTP GET + parse |
 | Scrape (HTML) | 500-2000ms | goquery parse |
-| Scrape (browser) | 2-10s | chromedp, bounded to 3 concurrent |
-| YouTube transcript | 1-5s | HTTP scrape + fallback yt-dlp |
+| Scrape (stealth HTTP) | 300-800ms | Browser-like TLS + headers, no JS |
+| Scrape (browser) | 2-10s | go-rod pool, bounded to MaxConcurrency |
+| YouTube transcript | 1-5s | 3-strategy: captions → timedtext API → description |
 | search_and_scrape | 2-15s | Parallel scrape (semaphore=5) |
 
 ## Binary Output
