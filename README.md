@@ -46,6 +46,14 @@ Works with Claude Code, Claude Desktop, Cursor, and any MCP-compatible client.
 
 ## Quick Start
 
+### One-Line Install (Claude Code)
+
+```bash
+claude mcp add web-researcher -- go run github.com/zoharbabin/web-researcher-mcp/cmd/web-researcher-mcp@latest
+```
+
+Then set your API keys in `~/.claude/settings.json` under the server's `env` block (see [Connect to Your AI Assistant](#connect-to-your-ai-assistant) below).
+
 ### Option 1: Download Binary
 
 Download the latest release for your platform from [Releases](https://github.com/zoharbabin/web-researcher-mcp/releases):
