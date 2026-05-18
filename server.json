@@ -1,0 +1,114 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.zoharbabin/web-researcher-mcp",
+  "description": "MCP server providing web search, content extraction, and multi-source research tools for AI assistants",
+  "repository": {
+    "url": "https://github.com/zoharbabin/web-researcher-mcp",
+    "source": "github"
+  },
+  "version_detail": {
+    "version": "1.0.0",
+    "release_date": "2026-05-18",
+    "is_latest": true
+  },
+  "packages": [
+    {
+      "registry_name": "github-releases",
+      "name": "web-researcher-mcp",
+      "version": "1.0.0",
+      "runtime": {
+        "type": "binary",
+        "platforms": ["linux-amd64", "linux-arm64", "darwin-amd64", "darwin-arm64", "windows-amd64"]
+      },
+      "transport": [
+        {
+          "type": "stdio"
+        }
+      ],
+      "environment_variables": [
+        {
+          "name": "GOOGLE_CUSTOM_SEARCH_API_KEY",
+          "description": "Google Custom Search API key",
+          "required": true,
+          "is_secret": true
+        },
+        {
+          "name": "GOOGLE_CUSTOM_SEARCH_ID",
+          "description": "Google Custom Search engine ID",
+          "required": true,
+          "is_secret": false
+        },
+        {
+          "name": "SEARCH_PROVIDER",
+          "description": "Search provider to use (google, brave, serper, searxng)",
+          "required": false,
+          "default": "google"
+        },
+        {
+          "name": "BRAVE_API_KEY",
+          "description": "Brave Search API key (required if SEARCH_PROVIDER=brave)",
+          "required": false,
+          "is_secret": true
+        }
+      ]
+    },
+    {
+      "registry_name": "docker",
+      "name": "zoharbabin/web-researcher-mcp",
+      "version": "1.0.0",
+      "transport": [
+        {
+          "type": "stdio"
+        }
+      ],
+      "environment_variables": [
+        {
+          "name": "GOOGLE_CUSTOM_SEARCH_API_KEY",
+          "description": "Google Custom Search API key",
+          "required": true,
+          "is_secret": true
+        },
+        {
+          "name": "GOOGLE_CUSTOM_SEARCH_ID",
+          "description": "Google Custom Search engine ID",
+          "required": true,
+          "is_secret": false
+        }
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "name": "web_search",
+      "description": "Search the web using configurable providers with optional search lenses"
+    },
+    {
+      "name": "scrape_page",
+      "description": "Extract content from URLs (web pages, PDFs, DOCX, YouTube) using a 4-tier scraping pipeline"
+    },
+    {
+      "name": "search_and_scrape",
+      "description": "Combined search and content extraction pipeline with quality scoring"
+    },
+    {
+      "name": "image_search",
+      "description": "Search for images with size and type filters"
+    },
+    {
+      "name": "news_search",
+      "description": "Search news articles with freshness controls"
+    },
+    {
+      "name": "academic_search",
+      "description": "Search academic papers via Scholar, arXiv, and PubMed"
+    },
+    {
+      "name": "patent_search",
+      "description": "Search patents with multi-office filtering (US, EP, WO, CN, JP, KR)"
+    },
+    {
+      "name": "sequential_search",
+      "description": "Multi-step research workflows with context tracking across queries"
+    }
+  ]
+}

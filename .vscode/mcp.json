@@ -1,0 +1,25 @@
+{
+  "inputs": [
+    {
+      "id": "google_api_key",
+      "type": "promptString",
+      "description": "Google Custom Search API key",
+      "password": true
+    },
+    {
+      "id": "google_cx",
+      "type": "promptString",
+      "description": "Google Custom Search engine ID"
+    }
+  ],
+  "servers": {
+    "web-researcher": {
+      "command": "web-researcher-mcp",
+      "args": [],
+      "env": {
+        "GOOGLE_CUSTOM_SEARCH_API_KEY": "${input:google_api_key}",
+        "GOOGLE_CUSTOM_SEARCH_ID": "${input:google_cx}"
+      }
+    }
+  }
+}
