@@ -1,136 +1,74 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.zoharbabin/web-researcher-mcp",
-  "description": "MCP server providing web search, content extraction, and multi-source research tools for AI assistants",
+  "title": "Web Researcher MCP",
+  "description": "MCP server providing web search, content extraction, and multi-source research tools for AI assistants. Supports 5 search providers with automatic fallback, 4-tier scraping, search lenses, and 8 specialized tools.",
   "repository": {
     "url": "https://github.com/zoharbabin/web-researcher-mcp",
     "source": "github"
   },
-  "version_detail": {
-    "version": "latest",
-    "release_date": "2026-05-18",
-    "is_latest": true
-  },
+  "version": "1.1.1",
   "packages": [
     {
-      "registry_name": "github-releases",
-      "name": "web-researcher-mcp",
-      "version": "latest",
-      "runtime": {
-        "type": "binary",
-        "platforms": ["linux-amd64", "linux-arm64", "darwin-amd64", "darwin-arm64", "windows-amd64"]
+      "registryType": "oci",
+      "identifier": "ghcr.io/zoharbabin/web-researcher-mcp:1.1.1",
+      "transport": {
+        "type": "stdio"
       },
-      "transport": [
-        {
-          "type": "stdio"
-        }
-      ],
-      "environment_variables": [
+      "environmentVariables": [
         {
           "name": "GOOGLE_CUSTOM_SEARCH_API_KEY",
           "description": "Google Custom Search API key",
-          "required": true,
-          "is_secret": true
+          "isRequired": false,
+          "isSecret": true
         },
         {
           "name": "GOOGLE_CUSTOM_SEARCH_ID",
-          "description": "Google Custom Search engine ID",
-          "required": true,
-          "is_secret": false
+          "description": "Google Programmable Search Engine ID",
+          "isRequired": false,
+          "isSecret": false
         },
         {
           "name": "SEARCH_PROVIDER",
-          "description": "Search provider to use (google, brave, serper, searxng, searchapi)",
-          "required": false,
-          "default": "google"
+          "description": "Search provider: google, brave, serper, searxng, or searchapi",
+          "isRequired": false
         },
         {
           "name": "SEARCH_ROUTING",
           "description": "Multi-provider routing with automatic fallback (e.g. brave,google,serper)",
-          "required": false
+          "isRequired": false
         },
         {
           "name": "BRAVE_API_KEY",
-          "description": "Brave Search API key (required if using brave provider)",
-          "required": false,
-          "is_secret": true
+          "description": "Brave Search API key",
+          "isRequired": false,
+          "isSecret": true
         },
         {
           "name": "SERPER_API_KEY",
-          "description": "Serper.dev API key (required if using serper provider)",
-          "required": false,
-          "is_secret": true
+          "description": "Serper.dev API key",
+          "isRequired": false,
+          "isSecret": true
         },
         {
           "name": "SEARCHAPI_API_KEY",
-          "description": "SearchAPI.io API key (required if using searchapi provider)",
-          "required": false,
-          "is_secret": true
+          "description": "SearchAPI.io API key",
+          "isRequired": false,
+          "isSecret": true
         },
         {
           "name": "SEARXNG_URL",
-          "description": "SearXNG instance URL (required if using searxng provider)",
-          "required": false
+          "description": "SearXNG instance URL",
+          "isRequired": false
         }
       ]
     },
     {
-      "registry_name": "docker",
-      "name": "zoharbabin/web-researcher-mcp",
-      "version": "latest",
-      "transport": [
-        {
-          "type": "stdio"
-        }
-      ],
-      "environment_variables": [
-        {
-          "name": "GOOGLE_CUSTOM_SEARCH_API_KEY",
-          "description": "Google Custom Search API key",
-          "required": true,
-          "is_secret": true
-        },
-        {
-          "name": "GOOGLE_CUSTOM_SEARCH_ID",
-          "description": "Google Custom Search engine ID",
-          "required": true,
-          "is_secret": false
-        }
-      ]
-    }
-  ],
-  "tools": [
-    {
-      "name": "web_search",
-      "description": "Search the web using configurable providers with optional search lenses"
-    },
-    {
-      "name": "scrape_page",
-      "description": "Extract content from URLs (web pages, PDFs, DOCX, YouTube) using a 4-tier scraping pipeline"
-    },
-    {
-      "name": "search_and_scrape",
-      "description": "Combined search and content extraction pipeline with quality scoring"
-    },
-    {
-      "name": "image_search",
-      "description": "Search for images with size and type filters"
-    },
-    {
-      "name": "news_search",
-      "description": "Search news articles with freshness controls"
-    },
-    {
-      "name": "academic_search",
-      "description": "Search academic papers via Scholar, arXiv, and PubMed"
-    },
-    {
-      "name": "patent_search",
-      "description": "Search patents with multi-office filtering (US, EP, WO, CN, JP, KR)"
-    },
-    {
-      "name": "sequential_search",
-      "description": "Multi-step research workflows with context tracking across queries"
+      "registryType": "oci",
+      "identifier": "docker.io/zoharbabin/web-researcher-mcp:1.1.1",
+      "transport": {
+        "type": "stdio"
+      }
     }
   ]
 }
