@@ -24,3 +24,7 @@ coverage.out
 
 # Vendor (if using)
 /vendor/
+
+# Docs build
+/site/
+/site_src/

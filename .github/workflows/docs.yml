@@ -1,0 +1,55 @@
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "README.md"
+      - "ARCHITECTURE.md"
+      - "CONTRIBUTING.md"
+      - "docs/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - run: pip install mkdocs-material
+
+      - name: Assemble docs from source files
+        run: |
+          mkdir -p site_src
+          # Copy and rewrite internal links to flattened structure
+          for f in README.md ARCHITECTURE.md CONTRIBUTING.md; do
+            sed -e 's|docs/TOOLS.md|tools.md|g' \
+                -e 's|docs/SECURITY.md|security.md|g' \
+                -e 's|docs/DEPLOYMENT.md|deployment.md|g' \
+                -e 's|docs/MIGRATION.md|migration.md|g' \
+                -e 's|ARCHITECTURE.md|architecture.md|g' \
+                -e 's|CONTRIBUTING.md|contributing.md|g' \
+                -e 's|SECURITY.md|security.md|g' \
+                "$f" > "site_src/$(echo "$f" | tr '[:upper:]' '[:lower:]')"
+          done
+          mv site_src/readme.md site_src/index.md
+          # Copy docs/ files with cross-link rewriting
+          for f in docs/TOOLS.md docs/DEPLOYMENT.md docs/SECURITY.md docs/MIGRATION.md; do
+            sed -e 's|ARCHITECTURE.md|architecture.md|g' \
+                -e 's|CONTRIBUTING.md|contributing.md|g' \
+                -e 's|SECURITY.md|security.md|g' \
+                -e 's|TOOLS.md|tools.md|g' \
+                -e 's|DEPLOYMENT.md|deployment.md|g' \
+                -e 's|MIGRATION.md|migration.md|g' \
+                "$f" > "site_src/$(basename "$f" | tr '[:upper:]' '[:lower:]')"
+          done
+
+      - run: mkdocs gh-deploy --force

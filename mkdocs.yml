@@ -1,0 +1,47 @@
+site_name: Web Researcher MCP
+site_url: https://zoharbabin.github.io/web-researcher-mcp/
+site_description: MCP server for AI assistants — web search, content extraction, and multi-source research
+repo_url: https://github.com/zoharbabin/web-researcher-mcp
+repo_name: zoharbabin/web-researcher-mcp
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+    - content.code.copy
+
+docs_dir: site_src
+
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - Tools: tools.md
+  - Deployment: deployment.md
+  - Security: security.md
+  - Contributing: contributing.md
+  - Migration: migration.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true
