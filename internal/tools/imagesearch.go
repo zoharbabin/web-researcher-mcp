@@ -6,67 +6,64 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
-func registerImageSearch(srv *server.MCPServer, deps Dependencies) {
-	tool := mcp.NewTool("image_search",
-		mcp.WithDescription("Search for images with optional filters for size, type, color, and file format."),
-		mcp.WithString("query", mcp.Required(), mcp.Description("Image search query")),
-		mcp.WithNumber("num_results", mcp.Description("Number of results (1-10, default: 5)")),
-		mcp.WithString("size", mcp.Description("Image size: huge, icon, large, medium, small, xlarge, xxlarge")),
-		mcp.WithString("type", mcp.Description("Image type: clipart, face, lineart, stock, photo, animated")),
-		mcp.WithString("color_type", mcp.Description("Color type: color, gray, mono, trans")),
-		mcp.WithString("dominant_color", mcp.Description("Dominant color: black, blue, brown, gray, green, orange, pink, purple, red, teal, white, yellow")),
-		mcp.WithString("file_type", mcp.Description("File type: jpg, gif, png, bmp, svg, webp")),
-		mcp.WithString("safe", mcp.Description("Safe search: off, medium, high")),
-	)
+type imageSearchInput struct {
+	Query         string `json:"query" jsonschema:"Image search query,required"`
+	NumResults    int    `json:"num_results,omitempty" jsonschema:"Number of results (1-10, default: 5)"`
+	Size          string `json:"size,omitempty" jsonschema:"Image size: huge, icon, large, medium, small, xlarge, xxlarge"`
+	Type          string `json:"type,omitempty" jsonschema:"Image type: clipart, face, lineart, stock, photo, animated"`
+	ColorType     string `json:"color_type,omitempty" jsonschema:"Color type: color, gray, mono, trans"`
+	DominantColor string `json:"dominant_color,omitempty" jsonschema:"Dominant color: black, blue, brown, gray, green, orange, pink, purple, red, teal, white, yellow"`
+	FileType      string `json:"file_type,omitempty" jsonschema:"File type: jpg, gif, png, bmp, svg, webp"`
+	Safe          string `json:"safe,omitempty" jsonschema:"Safe search: off, medium, high"`
+}
 
-	srv.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func registerImageSearch(srv *mcp.Server, deps Dependencies) {
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "image_search",
+		Description: "Search for images with optional filters for size, type, color, and file format.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input imageSearchInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
 
-		query, _ := req.GetArguments()["query"].(string)
-		if query == "" {
-			return toolError("query is required"), nil
+		if input.Query == "" {
+			return toolError("query is required"), nil, nil
 		}
 
-		numResults := intParam(req.GetArguments(), "num_results", 5)
-		size, _ := req.GetArguments()["size"].(string)
-		imgType, _ := req.GetArguments()["type"].(string)
-		colorType, _ := req.GetArguments()["color_type"].(string)
-		dominantColor, _ := req.GetArguments()["dominant_color"].(string)
-		fileType, _ := req.GetArguments()["file_type"].(string)
-		safe, _ := req.GetArguments()["safe"].(string)
+		numResults := input.NumResults
+		if numResults <= 0 {
+			numResults = 5
+		}
 
-		cacheKey := searchCacheKey("image", query, numResults, size, imgType, colorType, dominantColor, fileType)
+		cacheKey := searchCacheKey("image", input.Query, numResults, input.Size, input.Type, input.ColorType, input.DominantColor, input.FileType)
 		if cached, ok := deps.Cache.Get(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("image_search", time.Since(start), nil, "", true)
 			auditToolCall(deps, "image_search", time.Since(start), nil, "")
-			return mcp.NewToolResultText(string(cached)), nil
+			return textResult(string(cached)), nil, nil
 		}
 
 		results, err := deps.Search.Images(ctx, search.ImageSearchParams{
-			Query:         query,
+			Query:         input.Query,
 			NumResults:    numResults,
-			Size:          size,
-			Type:          imgType,
-			ColorType:     colorType,
-			DominantColor: dominantColor,
-			FileType:      fileType,
-			Safe:          safe,
+			Size:          input.Size,
+			Type:          input.Type,
+			ColorType:     input.ColorType,
+			DominantColor: input.DominantColor,
+			FileType:      input.FileType,
+			Safe:          input.Safe,
 		})
 		if err != nil {
 			deps.Metrics.RecordToolCall("image_search", time.Since(start), err, "upstream_error", false)
 			auditToolCall(deps, "image_search", time.Since(start), err, "upstream_error")
-			return toolError(fmt.Sprintf("image search failed: %v", err)), nil
+			return toolError(fmt.Sprintf("image search failed: %v", err)), nil, nil
 		}
 
 		output := map[string]any{
 			"images":      results,
-			"query":       query,
+			"query":       input.Query,
 			"resultCount": len(results),
 		}
 
@@ -75,6 +72,6 @@ func registerImageSearch(srv *server.MCPServer, deps Dependencies) {
 		deps.Metrics.RecordToolCall("image_search", time.Since(start), nil, "", false)
 		auditToolCall(deps, "image_search", time.Since(start), nil, "")
 
-		return mcp.NewToolResultText(string(jsonBytes)), nil
+		return textResult(string(jsonBytes)), nil, nil
 	})
 }

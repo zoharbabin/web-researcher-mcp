@@ -160,7 +160,7 @@ func TestMCPLifecycle(t *testing.T) {
 			ID:      1,
 			Method:  "initialize",
 			Params: map[string]interface{}{
-				"protocolVersion": "2024-11-05",
+				"protocolVersion": "2025-03-26",
 				"capabilities":    map[string]interface{}{},
 				"clientInfo": map[string]interface{}{
 					"name":    "e2e-test",

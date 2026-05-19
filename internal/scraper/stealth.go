@@ -1,6 +1,8 @@
 package scraper
 
 import (
+	"compress/flate"
+	"compress/gzip"
 	"context"
 	"crypto/tls"
 	"io"
@@ -34,7 +36,18 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int)
 		return nil, &httpError{statusCode: resp.StatusCode}
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, int64(maxLength)*2))
+	reader, err := decompressBody(resp)
+	if err != nil {
+		return nil, err
+	}
+	if closer, ok := reader.(io.Closer); ok && closer != resp.Body {
+		defer closer.Close()
+	}
+
+	// Read up to 1MB of raw HTML to ensure we reach the article content,
+	// regardless of the desired output maxLength.
+	const maxHTMLRead = 1024 * 1024
+	body, err := io.ReadAll(io.LimitReader(reader, maxHTMLRead))
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +120,7 @@ func applyBrowserHeaders(req *http.Request) {
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Accept-Encoding", "gzip, deflate")
 	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="131", "Not_A Brand";v="24"`)
 	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
 	req.Header.Set("Sec-Ch-Ua-Platform", `"macOS"`)
@@ -162,5 +175,16 @@ func newSSRFSafeDialer() *net.Dialer {
 	return &net.Dialer{
 		Timeout:   10 * time.Second,
 		KeepAlive: 30 * time.Second,
+	}
+}
+
+func decompressBody(resp *http.Response) (io.Reader, error) {
+	switch strings.ToLower(resp.Header.Get("Content-Encoding")) {
+	case "gzip":
+		return gzip.NewReader(resp.Body)
+	case "deflate":
+		return flate.NewReader(resp.Body), nil
+	default:
+		return resp.Body, nil
 	}
 }

@@ -55,8 +55,28 @@ func NewDiskCache(cfg DiskConfig) *DiskCache {
 		}
 	}
 
+	if cfg.Version != "" {
+		dc.invalidateOnVersionChange(cfg.Version)
+	}
+
 	go dc.cleanup()
 	return dc
+}
+
+func (d *DiskCache) invalidateOnVersionChange(version string) {
+	versionFile := filepath.Join(d.dir, ".version")
+	existing, err := os.ReadFile(versionFile)
+	if err != nil || string(existing) != version {
+		entries, _ := os.ReadDir(d.dir)
+		for _, e := range entries {
+			if e.Name() == ".version" {
+				continue
+			}
+			_ = os.Remove(filepath.Join(d.dir, e.Name()))
+		}
+		_ = os.WriteFile(versionFile, []byte(version), 0600)
+		slog.Info("cache invalidated on version change", "version", version)
+	}
 }
 
 func (d *DiskCache) Get(_ context.Context, key string) ([]byte, bool) {

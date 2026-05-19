@@ -15,6 +15,7 @@ type HybridConfig struct {
 type DiskConfig struct {
 	Dir           string
 	EncryptionKey string
+	Version       string
 }
 
 type Hybrid struct {

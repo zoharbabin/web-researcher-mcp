@@ -4,66 +4,69 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/metrics"
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
 )
 
-func RegisterAll(srv *server.MCPServer, metricsCollector *metrics.Collector, sessionManager *session.Manager) {
+func RegisterAll(srv *mcp.Server, metricsCollector *metrics.Collector, sessionManager *session.Manager) {
 	registerResources(srv, metricsCollector, sessionManager)
 	registerPrompts(srv)
 }
 
-func registerResources(srv *server.MCPServer, metricsCollector *metrics.Collector, sessionManager *session.Manager) {
-	srv.AddResource(mcp.Resource{
+func registerResources(srv *mcp.Server, metricsCollector *metrics.Collector, sessionManager *session.Manager) {
+	srv.AddResource(&mcp.Resource{
 		URI:         "stats://tools",
 		Name:        "Tool Statistics",
 		Description: "Per-tool execution metrics including call counts, latency, and error rates",
 		MIMEType:    "application/json",
-	}, func(_ context.Context, _ mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	}, func(_ context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 		stats := metricsCollector.GetToolStats()
 		jsonBytes, err := json.MarshalIndent(map[string]any{"tools": stats}, "", "  ")
 		if err != nil {
 			return nil, err
 		}
-		return []mcp.ResourceContents{
-			mcp.TextResourceContents{
-				URI:      "stats://tools",
-				MIMEType: "application/json",
-				Text:     string(jsonBytes),
+		return &mcp.ReadResourceResult{
+			Contents: []*mcp.ResourceContents{
+				{
+					URI:      "stats://tools",
+					MIMEType: "application/json",
+					Text:     string(jsonBytes),
+				},
 			},
 		}, nil
 	})
 
-	srv.AddResource(mcp.Resource{
+	srv.AddResource(&mcp.Resource{
 		URI:         "stats://sessions",
 		Name:        "Active Sessions",
 		Description: "Count of active research sessions",
 		MIMEType:    "application/json",
-	}, func(_ context.Context, _ mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	}, func(_ context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 		count := sessionManager.ActiveCount()
 		jsonBytes, _ := json.Marshal(map[string]any{"activeSessions": count})
-		return []mcp.ResourceContents{
-			mcp.TextResourceContents{
-				URI:      "stats://sessions",
-				MIMEType: "application/json",
-				Text:     string(jsonBytes),
+		return &mcp.ReadResourceResult{
+			Contents: []*mcp.ResourceContents{
+				{
+					URI:      "stats://sessions",
+					MIMEType: "application/json",
+					Text:     string(jsonBytes),
+				},
 			},
 		}, nil
 	})
 }
 
-func registerPrompts(srv *server.MCPServer) {
-	srv.AddPrompt(mcp.Prompt{
+func registerPrompts(srv *mcp.Server) {
+	srv.AddPrompt(&mcp.Prompt{
 		Name:        "comprehensive-research",
 		Description: "Guide an AI assistant through a multi-step research process",
-		Arguments: []mcp.PromptArgument{
+		Arguments: []*mcp.PromptArgument{
 			{Name: "topic", Description: "Research topic", Required: true},
 			{Name: "depth", Description: "Research depth: quick, standard, deep (default: standard)"},
 		},
-	}, func(_ context.Context, req mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+	}, func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 		topic := req.Params.Arguments["topic"]
 		depth := req.Params.Arguments["depth"]
 		if depth == "" {
@@ -95,23 +98,23 @@ func registerPrompts(srv *server.MCPServer) {
 
 		return &mcp.GetPromptResult{
 			Description: "Comprehensive research guide for: " + topic,
-			Messages: []mcp.PromptMessage{
+			Messages: []*mcp.PromptMessage{
 				{
-					Role:    mcp.RoleUser,
-					Content: mcp.TextContent{Type: "text", Text: prompt},
+					Role:    "user",
+					Content: &mcp.TextContent{Text: prompt},
 				},
 			},
 		}, nil
 	})
 
-	srv.AddPrompt(mcp.Prompt{
+	srv.AddPrompt(&mcp.Prompt{
 		Name:        "fact-check",
 		Description: "Verify a claim using multiple independent sources",
-		Arguments: []mcp.PromptArgument{
+		Arguments: []*mcp.PromptArgument{
 			{Name: "claim", Description: "The claim to verify", Required: true},
 			{Name: "context", Description: "Additional context about the claim"},
 		},
-	}, func(_ context.Context, req mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+	}, func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 		claim := req.Params.Arguments["claim"]
 		extra := req.Params.Arguments["context"]
 
@@ -128,23 +131,23 @@ func registerPrompts(srv *server.MCPServer) {
 
 		return &mcp.GetPromptResult{
 			Description: "Fact-check: " + claim,
-			Messages: []mcp.PromptMessage{
+			Messages: []*mcp.PromptMessage{
 				{
-					Role:    mcp.RoleUser,
-					Content: mcp.TextContent{Type: "text", Text: prompt},
+					Role:    "user",
+					Content: &mcp.TextContent{Text: prompt},
 				},
 			},
 		}, nil
 	})
 
-	srv.AddPrompt(mcp.Prompt{
+	srv.AddPrompt(&mcp.Prompt{
 		Name:        "competitive-analysis",
 		Description: "Research competitors in a given market",
-		Arguments: []mcp.PromptArgument{
+		Arguments: []*mcp.PromptArgument{
 			{Name: "company", Description: "Company to analyze", Required: true},
 			{Name: "market", Description: "Market or industry context"},
 		},
-	}, func(_ context.Context, req mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+	}, func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 		company := req.Params.Arguments["company"]
 		market := req.Params.Arguments["market"]
 
@@ -161,24 +164,24 @@ func registerPrompts(srv *server.MCPServer) {
 
 		return &mcp.GetPromptResult{
 			Description: "Competitive analysis: " + company,
-			Messages: []mcp.PromptMessage{
+			Messages: []*mcp.PromptMessage{
 				{
-					Role:    mcp.RoleUser,
-					Content: mcp.TextContent{Type: "text", Text: prompt},
+					Role:    "user",
+					Content: &mcp.TextContent{Text: prompt},
 				},
 			},
 		}, nil
 	})
 
-	srv.AddPrompt(mcp.Prompt{
+	srv.AddPrompt(&mcp.Prompt{
 		Name:        "literature-review",
 		Description: "Systematic review of academic literature on a topic",
-		Arguments: []mcp.PromptArgument{
+		Arguments: []*mcp.PromptArgument{
 			{Name: "topic", Description: "Research topic", Required: true},
 			{Name: "year_from", Description: "Start year for papers"},
 			{Name: "year_to", Description: "End year for papers"},
 		},
-	}, func(_ context.Context, req mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+	}, func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 		topic := req.Params.Arguments["topic"]
 		yearFrom := req.Params.Arguments["year_from"]
 		yearTo := req.Params.Arguments["year_to"]
@@ -197,10 +200,10 @@ func registerPrompts(srv *server.MCPServer) {
 
 		return &mcp.GetPromptResult{
 			Description: "Literature review: " + topic,
-			Messages: []mcp.PromptMessage{
+			Messages: []*mcp.PromptMessage{
 				{
-					Role:    mcp.RoleUser,
-					Content: mcp.TextContent{Type: "text", Text: prompt},
+					Role:    "user",
+					Content: &mcp.TextContent{Text: prompt},
 				},
 			},
 		}, nil

@@ -117,9 +117,9 @@ Client → [Authorization: Bearer <token>] → MCP Server
 
 **JWKS Management:**
 - Fetch from `{issuerURL}/.well-known/jwks.json`
-- Cache with auto-refresh (15-minute minimum interval)
+- Cache with auto-refresh (configurable interval, default 1 hour)
 - Graceful degradation: serve from cache if JWKS endpoint is down
-- Library: `github.com/lestrrat-go/jwx/v3` (handles all of this)
+- Implementation: custom RS256 validation (no external JWT library dependency)
 
 **Token Requirements:**
 - Algorithm: RS256 or ES256 (reject HS256 from external issuers)

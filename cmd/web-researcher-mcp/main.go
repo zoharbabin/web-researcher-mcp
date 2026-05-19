@@ -38,7 +38,7 @@ func main() {
 
 	cacheStore := cache.NewHybrid(cache.HybridConfig{
 		Memory:         cache.MemoryConfig{MaxSizeMB: cfg.CacheMaxMemoryMB},
-		Disk:           cache.DiskConfig{Dir: cfg.CacheDir, EncryptionKey: cfg.CacheEncryptionKey},
+		Disk:           cache.DiskConfig{Dir: cfg.CacheDir, EncryptionKey: cfg.CacheEncryptionKey, Version: version},
 		RedisURL:       cfg.RedisURL,
 		CacheIsolation: cfg.CacheIsolation,
 	})
@@ -105,6 +105,7 @@ func main() {
 	srv := server.New(server.Config{
 		Name:    "web-researcher-mcp",
 		Version: version,
+		Logger:  logger,
 	})
 
 	tools.RegisterAll(srv.MCP(), toolDeps)

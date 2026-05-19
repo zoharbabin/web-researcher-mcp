@@ -4,21 +4,40 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/metrics"
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
 )
 
+func createTestServer(m *metrics.Collector, s *session.Manager) *mcp.Server {
+	srv := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1.0.0"}, nil)
+	RegisterAll(srv, m, s)
+	return srv
+}
+
+func connectTestClient(ctx context.Context, t *testing.T, srv *mcp.Server) *mcp.ClientSession {
+	t.Helper()
+	t1, t2 := mcp.NewInMemoryTransports()
+	if _, err := srv.Connect(ctx, t1, nil); err != nil {
+		t.Fatalf("server connect failed: %v", err)
+	}
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "1.0.0"}, nil)
+	cs, err := client.Connect(ctx, t2, nil)
+	if err != nil {
+		t.Fatalf("client connect failed: %v", err)
+	}
+	return cs
+}
+
 func TestRegisterAllDoesNotPanic(t *testing.T) {
-	srv := server.NewMCPServer("test", "1.0.0")
 	m := metrics.NewCollector()
 	s := session.NewManager(session.Config{MaxSessions: 10})
-	RegisterAll(srv, m, s)
+	createTestServer(m, s)
 }
 
 // =============================================================================
@@ -26,49 +45,33 @@ func TestRegisterAllDoesNotPanic(t *testing.T) {
 // =============================================================================
 
 func TestToolStatsResource(t *testing.T) {
-	srv := server.NewMCPServer("test", "1.0.0",
-		server.WithResourceCapabilities(true, true),
-	)
+	ctx := context.Background()
 	m := metrics.NewCollector()
 	s := session.NewManager(session.Config{MaxSessions: 10})
-	RegisterAll(srv, m, s)
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
 
 	// Record some tool calls to populate metrics
 	m.RecordToolCall("web_search", 100*time.Millisecond, nil, "", false)
 	m.RecordToolCall("web_search", 200*time.Millisecond, nil, "", true)
 	m.RecordToolCall("scrape_page", 50*time.Millisecond, nil, "", false)
 
-	// Call the resource handler via HandleMessage
-	result := srv.HandleMessage(context.Background(), mustMarshalResourceRead("stats://tools"))
-
-	resp, ok := result.(mcp.JSONRPCResponse)
-	if !ok {
-		t.Fatalf("expected JSONRPCResponse, got %T", result)
+	result, err := cs.ReadResource(ctx, &mcp.ReadResourceParams{URI: "stats://tools"})
+	if err != nil {
+		t.Fatalf("ReadResource failed: %v", err)
 	}
 
-	resultBytes, _ := json.Marshal(resp.Result)
-	var raw struct {
-		Contents []struct {
-			URI      string `json:"uri"`
-			MIMEType string `json:"mimeType"`
-			Text     string `json:"text"`
-		} `json:"contents"`
-	}
-	if err := json.Unmarshal(resultBytes, &raw); err != nil {
-		t.Fatalf("failed to unmarshal resource result: %v", err)
-	}
-
-	if len(raw.Contents) == 0 {
+	if len(result.Contents) == 0 {
 		t.Fatal("expected at least one resource content item")
 	}
 
-	if raw.Contents[0].URI != "stats://tools" {
-		t.Fatalf("expected URI 'stats://tools', got %q", raw.Contents[0].URI)
+	if result.Contents[0].URI != "stats://tools" {
+		t.Fatalf("expected URI 'stats://tools', got %q", result.Contents[0].URI)
 	}
 
-	// Parse the JSON text to verify tool stats
 	var statsResponse map[string]any
-	if err := json.Unmarshal([]byte(raw.Contents[0].Text), &statsResponse); err != nil {
+	if err := json.Unmarshal([]byte(result.Contents[0].Text), &statsResponse); err != nil {
 		t.Fatalf("failed to parse stats JSON: %v", err)
 	}
 
@@ -99,42 +102,28 @@ func TestToolStatsResource(t *testing.T) {
 }
 
 func TestSessionsResource(t *testing.T) {
-	srv := server.NewMCPServer("test", "1.0.0",
-		server.WithResourceCapabilities(true, true),
-	)
+	ctx := context.Background()
 	m := metrics.NewCollector()
 	s := session.NewManager(session.Config{MaxSessions: 10, SessionTTL: time.Hour})
-	RegisterAll(srv, m, s)
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
 
 	// Create some sessions
 	_, _ = s.Create("tenant-1")
 	_, _ = s.Create("tenant-2")
 
-	result := srv.HandleMessage(context.Background(), mustMarshalResourceRead("stats://sessions"))
-
-	resp, ok := result.(mcp.JSONRPCResponse)
-	if !ok {
-		t.Fatalf("expected JSONRPCResponse, got %T", result)
+	result, err := cs.ReadResource(ctx, &mcp.ReadResourceParams{URI: "stats://sessions"})
+	if err != nil {
+		t.Fatalf("ReadResource failed: %v", err)
 	}
 
-	resultBytes, _ := json.Marshal(resp.Result)
-	var raw struct {
-		Contents []struct {
-			URI      string `json:"uri"`
-			MIMEType string `json:"mimeType"`
-			Text     string `json:"text"`
-		} `json:"contents"`
-	}
-	if err := json.Unmarshal(resultBytes, &raw); err != nil {
-		t.Fatalf("failed to unmarshal resource result: %v", err)
-	}
-
-	if len(raw.Contents) == 0 {
+	if len(result.Contents) == 0 {
 		t.Fatal("expected at least one resource content item")
 	}
 
 	var sessResponse map[string]any
-	if err := json.Unmarshal([]byte(raw.Contents[0].Text), &sessResponse); err != nil {
+	if err := json.Unmarshal([]byte(result.Contents[0].Text), &sessResponse); err != nil {
 		t.Fatalf("failed to parse sessions JSON: %v", err)
 	}
 
@@ -148,32 +137,20 @@ func TestSessionsResource(t *testing.T) {
 }
 
 func TestSessionsResourceZero(t *testing.T) {
-	srv := server.NewMCPServer("test", "1.0.0",
-		server.WithResourceCapabilities(true, true),
-	)
+	ctx := context.Background()
 	m := metrics.NewCollector()
 	s := session.NewManager(session.Config{MaxSessions: 10})
-	RegisterAll(srv, m, s)
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
 
-	result := srv.HandleMessage(context.Background(), mustMarshalResourceRead("stats://sessions"))
-
-	resp, ok := result.(mcp.JSONRPCResponse)
-	if !ok {
-		t.Fatalf("expected JSONRPCResponse, got %T", result)
-	}
-
-	resultBytes, _ := json.Marshal(resp.Result)
-	var raw struct {
-		Contents []struct {
-			Text string `json:"text"`
-		} `json:"contents"`
-	}
-	if err := json.Unmarshal(resultBytes, &raw); err != nil {
-		t.Fatalf("failed to unmarshal: %v", err)
+	result, err := cs.ReadResource(ctx, &mcp.ReadResourceParams{URI: "stats://sessions"})
+	if err != nil {
+		t.Fatalf("ReadResource failed: %v", err)
 	}
 
 	var sessResponse map[string]any
-	if err := json.Unmarshal([]byte(raw.Contents[0].Text), &sessResponse); err != nil {
+	if err := json.Unmarshal([]byte(result.Contents[0].Text), &sessResponse); err != nil {
 		t.Fatalf("failed to parse JSON: %v", err)
 	}
 
@@ -187,242 +164,175 @@ func TestSessionsResourceZero(t *testing.T) {
 // =============================================================================
 
 func TestComprehensiveResearchPrompt(t *testing.T) {
-	srv := server.NewMCPServer("test", "1.0.0",
-		server.WithPromptCapabilities(true),
-	)
+	ctx := context.Background()
 	m := metrics.NewCollector()
 	s := session.NewManager(session.Config{MaxSessions: 10})
-	RegisterAll(srv, m, s)
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
 
-	result := srv.HandleMessage(context.Background(), mustMarshalPromptGet("comprehensive-research", map[string]string{
-		"topic": "quantum computing",
-		"depth": "deep",
-	}))
-
-	resp, ok := result.(mcp.JSONRPCResponse)
-	if !ok {
-		t.Fatalf("expected JSONRPCResponse, got %T", result)
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name: "comprehensive-research",
+		Arguments: map[string]string{
+			"topic": "quantum computing",
+			"depth": "deep",
+		},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
 	}
 
-	resultBytes, _ := json.Marshal(resp.Result)
-	var raw struct {
-		Description string `json:"description"`
-		Messages    []struct {
-			Role    string `json:"role"`
-			Content struct {
-				Type string `json:"type"`
-				Text string `json:"text"`
-			} `json:"content"`
-		} `json:"messages"`
-	}
-	if err := json.Unmarshal(resultBytes, &raw); err != nil {
-		t.Fatalf("failed to unmarshal prompt result: %v", err)
-	}
-
-	if len(raw.Messages) == 0 {
+	if len(result.Messages) == 0 {
 		t.Fatal("expected at least one message")
 	}
 
-	text := raw.Messages[0].Content.Text
-	if text == "" {
-		t.Fatal("expected non-empty prompt text")
+	tc, ok := result.Messages[0].Content.(*mcp.TextContent)
+	if !ok {
+		t.Fatal("expected TextContent")
 	}
 
-	// Check it contains the topic
-	if !containsStr(text, "quantum computing") {
+	if !strings.Contains(tc.Text, "quantum computing") {
 		t.Error("expected prompt to mention the topic")
 	}
-	// Deep depth should include step 6
-	if !containsStr(text, "ACADEMIC") {
+	if !strings.Contains(tc.Text, "ACADEMIC") {
 		t.Error("expected deep research to include academic step")
 	}
 }
 
 func TestComprehensiveResearchPromptQuick(t *testing.T) {
-	srv := server.NewMCPServer("test", "1.0.0",
-		server.WithPromptCapabilities(true),
-	)
+	ctx := context.Background()
 	m := metrics.NewCollector()
 	s := session.NewManager(session.Config{MaxSessions: 10})
-	RegisterAll(srv, m, s)
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
 
-	result := srv.HandleMessage(context.Background(), mustMarshalPromptGet("comprehensive-research", map[string]string{
-		"topic": "AI ethics",
-		"depth": "quick",
-	}))
-
-	resp, ok := result.(mcp.JSONRPCResponse)
-	if !ok {
-		t.Fatalf("expected JSONRPCResponse, got %T", result)
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name: "comprehensive-research",
+		Arguments: map[string]string{
+			"topic": "AI ethics",
+			"depth": "quick",
+		},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
 	}
 
-	resultBytes, _ := json.Marshal(resp.Result)
-	var raw struct {
-		Messages []struct {
-			Content struct {
-				Text string `json:"text"`
-			} `json:"content"`
-		} `json:"messages"`
-	}
-	if err := json.Unmarshal(resultBytes, &raw); err != nil {
-		t.Fatalf("failed to unmarshal: %v", err)
-	}
-
-	text := raw.Messages[0].Content.Text
-	// Quick should not include step 4+
-	if containsStr(text, "CROSS-REFERENCE") {
+	tc := result.Messages[0].Content.(*mcp.TextContent)
+	if strings.Contains(tc.Text, "CROSS-REFERENCE") {
 		t.Error("quick depth should not include cross-reference step")
 	}
 }
 
 func TestFactCheckPrompt(t *testing.T) {
-	srv := server.NewMCPServer("test", "1.0.0",
-		server.WithPromptCapabilities(true),
-	)
+	ctx := context.Background()
 	m := metrics.NewCollector()
 	s := session.NewManager(session.Config{MaxSessions: 10})
-	RegisterAll(srv, m, s)
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
 
-	result := srv.HandleMessage(context.Background(), mustMarshalPromptGet("fact-check", map[string]string{
-		"claim":   "The earth is flat",
-		"context": "social media debate",
-	}))
-
-	resp, ok := result.(mcp.JSONRPCResponse)
-	if !ok {
-		t.Fatalf("expected JSONRPCResponse, got %T", result)
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name: "fact-check",
+		Arguments: map[string]string{
+			"claim":   "The earth is flat",
+			"context": "social media debate",
+		},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
 	}
 
-	resultBytes, _ := json.Marshal(resp.Result)
-	var raw struct {
-		Description string `json:"description"`
-		Messages    []struct {
-			Content struct {
-				Text string `json:"text"`
-			} `json:"content"`
-		} `json:"messages"`
-	}
-	if err := json.Unmarshal(resultBytes, &raw); err != nil {
-		t.Fatalf("failed to unmarshal: %v", err)
-	}
-
-	if len(raw.Messages) == 0 {
+	if len(result.Messages) == 0 {
 		t.Fatal("expected messages")
 	}
 
-	text := raw.Messages[0].Content.Text
-	if !containsStr(text, "The earth is flat") {
+	tc := result.Messages[0].Content.(*mcp.TextContent)
+	if !strings.Contains(tc.Text, "The earth is flat") {
 		t.Error("expected prompt to contain the claim")
 	}
-	if !containsStr(text, "social media debate") {
+	if !strings.Contains(tc.Text, "social media debate") {
 		t.Error("expected prompt to contain the context")
 	}
 }
 
 func TestCompetitiveAnalysisPrompt(t *testing.T) {
-	srv := server.NewMCPServer("test", "1.0.0",
-		server.WithPromptCapabilities(true),
-	)
+	ctx := context.Background()
 	m := metrics.NewCollector()
 	s := session.NewManager(session.Config{MaxSessions: 10})
-	RegisterAll(srv, m, s)
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
 
-	result := srv.HandleMessage(context.Background(), mustMarshalPromptGet("competitive-analysis", map[string]string{
-		"company": "Acme Corp",
-		"market":  "cloud computing",
-	}))
-
-	resp, ok := result.(mcp.JSONRPCResponse)
-	if !ok {
-		t.Fatalf("expected JSONRPCResponse, got %T", result)
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name: "competitive-analysis",
+		Arguments: map[string]string{
+			"company": "Acme Corp",
+			"market":  "cloud computing",
+		},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
 	}
 
-	resultBytes, _ := json.Marshal(resp.Result)
-	var raw struct {
-		Messages []struct {
-			Content struct {
-				Text string `json:"text"`
-			} `json:"content"`
-		} `json:"messages"`
-	}
-	if err := json.Unmarshal(resultBytes, &raw); err != nil {
-		t.Fatalf("failed to unmarshal: %v", err)
-	}
-
-	text := raw.Messages[0].Content.Text
-	if !containsStr(text, "Acme Corp") {
+	tc := result.Messages[0].Content.(*mcp.TextContent)
+	if !strings.Contains(tc.Text, "Acme Corp") {
 		t.Error("expected prompt to mention the company")
 	}
-	if !containsStr(text, "cloud computing") {
+	if !strings.Contains(tc.Text, "cloud computing") {
 		t.Error("expected prompt to mention the market")
 	}
 }
 
 func TestLiteratureReviewPrompt(t *testing.T) {
-	srv := server.NewMCPServer("test", "1.0.0",
-		server.WithPromptCapabilities(true),
-	)
+	ctx := context.Background()
 	m := metrics.NewCollector()
 	s := session.NewManager(session.Config{MaxSessions: 10})
-	RegisterAll(srv, m, s)
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
 
-	result := srv.HandleMessage(context.Background(), mustMarshalPromptGet("literature-review", map[string]string{
-		"topic":     "CRISPR gene editing",
-		"year_from": "2020",
-		"year_to":   "2025",
-	}))
-
-	resp, ok := result.(mcp.JSONRPCResponse)
-	if !ok {
-		t.Fatalf("expected JSONRPCResponse, got %T", result)
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name: "literature-review",
+		Arguments: map[string]string{
+			"topic":     "CRISPR gene editing",
+			"year_from": "2020",
+			"year_to":   "2025",
+		},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
 	}
 
-	resultBytes, _ := json.Marshal(resp.Result)
-	var raw struct {
-		Messages []struct {
-			Content struct {
-				Text string `json:"text"`
-			} `json:"content"`
-		} `json:"messages"`
-	}
-	if err := json.Unmarshal(resultBytes, &raw); err != nil {
-		t.Fatalf("failed to unmarshal: %v", err)
-	}
-
-	text := raw.Messages[0].Content.Text
-	if !containsStr(text, "CRISPR gene editing") {
+	tc := result.Messages[0].Content.(*mcp.TextContent)
+	if !strings.Contains(tc.Text, "CRISPR gene editing") {
 		t.Error("expected prompt to mention the topic")
 	}
-	if !containsStr(text, "2020") || !containsStr(text, "2025") {
+	if !strings.Contains(tc.Text, "2020") || !strings.Contains(tc.Text, "2025") {
 		t.Error("expected prompt to mention year range")
 	}
 }
 
 func TestToolStatsResourceWithErrors(t *testing.T) {
-	srv := server.NewMCPServer("test", "1.0.0",
-		server.WithResourceCapabilities(true, true),
-	)
+	ctx := context.Background()
 	m := metrics.NewCollector()
 	s := session.NewManager(session.Config{MaxSessions: 10})
-	RegisterAll(srv, m, s)
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
 
 	// Record calls with errors
 	m.RecordToolCall("web_search", 100*time.Millisecond, nil, "", false)
 	m.RecordToolCall("web_search", 200*time.Millisecond, fmt.Errorf("timeout"), "timeout", false)
 	m.RecordToolCall("web_search", 50*time.Millisecond, fmt.Errorf("rate limit"), "rate_limited", false)
 
-	result := srv.HandleMessage(context.Background(), mustMarshalResourceRead("stats://tools"))
-	resp := result.(mcp.JSONRPCResponse)
-	resultBytes, _ := json.Marshal(resp.Result)
-	var raw struct {
-		Contents []struct {
-			Text string `json:"text"`
-		} `json:"contents"`
+	result, err := cs.ReadResource(ctx, &mcp.ReadResourceParams{URI: "stats://tools"})
+	if err != nil {
+		t.Fatalf("ReadResource failed: %v", err)
 	}
-	json.Unmarshal(resultBytes, &raw)
 
 	var statsResponse map[string]any
-	json.Unmarshal([]byte(raw.Contents[0].Text), &statsResponse)
+	json.Unmarshal([]byte(result.Contents[0].Text), &statsResponse)
 
 	tools := statsResponse["tools"].(map[string]any)
 	webSearch := tools["web_search"].(map[string]any)
@@ -436,48 +346,4 @@ func TestToolStatsResourceWithErrors(t *testing.T) {
 	if webSearch["errorCalls"].(float64) != 2 {
 		t.Fatalf("expected 2 error calls, got %v", webSearch["errorCalls"])
 	}
-}
-
-// =============================================================================
-// Helpers
-// =============================================================================
-
-func mustMarshalResourceRead(uri string) json.RawMessage {
-	msg := map[string]any{
-		"jsonrpc": "2.0",
-		"id":      1,
-		"method":  "resources/read",
-		"params": map[string]any{
-			"uri": uri,
-		},
-	}
-	b, _ := json.Marshal(msg)
-	return b
-}
-
-func mustMarshalPromptGet(name string, args map[string]string) json.RawMessage {
-	msg := map[string]any{
-		"jsonrpc": "2.0",
-		"id":      1,
-		"method":  "prompts/get",
-		"params": map[string]any{
-			"name":      name,
-			"arguments": args,
-		},
-	}
-	b, _ := json.Marshal(msg)
-	return b
-}
-
-func containsStr(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstring(s, substr))
-}
-
-func containsSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

@@ -1,12 +1,3 @@
 {
-  "mcpServers": {
-    "web-researcher": {
-      "command": "web-researcher-mcp",
-      "args": [],
-      "env": {
-        "GOOGLE_CUSTOM_SEARCH_API_KEY": "${GOOGLE_CUSTOM_SEARCH_API_KEY}",
-        "GOOGLE_CUSTOM_SEARCH_ID": "${GOOGLE_CUSTOM_SEARCH_ID}"
-      }
-    }
-  }
+  "mcpServers": {}
 }

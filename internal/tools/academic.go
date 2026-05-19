@@ -7,8 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
@@ -41,43 +40,43 @@ var sourceToSites = map[string][]string{
 	"springer": {"link.springer.com"},
 }
 
-func registerAcademicSearch(srv *server.MCPServer, deps Dependencies) {
-	tool := mcp.NewTool("academic_search",
-		mcp.WithDescription("Search academic literature across arXiv, PubMed, IEEE, Nature, Springer, and other scholarly sources. Uses site-restricted Google search (unaffected by PSE sunset)."),
-		mcp.WithString("query", mcp.Required(), mcp.Description("Academic search query")),
-		mcp.WithNumber("num_results", mcp.Description("Number of results (1-10, default: 5)")),
-		mcp.WithNumber("year_from", mcp.Description("Filter papers from this year (e.g., 2020)")),
-		mcp.WithNumber("year_to", mcp.Description("Filter papers to this year (e.g., 2024)")),
-		mcp.WithString("source", mcp.Description("Source filter: all, arxiv, pubmed, ieee, nature, springer (default: all)")),
-		mcp.WithBoolean("pdf_only", mcp.Description("Only return results with PDF links (default: false)")),
-		mcp.WithString("sort_by", mcp.Description("Sort by: relevance, date (default: relevance)")),
-	)
+type academicSearchInput struct {
+	Query      string `json:"query" jsonschema:"Academic search query,required"`
+	NumResults int    `json:"num_results,omitempty" jsonschema:"Number of results (1-10, default: 5)"`
+	YearFrom   int    `json:"year_from,omitempty" jsonschema:"Filter papers from this year (e.g., 2020)"`
+	YearTo     int    `json:"year_to,omitempty" jsonschema:"Filter papers to this year (e.g., 2024)"`
+	Source     string `json:"source,omitempty" jsonschema:"Source filter: all, arxiv, pubmed, ieee, nature, springer (default: all)"`
+	PDFOnly    bool   `json:"pdf_only,omitempty" jsonschema:"Only return results with PDF links (default: false)"`
+	SortBy     string `json:"sort_by,omitempty" jsonschema:"Sort by: relevance, date (default: relevance)"`
+}
 
-	srv.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "academic_search",
+		Description: "Search academic literature across arXiv, PubMed, IEEE, Nature, Springer, and other scholarly sources. Uses site-restricted Google search (unaffected by PSE sunset).",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input academicSearchInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
 
-		query, _ := req.GetArguments()["query"].(string)
-		if query == "" {
-			return toolError("query is required"), nil
+		if input.Query == "" {
+			return toolError("query is required"), nil, nil
 		}
 
-		numResults := intParam(req.GetArguments(), "num_results", 5)
-		yearFrom := intParam(req.GetArguments(), "year_from", 0)
-		yearTo := intParam(req.GetArguments(), "year_to", 0)
-		source, _ := req.GetArguments()["source"].(string)
+		numResults := input.NumResults
+		if numResults <= 0 {
+			numResults = 5
+		}
+		source := input.Source
 		if source == "" {
 			source = "all"
 		}
-		pdfOnly := boolParam(req.GetArguments(), "pdf_only", false)
 
-		cacheKey := searchCacheKey("academic", query, numResults, yearFrom, yearTo, source)
+		cacheKey := searchCacheKey("academic", input.Query, numResults, input.YearFrom, input.YearTo, source)
 		if cached, ok := deps.Cache.Get(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("academic_search", time.Since(start), nil, "", true)
 			auditToolCall(deps, "academic_search", time.Since(start), nil, "")
-			return mcp.NewToolResultText(string(cached)), nil
+			return textResult(string(cached)), nil, nil
 		}
 
-		// Build site-restricted query
 		sites := academicSites
 		if source != "all" {
 			if s, ok := sourceToSites[source]; ok {
@@ -89,15 +88,15 @@ func registerAcademicSearch(srv *server.MCPServer, deps Dependencies) {
 		for i, s := range sites {
 			siteOps[i] = "site:" + s
 		}
-		siteQuery := query + " (" + strings.Join(siteOps, " OR ") + ")"
+		siteQuery := input.Query + " (" + strings.Join(siteOps, " OR ") + ")"
 
-		if yearFrom > 0 {
-			siteQuery += fmt.Sprintf(" after:%d", yearFrom-1)
+		if input.YearFrom > 0 {
+			siteQuery += fmt.Sprintf(" after:%d", input.YearFrom-1)
 		}
-		if yearTo > 0 {
-			siteQuery += fmt.Sprintf(" before:%d", yearTo+1)
+		if input.YearTo > 0 {
+			siteQuery += fmt.Sprintf(" before:%d", input.YearTo+1)
 		}
-		if pdfOnly {
+		if input.PDFOnly {
 			siteQuery += " filetype:pdf"
 		}
 
@@ -108,10 +107,9 @@ func registerAcademicSearch(srv *server.MCPServer, deps Dependencies) {
 		if err != nil {
 			deps.Metrics.RecordToolCall("academic_search", time.Since(start), err, "upstream_error", false)
 			auditToolCall(deps, "academic_search", time.Since(start), err, "upstream_error")
-			return toolError(fmt.Sprintf("academic search failed: %v", err)), nil
+			return toolError(fmt.Sprintf("academic search failed: %v", err)), nil, nil
 		}
 
-		// Transform to academic paper format
 		papers := make([]map[string]any, 0, len(results))
 		for _, r := range results {
 			paper := map[string]any{
@@ -127,7 +125,7 @@ func registerAcademicSearch(srv *server.MCPServer, deps Dependencies) {
 
 		output := map[string]any{
 			"papers":       papers,
-			"query":        query,
+			"query":        input.Query,
 			"totalResults": len(papers),
 			"resultCount":  len(papers),
 			"source":       source,
@@ -138,7 +136,7 @@ func registerAcademicSearch(srv *server.MCPServer, deps Dependencies) {
 		deps.Metrics.RecordToolCall("academic_search", time.Since(start), nil, "", false)
 		auditToolCall(deps, "academic_search", time.Since(start), nil, "")
 
-		return mcp.NewToolResultText(string(jsonBytes)), nil
+		return textResult(string(jsonBytes)), nil, nil
 	})
 }
 

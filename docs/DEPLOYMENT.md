@@ -74,7 +74,7 @@ When `PORT` is set, the server starts an HTTP listener in addition to STDIO.
 ## Docker
 
 ```dockerfile
-FROM golang:1.23-alpine AS builder
+FROM golang:1.25-alpine AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
@@ -98,7 +98,7 @@ docker run -p 3000:3000 \
   web-researcher-mcp
 ```
 
-**For headless browser (chromedp):**
+**For headless browser (go-rod):**
 ```dockerfile
 FROM chromedp/headless-shell:latest AS chrome
 FROM gcr.io/distroless/static-debian12
@@ -207,7 +207,7 @@ spec:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SEARCH_PROVIDER` | Primary provider | `google` (until Brave adapter ships) |
+| `SEARCH_PROVIDER` | Primary provider | `google` |
 | `SEARCH_FALLBACK_PROVIDER` | Fallback provider | — |
 | `BRAVE_API_KEY` | Brave Search API key | — |
 | `SERPER_API_KEY` | Serper.dev API key | — |
@@ -267,7 +267,7 @@ When running multiple instances behind a load balancer:
 
 1. **Set `REDIS_URL`** — Enables shared cache, rate limit counters, and session state across instances.
 2. **Use session-affinity** for SSE connections (sticky sessions at L7 LB), OR use the stateless Streamable HTTP transport where clients reconnect and re-fetch state from Redis.
-3. **Chromedp instances** are per-pod. No shared browser pool. Each pod handles its own headless Chrome.
+3. **go-rod browser instances** are per-pod. No shared browser pool. Each pod handles its own headless Chrome.
 
 **Architecture (multi-instance):**
 

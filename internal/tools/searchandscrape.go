@@ -7,60 +7,75 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
-func registerSearchAndScrape(srv *server.MCPServer, deps Dependencies) {
-	tool := mcp.NewTool("search_and_scrape",
-		mcp.WithDescription("Combined search and scrape pipeline. Searches the web, scrapes top results in parallel, deduplicates content, scores quality, and returns ranked sources."),
-		mcp.WithString("query", mcp.Required(), mcp.Description("Search query")),
-		mcp.WithNumber("num_results", mcp.Description("Number of sources to scrape (1-10, default: 3)")),
-		mcp.WithBoolean("include_sources", mcp.Description("Include individual source details (default: true)")),
-		mcp.WithBoolean("deduplicate", mcp.Description("Remove duplicate paragraphs (default: true)")),
-		mcp.WithNumber("max_length_per_source", mcp.Description("Max bytes per source (default: 50000)")),
-		mcp.WithNumber("total_max_length", mcp.Description("Total max bytes for combined content (default: 300000)")),
-		mcp.WithBoolean("filter_by_query", mcp.Description("Filter out low-relevance sources (default: false)")),
-	)
+type searchAndScrapeInput struct {
+	Query              string `json:"query" jsonschema:"Search query,required"`
+	NumResults         int    `json:"num_results,omitempty" jsonschema:"Number of sources to scrape (1-10, default: 3)"`
+	IncludeSources     *bool  `json:"include_sources,omitempty" jsonschema:"Include individual source details (default: true)"`
+	Deduplicate        *bool  `json:"deduplicate,omitempty" jsonschema:"Remove duplicate paragraphs (default: true)"`
+	MaxLengthPerSource int    `json:"max_length_per_source,omitempty" jsonschema:"Max bytes per source (default: 50000)"`
+	TotalMaxLength     int    `json:"total_max_length,omitempty" jsonschema:"Total max bytes for combined content (default: 300000)"`
+	FilterByQuery      bool   `json:"filter_by_query,omitempty" jsonschema:"Filter out low-relevance sources (default: false)"`
+}
 
-	srv.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "search_and_scrape",
+		Description: "Combined search and scrape pipeline. Searches the web, scrapes top results in parallel, deduplicates content, scores quality, and returns ranked sources.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input searchAndScrapeInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
 
-		query, _ := req.GetArguments()["query"].(string)
-		if query == "" {
-			return toolError("query is required"), nil
+		if input.Query == "" {
+			return toolError("query is required"), nil, nil
 		}
 
-		numResults := intParam(req.GetArguments(), "num_results", 3)
-		includeSources := boolParam(req.GetArguments(), "include_sources", true)
-		deduplicate := boolParam(req.GetArguments(), "deduplicate", true)
-		maxLenPerSource := intParam(req.GetArguments(), "max_length_per_source", 50000)
-		totalMaxLen := intParam(req.GetArguments(), "total_max_length", 300000)
-		filterByQuery := boolParam(req.GetArguments(), "filter_by_query", false)
+		numResults := input.NumResults
+		if numResults <= 0 {
+			numResults = 3
+		}
+		includeSources := input.IncludeSources == nil || *input.IncludeSources
+		deduplicate := input.Deduplicate == nil || *input.Deduplicate
+		maxLenPerSource := input.MaxLengthPerSource
+		if maxLenPerSource <= 0 {
+			maxLenPerSource = 50000
+		}
+		totalMaxLen := input.TotalMaxLength
+		if totalMaxLen <= 0 {
+			totalMaxLen = 300000
+		}
 
 		searchResults, err := deps.Search.Web(ctx, search.WebSearchParams{
-			Query:      query,
+			Query:      input.Query,
 			NumResults: numResults,
 		})
 		if err != nil {
 			deps.Metrics.RecordToolCall("search_and_scrape", time.Since(start), err, "upstream_error", false)
 			auditToolCall(deps, "search_and_scrape", time.Since(start), err, "upstream_error")
-			return toolError(fmt.Sprintf("search failed: %v", err)), nil
+			return toolError(fmt.Sprintf("search failed: %v", err)), nil, nil
 		}
 
 		if len(searchResults) == 0 {
-			return emptySearchResult(query)
+			output := map[string]any{
+				"query":           input.Query,
+				"sources":         []any{},
+				"combinedContent": "",
+				"summary":         map[string]int{"urlsSearched": 0, "urlsScraped": 0, "processingTimeMs": 0},
+			}
+			jsonBytes, _ := json.Marshal(output)
+			return textResult(string(jsonBytes)), nil, nil
 		}
 
 		results := parallelScrape(ctx, deps, searchResults, maxLenPerSource)
-		sources, combinedParts, scraped := buildSources(results, query, filterByQuery)
+		sources, combinedParts, scraped := buildSources(results, input.Query, input.FilterByQuery)
 		combined := assembleCombined(combinedParts, deduplicate, totalMaxLen)
 
 		output := map[string]any{
-			"query":           query,
+			"query":           input.Query,
 			"combinedContent": combined,
 			"summary": map[string]any{
 				"urlsSearched":     len(searchResults),
@@ -82,7 +97,7 @@ func registerSearchAndScrape(srv *server.MCPServer, deps Dependencies) {
 		deps.Metrics.RecordToolCall("search_and_scrape", time.Since(start), nil, "", false)
 		auditToolCall(deps, "search_and_scrape", time.Since(start), nil, "")
 
-		return mcp.NewToolResultText(string(jsonBytes)), nil
+		return textResult(string(jsonBytes)), nil, nil
 	})
 }
 
@@ -100,17 +115,6 @@ type sourceOutput struct {
 	Content     string                `json:"content"`
 	ContentType string                `json:"contentType"`
 	Scores      *content.QualityScore `json:"scores,omitempty"`
-}
-
-func emptySearchResult(query string) (*mcp.CallToolResult, error) {
-	output := map[string]any{
-		"query":           query,
-		"sources":         []any{},
-		"combinedContent": "",
-		"summary":         map[string]int{"urlsSearched": 0, "urlsScraped": 0, "processingTimeMs": 0},
-	}
-	jsonBytes, _ := json.Marshal(output)
-	return mcp.NewToolResultText(string(jsonBytes)), nil
 }
 
 func parallelScrape(ctx context.Context, deps Dependencies, searchResults []search.SearchResult, maxLen int) []scrapeResult {
@@ -193,13 +197,4 @@ func assembleCombined(parts []string, deduplicate bool, totalMaxLen int) string 
 		combined += part + "\n\n---\n\n"
 	}
 	return combined
-}
-
-func boolParam(args map[string]any, key string, fallback bool) bool {
-	if v, ok := args[key]; ok {
-		if b, ok := v.(bool); ok {
-			return b
-		}
-	}
-	return fallback
 }

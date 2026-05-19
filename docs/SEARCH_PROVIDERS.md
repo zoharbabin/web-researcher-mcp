@@ -278,15 +278,13 @@ type SearXNGProvider struct {
 
 ---
 
-## Migration Path
+## Google PSE Sunset Timeline
 
-| Phase | Timing | Action |
-|-------|--------|--------|
-| 1 | Day 1 | Ship with Google PSE as default + lenses. All existing behavior preserved. |
-| 2 | v1.1 | Add Brave adapter. Switch default for unrestricted to Brave. |
-| 3 | v1.2 | Add Serper + SearXNG adapters. |
-| 4 | Before Jan 2027 | Log deprecation warning when Google PSE whole-web is used without lens. |
-| 5 | After Jan 2027 | Remove Google whole-web code path. Lenses + site-restricted remain. |
+| Phase | Action |
+|-------|--------|
+| Current (v1.0) | All four providers shipped (Google, Brave, Serper, SearXNG). Google PSE is default. |
+| Before Jan 2027 | Log deprecation warning when Google PSE whole-web is used without lens. |
+| After Jan 2027 | Remove Google whole-web code path. Lenses + site-restricted remain. |
 
 ---
 

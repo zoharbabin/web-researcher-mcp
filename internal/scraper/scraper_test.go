@@ -1,7 +1,9 @@
 package scraper
 
 import (
+	"compress/gzip"
 	"context"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -1445,4 +1447,117 @@ func TestPipeline_StealthTierIntercepts(t *testing.T) {
 	if !strings.Contains(result.Content, "Stealth intercepted content") {
 		t.Error("expected stealth tier to have provided the content")
 	}
+}
+
+// =============================================================================
+// Gzip Decompression Tests
+// =============================================================================
+
+func TestScrapeHTML_GzipDecompression(t *testing.T) {
+	html := `<!DOCTYPE html><html><head><title>Gzip Test</title></head><body><article>
+<p>This is gzip-compressed content that should be properly decompressed by the scraper pipeline to produce readable text output.</p>
+</article></body></html>`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Header().Set("Content-Encoding", "gzip")
+
+		var buf strings.Builder
+		gz, _ := newGzipWriter(&buf)
+		gz.Write([]byte(html))
+		gz.Close()
+		w.Write([]byte(buf.String()))
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{AllowPrivateIPs: true})
+	result, err := p.scrapeHTML(context.Background(), ts.URL, 50000)
+	if err != nil {
+		t.Fatalf("scrapeHTML with gzip error: %v", err)
+	}
+	if !strings.Contains(result.Content, "gzip-compressed content") {
+		t.Errorf("expected decompressed content, got: %q", result.Content[:min(len(result.Content), 200)])
+	}
+	if result.Title != "Gzip Test" {
+		t.Errorf("expected title 'Gzip Test', got %q", result.Title)
+	}
+}
+
+func TestScrapeStealth_GzipDecompression(t *testing.T) {
+	html := `<!DOCTYPE html><html><body><article>
+<p>Stealth gzip content that must be decompressed correctly. This paragraph has enough text to pass the one hundred character minimum threshold for extraction.</p>
+</article></body></html>`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Header().Set("Content-Encoding", "gzip")
+
+		var buf strings.Builder
+		gz, _ := newGzipWriter(&buf)
+		gz.Write([]byte(html))
+		gz.Close()
+		w.Write([]byte(buf.String()))
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{AllowPrivateIPs: true})
+	result, err := p.scrapeStealth(context.Background(), ts.URL, 50000)
+	if err != nil {
+		t.Fatalf("scrapeStealth with gzip error: %v", err)
+	}
+	if !strings.Contains(result.Content, "Stealth gzip content") {
+		t.Errorf("expected decompressed content, got: %q", result.Content[:min(len(result.Content), 200)])
+	}
+}
+
+func TestDecompressBody_Gzip(t *testing.T) {
+	var buf strings.Builder
+	gz, _ := newGzipWriter(&buf)
+	gz.Write([]byte("hello gzip world"))
+	gz.Close()
+
+	resp := &http.Response{
+		Header: http.Header{"Content-Encoding": []string{"gzip"}},
+		Body:   io.NopCloser(strings.NewReader(buf.String())),
+	}
+	reader, err := decompressBody(resp)
+	if err != nil {
+		t.Fatalf("decompressBody error: %v", err)
+	}
+	data, _ := io.ReadAll(reader)
+	if string(data) != "hello gzip world" {
+		t.Errorf("expected 'hello gzip world', got %q", string(data))
+	}
+}
+
+func TestDecompressBody_NoEncoding(t *testing.T) {
+	resp := &http.Response{
+		Header: http.Header{},
+		Body:   io.NopCloser(strings.NewReader("plain text")),
+	}
+	reader, err := decompressBody(resp)
+	if err != nil {
+		t.Fatalf("decompressBody error: %v", err)
+	}
+	data, _ := io.ReadAll(reader)
+	if string(data) != "plain text" {
+		t.Errorf("expected 'plain text', got %q", string(data))
+	}
+}
+
+func newGzipWriter(buf *strings.Builder) (*gzipTestWriter, error) {
+	w, err := gzip.NewWriterLevel(writerAdapter{buf}, gzip.DefaultCompression)
+	return &gzipTestWriter{w}, err
+}
+
+type gzipTestWriter struct {
+	*gzip.Writer
+}
+
+type writerAdapter struct {
+	*strings.Builder
+}
+
+func (w writerAdapter) Write(p []byte) (int, error) {
+	return w.Builder.Write(p)
 }

@@ -2,7 +2,7 @@ package content
 
 import "strings"
 
-func Dedup(paragraphs []string, _ float64) []string {
+func Dedup(paragraphs []string) []string {
 	seen := make(map[uint64]bool)
 	var result []string
 
@@ -24,7 +24,7 @@ func Dedup(paragraphs []string, _ float64) []string {
 
 func DedupContent(content string) string {
 	paragraphs := strings.Split(content, "\n\n")
-	deduped := Dedup(paragraphs, 0.85)
+	deduped := Dedup(paragraphs)
 	return strings.Join(deduped, "\n\n")
 }
 

@@ -8,51 +8,53 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 )
 
-func registerScrapePage(srv *server.MCPServer, deps Dependencies) {
-	tool := mcp.NewTool("scrape_page",
-		mcp.WithDescription("Extract content from a URL. Supports web pages, PDFs, DOCX, PPTX, and YouTube videos. Uses tiered extraction: markdown negotiation, HTML parsing, headless browser."),
-		mcp.WithString("url", mcp.Required(), mcp.Description("URL to scrape (must be HTTP or HTTPS)")),
-		mcp.WithString("mode", mcp.Description("Extraction mode: full (default) or preview")),
-		mcp.WithNumber("max_length", mcp.Description("Maximum content length in bytes (default: 50000)")),
-	)
+type scrapePageInput struct {
+	URL       string `json:"url" jsonschema:"URL to scrape (must be HTTP or HTTPS),required"`
+	Mode      string `json:"mode,omitempty" jsonschema:"Extraction mode: full (default) or preview"`
+	MaxLength int    `json:"max_length,omitempty" jsonschema:"Maximum content length in bytes (default: 50000)"`
+}
 
-	srv.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func registerScrapePage(srv *mcp.Server, deps Dependencies) {
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "scrape_page",
+		Description: "Extract content from a URL. Supports web pages, PDFs, DOCX, PPTX, and YouTube videos. Uses tiered extraction: markdown negotiation, HTML parsing, headless browser.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input scrapePageInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
 
-		url, _ := req.GetArguments()["url"].(string)
-		if url == "" {
-			return toolError("url is required"), nil
+		if input.URL == "" {
+			return toolError("url is required"), nil, nil
 		}
 
-		mode, _ := req.GetArguments()["mode"].(string)
+		mode := input.Mode
 		if mode == "" {
 			mode = "full"
 		}
 
-		maxLength := intParam(req.GetArguments(), "max_length", 50000)
+		maxLength := input.MaxLength
+		if maxLength <= 0 {
+			maxLength = 50000
+		}
 		if mode == "preview" {
 			maxLength = 5000
 		}
 
-		// Cache check
-		cacheKey := scrapeCacheKey(url, mode)
+		cacheKey := scrapeCacheKey(input.URL, mode)
 		if cached, ok := deps.Cache.Get(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("scrape_page", time.Since(start), nil, "", true)
 			auditToolCall(deps, "scrape_page", time.Since(start), nil, "")
-			return mcp.NewToolResultText(string(cached)), nil
+			return textResult(string(cached)), nil, nil
 		}
 
-		result, err := deps.Scraper.Scrape(ctx, url, maxLength)
+		result, err := deps.Scraper.Scrape(ctx, input.URL, maxLength)
 		if err != nil {
 			deps.Metrics.RecordToolCall("scrape_page", time.Since(start), err, "upstream_error", false)
 			auditToolCall(deps, "scrape_page", time.Since(start), err, "upstream_error")
-			return toolError(fmt.Sprintf("scrape failed: %v", err)), nil
+			return toolError(fmt.Sprintf("scrape failed: %v", err)), nil, nil
 		}
 
 		processedContent, truncated := deps.Content.Process(result.Content, maxLength)
@@ -61,10 +63,10 @@ func registerScrapePage(srv *server.MCPServer, deps Dependencies) {
 		}
 
 		contentLen := len(processedContent)
-		citation := content.ExtractCitation(url, result.Title, result.Author, result.SiteName, result.PublishDate)
+		citation := content.ExtractCitation(input.URL, result.Title, result.Author, result.SiteName, result.PublishDate)
 
 		output := map[string]any{
-			"url":             url,
+			"url":             input.URL,
 			"content":         processedContent,
 			"contentType":     result.ContentType,
 			"contentLength":   contentLen,
@@ -86,7 +88,7 @@ func registerScrapePage(srv *server.MCPServer, deps Dependencies) {
 		deps.Metrics.RecordToolCall("scrape_page", time.Since(start), nil, "", false)
 		auditToolCall(deps, "scrape_page", time.Since(start), nil, "")
 
-		return mcp.NewToolResultText(string(jsonBytes)), nil
+		return textResult(string(jsonBytes)), nil, nil
 	})
 }
 

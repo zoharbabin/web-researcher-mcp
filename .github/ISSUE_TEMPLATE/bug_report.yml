@@ -89,7 +89,7 @@ body:
     attributes:
       label: Go Version (if building from source)
       description: Output of `go version`
-      placeholder: "go1.23.0 linux/amd64"
+      placeholder: "go1.25.0 linux/amd64"
 
   - type: dropdown
     id: os

@@ -27,8 +27,9 @@ internal/
 ├── search/                 # Pluggable search providers (Brave, Google, Serper, SearXNG)
 ├── scraper/                # Tiered scraping pipeline (markdown → stealth → HTML → browser)
 ├── documents/              # PDF, DOCX, PPTX parsing
-├── cache/                  # Hybrid cache (ristretto + disk + optional Redis)
-├── auth/                   # OAuth 2.1 middleware + JWKS
+├── cache/                  # Hybrid cache (memory + disk + optional Redis)
+├── auth/                   # OAuth 2.1 middleware (JWT/JWKS)
+├── audit/                  # Structured audit logging
 ├── session/                # Per-tenant session management
 ├── content/                # Sanitize, dedup, truncate, quality score
 ├── metrics/                # Prometheus metrics + per-tool stats
@@ -96,14 +97,12 @@ Distribution configs (auto-included in release archives):
 ## Key Docs
 
 - `ARCHITECTURE.md` — Full architecture overview
+- `CONTRIBUTING.md` — Code style, workflow, adding tools/providers
 - `docs/TOOLS.md` — Tool specifications
 - `docs/SECURITY.md` — Security architecture
 - `docs/SEARCH_PROVIDERS.md` — Provider system + lenses
 - `docs/DEPLOYMENT.md` — Build, Docker, Kubernetes, client configs
 - `docs/TESTING.md` — Test strategy and patterns
 - `docs/COMPLIANCE.md` — SOC2, GDPR, FedRAMP
-- `docs/CONTRIBUTING.md` — Code style and workflow
 - `docs/GO_MODULE.md` — Dependencies with rationale
-- `docs/IMPLEMENTATION_PLAN.md` — Phased build roadmap
-- `docs/MAIN_SKELETON.md` — Entry point wiring pattern
 - `docs/SPECIFICATIONS.md` — Config struct, error types, CI/CD, Resources/Prompts

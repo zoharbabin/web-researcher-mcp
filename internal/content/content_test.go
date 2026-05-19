@@ -430,7 +430,7 @@ func TestDedup_RemovesDuplicates(t *testing.T) {
 		"Second paragraph",
 	}
 
-	result := Dedup(paragraphs, 0.85)
+	result := Dedup(paragraphs)
 	if len(result) != 3 {
 		t.Errorf("expected 3 unique paragraphs, got %d: %v", len(result), result)
 	}
@@ -450,7 +450,7 @@ func TestDedup_PreservesUniqueContent(t *testing.T) {
 		"Delta",
 	}
 
-	result := Dedup(paragraphs, 0.85)
+	result := Dedup(paragraphs)
 	if len(result) != 4 {
 		t.Errorf("expected 4 paragraphs, got %d", len(result))
 	}
@@ -465,31 +465,22 @@ func TestDedup_SkipsEmptyParagraphs(t *testing.T) {
 		"\t",
 	}
 
-	result := Dedup(paragraphs, 0.85)
+	result := Dedup(paragraphs)
 	if len(result) != 2 {
 		t.Errorf("expected 2 non-empty paragraphs, got %d: %v", len(result), result)
 	}
 }
 
-func TestDedup_DefaultThreshold(t *testing.T) {
-	paragraphs := []string{"Hello", "World", "Hello"}
-	// threshold <= 0 should default to 0.85
-	result := Dedup(paragraphs, 0)
-	if len(result) != 2 {
-		t.Errorf("expected 2 unique paragraphs with default threshold, got %d", len(result))
-	}
-}
-
-func TestDedup_NegativeThreshold(t *testing.T) {
+func TestDedup_AllDuplicates(t *testing.T) {
 	paragraphs := []string{"Same", "Same", "Same"}
-	result := Dedup(paragraphs, -1)
+	result := Dedup(paragraphs)
 	if len(result) != 1 {
 		t.Errorf("expected 1 unique paragraph, got %d", len(result))
 	}
 }
 
 func TestDedup_NilInput(t *testing.T) {
-	result := Dedup(nil, 0.85)
+	result := Dedup(nil)
 	if result != nil {
 		t.Errorf("expected nil for nil input, got %v", result)
 	}
@@ -1098,7 +1089,7 @@ func TestDedup_LargeInput(t *testing.T) {
 	}
 	paragraphs = append(paragraphs, "Unique one")
 
-	result := Dedup(paragraphs, 0.85)
+	result := Dedup(paragraphs)
 	if len(result) != 2 {
 		t.Errorf("expected 2 unique paragraphs from 1001 inputs, got %d", len(result))
 	}

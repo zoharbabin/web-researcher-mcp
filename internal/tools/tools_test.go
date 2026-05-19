@@ -9,8 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/audit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/cache"
@@ -43,7 +42,6 @@ func (m *mockProvider) News(_ context.Context, params search.NewsSearchParams) (
 
 func (m *mockProvider) Name() string { return "mock" }
 
-// mockProviderWithURL returns search results pointing to a specified URL.
 type mockProviderWithURL struct {
 	url string
 }
@@ -77,21 +75,49 @@ func setupTestDeps() Dependencies {
 	}
 }
 
-func TestRegisterAllDoesNotPanic(t *testing.T) {
-	srv := server.NewMCPServer("test-server", "1.0.0")
-	deps := setupTestDeps()
+func createTestServer(deps Dependencies) *mcp.Server {
+	srv := mcp.NewServer(&mcp.Implementation{Name: "test-server", Version: "1.0.0"}, nil)
 	RegisterAll(srv, deps)
+	return srv
+}
+
+func connectTestClient(ctx context.Context, t *testing.T, srv *mcp.Server) *mcp.ClientSession {
+	t.Helper()
+	t1, t2 := mcp.NewInMemoryTransports()
+	if _, err := srv.Connect(ctx, t1, nil); err != nil {
+		t.Fatalf("server connect failed: %v", err)
+	}
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "1.0.0"}, nil)
+	session, err := client.Connect(ctx, t2, nil)
+	if err != nil {
+		t.Fatalf("client connect failed: %v", err)
+	}
+	return session
+}
+
+func TestRegisterAllDoesNotPanic(t *testing.T) {
+	deps := setupTestDeps()
+	createTestServer(deps)
 }
 
 func TestWebSearchTool(t *testing.T) {
-	srv := server.NewMCPServer("test-server", "1.0.0")
+	ctx := context.Background()
 	deps := setupTestDeps()
-	RegisterAll(srv, deps)
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
 
-	result := callTool(t, srv, "web_search", map[string]any{"query": "golang testing"})
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "web_search",
+		Arguments: map[string]any{"query": "golang testing"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
 
+	text := res.Content[0].(*mcp.TextContent).Text
 	var output map[string]any
-	if err := json.Unmarshal([]byte(result), &output); err != nil {
+	if err := json.Unmarshal([]byte(text), &output); err != nil {
 		t.Fatalf("failed to parse output: %v", err)
 	}
 
@@ -104,43 +130,66 @@ func TestWebSearchTool(t *testing.T) {
 }
 
 func TestWebSearchEmptyQuery(t *testing.T) {
-	srv := server.NewMCPServer("test-server", "1.0.0")
+	ctx := context.Background()
 	deps := setupTestDeps()
-	RegisterAll(srv, deps)
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
 
-	result, isError := callToolRaw(t, srv, "web_search", map[string]any{"query": ""})
-	if !isError {
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "web_search",
+		Arguments: map[string]any{"query": ""},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !res.IsError {
 		t.Fatal("expected error for empty query")
 	}
-	if result != "query is required" {
-		t.Fatalf("expected 'query is required', got %q", result)
+	text := res.Content[0].(*mcp.TextContent).Text
+	if text != "query is required" {
+		t.Fatalf("expected 'query is required', got %q", text)
 	}
 }
 
 func TestWebSearchLongQuery(t *testing.T) {
-	srv := server.NewMCPServer("test-server", "1.0.0")
+	ctx := context.Background()
 	deps := setupTestDeps()
-	RegisterAll(srv, deps)
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
 
-	longQuery := ""
-	for i := 0; i < 501; i++ {
-		longQuery += "x"
+	longQuery := strings.Repeat("x", 501)
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "web_search",
+		Arguments: map[string]any{"query": longQuery},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
 	}
-	_, isError := callToolRaw(t, srv, "web_search", map[string]any{"query": longQuery})
-	if !isError {
+	if !res.IsError {
 		t.Fatal("expected error for query exceeding 500 chars")
 	}
 }
 
 func TestImageSearchTool(t *testing.T) {
-	srv := server.NewMCPServer("test-server", "1.0.0")
+	ctx := context.Background()
 	deps := setupTestDeps()
-	RegisterAll(srv, deps)
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
 
-	result := callTool(t, srv, "image_search", map[string]any{"query": "cats"})
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "image_search",
+		Arguments: map[string]any{"query": "cats"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
 
+	text := res.Content[0].(*mcp.TextContent).Text
 	var output map[string]any
-	if err := json.Unmarshal([]byte(result), &output); err != nil {
+	if err := json.Unmarshal([]byte(text), &output); err != nil {
 		t.Fatalf("failed to parse output: %v", err)
 	}
 	if output["resultCount"].(float64) != 1 {
@@ -149,14 +198,23 @@ func TestImageSearchTool(t *testing.T) {
 }
 
 func TestNewsSearchTool(t *testing.T) {
-	srv := server.NewMCPServer("test-server", "1.0.0")
+	ctx := context.Background()
 	deps := setupTestDeps()
-	RegisterAll(srv, deps)
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
 
-	result := callTool(t, srv, "news_search", map[string]any{"query": "technology"})
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "news_search",
+		Arguments: map[string]any{"query": "technology"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
 
+	text := res.Content[0].(*mcp.TextContent).Text
 	var output map[string]any
-	if err := json.Unmarshal([]byte(result), &output); err != nil {
+	if err := json.Unmarshal([]byte(text), &output); err != nil {
 		t.Fatalf("failed to parse output: %v", err)
 	}
 	if output["resultCount"].(float64) != 1 {
@@ -165,14 +223,23 @@ func TestNewsSearchTool(t *testing.T) {
 }
 
 func TestAcademicSearchTool(t *testing.T) {
-	srv := server.NewMCPServer("test-server", "1.0.0")
+	ctx := context.Background()
 	deps := setupTestDeps()
-	RegisterAll(srv, deps)
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
 
-	result := callTool(t, srv, "academic_search", map[string]any{"query": "machine learning"})
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "academic_search",
+		Arguments: map[string]any{"query": "machine learning"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
 
+	text := res.Content[0].(*mcp.TextContent).Text
 	var output map[string]any
-	if err := json.Unmarshal([]byte(result), &output); err != nil {
+	if err := json.Unmarshal([]byte(text), &output); err != nil {
 		t.Fatalf("failed to parse output: %v", err)
 	}
 	if output["query"] != "machine learning" {
@@ -181,19 +248,28 @@ func TestAcademicSearchTool(t *testing.T) {
 }
 
 func TestSequentialSearchTool(t *testing.T) {
-	srv := server.NewMCPServer("test-server", "1.0.0")
+	ctx := context.Background()
 	deps := setupTestDeps()
-	RegisterAll(srv, deps)
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
 
 	// Step 1: Create session
-	result := callTool(t, srv, "sequential_search", map[string]any{
-		"searchStep":     "Initial search for topic X",
-		"stepNumber":     float64(1),
-		"nextStepNeeded": true,
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "sequential_search",
+		Arguments: map[string]any{
+			"searchStep":     "Initial search for topic X",
+			"stepNumber":     float64(1),
+			"nextStepNeeded": true,
+		},
 	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
 
+	text := res.Content[0].(*mcp.TextContent).Text
 	var output map[string]any
-	if err := json.Unmarshal([]byte(result), &output); err != nil {
+	if err := json.Unmarshal([]byte(text), &output); err != nil {
 		t.Fatalf("failed to parse output: %v", err)
 	}
 	sessionID, ok := output["sessionId"].(string)
@@ -202,14 +278,21 @@ func TestSequentialSearchTool(t *testing.T) {
 	}
 
 	// Step 2: Continue session
-	result = callTool(t, srv, "sequential_search", map[string]any{
-		"searchStep":     "Found relevant paper on topic X",
-		"stepNumber":     float64(2),
-		"nextStepNeeded": false,
-		"sessionId":      sessionID,
+	res, err = session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "sequential_search",
+		Arguments: map[string]any{
+			"searchStep":     "Found relevant paper on topic X",
+			"stepNumber":     float64(2),
+			"nextStepNeeded": false,
+			"sessionId":      sessionID,
+		},
 	})
+	if err != nil {
+		t.Fatalf("CallTool step 2 failed: %v", err)
+	}
 
-	if err := json.Unmarshal([]byte(result), &output); err != nil {
+	text = res.Content[0].(*mcp.TextContent).Text
+	if err := json.Unmarshal([]byte(text), &output); err != nil {
 		t.Fatalf("failed to parse step 2 output: %v", err)
 	}
 	if output["isComplete"] != true {
@@ -218,17 +301,26 @@ func TestSequentialSearchTool(t *testing.T) {
 }
 
 func TestPatentSearchTool(t *testing.T) {
-	srv := server.NewMCPServer("test-server", "1.0.0")
+	ctx := context.Background()
 	deps := setupTestDeps()
-	RegisterAll(srv, deps)
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
 
-	result := callTool(t, srv, "patent_search", map[string]any{
-		"query":       "neural network acceleration",
-		"search_type": "prior_art",
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "patent_search",
+		Arguments: map[string]any{
+			"query":       "neural network acceleration",
+			"search_type": "prior_art",
+		},
 	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
 
+	text := res.Content[0].(*mcp.TextContent).Text
 	var output map[string]any
-	if err := json.Unmarshal([]byte(result), &output); err != nil {
+	if err := json.Unmarshal([]byte(text), &output); err != nil {
 		t.Fatalf("failed to parse output: %v", err)
 	}
 
@@ -244,32 +336,49 @@ func TestPatentSearchTool(t *testing.T) {
 }
 
 func TestPatentSearchEmptyQuery(t *testing.T) {
-	srv := server.NewMCPServer("test-server", "1.0.0")
+	ctx := context.Background()
 	deps := setupTestDeps()
-	RegisterAll(srv, deps)
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
 
-	_, isError := callToolRaw(t, srv, "patent_search", map[string]any{"query": ""})
-	if !isError {
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "patent_search",
+		Arguments: map[string]any{"query": ""},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !res.IsError {
 		t.Fatal("expected error for empty query")
 	}
 }
 
 func TestPatentSearchWithFilters(t *testing.T) {
-	srv := server.NewMCPServer("test-server", "1.0.0")
+	ctx := context.Background()
 	deps := setupTestDeps()
 	deps.Search = &mockProviderWithURL{url: "https://patents.google.com/patent/US20200012345A1/en"}
-	RegisterAll(srv, deps)
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
 
-	result := callTool(t, srv, "patent_search", map[string]any{
-		"query":         "machine learning",
-		"assignee":      "Google Inc",
-		"patent_office": "US",
-		"year_from":     float64(2020),
-		"year_to":       float64(2024),
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "patent_search",
+		Arguments: map[string]any{
+			"query":         "machine learning",
+			"assignee":      "Google Inc",
+			"patent_office": "US",
+			"year_from":     float64(2020),
+			"year_to":       float64(2024),
+		},
 	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
 
+	text := res.Content[0].(*mcp.TextContent).Text
 	var output map[string]any
-	if err := json.Unmarshal([]byte(result), &output); err != nil {
+	if err := json.Unmarshal([]byte(text), &output); err != nil {
 		t.Fatalf("failed to parse output: %v", err)
 	}
 	if output["resultCount"].(float64) != 1 {
@@ -278,18 +387,27 @@ func TestPatentSearchWithFilters(t *testing.T) {
 }
 
 func TestPatentSearchFilterRejectsNonMatching(t *testing.T) {
-	srv := server.NewMCPServer("test-server", "1.0.0")
+	ctx := context.Background()
 	deps := setupTestDeps()
 	deps.Search = &mockProviderWithURL{url: "https://patents.google.com/patent/EP1234567B1/en"}
-	RegisterAll(srv, deps)
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
 
-	result := callTool(t, srv, "patent_search", map[string]any{
-		"query":         "machine learning",
-		"patent_office": "US",
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "patent_search",
+		Arguments: map[string]any{
+			"query":         "machine learning",
+			"patent_office": "US",
+		},
 	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
 
+	text := res.Content[0].(*mcp.TextContent).Text
 	var output map[string]any
-	if err := json.Unmarshal([]byte(result), &output); err != nil {
+	if err := json.Unmarshal([]byte(text), &output); err != nil {
 		t.Fatalf("failed to parse output: %v", err)
 	}
 	if output["resultCount"].(float64) != 0 {
@@ -298,18 +416,27 @@ func TestPatentSearchFilterRejectsNonMatching(t *testing.T) {
 }
 
 func TestPatentSearchFilterAllowsAll(t *testing.T) {
-	srv := server.NewMCPServer("test-server", "1.0.0")
+	ctx := context.Background()
 	deps := setupTestDeps()
 	deps.Search = &mockProviderWithURL{url: "https://patents.google.com/patent/EP1234567B1/en"}
-	RegisterAll(srv, deps)
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
 
-	result := callTool(t, srv, "patent_search", map[string]any{
-		"query":         "machine learning",
-		"patent_office": "all",
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "patent_search",
+		Arguments: map[string]any{
+			"query":         "machine learning",
+			"patent_office": "all",
+		},
 	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
 
+	text := res.Content[0].(*mcp.TextContent).Text
 	var output map[string]any
-	if err := json.Unmarshal([]byte(result), &output); err != nil {
+	if err := json.Unmarshal([]byte(text), &output); err != nil {
 		t.Fatalf("failed to parse output: %v", err)
 	}
 	if output["resultCount"].(float64) != 1 {
@@ -318,17 +445,26 @@ func TestPatentSearchFilterAllowsAll(t *testing.T) {
 }
 
 func TestPatentSearchFilterNoOffice(t *testing.T) {
-	srv := server.NewMCPServer("test-server", "1.0.0")
+	ctx := context.Background()
 	deps := setupTestDeps()
 	deps.Search = &mockProviderWithURL{url: "https://patents.google.com/patent/WO2021123456A1/en"}
-	RegisterAll(srv, deps)
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
 
-	result := callTool(t, srv, "patent_search", map[string]any{
-		"query": "machine learning",
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "patent_search",
+		Arguments: map[string]any{
+			"query": "machine learning",
+		},
 	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
 
+	text := res.Content[0].(*mcp.TextContent).Text
 	var output map[string]any
-	if err := json.Unmarshal([]byte(result), &output); err != nil {
+	if err := json.Unmarshal([]byte(text), &output); err != nil {
 		t.Fatalf("failed to parse output: %v", err)
 	}
 	if output["resultCount"].(float64) != 1 {
@@ -354,18 +490,27 @@ func TestPatentSearchFilterMultipleOffices(t *testing.T) {
 
 	for _, tt := range offices {
 		t.Run(tt.office+"_"+tt.url, func(t *testing.T) {
-			srv := server.NewMCPServer("test-server", "1.0.0")
+			ctx := context.Background()
 			deps := setupTestDeps()
 			deps.Search = &mockProviderWithURL{url: tt.url}
-			RegisterAll(srv, deps)
+			srv := createTestServer(deps)
+			session := connectTestClient(ctx, t, srv)
+			defer session.Close()
 
-			result := callTool(t, srv, "patent_search", map[string]any{
-				"query":         "test",
-				"patent_office": tt.office,
+			res, err := session.CallTool(ctx, &mcp.CallToolParams{
+				Name: "patent_search",
+				Arguments: map[string]any{
+					"query":         "test",
+					"patent_office": tt.office,
+				},
 			})
+			if err != nil {
+				t.Fatalf("CallTool failed: %v", err)
+			}
 
+			text := res.Content[0].(*mcp.TextContent).Text
 			var output map[string]any
-			if err := json.Unmarshal([]byte(result), &output); err != nil {
+			if err := json.Unmarshal([]byte(text), &output); err != nil {
 				t.Fatalf("failed to parse output: %v", err)
 			}
 			if output["resultCount"].(float64) != tt.expect {
@@ -388,18 +533,27 @@ func TestScrapePageTool(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	srv := server.NewMCPServer("test-server", "1.0.0")
+	ctx := context.Background()
 	deps := setupTestDeps()
 	deps.Scraper = scraper.NewPipeline(scraper.PipelineConfig{
 		MaxConcurrency:  2,
 		AllowPrivateIPs: true,
 	})
-	RegisterAll(srv, deps)
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
 
-	result := callTool(t, srv, "scrape_page", map[string]any{"url": ts.URL})
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "scrape_page",
+		Arguments: map[string]any{"url": ts.URL},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
 
+	text := res.Content[0].(*mcp.TextContent).Text
 	var output map[string]any
-	if err := json.Unmarshal([]byte(result), &output); err != nil {
+	if err := json.Unmarshal([]byte(text), &output); err != nil {
 		t.Fatalf("failed to parse output: %v", err)
 	}
 
@@ -416,12 +570,20 @@ func TestScrapePageTool(t *testing.T) {
 }
 
 func TestScrapePageEmptyURL(t *testing.T) {
-	srv := server.NewMCPServer("test-server", "1.0.0")
+	ctx := context.Background()
 	deps := setupTestDeps()
-	RegisterAll(srv, deps)
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
 
-	_, isError := callToolRaw(t, srv, "scrape_page", map[string]any{"url": ""})
-	if !isError {
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "scrape_page",
+		Arguments: map[string]any{"url": ""},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !res.IsError {
 		t.Fatal("expected error for empty url")
 	}
 }
@@ -432,16 +594,24 @@ func TestScrapePageHTTPError(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	srv := server.NewMCPServer("test-server", "1.0.0")
+	ctx := context.Background()
 	deps := setupTestDeps()
 	deps.Scraper = scraper.NewPipeline(scraper.PipelineConfig{
 		MaxConcurrency:  2,
 		AllowPrivateIPs: true,
 	})
-	RegisterAll(srv, deps)
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
 
-	_, isError := callToolRaw(t, srv, "scrape_page", map[string]any{"url": ts.URL})
-	if !isError {
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "scrape_page",
+		Arguments: map[string]any{"url": ts.URL},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !res.IsError {
 		t.Fatal("expected error for HTTP 500")
 	}
 }
@@ -459,19 +629,28 @@ func TestSearchAndScrapeTool(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	srv := server.NewMCPServer("test-server", "1.0.0")
+	ctx := context.Background()
 	deps := setupTestDeps()
 	deps.Search = &mockProviderWithURL{url: ts.URL}
 	deps.Scraper = scraper.NewPipeline(scraper.PipelineConfig{
 		MaxConcurrency:  2,
 		AllowPrivateIPs: true,
 	})
-	RegisterAll(srv, deps)
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
 
-	result := callTool(t, srv, "search_and_scrape", map[string]any{"query": "test topic"})
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "search_and_scrape",
+		Arguments: map[string]any{"query": "test topic"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
 
+	text := res.Content[0].(*mcp.TextContent).Text
 	var output map[string]any
-	if err := json.Unmarshal([]byte(result), &output); err != nil {
+	if err := json.Unmarshal([]byte(text), &output); err != nil {
 		t.Fatalf("failed to parse output: %v", err)
 	}
 
@@ -489,18 +668,26 @@ func TestSearchAndScrapeTool(t *testing.T) {
 }
 
 func TestSearchAndScrapeEmptyQuery(t *testing.T) {
-	srv := server.NewMCPServer("test-server", "1.0.0")
+	ctx := context.Background()
 	deps := setupTestDeps()
-	RegisterAll(srv, deps)
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
 
-	_, isError := callToolRaw(t, srv, "search_and_scrape", map[string]any{"query": ""})
-	if !isError {
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "search_and_scrape",
+		Arguments: map[string]any{"query": ""},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !res.IsError {
 		t.Fatal("expected error for empty query")
 	}
 }
 
 func TestWebSearchCaching(t *testing.T) {
-	srv := server.NewMCPServer("test-server", "1.0.0")
+	ctx := context.Background()
 	metricsCollector := metrics.NewCollector()
 	deps := Dependencies{
 		Cache:    cache.NewMemory(cache.MemoryConfig{MaxSizeMB: 1}),
@@ -512,10 +699,18 @@ func TestWebSearchCaching(t *testing.T) {
 		Auditor:  audit.NewNoop(),
 		Logger:   slog.Default(),
 	}
-	RegisterAll(srv, deps)
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
 
 	// First call: should not be from cache
-	_ = callTool(t, srv, "web_search", map[string]any{"query": "cache test"})
+	_, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "web_search",
+		Arguments: map[string]any{"query": "cache test"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
 
 	stats := metricsCollector.GetToolStats()
 	s := stats["web_search"]
@@ -524,7 +719,13 @@ func TestWebSearchCaching(t *testing.T) {
 	}
 
 	// Second call with same query: should hit cache
-	_ = callTool(t, srv, "web_search", map[string]any{"query": "cache test"})
+	_, err = session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "web_search",
+		Arguments: map[string]any{"query": "cache test"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
 
 	stats = metricsCollector.GetToolStats()
 	s = stats["web_search"]
@@ -534,49 +735,81 @@ func TestWebSearchCaching(t *testing.T) {
 }
 
 func TestImageSearchEmptyQuery(t *testing.T) {
-	srv := server.NewMCPServer("test-server", "1.0.0")
+	ctx := context.Background()
 	deps := setupTestDeps()
-	RegisterAll(srv, deps)
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
 
-	_, isError := callToolRaw(t, srv, "image_search", map[string]any{"query": ""})
-	if !isError {
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "image_search",
+		Arguments: map[string]any{"query": ""},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !res.IsError {
 		t.Fatal("expected error for empty query")
 	}
 }
 
 func TestNewsSearchEmptyQuery(t *testing.T) {
-	srv := server.NewMCPServer("test-server", "1.0.0")
+	ctx := context.Background()
 	deps := setupTestDeps()
-	RegisterAll(srv, deps)
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
 
-	_, isError := callToolRaw(t, srv, "news_search", map[string]any{"query": ""})
-	if !isError {
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "news_search",
+		Arguments: map[string]any{"query": ""},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !res.IsError {
 		t.Fatal("expected error for empty query")
 	}
 }
 
 func TestAcademicSearchEmptyQuery(t *testing.T) {
-	srv := server.NewMCPServer("test-server", "1.0.0")
+	ctx := context.Background()
 	deps := setupTestDeps()
-	RegisterAll(srv, deps)
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
 
-	_, isError := callToolRaw(t, srv, "academic_search", map[string]any{"query": ""})
-	if !isError {
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "academic_search",
+		Arguments: map[string]any{"query": ""},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !res.IsError {
 		t.Fatal("expected error for empty query")
 	}
 }
 
 func TestSequentialSearchEmptyStep(t *testing.T) {
-	srv := server.NewMCPServer("test-server", "1.0.0")
+	ctx := context.Background()
 	deps := setupTestDeps()
-	RegisterAll(srv, deps)
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
 
-	_, isError := callToolRaw(t, srv, "sequential_search", map[string]any{
-		"searchStep":     "",
-		"stepNumber":     float64(1),
-		"nextStepNeeded": true,
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "sequential_search",
+		Arguments: map[string]any{
+			"searchStep":     "",
+			"stepNumber":     float64(1),
+			"nextStepNeeded": true,
+		},
 	})
-	if !isError {
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !res.IsError {
 		t.Fatal("expected error for empty searchStep")
 	}
 }
@@ -589,100 +822,11 @@ func TestToolError(t *testing.T) {
 	if len(result.Content) != 1 {
 		t.Fatalf("expected 1 content item, got %d", len(result.Content))
 	}
-	tc, ok := result.Content[0].(mcp.TextContent)
+	tc, ok := result.Content[0].(*mcp.TextContent)
 	if !ok {
-		t.Fatal("expected TextContent")
+		t.Fatal("expected *TextContent")
 	}
 	if tc.Text != "something went wrong" {
 		t.Fatalf("expected error text, got %q", tc.Text)
 	}
-}
-
-func TestIntParam(t *testing.T) {
-	args := map[string]any{
-		"num_results": float64(7),
-		"zero":        float64(0),
-	}
-
-	if got := intParam(args, "num_results", 5); got != 7 {
-		t.Fatalf("expected 7, got %d", got)
-	}
-	if got := intParam(args, "missing", 10); got != 10 {
-		t.Fatalf("expected fallback 10, got %d", got)
-	}
-	if got := intParam(args, "zero", 5); got != 0 {
-		t.Fatalf("expected 0, got %d", got)
-	}
-}
-
-func TestBoolParam(t *testing.T) {
-	args := map[string]any{
-		"enabled":  true,
-		"disabled": false,
-	}
-
-	if got := boolParam(args, "enabled", false); !got {
-		t.Fatal("expected true")
-	}
-	if got := boolParam(args, "disabled", true); got {
-		t.Fatal("expected false")
-	}
-	if got := boolParam(args, "missing", true); !got {
-		t.Fatal("expected fallback true")
-	}
-}
-
-// callTool invokes a tool on the MCP server and returns the text result.
-func callTool(t *testing.T, srv *server.MCPServer, name string, args map[string]any) string {
-	t.Helper()
-	text, isError := callToolRaw(t, srv, name, args)
-	if isError {
-		t.Fatalf("tool %s returned error: %s", name, text)
-	}
-	return text
-}
-
-// callToolRaw invokes a tool and returns (text, isError).
-func callToolRaw(t *testing.T, srv *server.MCPServer, name string, args map[string]any) (string, bool) {
-	t.Helper()
-
-	result := srv.HandleMessage(context.Background(), mustMarshalToolCall(name, args))
-
-	resp, ok := result.(mcp.JSONRPCResponse)
-	if !ok {
-		t.Fatalf("expected JSONRPCResponse, got %T", result)
-	}
-
-	// Parse the result as raw JSON to avoid interface unmarshaling issues
-	resultBytes, _ := json.Marshal(resp.Result)
-	var raw struct {
-		Content []struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
-		} `json:"content"`
-		IsError bool `json:"isError"`
-	}
-	if err := json.Unmarshal(resultBytes, &raw); err != nil {
-		t.Fatalf("failed to unmarshal tool result: %v", err)
-	}
-
-	if len(raw.Content) == 0 {
-		return "", raw.IsError
-	}
-
-	return raw.Content[0].Text, raw.IsError
-}
-
-func mustMarshalToolCall(name string, args map[string]any) json.RawMessage {
-	msg := map[string]any{
-		"jsonrpc": "2.0",
-		"id":      1,
-		"method":  "tools/call",
-		"params": map[string]any{
-			"name":      name,
-			"arguments": args,
-		},
-	}
-	b, _ := json.Marshal(msg)
-	return b
 }

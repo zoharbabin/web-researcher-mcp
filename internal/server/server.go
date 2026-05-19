@@ -3,10 +3,10 @@ package server
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
-	"os"
 
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/auth"
 	"github.com/zoharbabin/web-researcher-mcp/internal/cache"
@@ -18,6 +18,7 @@ import (
 type Config struct {
 	Name    string
 	Version string
+	Logger  *slog.Logger
 }
 
 type HTTPConfig struct {
@@ -32,36 +33,39 @@ type HTTPConfig struct {
 }
 
 type Server struct {
-	mcpServer *server.MCPServer
+	mcpServer *mcp.Server
 }
 
 func New(cfg Config) *Server {
-	mcpServer := server.NewMCPServer(
-		cfg.Name,
-		cfg.Version,
-		server.WithToolCapabilities(true),
-		server.WithResourceCapabilities(true, true),
-		server.WithPromptCapabilities(true),
+	mcpServer := mcp.NewServer(
+		&mcp.Implementation{
+			Name:    cfg.Name,
+			Version: cfg.Version,
+		},
+		&mcp.ServerOptions{
+			Logger: cfg.Logger,
+		},
 	)
 
 	return &Server{mcpServer: mcpServer}
 }
 
-func (s *Server) MCP() *server.MCPServer {
+func (s *Server) MCP() *mcp.Server {
 	return s.mcpServer
 }
 
 func (s *Server) RunSTDIO(ctx context.Context) error {
-	stdioServer := server.NewStdioServer(s.mcpServer)
-	return stdioServer.Listen(ctx, os.Stdin, os.Stdout)
+	return s.mcpServer.Run(ctx, &mcp.StdioTransport{})
 }
 
 func (s *Server) ServeHTTP(ctx context.Context, cfg HTTPConfig) error {
+	handler := mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
+		return s.mcpServer
+	}, nil)
+
 	mux := http.NewServeMux()
 
-	sseServer := server.NewSSEServer(s.mcpServer)
-	mux.Handle("/mcp/sse", cfg.Auth.Wrap(cfg.RateLimiter.Wrap(http.HandlerFunc(sseServer.ServeHTTP))))
-	mux.Handle("/mcp/message", cfg.Auth.Wrap(cfg.RateLimiter.Wrap(http.HandlerFunc(sseServer.ServeHTTP))))
+	mux.Handle("/mcp/", cfg.Auth.Wrap(cfg.RateLimiter.Wrap(handler)))
 
 	mux.HandleFunc("GET /health/live", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)

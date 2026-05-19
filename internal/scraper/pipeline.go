@@ -72,13 +72,22 @@ func (p *Pipeline) Scrape(ctx context.Context, url string, maxLength int) (*Scra
 func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, maxLength int) (*ScrapeResult, error) {
 	type scrapeFunc func(context.Context, string, int) (*ScrapeResult, error)
 
+	hasBrowser := p.config.ChromePath != "" || chromeAvailable()
+
+	// For known SPA domains, prefer the browser scraper first
+	if hasBrowser && isSPADomain(url) {
+		if result, err := p.scrapeBrowser(ctx, url, maxLength); err == nil && result != nil && len(result.Content) > 100 {
+			return result, nil
+		}
+	}
+
 	tiers := []scrapeFunc{
 		p.scrapeMarkdown,
 		p.scrapeStealth,
 		p.scrapeHTML,
 	}
 
-	if p.config.ChromePath != "" || chromeAvailable() {
+	if hasBrowser {
 		tiers = append(tiers, p.scrapeBrowser)
 	}
 
@@ -139,9 +148,11 @@ func isDocumentURL(url string) bool {
 }
 
 var knownSPADomains = []string{
+	"go.dev", "pkg.go.dev",
 	"patents.google.com", "scholar.google.com", "news.google.com",
 	"trends.google.com", "twitter.com", "x.com",
 	"linkedin.com", "facebook.com", "instagram.com",
+	"medium.com", "dev.to",
 }
 
 func isSPADomain(url string) bool {

@@ -159,14 +159,18 @@ Done. Your AI assistant now has access to all 8 research tools.
 | `OAUTH_ISSUER_URL` | JWT issuer for auth | |
 | `OAUTH_AUDIENCE` | Expected JWT audience | |
 | `REDIS_URL` | Redis URL for shared cache/sessions | in-memory |
-| `CACHE_TTL` | Cache time-to-live | `1h` |
-| `CACHE_ENCRYPTION_KEY` | Encryption key for cached content (64 hex chars) | |
-| `RATE_LIMIT_RPM` | Requests per minute per client | `60` |
+| `CACHE_DIR` | Disk cache directory | `./cache` |
+| `CACHE_MAX_MEMORY_MB` | Max memory cache size in MB | `64` |
+| `CACHE_ENCRYPTION_KEY` | AES-256-GCM key for disk cache (64 hex chars) | |
+| `RATE_LIMIT_PER_TENANT` | Requests per minute per tenant | `30` |
+| `RATE_LIMIT_GLOBAL` | Total requests per second | `1000` |
+| `DAILY_QUOTA_PER_TENANT` | Max API calls per tenant per day | `1000` |
 | `LOG_LEVEL` | Logging level: debug, info, warn, error | `info` |
 | `LOG_FORMAT` | Log format: json, text | `json` |
-| `METRICS_PORT` | Prometheus metrics endpoint port | disabled |
-| `MAX_CONCURRENT_SCRAPES` | Concurrent scrape limit | `5` |
-| `SCRAPE_TIMEOUT` | Per-scrape timeout | `30s` |
+| `METRICS_ENABLED` | Enable Prometheus metrics | `true` |
+| `MAX_SCRAPE_CONCURRENCY` | Concurrent scrape limit | `5` |
+| `CHROME_PATH` | Custom Chrome/Chromium binary path | auto-detect |
+| `ALLOW_PRIVATE_IPS` | Disable SSRF protection (dev only) | `false` |
 
 </details>
 
@@ -184,7 +188,7 @@ web-researcher-mcp/
 │   ├── search/                 # Pluggable search providers + lens routing
 │   ├── scraper/                # 4-tier scraping pipeline (markdown → stealth → HTML → browser)
 │   ├── documents/              # PDF, DOCX, PPTX parsing
-│   ├── cache/                  # Hybrid cache (ristretto + disk + optional Redis)
+│   ├── cache/                  # Hybrid cache (memory + disk + optional Redis)
 │   ├── auth/                   # OAuth 2.1 middleware + JWKS
 │   ├── session/                # Per-tenant session management
 │   ├── content/                # Sanitize, dedup, truncate, quality score
@@ -570,7 +574,7 @@ CGO_ENABLED=0 go build -ldflags="-s -w" -o web-researcher-mcp ./cmd/web-research
 
 ## Contributing
 
-Contributions are welcome. Please see [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for code style guidelines, development workflow, and how to submit pull requests.
+Contributions are welcome. Please see [CONTRIBUTING.md](CONTRIBUTING.md) for code style guidelines, development workflow, and how to submit pull requests.
 
 ---
 

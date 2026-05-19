@@ -10,47 +10,32 @@ Technical details that complete the implementation docs. Reference this alongsid
 // internal/config/config.go
 package config
 
-import (
-    "log/slog"
-    "time"
-)
-
 type Config struct {
-    // Search
-    GoogleAPIKey       string // GOOGLE_CUSTOM_SEARCH_API_KEY
-    GoogleCX           string // GOOGLE_CUSTOM_SEARCH_ID
-    SearchProvider     string // SEARCH_PROVIDER (default: "google")
-    FallbackProvider   string // SEARCH_FALLBACK_PROVIDER
-    BraveAPIKey        string // BRAVE_API_KEY
-    SerperAPIKey       string // SERPER_API_KEY
-    SearXNGURL         string // SEARXNG_URL
-    CustomLensesPath   string // CUSTOM_LENSES_PATH
+    // Search (top-level for backward compat)
+    GoogleAPIKey       string         // GOOGLE_CUSTOM_SEARCH_API_KEY
+    GoogleCX           string         // GOOGLE_CUSTOM_SEARCH_ID
+    Search             SearchConfig   // Nested search provider config
 
     // HTTP Transport
-    Port            int    // PORT (0 = STDIO only)
-    OAuthIssuerURL  string // OAUTH_ISSUER_URL
-    OAuthAudience   string // OAUTH_AUDIENCE
-    AllowedOrigins  []string // ALLOWED_ORIGINS (comma-separated)
-    TLSCertFile     string // TLS_CERT_FILE
-    TLSKeyFile      string // TLS_KEY_FILE
+    Port            int              // PORT (0 = STDIO only)
+    OAuth           OAuthConfig      // Nested OAuth config
+    AllowedOrigins  []string         // ALLOWED_ORIGINS (comma-separated)
 
     // Cache
     CacheDir           string // CACHE_DIR (default: "./cache")
     CacheMaxMemoryMB   int    // CACHE_MAX_MEMORY_MB (default: 64)
     CacheEncryptionKey string // CACHE_ENCRYPTION_KEY (64 hex chars)
+    CacheIsolation     string // CACHE_ISOLATION (default: "shared")
     RedisURL           string // REDIS_URL
-    CacheIsolation     string // CACHE_ISOLATION (default: "shared", or "tenant")
-    CacheDisabledTenants []string // CACHE_DISABLED_TENANTS (comma-separated)
 
     // Rate Limiting
     RateLimit RateLimitConfig
 
     // Scraping
-    AllowPrivateIPs     bool     // ALLOW_PRIVATE_IPS (default: false)
-    AllowedDomains      []string // ALLOWED_DOMAINS (comma-separated)
-    ChromePath          string   // CHROME_PATH (auto-detect if empty)
-    MaxScrapeConcurrency int     // MAX_SCRAPE_CONCURRENCY (default: 5)
-    MaxBrowserConcurrency int    // (hardcoded: 3, not configurable)
+    AllowPrivateIPs      bool     // ALLOW_PRIVATE_IPS (default: false)
+    AllowedDomains       []string // ALLOWED_DOMAINS (comma-separated)
+    ChromePath           string   // CHROME_PATH (auto-detect if empty)
+    MaxScrapeConcurrency int      // MAX_SCRAPE_CONCURRENCY (default: 5)
 
     // Session
     SessionTTL time.Duration // (default: 30 * time.Minute)
@@ -62,12 +47,39 @@ type Config struct {
 
     // Admin
     CacheAdminKey string // CACHE_ADMIN_KEY
+
+    // Audit
+    Audit AuditConfig
+}
+
+type SearchConfig struct {
+    Provider         string // SEARCH_PROVIDER (default: "google")
+    FallbackProvider string // SEARCH_FALLBACK_PROVIDER
+    GoogleAPIKey     string // (copied from top-level)
+    GoogleCX         string // (copied from top-level)
+    BraveAPIKey      string // BRAVE_API_KEY
+    SerperAPIKey     string // SERPER_API_KEY
+    SearXNGURL       string // SEARXNG_URL
+    CustomLensesPath string // CUSTOM_LENSES_PATH
+}
+
+type OAuthConfig struct {
+    IssuerURL           string        // OAUTH_ISSUER_URL
+    Audience            string        // OAUTH_AUDIENCE
+    JWKSRefreshInterval time.Duration // JWKS_REFRESH_INTERVAL (default: 1h)
+}
+
+type AuditConfig struct {
+    Enabled            bool   // AUDIT_ENABLED (default: true)
+    OutputPath         string // AUDIT_OUTPUT_PATH
+    BufferSize         int    // AUDIT_BUFFER_SIZE (default: 1000)
+    IncludeRequestBody bool   // AUDIT_INCLUDE_REQUEST_BODY (default: false)
 }
 
 type RateLimitConfig struct {
-    PerTenant    int // RATE_LIMIT_PER_TENANT (default: 30 req/min)
-    Global       int // RATE_LIMIT_GLOBAL (default: 1000 req/s)
-    DailyQuota   int // DAILY_QUOTA_PER_TENANT (default: 1000)
+    PerTenant  int // RATE_LIMIT_PER_TENANT (default: 30 req/min)
+    Global     int // RATE_LIMIT_GLOBAL (default: 1000 req/s)
+    DailyQuota int // DAILY_QUOTA_PER_TENANT (default: 1000)
 }
 
 // Load reads all env vars, validates format, returns Config.
@@ -100,55 +112,26 @@ If `REDIS_URL` is configured but Redis is unreachable:
 
 ## Error Types
 
+Sentinel errors are defined in their respective packages:
+
 ```go
-// internal/errors/errors.go
-package errors
+// internal/scraper/ssrf.go
+var ErrSSRFBlocked = errors.New("ssrf: request blocked (private IP or blocked hostname)")
 
-import "fmt"
-
-// Sentinel errors — check with errors.Is()
-var (
-    ErrSSRFBlocked    = fmt.Errorf("ssrf: request blocked (private IP or blocked hostname)")
-    ErrRateLimited    = fmt.Errorf("rate limited")
-    ErrCircuitOpen    = fmt.Errorf("circuit breaker open")
-    ErrSessionExpired = fmt.Errorf("session expired")
-    ErrNotFound       = fmt.Errorf("not found")
-    ErrTimeout        = fmt.Errorf("operation timed out")
-)
-
-// ToolError is returned to the MCP client as tool result with isError=true
-type ToolError struct {
-    Tool    string `json:"tool"`
-    Code    string `json:"code"`
-    Message string `json:"message"`
-    Err     error  `json:"-"`
-}
-
-func (e *ToolError) Error() string { return fmt.Sprintf("%s: %s", e.Tool, e.Message) }
-func (e *ToolError) Unwrap() error { return e.Err }
-
-// Error codes (returned in MCP tool error responses)
-const (
-    CodeInvalidInput   = "invalid_input"    // Bad parameters
-    CodeRateLimited    = "rate_limited"     // Per-tenant or global limit hit
-    CodeTimeout        = "timeout"          // Operation timed out
-    CodeUpstreamError  = "upstream_error"   // Search provider or target site failed
-    CodeSSRFBlocked    = "ssrf_blocked"     // URL targets private IP
-    CodeNotConfigured  = "not_configured"   // Required API key missing
-    CodeSessionExpired = "session_expired"  // Sequential search session gone
-    CodeContentEmpty   = "content_empty"    // Scrape returned no useful content
-    CodeQuotaExceeded  = "quota_exceeded"   // Daily quota exhausted
-)
+// internal/circuit/breaker.go
+var ErrCircuitOpen = errors.New("circuit breaker open")
 ```
+
+Tool handlers return errors as MCP tool results with `IsError: true` and a descriptive text message. The official SDK's `*mcp.CallToolResult` with `IsError` set communicates failures to clients.
 
 ### Error → MCP Response Mapping
 
 | Error Type | MCP Response |
 |------------|-------------|
-| `ToolError` | `CallToolResult{IsError: true, Content: [{Type: "text", Text: error.Message}]}` |
-| `context.DeadlineExceeded` | Wrap as `ToolError{Code: "timeout"}` |
-| `ErrRateLimited` | HTTP 429 + `Retry-After` header (HTTP mode); or `ToolError{Code: "rate_limited"}` (STDIO) |
-| `ErrCircuitOpen` | `ToolError{Code: "upstream_error", Message: "service temporarily unavailable"}` |
+| Tool handler error | `CallToolResult{IsError: true, Content: [TextContent{Text: message}]}` |
+| `context.DeadlineExceeded` | Wrapped as tool error with timeout message |
+| `ErrCircuitOpen` | Tool error: "service temporarily unavailable" |
+| `ErrSSRFBlocked` | Tool error: "URL blocked by SSRF protection" |
 | Protocol-level errors | SDK handles these (invalid JSON-RPC, unknown method) |
 
 ---
@@ -194,91 +177,27 @@ const (
 ## MCP Resources
 
 ```go
-// internal/resources/stats.go
+// internal/resources/resources.go
 
 // Resource: stats://tools
-// Returns per-tool execution metrics
-type ToolStats struct {
-    Tools map[string]ToolMetrics `json:"tools"`
-}
-type ToolMetrics struct {
-    TotalCalls   int64   `json:"totalCalls"`
-    SuccessCalls int64   `json:"successCalls"`
-    ErrorCalls   int64   `json:"errorCalls"`
-    CacheHits    int64   `json:"cacheHits"`
-    AvgLatencyMs float64 `json:"avgLatencyMs"`
-    P95LatencyMs float64 `json:"p95LatencyMs"`
-    LastCalled   string  `json:"lastCalled,omitempty"` // RFC3339
-}
+// Returns per-tool execution metrics as JSON
+// Response: {"tools": {<tool_name>: {totalCalls, avgLatencyMs, ...}}}
 
-// Resource: stats://tools/{name}
-// Same as above but single tool (URI template)
-
-// Resource: stats://cache
-type CacheStats struct {
-    MemoryHits     int64   `json:"memoryHits"`
-    MemoryMisses   int64   `json:"memoryMisses"`
-    DiskHits       int64   `json:"diskHits"`
-    DiskMisses     int64   `json:"diskMisses"`
-    RedisHits      int64   `json:"redisHits,omitempty"`
-    RedisMisses    int64   `json:"redisMisses,omitempty"`
-    HitRate        float64 `json:"hitRate"`
-    MemoryUsedMB   float64 `json:"memoryUsedMB"`
-    DiskUsedMB     float64 `json:"diskUsedMB"`
-    EntryCount     int64   `json:"entryCount"`
-}
-
-// Resource: stats://events
-type EventStats struct {
-    TotalEvents      int64  `json:"totalEvents"`
-    EventsPerMinute  float64 `json:"eventsPerMinute"`
-    OldestEvent      string `json:"oldestEvent"` // RFC3339
-    NewestEvent      string `json:"newestEvent"` // RFC3339
-}
-
-// Resource: search://recent (per-tenant, isolated)
-// Returns the last N search queries for the current tenant
-type RecentSearches struct {
-    Searches []RecentSearch `json:"searches"`
-}
-type RecentSearch struct {
-    Query     string `json:"query"`
-    Tool      string `json:"tool"`
-    Timestamp string `json:"timestamp"`
-    ResultCount int  `json:"resultCount"`
-}
-// Max 50 entries, FIFO. Keyed by tenantID. Not persisted across restarts (memory only).
+// Resource: stats://sessions
+// Returns count of active sequential research sessions
+// Response: {"activeSessions": <int>}
 ```
 
 ## MCP Prompts
 
-```go
-// internal/resources/prompts.go
+All prompts are registered in `internal/resources/resources.go`:
 
-// Prompt: comprehensive-research
-// Description: "Guide an AI assistant through a multi-step research process"
-// Arguments: topic (string, required), depth (string: "quick"|"standard"|"deep", default: "standard")
-// Returns a structured prompt that instructs the assistant to:
-//   1. Search broadly, 2. Identify key sources, 3. Scrape top results,
-//   4. Cross-reference findings, 5. Identify gaps, 6. Summarize with citations
-
-// Prompt: fact-check
-// Description: "Verify a claim using multiple independent sources"
-// Arguments: claim (string, required), context (string, optional)
-// Returns a prompt that instructs the assistant to:
-//   1. Search for the claim, 2. Search for counter-evidence,
-//   3. Evaluate source authority, 4. Report confidence level
-
-// Prompt: competitive-analysis
-// Description: "Research competitors in a given market"
-// Arguments: company (string, required), market (string, optional)
-// Returns a prompt guiding: company search, news search, patent search, synthesis
-
-// Prompt: literature-review
-// Description: "Systematic review of academic literature on a topic"
-// Arguments: topic (string, required), year_from (int, optional), year_to (int, optional)
-// Returns a prompt using academic_search + scrape_page systematically
-```
+| Prompt | Description | Required Args | Optional Args |
+|--------|-------------|---------------|---------------|
+| `comprehensive-research` | Multi-step research process | `topic` | `depth` (quick/standard/deep) |
+| `fact-check` | Verify a claim from multiple sources | `claim` | `context` |
+| `competitive-analysis` | Research competitors in a market | `company` | `market` |
+| `literature-review` | Systematic academic literature review | `topic` | `year_from`, `year_to` |
 
 ---
 
@@ -351,7 +270,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        go-version: ['1.23']
+        go-version: ['1.25']
         os: [ubuntu-latest, macos-latest]
     steps:
     - uses: actions/checkout@v4
@@ -370,7 +289,7 @@ jobs:
     - uses: actions/checkout@v4
     - uses: actions/setup-go@v5
       with:
-        go-version: '1.23'
+        go-version: '1.25'
     - uses: golangci/golangci-lint-action@v6
       with:
         version: latest
@@ -381,7 +300,7 @@ jobs:
     - uses: actions/checkout@v4
     - uses: actions/setup-go@v5
       with:
-        go-version: '1.23'
+        go-version: '1.25'
     - run: go install golang.org/x/vuln/cmd/govulncheck@latest
     - run: govulncheck ./...
 
@@ -391,7 +310,7 @@ jobs:
     - uses: actions/checkout@v4
     - uses: actions/setup-go@v5
       with:
-        go-version: '1.23'
+        go-version: '1.25'
     - run: go build -o web-researcher-mcp ./cmd/web-researcher-mcp
     - run: go test -v -timeout 120s ./tests/e2e/...
       env:
@@ -415,7 +334,7 @@ jobs:
         fetch-depth: 0
     - uses: actions/setup-go@v5
       with:
-        go-version: '1.23'
+        go-version: '1.25'
     - uses: goreleaser/goreleaser-action@v6
       with:
         version: latest
@@ -455,7 +374,7 @@ When a lens has more domains than can fit in a single `site:` query (~10 max):
 │  Per-session concurrent tools:  5           │
 │                                              │
 │  Scraping semaphore (all types): 5 slots    │
-│  Browser pool (chromedp only):   3 slots    │
+│  Browser pool (go-rod only):     3 slots    │
 │                                              │
 │  Browser slots are INSIDE scraping slots:   │
 │  [scrape-1] [scrape-2] [scrape-3]          │

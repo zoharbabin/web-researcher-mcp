@@ -3,6 +3,7 @@ package scraper
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -33,55 +34,25 @@ func (p *Pipeline) scrapeHTML(ctx context.Context, url string, maxLength int) (*
 		return nil, fmt.Errorf("HTTP %d for %s", resp.StatusCode, url)
 	}
 
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	reader, err := decompressBody(resp)
+	if err != nil {
+		return nil, err
+	}
+	if closer, ok := reader.(io.Closer); ok && closer != resp.Body {
+		defer closer.Close()
+	}
+
+	doc, err := goquery.NewDocumentFromReader(reader)
 	if err != nil {
 		return nil, err
 	}
 
-	// Remove unwanted elements
 	doc.Find("script, style, nav, footer, aside, header, noscript, iframe, form").Remove()
 	doc.Find("[role='navigation'], [role='banner'], [role='complementary']").Remove()
 	doc.Find(".ad, .ads, .advertisement, .sidebar, .nav, .footer, .header, .menu").Remove()
 
-	// Extract metadata
-	title := doc.Find("title").First().Text()
-	if ogTitle, exists := doc.Find(`meta[property="og:title"]`).Attr("content"); exists {
-		title = ogTitle
-	}
-
-	author := ""
-	if a, exists := doc.Find(`meta[name="author"]`).Attr("content"); exists {
-		author = a
-	}
-
-	siteName := ""
-	if s, exists := doc.Find(`meta[property="og:site_name"]`).Attr("content"); exists {
-		siteName = s
-	}
-
-	publishDate := ""
-	if d, exists := doc.Find(`meta[property="article:published_time"]`).Attr("content"); exists {
-		publishDate = d
-	} else if d, exists := doc.Find(`meta[name="date"]`).Attr("content"); exists {
-		publishDate = d
-	}
-
-	// Extract content in priority order
-	var content string
-	selectors := []string{"article", "main", "[role='main']", ".content", ".post-content", "#content", "body"}
-	for _, sel := range selectors {
-		node := doc.Find(sel).First()
-		if node.Length() > 0 {
-			content = extractText(node)
-			if len(content) > 100 {
-				break
-			}
-		}
-	}
-
-	if len(content) < 100 {
-		content = extractText(doc.Find("body"))
-	}
+	meta := extractHTMLMetadata(doc)
+	content := extractMainContent(doc)
 
 	content = cleanText(content)
 	truncated := false
@@ -94,12 +65,60 @@ func (p *Pipeline) scrapeHTML(ctx context.Context, url string, maxLength int) (*
 		URL:         url,
 		Content:     content,
 		ContentType: "html",
-		Title:       strings.TrimSpace(title),
-		Author:      author,
-		SiteName:    siteName,
-		PublishDate: publishDate,
+		Title:       meta.title,
+		Author:      meta.author,
+		SiteName:    meta.siteName,
+		PublishDate: meta.publishDate,
 		Truncated:   truncated,
 	}, nil
+}
+
+type htmlMetadata struct {
+	title       string
+	author      string
+	siteName    string
+	publishDate string
+}
+
+func extractHTMLMetadata(doc *goquery.Document) htmlMetadata {
+	title := doc.Find("title").First().Text()
+	if ogTitle, exists := doc.Find(`meta[property="og:title"]`).Attr("content"); exists {
+		title = ogTitle
+	}
+
+	var author, siteName, publishDate string
+	if a, exists := doc.Find(`meta[name="author"]`).Attr("content"); exists {
+		author = a
+	}
+	if s, exists := doc.Find(`meta[property="og:site_name"]`).Attr("content"); exists {
+		siteName = s
+	}
+	if d, exists := doc.Find(`meta[property="article:published_time"]`).Attr("content"); exists {
+		publishDate = d
+	} else if d, exists := doc.Find(`meta[name="date"]`).Attr("content"); exists {
+		publishDate = d
+	}
+
+	return htmlMetadata{
+		title:       strings.TrimSpace(title),
+		author:      author,
+		siteName:    siteName,
+		publishDate: publishDate,
+	}
+}
+
+func extractMainContent(doc *goquery.Document) string {
+	selectors := []string{"article", "main", "[role='main']", ".content", ".post-content", "#content", "body"}
+	for _, sel := range selectors {
+		node := doc.Find(sel).First()
+		if node.Length() > 0 {
+			content := extractText(node)
+			if len(content) > 100 {
+				return content
+			}
+		}
+	}
+	return extractText(doc.Find("body"))
 }
 
 func extractText(sel *goquery.Selection) string {

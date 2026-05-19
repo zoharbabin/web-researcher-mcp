@@ -18,7 +18,7 @@ Whether you're fixing a typo, adding a search provider, improving documentation,
 
 ### Prerequisites
 
-- **Go 1.23+** — this project uses `net/http` ServeMux patterns and `log/slog`
+- **Go 1.25+** — this project uses the official MCP Go SDK which requires Go 1.25
 - **API keys** (for integration/E2E testing):
   - Google Custom Search: `GOOGLE_CUSTOM_SEARCH_API_KEY` and `GOOGLE_CUSTOM_SEARCH_ID`
   - Brave Search (optional): `BRAVE_API_KEY`
@@ -122,7 +122,7 @@ This project follows [Effective Go](https://go.dev/doc/effective_go) and enforce
 7. **Table-driven tests** — with `t.Parallel()` where possible
 8. **No global state** — all dependencies are injected
 
-The full style guide with examples is in [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md).
+See `ARCHITECTURE.md` for package organization and `docs/TOOLS.md` for tool specifications.
 
 ### Before Submitting
 

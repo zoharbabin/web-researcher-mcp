@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
 )
 
 type SearXNGProvider struct {
@@ -165,9 +164,6 @@ func mapSearXNGTimeRange(tr string) string {
 		return ""
 	}
 }
-
-// Ensure NumResults is used from params (not exposed in SearXNG directly)
-var _ = strconv.Itoa
 
 type searxngResponse struct {
 	Results []searxngResult `json:"results"`

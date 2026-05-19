@@ -3,7 +3,7 @@ package tools
 import (
 	"log/slog"
 
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/audit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/cache"
@@ -25,7 +25,7 @@ type Dependencies struct {
 	Logger   *slog.Logger
 }
 
-func RegisterAll(srv *server.MCPServer, deps Dependencies) {
+func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	registerWebSearch(srv, deps)
 	registerScrapePage(srv, deps)
 	registerSearchAndScrape(srv, deps)

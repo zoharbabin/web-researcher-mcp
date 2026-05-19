@@ -1,27 +1,24 @@
 # Tool Specifications
 
-Each tool is implemented as a Go struct with typed input/output and a `Handle` method. This document specifies the contract for each tool — the schemas, behavior, caching, and error conditions that the implementation must satisfy.
+Each tool is registered via `mcp.AddTool` with a typed input struct. This document specifies the contract for each tool — the schemas, behavior, caching, and error conditions that the implementation must satisfy.
 
 ## Tool Registration Pattern
 
 ```go
-// Every tool follows this pattern:
-type SearchTool struct {
-    provider search.Provider
-    cache    cache.Cache
-    metrics  *metrics.Collector
-    circuit  *circuit.Breaker
+// internal/tools/search.go — actual pattern
+type webSearchInput struct {
+    Query      string `json:"query" jsonschema:"Search query,required"`
+    NumResults int    `json:"num_results,omitempty" jsonschema:"Number of results (1-10)"`
+    // ...
 }
 
-func (t *SearchTool) Definition() *mcp.Tool {
-    return &mcp.Tool{
+func registerWebSearch(srv *mcp.Server, deps Dependencies) {
+    mcp.AddTool(srv, &mcp.Tool{
         Name:        "web_search",
         Description: "...",
-    }
-}
-
-func (t *SearchTool) Handle(ctx context.Context, req *mcp.CallToolRequest, input SearchInput) (*mcp.CallToolResult, SearchOutput, error) {
-    // Implementation
+    }, func(ctx context.Context, req *mcp.CallToolRequest, input webSearchInput) (*mcp.CallToolResult, any, error) {
+        // Implementation — deps captured via closure
+    })
 }
 ```
 
@@ -483,7 +480,7 @@ type SequentialSearchOutput struct {
 | Search API call | 10s | 30s |
 | Markdown negotiation | 5s | 10s |
 | HTML scrape (goquery) | 15s | 30s |
-| Browser scrape (chromedp) | 30s | 60s |
+| Browser scrape (go-rod) | 30s | 60s |
 | YouTube transcript | 30s | 60s |
 | Document download | 30s | 60s |
 | Total tool execution | 60s | 120s |

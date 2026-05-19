@@ -88,15 +88,14 @@ This is an MCP (Model Context Protocol) server that provides AI assistants with 
 ```
 web-researcher-mcp/
 ├── cmd/
-│   └── server/
-│       └── main.go                    # Entry point (~50 lines)
+│   └── web-researcher-mcp/
+│       └── main.go                    # Entry point (wiring only)
 ├── internal/
 │   ├── config/
 │   │   ├── config.go                  # Strongly-typed config from env
 │   │   └── config_test.go
 │   ├── server/
-│   │   ├── server.go                  # MCP server wiring
-│   │   ├── lifecycle.go               # Shutdown, signals, stdin EOF
+│   │   ├── server.go                  # MCP server wiring + lifecycle
 │   │   └── server_test.go
 │   ├── tools/
 │   │   ├── registry.go                # Tool registration
@@ -108,7 +107,7 @@ web-researcher-mcp/
 │   │   ├── academic.go                # academic_search tool
 │   │   ├── patent.go                  # patent_search tool
 │   │   ├── sequential.go              # sequential_search tool
-│   │   └── *_test.go
+│   │   └── tools_test.go
 │   ├── search/
 │   │   ├── provider.go                # SearchProvider interface
 │   │   ├── google.go                  # Google PSE adapter
@@ -116,59 +115,58 @@ web-researcher-mcp/
 │   │   ├── serper.go                  # Serper.dev adapter (opt-in)
 │   │   ├── searxng.go                 # SearXNG adapter (self-hosted)
 │   │   ├── lenses.go                  # Search lens logic
-│   │   └── *_test.go
+│   │   └── search_test.go
 │   ├── scraper/
-│   │   ├── pipeline.go                # 4-tier scraping orchestrator
+│   │   ├── pipeline.go                # Tiered scraping orchestrator
 │   │   ├── markdown.go                # Tier 1: Accept: text/markdown negotiation
 │   │   ├── stealth.go                 # Tier 2: Browser-like TLS + Chrome headers
 │   │   ├── html.go                    # Tier 3: goquery-based extraction
 │   │   ├── browser.go                 # Tier 4: go-rod headless + stealth plugin
-│   │   ├── youtube.go                 # YouTube transcript (3-strategy fallback)
+│   │   ├── document.go                # Document type detection + routing
+│   │   ├── youtube.go                 # YouTube transcript extraction
 │   │   ├── ssrf.go                    # SSRF-safe HTTP client + dialer
-│   │   └── *_test.go
+│   │   └── scraper_test.go
 │   ├── documents/
 │   │   ├── parser.go                  # Unified document parser
 │   │   ├── pdf.go                     # PDF text extraction
 │   │   ├── docx.go                    # DOCX extraction
 │   │   ├── pptx.go                    # PPTX extraction
-│   │   └── *_test.go
+│   │   └── documents_test.go
 │   ├── cache/
 │   │   ├── cache.go                   # Cache interface
-│   │   ├── memory.go                  # Ristretto in-memory cache
-│   │   ├── disk.go                    # bbolt disk persistence
-│   │   ├── redis.go                   # Redis adapter (optional)
-│   │   ├── hybrid.go                  # L1 memory + L2 disk/redis
-│   │   └── *_test.go
+│   │   ├── memory.go                  # In-memory LRU cache (sync.Map + TTL)
+│   │   ├── disk.go                    # File-based disk persistence (AES-256-GCM)
+│   │   ├── hybrid.go                  # L1 memory + L2 disk
+│   │   └── cache_test.go
 │   ├── auth/
-│   │   ├── middleware.go              # OAuth 2.1 HTTP middleware
-│   │   ├── jwks.go                    # JWKS fetching + caching
-│   │   ├── claims.go                  # JWT claim extraction
-│   │   └── *_test.go
+│   │   ├── middleware.go              # OAuth 2.1 middleware (JWT/JWKS/revocation)
+│   │   └── middleware_test.go
+│   ├── audit/
+│   │   ├── logger.go                  # Structured audit logging
+│   │   └── audit_test.go
 │   ├── session/
-│   │   ├── manager.go                 # Session lifecycle
-│   │   ├── state.go                   # Per-session state (sequential_search)
-│   │   └── *_test.go
+│   │   ├── manager.go                 # Session lifecycle + state
+│   │   └── manager_test.go
 │   ├── content/
+│   │   ├── processor.go               # Content processing pipeline
 │   │   ├── sanitize.go                # HTML/content sanitization
 │   │   ├── dedup.go                   # Paragraph-level deduplication
 │   │   ├── truncate.go                # Smart truncation at breakpoints
-│   │   ├── quality.go                 # Quality scoring (relevance, freshness, authority)
+│   │   ├── quality.go                 # Quality scoring
 │   │   ├── citation.go                # Citation extraction + formatting
-│   │   └── *_test.go
+│   │   └── content_test.go
 │   ├── metrics/
-│   │   ├── collector.go               # Per-tool metrics + reservoir sampling
-│   │   ├── prometheus.go              # Prometheus exporter
-│   │   └── *_test.go
+│   │   ├── collector.go               # Per-tool metrics + Prometheus exporter
+│   │   └── collector_test.go
 │   ├── ratelimit/
 │   │   ├── limiter.go                 # Per-user/tenant rate limiting
-│   │   └── *_test.go
+│   │   └── limiter_test.go
 │   ├── circuit/
 │   │   ├── breaker.go                 # Circuit breaker (timer-free)
-│   │   └── *_test.go
+│   │   └── breaker_test.go
 │   └── resources/
-│       ├── stats.go                   # MCP Resources (stats://*)
-│       ├── prompts.go                 # MCP Prompts
-│       └── *_test.go
+│       ├── resources.go               # MCP Resources + Prompts
+│       └── resources_test.go
 ├── lenses/
 │   ├── programming.json               # Curated domain lists
 │   ├── news.json
@@ -181,8 +179,7 @@ web-researcher-mcp/
 ├── docs/                               # Extended documentation
 ├── testdata/                           # Fixtures for tests
 ├── scripts/
-│   ├── run-e2e.sh
-│   ├── release.sh
+│   ├── run-e2e.sh                     # Run E2E test suite
 │   └── build-mcpb.sh                  # Builds .mcpb bundles (CI)
 ├── mcpb/
 │   └── manifest.json                   # Claude Desktop bundle template
@@ -285,20 +282,17 @@ type RequestContext struct {
 
 | Concern | Library | Why |
 |---------|---------|-----|
-| MCP Protocol | `github.com/modelcontextprotocol/go-sdk` v1.6.0 | Official, Google-maintained |
-| HTML Parsing | `github.com/PuerkitoBio/goquery` | jQuery-style, 14k stars |
+| MCP Protocol | `github.com/modelcontextprotocol/go-sdk` v1.6.0 | Official MCP SDK, full spec compliance |
+| HTML Parsing | `github.com/PuerkitoBio/goquery` | jQuery-style CSS selectors |
 | Headless Browser | `github.com/go-rod/rod` + `go-rod/stealth` | DevTools Protocol, auto-download Chromium, anti-detection |
-| In-Memory Cache | `github.com/dgraph-io/ristretto/v2` | TinyLFU, memory-bounded |
-| Disk Cache | `go.etcd.io/bbolt` | Single-file B+tree |
-| Redis (optional) | `github.com/redis/go-redis/v9` | Official client |
-| JWT/JWKS | `github.com/lestrrat-go/jwx/v3` | Full JOSE suite, auto-refresh |
+| In-Memory Cache | Custom `sync.RWMutex` + map | Simple LRU with TTL, size-bounded |
+| Disk Cache | File-based with AES-256-GCM | Custom implementation, no external dependency |
+| JWT/JWKS | Custom RS256 implementation | Minimal, no external JWT library |
 | Rate Limiting | `golang.org/x/time/rate` | Token bucket, stdlib-adjacent |
-| PDF Parsing | `github.com/ledongthuc/pdf` | MIT, basic extraction |
-| DOCX/PPTX | `github.com/sajari/docconv` | Multi-format, single API |
 | HTML Sanitizer | `github.com/microcosm-cc/bluemonday` | Whitelist-based |
 | Metrics | `github.com/prometheus/client_golang` | Standard Prometheus |
+| UUID | `github.com/google/uuid` | Session ID generation |
 | Logging | `log/slog` (stdlib) | Standard, extensible |
-| Testing | `github.com/stretchr/testify` | Assertions + mocking |
 
 ## Performance Characteristics
 
@@ -309,7 +303,7 @@ type RequestContext struct {
 | Scrape (markdown) | 100-300ms | HTTP GET + parse |
 | Scrape (HTML) | 500-2000ms | goquery parse |
 | Scrape (stealth HTTP) | 300-800ms | Browser-like TLS + headers, no JS |
-| Scrape (browser) | 2-10s | go-rod pool, bounded to MaxConcurrency |
+| Scrape (browser) | 2-10s | go-rod headless, bounded to MaxConcurrency |
 | YouTube transcript | 1-5s | 3-strategy: captions → timedtext API → description |
 | search_and_scrape | 2-15s | Parallel scrape (semaphore=5) |
 

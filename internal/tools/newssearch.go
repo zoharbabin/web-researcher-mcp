@@ -6,64 +6,66 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
-func registerNewsSearch(srv *server.MCPServer, deps Dependencies) {
-	tool := mcp.NewTool("news_search",
-		mcp.WithDescription("Search for news articles with freshness control and source filtering."),
-		mcp.WithString("query", mcp.Required(), mcp.Description("News search query")),
-		mcp.WithNumber("num_results", mcp.Description("Number of results (1-10, default: 5)")),
-		mcp.WithString("freshness", mcp.Description("Time range: hour, day, week, month, year (default: week)")),
-		mcp.WithString("sort_by", mcp.Description("Sort order: relevance, date (default: relevance)")),
-		mcp.WithString("news_source", mcp.Description("Filter by news source domain")),
-	)
+type newsSearchInput struct {
+	Query      string `json:"query" jsonschema:"News search query,required"`
+	NumResults int    `json:"num_results,omitempty" jsonschema:"Number of results (1-10, default: 5)"`
+	Freshness  string `json:"freshness,omitempty" jsonschema:"Time range: hour, day, week, month, year (default: week)"`
+	SortBy     string `json:"sort_by,omitempty" jsonschema:"Sort order: relevance, date (default: relevance)"`
+	NewsSource string `json:"news_source,omitempty" jsonschema:"Filter by news source domain"`
+}
 
-	srv.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "news_search",
+		Description: "Search for news articles with freshness control and source filtering.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input newsSearchInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
 
-		query, _ := req.GetArguments()["query"].(string)
-		if query == "" {
-			return toolError("query is required"), nil
+		if input.Query == "" {
+			return toolError("query is required"), nil, nil
 		}
 
-		numResults := intParam(req.GetArguments(), "num_results", 5)
-		freshness, _ := req.GetArguments()["freshness"].(string)
+		numResults := input.NumResults
+		if numResults <= 0 {
+			numResults = 5
+		}
+		freshness := input.Freshness
 		if freshness == "" {
 			freshness = "week"
 		}
-		sortBy, _ := req.GetArguments()["sort_by"].(string)
+		sortBy := input.SortBy
 		if sortBy == "" {
 			sortBy = "relevance"
 		}
-		newsSource, _ := req.GetArguments()["news_source"].(string)
 
-		cacheKey := searchCacheKey("news", query, numResults, freshness, sortBy, newsSource)
+		cacheKey := searchCacheKey("news", input.Query, numResults, freshness, sortBy, input.NewsSource)
 		if cached, ok := deps.Cache.Get(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("news_search", time.Since(start), nil, "", true)
 			auditToolCall(deps, "news_search", time.Since(start), nil, "")
-			return mcp.NewToolResultText(string(cached)), nil
+			return textResult(string(cached)), nil, nil
 		}
 
 		results, err := deps.Search.News(ctx, search.NewsSearchParams{
-			Query:      query,
+			Query:      input.Query,
 			NumResults: numResults,
 			Freshness:  freshness,
 			SortBy:     sortBy,
-			Source:     newsSource,
+			Source:     input.NewsSource,
 		})
 		if err != nil {
 			deps.Metrics.RecordToolCall("news_search", time.Since(start), err, "upstream_error", false)
 			auditToolCall(deps, "news_search", time.Since(start), err, "upstream_error")
-			return toolError(fmt.Sprintf("news search failed: %v", err)), nil
+			return toolError(fmt.Sprintf("news search failed: %v", err)), nil, nil
 		}
 
 		output := map[string]any{
 			"articles":    results,
-			"query":       query,
+			"query":       input.Query,
 			"resultCount": len(results),
 		}
 
@@ -72,6 +74,6 @@ func registerNewsSearch(srv *server.MCPServer, deps Dependencies) {
 		deps.Metrics.RecordToolCall("news_search", time.Since(start), nil, "", false)
 		auditToolCall(deps, "news_search", time.Since(start), nil, "")
 
-		return mcp.NewToolResultText(string(jsonBytes)), nil
+		return textResult(string(jsonBytes)), nil, nil
 	})
 }

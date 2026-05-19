@@ -212,7 +212,7 @@ func TestProcessExitsOnStdinClose(t *testing.T) {
     cmd.Start()
     
     // Send initialize
-    stdin.Write([]byte(`{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}` + "\n"))
+    stdin.Write([]byte(`{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}` + "\n"))
     
     time.Sleep(2 * time.Second)
     assert.True(t, isProcessAlive(cmd.Process.Pid))
@@ -287,7 +287,7 @@ jobs:
   test:
     strategy:
       matrix:
-        go-version: ['1.23']
+        go-version: ['1.25']
         os: [ubuntu-latest, macos-latest]
     steps:
     - uses: actions/setup-go@v5
