@@ -68,6 +68,8 @@ dockers:
       - "--label=org.opencontainers.image.source=https://github.com/zoharbabin/web-researcher-mcp"
       - "--label=org.opencontainers.image.licenses=MIT"
     dockerfile: Dockerfile.release
+    extra_files:
+      - lenses/
     goarch: amd64
     goos: linux
 
@@ -85,6 +87,8 @@ dockers:
       - "--label=org.opencontainers.image.source=https://github.com/zoharbabin/web-researcher-mcp"
       - "--label=org.opencontainers.image.licenses=MIT"
     dockerfile: Dockerfile.release
+    extra_files:
+      - lenses/
     goarch: arm64
     goos: linux
 
@@ -103,6 +107,8 @@ dockers:
       - "--label=org.opencontainers.image.source=https://github.com/zoharbabin/web-researcher-mcp"
       - "--label=org.opencontainers.image.licenses=MIT"
     dockerfile: Dockerfile.release
+    extra_files:
+      - lenses/
     goarch: amd64
     goos: linux
 
@@ -120,6 +126,8 @@ dockers:
       - "--label=org.opencontainers.image.source=https://github.com/zoharbabin/web-researcher-mcp"
       - "--label=org.opencontainers.image.licenses=MIT"
     dockerfile: Dockerfile.release
+    extra_files:
+      - lenses/
     goarch: arm64
     goos: linux
 

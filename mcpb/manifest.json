@@ -1,7 +1,7 @@
 {
   "manifest_version": "0.3",
   "name": "web-researcher-mcp",
-  "version": "1.0.0",
+  "version": "0.0.0-template",
   "description": "MCP server providing web search, content extraction, and multi-source research tools for AI assistants",
   "author": {
     "name": "Zohar Babin",

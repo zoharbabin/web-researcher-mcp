@@ -2,25 +2,11 @@
 
 Each tool is registered via `mcp.AddTool` with a typed input struct. This document specifies the contract for each tool — the schemas, behavior, caching, and error conditions that the implementation must satisfy.
 
+> **Note:** Output schemas shown below describe the JSON shape returned by each tool. They are documentation of the response contract — see the corresponding `internal/tools/*.go` file for the actual implementation. Input schemas are auto-generated from the struct `jsonschema` tags.
+
 ## Tool Registration Pattern
 
-```go
-// internal/tools/search.go — actual pattern
-type webSearchInput struct {
-    Query      string `json:"query" jsonschema:"Search query,required"`
-    NumResults int    `json:"num_results,omitempty" jsonschema:"Number of results (1-10)"`
-    // ...
-}
-
-func registerWebSearch(srv *mcp.Server, deps Dependencies) {
-    mcp.AddTool(srv, &mcp.Tool{
-        Name:        "web_search",
-        Description: "...",
-    }, func(ctx context.Context, req *mcp.CallToolRequest, input webSearchInput) (*mcp.CallToolResult, any, error) {
-        // Implementation — deps captured via closure
-    })
-}
-```
+Each tool follows the pattern in `internal/tools/registry.go`: a typed input struct with `jsonschema` tags (the SDK auto-generates JSON Schema from these) and a `register*` function that calls `mcp.AddTool`. See `internal/tools/search.go` for a representative example.
 
 ---
 

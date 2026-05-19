@@ -17,7 +17,7 @@ GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o web-researcher-mcp-linux-am
 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o web-researcher-mcp-darwin-arm64 ./cmd/web-researcher-mcp
 ```
 
-Output: single static binary, ~20MB. No runtime dependencies.
+Output: single static binary. No runtime dependencies.
 
 ## Transport Modes
 
@@ -73,39 +73,29 @@ When `PORT` is set, the server starts an HTTP listener in addition to STDIO.
 
 ## Docker
 
-```dockerfile
-FROM golang:1.25-alpine AS builder
-WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /web-researcher-mcp ./cmd/web-researcher-mcp
-
-FROM gcr.io/distroless/static-debian12
-COPY --from=builder /web-researcher-mcp /web-researcher-mcp
-COPY lenses/ /lenses/
-ENTRYPOINT ["/web-researcher-mcp"]
-```
+The project includes two Dockerfiles in the repo root:
+- `Dockerfile` — multi-stage build (builder + Alpine runtime), used for local builds
+- `Dockerfile.release` — slim Alpine image used by GoReleaser (expects pre-built binary)
 
 ```bash
+# Build and run locally
 docker build -t web-researcher-mcp .
-docker run -p 3000:3000 \
+docker run -i --rm \
   -e GOOGLE_CUSTOM_SEARCH_API_KEY=... \
   -e GOOGLE_CUSTOM_SEARCH_ID=... \
+  web-researcher-mcp
+
+# HTTP mode
+docker run -p 3000:3000 \
   -e PORT=3000 \
+  -e GOOGLE_CUSTOM_SEARCH_API_KEY=... \
+  -e GOOGLE_CUSTOM_SEARCH_ID=... \
   -e OAUTH_ISSUER_URL=... \
   -e OAUTH_AUDIENCE=... \
   web-researcher-mcp
 ```
 
-**For headless browser (go-rod):**
-```dockerfile
-FROM chromedp/headless-shell:latest AS chrome
-FROM gcr.io/distroless/static-debian12
-COPY --from=chrome /headless-shell/ /headless-shell/
-COPY --from=builder /web-researcher-mcp /web-researcher-mcp
-ENV CHROME_PATH=/headless-shell/headless-shell
-```
+**For headless browser (go-rod):** Set `CHROME_PATH` to a Chromium binary inside the container, or extend the Dockerfile to include `chromedp/headless-shell`.
 
 ---
 
@@ -470,3 +460,40 @@ On SIGINT/SIGTERM or stdin EOF:
 6. Exit 0
 
 No orphan processes. No watchdog needed.
+
+---
+
+## Admin Endpoints (HTTP Mode)
+
+All admin endpoints require the `X-Admin-Key` header matching `CACHE_ADMIN_KEY` env var. They are separate from OAuth — admin auth is a simple shared secret for operational use.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| DELETE | `/admin/cache` | Flush all cache (memory + disk) |
+| DELETE | `/admin/sessions` | Kill all active sessions |
+| DELETE | `/admin/tenant/{id}` | Purge all data for a tenant |
+| GET | `/admin/audit` | Query audit logs (`tenant_id`, `from`, `to`) |
+| GET | `/users/{id}/data` | GDPR Art. 15 — export user data |
+| DELETE | `/users/{id}/data` | GDPR Art. 17 — purge user data |
+
+These are HTTP-only operational endpoints, not exposed via MCP tools.
+
+---
+
+## MCP Resources & Prompts
+
+### Resources
+
+| URI | Description |
+|-----|-------------|
+| `stats://tools` | Per-tool execution metrics (totalCalls, avgLatencyMs, etc.) |
+| `stats://sessions` | Count of active sequential research sessions |
+
+### Prompts
+
+| Prompt | Description | Required Args |
+|--------|-------------|---------------|
+| `comprehensive-research` | Multi-step research process | `topic` |
+| `fact-check` | Verify a claim from multiple sources | `claim` |
+| `competitive-analysis` | Research competitors in a market | `company` |
+| `literature-review` | Systematic academic literature review | `topic` |

@@ -73,8 +73,8 @@ This is an MCP (Model Context Protocol) server that provides AI assistants with 
 │       │   Infrastructure Layer                                    │
 │  ┌────▼────┐ ┌───▼────┐ ┌─────────┐ ┌────────┐ ┌───────────┐  │
 │  │  Cache  │ │  SSRF  │ │  Rate   │ │Metrics │ │   Audit   │  │
-│  │(ristret-│ │Protect │ │ Limiter │ │Collect.│ │   Logger  │  │
-│  │to+disk) │ │(dialer)│ │(x/time) │ │(prom.) │ │  (slog)   │  │
+│  │(memory+ │ │Protect │ │ Limiter │ │Collect.│ │   Logger  │  │
+│  │   disk) │ │(dialer)│ │(x/time) │ │(prom.) │ │  (slog)   │  │
 │  └─────────┘ └────────┘ └─────────┘ └────────┘ └───────────┘  │
 │  ┌─────────────────┐  ┌──────────────────────────────────────┐  │
 │  │  Circuit Breaker │  │  Content Pipeline (sanitize, dedup,  │  │
@@ -87,116 +87,30 @@ This is an MCP (Model Context Protocol) server that provides AI assistants with 
 
 ```
 web-researcher-mcp/
-├── cmd/
-│   └── web-researcher-mcp/
-│       └── main.go                    # Entry point (wiring only)
+├── cmd/web-researcher-mcp/       # Entry point (wiring only)
 ├── internal/
-│   ├── config/
-│   │   ├── config.go                  # Strongly-typed config from env
-│   │   └── config_test.go
-│   ├── server/
-│   │   ├── server.go                  # MCP server wiring + lifecycle
-│   │   └── server_test.go
-│   ├── tools/
-│   │   ├── registry.go                # Tool registration
-│   │   ├── search.go                  # web_search tool
-│   │   ├── imagesearch.go             # image_search tool
-│   │   ├── newssearch.go              # news_search tool
-│   │   ├── scrape.go                  # scrape_page tool
-│   │   ├── searchandscrape.go         # search_and_scrape tool
-│   │   ├── academic.go                # academic_search tool
-│   │   ├── patent.go                  # patent_search tool
-│   │   ├── sequential.go              # sequential_search tool
-│   │   └── tools_test.go
-│   ├── search/
-│   │   ├── provider.go                # SearchProvider interface
-│   │   ├── google.go                  # Google PSE adapter
-│   │   ├── brave.go                   # Brave Search adapter
-│   │   ├── serper.go                  # Serper.dev adapter (opt-in)
-│   │   ├── searxng.go                 # SearXNG adapter (self-hosted)
-│   │   ├── lenses.go                  # Search lens logic
-│   │   └── search_test.go
-│   ├── scraper/
-│   │   ├── pipeline.go                # Tiered scraping orchestrator
-│   │   ├── markdown.go                # Tier 1: Accept: text/markdown negotiation
-│   │   ├── stealth.go                 # Tier 2: Browser-like TLS + Chrome headers
-│   │   ├── html.go                    # Tier 3: goquery-based extraction
-│   │   ├── browser.go                 # Tier 4: go-rod headless + stealth plugin
-│   │   ├── document.go                # Document type detection + routing
-│   │   ├── youtube.go                 # YouTube transcript extraction
-│   │   ├── ssrf.go                    # SSRF-safe HTTP client + dialer
-│   │   └── scraper_test.go
-│   ├── documents/
-│   │   ├── parser.go                  # Unified document parser
-│   │   ├── pdf.go                     # PDF text extraction
-│   │   ├── docx.go                    # DOCX extraction
-│   │   ├── pptx.go                    # PPTX extraction
-│   │   └── documents_test.go
-│   ├── cache/
-│   │   ├── cache.go                   # Cache interface
-│   │   ├── memory.go                  # In-memory LRU cache (sync.Map + TTL)
-│   │   ├── disk.go                    # File-based disk persistence (AES-256-GCM)
-│   │   ├── hybrid.go                  # L1 memory + L2 disk
-│   │   └── cache_test.go
-│   ├── auth/
-│   │   ├── middleware.go              # OAuth 2.1 middleware (JWT/JWKS/revocation)
-│   │   └── middleware_test.go
-│   ├── audit/
-│   │   ├── logger.go                  # Structured audit logging
-│   │   └── audit_test.go
-│   ├── session/
-│   │   ├── manager.go                 # Session lifecycle + state
-│   │   └── manager_test.go
-│   ├── content/
-│   │   ├── processor.go               # Content processing pipeline
-│   │   ├── sanitize.go                # HTML/content sanitization
-│   │   ├── dedup.go                   # Paragraph-level deduplication
-│   │   ├── truncate.go                # Smart truncation at breakpoints
-│   │   ├── quality.go                 # Quality scoring
-│   │   ├── citation.go                # Citation extraction + formatting
-│   │   └── content_test.go
-│   ├── metrics/
-│   │   ├── collector.go               # Per-tool metrics + Prometheus exporter
-│   │   └── collector_test.go
-│   ├── ratelimit/
-│   │   ├── limiter.go                 # Per-user/tenant rate limiting
-│   │   └── limiter_test.go
-│   ├── circuit/
-│   │   ├── breaker.go                 # Circuit breaker (timer-free)
-│   │   └── breaker_test.go
-│   └── resources/
-│       ├── resources.go               # MCP Resources + Prompts
-│       └── resources_test.go
-├── lenses/
-│   ├── programming.json               # Curated domain lists
-│   ├── news.json
-│   ├── tech.json
-│   ├── legal.json
-│   ├── medical.json
-│   ├── finance.json
-│   ├── science.json
-│   └── government.json
-├── docs/                               # Extended documentation
-├── testdata/                           # Fixtures for tests
-├── scripts/
-│   ├── run-e2e.sh                     # Run E2E test suite
-│   └── build-mcpb.sh                  # Builds .mcpb bundles (CI)
-├── mcpb/
-│   └── manifest.json                   # Claude Desktop bundle template
-├── .mcp.json                           # Claude Code / Cursor config
-├── .vscode/mcp.json                    # VS Code / GitHub Copilot config
-├── server.json                         # Official MCP Registry manifest
-├── smithery.yaml                       # Smithery.ai marketplace config
-├── go.mod
-├── go.sum
-├── Makefile
-├── Dockerfile
-├── Dockerfile.release                  # Slim Alpine image for GoReleaser
-├── .goreleaser.yml
-├── CLAUDE.md
-├── README.md
-└── LICENSE
+│   ├── config/                   # Strongly-typed config from env
+│   ├── server/                   # MCP server lifecycle (STDIO + HTTP)
+│   ├── tools/                    # Tool handlers (one file per tool)
+│   ├── search/                   # Pluggable providers + lens routing
+│   ├── scraper/                  # 4-tier pipeline + SSRF protection
+│   ├── documents/                # PDF, DOCX, PPTX parsing
+│   ├── cache/                    # Hybrid cache (memory + disk)
+│   ├── auth/                     # OAuth 2.1 middleware (JWT/JWKS)
+│   ├── audit/                    # Structured audit logging
+│   ├── session/                  # Per-tenant session management
+│   ├── content/                  # Sanitize, dedup, truncate, quality
+│   ├── metrics/                  # Prometheus metrics
+│   ├── ratelimit/                # Three-tier rate limiting
+│   ├── circuit/                  # Circuit breaker
+│   └── resources/                # MCP Resources + Prompts
+├── lenses/                       # Search lens JSON files
+├── tests/                        # E2E tests + benchmarks
+├── scripts/                      # CI/CD helper scripts
+└── docs/                         # Extended documentation
 ```
+
+Run `find . -name '*.go' | head -50` or `tree internal/` for the full file listing.
 
 ## Key Design Decisions
 
@@ -247,29 +161,11 @@ type Pipeline struct {
 
 ### 4. Dependency Injection
 
-All services constructed explicitly in `main.go` and passed down:
-
-```go
-srv := server.New(cfg, server.Deps{
-    Cache:    cacheStore,
-    Search:   searchProvider,
-    Scraper:  scraperPipeline,
-    Sessions: sessionManager,
-})
-```
+All services are constructed explicitly in `main.go` and passed down via the `tools.Dependencies` struct. Tool handlers receive deps via closure capture at registration time — see `internal/tools/registry.go` for the canonical pattern.
 
 ### 5. Context Propagation
 
-Every request carries deadline, session ID, tenant ID, trace ID, and a pre-configured logger:
-
-```go
-type RequestContext struct {
-    SessionID string
-    TenantID  string
-    TraceID   string
-    Logger    *slog.Logger
-}
-```
+Every request carries a `context.Context` with deadline. Session and tenant IDs flow through the session manager for isolation. Structured logging via `slog` attaches relevant fields at each layer.
 
 ### 6. Concurrency Model
 
@@ -282,17 +178,19 @@ type RequestContext struct {
 
 | Concern | Library | Why |
 |---------|---------|-----|
-| MCP Protocol | `github.com/modelcontextprotocol/go-sdk` v1.6.0 | Official MCP SDK, full spec compliance |
+| MCP Protocol | `github.com/modelcontextprotocol/go-sdk` | Official MCP SDK, full spec compliance |
 | HTML Parsing | `github.com/PuerkitoBio/goquery` | jQuery-style CSS selectors |
 | Headless Browser | `github.com/go-rod/rod` + `go-rod/stealth` | DevTools Protocol, auto-download Chromium, anti-detection |
 | In-Memory Cache | Custom `sync.RWMutex` + map | Simple LRU with TTL, size-bounded |
 | Disk Cache | File-based with AES-256-GCM | Custom implementation, no external dependency |
 | JWT/JWKS | Custom RS256 implementation | Minimal, no external JWT library |
 | Rate Limiting | `golang.org/x/time/rate` | Token bucket, stdlib-adjacent |
-| HTML Sanitizer | `github.com/microcosm-cc/bluemonday` | Whitelist-based |
+| HTML Sanitizer | `github.com/microcosm-cc/bluemonday` | Whitelist-based, used by Gitea/Hugo |
 | Metrics | `github.com/prometheus/client_golang` | Standard Prometheus |
 | UUID | `github.com/google/uuid` | Session ID generation |
 | Logging | `log/slog` (stdlib) | Standard, extensible |
+
+For exact versions, see `go.mod`. All dependencies use MIT, Apache 2.0, or BSD licenses.
 
 ## Performance Characteristics
 
@@ -307,17 +205,37 @@ type RequestContext struct {
 | YouTube transcript | 1-5s | 3-strategy: captions → timedtext API → description |
 | search_and_scrape | 2-15s | Parallel scrape (semaphore=5) |
 
+## Concurrency Limits
+
+Default values (all configurable via environment variables — see `docs/DEPLOYMENT.md`):
+
+```
+Global request throughput:    1000 req/s     (RATE_LIMIT_GLOBAL)
+Per-tenant rate limit:        30 req/min     (RATE_LIMIT_PER_TENANT)
+Scraping semaphore:           5 slots        (MAX_SCRAPE_CONCURRENCY)
+Browser pool (go-rod):        3 slots        (subset of scraping slots)
+```
+
+Browser scrapes hold both a scraping slot and a browser slot simultaneously.
+
+## Error Handling
+
+Tool handlers return errors as MCP tool results with `IsError: true`:
+
+| Error Type | MCP Response |
+|------------|-------------|
+| `context.DeadlineExceeded` | Tool error: timeout message |
+| `ErrCircuitOpen` | Tool error: "service temporarily unavailable" |
+| `ErrSSRFBlocked` | Tool error: "URL blocked by SSRF protection" |
+| Invalid input | Tool error: descriptive validation message |
+| Protocol-level errors | Handled by go-sdk (invalid JSON-RPC, unknown method) |
+
 ## Binary Output
 
-Single static binary, ~20MB. No runtime dependencies except optional Chrome for JS rendering.
+Single static binary with no runtime dependencies except optional Chromium for JS rendering (auto-downloaded by go-rod on first headless scrape).
 
 ```bash
-# Build
-go build -o web-researcher-mcp ./cmd/web-researcher-mcp
-
-# Run (STDIO)
-./web-researcher-mcp
-
-# Run (HTTP)
-PORT=3000 ./web-researcher-mcp
+go build -o web-researcher-mcp ./cmd/web-researcher-mcp   # Build
+./web-researcher-mcp                                       # Run (STDIO)
+PORT=3000 ./web-researcher-mcp                             # Run (HTTP)
 ```

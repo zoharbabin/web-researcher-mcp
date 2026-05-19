@@ -27,7 +27,7 @@ echo "[e2e] Starting server in STDIO mode..."
 RESPONSE_FILE=$(mktemp)
 
 # Send MCP initialize request via stdin and capture response
-echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"e2e-test","version":"1.0.0"}}}' \
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"e2e-test","version":"1.0.0"}}}' \
     | timeout 10 "$BINARY" > "$RESPONSE_FILE" 2>/dev/null &
 PID=$!
 

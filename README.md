@@ -18,11 +18,11 @@
 
 AI assistants are only as good as the information they can access. **web-researcher-mcp** bridges the gap between LLMs and the live internet through the [Model Context Protocol](https://modelcontextprotocol.io/) standard:
 
-- **8 specialized research tools** in a single server
-- **4 pluggable search backends** (Google, Brave, Serper, SearXNG)
+- **Multiple specialized research tools** in a single server (see [Tools](#tools) below)
+- **Pluggable search backends** (Google, Brave, Serper, SearXNG)
 - **4-tier content extraction** -- markdown negotiation, stealth HTTP, HTML parsing, headless browser (go-rod + stealth)
 - **Search lenses** for domain-focused research (programming, news, legal, medical, and more)
-- **Single static binary** (~20MB) with zero runtime dependencies
+- **Single static binary** with optional Chromium for JS rendering (auto-downloaded on first use)
 - **Enterprise-ready** with OAuth 2.1, multi-tenancy, rate limiting, and audit logging
 
 Works with Claude Code, Claude Desktop, Cursor, and any MCP-compatible client.
@@ -46,33 +46,29 @@ Works with Claude Code, Claude Desktop, Cursor, and any MCP-compatible client.
 
 ## Quick Start
 
-### One-Line Install (Claude Code)
+### Option 1: Install with Go (Recommended)
 
 ```bash
-claude mcp add web-researcher -- go run github.com/zoharbabin/web-researcher-mcp/cmd/web-researcher-mcp@latest
+go install github.com/zoharbabin/web-researcher-mcp/cmd/web-researcher-mcp@latest
 ```
 
-Then set your API keys in `~/.claude/settings.json` under the server's `env` block (see [Connect to Your AI Assistant](#connect-to-your-ai-assistant) below).
-
-### Option 1: Download Binary
-
-Download the latest release for your platform from [Releases](https://github.com/zoharbabin/web-researcher-mcp/releases):
+The binary is now in your `$GOPATH/bin`. Add to Claude Code:
 
 ```bash
-# macOS (Apple Silicon)
-curl -L https://github.com/zoharbabin/web-researcher-mcp/releases/latest/download/web-researcher-mcp_1.0.0_darwin_arm64.tar.gz | tar xz
-chmod +x web-researcher-mcp
+claude mcp add --scope user --transport stdio web-researcher -- web-researcher-mcp
+```
 
-# macOS (Intel)
-curl -L https://github.com/zoharbabin/web-researcher-mcp/releases/latest/download/web-researcher-mcp_1.0.0_darwin_amd64.tar.gz | tar xz
-chmod +x web-researcher-mcp
+### Option 2: Download Binary
 
-# Linux (x86_64)
-curl -L https://github.com/zoharbabin/web-researcher-mcp/releases/latest/download/web-researcher-mcp_1.0.0_linux_amd64.tar.gz | tar xz
+Download the latest release for your platform from [Releases](https://github.com/zoharbabin/web-researcher-mcp/releases). Archives are named `web-researcher-mcp_<version>_<os>_<arch>.tar.gz`.
+
+```bash
+# Example: macOS Apple Silicon (replace VERSION with actual version, e.g. 1.0.4)
+curl -L https://github.com/zoharbabin/web-researcher-mcp/releases/download/v${VERSION}/web-researcher-mcp_${VERSION}_darwin_arm64.tar.gz | tar xz
 chmod +x web-researcher-mcp
 ```
 
-### Option 2: Docker
+### Option 3: Docker
 
 ```bash
 docker run -e GOOGLE_CUSTOM_SEARCH_API_KEY=YOUR_KEY \
@@ -82,18 +78,12 @@ docker run -e GOOGLE_CUSTOM_SEARCH_API_KEY=YOUR_KEY \
 
 Also available from GHCR: `ghcr.io/zoharbabin/web-researcher-mcp:latest`
 
-### Option 3: Build from Source
+### Option 4: Build from Source
 
 ```bash
 git clone https://github.com/zoharbabin/web-researcher-mcp.git
 cd web-researcher-mcp
 go build -o web-researcher-mcp ./cmd/web-researcher-mcp
-```
-
-Or install directly:
-
-```bash
-go install github.com/zoharbabin/web-researcher-mcp/cmd/web-researcher-mcp@latest
 ```
 
 ### Connect to Your AI Assistant
@@ -114,7 +104,7 @@ Add this to your MCP client configuration (example for Claude Code `~/.claude/se
 }
 ```
 
-Done. Your AI assistant now has access to all 8 research tools.
+Done. Your AI assistant now has access to all research tools.
 
 ---
 
@@ -147,30 +137,7 @@ Done. Your AI assistant now has access to all 8 research tools.
 <details>
 <summary><strong>All Environment Variables</strong></summary>
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `GOOGLE_CUSTOM_SEARCH_API_KEY` | Google API key | (required) |
-| `GOOGLE_CUSTOM_SEARCH_ID` | Search engine ID | (required) |
-| `SEARCH_PROVIDER` | Search backend | `google` |
-| `BRAVE_API_KEY` | Brave Search API key | |
-| `SERPER_API_KEY` | Serper.dev API key | |
-| `SEARXNG_URL` | SearXNG instance URL | |
-| `PORT` | HTTP port (enables HTTP/SSE mode) | STDIO |
-| `OAUTH_ISSUER_URL` | JWT issuer for auth | |
-| `OAUTH_AUDIENCE` | Expected JWT audience | |
-| `REDIS_URL` | Redis URL for shared cache/sessions | in-memory |
-| `CACHE_DIR` | Disk cache directory | `./cache` |
-| `CACHE_MAX_MEMORY_MB` | Max memory cache size in MB | `64` |
-| `CACHE_ENCRYPTION_KEY` | AES-256-GCM key for disk cache (64 hex chars) | |
-| `RATE_LIMIT_PER_TENANT` | Requests per minute per tenant | `30` |
-| `RATE_LIMIT_GLOBAL` | Total requests per second | `1000` |
-| `DAILY_QUOTA_PER_TENANT` | Max API calls per tenant per day | `1000` |
-| `LOG_LEVEL` | Logging level: debug, info, warn, error | `info` |
-| `LOG_FORMAT` | Log format: json, text | `json` |
-| `METRICS_ENABLED` | Enable Prometheus metrics | `true` |
-| `MAX_SCRAPE_CONCURRENCY` | Concurrent scrape limit | `5` |
-| `CHROME_PATH` | Custom Chrome/Chromium binary path | auto-detect |
-| `ALLOW_PRIVATE_IPS` | Disable SSRF protection (dev only) | `false` |
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#environment-variables) for the complete reference of all environment variables (cache, rate limiting, scraping, observability, etc.).
 
 </details>
 
@@ -180,7 +147,7 @@ Done. Your AI assistant now has access to all 8 research tools.
 
 ```
 web-researcher-mcp/
-├── cmd/web-researcher-mcp/     # Entry point (wiring only, ~50 lines)
+├── cmd/web-researcher-mcp/     # Entry point (wiring only)
 ├── internal/
 │   ├── config/                 # Env-based strongly-typed configuration
 │   ├── server/                 # MCP server lifecycle + signal handling
@@ -269,12 +236,12 @@ web-researcher-mcp/
 
 The server supports four search backends. Google PSE is always used for lens-restricted and site-restricted queries (free, works indefinitely). The configured provider handles unrestricted whole-web searches.
 
-| Provider | Cost per 1K Queries | Whole-Web | Images | News | Notes |
-|----------|-------------------|:---------:|:------:|:----:|-------|
-| **Google PSE** | Free (100/day) to $5 | Until 2027 | Yes | Yes | Default; always used for lenses |
-| **Brave Search** | $5 (free tier available) | Yes | Yes | Yes | Recommended for whole-web |
-| **Serper.dev** | $0.30-$1 | Yes | Yes | Yes | Google-identical results |
-| **SearXNG** | Free (self-hosted) | Yes | Yes | Yes | Privacy-first, air-gapped deployments |
+| Provider | Whole-Web | Images | News | Notes |
+|----------|:---------:|:------:|:----:|-------|
+| **Google PSE** | Yes | Yes | Yes | Default; always used for lenses (free tier: 100 queries/day) |
+| **Brave Search** | Yes | Yes | Yes | Recommended for whole-web |
+| **Serper.dev** | Yes | Yes | Yes | Google-identical results |
+| **SearXNG** | Yes | Yes | Yes | Self-hosted, privacy-first, air-gapped deployments |
 
 ### Routing Logic
 
@@ -321,16 +288,18 @@ Search lenses are curated domain lists that focus search results on high-quality
 
 ### Built-in Lenses
 
-| Lens | Focus | Example Domains |
-|------|-------|-----------------|
-| `programming` | Code docs, tutorials, Q&A | stackoverflow.com, github.com, developer.mozilla.org |
-| `news` | Current events, journalism | reuters.com, apnews.com, bbc.com, nytimes.com |
-| `tech` | Technology industry | arstechnica.com, techcrunch.com, theverge.com |
-| `legal` | Law, cases, statutes | law.cornell.edu, courtlistener.com, justia.com |
-| `medical` | Health, medicine | nih.gov, mayoclinic.org, who.int, pubmed.ncbi.nlm.nih.gov |
-| `finance` | Markets, filings | sec.gov, bloomberg.com, investopedia.com |
-| `science` | Research, papers | nature.com, science.org, nasa.gov |
-| `government` | Policy, regulations | *.gov, europa.eu, gov.uk, un.org |
+| Lens | Focus |
+|------|-------|
+| `programming` | Code docs, tutorials, Q&A |
+| `news` | Current events, journalism |
+| `tech` | Technology industry |
+| `legal` | Law, cases, statutes |
+| `medical` | Health, medicine |
+| `finance` | Markets, filings |
+| `science` | Research, papers |
+| `government` | Policy, regulations |
+
+Each lens is a JSON file in `lenses/` containing the curated domain list. See [Creating Custom Lenses](#search-lenses) below for the format.
 
 ### Usage Example
 
@@ -529,46 +498,52 @@ volumes:
 
 ## Performance
 
-| Operation | Expected Latency | Notes |
-|-----------|-----------------|-------|
-| Search (cache hit) | < 1ms | Direct return from in-memory cache |
-| Search (API call) | 200-500ms | Circuit-breaker protected |
-| Scrape (markdown) | 100-300ms | Tier 1: content negotiation |
-| Scrape (stealth HTTP) | 300-800ms | Tier 2: browser-like TLS + headers |
-| Scrape (HTML) | 500-2000ms | Tier 3: goquery-based extraction |
-| Scrape (browser) | 2-10s | Tier 4: go-rod headless + stealth plugin |
-| YouTube transcript | 1-5s | 3-strategy: captions → timedtext API → description |
-| search_and_scrape | 2-15s | Parallel scrape with semaphore (max 5) |
+Search results are cached in-memory for sub-millisecond hits. The scraping pipeline tries the fastest tier first and falls back progressively — most pages resolve in under a second via stealth HTTP, with the headless browser reserved for JS-heavy sites. See [ARCHITECTURE.md](ARCHITECTURE.md#performance-characteristics) for detailed latency breakdowns.
 
 ---
 
 ## Development
 
 ```bash
-# Build
-go build -o web-researcher-mcp ./cmd/web-researcher-mcp
-
-# Run all tests
-go test ./...
-
-# Tests with race detector
-go test -race ./...
-
-# E2E tests
-go test -v ./tests/e2e/...
-
-# Benchmarks
-go test -bench=. ./tests/benchmark/
-
-# Lint
-golangci-lint run
-
-# Security audit
-govulncheck ./...
-
-# Production build (static, stripped)
-CGO_ENABLED=0 go build -ldflags="-s -w" -o web-researcher-mcp ./cmd/web-researcher-mcp
+go build -o web-researcher-mcp ./cmd/web-researcher-mcp   # Build
+go test -race ./...                                        # Test (with race detector)
+golangci-lint run                                          # Lint
+govulncheck ./...                                          # Security audit
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development workflow, code style guide, and PR process.
+
+---
+
+## Troubleshooting
+
+<details>
+<summary><strong>Server starts but tools fail with "API key" errors</strong></summary>
+
+The server starts even with missing credentials (to allow MCP handshake). Set your API keys in the `env` block of your MCP client config, not in your shell profile.
+
+</details>
+
+<details>
+<summary><strong>scrape_page returns empty content for JavaScript-heavy sites</strong></summary>
+
+The browser tier (go-rod) requires Chromium. On first use it auto-downloads ~200MB. Set `CHROME_PATH` to use an existing Chrome installation, or use the Docker image which includes headless Chrome.
+
+</details>
+
+<details>
+<summary><strong>Cache serving stale results after upgrade</strong></summary>
+
+The disk cache auto-invalidates on version change. If you're running from source without `-ldflags`, the version is always "dev" — delete the `./cache` directory manually or set `CACHE_DIR` to a versioned path.
+
+</details>
+
+<details>
+<summary><strong>Rate limited by Google (HTTP 429)</strong></summary>
+
+Google PSE free tier allows 100 queries/day. Either upgrade to paid ($5/1K queries), or switch to Brave Search (`SEARCH_PROVIDER=brave`) for unrestricted queries while keeping Google for lens-restricted searches.
+
+</details>
 
 ---
 
@@ -582,14 +557,11 @@ Contributions are welcome. Please see [CONTRIBUTING.md](CONTRIBUTING.md) for cod
 
 | Document | Description |
 |----------|-------------|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Full architecture, design decisions, technology stack |
-| [docs/TOOLS.md](docs/TOOLS.md) | Detailed tool specifications and parameter schemas |
-| [docs/SECURITY.md](docs/SECURITY.md) | Threat model, SSRF, authentication, content safety |
-| [docs/SEARCH_PROVIDERS.md](docs/SEARCH_PROVIDERS.md) | Provider system, lenses, routing, migration plan |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Build, Docker, Kubernetes, scaling |
-| [docs/TESTING.md](docs/TESTING.md) | Test strategy and patterns |
-| [docs/COMPLIANCE.md](docs/COMPLIANCE.md) | SOC2, GDPR, FedRAMP compliance |
-| [docs/GO_MODULE.md](docs/GO_MODULE.md) | Every dependency with rationale |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Design decisions, technology stack, dependencies |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Development setup, code style, PR workflow |
+| [docs/TOOLS.md](docs/TOOLS.md) | Tool specifications and parameter schemas |
+| [docs/SECURITY.md](docs/SECURITY.md) | Threat model, SSRF, auth, compliance (SOC2/GDPR/FedRAMP) |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Build, Docker, Kubernetes, client configs, scaling |
 
 ---
 

@@ -22,7 +22,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     ./cmd/web-researcher-mcp
 
 # --- Runtime stage ---
-FROM alpine:3.19
+FROM alpine:3.20
 
 RUN apk add --no-cache ca-certificates curl
 
@@ -32,12 +32,12 @@ LABEL org.opencontainers.image.source="https://github.com/zoharbabin/web-researc
 LABEL org.opencontainers.image.licenses="MIT"
 
 COPY --from=builder /bin/web-researcher-mcp /usr/local/bin/web-researcher-mcp
+COPY lenses/ /lenses/
+
+RUN mkdir -p /tmp/cache && chown 65534:65534 /tmp/cache
 
 USER 65534:65534
 
-EXPOSE 8080
-
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/health/live || exit 1
+ENV CACHE_DIR=/tmp/cache
 
 ENTRYPOINT ["web-researcher-mcp"]

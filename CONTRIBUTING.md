@@ -18,7 +18,7 @@ Whether you're fixing a typo, adding a search provider, improving documentation,
 
 ### Prerequisites
 
-- **Go 1.25+** — this project uses the official MCP Go SDK which requires Go 1.25
+- **Go** — version requirement is specified in `go.mod`
 - **API keys** (for integration/E2E testing):
   - Google Custom Search: `GOOGLE_CUSTOM_SEARCH_API_KEY` and `GOOGLE_CUSTOM_SEARCH_ID`
   - Brave Search (optional): `BRAVE_API_KEY`
@@ -242,6 +242,39 @@ Please include:
 ## Code of Conduct
 
 This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to zohar.babin@gmail.com.
+
+## Adding a New Tool
+
+Adding a tool requires three files:
+
+1. **Create the handler** in `internal/tools/<toolname>.go`:
+
+```go
+package tools
+
+type myToolInput struct {
+    Query string `json:"query" jsonschema:"Search query,required"`
+}
+
+func registerMyTool(srv *mcp.Server, deps Dependencies) {
+    mcp.AddTool(srv, &mcp.Tool{
+        Name:        "my_tool",
+        Description: "One-line description for the AI assistant",
+    }, func(ctx context.Context, req *mcp.CallToolRequest, input myToolInput) (*mcp.CallToolResult, any, error) {
+        // Implementation here — use deps.Cache, deps.Search, etc.
+    })
+}
+```
+
+2. **Register it** in `internal/tools/registry.go` — add `registerMyTool(srv, deps)` to `RegisterAll()`.
+
+3. **Add tests** in `internal/tools/tools_test.go` or a dedicated `<toolname>_test.go`.
+
+Key conventions:
+- All tool inputs use typed structs with `jsonschema` tags (the SDK auto-generates JSON Schema from these)
+- Use `deps.Cache` for caching, `deps.Metrics` for telemetry, `deps.Auditor` for audit logging
+- Return errors via `&mcp.CallToolResult{IsError: true, Content: [...]}` for user-facing errors
+- Update `docs/TOOLS.md` with the parameter schema
 
 ## Getting Help
 

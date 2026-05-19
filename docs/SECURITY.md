@@ -14,43 +14,14 @@ This MCP server operates in a unique threat environment:
 
 Server-Side Request Forgery is the highest-severity risk for a scraping server.
 
-**Implementation: Custom `DialContext` on `http.Transport`**
+**Implementation:** Custom `DialContext` on `http.Transport` — see `internal/scraper/ssrf.go`.
 
-```go
-// ssrf.go — the canonical Go pattern
-func newSSRFSafeTransport(allowPrivate bool) *http.Transport {
-    return &http.Transport{
-        DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-            host, port, _ := net.SplitHostPort(addr)
-            
-            // 1. Protocol validation (already handled by http.Client)
-            // 2. Hostname blocklist
-            if isBlockedHostname(host) {
-                return nil, ErrSSRFBlocked
-            }
-            
-            // 3. DNS resolution
-            ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
-            if err != nil {
-                return nil, err
-            }
-            
-            // 4. Check ALL resolved IPs against deny-list
-            for _, ip := range ips {
-                if !allowPrivate && isPrivateIP(ip.IP) {
-                    return nil, ErrSSRFBlocked
-                }
-            }
-            
-            // 5. Connect to the first valid IP (prevents DNS rebinding)
-            return (&net.Dialer{Timeout: 10 * time.Second}).DialContext(
-                ctx, network, net.JoinHostPort(ips[0].IP.String(), port),
-            )
-        },
-        // Redirect validation happens in CheckRedirect
-    }
-}
-```
+The approach:
+1. Check hostname against blocklist (cloud metadata endpoints)
+2. Resolve DNS
+3. Validate ALL resolved IPs against private/reserved ranges
+4. Connect directly to the resolved IP (prevents DNS rebinding)
+5. Re-validate on each redirect hop (max 5 redirects)
 
 **Blocked IP Ranges:**
 
@@ -272,25 +243,9 @@ Protects against cascading failures when upstream APIs are down.
 
 ### Layer 7: Audit Logging
 
-**Every tool invocation produces an audit record:**
+**Every tool invocation produces an audit record.**
 
-```go
-type AuditEntry struct {
-    Timestamp   time.Time `json:"timestamp"`
-    TenantID    string    `json:"tenantId"`
-    UserID      string    `json:"userId"`
-    SessionID   string    `json:"sessionId"`
-    TraceID     string    `json:"traceId"`
-    ToolName    string    `json:"toolName"`
-    ParamsHash  string    `json:"paramsHash"`  // SHA-256 of params (not raw params — PII)
-    ResponseSize int      `json:"responseSize"`
-    LatencyMs   int64     `json:"latencyMs"`
-    Success     bool      `json:"success"`
-    ErrorType   string    `json:"errorType,omitempty"`
-    IPAddress   string    `json:"ipAddress"`
-    UserAgent   string    `json:"userAgent"`
-}
-```
+See `internal/audit/logger.go` for the canonical `AuditEvent` struct. Key fields include: timestamp, tenant/user/session IDs, tool name, request ID, duration, success/error status, and extensible metadata.
 
 **Storage:**
 - Default: structured log to stderr (slog JSON)
@@ -335,3 +290,71 @@ type AuditEntry struct {
 - Pattern-check all known env vars
 - Warn (don't exit) on format issues — allows MCP handshake even with bad credentials
 - Tools fail gracefully at call time with actionable error messages
+
+---
+
+## Compliance Frameworks
+
+### SOC 2 Type II
+
+| Criterion | How We Satisfy |
+|-----------|----------------|
+| **CC6.1** Access Control | OAuth 2.1 middleware, per-tenant RBAC via JWT scopes |
+| **CC6.2** Logical Access | Session isolation, cache namespace per tenant |
+| **CC6.6** Threat Mitigation | SSRF protection, rate limiting, circuit breakers |
+| **CC7.1** Monitoring | Prometheus metrics, structured audit logs |
+| **CC7.3** Incident Response | Structured error types, trace IDs for correlation |
+| **CC8.1** Change Management | Git history, CI/CD pipeline, tagged releases |
+| **A1.2** Availability | Health checks, HPA scaling, circuit breakers |
+
+### GDPR
+
+| Right | Implementation |
+|-------|----------------|
+| **Access** (Art. 15) | `GET /users/{id}/data` — returns all stored data |
+| **Erasure** (Art. 17) | `DELETE /users/{id}/data` — purges cache, sessions, audit logs |
+| **Portability** (Art. 20) | JSON export of all user-associated data |
+| **Restriction** (Art. 18) | Disable caching per tenant via `CACHE_ISOLATION=tenant` |
+
+Data minimization: cache stores content hashes for dedup (not copies), audit logs store parameter hashes (not raw queries), no persistent PII storage beyond cache TTLs.
+
+### FedRAMP (Moderate Baseline)
+
+| Control | Implementation |
+|---------|----------------|
+| **SC-8** Transmission Confidentiality | TLS 1.2+ on all connections |
+| **SC-13** Cryptographic Protection | FIPS 140-2 via `GOEXPERIMENT=boringcrypto` |
+| **SC-28** Protection at Rest | AES-256-GCM for disk cache |
+| **AC-3** Access Enforcement | OAuth middleware on all HTTP endpoints |
+| **AU-2** Audit Events | All tool calls, auth failures, config changes |
+| **SI-2** Flaw Remediation | Automated `govulncheck` in CI |
+
+```bash
+# FIPS-compliant build
+GOEXPERIMENT=boringcrypto CGO_ENABLED=0 \
+  go build -ldflags="-s -w -X main.version=${VERSION}" \
+  -o web-researcher-mcp ./cmd/web-researcher-mcp
+```
+
+### Multi-Tenancy Isolation
+
+| Boundary | Shared | Isolated |
+|----------|--------|----------|
+| Binary code, HTTP client pool | Yes | — |
+| Public content cache (search results, scraped pages) | Yes | — |
+| Rate limit counters | — | Per-tenant |
+| Sequential search sessions | — | Per-tenant:session |
+| Search history | — | Per-tenant |
+| Audit logs | — | Filterable by tenant |
+
+Set `CACHE_ISOLATION=tenant` to isolate cache per tenant (compliance requirement).
+
+### Supply Chain Security
+
+```bash
+govulncheck ./...        # Audit for known vulnerabilities
+go mod verify            # Pin dependency hashes
+cyclonedx-gomod mod -json -output sbom.json  # Generate SBOM
+```
+
+All dependencies: actively maintained, no unpatched CVEs, permissive licenses (MIT/Apache/BSD), >1000 stars or official/stdlib.
