@@ -11,7 +11,12 @@ linters:
     - unused
     - ineffassign
   exclusions:
+    presets:
+      - std-error-handling
     rules:
       - path: _test\.go
+        linters:
+          - errcheck
+      - text: "Error return value of .*.Close"
         linters:
           - errcheck
