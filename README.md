@@ -1,3 +1,4 @@
+<!-- mcp-name: io.github.zoharbabin/web-researcher-mcp -->
 <h1 align="center">web-researcher-mcp</h1>
 <p align="center">
   A production-grade MCP server that gives AI assistants the power to search the web, extract content, and conduct multi-source research.
