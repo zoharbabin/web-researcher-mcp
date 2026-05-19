@@ -45,7 +45,7 @@ tests/benchmark/  # Performance benchmarks
 2. **Interface-driven** — `cache.Cache`, `search.Provider`, `audit.Auditor` are interfaces; swap implementations without touching callers
 3. **Errors are values** — tool handlers return `toolError("message")` which sets `IsError: true` on the MCP result; never panic
 4. **Bounded concurrency** — scraping semaphore (5 slots), browser pool (3 slots), per-tenant rate limits
-5. **Lens routing** — if `lens` or `site` is set, query routes to Google PSE (site-restricted, free forever); unrestricted queries use `SEARCH_PROVIDER`
+5. **Lens routing** — if `lens` is set, `site:` operators are injected and routed to the configured provider; lenses with a dedicated `cx` route directly to that Google PSE engine
 
 ## How to Add a Tool
 

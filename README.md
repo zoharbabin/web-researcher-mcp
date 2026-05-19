@@ -63,7 +63,7 @@ claude mcp add --scope user --transport stdio web-researcher -- web-researcher-m
 Download the latest release for your platform from [Releases](https://github.com/zoharbabin/web-researcher-mcp/releases). Archives are named `web-researcher-mcp_<version>_<os>_<arch>.tar.gz`.
 
 ```bash
-# Example: macOS Apple Silicon (replace VERSION with actual version, e.g. 1.0.4)
+# Example: macOS Apple Silicon (replace VERSION with the latest from Releases)
 curl -L https://github.com/zoharbabin/web-researcher-mcp/releases/download/v${VERSION}/web-researcher-mcp_${VERSION}_darwin_arm64.tar.gz | tar xz
 chmod +x web-researcher-mcp
 ```
@@ -234,12 +234,12 @@ web-researcher-mcp/
 
 ## Search Providers
 
-The server supports four search backends. Google PSE is always used for lens-restricted and site-restricted queries (free, works indefinitely). The configured provider handles unrestricted whole-web searches.
+The server supports four search backends. All providers support lenses via `site:` operator injection.
 
 | Provider | Whole-Web | Images | News | Notes |
 |----------|:---------:|:------:|:----:|-------|
-| **Google PSE** | Yes | Yes | Yes | Default; always used for lenses (free tier: 100 queries/day) |
-| **Brave Search** | Yes | Yes | Yes | Recommended for whole-web |
+| **Google PSE** | Yes | Yes | Yes | Default; free tier: 100 queries/day |
+| **Brave Search** | Yes | Yes | Yes | Recommended for high-volume whole-web |
 | **Serper.dev** | Yes | Yes | Yes | Google-identical results |
 | **SearXNG** | Yes | Yes | Yes | Self-hosted, privacy-first, air-gapped deployments |
 
@@ -247,9 +247,10 @@ The server supports four search backends. Google PSE is always used for lens-res
 
 ```
 Request arrives
-  |-- lens specified?     --> Google PSE (site-restricted, free forever)
-  |-- site: param set?    --> Google PSE (site-restricted)
-  `-- unrestricted?       --> Configured SEARCH_PROVIDER
+  |-- lens with dedicated CX? --> That specific Google PSE engine
+  |-- lens (no CX)?           --> Configured provider + site: operators
+  |-- site: param set?        --> Configured provider + site: operator
+  `-- unrestricted?           --> Configured SEARCH_PROVIDER
 ```
 
 <details>
@@ -284,7 +285,7 @@ export GOOGLE_CUSTOM_SEARCH_ID=017...
 
 ## Search Lenses
 
-Search lenses are curated domain lists that focus search results on high-quality sources for specific topics. They route through Google PSE in site-restricted mode -- free and works indefinitely.
+Search lenses are curated domain lists that focus search results on high-quality sources for specific topics. They inject `site:` operators into queries and route through your configured search provider.
 
 ### Built-in Lenses
 
@@ -334,8 +335,8 @@ Add a JSON file to the `lenses/` directory:
 ```
 
 Fields:
-- **domains** -- Up to 5,000 URL patterns per lens (Google PSE limit)
-- **cx** -- Optional dedicated PSE engine ID. If empty, `site:` operators are injected at query time (limited to ~10 domains per query)
+- **domains** -- URL patterns for the lens (up to ~10 injected per query via `site:` operators)
+- **cx** -- Optional dedicated Google PSE engine ID. If set, bypasses site injection and routes directly to that PSE engine (supports up to 5,000 domains)
 
 </details>
 
@@ -467,7 +468,6 @@ Connect any MCP client to `http://localhost:3000/sse`.
 <summary><strong>Docker Compose Example</strong></summary>
 
 ```yaml
-version: "3.8"
 services:
   web-researcher:
     image: zoharbabin/web-researcher-mcp
@@ -541,7 +541,7 @@ The disk cache auto-invalidates on version change. If you're running from source
 <details>
 <summary><strong>Rate limited by Google (HTTP 429)</strong></summary>
 
-Google PSE free tier allows 100 queries/day. Either upgrade to paid ($5/1K queries), or switch to Brave Search (`SEARCH_PROVIDER=brave`) for unrestricted queries while keeping Google for lens-restricted searches.
+Google PSE free tier allows 100 queries/day. Either upgrade to paid ($5/1K queries), or switch to Brave Search (`SEARCH_PROVIDER=brave`) for higher-volume queries.
 
 </details>
 

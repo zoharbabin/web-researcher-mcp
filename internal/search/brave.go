@@ -1,6 +1,7 @@
 package search
 
 import (
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -152,7 +153,7 @@ func (b *BraveProvider) doNewsSearch(ctx context.Context, params NewsSearchParam
 		results = append(results, NewsResult{
 			Title:       r.Title,
 			URL:         r.URL,
-			Source:      r.Source,
+			Source:      r.MetaURL.Hostname,
 			PublishedAt: r.Age,
 			Snippet:     r.Description,
 		})
@@ -184,7 +185,17 @@ func (b *BraveProvider) doRequest(ctx context.Context, apiURL string) ([]byte, e
 		return nil, fmt.Errorf("brave API error %d: %s", resp.StatusCode, string(body))
 	}
 
-	return io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
+	var reader io.Reader = resp.Body
+	if resp.Header.Get("Content-Encoding") == "gzip" {
+		gr, err := gzip.NewReader(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("brave: failed to decompress response: %w", err)
+		}
+		defer gr.Close()
+		reader = gr
+	}
+
+	return io.ReadAll(io.LimitReader(reader, 5*1024*1024))
 }
 
 func mapBraveFreshness(tr string) string {
@@ -229,8 +240,10 @@ type braveNewsResponse struct {
 	Results []struct {
 		Title       string `json:"title"`
 		URL         string `json:"url"`
-		Source      string `json:"meta_url,omitempty"`
 		Description string `json:"description"`
 		Age         string `json:"age"`
+		MetaURL     struct {
+			Hostname string `json:"hostname"`
+		} `json:"meta_url"`
 	} `json:"results"`
 }

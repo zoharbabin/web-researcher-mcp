@@ -212,8 +212,6 @@ spec:
 | `OAUTH_ISSUER_URL` | JWT issuer URL | — |
 | `OAUTH_AUDIENCE` | Expected JWT audience | — |
 | `ALLOWED_ORIGINS` | CORS origins (comma-separated) | `*` |
-| `TLS_CERT_FILE` | TLS certificate path | — |
-| `TLS_KEY_FILE` | TLS key path | — |
 
 ### Cache
 

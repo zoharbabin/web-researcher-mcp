@@ -6,7 +6,7 @@
 .env
 
 # Cache
-/cache/
+**/cache/
 
 # IDE
 .idea/

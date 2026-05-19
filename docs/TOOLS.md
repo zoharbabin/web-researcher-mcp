@@ -42,8 +42,8 @@ type SearchOutput struct {
 
 ### Behavior
 
-1. If `lens` is specified, load the lens JSON file, inject `site:` operators, route to Google PSE.
-2. If no lens, route to the configured search provider (Brave by default, Google PSE legacy).
+1. If `lens` is specified and has a dedicated `cx`, route directly to that Google PSE engine.
+2. If `lens` is specified without `cx`, inject `site:` operators and route to the configured provider.
 3. Apply `time_range` as date restriction parameter.
 4. Return deduplicated URLs.
 
@@ -345,7 +345,7 @@ type NewsArticle struct {
 | `pdf_only` | bool | no | false | — |
 | `sort_by` | string | no | `relevance` | relevance, date |
 
-### Academic Site Pool (always Google PSE site-restricted — unaffected by sunset)
+### Academic Site Pool (site-restricted via configured provider)
 arxiv.org, pubmed.ncbi.nlm.nih.gov, scholar.google.com, ieeexplore.ieee.org, dl.acm.org, nature.com, sciencedirect.com, link.springer.com, researchgate.net, plos.org, frontiersin.org, mdpi.com, wiley.com, jstor.org, semanticscholar.org, biorxiv.org, medrxiv.org
 
 ### Output Schema
@@ -398,7 +398,7 @@ type AcademicPaper struct {
 ### Behavior
 - Generate company name variations (5-8 permutations: no spaces, with suffixes, base names)
 - Map patent office to prefix codes
-- Always use Google PSE site-restricted to patents.google.com (unaffected by sunset)
+- Always uses `site:patents.google.com` restriction via configured provider
 - Post-filter results by patent number prefix (US, EP, WO, JP, CN, KR) — non-matching patents are dropped when `patent_office` is specified
 
 ### Cache

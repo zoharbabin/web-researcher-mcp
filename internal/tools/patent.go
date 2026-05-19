@@ -27,7 +27,7 @@ type patentSearchInput struct {
 func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "patent_search",
-		Description: "Search patent databases via Google Patents. Supports prior art search, landscape analysis, and specific patent lookup. Uses site-restricted search (unaffected by PSE sunset).",
+		Description: "Search patent databases via Google Patents. Supports prior art search, landscape analysis, and specific patent lookup with CPC classification filtering.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input patentSearchInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
 

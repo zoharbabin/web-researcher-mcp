@@ -24,7 +24,7 @@ Whether you're fixing a typo, adding a search provider, improving documentation,
   - Brave Search (optional): `BRAVE_API_KEY`
 - **Chrome/Chromium** — optional, only needed for headless scraping features
 - **Redis** — optional, only for multi-instance cache testing
-- **golangci-lint** — for linting (`go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest`)
+- **golangci-lint v2** — for linting (see [install docs](https://golangci-lint.run/welcome/install/))
 
 ### Getting Started
 

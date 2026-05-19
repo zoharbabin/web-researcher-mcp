@@ -53,7 +53,7 @@ type academicSearchInput struct {
 func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "academic_search",
-		Description: "Search academic literature across arXiv, PubMed, IEEE, Nature, Springer, and other scholarly sources. Uses site-restricted Google search (unaffected by PSE sunset).",
+		Description: "Search academic literature across arXiv, PubMed, IEEE, Nature, Springer, and other scholarly sources. Uses site-restricted search across curated academic domains.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input academicSearchInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
 

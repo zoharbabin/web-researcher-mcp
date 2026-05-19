@@ -143,7 +143,7 @@ type SearchProvider interface {
 }
 ```
 
-Search lenses route to Google PSE (site-restricted, free forever). Unrestricted queries route to the configured provider (Brave, Serper, SearXNG). Providers are swappable at runtime via configuration.
+Search lenses inject `site:` operators and route through the configured provider. Lenses with a dedicated `cx` field route directly to that Google PSE engine. Providers are swappable at runtime via configuration.
 
 ### 3. Tiered Scraping Pipeline
 
