@@ -44,10 +44,12 @@ type AuditConfig struct {
 type SearchConfig struct {
 	Provider         string
 	FallbackProvider string
+	Routing          string
 	GoogleAPIKey     string
 	GoogleCX         string
 	BraveAPIKey      string
 	SerperAPIKey     string
+	SearchAPIKey     string
 	SearXNGURL       string
 	CustomLensesPath string
 }
@@ -68,13 +70,18 @@ func Load() (*Config, error) {
 	var errs []string
 
 	googleKey := os.Getenv("GOOGLE_CUSTOM_SEARCH_API_KEY")
-	if googleKey == "" {
-		errs = append(errs, "GOOGLE_CUSTOM_SEARCH_API_KEY is required")
-	}
-
 	googleCX := os.Getenv("GOOGLE_CUSTOM_SEARCH_ID")
-	if googleCX == "" {
-		errs = append(errs, "GOOGLE_CUSTOM_SEARCH_ID is required")
+	routing := os.Getenv("SEARCH_ROUTING")
+
+	// Google keys are required unless SEARCH_ROUTING is configured (which enables
+	// multi-provider mode where Google may not be the primary/only provider).
+	if routing == "" {
+		if googleKey == "" {
+			errs = append(errs, "GOOGLE_CUSTOM_SEARCH_API_KEY is required")
+		}
+		if googleCX == "" {
+			errs = append(errs, "GOOGLE_CUSTOM_SEARCH_ID is required")
+		}
 	}
 
 	provider := envOrDefault("SEARCH_PROVIDER", "google")
@@ -93,6 +100,11 @@ func Load() (*Config, error) {
 		errs = append(errs, "SEARXNG_URL is required when SEARCH_PROVIDER=searxng")
 	}
 
+	searchAPIKey := os.Getenv("SEARCHAPI_API_KEY")
+	if provider == "searchapi" && searchAPIKey == "" {
+		errs = append(errs, "SEARCHAPI_API_KEY is required when SEARCH_PROVIDER=searchapi")
+	}
+
 	port := envInt("PORT", 0)
 	encKey := os.Getenv("CACHE_ENCRYPTION_KEY")
 	if encKey != "" && len(encKey) != 64 {
@@ -107,10 +119,12 @@ func Load() (*Config, error) {
 		Search: SearchConfig{
 			Provider:         provider,
 			FallbackProvider: os.Getenv("SEARCH_FALLBACK_PROVIDER"),
+			Routing:          os.Getenv("SEARCH_ROUTING"),
 			GoogleAPIKey:     googleKey,
 			GoogleCX:         googleCX,
 			BraveAPIKey:      braveKey,
 			SerperAPIKey:     serperKey,
+			SearchAPIKey:     searchAPIKey,
 			SearXNGURL:       searxngURL,
 			CustomLensesPath: os.Getenv("CUSTOM_LENSES_PATH"),
 		},

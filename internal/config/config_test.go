@@ -310,6 +310,67 @@ func TestLoadSearXNGProviderMissingURL(t *testing.T) {
 	}
 }
 
+func TestLoadSearchAPIProviderMissingKey(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("SEARCH_PROVIDER", "searchapi")
+	t.Setenv("SEARCHAPI_API_KEY", "")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error when SEARCH_PROVIDER=searchapi without SEARCHAPI_API_KEY")
+	}
+	if !strings.Contains(err.Error(), "SEARCHAPI_API_KEY is required") {
+		t.Errorf("expected error about missing SEARCHAPI_API_KEY, got: %v", err)
+	}
+}
+
+func TestLoadSearchAPIProviderWithKey(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("SEARCH_PROVIDER", "searchapi")
+	t.Setenv("SEARCHAPI_API_KEY", "test-searchapi-key")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Search.Provider != "searchapi" {
+		t.Errorf("expected provider=searchapi, got %s", cfg.Search.Provider)
+	}
+	if cfg.Search.SearchAPIKey != "test-searchapi-key" {
+		t.Errorf("expected SearchAPIKey=test-searchapi-key, got %s", cfg.Search.SearchAPIKey)
+	}
+}
+
+func TestLoadSearchRouting(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("SEARCH_ROUTING", "brave,google,serper")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Search.Routing != "brave,google,serper" {
+		t.Errorf("expected Routing='brave,google,serper', got %q", cfg.Search.Routing)
+	}
+}
+
+func TestLoadSearchRoutingRelaxesGoogleRequirement(t *testing.T) {
+	// When SEARCH_ROUTING is set, Google keys are not required
+	t.Setenv("GOOGLE_CUSTOM_SEARCH_API_KEY", "")
+	t.Setenv("GOOGLE_CUSTOM_SEARCH_ID", "")
+	t.Setenv("SEARCH_PROVIDER", "brave")
+	t.Setenv("BRAVE_API_KEY", "brave-key")
+	t.Setenv("SEARCH_ROUTING", "brave")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("expected no error with routing configured and no Google keys, got: %v", err)
+	}
+	if cfg.Search.Routing != "brave" {
+		t.Errorf("expected Routing='brave', got %q", cfg.Search.Routing)
+	}
+}
+
 func TestLoadCacheEncryptionKeyValidation(t *testing.T) {
 	setRequiredEnv(t)
 	t.Setenv("CACHE_ENCRYPTION_KEY", "tooshort")

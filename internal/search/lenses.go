@@ -14,6 +14,7 @@ type Lens struct {
 	Description string   `json:"description"`
 	Domains     []string `json:"domains"`
 	CX          string   `json:"cx"`
+	Routing     string   `json:"routing,omitempty"`
 }
 
 type LensRegistry struct {

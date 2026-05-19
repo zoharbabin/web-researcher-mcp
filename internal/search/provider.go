@@ -85,7 +85,55 @@ func NewProvider(cfg config.SearchConfig, deps Deps) Provider {
 		return NewSerperProvider(cfg.SerperAPIKey, deps)
 	case "searxng":
 		return NewSearXNGProvider(cfg.SearXNGURL, deps)
+	case "searchapi":
+		return NewSearchAPIProvider(cfg.SearchAPIKey, deps)
 	default:
 		return NewGoogleProvider(cfg.GoogleAPIKey, cfg.GoogleCX, deps)
 	}
+}
+
+// NewProviderByName creates a single provider by name using the given config.
+// Returns nil if the provider cannot be created (missing credentials).
+func NewProviderByName(name string, cfg config.SearchConfig, deps Deps) Provider {
+	switch name {
+	case "google":
+		if cfg.GoogleAPIKey != "" && cfg.GoogleCX != "" {
+			return NewGoogleProvider(cfg.GoogleAPIKey, cfg.GoogleCX, deps)
+		}
+	case "brave":
+		if cfg.BraveAPIKey != "" {
+			return NewBraveProvider(cfg.BraveAPIKey, deps)
+		}
+	case "serper":
+		if cfg.SerperAPIKey != "" {
+			return NewSerperProvider(cfg.SerperAPIKey, deps)
+		}
+	case "searxng":
+		if cfg.SearXNGURL != "" {
+			return NewSearXNGProvider(cfg.SearXNGURL, deps)
+		}
+	case "searchapi":
+		if cfg.SearchAPIKey != "" {
+			return NewSearchAPIProvider(cfg.SearchAPIKey, deps)
+		}
+	}
+	return nil
+}
+
+// AvailableProviders returns all providers that can be constructed from the
+// given config (i.e., have credentials configured). Each provider gets its own
+// circuit breaker for isolation — failures in one provider don't affect others.
+func AvailableProviders(cfg config.SearchConfig, deps Deps) map[string]Provider {
+	providers := make(map[string]Provider)
+	names := []string{"google", "brave", "serper", "searxng", "searchapi"}
+	for _, name := range names {
+		providerDeps := Deps{
+			HTTPClient: deps.HTTPClient,
+			Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+		}
+		if p := NewProviderByName(name, cfg, providerDeps); p != nil {
+			providers[name] = p
+		}
+	}
+	return providers
 }

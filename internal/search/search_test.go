@@ -3,6 +3,7 @@ package search
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -742,6 +743,595 @@ func TestMapSearXNGTimeRange(t *testing.T) {
 		got := mapSearXNGTimeRange(tt.input)
 		if got != tt.expected {
 			t.Errorf("mapSearXNGTimeRange(%q) = %q, want %q", tt.input, got, tt.expected)
+		}
+	}
+}
+
+// =============================================================================
+// SearchAPI Provider Tests
+// =============================================================================
+
+func TestSearchAPIProvider_WebSearch(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("api_key") != "searchapi-key" {
+			t.Errorf("expected api_key 'searchapi-key', got %q", q.Get("api_key"))
+		}
+		if q.Get("engine") != "google" {
+			t.Errorf("expected engine 'google', got %q", q.Get("engine"))
+		}
+		if !strings.Contains(q.Get("q"), "test query") {
+			t.Errorf("expected query to contain 'test query', got %q", q.Get("q"))
+		}
+		if q.Get("num") != "5" {
+			t.Errorf("expected num '5', got %q", q.Get("num"))
+		}
+
+		resp := searchAPIWebResponse{
+			OrganicResults: []searchAPIOrganicResult{
+				{Position: 1, Title: "SearchAPI Result", Link: "https://example.com/searchapi", Snippet: "Found via SearchAPI", DisplayedLink: "example.com"},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer ts.Close()
+
+	deps := Deps{HTTPClient: ts.Client(), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	s := NewSearchAPIProvider("searchapi-key", deps)
+	s.baseURL = ts.URL
+
+	results, err := s.Web(context.Background(), WebSearchParams{Query: "test query", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Title != "SearchAPI Result" {
+		t.Errorf("expected title 'SearchAPI Result', got %q", results[0].Title)
+	}
+	if results[0].URL != "https://example.com/searchapi" {
+		t.Errorf("expected URL 'https://example.com/searchapi', got %q", results[0].URL)
+	}
+}
+
+func TestSearchAPIProvider_WebSearch_WithParams(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("gl") != "US" {
+			t.Errorf("expected gl 'US', got %q", q.Get("gl"))
+		}
+		if q.Get("hl") != "en" {
+			t.Errorf("expected hl 'en', got %q", q.Get("hl"))
+		}
+		if q.Get("safe") != "active" {
+			t.Errorf("expected safe 'active', got %q", q.Get("safe"))
+		}
+		if q.Get("time_period") != "last_week" {
+			t.Errorf("expected time_period 'last_week', got %q", q.Get("time_period"))
+		}
+
+		resp := searchAPIWebResponse{OrganicResults: []searchAPIOrganicResult{}}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer ts.Close()
+
+	deps := Deps{HTTPClient: ts.Client(), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	s := NewSearchAPIProvider("key", deps)
+	s.baseURL = ts.URL
+
+	_, err := s.Web(context.Background(), WebSearchParams{
+		Query:      "test",
+		NumResults: 5,
+		Country:    "US",
+		Language:   "en",
+		Safe:       "high",
+		TimeRange:  "week",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSearchAPIProvider_ImageSearch(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("engine") != "google_images" {
+			t.Errorf("expected engine 'google_images', got %q", q.Get("engine"))
+		}
+
+		resp := searchAPIImageResponse{
+			Images: []searchAPIImageResult{
+				{Title: "Cat Image", Original: "https://img.example.com/cat.jpg", Thumbnail: "https://thumb.example.com/cat.jpg", Source: "example.com", OriginalWidth: 1920, OriginalHeight: 1080},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer ts.Close()
+
+	deps := Deps{HTTPClient: ts.Client(), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	s := NewSearchAPIProvider("key", deps)
+	s.baseURL = ts.URL
+
+	results, err := s.Images(context.Background(), ImageSearchParams{Query: "cats", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Link != "https://img.example.com/cat.jpg" {
+		t.Errorf("unexpected image link: %q", results[0].Link)
+	}
+	if results[0].Width != 1920 || results[0].Height != 1080 {
+		t.Errorf("unexpected dimensions: %dx%d", results[0].Width, results[0].Height)
+	}
+}
+
+func TestSearchAPIProvider_NewsSearch(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("engine") != "google_news" {
+			t.Errorf("expected engine 'google_news', got %q", q.Get("engine"))
+		}
+		if q.Get("time_period") != "last_day" {
+			t.Errorf("expected time_period 'last_day', got %q", q.Get("time_period"))
+		}
+
+		resp := searchAPINewsResponse{
+			NewsResults: []searchAPINewsResult{
+				{Title: "Breaking News", Link: "https://news.example.com/1", Source: "Example News", Date: "2 hours ago", Snippet: "Something happened"},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer ts.Close()
+
+	deps := Deps{HTTPClient: ts.Client(), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	s := NewSearchAPIProvider("key", deps)
+	s.baseURL = ts.URL
+
+	results, err := s.News(context.Background(), NewsSearchParams{Query: "tech", NumResults: 5, Freshness: "day"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Source != "Example News" {
+		t.Errorf("expected source 'Example News', got %q", results[0].Source)
+	}
+}
+
+func TestSearchAPIProvider_RateLimited(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer ts.Close()
+
+	deps := Deps{HTTPClient: ts.Client(), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	s := NewSearchAPIProvider("key", deps)
+	s.baseURL = ts.URL
+
+	_, err := s.Web(context.Background(), WebSearchParams{Query: "test", NumResults: 5})
+	if err == nil {
+		t.Fatal("expected rate limit error")
+	}
+	if !strings.Contains(err.Error(), "rate limited") {
+		t.Errorf("expected rate limit error, got: %v", err)
+	}
+}
+
+func TestSearchAPIProvider_AuthFailed(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer ts.Close()
+
+	deps := Deps{HTTPClient: ts.Client(), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	s := NewSearchAPIProvider("bad-key", deps)
+	s.baseURL = ts.URL
+
+	_, err := s.Web(context.Background(), WebSearchParams{Query: "test", NumResults: 5})
+	if err == nil {
+		t.Fatal("expected auth error")
+	}
+	if !strings.Contains(err.Error(), "authentication failed") {
+		t.Errorf("expected auth error, got: %v", err)
+	}
+}
+
+func TestNewProvider_SearchAPI(t *testing.T) {
+	cfg := config.SearchConfig{Provider: "searchapi", SearchAPIKey: "key"}
+	p := NewProvider(cfg, newTestDeps(http.DefaultClient))
+	if p.Name() != "searchapi" {
+		t.Errorf("expected provider name 'searchapi', got %q", p.Name())
+	}
+}
+
+// =============================================================================
+// Router Tests
+// =============================================================================
+
+type failingProvider struct {
+	name string
+}
+
+func (f *failingProvider) Web(_ context.Context, _ WebSearchParams) ([]SearchResult, error) {
+	return nil, fmt.Errorf("%s: web search unavailable", f.name)
+}
+func (f *failingProvider) Images(_ context.Context, _ ImageSearchParams) ([]ImageResult, error) {
+	return nil, fmt.Errorf("%s: image search unavailable", f.name)
+}
+func (f *failingProvider) News(_ context.Context, _ NewsSearchParams) ([]NewsResult, error) {
+	return nil, fmt.Errorf("%s: news search unavailable", f.name)
+}
+func (f *failingProvider) Name() string { return f.name }
+
+type successProvider struct {
+	name string
+}
+
+func (s *successProvider) Web(_ context.Context, _ WebSearchParams) ([]SearchResult, error) {
+	return []SearchResult{{Title: s.name + " result", URL: "https://" + s.name + ".com"}}, nil
+}
+func (s *successProvider) Images(_ context.Context, _ ImageSearchParams) ([]ImageResult, error) {
+	return []ImageResult{{Title: s.name + " image", Link: "https://" + s.name + ".com/img.png"}}, nil
+}
+func (s *successProvider) News(_ context.Context, _ NewsSearchParams) ([]NewsResult, error) {
+	return []NewsResult{{Title: s.name + " news", URL: "https://" + s.name + ".com/news"}}, nil
+}
+func (s *successProvider) Name() string { return s.name }
+
+func TestRouter_UsesFirstAvailableProvider(t *testing.T) {
+	providers := map[string]Provider{
+		"primary":   &successProvider{name: "primary"},
+		"secondary": &successProvider{name: "secondary"},
+	}
+	r := NewRouter(providers, RouterConfig{
+		Routing: RoutingConfig{Default: []string{"primary", "secondary"}},
+	})
+
+	results, err := r.Web(context.Background(), WebSearchParams{Query: "test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if results[0].Title != "primary result" {
+		t.Errorf("expected primary result, got %q", results[0].Title)
+	}
+}
+
+func TestRouter_FallsBackOnFailure(t *testing.T) {
+	providers := map[string]Provider{
+		"failing":   &failingProvider{name: "failing"},
+		"secondary": &successProvider{name: "secondary"},
+	}
+	r := NewRouter(providers, RouterConfig{
+		Routing: RoutingConfig{Default: []string{"failing", "secondary"}},
+	})
+
+	results, err := r.Web(context.Background(), WebSearchParams{Query: "test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if results[0].Title != "secondary result" {
+		t.Errorf("expected secondary result after fallback, got %q", results[0].Title)
+	}
+}
+
+func TestRouter_PerOperationRouting(t *testing.T) {
+	providers := map[string]Provider{
+		"brave":  &successProvider{name: "brave"},
+		"google": &successProvider{name: "google"},
+	}
+	r := NewRouter(providers, RouterConfig{
+		Routing: RoutingConfig{
+			Web:    []string{"brave", "google"},
+			Images: []string{"google", "brave"},
+		},
+	})
+
+	webResults, err := r.Web(context.Background(), WebSearchParams{Query: "test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if webResults[0].Title != "brave result" {
+		t.Errorf("expected brave for web, got %q", webResults[0].Title)
+	}
+
+	imgResults, err := r.Images(context.Background(), ImageSearchParams{Query: "test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if imgResults[0].Title != "google image" {
+		t.Errorf("expected google for images, got %q", imgResults[0].Title)
+	}
+}
+
+func TestRouter_FallsBackToDefault(t *testing.T) {
+	providers := map[string]Provider{
+		"brave":  &successProvider{name: "brave"},
+		"google": &successProvider{name: "google"},
+	}
+	r := NewRouter(providers, RouterConfig{
+		Routing: RoutingConfig{
+			Default: []string{"google", "brave"},
+		},
+	})
+
+	results, err := r.News(context.Background(), NewsSearchParams{Query: "test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if results[0].Title != "google news" {
+		t.Errorf("expected google for news (via default), got %q", results[0].Title)
+	}
+}
+
+func TestRouter_AllProvidersFail(t *testing.T) {
+	providers := map[string]Provider{
+		"a": &failingProvider{name: "a"},
+		"b": &failingProvider{name: "b"},
+	}
+	r := NewRouter(providers, RouterConfig{
+		Routing: RoutingConfig{Default: []string{"a", "b"}},
+	})
+
+	_, err := r.Web(context.Background(), WebSearchParams{Query: "test"})
+	if err == nil {
+		t.Fatal("expected error when all providers fail")
+	}
+}
+
+func TestRouter_NotifiesOnFallback(t *testing.T) {
+	var notifications []string
+	providers := map[string]Provider{
+		"failing":   &failingProvider{name: "failing"},
+		"secondary": &successProvider{name: "secondary"},
+	}
+	r := NewRouter(providers, RouterConfig{
+		Routing: RoutingConfig{Default: []string{"failing", "secondary"}},
+		Notifier: func(op Operation, from, to, reason string) {
+			notifications = append(notifications, fmt.Sprintf("%s: %s->%s (%s)", op, from, to, reason))
+		},
+	})
+
+	_, err := r.Web(context.Background(), WebSearchParams{Query: "test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(notifications) != 1 {
+		t.Fatalf("expected 1 notification, got %d: %v", len(notifications), notifications)
+	}
+	if !strings.Contains(notifications[0], "failing->secondary") {
+		t.Errorf("unexpected notification: %s", notifications[0])
+	}
+}
+
+func TestRouter_ProviderFor(t *testing.T) {
+	providers := map[string]Provider{
+		"searchapi": &successProvider{name: "searchapi"},
+		"google":    &successProvider{name: "google"},
+	}
+	r := NewRouter(providers, RouterConfig{
+		Routing: RoutingConfig{
+			Academic: []string{"searchapi", "google"},
+		},
+	})
+
+	p, name := r.ProviderFor(OpAcademic)
+	if p == nil {
+		t.Fatal("expected non-nil provider")
+	}
+	if name != "searchapi" {
+		t.Errorf("expected 'searchapi', got %q", name)
+	}
+}
+
+func TestRouter_Name(t *testing.T) {
+	r := NewRouter(map[string]Provider{}, RouterConfig{})
+	if r.Name() != "router" {
+		t.Errorf("expected name 'router', got %q", r.Name())
+	}
+}
+
+func TestRouter_SkipsUnknownProviders(t *testing.T) {
+	providers := map[string]Provider{
+		"google": &successProvider{name: "google"},
+	}
+	r := NewRouter(providers, RouterConfig{
+		Routing: RoutingConfig{Default: []string{"nonexistent", "google"}},
+	})
+
+	results, err := r.Web(context.Background(), WebSearchParams{Query: "test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if results[0].Title != "google result" {
+		t.Errorf("expected google result after skipping unknown, got %q", results[0].Title)
+	}
+}
+
+func TestRouter_NoProviders(t *testing.T) {
+	r := NewRouter(map[string]Provider{}, RouterConfig{})
+
+	_, err := r.Web(context.Background(), WebSearchParams{Query: "test"})
+	if err == nil {
+		t.Fatal("expected error with no providers")
+	}
+	if !strings.Contains(err.Error(), "no providers available") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+// =============================================================================
+// ParseRoutingConfig Tests
+// =============================================================================
+
+func TestParseRoutingConfig_SimpleList(t *testing.T) {
+	cfg, err := ParseRoutingConfig("brave,google,serper")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Default) != 3 {
+		t.Fatalf("expected 3 providers in default, got %d", len(cfg.Default))
+	}
+	if cfg.Default[0] != "brave" || cfg.Default[1] != "google" || cfg.Default[2] != "serper" {
+		t.Errorf("unexpected default: %v", cfg.Default)
+	}
+}
+
+func TestParseRoutingConfig_JSON(t *testing.T) {
+	input := `{"web":"brave,google","news":"brave,serper","images":"google,brave","academic":"searchapi,google","default":"brave,google,serper"}`
+	cfg, err := ParseRoutingConfig(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Web) != 2 || cfg.Web[0] != "brave" {
+		t.Errorf("unexpected web routing: %v", cfg.Web)
+	}
+	if len(cfg.News) != 2 || cfg.News[0] != "brave" {
+		t.Errorf("unexpected news routing: %v", cfg.News)
+	}
+	if len(cfg.Images) != 2 || cfg.Images[0] != "google" {
+		t.Errorf("unexpected images routing: %v", cfg.Images)
+	}
+	if len(cfg.Academic) != 2 || cfg.Academic[0] != "searchapi" {
+		t.Errorf("unexpected academic routing: %v", cfg.Academic)
+	}
+	if len(cfg.Default) != 3 {
+		t.Errorf("unexpected default routing: %v", cfg.Default)
+	}
+}
+
+func TestParseRoutingConfig_Empty(t *testing.T) {
+	cfg, err := ParseRoutingConfig("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Default) != 0 {
+		t.Errorf("expected empty config for empty input, got: %v", cfg)
+	}
+}
+
+func TestParseRoutingConfig_InvalidJSON(t *testing.T) {
+	_, err := ParseRoutingConfig("{invalid json")
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestParseRoutingConfig_SpacesHandled(t *testing.T) {
+	cfg, err := ParseRoutingConfig(" brave , google , serper ")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Default) != 3 {
+		t.Fatalf("expected 3, got %d", len(cfg.Default))
+	}
+	if cfg.Default[0] != "brave" || cfg.Default[1] != "google" || cfg.Default[2] != "serper" {
+		t.Errorf("spaces not trimmed: %v", cfg.Default)
+	}
+}
+
+// =============================================================================
+// AvailableProviders Tests
+// =============================================================================
+
+func TestAvailableProviders(t *testing.T) {
+	cfg := config.SearchConfig{
+		GoogleAPIKey: "gkey",
+		GoogleCX:     "gcx",
+		BraveAPIKey:  "bkey",
+		SearchAPIKey: "skey",
+	}
+	deps := newTestDeps(http.DefaultClient)
+	providers := AvailableProviders(cfg, deps)
+
+	if _, ok := providers["google"]; !ok {
+		t.Error("expected google provider")
+	}
+	if _, ok := providers["brave"]; !ok {
+		t.Error("expected brave provider")
+	}
+	if _, ok := providers["searchapi"]; !ok {
+		t.Error("expected searchapi provider")
+	}
+	if _, ok := providers["serper"]; ok {
+		t.Error("did not expect serper provider (no key)")
+	}
+	if _, ok := providers["searxng"]; ok {
+		t.Error("did not expect searxng provider (no URL)")
+	}
+}
+
+func TestNewProviderByName_MissingCredentials(t *testing.T) {
+	cfg := config.SearchConfig{}
+	deps := newTestDeps(http.DefaultClient)
+
+	if p := NewProviderByName("brave", cfg, deps); p != nil {
+		t.Error("expected nil for brave without key")
+	}
+	if p := NewProviderByName("serper", cfg, deps); p != nil {
+		t.Error("expected nil for serper without key")
+	}
+	if p := NewProviderByName("searchapi", cfg, deps); p != nil {
+		t.Error("expected nil for searchapi without key")
+	}
+	if p := NewProviderByName("searxng", cfg, deps); p != nil {
+		t.Error("expected nil for searxng without URL")
+	}
+	if p := NewProviderByName("google", cfg, deps); p != nil {
+		t.Error("expected nil for google without both key and cx")
+	}
+}
+
+// =============================================================================
+// SearchAPI Helper Tests
+// =============================================================================
+
+func TestMapSearchAPITimePeriod(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"hour", "last_hour"},
+		{"day", "last_day"},
+		{"week", "last_week"},
+		{"month", "last_month"},
+		{"year", "last_year"},
+		{"invalid", ""},
+	}
+	for _, tt := range tests {
+		got := mapSearchAPITimePeriod(tt.input)
+		if got != tt.expected {
+			t.Errorf("mapSearchAPITimePeriod(%q) = %q, want %q", tt.input, got, tt.expected)
+		}
+	}
+}
+
+func TestMapSearchAPIImageSize(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"icon", "i"},
+		{"small", "s"},
+		{"medium", "m"},
+		{"large", "l"},
+		{"xlarge", "lt"},
+		{"xxlarge", "lt"},
+		{"huge", "lt"},
+		{"unknown", ""},
+	}
+	for _, tt := range tests {
+		got := mapSearchAPIImageSize(tt.input)
+		if got != tt.expected {
+			t.Errorf("mapSearchAPIImageSize(%q) = %q, want %q", tt.input, got, tt.expected)
 		}
 	}
 }

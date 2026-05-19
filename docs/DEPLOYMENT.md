@@ -190,19 +190,43 @@ spec:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `GOOGLE_CUSTOM_SEARCH_API_KEY` | Google API key | `AIzaSy...` (39 chars) |
-| `GOOGLE_CUSTOM_SEARCH_ID` | Search engine ID | `017576662512468239146:omuauf_gy1x` |
+| `GOOGLE_CUSTOM_SEARCH_API_KEY` | Google API key (required unless `SEARCH_ROUTING` is set) | `AIzaSy...` (39 chars) |
+| `GOOGLE_CUSTOM_SEARCH_ID` | Search engine ID (required unless `SEARCH_ROUTING` is set) | `017576662512468239146:omuauf_gy1x` |
 
 ### Search Provider
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SEARCH_PROVIDER` | Primary provider | `google` |
-| `SEARCH_FALLBACK_PROVIDER` | Fallback provider | — |
+| `SEARCH_PROVIDER` | Primary provider: google, brave, serper, searxng, searchapi | `google` |
+| `SEARCH_FALLBACK_PROVIDER` | Fallback provider (simple fallback) | — |
+| `SEARCH_ROUTING` | Multi-provider routing (see below) | — |
 | `BRAVE_API_KEY` | Brave Search API key | — |
 | `SERPER_API_KEY` | Serper.dev API key | — |
+| `SEARCHAPI_API_KEY` | SearchAPI.io API key | — |
 | `SEARXNG_URL` | SearXNG instance URL | — |
 | `CUSTOM_LENSES_PATH` | External lenses directory | — |
+
+### Multi-Provider Routing
+
+When `SEARCH_ROUTING` is set, the server uses all configured providers with intelligent fallback:
+
+```bash
+# Simple: comma-separated priority list (applies to all operations)
+SEARCH_ROUTING=brave,google,serper
+
+# Advanced: per-operation routing (JSON)
+SEARCH_ROUTING='{"web":"brave,google","news":"brave,serper","images":"google,brave","academic":"searchapi,google","patents":"searchapi,google","default":"brave,google,searchapi"}'
+```
+
+**How it works:**
+- Requests route to the first healthy provider in the priority list
+- If a provider fails (timeout, rate limit, 5xx), the next provider is tried automatically
+- Each provider has an independent circuit breaker (opens after 3 consecutive failures, resets after 30s)
+- Lenses can override routing via the `"routing"` field in their JSON definition
+
+**Operation types:** `web`, `images`, `news`, `academic`, `patents`, `default`
+
+When no explicit routing is configured for an operation, the `default` list is used. When `SEARCH_ROUTING` is not set at all, the server uses `SEARCH_PROVIDER` as a single provider (backward compatible).
 
 ### HTTP Transport
 

@@ -52,10 +52,31 @@ func main() {
 		logger.Warn("failed to load search lenses", "err", err)
 	}
 
-	searchProvider := search.NewProvider(cfg.Search, search.Deps{
+	searchDeps := search.Deps{
 		HTTPClient: scraper.NewSSRFSafeClient(cfg.AllowPrivateIPs),
 		Breaker:    searchBreaker,
-	})
+	}
+
+	var searchProvider search.Provider
+	if cfg.Search.Routing != "" {
+		routingCfg, routeErr := search.ParseRoutingConfig(cfg.Search.Routing)
+		if routeErr != nil {
+			logger.Error("invalid SEARCH_ROUTING", "err", routeErr)
+			os.Exit(1)
+		}
+		providers := search.AvailableProviders(cfg.Search, searchDeps)
+		if len(providers) == 0 {
+			logger.Error("no search providers available for routing")
+			os.Exit(1)
+		}
+		searchProvider = search.NewRouter(providers, search.RouterConfig{
+			Routing: routingCfg,
+			Logger:  logger,
+		})
+		logger.Info("search router initialized", "providers", len(providers), "routing", cfg.Search.Routing)
+	} else {
+		searchProvider = search.NewProvider(cfg.Search, searchDeps)
+	}
 
 	scraperPipeline := scraper.NewPipeline(scraper.PipelineConfig{
 		MaxConcurrency:  cfg.MaxScrapeConcurrency,

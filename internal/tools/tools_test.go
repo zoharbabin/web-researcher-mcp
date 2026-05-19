@@ -13,6 +13,8 @@ import (
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/audit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/cache"
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
+	"github.com/zoharbabin/web-researcher-mcp/internal/config"
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 	"github.com/zoharbabin/web-researcher-mcp/internal/metrics"
 	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
@@ -61,6 +63,10 @@ func (m *mockProviderWithURL) News(_ context.Context, params search.NewsSearchPa
 }
 
 func (m *mockProviderWithURL) Name() string { return "mock-with-url" }
+
+func newTestBreaker() *circuit.Breaker {
+	return circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60})
+}
 
 func setupTestDeps() Dependencies {
 	return Dependencies{
@@ -828,5 +834,78 @@ func TestToolError(t *testing.T) {
 	}
 	if tc.Text != "something went wrong" {
 		t.Fatalf("expected error text, got %q", tc.Text)
+	}
+}
+
+func TestToolsWorkWithRouter(t *testing.T) {
+	// Verify that tools work correctly when the Provider is a Router
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := map[string]any{
+			"organic_results": []map[string]any{
+				{"position": 1, "title": "Router Result", "link": "https://router.example.com", "snippet": "Via router", "displayed_link": "router.example.com"},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer ts.Close()
+
+	cfg := config.SearchConfig{
+		SearchAPIKey: "test-key",
+	}
+	searchDeps := search.Deps{
+		HTTPClient: ts.Client(),
+		Breaker:    nil, // AvailableProviders creates its own breakers via the router
+	}
+
+	// Manually create a searchapi provider pointed at our test server
+	provider := search.NewSearchAPIProvider(cfg.SearchAPIKey, search.Deps{
+		HTTPClient: ts.Client(),
+		Breaker:    newTestBreaker(),
+	})
+	provider.SetBaseURL(ts.URL)
+	_ = searchDeps // used only for the pattern illustration
+
+	providers := map[string]search.Provider{
+		"searchapi": provider,
+	}
+	router := search.NewRouter(providers, search.RouterConfig{
+		Routing: search.RoutingConfig{Default: []string{"searchapi"}},
+	})
+
+	deps := Dependencies{
+		Cache:    cache.NewNoop(),
+		Search:   router,
+		Scraper:  scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2}),
+		Content:  content.NewProcessor(),
+		Sessions: session.NewManager(session.Config{MaxSessions: 100}),
+		Metrics:  metrics.NewCollector(),
+		Auditor:  audit.NewNoop(),
+		Logger:   slog.Default(),
+	}
+
+	ctx := context.Background()
+	srv := createTestServer(deps)
+	client := connectTestClient(ctx, t, srv)
+	defer client.Close()
+
+	res, err := client.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "web_search",
+		Arguments: map[string]any{"query": "test via router"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("unexpected tool error: %s", res.Content[0].(*mcp.TextContent).Text)
+	}
+
+	text := res.Content[0].(*mcp.TextContent).Text
+	var output map[string]any
+	if err := json.Unmarshal([]byte(text), &output); err != nil {
+		t.Fatalf("failed to parse output: %v", err)
+	}
+	if output["resultCount"].(float64) != 1 {
+		t.Fatalf("expected 1 result, got %v", output["resultCount"])
 	}
 }
