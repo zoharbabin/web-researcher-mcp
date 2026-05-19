@@ -26,8 +26,10 @@ type sequentialSearchInput struct {
 
 func registerSequentialSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "sequential_search",
-		Description: "Track multi-step research progress with persistent sessions, branching, and knowledge gap tracking. Use this to maintain state across a complex investigation that requires multiple searches. Call with stepNumber=1 to start (returns sessionId), then pass sessionId for each subsequent step. Set nextStepNeeded=false on the final step. Sessions expire after 30 min of inactivity. Not cached — this is a state tracker, not a search tool.",
+		Name:         "sequential_search",
+		Description:  "Track multi-step research progress with persistent sessions, branching, and knowledge gap tracking. This is a state tracker, not a search tool — pair with web_search or search_and_scrape for actual searches. Call with stepNumber=1 (omit sessionId) to start a new session. Returns JSON with fields: sessionId, currentStep, totalStepsEstimate, isComplete, steps (array of {stepNumber, description, isRevision, revisesStep, branchId, timestamp}), sources, gaps (array of {description, foundInStep}), startedAt, completedAt (only when isComplete=true). Pass sessionId for steps 2+; each call returns the full accumulated session state. Set nextStepNeeded=false on final step to mark complete. Sessions expire after 30 min of inactivity (returns 'session expired or not found' error); max 50 concurrent sessions per tenant. Use branchFromStep + branchId to explore alternative directions without losing the main thread. Not cached.",
+		Annotations:  readOnlyAnnotations(false, false),
+		OutputSchema: sequentialSearchOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input sequentialSearchInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
 

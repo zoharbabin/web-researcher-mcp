@@ -52,8 +52,10 @@ type academicSearchInput struct {
 
 func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "academic_search",
-		Description: "Search peer-reviewed academic papers across arXiv, PubMed, IEEE, Nature, Springer, and 12 other scholarly databases. Use this for scientific research, literature reviews, or finding citations — not for general web content. Returns paper title, abstract, authors, URL, and source. Filter by year range and source. Results cached 24 hours.",
+		Name:         "academic_search",
+		Description:  "Search peer-reviewed papers across arXiv, PubMed, IEEE, Nature, Springer, and 12+ scholarly databases via site-restricted web search. Returns JSON with fields: papers (array of {title, url, source, abstract}), query, totalResults, resultCount, source. No special query syntax needed — use technical terms directly. year_from/year_to combine with source filter to narrow scope. On no matches returns resultCount: 0 with empty array; on failure returns isError with message. Subject to per-tenant rate limit (default 30 req/min) with automatic provider fallback. Use this for scientific research, literature reviews, or citations — not for general content. Use web_search for non-academic technical content, or news_search for recent scientific announcements. Set pdf_only=true when you plan to pass URLs to scrape_page for full-text extraction. Results cached 24 hours.",
+		Annotations:  readOnlyAnnotations(true, true),
+		OutputSchema: academicSearchOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input academicSearchInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
 

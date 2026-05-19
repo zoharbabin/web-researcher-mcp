@@ -35,3 +35,14 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	registerPatentSearch(srv, deps)
 	registerSequentialSearch(srv, deps)
 }
+
+func boolPtr(b bool) *bool { return &b }
+
+func readOnlyAnnotations(idempotent bool, openWorld bool) *mcp.ToolAnnotations {
+	return &mcp.ToolAnnotations{
+		ReadOnlyHint:    true,
+		DestructiveHint: boolPtr(false),
+		IdempotentHint:  idempotent,
+		OpenWorldHint:   boolPtr(openWorld),
+	}
+}

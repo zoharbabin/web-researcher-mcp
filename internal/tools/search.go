@@ -29,8 +29,10 @@ type webSearchInput struct {
 
 func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "web_search",
-		Description: "Search the web for URLs and metadata without fetching page content. Use this for quick link discovery; use search_and_scrape instead when you need full page content. Supports lenses (programming, news, tech, legal, medical, finance, science, government) for domain-restricted search. Results cached 30 min; returns empty array on no matches.",
+		Name:         "web_search",
+		Description:  "Search the web for URLs and metadata without fetching page content. Returns JSON with fields: urls (string array), results (array of {title, url, snippet, displayLink}), query, resultCount. lens and site are mutually exclusive (lens overrides site if both provided). On no matches returns resultCount: 0 with empty results array; on failure returns isError with message. Subject to per-tenant rate limit (default 30 req/min) with automatic provider fallback and circuit breaker recovery. Supports lenses (programming, news, tech, legal, medical, finance, science, government) for domain-restricted search. Use search_and_scrape instead when you need full page content; use news_search for time-sensitive current events; use academic_search for scholarly papers. Results cached 30 min; use time_range to constrain freshness when cache staleness is a concern.",
+		Annotations:  readOnlyAnnotations(true, true),
+		OutputSchema: webSearchOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input webSearchInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
 
