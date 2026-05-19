@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -423,6 +424,7 @@ func TestMiddlewareKeyRotation(t *testing.T) {
 	kid1 := "key-1"
 	kid2 := "key-2"
 
+	var mu sync.Mutex
 	currentKid := kid1
 	currentKey := &key1.PublicKey
 
@@ -432,7 +434,11 @@ func TestMiddlewareKeyRotation(t *testing.T) {
 			return
 		}
 
+		mu.Lock()
 		pub := currentKey
+		kid := currentKid
+		mu.Unlock()
+
 		nBytes := pub.N.Bytes()
 		eBytes := big.NewInt(int64(pub.E)).Bytes()
 
@@ -441,7 +447,7 @@ func TestMiddlewareKeyRotation(t *testing.T) {
 				{
 					"kty": "RSA",
 					"use": "sig",
-					"kid": currentKid,
+					"kid": kid,
 					"alg": "RS256",
 					"n":   base64.RawURLEncoding.EncodeToString(nBytes),
 					"e":   base64.RawURLEncoding.EncodeToString(eBytes),
@@ -483,8 +489,10 @@ func TestMiddlewareKeyRotation(t *testing.T) {
 	}
 
 	// Rotate key
+	mu.Lock()
 	currentKid = kid2
 	currentKey = &key2.PublicKey
+	mu.Unlock()
 
 	// Token signed with key2 should work after JWKS re-fetch (triggered by cache miss)
 	token2 := signJWT(t, key2, kid2, validPayload(jwksSrv.URL))
