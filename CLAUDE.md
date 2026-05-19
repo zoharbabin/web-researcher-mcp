@@ -20,7 +20,7 @@ make all                                                    # lint + vet + vuln 
 cmd/web-researcher-mcp/main.go   # Wiring only — constructs deps, starts server
 internal/
 ├── tools/        # One file per tool, typed input structs, registered in registry.go
-├── search/       # Provider interface + 4 adapters (Google, Brave, Serper, SearXNG)
+├── search/       # Provider interface + adapters + Router (multi-provider fallback)
 ├── scraper/      # 4-tier pipeline: markdown → stealth → HTML → browser (go-rod)
 ├── documents/    # PDF, DOCX, PPTX extraction
 ├── cache/        # Cache interface + hybrid impl (memory LRU + AES-encrypted disk)
@@ -46,6 +46,7 @@ tests/benchmark/  # Performance benchmarks
 3. **Errors are values** — tool handlers return `toolError("message")` which sets `IsError: true` on the MCP result; never panic
 4. **Bounded concurrency** — scraping semaphore (5 slots), browser pool (3 slots), per-tenant rate limits
 5. **Lens routing** — if `lens` is set, `site:` operators are injected and routed to the configured provider; lenses with a dedicated `cx` route directly to that Google PSE engine
+6. **Multi-provider routing** — when `SEARCH_ROUTING` is set, the Router wraps all available providers with per-provider circuit breakers and priority-ordered fallback; transparent to tools via the `search.Provider` interface
 
 ## How to Add a Tool
 
@@ -61,8 +62,9 @@ tests/benchmark/  # Performance benchmarks
 ## How to Add a Search Provider
 
 1. Create `internal/search/<name>.go` implementing `search.Provider` interface (Web, Images, News, Name methods)
-2. Add a case to the switch in `search.NewProvider()` in `internal/search/provider.go`
+2. Add a case to the switch in `search.NewProvider()` and `NewProviderByName()` in `internal/search/provider.go`
 3. Add the env var to `internal/config/config.go` and `.env.example`
+4. Add a credential check in `AvailableProviders()` so the Router can discover it
 
 ## Key Patterns
 
@@ -74,8 +76,8 @@ tests/benchmark/  # Performance benchmarks
 
 ## Environment
 
-Required: `GOOGLE_CUSTOM_SEARCH_API_KEY`, `GOOGLE_CUSTOM_SEARCH_ID`
-Optional: `SEARCH_PROVIDER` (brave|google|serper|searxng), `BRAVE_API_KEY`, `PORT` (enables HTTP), `REDIS_URL` (shared state)
+Required (unless `SEARCH_ROUTING` is set): `GOOGLE_CUSTOM_SEARCH_API_KEY`, `GOOGLE_CUSTOM_SEARCH_ID`
+Optional: `SEARCH_PROVIDER` (brave|google|serper|searxng|searchapi), `SEARCH_ROUTING` (multi-provider fallback), `BRAVE_API_KEY`, `SEARCHAPI_API_KEY`, `PORT` (enables HTTP), `REDIS_URL` (shared state)
 Full list: see `.env.example`
 
 ## Release Process

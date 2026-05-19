@@ -235,8 +235,8 @@ Protects against cascading failures when upstream APIs are down.
 - Half-open attempts: 1
 
 **Per-Provider Breakers:**
-- Google PSE: separate breaker
-- Brave Search: separate breaker
+- Each search provider (Google, Brave, Serper, SearXNG, SearchAPI) gets an independent circuit breaker
+- When using multi-provider routing, failures in one provider don't affect others
 - Scraping (per domain): optional, prevent hammering broken sites
 
 ---

@@ -28,24 +28,33 @@ Perform a web search and return structured result URLs with metadata.
 | `exact_terms` | string | no | — | Exact phrase match |
 | `exclude_terms` | string | no | — | Terms to exclude |
 | `country` | string | no | — | ISO 3166-1 alpha-2 |
-| `lens` | string | no | — | Search lens name (NEW) |
+| `lens` | string | no | — | Search lens name |
 
 ### Output Schema
 
 ```go
 type SearchOutput struct {
-    URLs        []string `json:"urls"`
-    Query       string   `json:"query"`
-    ResultCount int      `json:"resultCount"`
+    URLs        []string       `json:"urls"`
+    Query       string         `json:"query"`
+    ResultCount int            `json:"resultCount"`
+    Results     []SearchResult `json:"results"`
+}
+
+type SearchResult struct {
+    Title       string `json:"title"`
+    URL         string `json:"url"`
+    Snippet     string `json:"snippet"`
+    DisplayLink string `json:"displayLink"`
 }
 ```
 
 ### Behavior
 
-1. If `lens` is specified and has a dedicated `cx`, route directly to that Google PSE engine.
-2. If `lens` is specified without `cx`, inject `site:` operators and route to the configured provider.
-3. Apply `time_range` as date restriction parameter.
-4. Return deduplicated URLs.
+1. If `SEARCH_ROUTING` is set, route through the multi-provider Router (priority-ordered fallback with per-provider circuit breakers).
+2. If `lens` is specified and has a dedicated `cx`, route directly to that Google PSE engine.
+3. If `lens` is specified without `cx`, inject `site:` operators and route to the configured provider.
+4. Apply `time_range` as date restriction parameter.
+5. Return deduplicated URLs and full result objects.
 
 ### Cache
 - Key: SHA-256 of (provider + query + all params)

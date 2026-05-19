@@ -17,7 +17,7 @@ This guide is for users of the deprecated [`google-researcher-mcp`](https://gith
 | Language | TypeScript / Node.js 20+ | Go (single static binary) |
 | Install | `npx -y google-researcher-mcp` | `go install`, binary download, or Docker |
 | Process model | npm spawns Node.js — orphan detection issues | Native binary — clean EOF/SIGPIPE lifecycle |
-| Search backends | Google PSE only | Google PSE + Brave + Serper + SearXNG |
+| Search backends | Google PSE only | Google PSE + Brave + Serper + SearXNG + SearchAPI.io (with multi-provider routing) |
 | Caching | In-memory only | Hybrid (memory + AES-encrypted disk + optional Redis) |
 | Architecture | Monolithic `server.ts` | Modular (one package per concern) |
 | Binary size | ~200MB (Node.js + Chromium) | ~22MB standalone (Chromium optional, auto-downloaded) |
@@ -99,7 +99,26 @@ The new version supports multiple backends for unrestricted whole-web search:
 }
 ```
 
-Supported providers: `google` (default), `brave`, `serper`, `searxng`.
+Supported providers: `google` (default), `brave`, `serper`, `searxng`, `searchapi`.
+
+You can also enable multi-provider routing with automatic fallback:
+
+```json
+{
+  "mcpServers": {
+    "web-researcher": {
+      "command": "web-researcher-mcp",
+      "env": {
+        "SEARCH_ROUTING": "brave,google,serper",
+        "BRAVE_API_KEY": "BSA...",
+        "GOOGLE_CUSTOM_SEARCH_API_KEY": "YOUR_KEY",
+        "GOOGLE_CUSTOM_SEARCH_ID": "YOUR_CX",
+        "SERPER_API_KEY": "..."
+      }
+    }
+  }
+}
+```
 
 ---
 

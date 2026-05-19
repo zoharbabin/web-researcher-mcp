@@ -55,11 +55,14 @@ This is an MCP (Model Context Protocol) server that provides AI assistants with 
 │  └────┬────┘ └───┬────┘ └───────┘ └────────┘ └────────────┘   │
 │       │          │                                               │
 │  ┌────▼────┐ ┌───▼─────────────────────────────┐               │
-│  │Brave    │ │ Scraper Implementations          │               │
-│  │Google   │ │ ┌──────────┐ ┌───────┐ ┌──────┐│               │
-│  │Serper   │ │ │ Markdown │ │goquery│ │chrom-││               │
-│  │SearXNG  │ │ │ Negotiat.│ │(HTML) │ │  dp  ││               │
-│  └─────────┘ │ └──────────┘ └───────┘ └──────┘│               │
+│  │ Router  │ │ Scraper Implementations          │               │
+│  │(fallbk) │ │ ┌──────────┐ ┌───────┐ ┌──────┐│               │
+│  │ Brave   │ │ │ Markdown │ │goquery│ │chrom-││               │
+│  │ Google  │ │ │ Negotiat.│ │(HTML) │ │  dp  ││               │
+│  │ Serper  │ │ └──────────┘ └───────┘ └──────┘│               │
+│  │ SearXNG │                                    │               │
+│  │SearchAPI│                                    │               │
+│  └─────────┘ │                                  │               │
 │              │ ┌──────────┐ ┌───────┐ ┌──────┐│               │
 │              │ │   PDF    │ │ DOCX  │ │ PPTX ││               │
 │              │ └──────────┘ └───────┘ └──────┘│               │
@@ -92,7 +95,7 @@ web-researcher-mcp/
 │   ├── config/                   # Strongly-typed config from env
 │   ├── server/                   # MCP server lifecycle (STDIO + HTTP)
 │   ├── tools/                    # Tool handlers (one file per tool)
-│   ├── search/                   # Pluggable providers + lens routing
+│   ├── search/                   # Pluggable providers + router + lens routing
 │   ├── scraper/                  # 4-tier pipeline + SSRF protection
 │   ├── documents/                # PDF, DOCX, PPTX parsing
 │   ├── cache/                    # Hybrid cache (memory + disk)
@@ -135,7 +138,7 @@ When the parent process dies, `os.Stdin.Read()` returns `io.EOF`. Writing to a b
 ### 2. Pluggable Search Backend
 
 ```go
-type SearchProvider interface {
+type Provider interface {
     Web(ctx context.Context, params WebSearchParams) ([]SearchResult, error)
     Images(ctx context.Context, params ImageSearchParams) ([]ImageResult, error)
     News(ctx context.Context, params NewsSearchParams) ([]NewsResult, error)
@@ -143,7 +146,9 @@ type SearchProvider interface {
 }
 ```
 
-Search lenses inject `site:` operators and route through the configured provider. Lenses with a dedicated `cx` field route directly to that Google PSE engine. Providers are swappable at runtime via configuration.
+Five providers implement this interface: Google PSE, Brave, Serper, SearXNG, and SearchAPI.io. The `Router` also implements `Provider`, enabling transparent multi-provider fallback — tools don't need to know whether they're calling a single provider or a routing layer.
+
+When `SEARCH_ROUTING` is configured, the Router wraps all available providers with per-provider circuit breakers and priority-ordered fallback. Search lenses inject `site:` operators and route through the configured provider. Lenses with a dedicated `cx` field route directly to that Google PSE engine.
 
 ### 3. Tiered Scraping Pipeline
 

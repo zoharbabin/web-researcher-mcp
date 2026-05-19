@@ -19,7 +19,7 @@
 AI assistants are only as good as the information they can access. **web-researcher-mcp** bridges the gap between LLMs and the live internet through the [Model Context Protocol](https://modelcontextprotocol.io/) standard:
 
 - **Multiple specialized research tools** in a single server (see [Tools](#tools) below)
-- **Pluggable search backends** (Google, Brave, Serper, SearXNG)
+- **Pluggable search backends** with multi-provider routing and automatic fallback (Google, Brave, Serper, SearXNG, SearchAPI.io)
 - **4-tier content extraction** -- markdown negotiation, stealth HTTP, HTML parsing, headless browser (go-rod + stealth)
 - **Search lenses** for domain-focused research (programming, news, legal, medical, and more)
 - **Single static binary** with optional Chromium for JS rendering (auto-downloaded on first use)
@@ -38,7 +38,7 @@ Works with Claude Code, Claude Desktop, Cursor, and any MCP-compatible client.
 | `search_and_scrape` | Combined search + extraction pipeline with quality scoring and deduplication |
 | `image_search` | Search for images with size, type, color, and file format filters |
 | `news_search` | Search news sources with freshness controls and source filtering |
-| `academic_search` | Search academic papers via Scholar, arXiv, and PubMed |
+| `academic_search` | Search peer-reviewed papers across arXiv, PubMed, IEEE, Nature, Springer, and other scholarly databases |
 | `patent_search` | Search patent databases with CPC classification, strict office filtering (US/EP/WO/JP/CN/KR) |
 | `sequential_search` | Multi-step research tracking with session state for iterative investigation |
 
@@ -104,27 +104,47 @@ Add this to your MCP client configuration (example for Claude Code `~/.claude/se
 }
 ```
 
+Or with Brave Search (no Google keys needed):
+
+```json
+{
+  "mcpServers": {
+    "web-researcher": {
+      "command": "/path/to/web-researcher-mcp",
+      "env": {
+        "SEARCH_ROUTING": "brave",
+        "BRAVE_API_KEY": "YOUR_BRAVE_API_KEY"
+      }
+    }
+  }
+}
+```
+
 Done. Your AI assistant now has access to all research tools.
 
 ---
 
 ## Configuration
 
-### Required
+### Required (unless using `SEARCH_ROUTING`)
 
 | Variable | Description | How to Get |
 |----------|-------------|-----------|
 | `GOOGLE_CUSTOM_SEARCH_API_KEY` | Google API key | [Google Cloud Console](https://developers.google.com/custom-search/v1/introduction) |
 | `GOOGLE_CUSTOM_SEARCH_ID` | Programmable Search Engine ID | [PSE Console](https://programmablesearchengine.google.com/) |
 
+> **Note:** When `SEARCH_ROUTING` is set with non-Google providers (e.g., `brave,serper`), Google keys are not required. You only need credentials for the providers you configure.
+
 ### Search Provider
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SEARCH_PROVIDER` | Backend: `google`, `brave`, `serper`, or `searxng` | `google` |
+| `SEARCH_PROVIDER` | Backend: `google`, `brave`, `serper`, `searxng`, or `searchapi` | `google` |
 | `BRAVE_API_KEY` | Brave Search API key | |
 | `SERPER_API_KEY` | Serper.dev API key | |
+| `SEARCHAPI_API_KEY` | SearchAPI.io API key | |
 | `SEARXNG_URL` | SearXNG instance URL | |
+| `SEARCH_ROUTING` | Multi-provider routing with automatic fallback (see [Deployment docs](docs/DEPLOYMENT.md#multi-provider-routing)) | |
 
 ### HTTP Transport (Optional)
 
@@ -152,7 +172,7 @@ web-researcher-mcp/
 │   ├── config/                 # Env-based strongly-typed configuration
 │   ├── server/                 # MCP server lifecycle + signal handling
 │   ├── tools/                  # Tool handlers (one file per tool)
-│   ├── search/                 # Pluggable search providers + lens routing
+│   ├── search/                 # Pluggable search providers + router + lens routing
 │   ├── scraper/                # 4-tier scraping pipeline (markdown → stealth → HTML → browser)
 │   ├── documents/              # PDF, DOCX, PPTX parsing
 │   ├── cache/                  # Hybrid cache (memory + disk + optional Redis)
@@ -200,10 +220,13 @@ web-researcher-mcp/
 │  └────┬────┘ └───┬────┘ └───────┘ └────────┘ └────────────┘   │
 │       │          │                                               │
 │  ┌────▼─────┐ ┌─▼──────────────────────────────────┐           │
-│  │ Brave    │ │  Scraper Tiers (4-tier pipeline)     │           │
-│  │ Google   │ │  markdown > stealth > HTML > browser│           │
-│  │ Serper   │ │  + YouTube (3-strategy) + documents │           │
-│  │ SearXNG  │ └─────────────────────────────────────┘           │
+│  │ Router   │ │  Scraper Tiers (4-tier pipeline)     │           │
+│  │(fallback)│ │  markdown > stealth > HTML > browser│           │
+│  │  Brave   │ │  + YouTube (3-strategy) + documents │           │
+│  │  Google  │ └─────────────────────────────────────┘           │
+│  │  Serper  │                                                    │
+│  │  SearXNG │                                                    │
+│  │SearchAPI │                                                    │
 │  └──────────┘                                                    │
 └──────────────────────────────────────────────────────────────────┘
         │          │
@@ -234,7 +257,7 @@ web-researcher-mcp/
 
 ## Search Providers
 
-The server supports four search backends. All providers support lenses via `site:` operator injection.
+All providers implement the same interface and support lenses via `site:` operator injection.
 
 | Provider | Whole-Web | Images | News | Notes |
 |----------|:---------:|:------:|:----:|-------|
@@ -242,8 +265,27 @@ The server supports four search backends. All providers support lenses via `site
 | **Brave Search** | Yes | Yes | Yes | Recommended for high-volume whole-web |
 | **Serper.dev** | Yes | Yes | Yes | Google-identical results |
 | **SearXNG** | Yes | Yes | Yes | Self-hosted, privacy-first, air-gapped deployments |
+| **SearchAPI.io** | Yes | Yes | Yes | Unified API with multiple engine backends |
 
-### Routing Logic
+### Multi-Provider Routing
+
+When `SEARCH_ROUTING` is set, the server uses multiple providers with automatic fallback:
+
+```bash
+# Priority-ordered list — requests go to the first healthy provider
+export SEARCH_ROUTING=brave,google,serper
+
+# Per-operation routing (JSON) — different priorities for different search types
+export SEARCH_ROUTING='{"web":"brave,google","news":"brave,serper","images":"google,brave","default":"brave,google,searchapi"}'
+```
+
+Each provider gets an independent circuit breaker. If a provider fails (timeout, rate limit, 5xx), the next provider in the priority list is tried automatically. Lenses can override routing via the `routing` field in their JSON definition.
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#multi-provider-routing) for full routing documentation.
+
+### Single-Provider Routing
+
+When `SEARCH_ROUTING` is not set, the server uses a single provider:
 
 ```
 Request arrives
@@ -256,23 +298,28 @@ Request arrives
 <details>
 <summary><strong>Provider Setup Examples</strong></summary>
 
-**Brave Search (recommended for whole-web):**
+**Multi-provider routing (recommended):**
+```bash
+export SEARCH_ROUTING=brave,google,serper
+export BRAVE_API_KEY=BSAxxxxxxxxxx
+export GOOGLE_CUSTOM_SEARCH_API_KEY=AIza...
+export GOOGLE_CUSTOM_SEARCH_ID=017...
+export SERPER_API_KEY=...
+```
+
+**Single provider — Brave Search:**
 ```bash
 export SEARCH_PROVIDER=brave
 export BRAVE_API_KEY=BSAxxxxxxxxxx
-export GOOGLE_CUSTOM_SEARCH_API_KEY=AIza...  # still needed for lenses
-export GOOGLE_CUSTOM_SEARCH_ID=017...
 ```
 
-**SearXNG (self-hosted, privacy-first):**
+**Single provider — SearXNG (self-hosted, privacy-first):**
 ```bash
 export SEARCH_PROVIDER=searxng
 export SEARXNG_URL=http://localhost:8080
-export GOOGLE_CUSTOM_SEARCH_API_KEY=AIza...
-export GOOGLE_CUSTOM_SEARCH_ID=017...
 ```
 
-**Google PSE only (simplest setup):**
+**Single provider — Google PSE only (simplest setup):**
 ```bash
 export GOOGLE_CUSTOM_SEARCH_API_KEY=AIza...
 export GOOGLE_CUSTOM_SEARCH_ID=017...
@@ -330,13 +377,15 @@ Add a JSON file to the `lenses/` directory:
     "docs.example.org",
     "*.trusted-source.io"
   ],
-  "cx": ""
+  "cx": "",
+  "routing": ""
 }
 ```
 
 Fields:
 - **domains** -- URL patterns for the lens (up to ~10 injected per query via `site:` operators)
 - **cx** -- Optional dedicated Google PSE engine ID. If set, bypasses site injection and routes directly to that PSE engine (supports up to 5,000 domains)
+- **routing** -- Optional provider override for this lens (e.g., `"google"` or `"searchapi,google"`). When set, this lens routes through the specified provider(s) regardless of global routing config
 
 </details>
 
@@ -462,7 +511,7 @@ OAUTH_AUDIENCE=https://api.example.com \
 ./web-researcher-mcp
 ```
 
-Connect any MCP client to `http://localhost:3000/sse`.
+Connect any MCP client to `http://localhost:3000/mcp/` (Streamable HTTP transport).
 
 <details>
 <summary><strong>Docker Compose Example</strong></summary>
@@ -562,6 +611,7 @@ Contributions are welcome. Please see [CONTRIBUTING.md](CONTRIBUTING.md) for cod
 | [docs/TOOLS.md](docs/TOOLS.md) | Tool specifications and parameter schemas |
 | [docs/SECURITY.md](docs/SECURITY.md) | Threat model, SSRF, auth, compliance (SOC2/GDPR/FedRAMP) |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Build, Docker, Kubernetes, client configs, scaling |
+| [docs/MIGRATION.md](docs/MIGRATION.md) | Migrating from the deprecated google-researcher-mcp |
 
 ---
 
