@@ -14,19 +14,19 @@ import (
 )
 
 type searchAndScrapeInput struct {
-	Query              string `json:"query" jsonschema:"Search query,required"`
-	NumResults         int    `json:"num_results,omitempty" jsonschema:"Number of sources to scrape (1-10, default: 3)"`
-	IncludeSources     *bool  `json:"include_sources,omitempty" jsonschema:"Include individual source details (default: true)"`
-	Deduplicate        *bool  `json:"deduplicate,omitempty" jsonschema:"Remove duplicate paragraphs (default: true)"`
-	MaxLengthPerSource int    `json:"max_length_per_source,omitempty" jsonschema:"Max bytes per source (default: 50000)"`
-	TotalMaxLength     int    `json:"total_max_length,omitempty" jsonschema:"Total max bytes for combined content (default: 300000)"`
-	FilterByQuery      bool   `json:"filter_by_query,omitempty" jsonschema:"Filter out low-relevance sources (default: false)"`
+	Query              string `json:"query" jsonschema:"The research question or topic to search and extract content for. Use natural language or keyword-rich queries.,required"`
+	NumResults         int    `json:"num_results,omitempty" jsonschema:"Number of top search results to scrape (1-10, default: 3). More sources = slower but more comprehensive."`
+	IncludeSources     *bool  `json:"include_sources,omitempty" jsonschema:"Include per-source content and quality scores in response (default: true). Set false to reduce response size."`
+	Deduplicate        *bool  `json:"deduplicate,omitempty" jsonschema:"Remove duplicate paragraphs across sources (default: true). Disable only if exact repetition matters."`
+	MaxLengthPerSource int    `json:"max_length_per_source,omitempty" jsonschema:"Max content bytes extracted per source (default: 50000)."`
+	TotalMaxLength     int    `json:"total_max_length,omitempty" jsonschema:"Max total bytes for combined output (default: 300000). Reduce for faster, more concise results."`
+	FilterByQuery      bool   `json:"filter_by_query,omitempty" jsonschema:"Remove sources with low relevance to the query (default: false). Enable for precision over recall."`
 }
 
 func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "search_and_scrape",
-		Description: "Combined search and scrape pipeline. Searches the web, scrapes top results in parallel, deduplicates content, scores quality, and returns ranked sources.",
+		Description: "Search the web and extract full content from top results in one call. Best for research questions where you need synthesized information from multiple sources. Scrapes in parallel, deduplicates content, and ranks sources by quality. Use web_search instead if you only need URLs without content. Typically 2-15s depending on source count.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input searchAndScrapeInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
 

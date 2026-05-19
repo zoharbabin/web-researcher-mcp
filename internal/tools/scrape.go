@@ -14,15 +14,15 @@ import (
 )
 
 type scrapePageInput struct {
-	URL       string `json:"url" jsonschema:"URL to scrape (must be HTTP or HTTPS),required"`
-	Mode      string `json:"mode,omitempty" jsonschema:"Extraction mode: full (default) or preview"`
-	MaxLength int    `json:"max_length,omitempty" jsonschema:"Maximum content length in bytes (default: 50000)"`
+	URL       string `json:"url" jsonschema:"The HTTP/HTTPS URL to extract content from. Supports web pages, PDFs, DOCX, PPTX, and YouTube video URLs.,required"`
+	Mode      string `json:"mode,omitempty" jsonschema:"Extraction depth: full (default, up to max_length) or preview (first 5000 bytes, faster). Use preview for quick relevance checks."`
+	MaxLength int    `json:"max_length,omitempty" jsonschema:"Maximum content length in bytes (default: 50000). Reduce for faster responses when you only need a summary."`
 }
 
 func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "scrape_page",
-		Description: "Extract content from a URL. Supports web pages, PDFs, DOCX, PPTX, and YouTube videos. Uses tiered extraction: markdown negotiation, HTML parsing, headless browser.",
+		Description: "Extract readable content from a single URL. Handles web pages (HTML/JS), PDFs, DOCX, PPTX, and YouTube transcripts. Use this when you already have a URL and need its content; use search_and_scrape instead to discover and extract in one step. Auto-selects fastest extraction method. Results cached 1 hour; returns citation metadata.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input scrapePageInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
 

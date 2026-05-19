@@ -41,19 +41,19 @@ var sourceToSites = map[string][]string{
 }
 
 type academicSearchInput struct {
-	Query      string `json:"query" jsonschema:"Academic search query,required"`
-	NumResults int    `json:"num_results,omitempty" jsonschema:"Number of results (1-10, default: 5)"`
-	YearFrom   int    `json:"year_from,omitempty" jsonschema:"Filter papers from this year (e.g., 2020)"`
-	YearTo     int    `json:"year_to,omitempty" jsonschema:"Filter papers to this year (e.g., 2024)"`
-	Source     string `json:"source,omitempty" jsonschema:"Source filter: all, arxiv, pubmed, ieee, nature, springer (default: all)"`
-	PDFOnly    bool   `json:"pdf_only,omitempty" jsonschema:"Only return results with PDF links (default: false)"`
-	SortBy     string `json:"sort_by,omitempty" jsonschema:"Sort by: relevance, date (default: relevance)"`
+	Query      string `json:"query" jsonschema:"Research topic or paper title to search for. Use technical terms and specific concepts for best results.,required"`
+	NumResults int    `json:"num_results,omitempty" jsonschema:"Number of papers to return (1-10, default: 5)."`
+	YearFrom   int    `json:"year_from,omitempty" jsonschema:"Only include papers published in or after this year (e.g. 2020)."`
+	YearTo     int    `json:"year_to,omitempty" jsonschema:"Only include papers published in or before this year (e.g. 2024)."`
+	Source     string `json:"source,omitempty" jsonschema:"Restrict to an academic source: all (default), arxiv, pubmed, ieee, nature, springer."`
+	PDFOnly    bool   `json:"pdf_only,omitempty" jsonschema:"Only return papers with direct PDF links (default: false). Useful when you plan to scrape the full paper."`
+	SortBy     string `json:"sort_by,omitempty" jsonschema:"Sort order: relevance (default) or date (newest first)."`
 }
 
 func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "academic_search",
-		Description: "Search academic literature across arXiv, PubMed, IEEE, Nature, Springer, and other scholarly sources. Uses site-restricted search across curated academic domains.",
+		Description: "Search peer-reviewed academic papers across arXiv, PubMed, IEEE, Nature, Springer, and 12 other scholarly databases. Use this for scientific research, literature reviews, or finding citations — not for general web content. Returns paper title, abstract, authors, URL, and source. Filter by year range and source. Results cached 24 hours.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input academicSearchInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
 

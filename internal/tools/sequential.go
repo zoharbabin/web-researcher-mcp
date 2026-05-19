@@ -12,22 +12,22 @@ import (
 )
 
 type sequentialSearchInput struct {
-	SearchStep         string `json:"searchStep" jsonschema:"Description of what was done/found in this research step,required"`
-	StepNumber         int    `json:"stepNumber" jsonschema:"Current step number (starts at 1),required"`
-	NextStepNeeded     bool   `json:"nextStepNeeded" jsonschema:"Whether more research steps are needed,required"`
-	TotalStepsEstimate int    `json:"totalStepsEstimate,omitempty" jsonschema:"Estimated total number of steps"`
-	SessionID          string `json:"sessionId,omitempty" jsonschema:"Session ID (returned from first call, required for subsequent steps)"`
-	IsRevision         bool   `json:"isRevision,omitempty" jsonschema:"Whether this revises a previous step"`
-	RevisesStep        int    `json:"revisesStep,omitempty" jsonschema:"Step number being revised"`
-	BranchFromStep     int    `json:"branchFromStep,omitempty" jsonschema:"Step to branch from"`
-	BranchID           string `json:"branchId,omitempty" jsonschema:"Branch identifier"`
-	KnowledgeGap       string `json:"knowledgeGap,omitempty" jsonschema:"Knowledge gap identified in this step"`
+	SearchStep         string `json:"searchStep" jsonschema:"Summary of what was researched or discovered in this step. Be descriptive to build a useful research trail.,required"`
+	StepNumber         int    `json:"stepNumber" jsonschema:"Current step number (start at 1 for a new session). Must increment sequentially.,required"`
+	NextStepNeeded     bool   `json:"nextStepNeeded" jsonschema:"Set true if more research steps will follow; false to mark the session complete.,required"`
+	TotalStepsEstimate int    `json:"totalStepsEstimate,omitempty" jsonschema:"Your estimate of total steps needed. Update as scope becomes clearer."`
+	SessionID          string `json:"sessionId,omitempty" jsonschema:"Session ID returned from the first call. Required for steps 2+. Omit to start a new session."`
+	IsRevision         bool   `json:"isRevision,omitempty" jsonschema:"Set true if this step revises a previous step's findings."`
+	RevisesStep        int    `json:"revisesStep,omitempty" jsonschema:"The step number being revised (required if isRevision is true)."`
+	BranchFromStep     int    `json:"branchFromStep,omitempty" jsonschema:"Step number to branch from, for exploring alternative research directions."`
+	BranchID           string `json:"branchId,omitempty" jsonschema:"Identifier for this research branch (e.g. 'technical-approach' vs 'business-angle')."`
+	KnowledgeGap       string `json:"knowledgeGap,omitempty" jsonschema:"A specific gap or unanswered question identified during this step that needs further investigation."`
 }
 
 func registerSequentialSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "sequential_search",
-		Description: "Multi-step research tracking with session persistence, branching, and knowledge gap identification. Start with stepNumber=1, set nextStepNeeded=false on the final step.",
+		Description: "Track multi-step research progress with persistent sessions, branching, and knowledge gap tracking. Use this to maintain state across a complex investigation that requires multiple searches. Call with stepNumber=1 to start (returns sessionId), then pass sessionId for each subsequent step. Set nextStepNeeded=false on the final step. Sessions expire after 30 min of inactivity. Not cached — this is a state tracker, not a search tool.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input sequentialSearchInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
 

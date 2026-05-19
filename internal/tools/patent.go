@@ -13,21 +13,21 @@ import (
 )
 
 type patentSearchInput struct {
-	Query        string `json:"query" jsonschema:"Patent search query or patent number,required"`
-	NumResults   int    `json:"num_results,omitempty" jsonschema:"Number of results (1-10, default: 5)"`
-	SearchType   string `json:"search_type,omitempty" jsonschema:"Search type: prior_art, specific, landscape (default: prior_art)"`
-	PatentOffice string `json:"patent_office,omitempty" jsonschema:"Patent office: all, US, EP, WO, JP, CN, KR (default: all)"`
-	Assignee     string `json:"assignee,omitempty" jsonschema:"Company/assignee name"`
-	Inventor     string `json:"inventor,omitempty" jsonschema:"Inventor name"`
-	CPCCode      string `json:"cpc_code,omitempty" jsonschema:"CPC classification code (e.g., G06F)"`
-	YearFrom     int    `json:"year_from,omitempty" jsonschema:"Filing year from"`
-	YearTo       int    `json:"year_to,omitempty" jsonschema:"Filing year to"`
+	Query        string `json:"query" jsonschema:"Patent search terms, invention description, or patent number (e.g. 'US11234567' or 'machine learning image classification').,required"`
+	NumResults   int    `json:"num_results,omitempty" jsonschema:"Number of patents to return (1-10, default: 5)."`
+	SearchType   string `json:"search_type,omitempty" jsonschema:"Search strategy: prior_art (default, broad technical search), specific (exact patent lookup), landscape (competitive overview)."`
+	PatentOffice string `json:"patent_office,omitempty" jsonschema:"Restrict to patent office: all (default), US, EP, WO, JP, CN, KR."`
+	Assignee     string `json:"assignee,omitempty" jsonschema:"Company or organization that owns the patent (auto-generates name variations for matching)."`
+	Inventor     string `json:"inventor,omitempty" jsonschema:"Name of the inventor to filter by."`
+	CPCCode      string `json:"cpc_code,omitempty" jsonschema:"Cooperative Patent Classification code to narrow by technology area (e.g. G06F for computing, H04L for networking)."`
+	YearFrom     int    `json:"year_from,omitempty" jsonschema:"Only include patents filed in or after this year."`
+	YearTo       int    `json:"year_to,omitempty" jsonschema:"Only include patents filed in or before this year."`
 }
 
 func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "patent_search",
-		Description: "Search patent databases via Google Patents. Supports prior art search, landscape analysis, and specific patent lookup with CPC classification filtering.",
+		Description: "Search Google Patents for prior art, competitive landscapes, or specific patents by number. Use this for IP research, novelty checks, and technology landscaping — not for general technical content (use academic_search or web_search instead). Supports CPC codes, assignee/inventor filters, and patent office restrictions. Auto-generates company name variations. Results cached 24 hours.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input patentSearchInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
 

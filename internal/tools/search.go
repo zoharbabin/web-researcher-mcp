@@ -15,22 +15,22 @@ import (
 )
 
 type webSearchInput struct {
-	Query        string `json:"query" jsonschema:"Search query (1-500 characters),required"`
-	NumResults   int    `json:"num_results,omitempty" jsonschema:"Number of results to return (1-10, default: 5)"`
-	TimeRange    string `json:"time_range,omitempty" jsonschema:"Time restriction: day, week, month, year"`
-	Safe         string `json:"safe,omitempty" jsonschema:"Safe search level: off, medium, high"`
-	Language     string `json:"language,omitempty" jsonschema:"ISO 639-1 language code"`
-	Site         string `json:"site,omitempty" jsonschema:"Restrict to domain"`
-	ExactTerms   string `json:"exact_terms,omitempty" jsonschema:"Exact phrase to match"`
-	ExcludeTerms string `json:"exclude_terms,omitempty" jsonschema:"Terms to exclude"`
-	Country      string `json:"country,omitempty" jsonschema:"ISO 3166-1 alpha-2 country code"`
-	Lens         string `json:"lens,omitempty" jsonschema:"Search lens: programming, news, tech, legal, medical, finance, science, government"`
+	Query        string `json:"query" jsonschema:"The search query text (1-500 chars). Be specific with key terms and qualifiers for better results.,required"`
+	NumResults   int    `json:"num_results,omitempty" jsonschema:"Number of results to return (1-10). Default: 5. Higher values increase latency."`
+	TimeRange    string `json:"time_range,omitempty" jsonschema:"Restrict to a time period: day, week, month, or year. Omit for all-time results."`
+	Safe         string `json:"safe,omitempty" jsonschema:"SafeSearch level: off, medium (default), or high."`
+	Language     string `json:"language,omitempty" jsonschema:"Filter by language using ISO 639-1 code (e.g. en, fr, de)."`
+	Site         string `json:"site,omitempty" jsonschema:"Restrict to a single domain (e.g. stackoverflow.com). Cannot combine with lens."`
+	ExactTerms   string `json:"exact_terms,omitempty" jsonschema:"Phrase that must appear verbatim in results."`
+	ExcludeTerms string `json:"exclude_terms,omitempty" jsonschema:"Terms to exclude from results (space-separated)."`
+	Country      string `json:"country,omitempty" jsonschema:"Restrict to a country using ISO 3166-1 alpha-2 code (e.g. US, GB)."`
+	Lens         string `json:"lens,omitempty" jsonschema:"Apply a curated domain-restricted search lens: programming, news, tech, legal, medical, finance, science, government. Overrides site parameter."`
 }
 
 func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "web_search",
-		Description: "Search the web and return structured result URLs with metadata. Supports search lenses for focused domain-specific research.",
+		Description: "Search the web for URLs and metadata without fetching page content. Use this for quick link discovery; use search_and_scrape instead when you need full page content. Supports lenses (programming, news, tech, legal, medical, finance, science, government) for domain-restricted search. Results cached 30 min; returns empty array on no matches.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input webSearchInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
 

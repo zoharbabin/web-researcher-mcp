@@ -12,20 +12,20 @@ import (
 )
 
 type imageSearchInput struct {
-	Query         string `json:"query" jsonschema:"Image search query,required"`
-	NumResults    int    `json:"num_results,omitempty" jsonschema:"Number of results (1-10, default: 5)"`
-	Size          string `json:"size,omitempty" jsonschema:"Image size: huge, icon, large, medium, small, xlarge, xxlarge"`
-	Type          string `json:"type,omitempty" jsonschema:"Image type: clipart, face, lineart, stock, photo, animated"`
-	ColorType     string `json:"color_type,omitempty" jsonschema:"Color type: color, gray, mono, trans"`
-	DominantColor string `json:"dominant_color,omitempty" jsonschema:"Dominant color: black, blue, brown, gray, green, orange, pink, purple, red, teal, white, yellow"`
-	FileType      string `json:"file_type,omitempty" jsonschema:"File type: jpg, gif, png, bmp, svg, webp"`
-	Safe          string `json:"safe,omitempty" jsonschema:"Safe search: off, medium, high"`
+	Query         string `json:"query" jsonschema:"Descriptive search query for images (e.g. 'golden retriever puppy playing fetch'). More descriptive = better results.,required"`
+	NumResults    int    `json:"num_results,omitempty" jsonschema:"Number of image results (1-10, default: 5)."`
+	Size          string `json:"size,omitempty" jsonschema:"Filter by image size: huge, icon, large, medium, small, xlarge, xxlarge."`
+	Type          string `json:"type,omitempty" jsonschema:"Filter by image type: clipart, face, lineart, stock, photo, animated."`
+	ColorType     string `json:"color_type,omitempty" jsonschema:"Filter by color mode: color, gray, mono, trans (transparent background)."`
+	DominantColor string `json:"dominant_color,omitempty" jsonschema:"Filter by dominant color: black, blue, brown, gray, green, orange, pink, purple, red, teal, white, yellow."`
+	FileType      string `json:"file_type,omitempty" jsonschema:"Filter by file format: jpg, gif, png, bmp, svg, webp."`
+	Safe          string `json:"safe,omitempty" jsonschema:"SafeSearch level: off, medium (default), high."`
 }
 
 func registerImageSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "image_search",
-		Description: "Search for images with optional filters for size, type, color, and file format.",
+		Description: "Find images by query with filters for size, type, color, and format. Returns image URLs, dimensions, and thumbnail links. Use this when you need visual assets or image references — not for text information. Results cached 30 min.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input imageSearchInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
 

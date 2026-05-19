@@ -12,17 +12,17 @@ import (
 )
 
 type newsSearchInput struct {
-	Query      string `json:"query" jsonschema:"News search query,required"`
-	NumResults int    `json:"num_results,omitempty" jsonschema:"Number of results (1-10, default: 5)"`
-	Freshness  string `json:"freshness,omitempty" jsonschema:"Time range: hour, day, week, month, year (default: week)"`
-	SortBy     string `json:"sort_by,omitempty" jsonschema:"Sort order: relevance, date (default: relevance)"`
-	NewsSource string `json:"news_source,omitempty" jsonschema:"Filter by news source domain"`
+	Query      string `json:"query" jsonschema:"Topic or event to find news about. Use specific terms for precision (e.g. 'OpenAI GPT-5 release' not 'AI news').,required"`
+	NumResults int    `json:"num_results,omitempty" jsonschema:"Number of articles to return (1-10, default: 5)."`
+	Freshness  string `json:"freshness,omitempty" jsonschema:"How recent articles must be: hour, day, week (default), month, or year."`
+	SortBy     string `json:"sort_by,omitempty" jsonschema:"Sort order: relevance (default) or date (newest first)."`
+	NewsSource string `json:"news_source,omitempty" jsonschema:"Restrict to a specific news outlet domain (e.g. reuters.com, bbc.co.uk)."`
 }
 
 func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "news_search",
-		Description: "Search for news articles with freshness control and source filtering.",
+		Description: "Search recent news articles by topic with time-based freshness filtering. Use this for current events, breaking news, or time-sensitive topics. Use web_search instead for evergreen/non-news content. Returns article title, URL, source, publish date, and snippet. Results cached 15 min due to news volatility.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input newsSearchInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
 
