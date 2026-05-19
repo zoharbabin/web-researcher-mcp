@@ -8,6 +8,7 @@ on:
       - "ARCHITECTURE.md"
       - "CONTRIBUTING.md"
       - "docs/**"
+      - "overrides/**"
       - "mkdocs.yml"
       - ".github/workflows/docs.yml"
 

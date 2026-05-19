@@ -4,8 +4,14 @@ site_description: MCP server for AI assistants — web search, content extractio
 repo_url: https://github.com/zoharbabin/web-researcher-mcp
 repo_name: zoharbabin/web-researcher-mcp
 
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/zoharbabin/web-researcher-mcp
+
 theme:
   name: material
+  custom_dir: overrides
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
