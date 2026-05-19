@@ -11,11 +11,23 @@ startCommand:
         description: "Google Custom Search engine ID"
       search_provider:
         type: string
-        description: "Search provider (google, brave, serper, searxng)"
+        description: "Search provider (google, brave, serper, searxng, searchapi)"
         default: "google"
+      search_routing:
+        type: string
+        description: "Multi-provider routing with automatic fallback (e.g. brave,google,serper)"
       brave_api_key:
         type: string
-        description: "Brave Search API key (required if search_provider=brave)"
+        description: "Brave Search API key (required if using brave provider)"
+      serper_api_key:
+        type: string
+        description: "Serper.dev API key (required if using serper provider)"
+      searchapi_api_key:
+        type: string
+        description: "SearchAPI.io API key (required if using searchapi provider)"
+      searxng_url:
+        type: string
+        description: "SearXNG instance URL (required if using searxng provider)"
     required:
       - google_api_key
       - google_cx
@@ -25,4 +37,8 @@ startCommand:
     GOOGLE_CUSTOM_SEARCH_API_KEY: "{{config.google_api_key}}"
     GOOGLE_CUSTOM_SEARCH_ID: "{{config.google_cx}}"
     SEARCH_PROVIDER: "{{config.search_provider}}"
+    SEARCH_ROUTING: "{{config.search_routing}}"
     BRAVE_API_KEY: "{{config.brave_api_key}}"
+    SERPER_API_KEY: "{{config.serper_api_key}}"
+    SEARCHAPI_API_KEY: "{{config.searchapi_api_key}}"
+    SEARXNG_URL: "{{config.searxng_url}}"

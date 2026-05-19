@@ -67,6 +67,7 @@ dockers:
       - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
       - "--label=org.opencontainers.image.source=https://github.com/zoharbabin/web-researcher-mcp"
       - "--label=org.opencontainers.image.licenses=MIT"
+      - "--label=io.modelcontextprotocol.server.name=io.github.zoharbabin/web-researcher-mcp"
     dockerfile: Dockerfile.release
     extra_files:
       - lenses/
@@ -86,6 +87,7 @@ dockers:
       - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
       - "--label=org.opencontainers.image.source=https://github.com/zoharbabin/web-researcher-mcp"
       - "--label=org.opencontainers.image.licenses=MIT"
+      - "--label=io.modelcontextprotocol.server.name=io.github.zoharbabin/web-researcher-mcp"
     dockerfile: Dockerfile.release
     extra_files:
       - lenses/
@@ -106,6 +108,7 @@ dockers:
       - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
       - "--label=org.opencontainers.image.source=https://github.com/zoharbabin/web-researcher-mcp"
       - "--label=org.opencontainers.image.licenses=MIT"
+      - "--label=io.modelcontextprotocol.server.name=io.github.zoharbabin/web-researcher-mcp"
     dockerfile: Dockerfile.release
     extra_files:
       - lenses/
@@ -125,6 +128,7 @@ dockers:
       - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
       - "--label=org.opencontainers.image.source=https://github.com/zoharbabin/web-researcher-mcp"
       - "--label=org.opencontainers.image.licenses=MIT"
+      - "--label=io.modelcontextprotocol.server.name=io.github.zoharbabin/web-researcher-mcp"
     dockerfile: Dockerfile.release
     extra_files:
       - lenses/

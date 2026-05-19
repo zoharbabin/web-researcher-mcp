@@ -40,15 +40,37 @@
         },
         {
           "name": "SEARCH_PROVIDER",
-          "description": "Search provider to use (google, brave, serper, searxng)",
+          "description": "Search provider to use (google, brave, serper, searxng, searchapi)",
           "required": false,
           "default": "google"
         },
         {
+          "name": "SEARCH_ROUTING",
+          "description": "Multi-provider routing with automatic fallback (e.g. brave,google,serper)",
+          "required": false
+        },
+        {
           "name": "BRAVE_API_KEY",
-          "description": "Brave Search API key (required if SEARCH_PROVIDER=brave)",
+          "description": "Brave Search API key (required if using brave provider)",
           "required": false,
           "is_secret": true
+        },
+        {
+          "name": "SERPER_API_KEY",
+          "description": "Serper.dev API key (required if using serper provider)",
+          "required": false,
+          "is_secret": true
+        },
+        {
+          "name": "SEARCHAPI_API_KEY",
+          "description": "SearchAPI.io API key (required if using searchapi provider)",
+          "required": false,
+          "is_secret": true
+        },
+        {
+          "name": "SEARXNG_URL",
+          "description": "SearXNG instance URL (required if using searxng provider)",
+          "required": false
         }
       ]
     },

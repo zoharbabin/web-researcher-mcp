@@ -10,6 +10,8 @@
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://github.com/zoharbabin/web-researcher-mcp/releases"><img src="https://img.shields.io/github/v/release/zoharbabin/web-researcher-mcp" alt="Release"></a>
   <a href="https://hub.docker.com/r/zoharbabin/web-researcher-mcp"><img src="https://img.shields.io/docker/pulls/zoharbabin/web-researcher-mcp?cacheSeconds=3600" alt="Docker"></a>
+  <a href="https://glama.ai/mcp/servers/zoharbabin/web-researcher-mcp"><img src="https://glama.ai/mcp/servers/zoharbabin/web-researcher-mcp/badges/score.svg" alt="web-researcher-mcp MCP server"></a>
+  <a href="https://github.com/zoharbabin/web-researcher-mcp/stargazers"><img src="https://img.shields.io/github/stars/zoharbabin/web-researcher-mcp?style=social" alt="GitHub Stars"></a>
 </p>
 
 ---
@@ -621,8 +623,14 @@ Contributions are welcome. Please see [CONTRIBUTING.md](CONTRIBUTING.md) for cod
 
 ---
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/chart?repos=zoharbabin/web-researcher-mcp&type=date&legend=top-left)](https://www.star-history.com/?repos=zoharbabin%2Fweb-researcher-mcp&type=date&legend=top-left)
+
+---
+
 <p align="center">
   Built with <a href="https://go.dev">Go</a> and the <a href="https://modelcontextprotocol.io/">Model Context Protocol</a>
   <br/><br/>
-  If this project helps your workflow, consider giving it a star.
+  If this project helps your workflow, consider giving it a ⭐
 </p>
