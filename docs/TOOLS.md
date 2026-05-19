@@ -369,17 +369,10 @@ type AcademicSearchOutput struct {
 }
 
 type AcademicPaper struct {
-    Title    string            `json:"title"`
-    Authors  []string          `json:"authors"`
-    Year     int               `json:"year,omitempty"`
-    Venue    string            `json:"venue,omitempty"`
-    Abstract string            `json:"abstract,omitempty"`
-    URL      string            `json:"url"`
-    PDFURL   string            `json:"pdfUrl,omitempty"`
-    DOI      string            `json:"doi,omitempty"`
-    ArxivID  string            `json:"arxivId,omitempty"`
-    Source   string            `json:"source"`
-    Citations AcademicCitations `json:"citations"`
+    Title    string `json:"title"`
+    URL      string `json:"url"`
+    Source   string `json:"source"`
+    Abstract string `json:"abstract"`
 }
 ```
 
@@ -432,7 +425,6 @@ Multi-step research tracking with session persistence, branching, and knowledge 
 | `revisesStep` | int | no | — | Step being revised |
 | `branchFromStep` | int | no | — | Branching point |
 | `branchId` | string | no | — | Branch identifier |
-| `source` | object | no | — | Source found in this step |
 | `knowledgeGap` | string | no | — | Gap identified |
 
 ### Session Management

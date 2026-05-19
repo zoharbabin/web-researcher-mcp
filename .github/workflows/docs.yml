@@ -35,6 +35,9 @@ jobs:
                 -e 's|docs/SECURITY.md|security.md|g' \
                 -e 's|docs/DEPLOYMENT.md|deployment.md|g' \
                 -e 's|docs/MIGRATION.md|migration.md|g' \
+                -e 's|docs/EXAMPLES.md|examples.md|g' \
+                -e 's|docs/API_SETUP.md|api-setup.md|g' \
+                -e 's|docs/LESSONS_LEARNED.md|lessons-learned.md|g' \
                 -e 's|ARCHITECTURE.md|architecture.md|g' \
                 -e 's|CONTRIBUTING.md|contributing.md|g' \
                 -e 's|SECURITY.md|security.md|g' \
@@ -42,14 +45,20 @@ jobs:
           done
           mv site_src/readme.md site_src/index.md
           # Copy docs/ files with cross-link rewriting
-          for f in docs/TOOLS.md docs/DEPLOYMENT.md docs/SECURITY.md docs/MIGRATION.md; do
+          for f in docs/TOOLS.md docs/DEPLOYMENT.md docs/SECURITY.md docs/MIGRATION.md docs/EXAMPLES.md docs/API_SETUP.md docs/LESSONS_LEARNED.md; do
             sed -e 's|ARCHITECTURE.md|architecture.md|g' \
                 -e 's|CONTRIBUTING.md|contributing.md|g' \
                 -e 's|SECURITY.md|security.md|g' \
                 -e 's|TOOLS.md|tools.md|g' \
                 -e 's|DEPLOYMENT.md|deployment.md|g' \
                 -e 's|MIGRATION.md|migration.md|g' \
+                -e 's|EXAMPLES.md|examples.md|g' \
+                -e 's|API_SETUP.md|api-setup.md|g' \
+                -e 's|LESSONS_LEARNED.md|lessons-learned.md|g' \
                 "$f" > "site_src/$(basename "$f" | tr '[:upper:]' '[:lower:]')"
           done
+          # Rename files with underscores to hyphens for clean URLs
+          [ -f site_src/api_setup.md ] && mv site_src/api_setup.md site_src/api-setup.md
+          [ -f site_src/lessons_learned.md ] && mv site_src/lessons_learned.md site_src/lessons-learned.md
 
       - run: mkdocs gh-deploy --force

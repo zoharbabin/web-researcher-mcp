@@ -271,6 +271,28 @@ When no explicit routing is configured for an operation, the `default` list is u
 | `LOG_FORMAT` | Output format | `json` |
 | `METRICS_ENABLED` | Enable Prometheus metrics | `true` |
 
+### Audit
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `AUDIT_ENABLED` | Enable structured audit logging | `true` |
+| `AUDIT_OUTPUT_PATH` | File path for audit log output (JSONL format) | — (stdout) |
+| `AUDIT_BUFFER_SIZE` | Internal event buffer size | `1000` |
+| `AUDIT_INCLUDE_REQUEST_BODY` | Include full request bodies in audit records | `false` |
+
+### Multi-Tenancy
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `CACHE_ISOLATION` | Cache isolation mode (`shared` or `tenant`) | `shared` |
+
+### Auth (Advanced)
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `JWKS_REFRESH_INTERVAL` | How often to refresh JWKS keys | `1h` |
+| `CACHE_ADMIN_KEY` | Shared secret for admin endpoints (min 16 chars) | — |
+
 ---
 
 ## Horizontal Scaling

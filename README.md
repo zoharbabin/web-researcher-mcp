@@ -180,6 +180,7 @@ web-researcher-mcp/
 │   ├── documents/              # PDF, DOCX, PPTX parsing
 │   ├── cache/                  # Hybrid cache (memory + disk + optional Redis)
 │   ├── auth/                   # OAuth 2.1 middleware + JWKS
+│   ├── audit/                  # Structured audit logging
 │   ├── session/                # Per-tenant session management
 │   ├── content/                # Sanitize, dedup, truncate, quality score
 │   ├── metrics/                # Prometheus metrics + per-tool stats
@@ -612,8 +613,11 @@ Contributions are welcome. Please see [CONTRIBUTING.md](CONTRIBUTING.md) for cod
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Design decisions, technology stack, dependencies |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development setup, code style, PR workflow |
 | [docs/TOOLS.md](docs/TOOLS.md) | Tool specifications and parameter schemas |
+| [docs/EXAMPLES.md](docs/EXAMPLES.md) | Usage examples with JSON tool calls |
+| [docs/API_SETUP.md](docs/API_SETUP.md) | Search provider API key setup for all providers |
 | [docs/SECURITY.md](docs/SECURITY.md) | Threat model, SSRF, auth, compliance (SOC2/GDPR/FedRAMP) |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Build, Docker, Kubernetes, client configs, scaling |
+| [docs/LESSONS_LEARNED.md](docs/LESSONS_LEARNED.md) | Node.js to Go migration story and lessons |
 | [docs/MIGRATION.md](docs/MIGRATION.md) | Migrating from the deprecated google-researcher-mcp |
 
 ---

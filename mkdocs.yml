@@ -32,9 +32,12 @@ nav:
   - Home: index.md
   - Architecture: architecture.md
   - Tools: tools.md
+  - Examples: examples.md
+  - API Setup: api-setup.md
   - Deployment: deployment.md
   - Security: security.md
   - Contributing: contributing.md
+  - Lessons Learned: lessons-learned.md
   - Migration: migration.md
 
 markdown_extensions:

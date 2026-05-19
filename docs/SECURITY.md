@@ -229,14 +229,20 @@ Protects against cascading failures when upstream APIs are down.
 
 **States:** CLOSED → OPEN → HALF_OPEN → CLOSED
 
-**Configuration:**
+**Configuration (per-provider breaker):**
 - Failure threshold: 5 consecutive failures
 - Reset timeout: 60 seconds
 - Half-open attempts: 1
 
+**Configuration (multi-provider router breaker):**
+- Failure threshold: 3 consecutive failures
+- Reset timeout: 30 seconds
+- Half-open attempts: 1
+
 **Per-Provider Breakers:**
 - Each search provider (Google, Brave, Serper, SearXNG, SearchAPI) gets an independent circuit breaker
-- When using multi-provider routing, failures in one provider don't affect others
+- When using multi-provider routing (`SEARCH_ROUTING`), the router adds a second breaker layer with tighter thresholds for faster failover
+- Failures in one provider don't affect others
 - Scraping (per domain): optional, prevent hammering broken sites
 
 ---
