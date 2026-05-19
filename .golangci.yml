@@ -17,6 +17,10 @@ linters:
       - path: _test\.go
         linters:
           - errcheck
+          - staticcheck
       - text: "Error return value of .*.Close"
         linters:
           - errcheck
+      - text: "QF1003|QF1012"
+        linters:
+          - staticcheck
