@@ -108,7 +108,7 @@ web-researcher-mcp/
 │   ├── circuit/                  # Circuit breaker
 │   └── resources/                # MCP Resources + Prompts
 ├── lenses/                       # Search lens JSON files
-├── tests/                        # E2E tests + benchmarks
+├── tests/                        # E2E, integration tests + benchmarks
 ├── scripts/                      # CI/CD helper scripts
 └── docs/                         # Extended documentation
 ```
@@ -153,16 +153,16 @@ When `SEARCH_ROUTING` is configured, the Router wraps all available providers wi
 ### 3. Tiered Scraping Pipeline
 
 ```go
-type Scraper interface {
-    Scrape(ctx context.Context, url string, opts ScrapeOptions) (*ScrapeResult, error)
-    CanHandle(url string, contentType string) bool
+type Pipeline struct {
+    client    *http.Client
+    semaphore chan struct{}
+    config    PipelineConfig
 }
 
-// Pipeline tries scrapers in order, falls back on failure
-type Pipeline struct {
-    scrapers []Scraper // markdown → html → browser → document
-}
+func (p *Pipeline) Scrape(ctx context.Context, url string, maxLength int) (*ScrapeResult, error)
 ```
+
+The pipeline routes specialized content (YouTube, PDF/DOCX/PPTX) via early-return detection, then falls back through tiers in order: markdown → stealth → HTML → browser (go-rod). Each tier is a private method with the same signature; the pipeline tries each in sequence and promotes the first result that meets a quality threshold.
 
 ### 4. Dependency Injection
 

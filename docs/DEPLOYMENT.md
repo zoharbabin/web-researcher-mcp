@@ -62,8 +62,7 @@ OAUTH_AUDIENCE=https://api.example.com \
 When `PORT` is set, the server starts an HTTP listener in addition to STDIO.
 
 **Endpoints:**
-- `POST /mcp` — Streamable HTTP MCP endpoint
-- `GET /mcp/sse` — SSE endpoint for streaming
+- `/mcp/` — Streamable HTTP MCP endpoint (handles POST and streaming)
 - `GET /health/live` — Liveness probe (always 200)
 - `GET /health/ready` — Readiness probe (checks dependencies)
 - `GET /metrics` — Prometheus metrics
@@ -235,7 +234,7 @@ When no explicit routing is configured for an operation, the `default` list is u
 | `PORT` | HTTP listen port (enables HTTP mode) | — (STDIO only) |
 | `OAUTH_ISSUER_URL` | JWT issuer URL | — |
 | `OAUTH_AUDIENCE` | Expected JWT audience | — |
-| `ALLOWED_ORIGINS` | CORS origins (comma-separated) | `*` |
+| `ALLOWED_ORIGINS` | CORS origins (comma-separated) | — (all origins) |
 
 ### Cache
 
@@ -515,10 +514,6 @@ All admin endpoints require the `X-Admin-Key` header matching `CACHE_ADMIN_KEY` 
 |--------|------|---------|
 | DELETE | `/admin/cache` | Flush all cache (memory + disk) |
 | DELETE | `/admin/sessions` | Kill all active sessions |
-| DELETE | `/admin/tenant/{id}` | Purge all data for a tenant |
-| GET | `/admin/audit` | Query audit logs (`tenant_id`, `from`, `to`) |
-| GET | `/users/{id}/data` | GDPR Art. 15 — export user data |
-| DELETE | `/users/{id}/data` | GDPR Art. 17 — purge user data |
 
 These are HTTP-only operational endpoints, not exposed via MCP tools.
 

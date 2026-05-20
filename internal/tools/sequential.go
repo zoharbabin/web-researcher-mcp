@@ -93,6 +93,6 @@ func registerSequentialSearch(srv *mcp.Server, deps Dependencies) {
 		deps.Metrics.RecordToolCall("sequential_search", time.Since(start), nil, "", false)
 		auditToolCall(deps, "sequential_search", time.Since(start), nil, "")
 
-		return textResult(string(jsonBytes)), nil, nil
+		return structuredResult(jsonBytes), nil, nil
 	})
 }

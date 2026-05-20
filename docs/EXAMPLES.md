@@ -75,7 +75,7 @@ Search peer-reviewed papers, preprints, and academic databases.
 }
 ```
 
-**Response** contains: `urls`, `query`, `resultCount`, and `results` with academic-specific fields. The search targets scholarly databases including arXiv, PubMed, IEEE, Nature, and Springer. Pair with `scrape_page` to extract full paper content from accessible URLs.
+**Response** contains: `papers` (array of `{title, url, source, abstract}`), `query`, `totalResults`, `resultCount`, and `source`. The search targets scholarly databases including arXiv, PubMed, IEEE, Nature, and Springer. Pair with `scrape_page` to extract full paper content from accessible URLs.
 
 ---
 
@@ -95,7 +95,7 @@ Search patent databases with classification codes and office filtering.
 }
 ```
 
-**Response** contains: `urls`, `query`, `resultCount`, and `results` with patent-specific metadata. Supports strict office filtering (US, EP, WO, JP, CN, KR) and CPC classification codes for precise patent landscape mapping.
+**Response** contains: `patents` (array of `{title, url, number, abstract}`), `query`, `searchType`, and `resultCount`. Supports strict office filtering (US, EP, WO, JP, CN, KR) and CPC classification codes for precise patent landscape mapping.
 
 ---
 
@@ -108,13 +108,13 @@ Search recent news with freshness controls and source filtering.
   "tool": "news_search",
   "arguments": {
     "query": "artificial intelligence regulation",
-    "time_range": "week",
+    "freshness": "week",
     "num_results": 5
   }
 }
 ```
 
-**Response** contains: `urls`, `query`, `resultCount`, and `results` with news-specific fields (publication date, source). Use `time_range` values: `day`, `week`, `month`, `year` to control freshness.
+**Response** contains: `articles` (array of `{title, url, source, publishedAt, snippet}`), `query`, and `resultCount`. Use `freshness` values: `hour`, `day`, `week`, `month`, `year` to control how recent articles must be.
 
 ---
 
@@ -134,7 +134,7 @@ Search for images with format, size, and color filters.
 }
 ```
 
-**Response** contains: `urls`, `query`, `resultCount`, and `results` with image-specific fields (`thumbnailUrl`, `width`, `height`, `contextUrl`). Filter options: `size` (small/medium/large), `type` (photo/lineart/clipart/animated), `color` (various), `format` (jpg/png/gif/webp).
+**Response** contains: `images` (array of `{title, link, thumbnailLink, displayLink, contextLink, width, height, fileSize}`), `query`, and `resultCount`. Filter options: `size` (small/medium/large/xlarge/xxlarge/huge/icon), `type` (photo/lineart/clipart/animated/face/stock), `color_type` (color/gray/mono/trans), `file_type` (jpg/png/gif/bmp/svg/webp).
 
 ---
 
@@ -151,7 +151,7 @@ Extract content from any URL — web pages, PDFs, DOCX, PPTX, or YouTube transcr
 }
 ```
 
-**Response** contains: `url`, `title`, `content` (full extracted text in markdown format), `contentLength`, `method` (which tier succeeded: markdown/stealth/html/browser), and `qualityScore`. The 4-tier pipeline tries lightweight methods first and only falls back to the headless browser for JavaScript-heavy sites.
+**Response** contains: `url`, `content` (extracted text), `contentType` (html/markdown/youtube/pdf/docx/pptx), `contentLength`, `truncated`, `estimatedTokens`, `sizeCategory`, `citation` (with APA/MLA formatted citations), and optionally `metadata` (`{title, author}`). The 4-tier pipeline tries lightweight methods first and only falls back to the headless browser for JavaScript-heavy sites.
 
 ---
 

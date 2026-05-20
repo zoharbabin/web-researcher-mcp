@@ -44,7 +44,7 @@ func registerImageSearch(srv *mcp.Server, deps Dependencies) {
 		if cached, ok := deps.Cache.Get(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("image_search", time.Since(start), nil, "", true)
 			auditToolCall(deps, "image_search", time.Since(start), nil, "")
-			return textResult(string(cached)), nil, nil
+			return structuredResult(cached), nil, nil
 		}
 
 		results, err := deps.Search.Images(ctx, search.ImageSearchParams{
@@ -74,6 +74,6 @@ func registerImageSearch(srv *mcp.Server, deps Dependencies) {
 		deps.Metrics.RecordToolCall("image_search", time.Since(start), nil, "", false)
 		auditToolCall(deps, "image_search", time.Since(start), nil, "")
 
-		return textResult(string(jsonBytes)), nil, nil
+		return structuredResult(jsonBytes), nil, nil
 	})
 }

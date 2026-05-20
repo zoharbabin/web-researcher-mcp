@@ -57,7 +57,7 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 			ev.Success = true
 			ev.Metadata = map[string]any{"cache_hit": true, "query": input.Query}
 			deps.Auditor.Log(ev)
-			return textResult(string(cached)), nil, nil
+			return structuredResult(cached), nil, nil
 		}
 
 		params := search.WebSearchParams{
@@ -122,7 +122,7 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 		ev.Metadata = map[string]any{"query": input.Query, "result_count": len(results)}
 		deps.Auditor.Log(ev)
 
-		return textResult(string(jsonBytes)), nil, nil
+		return structuredResult(jsonBytes), nil, nil
 	})
 }
 
@@ -163,5 +163,14 @@ func textResult(text string) *mcp.CallToolResult {
 		Content: []mcp.Content{
 			&mcp.TextContent{Text: text},
 		},
+	}
+}
+
+func structuredResult(jsonBytes []byte) *mcp.CallToolResult {
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			&mcp.TextContent{Text: string(jsonBytes)},
+		},
+		StructuredContent: json.RawMessage(jsonBytes),
 	}
 }

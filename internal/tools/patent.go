@@ -50,7 +50,7 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 		if cached, ok := deps.Cache.Get(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("patent_search", time.Since(start), nil, "", true)
 			auditToolCall(deps, "patent_search", time.Since(start), nil, "")
-			return textResult(string(cached)), nil, nil
+			return structuredResult(cached), nil, nil
 		}
 
 		searchQuery := buildPatentQuery(input.Query, input.Assignee, input.Inventor, input.CPCCode, input.PatentOffice, input.YearFrom, input.YearTo)
@@ -94,7 +94,7 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 		deps.Metrics.RecordToolCall("patent_search", time.Since(start), nil, "", false)
 		auditToolCall(deps, "patent_search", time.Since(start), nil, "")
 
-		return textResult(string(jsonBytes)), nil, nil
+		return structuredResult(jsonBytes), nil, nil
 	})
 }
 

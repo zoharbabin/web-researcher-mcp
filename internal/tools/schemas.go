@@ -121,7 +121,29 @@ var scrapePageOutputSchema = map[string]any{
 		"truncated":       map[string]any{"type": "boolean"},
 		"estimatedTokens": map[string]any{"type": "integer"},
 		"sizeCategory":    map[string]any{"type": "string"},
-		"citation":        map[string]any{"type": "string"},
+		"citation": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"url":          map[string]any{"type": "string"},
+				"accessedDate": map[string]any{"type": "string"},
+				"metadata": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"title":  map[string]any{"type": "string"},
+						"author": map[string]any{"type": "string"},
+						"site":   map[string]any{"type": "string"},
+						"date":   map[string]any{"type": "string"},
+					},
+				},
+				"formatted": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"apa": map[string]any{"type": "string"},
+						"mla": map[string]any{"type": "string"},
+					},
+				},
+			},
+		},
 		"metadata": map[string]any{
 			"type": "object",
 			"properties": map[string]any{

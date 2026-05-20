@@ -7,11 +7,11 @@
     "url": "https://github.com/zoharbabin/web-researcher-mcp",
     "source": "github"
   },
-  "version": "1.1.2",
+  "version": "1.2.1",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/zoharbabin/web-researcher-mcp:1.1.2",
+      "identifier": "ghcr.io/zoharbabin/web-researcher-mcp:1.2.1",
       "transport": {
         "type": "stdio"
       },
@@ -65,7 +65,7 @@
     },
     {
       "registryType": "oci",
-      "identifier": "docker.io/zoharbabin/web-researcher-mcp:1.1.2",
+      "identifier": "docker.io/zoharbabin/web-researcher-mcp:1.2.1",
       "transport": {
         "type": "stdio"
       }

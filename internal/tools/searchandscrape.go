@@ -69,7 +69,7 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 				"summary":         map[string]int{"urlsSearched": 0, "urlsScraped": 0, "processingTimeMs": 0},
 			}
 			jsonBytes, _ := json.Marshal(output)
-			return textResult(string(jsonBytes)), nil, nil
+			return structuredResult(jsonBytes), nil, nil
 		}
 
 		results := parallelScrape(ctx, deps, searchResults, maxLenPerSource)
@@ -99,7 +99,7 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 		deps.Metrics.RecordToolCall("search_and_scrape", time.Since(start), nil, "", false)
 		auditToolCall(deps, "search_and_scrape", time.Since(start), nil, "")
 
-		return textResult(string(jsonBytes)), nil, nil
+		return structuredResult(jsonBytes), nil, nil
 	})
 }
 

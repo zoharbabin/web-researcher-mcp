@@ -49,7 +49,7 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		if cached, ok := deps.Cache.Get(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("scrape_page", time.Since(start), nil, "", true)
 			auditToolCall(deps, "scrape_page", time.Since(start), nil, "")
-			return textResult(string(cached)), nil, nil
+			return structuredResult(cached), nil, nil
 		}
 
 		result, err := deps.Scraper.Scrape(ctx, input.URL, maxLength)
@@ -90,7 +90,7 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		deps.Metrics.RecordToolCall("scrape_page", time.Since(start), nil, "", false)
 		auditToolCall(deps, "scrape_page", time.Since(start), nil, "")
 
-		return textResult(string(jsonBytes)), nil, nil
+		return structuredResult(jsonBytes), nil, nil
 	})
 }
 

@@ -76,7 +76,7 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 		if cached, ok := deps.Cache.Get(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("academic_search", time.Since(start), nil, "", true)
 			auditToolCall(deps, "academic_search", time.Since(start), nil, "")
-			return textResult(string(cached)), nil, nil
+			return structuredResult(cached), nil, nil
 		}
 
 		sites := academicSites
@@ -138,7 +138,7 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 		deps.Metrics.RecordToolCall("academic_search", time.Since(start), nil, "", false)
 		auditToolCall(deps, "academic_search", time.Since(start), nil, "")
 
-		return textResult(string(jsonBytes)), nil, nil
+		return structuredResult(jsonBytes), nil, nil
 	})
 }
 

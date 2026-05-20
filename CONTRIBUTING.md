@@ -273,7 +273,7 @@ func registerMyTool(srv *mcp.Server, deps Dependencies) {
 Key conventions:
 - All tool inputs use typed structs with `jsonschema` tags (the SDK auto-generates JSON Schema from these)
 - Use `deps.Cache` for caching, `deps.Metrics` for telemetry, `deps.Auditor` for audit logging
-- Return errors via `&mcp.CallToolResult{IsError: true, Content: [...]}` for user-facing errors
+- Return errors via `toolError(msg)` and success via `structuredResult(jsonBytes)` (see `internal/tools/search.go` for helpers)
 - Update `docs/TOOLS.md` with the parameter schema
 
 ## Getting Help
