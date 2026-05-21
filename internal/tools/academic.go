@@ -53,7 +53,7 @@ type academicSearchInput struct {
 func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "academic_search",
-		Description:  "Search peer-reviewed papers across arXiv, PubMed, IEEE, Nature, Springer, and 12+ scholarly databases via site-restricted web search. Returns JSON with fields: papers (array of {title, url, source, abstract}), query, totalResults, resultCount, source. No special query syntax needed — use technical terms directly. year_from/year_to combine with source filter to narrow scope. On no matches returns resultCount: 0 with empty array; on failure returns isError with message. Subject to per-tenant rate limit (default 30 req/min) with automatic provider fallback. Use this for scientific research, literature reviews, or citations — not for general content. Use web_search for non-academic technical content, or news_search for recent scientific announcements. Set pdf_only=true when you plan to pass URLs to scrape_page for full-text extraction. Results cached 24 hours.",
+		Description:  "Search peer-reviewed papers across arXiv, PubMed, IEEE, Nature, Springer, and 12+ scholarly databases via site-restricted web search. Returns JSON with fields: papers (array of {title, url, source, abstract}), query, totalResults, resultCount, source. No special query syntax needed — use technical terms directly. year_from/year_to combine with source filter to narrow scope. On no matches returns resultCount: 0 with empty array; on failure returns isError with message. Subject to upstream API quotas with automatic provider fallback. Use this for scientific research, literature reviews, or citations — not for general content. Use web_search for non-academic technical content, or news_search for recent scientific announcements. Set pdf_only=true when you plan to pass URLs to scrape_page for full-text extraction. Results cached 24 hours.",
 		Annotations:  readOnlyAnnotations(true, true),
 		OutputSchema: academicSearchOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input academicSearchInput) (*mcp.CallToolResult, any, error) {
@@ -75,7 +75,7 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 		cacheKey := searchCacheKey("academic", input.Query, numResults, input.YearFrom, input.YearTo, source)
 		if cached, ok := deps.Cache.Get(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("academic_search", time.Since(start), nil, "", true)
-			auditToolCall(deps, "academic_search", time.Since(start), nil, "")
+			auditToolCall(ctx, deps, "academic_search", time.Since(start), nil, "")
 			return structuredResult(cached), nil, nil
 		}
 
@@ -107,8 +107,15 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 			NumResults: numResults,
 		})
 		if err != nil {
-			deps.Metrics.RecordToolCall("academic_search", time.Since(start), err, "upstream_error", false)
-			auditToolCall(deps, "academic_search", time.Since(start), err, "upstream_error")
+			errCode := "upstream_error"
+			if isRateLimitError(err) {
+				errCode = "rate_limited"
+			}
+			deps.Metrics.RecordToolCall("academic_search", time.Since(start), err, errCode, false)
+			auditToolCall(ctx, deps, "academic_search", time.Since(start), err, errCode)
+			if isRateLimitError(err) {
+				return rateLimitError(err), nil, nil
+			}
 			return toolError(fmt.Sprintf("academic search failed: %v", err)), nil, nil
 		}
 
@@ -136,7 +143,7 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 		jsonBytes, _ := json.Marshal(output)
 		deps.Cache.Set(ctx, cacheKey, jsonBytes, 24*time.Hour)
 		deps.Metrics.RecordToolCall("academic_search", time.Since(start), nil, "", false)
-		auditToolCall(deps, "academic_search", time.Since(start), nil, "")
+		auditToolCall(ctx, deps, "academic_search", time.Since(start), nil, "")
 
 		return structuredResult(jsonBytes), nil, nil
 	})

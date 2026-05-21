@@ -25,7 +25,7 @@ type imageSearchInput struct {
 func registerImageSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "image_search",
-		Description:  "Find images by query with filters for size, type, color, and format. Returns JSON with fields: images (array of {title, link, thumbnailLink, displayLink, contextLink, width, height, fileSize}), query, resultCount. Results sorted by relevance; max 10 per call, no pagination. On no matches returns resultCount: 0 with empty array; on failure returns isError with message. Subject to per-tenant rate limit (default 30 req/min) with automatic provider fallback. Use this for visual assets or image references — not for text information. Use web_search for pages containing images, or scrape_page to extract images from a known URL. Results cached 30 min.",
+		Description:  "Find images by query with filters for size, type, color, and format. Returns JSON with fields: images (array of {title, link, thumbnailLink, displayLink, contextLink, width, height, fileSize}), query, resultCount. Results sorted by relevance; max 10 per call, no pagination. On no matches returns resultCount: 0 with empty array; on failure returns isError with message. Subject to upstream API quotas with automatic provider fallback. Use this for visual assets or image references — not for text information. Use web_search for pages containing images, or scrape_page to extract images from a known URL. Results cached 30 min.",
 		Annotations:  readOnlyAnnotations(true, true),
 		OutputSchema: imageSearchOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input imageSearchInput) (*mcp.CallToolResult, any, error) {
@@ -43,7 +43,7 @@ func registerImageSearch(srv *mcp.Server, deps Dependencies) {
 		cacheKey := searchCacheKey("image", input.Query, numResults, input.Size, input.Type, input.ColorType, input.DominantColor, input.FileType)
 		if cached, ok := deps.Cache.Get(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("image_search", time.Since(start), nil, "", true)
-			auditToolCall(deps, "image_search", time.Since(start), nil, "")
+			auditToolCall(ctx, deps, "image_search", time.Since(start), nil, "")
 			return structuredResult(cached), nil, nil
 		}
 
@@ -58,8 +58,15 @@ func registerImageSearch(srv *mcp.Server, deps Dependencies) {
 			Safe:          input.Safe,
 		})
 		if err != nil {
-			deps.Metrics.RecordToolCall("image_search", time.Since(start), err, "upstream_error", false)
-			auditToolCall(deps, "image_search", time.Since(start), err, "upstream_error")
+			errCode := "upstream_error"
+			if isRateLimitError(err) {
+				errCode = "rate_limited"
+			}
+			deps.Metrics.RecordToolCall("image_search", time.Since(start), err, errCode, false)
+			auditToolCall(ctx, deps, "image_search", time.Since(start), err, errCode)
+			if isRateLimitError(err) {
+				return rateLimitError(err), nil, nil
+			}
 			return toolError(fmt.Sprintf("image search failed: %v", err)), nil, nil
 		}
 
@@ -72,7 +79,7 @@ func registerImageSearch(srv *mcp.Server, deps Dependencies) {
 		jsonBytes, _ := json.Marshal(output)
 		deps.Cache.Set(ctx, cacheKey, jsonBytes, 30*time.Minute)
 		deps.Metrics.RecordToolCall("image_search", time.Since(start), nil, "", false)
-		auditToolCall(deps, "image_search", time.Since(start), nil, "")
+		auditToolCall(ctx, deps, "image_search", time.Since(start), nil, "")
 
 		return structuredResult(jsonBytes), nil, nil
 	})

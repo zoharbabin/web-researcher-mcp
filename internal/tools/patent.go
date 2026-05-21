@@ -27,7 +27,7 @@ type patentSearchInput struct {
 func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "patent_search",
-		Description:  "Search Google Patents for prior art, competitive landscapes, or specific patents by number. Returns JSON with fields: patents (array of {title, url, number, abstract}), query, searchType, resultCount. Query accepts patent numbers (e.g. 'US11234567') or natural-language invention descriptions. search_type adjusts strategy: prior_art (broad technical), specific (exact lookup), landscape (competitive overview). Auto-generates assignee name variations (with/without Inc, LLC, Corp, Ltd suffixes). On no matches returns resultCount: 0 with empty array; on failure returns isError with message. Subject to per-tenant rate limit with provider fallback. Use academic_search for published research papers, or web_search for general technical content. Results cached 24 hours.",
+		Description:  "Search Google Patents for prior art, competitive landscapes, or specific patents by number. Returns JSON with fields: patents (array of {title, url, number, abstract}), query, searchType, resultCount. Query accepts patent numbers (e.g. 'US11234567') or natural-language invention descriptions. search_type adjusts strategy: prior_art (broad technical), specific (exact lookup), landscape (competitive overview). Auto-generates assignee name variations (with/without Inc, LLC, Corp, Ltd suffixes). On no matches returns resultCount: 0 with empty array; on failure returns isError with message. Subject to upstream API quotas with automatic provider fallback. Use academic_search for published research papers, or web_search for general technical content. Results cached 24 hours.",
 		Annotations:  readOnlyAnnotations(true, true),
 		OutputSchema: patentSearchOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input patentSearchInput) (*mcp.CallToolResult, any, error) {
@@ -49,7 +49,7 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 		cacheKey := searchCacheKey("patent", input.Query, numResults, searchType, input.PatentOffice, input.Assignee, input.CPCCode)
 		if cached, ok := deps.Cache.Get(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("patent_search", time.Since(start), nil, "", true)
-			auditToolCall(deps, "patent_search", time.Since(start), nil, "")
+			auditToolCall(ctx, deps, "patent_search", time.Since(start), nil, "")
 			return structuredResult(cached), nil, nil
 		}
 
@@ -60,8 +60,15 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 			NumResults: numResults,
 		})
 		if err != nil {
-			deps.Metrics.RecordToolCall("patent_search", time.Since(start), err, "upstream_error", false)
-			auditToolCall(deps, "patent_search", time.Since(start), err, "upstream_error")
+			errCode := "upstream_error"
+			if isRateLimitError(err) {
+				errCode = "rate_limited"
+			}
+			deps.Metrics.RecordToolCall("patent_search", time.Since(start), err, errCode, false)
+			auditToolCall(ctx, deps, "patent_search", time.Since(start), err, errCode)
+			if isRateLimitError(err) {
+				return rateLimitError(err), nil, nil
+			}
 			return toolError(fmt.Sprintf("patent search failed: %v", err)), nil, nil
 		}
 
@@ -92,7 +99,7 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 		jsonBytes, _ := json.Marshal(output)
 		deps.Cache.Set(ctx, cacheKey, jsonBytes, 24*time.Hour)
 		deps.Metrics.RecordToolCall("patent_search", time.Since(start), nil, "", false)
-		auditToolCall(deps, "patent_search", time.Since(start), nil, "")
+		auditToolCall(ctx, deps, "patent_search", time.Since(start), nil, "")
 
 		return structuredResult(jsonBytes), nil, nil
 	})

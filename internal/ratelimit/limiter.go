@@ -1,10 +1,12 @@
 package ratelimit
 
 import (
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
 
+	"github.com/zoharbabin/web-researcher-mcp/internal/auth"
 	"github.com/zoharbabin/web-researcher-mcp/internal/config"
 	"golang.org/x/time/rate"
 )
@@ -71,21 +73,23 @@ func (l *Limiter) getTenantLimiter(tenantID string) *tenantLimiter {
 
 func (l *Limiter) Wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.Context().Value(contextKeyTenantID)
-		tid := "anonymous"
-		if tenantID != nil {
-			tid = tenantID.(string)
-		}
+		tid := auth.TenantIDFromContext(r.Context())
 
 		if !l.Allow(tid) {
 			w.Header().Set("Retry-After", "60")
-			http.Error(w, "rate limited", http.StatusTooManyRequests)
+			msg := fmt.Sprintf(
+				"Rate limited: %d req/min exceeded for tenant %q. Retry after 60s. Set RATE_LIMIT_PER_TENANT to increase.",
+				l.config.PerTenant, tid)
+			http.Error(w, msg, http.StatusTooManyRequests)
 			return
 		}
 
 		if !l.AllowDaily(tid) {
 			w.Header().Set("Retry-After", "3600")
-			http.Error(w, "daily quota exceeded", http.StatusTooManyRequests)
+			msg := fmt.Sprintf(
+				"Daily quota exceeded: %d req/day for tenant %q. Resets at midnight UTC. Set DAILY_QUOTA_PER_TENANT to increase.",
+				l.config.DailyQuota, tid)
+			http.Error(w, msg, http.StatusTooManyRequests)
 			return
 		}
 
@@ -93,9 +97,43 @@ func (l *Limiter) Wrap(next http.Handler) http.Handler {
 	})
 }
 
-type contextKey string
+// TenantStats returns rate limit status for a given tenant.
+type TenantStats struct {
+	TenantID        string `json:"tenantId"`
+	PerMinuteLimit  int    `json:"perMinuteLimit"`
+	DailyLimit      int    `json:"dailyLimit"`
+	DailyUsed       int64  `json:"dailyUsed"`
+	DailyRemaining  int64  `json:"dailyRemaining"`
+	DailyResetsAt   string `json:"dailyResetsAt"`
+}
 
-const contextKeyTenantID contextKey = "tenantID"
+// Stats returns rate limit configuration and usage for a tenant.
+func (l *Limiter) Stats(tenantID string) TenantStats {
+	stats := TenantStats{
+		TenantID:       tenantID,
+		PerMinuteLimit: l.config.PerTenant,
+		DailyLimit:     l.config.DailyQuota,
+	}
+
+	if v, ok := l.tenants.Load(tenantID); ok {
+		tl := v.(*tenantLimiter)
+		tl.mu.Lock()
+		stats.DailyUsed = tl.dailyCount
+		stats.DailyResetsAt = tl.dailyReset.UTC().Format(time.RFC3339)
+		tl.mu.Unlock()
+	}
+
+	stats.DailyRemaining = int64(l.config.DailyQuota) - stats.DailyUsed
+	if stats.DailyRemaining < 0 {
+		stats.DailyRemaining = 0
+	}
+	return stats
+}
+
+// Config returns the rate limit configuration.
+func (l *Limiter) Config() config.RateLimitConfig {
+	return l.config
+}
 
 func (l *Limiter) Cleanup() {
 	l.cleanupMu.Lock()

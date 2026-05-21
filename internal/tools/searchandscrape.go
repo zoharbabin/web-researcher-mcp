@@ -26,7 +26,7 @@ type searchAndScrapeInput struct {
 func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "search_and_scrape",
-		Description:  "Search the web and extract full content from top results in one call. Scrapes in parallel (max 5 concurrent), deduplicates content across sources, and scores each source on relevance and quality. Returns JSON with fields: query, combinedContent, sources (array of {url, title, content, contentType, scores} — included when include_sources=true), summary ({urlsSearched, urlsScraped, processingTimeMs}), sizeMetadata ({totalLength, estimatedTokens, sizeCategory}). On zero search matches returns empty combinedContent with urlsSearched: 0. Individual scrape failures are silently skipped (urlsScraped < urlsSearched indicates partial failures). num_results controls sources scraped (more = slower, typically 2-15s). Subject to per-tenant rate limit with provider fallback. Use web_search instead if you only need URLs; use scrape_page for a single known URL. Not cached (combines live search + scrape).",
+		Description:  "Search the web and extract full content from top results in one call. Scrapes in parallel (max 5 concurrent), deduplicates content across sources, and scores each source on relevance and quality. Returns JSON with fields: query, combinedContent, sources (array of {url, title, content, contentType, scores} — included when include_sources=true), summary ({urlsSearched, urlsScraped, processingTimeMs}), sizeMetadata ({totalLength, estimatedTokens, sizeCategory}). On zero search matches returns empty combinedContent with urlsSearched: 0. Individual scrape failures are silently skipped (urlsScraped < urlsSearched indicates partial failures). num_results controls sources scraped (more = slower, typically 2-15s). Subject to upstream API quotas with automatic provider fallback. Use web_search instead if you only need URLs; use scrape_page for a single known URL. Not cached (combines live search + scrape).",
 		Annotations:  readOnlyAnnotations(true, true),
 		OutputSchema: searchAndScrapeOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input searchAndScrapeInput) (*mcp.CallToolResult, any, error) {
@@ -56,8 +56,15 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 			NumResults: numResults,
 		})
 		if err != nil {
-			deps.Metrics.RecordToolCall("search_and_scrape", time.Since(start), err, "upstream_error", false)
-			auditToolCall(deps, "search_and_scrape", time.Since(start), err, "upstream_error")
+			errCode := "upstream_error"
+			if isRateLimitError(err) {
+				errCode = "rate_limited"
+			}
+			deps.Metrics.RecordToolCall("search_and_scrape", time.Since(start), err, errCode, false)
+			auditToolCall(ctx, deps, "search_and_scrape", time.Since(start), err, errCode)
+			if isRateLimitError(err) {
+				return rateLimitError(err), nil, nil
+			}
 			return toolError(fmt.Sprintf("search failed: %v", err)), nil, nil
 		}
 
@@ -97,7 +104,7 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 
 		jsonBytes, _ := json.Marshal(output)
 		deps.Metrics.RecordToolCall("search_and_scrape", time.Since(start), nil, "", false)
-		auditToolCall(deps, "search_and_scrape", time.Since(start), nil, "")
+		auditToolCall(ctx, deps, "search_and_scrape", time.Since(start), nil, "")
 
 		return structuredResult(jsonBytes), nil, nil
 	})

@@ -22,7 +22,7 @@ type newsSearchInput struct {
 func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "news_search",
-		Description:  "Search recent news articles by topic with time-based freshness filtering. Returns JSON with fields: articles (array of {title, url, source, publishedAt, snippet}), query, resultCount. Default freshness is 'week'; use 'hour' or 'day' for breaking news. On no matches returns resultCount: 0 with empty array; on failure returns isError with message. Subject to per-tenant rate limit (default 30 req/min) with automatic provider fallback. Coverage depends on configured search provider. Use web_search instead for evergreen/non-news content; use academic_search for peer-reviewed findings; use search_and_scrape if you need full article text beyond snippets. Results cached 15 min due to news volatility.",
+		Description:  "Search recent news articles by topic with time-based freshness filtering. Returns JSON with fields: articles (array of {title, url, source, publishedAt, snippet}), query, resultCount. Default freshness is 'week'; use 'hour' or 'day' for breaking news. On no matches returns resultCount: 0 with empty array; on failure returns isError with message. Subject to upstream API quotas with automatic provider fallback. Coverage depends on configured search provider. Use web_search instead for evergreen/non-news content; use academic_search for peer-reviewed findings; use search_and_scrape if you need full article text beyond snippets. Results cached 15 min due to news volatility.",
 		Annotations:  readOnlyAnnotations(true, true),
 		OutputSchema: newsSearchOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input newsSearchInput) (*mcp.CallToolResult, any, error) {
@@ -48,7 +48,7 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 		cacheKey := searchCacheKey("news", input.Query, numResults, freshness, sortBy, input.NewsSource)
 		if cached, ok := deps.Cache.Get(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("news_search", time.Since(start), nil, "", true)
-			auditToolCall(deps, "news_search", time.Since(start), nil, "")
+			auditToolCall(ctx, deps, "news_search", time.Since(start), nil, "")
 			return structuredResult(cached), nil, nil
 		}
 
@@ -60,8 +60,15 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 			Source:     input.NewsSource,
 		})
 		if err != nil {
-			deps.Metrics.RecordToolCall("news_search", time.Since(start), err, "upstream_error", false)
-			auditToolCall(deps, "news_search", time.Since(start), err, "upstream_error")
+			errCode := "upstream_error"
+			if isRateLimitError(err) {
+				errCode = "rate_limited"
+			}
+			deps.Metrics.RecordToolCall("news_search", time.Since(start), err, errCode, false)
+			auditToolCall(ctx, deps, "news_search", time.Since(start), err, errCode)
+			if isRateLimitError(err) {
+				return rateLimitError(err), nil, nil
+			}
 			return toolError(fmt.Sprintf("news search failed: %v", err)), nil, nil
 		}
 
@@ -74,7 +81,7 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 		jsonBytes, _ := json.Marshal(output)
 		deps.Cache.Set(ctx, cacheKey, jsonBytes, 15*time.Minute)
 		deps.Metrics.RecordToolCall("news_search", time.Since(start), nil, "", false)
-		auditToolCall(deps, "news_search", time.Since(start), nil, "")
+		auditToolCall(ctx, deps, "news_search", time.Since(start), nil, "")
 
 		return structuredResult(jsonBytes), nil, nil
 	})

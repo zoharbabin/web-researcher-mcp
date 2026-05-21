@@ -258,10 +258,16 @@ type myToolInput struct {
 
 func registerMyTool(srv *mcp.Server, deps Dependencies) {
     mcp.AddTool(srv, &mcp.Tool{
-        Name:        "my_tool",
-        Description: "One-line description for the AI assistant",
+        Name:         "my_tool",
+        Description:  "One-line description for the AI assistant",
+        Annotations:  readOnlyAnnotations(true, true),
+        OutputSchema: myToolOutputSchema,
     }, func(ctx context.Context, req *mcp.CallToolRequest, input myToolInput) (*mcp.CallToolResult, any, error) {
+        start := time.Now()
         // Implementation here — use deps.Cache, deps.Search, etc.
+        deps.Metrics.RecordToolCall("my_tool", time.Since(start), nil, "", false)
+        auditToolCall(ctx, deps, "my_tool", time.Since(start), nil, "")
+        return structuredResult(jsonBytes), nil, nil
     })
 }
 ```

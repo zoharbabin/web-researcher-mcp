@@ -8,6 +8,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/zoharbabin/web-researcher-mcp/internal/auth"
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
 )
 
@@ -37,7 +38,7 @@ func registerSequentialSearch(srv *mcp.Server, deps Dependencies) {
 			return toolError("searchStep is required"), nil, nil
 		}
 
-		tenantID := "default"
+		tenantID := auth.TenantIDFromContext(ctx)
 
 		var sess *session.Session
 		var err error
@@ -91,7 +92,7 @@ func registerSequentialSearch(srv *mcp.Server, deps Dependencies) {
 
 		jsonBytes, _ := json.Marshal(output)
 		deps.Metrics.RecordToolCall("sequential_search", time.Since(start), nil, "", false)
-		auditToolCall(deps, "sequential_search", time.Since(start), nil, "")
+		auditToolCall(ctx, deps, "sequential_search", time.Since(start), nil, "")
 
 		return structuredResult(jsonBytes), nil, nil
 	})

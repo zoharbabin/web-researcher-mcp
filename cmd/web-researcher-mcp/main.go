@@ -130,7 +130,7 @@ func main() {
 	})
 
 	tools.RegisterAll(srv.MCP(), toolDeps)
-	resources.RegisterAll(srv.MCP(), metricsCollector, sessionManager)
+	resources.RegisterAll(srv.MCP(), metricsCollector, sessionManager, rateLimiter)
 
 	ctx, cancel := signal.NotifyContext(context.Background(),
 		syscall.SIGINT, syscall.SIGTERM)

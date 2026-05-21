@@ -141,9 +141,9 @@ func Load() (*Config, error) {
 		CacheIsolation:     envOrDefault("CACHE_ISOLATION", "shared"),
 		RedisURL:           os.Getenv("REDIS_URL"),
 		RateLimit: RateLimitConfig{
-			PerTenant:  envInt("RATE_LIMIT_PER_TENANT", 30),
+			PerTenant:  envInt("RATE_LIMIT_PER_TENANT", 120),
 			Global:     envInt("RATE_LIMIT_GLOBAL", 1000),
-			DailyQuota: envInt("DAILY_QUOTA_PER_TENANT", 1000),
+			DailyQuota: envInt("DAILY_QUOTA_PER_TENANT", 5000),
 		},
 		AllowPrivateIPs:      envBool("ALLOW_PRIVATE_IPS", false),
 		AllowedDomains:       splitCSV(os.Getenv("ALLOWED_DOMAINS")),

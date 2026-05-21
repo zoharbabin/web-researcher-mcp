@@ -6,11 +6,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/audit"
+	"github.com/zoharbabin/web-researcher-mcp/internal/auth"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
@@ -30,7 +32,7 @@ type webSearchInput struct {
 func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "web_search",
-		Description:  "Search the web for URLs and metadata without fetching page content. Returns JSON with fields: urls (string array), results (array of {title, url, snippet, displayLink}), query, resultCount. lens and site are mutually exclusive (lens overrides site if both provided). On no matches returns resultCount: 0 with empty results array; on failure returns isError with message. Subject to per-tenant rate limit (default 30 req/min) with automatic provider fallback and circuit breaker recovery. Supports lenses (programming, news, tech, legal, medical, finance, science, government) for domain-restricted search. Use search_and_scrape instead when you need full page content; use news_search for time-sensitive current events; use academic_search for scholarly papers. Results cached 30 min; use time_range to constrain freshness when cache staleness is a concern.",
+		Description:  "Search the web for URLs and metadata without fetching page content. Returns JSON with fields: urls (string array), results (array of {title, url, snippet, displayLink}), query, resultCount. lens and site are mutually exclusive (lens overrides site if both provided). On no matches returns resultCount: 0 with empty results array; on failure returns isError with message. Subject to upstream API quotas with automatic provider fallback and circuit breaker recovery. Supports lenses (programming, news, tech, legal, medical, finance, science, government) for domain-restricted search. Use search_and_scrape instead when you need full page content; use news_search for time-sensitive current events; use academic_search for scholarly papers. Results cached 30 min; use time_range to constrain freshness when cache staleness is a concern.",
 		Annotations:  readOnlyAnnotations(true, true),
 		OutputSchema: webSearchOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input webSearchInput) (*mcp.CallToolResult, any, error) {
@@ -51,7 +53,7 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 		cacheKey := searchCacheKey("web", input.Query, numResults, input.TimeRange, input.Safe, input.Language, input.Site, input.Lens)
 		if cached, ok := deps.Cache.Get(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("web_search", time.Since(start), nil, "", true)
-			ev := audit.NewEvent("tool_call", "", "")
+			ev := audit.NewEvent("tool_call", auth.TenantIDFromContext(ctx), auth.UserIDFromContext(ctx))
 			ev.ToolName = "web_search"
 			ev.Duration = time.Since(start).Milliseconds()
 			ev.Success = true
@@ -89,14 +91,21 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 
 		results, err := deps.Search.Web(ctx, params)
 		if err != nil {
-			deps.Metrics.RecordToolCall("web_search", time.Since(start), err, "upstream_error", false)
-			ev := audit.NewEvent("tool_call", "", "")
+			errCode := "upstream_error"
+			if isRateLimitError(err) {
+				errCode = "rate_limited"
+			}
+			deps.Metrics.RecordToolCall("web_search", time.Since(start), err, errCode, false)
+			ev := audit.NewEvent("tool_call", auth.TenantIDFromContext(ctx), auth.UserIDFromContext(ctx))
 			ev.ToolName = "web_search"
 			ev.Duration = time.Since(start).Milliseconds()
 			ev.Success = false
-			ev.ErrorCode = "upstream_error"
+			ev.ErrorCode = errCode
 			ev.Metadata = map[string]any{"query": input.Query, "error": err.Error()}
 			deps.Auditor.Log(ev)
+			if isRateLimitError(err) {
+				return rateLimitError(err), nil, nil
+			}
 			return toolError(fmt.Sprintf("search failed: %v", err)), nil, nil
 		}
 
@@ -115,7 +124,7 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 		jsonBytes, _ := json.Marshal(output)
 		deps.Cache.Set(ctx, cacheKey, jsonBytes, 30*time.Minute)
 		deps.Metrics.RecordToolCall("web_search", time.Since(start), nil, "", false)
-		ev := audit.NewEvent("tool_call", "", "")
+		ev := audit.NewEvent("tool_call", auth.TenantIDFromContext(ctx), auth.UserIDFromContext(ctx))
 		ev.ToolName = "web_search"
 		ev.Duration = time.Since(start).Milliseconds()
 		ev.Success = true
@@ -135,11 +144,13 @@ func searchCacheKey(toolName string, parts ...any) string {
 	return "search:" + hex.EncodeToString(h.Sum(nil))[:32]
 }
 
-func auditToolCall(deps Dependencies, toolName string, duration time.Duration, err error, errCode string) {
+func auditToolCall(ctx context.Context, deps Dependencies, toolName string, duration time.Duration, err error, errCode string) {
 	if deps.Auditor == nil {
 		return
 	}
-	event := audit.NewEvent("tool_call", "default", "anonymous")
+	tenantID := auth.TenantIDFromContext(ctx)
+	userID := auth.UserIDFromContext(ctx)
+	event := audit.NewEvent("tool_call", tenantID, userID)
 	event.ToolName = toolName
 	event.Duration = duration.Milliseconds()
 	event.Success = err == nil
@@ -156,6 +167,24 @@ func toolError(msg string) *mcp.CallToolResult {
 		},
 		IsError: true,
 	}
+}
+
+func rateLimitError(err error) *mcp.CallToolResult {
+	msg := fmt.Sprintf("Rate limited by upstream provider: %v. Retry after 60s, or use a different search provider.", err)
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			&mcp.TextContent{Text: msg},
+		},
+		IsError: true,
+	}
+}
+
+func isRateLimitError(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "rate limited") || strings.Contains(s, "429") || strings.Contains(s, "quota")
 }
 
 func textResult(text string) *mcp.CallToolResult {

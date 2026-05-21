@@ -48,14 +48,14 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		cacheKey := scrapeCacheKey(input.URL, mode)
 		if cached, ok := deps.Cache.Get(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("scrape_page", time.Since(start), nil, "", true)
-			auditToolCall(deps, "scrape_page", time.Since(start), nil, "")
+			auditToolCall(ctx, deps, "scrape_page", time.Since(start), nil, "")
 			return structuredResult(cached), nil, nil
 		}
 
 		result, err := deps.Scraper.Scrape(ctx, input.URL, maxLength)
 		if err != nil {
 			deps.Metrics.RecordToolCall("scrape_page", time.Since(start), err, "upstream_error", false)
-			auditToolCall(deps, "scrape_page", time.Since(start), err, "upstream_error")
+			auditToolCall(ctx, deps, "scrape_page", time.Since(start), err, "upstream_error")
 			return toolError(fmt.Sprintf("scrape failed: %v", err)), nil, nil
 		}
 
@@ -88,7 +88,7 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		jsonBytes, _ := json.Marshal(output)
 		deps.Cache.Set(ctx, cacheKey, jsonBytes, time.Hour)
 		deps.Metrics.RecordToolCall("scrape_page", time.Since(start), nil, "", false)
-		auditToolCall(deps, "scrape_page", time.Since(start), nil, "")
+		auditToolCall(ctx, deps, "scrape_page", time.Since(start), nil, "")
 
 		return structuredResult(jsonBytes), nil, nil
 	})

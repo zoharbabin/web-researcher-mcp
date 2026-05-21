@@ -424,11 +424,23 @@ In HTTP mode, the server supports OAuth 2.1 with:
 <details>
 <summary><strong>Rate Limiting</strong></summary>
 
-Three-tier rate limiting protects both the server and upstream APIs:
+Rate limiting applies only in **HTTP mode** (when `PORT` is set). STDIO mode has no internal rate limiting — only upstream API quotas apply.
 
-1. **Per-client** -- token bucket per authenticated session
-2. **Per-provider** -- prevents exceeding upstream API quotas
-3. **Global** -- server-wide backpressure valve
+In HTTP mode, three tiers protect the server and upstream APIs:
+
+| Tier | Env Variable | Default | Scope |
+|------|-------------|---------|-------|
+| Per-tenant | `RATE_LIMIT_PER_TENANT` | 120 req/min | Per authenticated tenant (or shared "default" bucket if no OAuth) |
+| Daily quota | `DAILY_QUOTA_PER_TENANT` | 5000 req/day | Per tenant |
+| Global | `RATE_LIMIT_GLOBAL` | 1000 req/s | Server-wide backpressure |
+
+**Important:** Without OAuth, all clients share a single "default" tenant bucket. If you run multiple AI sessions against one HTTP instance, raise the per-tenant limit:
+
+```bash
+RATE_LIMIT_PER_TENANT=200 DAILY_QUOTA_PER_TENANT=5000 PORT=3000 ./web-researcher-mcp
+```
+
+For STDIO deployments (Claude Code, Cursor, Claude Desktop), the only limits are your upstream search API quotas (e.g., Google PSE free tier: 100 queries/day).
 
 </details>
 
@@ -592,9 +604,15 @@ The disk cache auto-invalidates on version change. If you're running from source
 </details>
 
 <details>
-<summary><strong>Rate limited by Google (HTTP 429)</strong></summary>
+<summary><strong>Getting 429 errors (rate limited)</strong></summary>
 
-Google PSE free tier allows 100 queries/day. Either upgrade to paid ($5/1K queries), or switch to Brave Search (`SEARCH_PROVIDER=brave`) for higher-volume queries.
+Two different things can cause 429s:
+
+1. **Internal rate limiter** (HTTP mode only): The server's per-tenant limit (default 120 req/min) is shared across all unauthenticated clients hitting the same "default" tenant bucket. Fix: raise the limit with `RATE_LIMIT_PER_TENANT=200` or configure OAuth so each client gets its own bucket.
+
+2. **Upstream API quota** (any mode): Google PSE free tier allows 100 queries/day. Fix: upgrade to paid ($5/1K queries), switch to Brave Search (`SEARCH_PROVIDER=brave`), or configure multi-provider routing (`SEARCH_ROUTING=brave,google`) so rate-limited providers fail over automatically.
+
+To tell which one you hit: internal limits return immediately; upstream 429s appear after a network round-trip and include the provider name in the error message (e.g., "google API rate limited").
 
 </details>
 

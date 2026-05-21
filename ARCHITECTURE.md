@@ -216,10 +216,13 @@ Default values (all configurable via environment variables — see `docs/DEPLOYM
 
 ```
 Global request throughput:    1000 req/s     (RATE_LIMIT_GLOBAL)
-Per-tenant rate limit:        30 req/min     (RATE_LIMIT_PER_TENANT)
+Per-tenant rate limit:        120 req/min    (RATE_LIMIT_PER_TENANT)  [HTTP mode only]
+Daily quota per tenant:       5000 req/day   (DAILY_QUOTA_PER_TENANT) [HTTP mode only]
 Scraping semaphore:           5 slots        (MAX_SCRAPE_CONCURRENCY)
 Browser pool (go-rod):        3 slots        (subset of scraping slots)
 ```
+
+Rate limiting applies only in HTTP mode. STDIO mode (the default for Claude Code, Cursor, and Claude Desktop) has no internal rate limiting — only upstream API quotas apply.
 
 Browser scrapes hold both a scraping slot and a browser slot simultaneously.
 

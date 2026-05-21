@@ -89,14 +89,14 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.CacheMaxMemoryMB != 64 {
 		t.Errorf("expected default CacheMaxMemoryMB=64, got %d", cfg.CacheMaxMemoryMB)
 	}
-	if cfg.RateLimit.PerTenant != 30 {
-		t.Errorf("expected default PerTenant=30, got %d", cfg.RateLimit.PerTenant)
+	if cfg.RateLimit.PerTenant != 120 {
+		t.Errorf("expected default PerTenant=120, got %d", cfg.RateLimit.PerTenant)
 	}
 	if cfg.RateLimit.Global != 1000 {
 		t.Errorf("expected default Global=1000, got %d", cfg.RateLimit.Global)
 	}
-	if cfg.RateLimit.DailyQuota != 1000 {
-		t.Errorf("expected default DailyQuota=1000, got %d", cfg.RateLimit.DailyQuota)
+	if cfg.RateLimit.DailyQuota != 5000 {
+		t.Errorf("expected default DailyQuota=5000, got %d", cfg.RateLimit.DailyQuota)
 	}
 	if cfg.MaxScrapeConcurrency != 5 {
 		t.Errorf("expected default MaxScrapeConcurrency=5, got %d", cfg.MaxScrapeConcurrency)

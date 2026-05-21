@@ -247,11 +247,36 @@ When no explicit routing is configured for an operation, the `default` list is u
 
 ### Rate Limiting
 
+Rate limiting applies **only in HTTP mode** (when `PORT` is set). STDIO mode has no internal rate limiting — only upstream API quotas apply.
+
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `RATE_LIMIT_PER_TENANT` | Requests per minute per tenant | `30` |
+| `RATE_LIMIT_PER_TENANT` | Requests per minute per tenant | `120` |
 | `RATE_LIMIT_GLOBAL` | Total requests per second | `1000` |
-| `DAILY_QUOTA_PER_TENANT` | Max API calls per tenant per day | `1000` |
+| `DAILY_QUOTA_PER_TENANT` | Max API calls per tenant per day | `5000` |
+
+**How tenant identity works:**
+- With OAuth configured: tenant ID is extracted from the JWT `tenant_id` claim. Each authenticated tenant gets independent rate limit buckets.
+- Without OAuth: all requests share a single "default" tenant bucket. This means multiple AI sessions hitting the same HTTP instance share 120 req/min by default.
+
+**Recommended settings for common scenarios:**
+
+```bash
+# Single developer, multiple AI sessions (no OAuth)
+RATE_LIMIT_PER_TENANT=200
+DAILY_QUOTA_PER_TENANT=5000
+
+# Team server with OAuth (each team member gets their own bucket)
+RATE_LIMIT_PER_TENANT=60
+DAILY_QUOTA_PER_TENANT=2000
+
+# High-throughput automation
+RATE_LIMIT_PER_TENANT=500
+RATE_LIMIT_GLOBAL=5000
+DAILY_QUOTA_PER_TENANT=10000
+```
+
+**Note:** These limits protect the server, not your upstream API quota. Google PSE free tier is 100 queries/day regardless of what you set here. Configure `SEARCH_ROUTING` with multiple providers if you need higher throughput.
 
 ### Scraping
 
@@ -527,6 +552,7 @@ These are HTTP-only operational endpoints, not exposed via MCP tools.
 |-----|-------------|
 | `stats://tools` | Per-tool execution metrics (totalCalls, avgLatencyMs, etc.) |
 | `stats://sessions` | Count of active sequential research sessions |
+| `stats://rate-limits` | Rate limit config and usage (per-tenant limits, daily quota remaining, reset time) |
 
 ### Prompts
 

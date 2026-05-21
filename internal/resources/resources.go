@@ -7,15 +7,16 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/metrics"
+	"github.com/zoharbabin/web-researcher-mcp/internal/ratelimit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
 )
 
-func RegisterAll(srv *mcp.Server, metricsCollector *metrics.Collector, sessionManager *session.Manager) {
-	registerResources(srv, metricsCollector, sessionManager)
+func RegisterAll(srv *mcp.Server, metricsCollector *metrics.Collector, sessionManager *session.Manager, rateLimiter *ratelimit.Limiter) {
+	registerResources(srv, metricsCollector, sessionManager, rateLimiter)
 	registerPrompts(srv)
 }
 
-func registerResources(srv *mcp.Server, metricsCollector *metrics.Collector, sessionManager *session.Manager) {
+func registerResources(srv *mcp.Server, metricsCollector *metrics.Collector, sessionManager *session.Manager, rateLimiter *ratelimit.Limiter) {
 	srv.AddResource(&mcp.Resource{
 		URI:         "stats://tools",
 		Name:        "Tool Statistics",
@@ -50,6 +51,35 @@ func registerResources(srv *mcp.Server, metricsCollector *metrics.Collector, ses
 			Contents: []*mcp.ResourceContents{
 				{
 					URI:      "stats://sessions",
+					MIMEType: "application/json",
+					Text:     string(jsonBytes),
+				},
+			},
+		}, nil
+	})
+
+	srv.AddResource(&mcp.Resource{
+		URI:         "stats://rate-limits",
+		Name:        "Rate Limit Status",
+		Description: "Current rate limit configuration and usage. Shows per-tenant limits, daily quota remaining, and reset times. Only active in HTTP mode.",
+		MIMEType:    "application/json",
+	}, func(_ context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		cfg := rateLimiter.Config()
+		stats := rateLimiter.Stats("default")
+		result := map[string]any{
+			"config": map[string]any{
+				"perMinutePerTenant": cfg.PerTenant,
+				"globalPerSecond":    cfg.Global,
+				"dailyPerTenant":     cfg.DailyQuota,
+			},
+			"defaultTenant": stats,
+			"guidance":      "Rate limiting applies only in HTTP mode. In STDIO mode, only upstream API quotas apply. Without OAuth, all clients share the 'default' tenant bucket. Set RATE_LIMIT_PER_TENANT and DAILY_QUOTA_PER_TENANT env vars to adjust.",
+		}
+		jsonBytes, _ := json.MarshalIndent(result, "", "  ")
+		return &mcp.ReadResourceResult{
+			Contents: []*mcp.ResourceContents{
+				{
+					URI:      "stats://rate-limits",
 					MIMEType: "application/json",
 					Text:     string(jsonBytes),
 				},

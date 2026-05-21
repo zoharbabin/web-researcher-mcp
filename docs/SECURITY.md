@@ -202,7 +202,7 @@ Raw HTML/Content
 | Tier | Scope | Default | Purpose |
 |------|-------|---------|---------|
 | Global | Per-server | 1000 req/s | Infrastructure protection |
-| Per-Tenant | Per JWT `sub` | 30 req/min | Fair use |
+| Per-Tenant | Per JWT `sub` | 120 req/min | Fair use |
 | Per-Session | Per MCP session | 5 concurrent | Backpressure |
 
 **Implementation:**
@@ -212,7 +212,7 @@ Raw HTML/Content
 
 **Cost Quotas:**
 - Track Google API call count per tenant per day
-- Configurable daily limit (default: 1000 queries/day)
+- Configurable daily limit (default: 5000 queries/day)
 - Reject with informative error when exceeded
 
 **Sub-Agent Handling:**

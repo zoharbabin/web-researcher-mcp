@@ -10,13 +10,16 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/zoharbabin/web-researcher-mcp/internal/config"
 	"github.com/zoharbabin/web-researcher-mcp/internal/metrics"
+	"github.com/zoharbabin/web-researcher-mcp/internal/ratelimit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
 )
 
 func createTestServer(m *metrics.Collector, s *session.Manager) *mcp.Server {
 	srv := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1.0.0"}, nil)
-	RegisterAll(srv, m, s)
+	rl := ratelimit.New(config.RateLimitConfig{PerTenant: 120, Global: 1000, DailyQuota: 5000})
+	RegisterAll(srv, m, s, rl)
 	return srv
 }
 
@@ -345,5 +348,45 @@ func TestToolStatsResourceWithErrors(t *testing.T) {
 	}
 	if webSearch["errorCalls"].(float64) != 2 {
 		t.Fatalf("expected 2 error calls, got %v", webSearch["errorCalls"])
+	}
+}
+
+func TestRateLimitResource(t *testing.T) {
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.ReadResource(ctx, &mcp.ReadResourceParams{URI: "stats://rate-limits"})
+	if err != nil {
+		t.Fatalf("ReadResource failed: %v", err)
+	}
+
+	if len(result.Contents) == 0 {
+		t.Fatal("expected at least one resource content item")
+	}
+
+	var response map[string]any
+	if err := json.Unmarshal([]byte(result.Contents[0].Text), &response); err != nil {
+		t.Fatalf("failed to parse rate-limits JSON: %v", err)
+	}
+
+	cfg, ok := response["config"].(map[string]any)
+	if !ok {
+		t.Fatal("expected 'config' key in rate-limits response")
+	}
+
+	if cfg["perMinutePerTenant"].(float64) != 120 {
+		t.Fatalf("expected perMinutePerTenant=120, got %v", cfg["perMinutePerTenant"])
+	}
+	if cfg["dailyPerTenant"].(float64) != 5000 {
+		t.Fatalf("expected dailyPerTenant=5000, got %v", cfg["dailyPerTenant"])
+	}
+
+	guidance, ok := response["guidance"].(string)
+	if !ok || guidance == "" {
+		t.Fatal("expected non-empty 'guidance' string in response")
 	}
 }
