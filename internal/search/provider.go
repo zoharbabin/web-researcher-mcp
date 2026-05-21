@@ -87,6 +87,8 @@ func NewProvider(cfg config.SearchConfig, deps Deps) Provider {
 		return NewSearXNGProvider(cfg.SearXNGURL, deps)
 	case "searchapi":
 		return NewSearchAPIProvider(cfg.SearchAPIKey, deps)
+	case "tavily":
+		return NewTavilyProvider(cfg.TavilyAPIKey, deps)
 	default:
 		return NewGoogleProvider(cfg.GoogleAPIKey, cfg.GoogleCX, deps)
 	}
@@ -116,6 +118,10 @@ func NewProviderByName(name string, cfg config.SearchConfig, deps Deps) Provider
 		if cfg.SearchAPIKey != "" {
 			return NewSearchAPIProvider(cfg.SearchAPIKey, deps)
 		}
+	case "tavily":
+		if cfg.TavilyAPIKey != "" {
+			return NewTavilyProvider(cfg.TavilyAPIKey, deps)
+		}
 	}
 	return nil
 }
@@ -125,7 +131,7 @@ func NewProviderByName(name string, cfg config.SearchConfig, deps Deps) Provider
 // circuit breaker for isolation — failures in one provider don't affect others.
 func AvailableProviders(cfg config.SearchConfig, deps Deps) map[string]Provider {
 	providers := make(map[string]Provider)
-	names := []string{"google", "brave", "serper", "searxng", "searchapi"}
+	names := []string{"google", "brave", "serper", "searxng", "searchapi", "tavily"}
 	for _, name := range names {
 		providerDeps := Deps{
 			HTTPClient: deps.HTTPClient,
