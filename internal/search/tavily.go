@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 )
 
 type TavilyProvider struct {
@@ -96,10 +97,14 @@ func (t *TavilyProvider) doNewsSearch(ctx context.Context, params NewsSearchPara
 
 	var results []NewsResult
 	for _, r := range resp.Results {
+		source := r.URL
+		if u, err := url.Parse(r.URL); err == nil && u.Host != "" {
+			source = u.Host
+		}
 		results = append(results, NewsResult{
 			Title:       r.Title,
 			URL:         r.URL,
-			Source:      r.URL,
+			Source:      source,
 			PublishedAt: r.PublishedDate,
 			Snippet:     r.Content,
 		})
