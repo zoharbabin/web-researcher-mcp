@@ -28,3 +28,5 @@ coverage.out
 # Docs build
 /site/
 /site_src/
+
+docs/LAUNCH_PLAN.md
