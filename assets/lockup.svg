@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 620 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Lockup: icon + wordmark horizontal -->
+  <defs>
+    <linearGradient id="g1" x1="10" y1="6" x2="70" y2="74" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#22F0E8"/>
+      <stop offset="100%" stop-color="#5B4CFF"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Icon scaled to 80x80 -->
+  <g transform="translate(0, 0)">
+    <rect width="80" height="80" rx="16" fill="#0F172A"/>
+    <g transform="translate(40, 38) scale(0.125)">
+      <path d="M256 84 L388 160 L388 312 L256 388 L124 312 L124 160 Z"
+            stroke="url(#g1)" stroke-width="40" stroke-linejoin="round" stroke-linecap="round" fill="none"
+            transform="translate(-256, -236)"/>
+      <path d="M242 384 Q256 448 270 384"
+            stroke="url(#g1)" stroke-width="28" stroke-linecap="round" fill="none"
+            transform="translate(-256, -236)"/>
+      <circle cx="0" cy="-4" r="28" fill="#E0F8F5"/>
+    </g>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="100" y="52"
+        font-family="'Inter', 'Geist Sans', -apple-system, BlinkMacSystemFont, sans-serif"
+        font-size="40" font-weight="700" fill="#0F172A" letter-spacing="-1.5"
+        text-rendering="optimizeLegibility">web-researcher-mcp</text>
+</svg>

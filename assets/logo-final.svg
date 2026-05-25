@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- web-researcher-mcp logo: hex frame + focused drop + core dot -->
+
+  <rect width="512" height="512" rx="96" fill="#0F172A"/>
+  <defs>
+    <linearGradient id="g1" x1="120" y1="72" x2="392" y2="420" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#22F0E8"/>
+      <stop offset="100%" stop-color="#5B4CFF"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Hex frame — vertically centered accounting for the drop below -->
+  <path d="M256 84 L388 160 L388 312 L256 388 L124 312 L124 160 Z"
+        stroke="url(#g1)" stroke-width="40" stroke-linejoin="round" stroke-linecap="round" fill="none"/>
+
+  <!-- Rounded drop — seamlessly extends from bottom vertex -->
+  <path d="M242 384 Q256 448 270 384"
+        stroke="url(#g1)" stroke-width="28" stroke-linecap="round" fill="none"/>
+
+  <!-- Core dot — slightly above true center for optical balance -->
+  <circle cx="256" cy="232" r="28" fill="#E0F8F5"/>
+</svg>

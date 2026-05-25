@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1280 640" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="640" fill="#f9fdfc"/>
+
+  <defs>
+    <linearGradient id="g1" x1="120" y1="72" x2="392" y2="420" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#22F0E8"/>
+      <stop offset="100%" stop-color="#5B4CFF"/>
+    </linearGradient>
+    <linearGradient id="g-text" x1="480" y1="260" x2="1100" y2="260" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0EA5C9"/>
+      <stop offset="100%" stop-color="#4F46E5"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Logo mark on dark rounded background — scaled up -->
+  <g transform="translate(50, 90)">
+    <rect width="420" height="420" rx="72" fill="#0F172A"/>
+    <g transform="translate(210, 205) scale(0.68)">
+      <path d="M256 84 L388 160 L388 312 L256 388 L124 312 L124 160 Z"
+            stroke="url(#g1)" stroke-width="40" stroke-linejoin="round" stroke-linecap="round" fill="none"
+            transform="translate(-256, -236)"/>
+      <path d="M242 384 Q256 448 270 384"
+            stroke="url(#g1)" stroke-width="28" stroke-linecap="round" fill="none"
+            transform="translate(-256, -236)"/>
+      <circle cx="0" cy="-4" r="28" fill="#E0F8F5"/>
+    </g>
+  </g>
+
+  <!-- GitHub path breadcrumb -->
+  <text x="520" y="208"
+        font-family="'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+        font-size="22" font-weight="400" fill="#64748B" letter-spacing="0.3"
+        text-rendering="optimizeLegibility">github.com/zoharbabin/</text>
+
+  <!-- Project name -->
+  <text x="520" y="278"
+        font-family="'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+        font-size="64" font-weight="800" fill="#0F172A" letter-spacing="-2.5"
+        text-rendering="optimizeLegibility">web-researcher-mcp</text>
+
+  <!-- Tagline -->
+  <text x="520" y="338"
+        font-family="'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+        font-size="24" font-weight="400" fill="#475569" letter-spacing="-0.2"
+        text-rendering="optimizeLegibility">Multi-provider research intelligence for AI assistants</text>
+
+  <!-- Gradient accent bar -->
+  <rect x="520" y="362" width="80" height="4" rx="2" fill="url(#g-text)"/>
+
+  <!-- Feature pills — all on one row including Open Source -->
+  <g font-family="'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+     font-size="15" font-weight="500" text-rendering="optimizeLegibility">
+    <rect x="520" y="392" width="120" height="32" rx="16" fill="#EEF2FF"/>
+    <text x="580" y="413" fill="#4F46E5" text-anchor="middle">Web Search</text>
+
+    <rect x="654" y="392" width="104" height="32" rx="16" fill="#ECFDF5"/>
+    <text x="706" y="413" fill="#059669" text-anchor="middle">Scraping</text>
+
+    <rect x="772" y="392" width="136" height="32" rx="16" fill="#FFF7ED"/>
+    <text x="840" y="413" fill="#D97706" text-anchor="middle">Multi-Provider</text>
+
+    <rect x="922" y="392" width="76" height="32" rx="16" fill="#F0F9FF"/>
+    <text x="960" y="413" fill="#0284C7" text-anchor="middle">MCP</text>
+
+    <rect x="1012" y="392" width="120" height="32" rx="16" fill="none" stroke="#CBD5E1" stroke-width="1.5"/>
+    <text x="1072" y="413" fill="#64748B" text-anchor="middle">Open Source</text>
+  </g>
+
+  <!-- Bottom footer -->
+  <rect x="0" y="592" width="1280" height="48" fill="#F1F5F9"/>
+
+  <!-- X logo + handle — bottom left -->
+  <g transform="translate(40, 605)">
+    <path d="M21.742 21.75l-7.563-11.179 7.056-8.321h-2.456l-5.691 6.714-4.54-6.714H2.359l7.29 10.776L2.25 21.75h2.456l6.035-7.118 4.818 7.118h6.191-.008zM7.739 3.818L18.81 20.182h-2.447L5.29 3.818h2.447z"
+          fill="#334155" transform="scale(0.72)"/>
+    <text x="24" y="12"
+          font-family="'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="15" font-weight="500" fill="#475569" letter-spacing="0.2"
+          text-rendering="optimizeLegibility">@zohar</text>
+  </g>
+</svg>
