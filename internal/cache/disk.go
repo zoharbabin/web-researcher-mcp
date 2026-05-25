@@ -30,7 +30,7 @@ type diskEntry struct {
 func NewDiskCache(cfg DiskConfig) *DiskCache {
 	dir := cfg.Dir
 	if dir == "" {
-		dir = "./cache"
+		dir = os.TempDir()
 	}
 
 	if err := os.MkdirAll(dir, 0700); err != nil {

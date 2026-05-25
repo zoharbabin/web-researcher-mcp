@@ -240,7 +240,7 @@ When no explicit routing is configured for an operation, the `default` list is u
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `CACHE_DIR` | Disk cache directory | `./cache` |
+| `CACHE_DIR` | Disk cache directory | Platform cache dir (e.g., `~/Library/Caches/web-researcher-mcp`) |
 | `CACHE_MAX_MEMORY_MB` | Max memory cache size | `64` |
 | `CACHE_ENCRYPTION_KEY` | 64 hex chars for AES-256-GCM | — (plaintext) |
 | `REDIS_URL` | Redis connection string | — (local cache only) |

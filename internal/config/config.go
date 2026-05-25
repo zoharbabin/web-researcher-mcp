@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -135,7 +136,7 @@ func Load() (*Config, error) {
 			JWKSRefreshInterval: envDuration("JWKS_REFRESH_INTERVAL", 1*time.Hour),
 		},
 		AllowedOrigins:     splitCSV(os.Getenv("ALLOWED_ORIGINS")),
-		CacheDir:           envOrDefault("CACHE_DIR", "./cache"),
+		CacheDir:           envOrDefault("CACHE_DIR", defaultCacheDir()),
 		CacheMaxMemoryMB:   envInt("CACHE_MAX_MEMORY_MB", 64),
 		CacheEncryptionKey: encKey,
 		CacheIsolation:     envOrDefault("CACHE_ISOLATION", "shared"),
@@ -224,6 +225,13 @@ func splitCSV(s string) []string {
 		}
 	}
 	return result
+}
+
+func defaultCacheDir() string {
+	if dir, err := os.UserCacheDir(); err == nil {
+		return filepath.Join(dir, "web-researcher-mcp")
+	}
+	return filepath.Join(os.TempDir(), "web-researcher-mcp-cache")
 }
 
 func parseLogLevel(s string) slog.Level {

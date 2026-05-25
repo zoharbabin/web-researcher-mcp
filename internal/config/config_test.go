@@ -83,8 +83,8 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Port != 0 {
 		t.Errorf("expected default port=0, got %d", cfg.Port)
 	}
-	if cfg.CacheDir != "./cache" {
-		t.Errorf("expected default CacheDir=./cache, got %s", cfg.CacheDir)
+	if cfg.CacheDir == "" || cfg.CacheDir == "./cache" {
+		t.Errorf("expected platform-specific cache dir, got %q", cfg.CacheDir)
 	}
 	if cfg.CacheMaxMemoryMB != 64 {
 		t.Errorf("expected default CacheMaxMemoryMB=64, got %d", cfg.CacheMaxMemoryMB)
