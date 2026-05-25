@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -953,6 +954,14 @@ func TestNewProvider_SearchAPI(t *testing.T) {
 	}
 }
 
+func TestNewProvider_Tavily(t *testing.T) {
+	cfg := config.SearchConfig{Provider: "tavily", TavilyAPIKey: "tvly-key"}
+	p := NewProvider(cfg, newTestDeps(http.DefaultClient))
+	if p.Name() != "tavily" {
+		t.Errorf("expected provider name 'tavily', got %q", p.Name())
+	}
+}
+
 // =============================================================================
 // Router Tests
 // =============================================================================
@@ -1267,6 +1276,9 @@ func TestAvailableProviders(t *testing.T) {
 	if _, ok := providers["searxng"]; ok {
 		t.Error("did not expect searxng provider (no URL)")
 	}
+	if _, ok := providers["tavily"]; ok {
+		t.Error("did not expect tavily provider (no key)")
+	}
 }
 
 func TestNewProviderByName_MissingCredentials(t *testing.T) {
@@ -1287,6 +1299,9 @@ func TestNewProviderByName_MissingCredentials(t *testing.T) {
 	}
 	if p := NewProviderByName("google", cfg, deps); p != nil {
 		t.Error("expected nil for google without both key and cx")
+	}
+	if p := NewProviderByName("tavily", cfg, deps); p != nil {
+		t.Error("expected nil for tavily without key")
 	}
 }
 
@@ -1333,6 +1348,155 @@ func TestMapSearchAPIImageSize(t *testing.T) {
 		if got != tt.expected {
 			t.Errorf("mapSearchAPIImageSize(%q) = %q, want %q", tt.input, got, tt.expected)
 		}
+	}
+}
+
+// =============================================================================
+// Tavily Provider Tests
+// =============================================================================
+
+func TestTavilyProvider_WebSearch(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("expected content-type 'application/json', got %q", r.Header.Get("Content-Type"))
+		}
+
+		body, _ := io.ReadAll(r.Body)
+		var reqBody tavilyRequest
+		if err := json.Unmarshal(body, &reqBody); err != nil {
+			t.Fatalf("failed to parse request body: %v", err)
+		}
+		if reqBody.APIKey != "tavily-key" {
+			t.Errorf("expected api_key 'tavily-key', got %q", reqBody.APIKey)
+		}
+		if !strings.Contains(reqBody.Query, "golang testing") {
+			t.Errorf("expected query to contain 'golang testing', got %q", reqBody.Query)
+		}
+		if reqBody.MaxResults != 5 {
+			t.Errorf("expected max_results 5, got %d", reqBody.MaxResults)
+		}
+		if reqBody.Topic != "general" {
+			t.Errorf("expected topic 'general', got %q", reqBody.Topic)
+		}
+
+		resp := tavilyResponse{
+			Results: []struct {
+				Title         string  `json:"title"`
+				URL           string  `json:"url"`
+				Content       string  `json:"content"`
+				Score         float64 `json:"score"`
+				PublishedDate string  `json:"published_date,omitempty"`
+			}{
+				{Title: "Tavily Result", URL: "https://example.com/tavily", Content: "From Tavily", Score: 0.95},
+				{Title: "Tavily Result 2", URL: "https://example.com/tavily2", Content: "Second result", Score: 0.85},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer ts.Close()
+
+	client := &http.Client{Transport: &rewriteTransport{baseURL: ts.URL, inner: http.DefaultTransport}}
+	deps := Deps{HTTPClient: client, Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	tv := NewTavilyProvider("tavily-key", deps)
+
+	results, err := tv.Web(context.Background(), WebSearchParams{Query: "golang testing", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+	if results[0].Title != "Tavily Result" {
+		t.Errorf("expected first result title 'Tavily Result', got %q", results[0].Title)
+	}
+	if results[0].URL != "https://example.com/tavily" {
+		t.Errorf("expected first result URL 'https://example.com/tavily', got %q", results[0].URL)
+	}
+}
+
+func TestTavilyProvider_NewsSearch(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var reqBody tavilyRequest
+		if err := json.Unmarshal(body, &reqBody); err != nil {
+			t.Fatalf("failed to parse request body: %v", err)
+		}
+		if reqBody.Topic != "news" {
+			t.Errorf("expected topic 'news', got %q", reqBody.Topic)
+		}
+		if reqBody.APIKey != "tavily-key" {
+			t.Errorf("expected api_key 'tavily-key', got %q", reqBody.APIKey)
+		}
+
+		resp := tavilyResponse{
+			Results: []struct {
+				Title         string  `json:"title"`
+				URL           string  `json:"url"`
+				Content       string  `json:"content"`
+				Score         float64 `json:"score"`
+				PublishedDate string  `json:"published_date,omitempty"`
+			}{
+				{Title: "News Item", URL: "https://news.example.com/article", Content: "Breaking news", Score: 0.9, PublishedDate: "2024-01-15"},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer ts.Close()
+
+	client := &http.Client{Transport: &rewriteTransport{baseURL: ts.URL, inner: http.DefaultTransport}}
+	deps := Deps{HTTPClient: client, Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	tv := NewTavilyProvider("tavily-key", deps)
+
+	results, err := tv.News(context.Background(), NewsSearchParams{Query: "technology", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Title != "News Item" {
+		t.Errorf("expected title 'News Item', got %q", results[0].Title)
+	}
+	if results[0].Source != "news.example.com" {
+		t.Errorf("expected source 'news.example.com', got %q", results[0].Source)
+	}
+	if results[0].PublishedAt != "2024-01-15" {
+		t.Errorf("expected published_at '2024-01-15', got %q", results[0].PublishedAt)
+	}
+}
+
+func TestTavilyProvider_RateLimit(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer ts.Close()
+
+	client := &http.Client{Transport: &rewriteTransport{baseURL: ts.URL, inner: http.DefaultTransport}}
+	deps := Deps{HTTPClient: client, Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	tv := NewTavilyProvider("key", deps)
+
+	_, err := tv.Web(context.Background(), WebSearchParams{Query: "test", NumResults: 5})
+	if err == nil {
+		t.Fatal("expected error for 429 response")
+	}
+	if !strings.Contains(err.Error(), "rate limited") {
+		t.Errorf("expected rate limit error, got: %v", err)
+	}
+}
+
+func TestTavilyProvider_ImageSearchUnsupported(t *testing.T) {
+	tv := NewTavilyProvider("key", newTestDeps(http.DefaultClient))
+	_, err := tv.Images(context.Background(), ImageSearchParams{Query: "cats"})
+	if err == nil {
+		t.Fatal("expected error for unsupported image search")
+	}
+	if !strings.Contains(err.Error(), "does not support image search") {
+		t.Errorf("expected unsupported error, got: %v", err)
 	}
 }
 
