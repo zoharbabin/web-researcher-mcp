@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1270 760" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- PH Gallery Image 4: One server. Eight specialized tools. -->
+  <rect width="1270" height="760" fill="#0F172A"/>
+
+  <!-- Header -->
+  <text x="635" y="80"
+        font-family="'Inter', 'SF Pro Display', sans-serif"
+        font-size="36" font-weight="700" fill="#FFFFFF" letter-spacing="-1"
+        text-anchor="middle" text-rendering="optimizeLegibility">One server. Eight specialized tools.</text>
+
+  <text x="635" y="120"
+        font-family="'Inter', 'SF Pro Display', sans-serif"
+        font-size="20" font-weight="400" fill="#64748B"
+        text-anchor="middle" text-rendering="optimizeLegibility">Each tool designed for a specific research task. All accessible via MCP.</text>
+
+  <!-- Tool grid: 2 rows x 4 columns -->
+  <!-- Row 1 -->
+  <g transform="translate(90, 170)">
+    <rect width="255" height="200" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
+    <text x="128" y="50" font-family="'Inter', sans-serif" font-size="28" text-anchor="middle" fill="#22F0E8">🔍</text>
+    <text x="128" y="85" font-family="'JetBrains Mono', monospace" font-size="15" font-weight="600" fill="#E2E8F0" text-anchor="middle">web_search</text>
+    <text x="128" y="115" font-family="'Inter', sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">Multi-provider web search</text>
+    <text x="128" y="140" font-family="'Inter', sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">with time filters, lenses,</text>
+    <text x="128" y="165" font-family="'Inter', sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">and auto-failover</text>
+  </g>
+
+  <g transform="translate(365, 170)">
+    <rect width="255" height="200" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
+    <text x="128" y="50" font-family="'Inter', sans-serif" font-size="28" text-anchor="middle" fill="#22F0E8">📄</text>
+    <text x="128" y="85" font-family="'JetBrains Mono', monospace" font-size="15" font-weight="600" fill="#E2E8F0" text-anchor="middle">scrape_page</text>
+    <text x="128" y="115" font-family="'Inter', sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">4-tier content extraction</text>
+    <text x="128" y="140" font-family="'Inter', sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">PDF, DOCX, YouTube,</text>
+    <text x="128" y="165" font-family="'Inter', sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">JS-rendered pages</text>
+  </g>
+
+  <g transform="translate(640, 170)">
+    <rect width="255" height="200" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
+    <text x="128" y="50" font-family="'Inter', sans-serif" font-size="28" text-anchor="middle" fill="#22F0E8">⚡</text>
+    <text x="128" y="85" font-family="'JetBrains Mono', monospace" font-size="15" font-weight="600" fill="#E2E8F0" text-anchor="middle">search_and_scrape</text>
+    <text x="128" y="115" font-family="'Inter', sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">Search + extract + score</text>
+    <text x="128" y="140" font-family="'Inter', sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">in one call. Quality ranking,</text>
+    <text x="128" y="165" font-family="'Inter', sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">deduplication, citations</text>
+  </g>
+
+  <g transform="translate(915, 170)">
+    <rect width="255" height="200" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
+    <text x="128" y="50" font-family="'Inter', sans-serif" font-size="28" text-anchor="middle" fill="#22F0E8">🔬</text>
+    <text x="128" y="85" font-family="'JetBrains Mono', monospace" font-size="15" font-weight="600" fill="#E2E8F0" text-anchor="middle">sequential_search</text>
+    <text x="128" y="115" font-family="'Inter', sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">Multi-step research with</text>
+    <text x="128" y="140" font-family="'Inter', sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">session persistence,</text>
+    <text x="128" y="165" font-family="'Inter', sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">branching, knowledge gaps</text>
+  </g>
+
+  <!-- Row 2 -->
+  <g transform="translate(90, 400)">
+    <rect width="255" height="200" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
+    <text x="128" y="50" font-family="'Inter', sans-serif" font-size="28" text-anchor="middle" fill="#22F0E8">🎓</text>
+    <text x="128" y="85" font-family="'JetBrains Mono', monospace" font-size="15" font-weight="600" fill="#E2E8F0" text-anchor="middle">academic_search</text>
+    <text x="128" y="115" font-family="'Inter', sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">arXiv, PubMed, IEEE,</text>
+    <text x="128" y="140" font-family="'Inter', sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">Nature, Springer. Year and</text>
+    <text x="128" y="165" font-family="'Inter', sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">source filtering</text>
+  </g>
+
+  <g transform="translate(365, 400)">
+    <rect width="255" height="200" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
+    <text x="128" y="50" font-family="'Inter', sans-serif" font-size="28" text-anchor="middle" fill="#22F0E8">📰</text>
+    <text x="128" y="85" font-family="'JetBrains Mono', monospace" font-size="15" font-weight="600" fill="#E2E8F0" text-anchor="middle">news_search</text>
+    <text x="128" y="115" font-family="'Inter', sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">Real-time news with</text>
+    <text x="128" y="140" font-family="'Inter', sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">freshness filters. Hour,</text>
+    <text x="128" y="165" font-family="'Inter', sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">day, week, month</text>
+  </g>
+
+  <g transform="translate(640, 400)">
+    <rect width="255" height="200" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
+    <text x="128" y="50" font-family="'Inter', sans-serif" font-size="28" text-anchor="middle" fill="#22F0E8">💡</text>
+    <text x="128" y="85" font-family="'JetBrains Mono', monospace" font-size="15" font-weight="600" fill="#E2E8F0" text-anchor="middle">patent_search</text>
+    <text x="128" y="115" font-family="'Inter', sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">Prior art, landscape, and</text>
+    <text x="128" y="140" font-family="'Inter', sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">specific patent lookup.</text>
+    <text x="128" y="165" font-family="'Inter', sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">US, EP, WO, JP, CN, KR</text>
+  </g>
+
+  <g transform="translate(915, 400)">
+    <rect width="255" height="200" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
+    <text x="128" y="50" font-family="'Inter', sans-serif" font-size="28" text-anchor="middle" fill="#22F0E8">🖼️</text>
+    <text x="128" y="85" font-family="'JetBrains Mono', monospace" font-size="15" font-weight="600" fill="#E2E8F0" text-anchor="middle">image_search</text>
+    <text x="128" y="115" font-family="'Inter', sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">Image search with size,</text>
+    <text x="128" y="140" font-family="'Inter', sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">type, color, and format</text>
+    <text x="128" y="165" font-family="'Inter', sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">filters</text>
+  </g>
+
+  <!-- Bottom -->
+  <text x="635" y="680"
+        font-family="'Inter', sans-serif" font-size="18" fill="#475569"
+        text-anchor="middle" text-rendering="optimizeLegibility">All tools auto-discovered via MCP. No configuration per tool — just ask your AI.</text>
+
+  <text x="635" y="720"
+        font-family="'Inter', sans-serif" font-size="16" fill="#64748B"
+        text-anchor="middle">github.com/zoharbabin/web-researcher-mcp</text>
+</svg>

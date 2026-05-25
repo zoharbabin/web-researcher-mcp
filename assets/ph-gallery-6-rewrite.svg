@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1270 760" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- PH Gallery Image 6: Before/After rewrite comparison -->
+  <rect width="1270" height="760" fill="#0F172A"/>
+
+  <!-- Header -->
+  <text x="635" y="80"
+        font-family="'Inter', 'SF Pro Display', sans-serif"
+        font-size="36" font-weight="700" fill="#FFFFFF" letter-spacing="-1"
+        text-anchor="middle" text-rendering="optimizeLegibility">Rewritten from scratch for production</text>
+
+  <!-- Divider line -->
+  <line x1="635" y1="130" x2="635" y2="650" stroke="#334155" stroke-width="1" stroke-dasharray="6 4"/>
+
+  <!-- BEFORE column -->
+  <text x="317" y="140"
+        font-family="'Inter', sans-serif" font-size="14" font-weight="600" fill="#EF4444" letter-spacing="2"
+        text-anchor="middle">BEFORE</text>
+
+  <text x="317" y="180"
+        font-family="'Inter', sans-serif" font-size="22" font-weight="600" fill="#94A3B8"
+        text-anchor="middle">Node.js predecessor</text>
+
+  <g font-family="'Inter', sans-serif" text-rendering="optimizeLegibility">
+    <!-- Memory -->
+    <rect x="120" y="220" width="395" height="70" rx="12" fill="#1E293B"/>
+    <text x="150" y="258" font-size="14" fill="#64748B">Memory usage</text>
+    <text x="485" y="258" font-size="28" font-weight="700" fill="#EF4444" text-anchor="end">430 MB</text>
+    <rect x="150" y="275" width="335" height="6" rx="3" fill="#1E293B"/>
+    <rect x="150" y="275" width="335" height="6" rx="3" fill="#EF4444" opacity="0.4"/>
+
+    <!-- Startup -->
+    <rect x="120" y="305" width="395" height="70" rx="12" fill="#1E293B"/>
+    <text x="150" y="343" font-size="14" fill="#64748B">Startup time</text>
+    <text x="485" y="343" font-size="28" font-weight="700" fill="#EF4444" text-anchor="end">~3 seconds</text>
+
+    <!-- Dependencies -->
+    <rect x="120" y="390" width="395" height="70" rx="12" fill="#1E293B"/>
+    <text x="150" y="428" font-size="14" fill="#64748B">Dependencies</text>
+    <text x="485" y="428" font-size="28" font-weight="700" fill="#EF4444" text-anchor="end">800+ packages</text>
+
+    <!-- Provider -->
+    <rect x="120" y="475" width="395" height="70" rx="12" fill="#1E293B"/>
+    <text x="150" y="513" font-size="14" fill="#64748B">Search providers</text>
+    <text x="485" y="513" font-size="28" font-weight="700" fill="#EF4444" text-anchor="end">1 (locked in)</text>
+
+    <!-- Issues -->
+    <rect x="120" y="560" width="395" height="70" rx="12" fill="#1E293B"/>
+    <text x="150" y="598" font-size="14" fill="#64748B">Known issues</text>
+    <text x="485" y="598" font-size="22" font-weight="700" fill="#EF4444" text-anchor="end">Orphan processes</text>
+  </g>
+
+  <!-- AFTER column -->
+  <text x="953" y="140"
+        font-family="'Inter', sans-serif" font-size="14" font-weight="600" fill="#22C55E" letter-spacing="2"
+        text-anchor="middle">AFTER</text>
+
+  <text x="953" y="180"
+        font-family="'Inter', sans-serif" font-size="22" font-weight="600" fill="#E2E8F0"
+        text-anchor="middle">Go rewrite</text>
+
+  <g font-family="'Inter', sans-serif" text-rendering="optimizeLegibility">
+    <!-- Memory -->
+    <rect x="755" y="220" width="395" height="70" rx="12" fill="#1E293B"/>
+    <text x="785" y="258" font-size="14" fill="#64748B">Memory usage</text>
+    <text x="1120" y="258" font-size="28" font-weight="700" fill="#22C55E" text-anchor="end">25 MB</text>
+    <rect x="785" y="275" width="335" height="6" rx="3" fill="#1E293B"/>
+    <rect x="785" y="275" width="20" height="6" rx="3" fill="#22C55E"/>
+
+    <!-- Startup -->
+    <rect x="755" y="305" width="395" height="70" rx="12" fill="#1E293B"/>
+    <text x="785" y="343" font-size="14" fill="#64748B">Startup time</text>
+    <text x="1120" y="343" font-size="28" font-weight="700" fill="#22C55E" text-anchor="end">&lt;100 ms</text>
+
+    <!-- Dependencies -->
+    <rect x="755" y="390" width="395" height="70" rx="12" fill="#1E293B"/>
+    <text x="785" y="428" font-size="14" fill="#64748B">Dependencies</text>
+    <text x="1120" y="428" font-size="28" font-weight="700" fill="#22C55E" text-anchor="end">Single binary</text>
+
+    <!-- Provider -->
+    <rect x="755" y="475" width="395" height="70" rx="12" fill="#1E293B"/>
+    <text x="785" y="513" font-size="14" fill="#64748B">Search providers</text>
+    <text x="1120" y="513" font-size="28" font-weight="700" fill="#22C55E" text-anchor="end">5 (auto-failover)</text>
+
+    <!-- Issues -->
+    <rect x="755" y="560" width="395" height="70" rx="12" fill="#1E293B"/>
+    <text x="785" y="598" font-size="14" fill="#64748B">Architecture</text>
+    <text x="1120" y="598" font-size="22" font-weight="700" fill="#22C55E" text-anchor="end">Production-grade</text>
+  </g>
+
+  <!-- Improvement callout -->
+  <text x="635" y="710"
+        font-family="'Inter', sans-serif" font-size="20" font-weight="600" fill="#22F0E8"
+        text-anchor="middle">17x less memory • 30x faster startup • Zero orphan processes</text>
+
+  <text x="635" y="745"
+        font-family="'Inter', sans-serif" font-size="15" fill="#64748B"
+        text-anchor="middle">Read the full migration story: docs/LESSONS_LEARNED.md</text>
+</svg>

@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1270 760" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- PH Gallery Image 5: Search Lenses -->
+  <rect width="1270" height="760" fill="#0F172A"/>
+
+  <defs>
+    <linearGradient id="g1" x1="100" y1="200" x2="1170" y2="600" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#22F0E8" stop-opacity="0.1"/>
+      <stop offset="100%" stop-color="#5B4CFF" stop-opacity="0.1"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Header -->
+  <text x="635" y="80"
+        font-family="'Inter', 'SF Pro Display', sans-serif"
+        font-size="36" font-weight="700" fill="#FFFFFF" letter-spacing="-1"
+        text-anchor="middle" text-rendering="optimizeLegibility">Search Lenses: Focus on high-quality sources</text>
+
+  <text x="635" y="120"
+        font-family="'Inter', 'SF Pro Display', sans-serif"
+        font-size="20" font-weight="400" fill="#64748B"
+        text-anchor="middle" text-rendering="optimizeLegibility">Curated domain lists restrict searches to authoritative sites for each domain.</text>
+
+  <!-- Lens cards: 2 rows x 3 columns -->
+  <!-- Row 1 -->
+  <g transform="translate(90, 160)">
+    <rect width="360" height="220" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
+    <text x="30" y="45" font-family="'Inter', sans-serif" font-size="20" font-weight="600" fill="#22F0E8">Programming</text>
+    <text x="30" y="75" font-family="'Inter', sans-serif" font-size="14" fill="#94A3B8">Only authoritative dev sources:</text>
+    <text x="30" y="105" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">stackoverflow.com</text>
+    <text x="30" y="125" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">pkg.go.dev</text>
+    <text x="30" y="145" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">docs.python.org</text>
+    <text x="30" y="165" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">developer.mozilla.org</text>
+    <text x="30" y="185" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">github.com + 30 more...</text>
+  </g>
+
+  <g transform="translate(470, 160)">
+    <rect width="360" height="220" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
+    <text x="30" y="45" font-family="'Inter', sans-serif" font-size="20" font-weight="600" fill="#A78BFA">Medical</text>
+    <text x="30" y="75" font-family="'Inter', sans-serif" font-size="14" fill="#94A3B8">Peer-reviewed medical sources:</text>
+    <text x="30" y="105" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">pubmed.ncbi.nlm.nih.gov</text>
+    <text x="30" y="125" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">who.int</text>
+    <text x="30" y="145" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">nejm.org</text>
+    <text x="30" y="165" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">nature.com/nm</text>
+    <text x="30" y="185" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">cochranelibrary.com + more</text>
+  </g>
+
+  <g transform="translate(850, 160)">
+    <rect width="360" height="220" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
+    <text x="30" y="45" font-family="'Inter', sans-serif" font-size="20" font-weight="600" fill="#F59E0B">Legal</text>
+    <text x="30" y="75" font-family="'Inter', sans-serif" font-size="14" fill="#94A3B8">Official legal databases:</text>
+    <text x="30" y="105" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">law.cornell.edu</text>
+    <text x="30" y="125" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">scholar.google.com</text>
+    <text x="30" y="145" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">supremecourt.gov</text>
+    <text x="30" y="165" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">eur-lex.europa.eu</text>
+    <text x="30" y="185" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">westlaw.com + more</text>
+  </g>
+
+  <!-- Row 2 -->
+  <g transform="translate(90, 410)">
+    <rect width="360" height="220" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
+    <text x="30" y="45" font-family="'Inter', sans-serif" font-size="20" font-weight="600" fill="#22C55E">Science</text>
+    <text x="30" y="75" font-family="'Inter', sans-serif" font-size="14" fill="#94A3B8">Scientific journals and databases:</text>
+    <text x="30" y="105" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">arxiv.org</text>
+    <text x="30" y="125" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">nature.com</text>
+    <text x="30" y="145" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">science.org</text>
+    <text x="30" y="165" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">ieeexplore.ieee.org</text>
+    <text x="30" y="185" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">sciencedirect.com + more</text>
+  </g>
+
+  <g transform="translate(470, 410)">
+    <rect width="360" height="220" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
+    <text x="30" y="45" font-family="'Inter', sans-serif" font-size="20" font-weight="600" fill="#EC4899">News</text>
+    <text x="30" y="75" font-family="'Inter', sans-serif" font-size="14" fill="#94A3B8">Quality journalism sources:</text>
+    <text x="30" y="105" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">reuters.com</text>
+    <text x="30" y="125" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">apnews.com</text>
+    <text x="30" y="145" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">bbc.com</text>
+    <text x="30" y="165" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">nytimes.com</text>
+    <text x="30" y="185" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">theguardian.com + more</text>
+  </g>
+
+  <g transform="translate(850, 410)">
+    <rect width="360" height="220" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
+    <text x="30" y="45" font-family="'Inter', sans-serif" font-size="20" font-weight="600" fill="#06B6D4">Custom</text>
+    <text x="30" y="75" font-family="'Inter', sans-serif" font-size="14" fill="#94A3B8">Create your own lenses:</text>
+    <text x="30" y="110" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">// lenses/my-lens.json</text>
+    <text x="30" y="135" font-family="'JetBrains Mono', monospace" font-size="12" fill="#E2E8F0">{</text>
+    <text x="30" y="155" font-family="'JetBrains Mono', monospace" font-size="12" fill="#E2E8F0">  "domains": [...]</text>
+    <text x="30" y="175" font-family="'JetBrains Mono', monospace" font-size="12" fill="#E2E8F0">  "provider": "brave"</text>
+    <text x="30" y="195" font-family="'JetBrains Mono', monospace" font-size="12" fill="#E2E8F0">}</text>
+  </g>
+
+  <!-- Bottom -->
+  <text x="635" y="700"
+        font-family="'Inter', sans-serif" font-size="18" fill="#475569"
+        text-anchor="middle" text-rendering="optimizeLegibility">No more SEO spam in your AI research. Lenses ensure high-signal results.</text>
+
+  <text x="635" y="735"
+        font-family="'Inter', sans-serif" font-size="16" fill="#64748B"
+        text-anchor="middle">Just add lens: "programming" to any search query</text>
+</svg>

@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1270 760" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- PH Gallery Image 3: Multi-provider routing with failover -->
+  <rect width="1270" height="760" fill="#0F172A"/>
+
+  <defs>
+    <linearGradient id="g1" x1="200" y1="300" x2="1070" y2="500" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#22F0E8"/>
+      <stop offset="100%" stop-color="#5B4CFF"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Header -->
+  <text x="635" y="80"
+        font-family="'Inter', 'SF Pro Display', sans-serif"
+        font-size="36" font-weight="700" fill="#FFFFFF" letter-spacing="-1"
+        text-anchor="middle" text-rendering="optimizeLegibility">5 search providers. Automatic failover.</text>
+
+  <text x="635" y="120"
+        font-family="'Inter', 'SF Pro Display', sans-serif"
+        font-size="20" font-weight="400" fill="#64748B"
+        text-anchor="middle" text-rendering="optimizeLegibility">Circuit breakers detect failures. Traffic routes to healthy providers instantly.</text>
+
+  <!-- AI box on the left -->
+  <rect x="80" y="320" width="180" height="80" rx="16" fill="#1E293B" stroke="#334155" stroke-width="2"/>
+  <text x="170" y="366"
+        font-family="'Inter', sans-serif" font-size="18" font-weight="600" fill="#E2E8F0"
+        text-anchor="middle">AI Assistant</text>
+
+  <!-- MCP Server box in center -->
+  <rect x="380" y="280" width="220" height="160" rx="16" fill="#1E293B" stroke="url(#g1)" stroke-width="2"/>
+  <text x="490" y="340"
+        font-family="'Inter', sans-serif" font-size="14" font-weight="500" fill="#22F0E8"
+        text-anchor="middle">web-researcher-mcp</text>
+  <text x="490" y="370"
+        font-family="'Inter', sans-serif" font-size="16" font-weight="600" fill="#E2E8F0"
+        text-anchor="middle">Smart Router</text>
+  <text x="490" y="400"
+        font-family="'Inter', sans-serif" font-size="13" font-weight="400" fill="#64748B"
+        text-anchor="middle">Circuit Breakers</text>
+  <text x="490" y="420"
+        font-family="'Inter', sans-serif" font-size="13" font-weight="400" fill="#64748B"
+        text-anchor="middle">Priority Fallback</text>
+
+  <!-- Arrow: AI → MCP -->
+  <path d="M260 360 L370 360" stroke="#475569" stroke-width="2" stroke-dasharray="6 4"/>
+  <polygon points="370,355 380,360 370,365" fill="#475569"/>
+
+  <!-- Provider boxes on the right -->
+  <rect x="720" y="180" width="180" height="56" rx="12" fill="#1E293B" stroke="#334155" stroke-width="1.5"/>
+  <text x="810" y="214" font-family="'Inter', sans-serif" font-size="16" font-weight="500" fill="#E2E8F0" text-anchor="middle">Brave Search</text>
+
+  <rect x="720" y="260" width="180" height="56" rx="12" fill="#1E293B" stroke="#334155" stroke-width="1.5"/>
+  <text x="810" y="294" font-family="'Inter', sans-serif" font-size="16" font-weight="500" fill="#E2E8F0" text-anchor="middle">Google CSE</text>
+
+  <rect x="720" y="340" width="180" height="56" rx="12" fill="#1E293B" stroke="#334155" stroke-width="1.5"/>
+  <text x="810" y="374" font-family="'Inter', sans-serif" font-size="16" font-weight="500" fill="#E2E8F0" text-anchor="middle">Serper</text>
+
+  <rect x="720" y="420" width="180" height="56" rx="12" fill="#1E293B" stroke="#334155" stroke-width="1.5"/>
+  <text x="810" y="454" font-family="'Inter', sans-serif" font-size="16" font-weight="500" fill="#E2E8F0" text-anchor="middle">SearXNG</text>
+
+  <rect x="720" y="500" width="180" height="56" rx="12" fill="#1E293B" stroke="#334155" stroke-width="1.5"/>
+  <text x="810" y="534" font-family="'Inter', sans-serif" font-size="16" font-weight="500" fill="#E2E8F0" text-anchor="middle">SearchAPI</text>
+
+  <!-- Arrows: MCP → Providers -->
+  <path d="M600 320 L710 208" stroke="#22F0E8" stroke-width="2"/>
+  <path d="M600 340 L710 288" stroke="#22F0E8" stroke-width="2"/>
+  <path d="M600 360 L710 368" stroke="#22F0E8" stroke-width="2"/>
+  <path d="M600 380 L710 448" stroke="#64748B" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <path d="M600 390 L710 528" stroke="#64748B" stroke-width="1.5" stroke-dasharray="4 3"/>
+
+  <!-- Status indicators -->
+  <circle cx="915" cy="208" r="6" fill="#22C55E"/>
+  <circle cx="915" cy="288" r="6" fill="#22C55E"/>
+  <circle cx="915" cy="368" r="6" fill="#22C55E"/>
+  <circle cx="915" cy="448" r="6" fill="#F59E0B"/>
+  <circle cx="915" cy="528" r="6" fill="#22C55E"/>
+
+  <text x="935" y="213" font-family="'Inter', sans-serif" font-size="12" fill="#64748B">Primary</text>
+  <text x="935" y="293" font-family="'Inter', sans-serif" font-size="12" fill="#64748B">Fallback 1</text>
+  <text x="935" y="373" font-family="'Inter', sans-serif" font-size="12" fill="#64748B">Fallback 2</text>
+  <text x="935" y="453" font-family="'Inter', sans-serif" font-size="12" fill="#64748B">Standby</text>
+  <text x="935" y="538" font-family="'Inter', sans-serif" font-size="12" fill="#64748B">Standby</text>
+
+  <!-- Bottom feature callouts -->
+  <g font-family="'Inter', sans-serif" text-rendering="optimizeLegibility">
+    <rect x="180" y="620" width="240" height="44" rx="22" fill="#1E293B"/>
+    <text x="300" y="647" font-size="15" font-weight="500" fill="#22F0E8" text-anchor="middle">Per-provider rate limits</text>
+
+    <rect x="450" y="620" width="280" height="44" rx="22" fill="#1E293B"/>
+    <text x="590" y="647" font-size="15" font-weight="500" fill="#22F0E8" text-anchor="middle">Automatic health detection</text>
+
+    <rect x="760" y="620" width="260" height="44" rx="22" fill="#1E293B"/>
+    <text x="890" y="647" font-size="15" font-weight="500" fill="#22F0E8" text-anchor="middle">Zero vendor lock-in</text>
+  </g>
+
+  <!-- Bottom note -->
+  <text x="635" y="720"
+        font-family="'Inter', sans-serif" font-size="16" fill="#475569"
+        text-anchor="middle">Configure once. The router handles the rest — transparent to your AI.</text>
+</svg>

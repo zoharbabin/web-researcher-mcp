@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1270 760" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- PH Gallery Image 2: Install in 10 seconds -->
+  <rect width="1270" height="760" fill="#0F172A"/>
+
+  <!-- Header -->
+  <text x="635" y="80"
+        font-family="'Inter', 'SF Pro Display', sans-serif"
+        font-size="36" font-weight="700" fill="#FFFFFF" letter-spacing="-1"
+        text-anchor="middle" text-rendering="optimizeLegibility">Install in 10 seconds. Works immediately.</text>
+
+  <!-- Terminal window -->
+  <rect x="100" y="120" width="1070" height="520" rx="12" fill="#1E293B"/>
+  <!-- Terminal title bar -->
+  <rect x="100" y="120" width="1070" height="36" rx="12" fill="#334155"/>
+  <circle cx="128" cy="138" r="6" fill="#EF4444"/>
+  <circle cx="148" cy="138" r="6" fill="#F59E0B"/>
+  <circle cx="168" cy="138" r="6" fill="#22C55E"/>
+  <text x="635" y="143" font-family="'JetBrains Mono', monospace" font-size="12" fill="#94A3B8" text-anchor="middle">Terminal</text>
+
+  <!-- Terminal content -->
+  <g font-family="'JetBrains Mono', 'SF Mono', monospace" font-size="16" fill="#E2E8F0">
+    <text x="130" y="190" fill="#22F0E8">$</text>
+    <text x="150" y="190">go install github.com/zoharbabin/web-researcher-mcp/cmd/web-researcher-mcp@latest</text>
+
+    <text x="130" y="230" fill="#64748B"># Add to your Claude Code MCP config:</text>
+
+    <text x="130" y="270" fill="#22F0E8">$</text>
+    <text x="150" y="270">cat ~/.claude/mcp_servers.json</text>
+
+    <text x="130" y="310" fill="#A78BFA">{</text>
+    <text x="150" y="340" fill="#94A3B8">"web-researcher"</text><text x="320" y="340" fill="#E2E8F0">: {</text>
+    <text x="170" y="370" fill="#94A3B8">"command"</text><text x="280" y="370" fill="#E2E8F0">: </text><text x="300" y="370" fill="#86EFAC">"web-researcher-mcp"</text><text x="510" y="370" fill="#E2E8F0">,</text>
+    <text x="170" y="400" fill="#94A3B8">"env"</text><text x="230" y="400" fill="#E2E8F0">: {</text>
+    <text x="190" y="430" fill="#94A3B8">"GOOGLE_CUSTOM_SEARCH_API_KEY"</text><text x="540" y="430" fill="#E2E8F0">: </text><text x="560" y="430" fill="#86EFAC">"your-key"</text><text x="665" y="430" fill="#E2E8F0">,</text>
+    <text x="190" y="460" fill="#94A3B8">"GOOGLE_CUSTOM_SEARCH_ID"</text><text x="490" y="460" fill="#E2E8F0">: </text><text x="510" y="460" fill="#86EFAC">"your-cx"</text>
+    <text x="170" y="490" fill="#E2E8F0">}</text>
+    <text x="150" y="520" fill="#E2E8F0">}</text>
+    <text x="130" y="550" fill="#A78BFA">}</text>
+
+    <text x="130" y="600" fill="#22F0E8">$</text>
+    <text x="150" y="600">claude</text>
+    <text x="220" y="600" fill="#64748B"># That's it. Your AI can now research the web.</text>
+  </g>
+
+  <!-- Bottom caption -->
+  <text x="635" y="710"
+        font-family="'Inter', 'SF Pro Display', sans-serif"
+        font-size="20" font-weight="400" fill="#64748B"
+        text-anchor="middle" text-rendering="optimizeLegibility">Single static binary. Zero dependencies. Works with Claude, Cursor, and any MCP client.</text>
+</svg>
