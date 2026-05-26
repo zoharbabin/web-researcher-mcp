@@ -353,6 +353,7 @@ type NewsArticle struct {
 | `source` | string | no | `all` | all, arxiv, pubmed, ieee, nature, springer |
 | `pdf_only` | bool | no | false | — |
 | `sort_by` | string | no | `relevance` | relevance, date |
+| `provider` | string | no | — | Force provider: google, brave, serper, searxng, searchapi |
 
 ### Academic Site Pool (site-restricted via configured provider)
 arxiv.org, pubmed.ncbi.nlm.nih.gov, scholar.google.com, ieeexplore.ieee.org, dl.acm.org, nature.com, sciencedirect.com, link.springer.com, researchgate.net, plos.org, frontiersin.org, mdpi.com, wiley.com, jstor.org, semanticscholar.org, biorxiv.org, medrxiv.org

@@ -281,6 +281,54 @@ Key conventions:
 - Return errors via `toolError(msg)` and success via `structuredResult(jsonBytes)` (see `internal/tools/search.go` for helpers)
 - Update `docs/TOOLS.md` with the parameter schema
 
+## Adding a Patent Provider
+
+Patent providers implement the `PatentProvider` interface for structured patent search from authoritative APIs.
+
+1. **Create the provider** in `internal/search/<provider>.go`:
+
+```go
+package search
+
+type MyProvider struct {
+    apiKey  string
+    deps    Deps
+}
+
+func NewMyProvider(apiKey string, deps Deps) *MyProvider {
+    return &MyProvider{apiKey: apiKey, deps: deps}
+}
+
+func (p *MyProvider) Name() string { return "myprovider" }
+
+func (p *MyProvider) Metadata() ProviderMeta {
+    return ProviderMeta{
+        Regions:      []string{"US"},       // or []string{"*"} for worldwide
+        Capabilities: []string{"search", "biblio"},
+        RateClass:    "metered",
+        Description:  "My Provider — brief description",
+    }
+}
+
+func (p *MyProvider) Patents(ctx context.Context, params PatentSearchParams) ([]PatentResult, error) {
+    // Wrap in circuit breaker, call API, parse response
+    var results []PatentResult
+    err := p.deps.Breaker.Execute(func() error {
+        // API call and parsing here
+        return nil
+    })
+    return results, err
+}
+```
+
+2. **Register it** — add a case to `NewPatentProviderByName()` in `internal/search/domain.go` and add the env var to `internal/config/config.go`.
+
+3. **Add tests** — create `internal/search/<provider>_test.go` with httptest mocks and a `_live_test.go` that skips without credentials.
+
+4. **Document** — add the env var to `.env.example` and setup instructions to `docs/API_SETUP.md`.
+
+The `ProviderMeta.Regions` field controls intelligent routing — set it to the jurisdictions your provider covers so queries for other regions skip it automatically.
+
 ## Getting Help
 
 - **Questions and discussions**: [GitHub Discussions](https://github.com/zoharbabin/web-researcher-mcp/discussions)

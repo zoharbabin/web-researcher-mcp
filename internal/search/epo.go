@@ -128,7 +128,16 @@ func (e *EPOProvider) buildCQL(params PatentSearchParams) string {
 	var clauses []string
 
 	if params.Query != "" {
-		clauses = append(clauses, fmt.Sprintf("txt=%q", params.Query))
+		// Split query into individual keywords for broad matching.
+		// EPO CQL treats quoted strings as exact phrases which is too restrictive.
+		words := strings.Fields(params.Query)
+		if len(words) == 1 {
+			clauses = append(clauses, "txt="+words[0])
+		} else {
+			for _, w := range words {
+				clauses = append(clauses, "txt="+w)
+			}
+		}
 	}
 	if params.Assignee != "" {
 		clauses = append(clauses, fmt.Sprintf("pa=%q", params.Assignee))
@@ -192,17 +201,21 @@ func (e *EPOProvider) refreshToken(ctx context.Context) (string, error) {
 		return "", err
 	}
 
-	// EPO returns: {"access_token":"...","token_type":"BearerToken","expires_in":1200}
+	// EPO returns expires_in as string: {"access_token":"...","expires_in":"1199"}
 	type tokenResp struct {
-		AccessToken string `json:"access_token"`
-		ExpiresIn   int    `json:"expires_in"`
+		AccessToken string          `json:"access_token"`
+		ExpiresIn   json.Number     `json:"expires_in"`
 	}
 	var tr tokenResp
 	if err := json.Unmarshal(body, &tr); err != nil {
 		return "", fmt.Errorf("failed to parse token response: %w", err)
 	}
 
-	expiry := time.Duration(tr.ExpiresIn) * time.Second
+	expiresInt, _ := tr.ExpiresIn.Int64()
+	if expiresInt <= 0 {
+		expiresInt = 1200
+	}
+	expiry := time.Duration(expiresInt) * time.Second
 	if expiry > 60*time.Second {
 		expiry -= 60 * time.Second // refresh buffer
 	}
@@ -241,32 +254,46 @@ func (s *epoTokenStore) Invalidate() {
 	s.expires = time.Time{}
 }
 
-// XML response parsing for EPO OPS bibliographic data
+// XML response parsing for EPO OPS bibliographic data.
+// EPO uses two namespaces: ops (http://ops.epo.org) for control elements,
+// and exchange (http://www.epo.org/exchange) for patent data elements.
 
 type opsWorldPatentData struct {
-	XMLName  xml.Name        `xml:"world-patent-data"`
-	Search   opsSearchResult `xml:"biblio-search"`
+	XMLName xml.Name        `xml:"world-patent-data"`
+	Search  opsSearchResult `xml:"biblio-search"`
 }
 
 type opsSearchResult struct {
-	TotalCount int                `xml:"total-result-count,attr"`
-	Documents  []opsExchangeDoc   `xml:"search-result>exchange-documents>exchange-document"`
+	TotalCount int              `xml:"total-result-count,attr"`
+	Result     opsSearchOutput  `xml:"search-result"`
+}
+
+type opsSearchOutput struct {
+	ExchangeDocs opsExchangeDocs `xml:"exchange-documents"`
+}
+
+type opsExchangeDocs struct {
+	Documents []opsExchangeDoc `xml:"exchange-document"`
 }
 
 type opsExchangeDoc struct {
-	Country  string          `xml:"country,attr"`
-	DocNum   string          `xml:"doc-number,attr"`
-	Kind     string          `xml:"kind,attr"`
-	Biblio   opsBiblioData   `xml:"bibliographic-data"`
-	Abstract []opsAbstract   `xml:"abstract"`
+	Country  string        `xml:"country,attr"`
+	DocNum   string        `xml:"doc-number,attr"`
+	Kind     string        `xml:"kind,attr"`
+	Biblio   opsBiblioData `xml:"bibliographic-data"`
+	Abstract []opsAbstract `xml:"abstract"`
 }
 
 type opsBiblioData struct {
 	Title      []opsTitle     `xml:"invention-title"`
-	Applicants []opsApplicant `xml:"parties>applicants>applicant"`
-	Inventors  []opsInventor  `xml:"parties>inventors>inventor"`
-	AppRef     opsDocRef      `xml:"application-reference>document-id"`
-	PubRef     []opsDocRef    `xml:"publication-reference>document-id"`
+	Applicants opsParties     `xml:"parties"`
+	PubRef     []opsPubRef    `xml:"publication-reference"`
+	AppRef     []opsAppRef    `xml:"application-reference"`
+}
+
+type opsParties struct {
+	Applicants []opsApplicant `xml:"applicants>applicant"`
+	Inventors  []opsInventor  `xml:"inventors>inventor"`
 }
 
 type opsTitle struct {
@@ -282,7 +309,16 @@ type opsInventor struct {
 	Name string `xml:"inventor-name>name"`
 }
 
+type opsPubRef struct {
+	DocIDs []opsDocRef `xml:"document-id"`
+}
+
+type opsAppRef struct {
+	DocIDs []opsDocRef `xml:"document-id"`
+}
+
 type opsDocRef struct {
+	Type    string `xml:"document-id-type,attr"`
 	Country string `xml:"country"`
 	DocNum  string `xml:"doc-number"`
 	Kind    string `xml:"kind"`
@@ -300,8 +336,9 @@ func parseEPOResponse(data []byte) ([]PatentResult, error) {
 		return nil, fmt.Errorf("epo: failed to parse XML: %w", err)
 	}
 
-	results := make([]PatentResult, 0, len(world.Search.Documents))
-	for _, doc := range world.Search.Documents {
+	docs := world.Search.Result.ExchangeDocs.Documents
+	results := make([]PatentResult, 0, len(docs))
+	for _, doc := range docs {
 		result := PatentResult{
 			Number: doc.Country + doc.DocNum,
 		}
@@ -313,33 +350,46 @@ func parseEPOResponse(data []byte) ([]PatentResult, error) {
 			}
 		}
 
-		// Assignee: first applicant
-		if len(doc.Biblio.Applicants) > 0 {
-			result.Assignee = strings.TrimSpace(doc.Biblio.Applicants[0].Name)
+		// Assignee: first applicant (strip country suffix like " [US]")
+		if len(doc.Biblio.Applicants.Applicants) > 0 {
+			result.Assignee = cleanEPOName(doc.Biblio.Applicants.Applicants[0].Name)
 		}
 
-		// Inventor: first inventor
-		if len(doc.Biblio.Inventors) > 0 {
-			result.Inventor = strings.TrimSpace(doc.Biblio.Inventors[0].Name)
+		// Inventor: first inventor (strip country suffix)
+		if len(doc.Biblio.Applicants.Inventors) > 0 {
+			result.Inventor = cleanEPOName(doc.Biblio.Applicants.Inventors[0].Name)
 		}
 
-		// Filing date from application reference
-		if doc.Biblio.AppRef.Date != "" {
-			result.Filed = formatEPODate(doc.Biblio.AppRef.Date)
-		}
-
-		// Publication date (as granted proxy)
-		for _, ref := range doc.Biblio.PubRef {
-			if ref.Date != "" {
-				result.Granted = formatEPODate(ref.Date)
+		// Filing date from application reference (prefer docdb type)
+		for _, appRef := range doc.Biblio.AppRef {
+			for _, docID := range appRef.DocIDs {
+				if docID.Date != "" {
+					result.Filed = formatEPODate(docID.Date)
+					break
+				}
+			}
+			if result.Filed != "" {
 				break
 			}
 		}
 
-		// Abstract: prefer English
+		// Publication date
+		for _, pubRef := range doc.Biblio.PubRef {
+			for _, docID := range pubRef.DocIDs {
+				if docID.Date != "" {
+					result.Granted = formatEPODate(docID.Date)
+					break
+				}
+			}
+			if result.Granted != "" {
+				break
+			}
+		}
+
+		// Abstract: prefer English, strip patent document prefixes
 		for _, abs := range doc.Abstract {
 			if result.Abstract == "" || abs.Lang == "en" {
-				result.Abstract = strings.TrimSpace(abs.Text)
+				result.Abstract = cleanEPOAbstract(abs.Text)
 			}
 		}
 		if len(result.Abstract) > 500 {
@@ -360,5 +410,25 @@ func formatEPODate(d string) string {
 		return d[:4] + "-" + d[4:6] + "-" + d[6:8]
 	}
 	return d
+}
+
+// cleanEPOName strips the country suffix (e.g. " [US]") from EPO party names.
+func cleanEPOName(name string) string {
+	name = strings.TrimSpace(name)
+	if idx := strings.LastIndex(name, " ["); idx > 0 && strings.HasSuffix(name, "]") {
+		name = name[:idx]
+	}
+	return name
+}
+
+// cleanEPOAbstract removes patent document prefixes like "[0000]    " from abstracts.
+func cleanEPOAbstract(text string) string {
+	text = strings.TrimSpace(text)
+	if len(text) > 6 && text[0] == '[' {
+		if idx := strings.Index(text, "]"); idx > 0 && idx < 10 {
+			text = strings.TrimSpace(text[idx+1:])
+		}
+	}
+	return text
 }
 

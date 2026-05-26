@@ -242,19 +242,24 @@ func TestEPOProvider_CQLConstruction(t *testing.T) {
 		want   string
 	}{
 		{
-			name:   "simple query",
+			name:   "multi-word query splits into keywords",
 			params: PatentSearchParams{Query: "video encoding"},
-			want:   `txt="video encoding"`,
+			want:   `txt=video AND txt=encoding`,
 		},
 		{
-			name:   "with assignee and inventor",
+			name:   "single word query",
 			params: PatentSearchParams{Query: "AI", Assignee: "Google", Inventor: "Smith"},
-			want:   `txt="AI" AND pa="Google" AND in="Smith"`,
+			want:   `txt=AI AND pa="Google" AND in="Smith"`,
 		},
 		{
 			name:   "with date range and office",
 			params: PatentSearchParams{Query: "network", PatentOffice: "EP", YearFrom: 2020, YearTo: 2024},
-			want:   `txt="network" AND pn=EP AND pd>=2020 AND pd<=2024`,
+			want:   `txt=network AND pn=EP AND pd>=2020 AND pd<=2024`,
+		},
+		{
+			name:   "multi-word with all fields",
+			params: PatentSearchParams{Query: "language model inference", Assignee: "Apple", PatentOffice: "EP"},
+			want:   `txt=language AND txt=model AND txt=inference AND pa="Apple" AND pn=EP`,
 		},
 	}
 

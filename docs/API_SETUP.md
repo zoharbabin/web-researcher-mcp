@@ -190,3 +190,62 @@ See [docs/DEPLOYMENT.md](DEPLOYMENT.md) for advanced routing configuration.
 | **SearchAPI.io** | Multiple engine backends via unified API | Smaller free tier |
 
 **Recommendation**: Start with Brave (generous free tier, fast) and add Google as a fallback. Use `SEARCH_ROUTING=brave,google` for the best balance of speed and coverage.
+
+---
+
+## Patent Search Providers (Optional)
+
+These providers enable structured patent search via `patent_search`. All are optional — without them, patent search falls back to web discovery via your configured web search provider.
+
+### EPO Open Patent Services (Worldwide)
+
+Free access to 100M+ patent documents across all major offices.
+
+**Step 1**: Register at [developers.epo.org](https://developers.epo.org) and create an app with "OPS - EPO OPS Core APIs" enabled.
+
+**Step 2**: Configure
+
+```bash
+export EPO_OPS_CONSUMER_KEY=your-consumer-key
+export EPO_OPS_CONSUMER_SECRET=your-consumer-secret
+```
+
+**Notes**: Free tier is rate-limited (throttled, not hard-capped). Authentication uses OAuth2 Client Credentials (handled automatically). Coverage is worldwide — all patent offices.
+
+### USPTO (US Patents)
+
+Access to US patent applications and grants.
+
+**Step 1**: Request an API key at [developer.uspto.gov](https://developer.uspto.gov).
+
+**Step 2**: Configure
+
+```bash
+export USPTO_API_KEY=your-api-key
+```
+
+**Notes**: Covers US patents only. Queries for non-US patent offices automatically skip this provider.
+
+### The Lens (Worldwide + Scholarly Links)
+
+Access to 100+ jurisdictions with links between patents and scholarly works.
+
+**Step 1**: Register at [lens.org](https://www.lens.org) and request API access from your account settings.
+
+**Step 2**: Configure
+
+```bash
+export LENS_API_TOKEN=your-api-token
+```
+
+**Notes**: Free tier allows limited monthly requests. Unique capability: links patents to citing academic papers.
+
+### Patent Routing
+
+When multiple patent providers are configured, the router tries them in priority order with automatic fallback:
+
+```bash
+export SEARCH_ROUTING='{"patents":"epo,lens,searchapi,uspto","default":"brave,google"}'
+```
+
+Without explicit routing, all configured patent providers are tried in order until one returns results. The `patent_office` parameter in search requests enables intelligent routing — e.g., a search restricted to `EP` skips USPTO automatically.
