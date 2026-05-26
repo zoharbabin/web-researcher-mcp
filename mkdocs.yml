@@ -1,6 +1,6 @@
 site_name: Web Researcher MCP
 site_url: https://zoharbabin.github.io/web-researcher-mcp/
-site_description: MCP server for AI assistants — web search, content extraction, and multi-source research
+site_description: Open-source research toolkit for AI assistants — domain-focused search lenses, verifiable citations, full privacy
 repo_url: https://github.com/zoharbabin/web-researcher-mcp
 repo_name: zoharbabin/web-researcher-mcp
 

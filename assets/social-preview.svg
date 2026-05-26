@@ -43,28 +43,25 @@
   <text x="520" y="338"
         font-family="'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
         font-size="24" font-weight="400" fill="#475569" letter-spacing="-0.2"
-        text-rendering="optimizeLegibility">Multi-provider research intelligence for AI assistants</text>
+        text-rendering="optimizeLegibility">Your AI searches sources you trust — open, private, verifiable</text>
 
   <!-- Gradient accent bar -->
   <rect x="520" y="362" width="80" height="4" rx="2" fill="url(#g-text)"/>
 
-  <!-- Feature pills — all on one row including Open Source -->
+  <!-- Value pills — trust-focused messaging -->
   <g font-family="'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
      font-size="15" font-weight="500" text-rendering="optimizeLegibility">
-    <rect x="520" y="392" width="120" height="32" rx="16" fill="#EEF2FF"/>
-    <text x="580" y="413" fill="#4F46E5" text-anchor="middle">Web Search</text>
+    <rect x="520" y="392" width="142" height="32" rx="16" fill="#EEF2FF"/>
+    <text x="591" y="413" fill="#4F46E5" text-anchor="middle">Trusted Sources</text>
 
-    <rect x="654" y="392" width="104" height="32" rx="16" fill="#ECFDF5"/>
-    <text x="706" y="413" fill="#059669" text-anchor="middle">Scraping</text>
+    <rect x="676" y="392" width="138" height="32" rx="16" fill="#ECFDF5"/>
+    <text x="745" y="413" fill="#059669" text-anchor="middle">Real Citations</text>
 
-    <rect x="772" y="392" width="136" height="32" rx="16" fill="#FFF7ED"/>
-    <text x="840" y="413" fill="#D97706" text-anchor="middle">Multi-Provider</text>
+    <rect x="828" y="392" width="96" height="32" rx="16" fill="#FFF7ED"/>
+    <text x="876" y="413" fill="#D97706" text-anchor="middle">Private</text>
 
-    <rect x="922" y="392" width="76" height="32" rx="16" fill="#F0F9FF"/>
-    <text x="960" y="413" fill="#0284C7" text-anchor="middle">MCP</text>
-
-    <rect x="1012" y="392" width="120" height="32" rx="16" fill="none" stroke="#CBD5E1" stroke-width="1.5"/>
-    <text x="1072" y="413" fill="#64748B" text-anchor="middle">Open Source</text>
+    <rect x="938" y="392" width="120" height="32" rx="16" fill="none" stroke="#CBD5E1" stroke-width="1.5"/>
+    <text x="998" y="413" fill="#64748B" text-anchor="middle">Open Source</text>
   </g>
 
   <!-- Bottom footer -->
