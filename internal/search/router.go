@@ -41,19 +41,22 @@ type FallbackNotifier func(op Operation, from, to, reason string)
 // It holds multiple configured providers and routes requests based on
 // operation type, provider health (circuit breakers), and priority ordering.
 type Router struct {
-	mu        sync.RWMutex
-	providers map[string]Provider
-	breakers  map[string]*circuit.Breaker
-	routing   RoutingConfig
-	notifier  FallbackNotifier
-	logger    *slog.Logger
+	mu              sync.RWMutex
+	providers       map[string]Provider
+	breakers        map[string]*circuit.Breaker
+	patentProviders map[string]PatentProvider
+	patentBreakers  map[string]*circuit.Breaker
+	routing         RoutingConfig
+	notifier        FallbackNotifier
+	logger          *slog.Logger
 }
 
 // RouterConfig configures the Router.
 type RouterConfig struct {
-	Routing  RoutingConfig
-	Notifier FallbackNotifier
-	Logger   *slog.Logger
+	Routing         RoutingConfig
+	Notifier        FallbackNotifier
+	Logger          *slog.Logger
+	PatentProviders map[string]PatentProvider
 }
 
 // NewRouter creates a multi-provider router. Providers must be pre-constructed
@@ -68,17 +71,32 @@ func NewRouter(providers map[string]Provider, cfg RouterConfig) *Router {
 		})
 	}
 
+	patentProviders := cfg.PatentProviders
+	if patentProviders == nil {
+		patentProviders = make(map[string]PatentProvider)
+	}
+	patentBreakers := make(map[string]*circuit.Breaker, len(patentProviders))
+	for name := range patentProviders {
+		patentBreakers[name] = circuit.New(circuit.Config{
+			FailureThreshold: 3,
+			ResetTimeout:     30,
+			HalfOpenAttempts: 1,
+		})
+	}
+
 	logger := cfg.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
 
 	return &Router{
-		providers: providers,
-		breakers:  breakers,
-		routing:   cfg.Routing,
-		notifier:  cfg.Notifier,
-		logger:    logger,
+		providers:       providers,
+		breakers:        breakers,
+		patentProviders: patentProviders,
+		patentBreakers:  patentBreakers,
+		routing:         cfg.Routing,
+		notifier:        cfg.Notifier,
+		logger:          logger,
 	}
 }
 
@@ -192,6 +210,134 @@ func (r *Router) News(ctx context.Context, params NewsSearchParams) ([]NewsResul
 	return nil, fmt.Errorf("no providers available for news search")
 }
 
+// Patents implements PatentSearcher by routing to patent-capable providers
+// in priority order, with region-aware filtering and circuit breaker fallback.
+func (r *Router) Patents(ctx context.Context, params PatentSearchParams) ([]PatentResult, error) {
+	priority := r.patentPriority()
+	var lastErr error
+
+	for i, name := range priority {
+		// Check full providers that also implement PatentSearcher (e.g. SearchAPI)
+		if p, ok := r.provider(name); ok {
+			ps, implements := p.(PatentSearcher)
+			if !implements {
+				continue
+			}
+			if !r.isHealthy(name) {
+				continue
+			}
+			// Check region metadata if available
+			if pp, hasMetadata := p.(PatentProvider); hasMetadata {
+				if !pp.Metadata().MatchesRegion(params.PatentOffice) {
+					continue
+				}
+			}
+			results, err := ps.Patents(ctx, params)
+			if err == nil {
+				r.recordSuccess(name)
+				return results, nil
+			}
+			lastErr = err
+			r.recordFailure(name)
+			r.logger.Warn("patent provider failed, trying next",
+				"provider", name, "operation", "patents", "error", err)
+			if i+1 < len(priority) {
+				r.notifyFallback(OpPatents, name, priority[i+1], err.Error())
+			}
+			continue
+		}
+
+		// Check patent-only providers
+		r.mu.RLock()
+		pp, ok := r.patentProviders[name]
+		breaker, hasBrk := r.patentBreakers[name]
+		r.mu.RUnlock()
+		if !ok {
+			continue
+		}
+		if hasBrk && breaker.State() == circuit.StateOpen {
+			continue
+		}
+		if !pp.Metadata().MatchesRegion(params.PatentOffice) {
+			continue
+		}
+
+		results, err := pp.Patents(ctx, params)
+		if err == nil {
+			if hasBrk {
+				_ = breaker.Execute(func() error { return nil })
+			}
+			return results, nil
+		}
+		lastErr = err
+		if hasBrk {
+			_ = breaker.Execute(func() error { return err })
+		}
+		r.logger.Warn("patent provider failed, trying next",
+			"provider", name, "operation", "patents", "error", err)
+		if i+1 < len(priority) {
+			r.notifyFallback(OpPatents, name, priority[i+1], err.Error())
+		}
+	}
+
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, fmt.Errorf("no providers available for patent search")
+}
+
+// RegisterPatentProviders adds patent-only providers to the router.
+func (r *Router) RegisterPatentProviders(providers map[string]PatentProvider) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for name, p := range providers {
+		r.patentProviders[name] = p
+		if _, exists := r.patentBreakers[name]; !exists {
+			r.patentBreakers[name] = circuit.New(circuit.Config{
+				FailureThreshold: 3,
+				ResetTimeout:     30,
+				HalfOpenAttempts: 1,
+			})
+		}
+	}
+}
+
+// PatentProviderByName returns a patent-capable provider by name.
+// Checks both full providers (that implement PatentSearcher) and patent-only providers.
+func (r *Router) PatentProviderByName(name string) (PatentSearcher, bool) {
+	if p, ok := r.provider(name); ok {
+		if ps, implements := p.(PatentSearcher); implements {
+			return ps, true
+		}
+	}
+	r.mu.RLock()
+	pp, ok := r.patentProviders[name]
+	r.mu.RUnlock()
+	if ok {
+		return pp, true
+	}
+	return nil, false
+}
+
+// patentPriority returns the ordered list of patent provider names to try.
+func (r *Router) patentPriority() []string {
+	priority := r.priorityFor(OpPatents)
+
+	// Also include patent-only providers not already in the list
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	seen := make(map[string]bool, len(priority))
+	for _, name := range priority {
+		seen[name] = true
+	}
+	for name := range r.patentProviders {
+		if !seen[name] {
+			priority = append(priority, name)
+		}
+	}
+	return priority
+}
+
 // ProviderFor returns the best available provider for a given operation,
 // respecting routing config and circuit breaker state. Useful for tools that
 // need direct access (academic_search, patent_search).
@@ -207,6 +353,12 @@ func (r *Router) ProviderFor(op Operation) (Provider, string) {
 		}
 	}
 	return nil, ""
+}
+
+// ProviderByName returns a specific provider by name.
+// Returns (nil, false) if the provider is not registered.
+func (r *Router) ProviderByName(name string) (Provider, bool) {
+	return r.provider(name)
 }
 
 // Providers returns all registered provider names.

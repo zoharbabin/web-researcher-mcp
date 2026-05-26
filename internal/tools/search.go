@@ -27,6 +27,7 @@ type webSearchInput struct {
 	ExcludeTerms string `json:"exclude_terms,omitempty" jsonschema:"Terms to exclude from results (space-separated)."`
 	Country      string `json:"country,omitempty" jsonschema:"Restrict to a country using ISO 3166-1 alpha-2 code (e.g. US, GB)."`
 	Lens         string `json:"lens,omitempty" jsonschema:"Apply a curated domain-restricted search lens: programming, news, tech, legal, medical, finance, science, government. Overrides site parameter."`
+	Provider     string `json:"provider,omitempty" jsonschema:"Force a specific search provider for this query: google, brave, serper, searxng, searchapi. Omit to use the configured default. Returns an error if the requested provider is not configured."`
 }
 
 func registerWebSearch(srv *mcp.Server, deps Dependencies) {
@@ -89,7 +90,12 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 			}
 		}
 
-		results, err := deps.Search.Web(ctx, params)
+		provider, errResult := resolveProvider(deps, input.Provider)
+		if errResult != nil {
+			return errResult, nil, nil
+		}
+
+		results, err := provider.Web(ctx, params)
 		if err != nil {
 			errCode := "upstream_error"
 			if isRateLimitError(err) {
@@ -201,5 +207,116 @@ func structuredResult(jsonBytes []byte) *mcp.CallToolResult {
 			&mcp.TextContent{Text: string(jsonBytes)},
 		},
 		StructuredContent: json.RawMessage(jsonBytes),
+	}
+}
+
+// resolveProvider returns the search provider to use for a request.
+// If providerName is empty, returns deps.Search (the configured default/router).
+// If providerName is set, attempts to resolve it from the router.
+// Returns (nil, errorResult) if the provider cannot be resolved.
+func resolveProvider(deps Dependencies, providerName string) (search.Provider, *mcp.CallToolResult) {
+	if providerName == "" {
+		return deps.Search, nil
+	}
+
+	// Check if it's a known/supported provider name (web or patent-specific)
+	supported := false
+	for _, name := range search.SupportedProviders {
+		if name == providerName {
+			supported = true
+			break
+		}
+	}
+	if !supported {
+		for _, name := range search.SupportedPatentProviders {
+			if name == providerName {
+				supported = true
+				break
+			}
+		}
+	}
+
+	if !supported {
+		all := append(search.SupportedProviders, search.SupportedPatentProviders...)
+		return nil, toolError(fmt.Sprintf(
+			"Unknown search provider %q. Supported providers: %s. "+
+				"If you'd like us to add support for this provider, please open an issue at "+
+				"https://github.com/zoharbabin/web-researcher-mcp/issues",
+			providerName, strings.Join(all, ", ")))
+	}
+
+	// Try to get it from the router
+	if router, ok := deps.Search.(*search.Router); ok {
+		p, found := router.ProviderByName(providerName)
+		if found {
+			return p, nil
+		}
+	} else if deps.Search.Name() == providerName {
+		return deps.Search, nil
+	}
+
+	return nil, toolError(fmt.Sprintf(
+		"Search provider %q is not configured. To use it, set the appropriate API key "+
+			"in your environment. See .env.example for required variables per provider.",
+		providerName))
+}
+
+// resolvePatentSearcher returns a PatentSearcher for a given provider name.
+// Checks the main provider, router, patent-only providers, and full providers
+// that implement PatentSearcher (e.g. SearchAPI).
+func resolvePatentSearcher(deps Dependencies, providerName string) (search.PatentSearcher, *mcp.CallToolResult) {
+	if providerName == "" {
+		// Check if the main provider implements PatentSearcher
+		if ps, ok := deps.Search.(search.PatentSearcher); ok {
+			return ps, nil
+		}
+		return nil, nil
+	}
+
+	// Try router's patent provider lookup (covers both full and patent-only providers)
+	if router, ok := deps.Search.(*search.Router); ok {
+		if ps, found := router.PatentProviderByName(providerName); found {
+			return ps, nil
+		}
+	}
+
+	// Try direct patent providers
+	if pp, ok := deps.PatentProviders[providerName]; ok {
+		return pp, nil
+	}
+
+	// Check if the main provider matches the requested name and implements PatentSearcher
+	// (single-provider mode: e.g. SEARCH_PROVIDER=searchapi without routing)
+	if deps.Search.Name() == providerName {
+		if ps, ok := deps.Search.(search.PatentSearcher); ok {
+			return ps, nil
+		}
+	}
+
+	// Check if it's a known patent provider that's not configured
+	for _, name := range search.SupportedPatentProviders {
+		if name == providerName {
+			envHint := patentProviderEnvHint(providerName)
+			return nil, toolError(fmt.Sprintf(
+				"Patent provider %q is not configured. %s See .env.example for details.",
+				providerName, envHint))
+		}
+	}
+
+	return nil, nil
+}
+
+func patentProviderEnvHint(name string) string {
+	switch name {
+	case "epo":
+		return "Set EPO_OPS_CONSUMER_KEY and EPO_OPS_CONSUMER_SECRET."
+	case "lens":
+		return "Set LENS_API_TOKEN."
+	case "uspto":
+		return "Set USPTO_API_KEY."
+	case "searchapi":
+		return "Set SEARCHAPI_API_KEY."
+	default:
+		return ""
 	}
 }

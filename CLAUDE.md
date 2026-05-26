@@ -23,13 +23,13 @@ internal/
 ├── search/       # Provider interface + adapters + Router (multi-provider fallback)
 ├── scraper/      # 4-tier pipeline: markdown → stealth → HTML → browser (go-rod)
 ├── documents/    # PDF, DOCX, PPTX extraction
-├── cache/        # Cache interface + hybrid impl (memory LRU + AES-encrypted disk)
+├── cache/        # Cache interface + hybrid impl (memory + AES-encrypted disk)
 ├── content/      # Sanitize, dedup, truncate, quality score, citation extraction
 ├── config/       # Env-based config — all vars documented in .env.example
-├── server/       # MCP server lifecycle (STDIO + HTTP/SSE)
+├── server/       # MCP server lifecycle (STDIO + Streamable HTTP)
 ├── auth/         # OAuth 2.1 middleware (JWKS, audience/issuer validation)
 ├── audit/        # Auditor interface + structured JSON logging
-├── session/      # Per-tenant session state (sync.Map or Redis)
+├── session/      # Per-tenant session state (in-memory sync.Map)
 ├── metrics/      # Prometheus counters/histograms per tool
 ├── ratelimit/    # Token bucket (per-tenant + global)
 ├── circuit/      # Circuit breaker for external APIs
@@ -44,7 +44,7 @@ tests/benchmark/  # Performance benchmarks
 1. **Zero global state** — all deps flow through `tools.Dependencies` struct (constructed in `main.go`)
 2. **Interface-driven** — `cache.Cache`, `search.Provider`, `audit.Auditor` are interfaces; swap implementations without touching callers
 3. **Errors are values** — tool handlers return `toolError("message")` which sets `IsError: true` on the MCP result; never panic
-4. **Bounded concurrency** — scraping semaphore (5 slots), browser pool (3 slots), per-tenant rate limits
+4. **Bounded concurrency** — scraping semaphore (5 slots), mutex-serialized browser, per-tenant rate limits
 5. **Lens routing** — if `lens` is set, `site:` operators are injected and routed to the configured provider; lenses with a dedicated `cx` route directly to that Google PSE engine
 6. **Multi-provider routing** — when `SEARCH_ROUTING` is set, the Router wraps all available providers with per-provider circuit breakers and priority-ordered fallback; transparent to tools via the `search.Provider` interface
 
@@ -77,7 +77,7 @@ tests/benchmark/  # Performance benchmarks
 ## Environment
 
 Required (unless `SEARCH_ROUTING` is set): `GOOGLE_CUSTOM_SEARCH_API_KEY`, `GOOGLE_CUSTOM_SEARCH_ID`
-Optional: `SEARCH_PROVIDER` (brave|google|serper|searxng|searchapi), `SEARCH_ROUTING` (multi-provider fallback), `BRAVE_API_KEY`, `SEARCHAPI_API_KEY`, `PORT` (enables HTTP), `REDIS_URL` (shared state)
+Optional: `SEARCH_PROVIDER` (brave|google|serper|searxng|searchapi), `SEARCH_ROUTING` (multi-provider fallback), `BRAVE_API_KEY`, `SEARCHAPI_API_KEY`, `PORT` (enables HTTP)  
 Full list: see `.env.example`
 
 ## Release Process

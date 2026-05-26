@@ -95,7 +95,7 @@ Search patent databases with classification codes and office filtering.
 }
 ```
 
-**Response** contains: `patents` (array of `{title, url, number, abstract}`), `query`, `searchType`, and `resultCount`. Supports strict office filtering (US, EP, WO, JP, CN, KR) and CPC classification codes for precise patent landscape mapping.
+**Response** contains: `patents` (array of `{title, url, number, abstract, assignee, inventor, filed, granted, pdf, status}`), `query`, `searchType`, `resultCount`, `source` (which provider answered), and `searchUrl`. Supports strict office filtering (US, EP, WO, JP, CN, KR), CPC classification codes, and automatic provider selection based on region.
 
 ---
 

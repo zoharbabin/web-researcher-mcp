@@ -50,7 +50,7 @@ The server reads MCP JSON-RPC from stdin, writes to stdout. No port, no network.
 }
 ```
 
-### HTTP/SSE (Multi-client, web apps)
+### HTTP (Multi-client, web apps)
 
 ```bash
 PORT=3000 \
@@ -205,6 +205,19 @@ spec:
 | `SEARXNG_URL` | SearXNG instance URL | — |
 | `CUSTOM_LENSES_PATH` | External lenses directory | — |
 
+### Patent Providers (Optional)
+
+These enable structured patent search via official APIs. Without them, `patent_search` falls back to web search discovery.
+
+| Variable | Description | Coverage |
+|----------|-------------|----------|
+| `USPTO_API_KEY` | USPTO API key ([data.uspto.gov](https://data.uspto.gov)) | US patents |
+| `EPO_OPS_CONSUMER_KEY` | EPO OPS consumer key ([developers.epo.org](https://developers.epo.org)) | Worldwide |
+| `EPO_OPS_CONSUMER_SECRET` | EPO OPS consumer secret | Worldwide |
+| `LENS_API_TOKEN` | The Lens API token ([lens.org](https://www.lens.org)) | Worldwide + scholarly |
+
+Each configured provider gets an independent circuit breaker. The `patent_search` tool automatically selects providers based on the requested `patent_office` region.
+
 ### Multi-Provider Routing
 
 When `SEARCH_ROUTING` is set, the server uses all configured providers with intelligent fallback:
@@ -214,7 +227,7 @@ When `SEARCH_ROUTING` is set, the server uses all configured providers with inte
 SEARCH_ROUTING=brave,google,serper
 
 # Advanced: per-operation routing (JSON)
-SEARCH_ROUTING='{"web":"brave,google","news":"brave,serper","images":"google,brave","academic":"searchapi,google","patents":"searchapi,google","default":"brave,google,searchapi"}'
+SEARCH_ROUTING='{"web":"brave,google","news":"brave,serper","images":"google,brave","academic":"searchapi,google","patents":"epo,lens,searchapi,uspto","default":"brave,google,searchapi"}'
 ```
 
 **How it works:**
@@ -243,7 +256,7 @@ When no explicit routing is configured for an operation, the `default` list is u
 | `CACHE_DIR` | Disk cache directory | Platform cache dir (e.g., `~/Library/Caches/web-researcher-mcp`) |
 | `CACHE_MAX_MEMORY_MB` | Max memory cache size | `64` |
 | `CACHE_ENCRYPTION_KEY` | 64 hex chars for AES-256-GCM | — (plaintext) |
-| `REDIS_URL` | Redis connection string | — (local cache only) |
+| `REDIS_URL` | Redis connection string (accepted but not yet used — reserved for future distributed sessions) | — |
 
 ### Rate Limiting
 
@@ -300,7 +313,7 @@ DAILY_QUOTA_PER_TENANT=10000
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `AUDIT_ENABLED` | Enable structured audit logging | `true` |
-| `AUDIT_OUTPUT_PATH` | File path for audit log output (JSONL format) | — (stdout) |
+| `AUDIT_OUTPUT_PATH` | File path for audit log output (JSONL format) | — (stderr) |
 | `AUDIT_BUFFER_SIZE` | Internal event buffer size | `1000` |
 | `AUDIT_INCLUDE_REQUEST_BODY` | Include full request bodies in audit records | `false` |
 
@@ -309,6 +322,8 @@ DAILY_QUOTA_PER_TENANT=10000
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `CACHE_ISOLATION` | Cache isolation mode (`shared` or `tenant`) | `shared` |
+
+**Note:** `CACHE_ISOLATION=tenant` is accepted but not yet enforced in the cache implementation. Cache keys are content-addressed and shared across tenants. For search results this is safe (same query returns same results), but deployments requiring strict tenant data isolation should be aware of this limitation.
 
 ### Auth (Advanced)
 
@@ -321,32 +336,20 @@ DAILY_QUOTA_PER_TENANT=10000
 
 ## Horizontal Scaling
 
-When running multiple instances behind a load balancer:
+**Current state:** The server uses in-memory session state and per-instance rate limit counters. This means:
 
-1. **Set `REDIS_URL`** — Enables shared cache, rate limit counters, and session state across instances.
-2. **Use session-affinity** for SSE connections (sticky sessions at L7 LB), OR use the stateless Streamable HTTP transport where clients reconnect and re-fetch state from Redis.
-3. **go-rod browser instances** are per-pod. No shared browser pool. Each pod handles its own headless Chrome.
+- **Cache:** Each instance has its own memory + disk cache. Cache hits are local only. This is acceptable since search results are deterministic (same query = same results).
+- **Sessions:** Sequential search sessions are stored in-memory (`sync.Map`). If a client reconnects to a different instance mid-session, the session is lost. Use session-affinity (sticky sessions) at your load balancer.
+- **Rate limits:** Per-instance, not distributed. A tenant hitting N instances gets N times the per-tenant limit.
+- **go-rod browser instances** are per-pod. No shared browser pool. Each pod manages its own headless Chrome.
 
-**Architecture (multi-instance):**
+**Recommendations for multi-instance HTTP deployments:**
 
-```
-                  ┌─────────────┐
-                  │ Load Balancer│
-                  └──────┬──────┘
-              ┌──────────┼──────────┐
-              │          │          │
-         ┌────▼───┐ ┌───▼────┐ ┌──▼─────┐
-         │ Pod 1  │ │ Pod 2  │ │ Pod 3  │
-         │(server)│ │(server)│ │(server)│
-         └────┬───┘ └───┬────┘ └──┬─────┘
-              │          │         │
-              └──────────┼─────────┘
-                         │
-                  ┌──────▼──────┐
-                  │    Redis    │
-                  │  (shared)   │
-                  └─────────────┘
-```
+1. Use sticky sessions at your L7 load balancer (route by `X-Session-ID` header or MCP session)
+2. Set rate limits conservatively (divide by expected instance count)
+3. Accept that cache miss rates will be higher than single-instance (each pod warms independently)
+
+**Note:** `REDIS_URL` is accepted in configuration but not yet wired into cache, sessions, or rate limiting. Distributed state support is planned for a future release.
 
 ---
 
@@ -511,8 +514,7 @@ This server is distributed via:
 | `/health/ready` | GET | `200` if dependencies up, `503` otherwise | K8s readiness probe |
 
 Readiness checks:
-- Google API key is configured and non-empty
-- Redis is reachable (if configured)
+- At least one search provider is configured with valid credentials
 - Disk cache directory is writable
 
 ---
@@ -523,7 +525,7 @@ On SIGINT/SIGTERM or stdin EOF:
 1. Stop accepting new connections
 2. Drain in-flight requests (30s timeout)
 3. Flush cache to disk
-4. Close Redis connections
+4. Close audit logger (drains buffered events including swap file)
 5. Terminate headless browsers
 6. Exit 0
 

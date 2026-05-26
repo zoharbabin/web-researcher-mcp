@@ -40,7 +40,7 @@ Works with Claude Code, Claude Desktop, Cursor, and any MCP-compatible client.
 | Tool | Description |
 |------|-------------|
 | `web_search` | General web search with optional search lenses for domain-focused results |
-| `scrape_page` | Extract content from any URL -- web pages, PDFs, DOCX, PPTX, YouTube transcripts (3-strategy fallback) |
+| `scrape_page` | Extract content from any URL -- web pages, PDFs, DOCX, PPTX, YouTube transcripts (4-tier fallback) |
 | `search_and_scrape` | Combined search + extraction pipeline with quality scoring and deduplication |
 | `image_search` | Search for images with size, type, color, and file format filters |
 | `news_search` | Search news sources with freshness controls and source filtering |
@@ -156,7 +156,7 @@ Done. Your AI assistant now has access to all research tools.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `PORT` | Enable HTTP/SSE mode | STDIO only |
+| `PORT` | Enable HTTP mode | STDIO only |
 | `OAUTH_ISSUER_URL` | JWT issuer URL for token validation | |
 | `OAUTH_AUDIENCE` | Expected JWT audience claim | |
 
@@ -181,7 +181,7 @@ web-researcher-mcp/
 │   ├── search/                 # Pluggable search providers + router + lens routing
 │   ├── scraper/                # 4-tier scraping pipeline (markdown → stealth → HTML → browser)
 │   ├── documents/              # PDF, DOCX, PPTX parsing
-│   ├── cache/                  # Hybrid cache (memory + disk + optional Redis)
+│   ├── cache/                  # Hybrid cache (memory + AES-encrypted disk)
 │   ├── auth/                   # OAuth 2.1 middleware + JWKS
 │   ├── audit/                  # Structured audit logging
 │   ├── session/                # Per-tenant session management
@@ -201,8 +201,8 @@ web-researcher-mcp/
 ┌─────────────────────────────────────────────────────────────────┐
 │                         MCP Protocol Layer                        │
 │  ┌──────────────────┐              ┌─────────────────────────┐  │
-│  │  STDIO Transport │              │  HTTP/SSE Transport     │  │
-│  │  (zero-config)   │              │  (OAuth 2.1 + CORS)     │  │
+│  │  STDIO Transport │              │  HTTP Transport         │  │
+│  │  (zero-config)   │              │  (Streamable, OAuth 2.1)│  │
 │  └────────┬─────────┘              └──────────┬──────────────┘  │
 │           └────────────────┬───────────────────┘                 │
 │                    ┌───────▼───────┐                             │
@@ -283,7 +283,7 @@ When `SEARCH_ROUTING` is set, the server uses multiple providers with automatic 
 export SEARCH_ROUTING=brave,google,serper
 
 # Per-operation routing (JSON) — different priorities for different search types
-export SEARCH_ROUTING='{"web":"brave,google","news":"brave,serper","images":"google,brave","default":"brave,google,searchapi"}'
+export SEARCH_ROUTING='{"web":"brave,google","news":"brave,serper","images":"google,brave","patents":"epo,lens,searchapi,uspto","default":"brave,google,searchapi"}'
 ```
 
 Each provider gets an independent circuit breaker. If a provider fails (timeout, rate limit, 5xx), the next provider in the priority list is tried automatically. Lenses can override routing via the `routing` field in their JSON definition.
@@ -519,7 +519,7 @@ Add to `.cursor/mcp.json` in your project root:
 }
 ```
 
-### HTTP/SSE Mode (Multi-Client, Teams)
+### HTTP Mode (Multi-Client, Teams)
 
 For shared deployments serving multiple clients or web applications:
 
@@ -547,17 +547,6 @@ services:
       GOOGLE_CUSTOM_SEARCH_ID: ${GOOGLE_CUSTOM_SEARCH_ID}
       SEARCH_PROVIDER: brave
       BRAVE_API_KEY: ${BRAVE_API_KEY}
-      REDIS_URL: redis://redis:6379
-    depends_on:
-      - redis
-
-  redis:
-    image: redis:7-alpine
-    volumes:
-      - redis-data:/data
-
-volumes:
-  redis-data:
 ```
 
 </details>
@@ -602,7 +591,7 @@ The browser tier (go-rod) requires Chromium. On first use it auto-downloads ~200
 <details>
 <summary><strong>Cache serving stale results after upgrade</strong></summary>
 
-The disk cache auto-invalidates on version change. If you're running from source without `-ldflags`, the version is always "dev" — delete the `./cache` directory manually or set `CACHE_DIR` to a versioned path.
+The disk cache lives at your OS cache directory (e.g., `~/Library/Caches/web-researcher-mcp/` on macOS, `~/.cache/web-researcher-mcp/` on Linux). Delete that directory to clear it, or set `CACHE_DIR` to a custom path.
 
 </details>
 

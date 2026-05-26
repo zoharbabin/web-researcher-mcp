@@ -41,7 +41,6 @@ archives:
       - README.md
       - LICENSE*
       - lenses/**/*
-      - .mcp.json
       - server.json
       - smithery.yaml
 

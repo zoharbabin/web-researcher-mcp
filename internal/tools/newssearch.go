@@ -17,6 +17,7 @@ type newsSearchInput struct {
 	Freshness  string `json:"freshness,omitempty" jsonschema:"How recent articles must be: hour, day, week (default), month, or year."`
 	SortBy     string `json:"sort_by,omitempty" jsonschema:"Sort order: relevance (default) or date (newest first)."`
 	NewsSource string `json:"news_source,omitempty" jsonschema:"Restrict to a specific news outlet domain (e.g. reuters.com, bbc.co.uk)."`
+	Provider   string `json:"provider,omitempty" jsonschema:"Force a specific search provider: google, brave, serper, searxng, searchapi. Omit to use configured default."`
 }
 
 func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
@@ -52,7 +53,12 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 			return structuredResult(cached), nil, nil
 		}
 
-		results, err := deps.Search.News(ctx, search.NewsSearchParams{
+		provider, errResult := resolveProvider(deps, input.Provider)
+		if errResult != nil {
+			return errResult, nil, nil
+		}
+
+		results, err := provider.News(ctx, search.NewsSearchParams{
 			Query:      input.Query,
 			NumResults: numResults,
 			Freshness:  freshness,

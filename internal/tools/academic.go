@@ -48,6 +48,7 @@ type academicSearchInput struct {
 	Source     string `json:"source,omitempty" jsonschema:"Restrict to an academic source: all (default), arxiv, pubmed, ieee, nature, springer."`
 	PDFOnly    bool   `json:"pdf_only,omitempty" jsonschema:"Only return papers with direct PDF links (default: false). Useful when you plan to scrape the full paper."`
 	SortBy     string `json:"sort_by,omitempty" jsonschema:"Sort order: relevance (default) or date (newest first)."`
+	Provider   string `json:"provider,omitempty" jsonschema:"Force a specific search provider: google, brave, serper, searxng, searchapi. Omit to use configured default."`
 }
 
 func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
@@ -102,7 +103,12 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 			siteQuery += " filetype:pdf"
 		}
 
-		results, err := deps.Search.Web(ctx, search.WebSearchParams{
+		provider, errResult := resolveProvider(deps, input.Provider)
+		if errResult != nil {
+			return errResult, nil, nil
+		}
+
+		results, err := provider.Web(ctx, search.WebSearchParams{
 			Query:      siteQuery,
 			NumResults: numResults,
 		})

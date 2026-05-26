@@ -29,4 +29,8 @@ coverage.out
 /site/
 /site_src/
 
+# Generated demo assets (large binaries)
+assets/*.gif
+assets/*.mp4
+
 docs/LAUNCH_PLAN.md

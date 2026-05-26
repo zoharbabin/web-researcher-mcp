@@ -387,24 +387,46 @@ type AcademicPaper struct {
 
 | Field | Type | Required | Default | Constraints |
 |-------|------|----------|---------|-------------|
-| `query` | string | yes | — | 1-500 chars |
+| `query` | string | no | — | Patent terms or number. Not required when `assignee` or `inventor` provided |
 | `num_results` | int | no | 5 | 1-10 |
 | `search_type` | string | no | `prior_art` | prior_art, specific, landscape |
 | `patent_office` | string | no | `all` | all, US, EP, WO, JP, CN, KR |
-| `assignee` | string | no | — | Company name |
+| `assignee` | string | no | — | Company name (auto-strips Inc/LLC/Ltd suffixes) |
 | `inventor` | string | no | — | Inventor name |
 | `cpc_code` | string | no | — | CPC classification (e.g., G06F) |
-| `year_from` | int | no | — | 1900-2030 |
-| `year_to` | int | no | — | 1900-2030 |
+| `year_from` | int | no | — | Only patents filed in or after this year |
+| `year_to` | int | no | — | Only patents filed in or before this year |
+| `provider` | string | no | — | Force provider: searchapi, epo, lens, uspto, or web search providers |
+
+### Output Fields
+
+Each patent in the `patents` array contains:
+
+| Field | Type | Always Present | Description |
+|-------|------|---------------|-------------|
+| `title` | string | yes | Patent title |
+| `number` | string | yes | Patent number (e.g., US10165245B2) |
+| `url` | string | yes | Link to patent detail page |
+| `abstract` | string | no | Patent abstract or snippet |
+| `assignee` | string | no | Patent owner/assignee |
+| `inventor` | string | no | Primary inventor name |
+| `filed` | string | no | Filing date (YYYY-MM-DD) |
+| `granted` | string | no | Grant date (YYYY-MM-DD) |
+| `pdf` | string | no | Direct link to patent PDF |
+| `status` | string | no | Application status (e.g., "Patented Case") |
+
+Additional output fields: `query`, `searchType`, `resultCount`, `source` (which provider answered), `searchUrl`.
 
 ### Behavior
-- Generate company name variations (5-8 permutations: no spaces, with suffixes, base names)
-- Map patent office to prefix codes
-- Always uses `site:patents.google.com` restriction via configured provider
-- Post-filter results by patent number prefix (US, EP, WO, JP, CN, KR) — non-matching patents are dropped when `patent_office` is specified
+- 4-strategy fallback: explicit provider → router → patent-only providers → web search discovery
+- Strips HTML from API responses; extracts clean patent numbers from paths
+- Normalizes assignee names (removes Inc/LLC/Corp/Ltd suffixes for matching)
+- Region-aware routing: `patent_office` filters which providers are tried
+- Post-filter results by patent number prefix when `patent_office` is specified
+- Does not cache empty results (only caches when patents are found)
 
 ### Cache
-- TTL: 24 hours
+- TTL: 24 hours (only for non-empty results)
 
 ---
 
@@ -453,8 +475,7 @@ type SequentialSearchOutput struct {
 ```
 
 ### State Management
-- In single-instance: `sync.Map` per tenant
-- In multi-instance: Redis hash per session (key: `session:{tenantID}:{sessionID}`)
+- In-memory `sync.Map` per tenant (requires session-affinity in multi-instance deployments)
 - No cache (state tracking, not content)
 
 ---

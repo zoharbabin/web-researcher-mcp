@@ -5,15 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
 type patentSearchInput struct {
-	Query        string `json:"query" jsonschema:"Patent search terms, invention description, or patent number (e.g. 'US11234567' or 'machine learning image classification').,required"`
+	Query        string `json:"query,omitempty" jsonschema:"Patent search terms, invention description, or patent number (e.g. 'US11234567' or 'machine learning video encoding'). Not required when assignee or inventor is provided."`
 	NumResults   int    `json:"num_results,omitempty" jsonschema:"Number of patents to return (1-10, default: 5)."`
 	SearchType   string `json:"search_type,omitempty" jsonschema:"Search strategy: prior_art (default, broad technical search), specific (exact patent lookup), landscape (competitive overview)."`
 	PatentOffice string `json:"patent_office,omitempty" jsonschema:"Restrict to patent office: all (default), US, EP, WO, JP, CN, KR."`
@@ -22,71 +24,162 @@ type patentSearchInput struct {
 	CPCCode      string `json:"cpc_code,omitempty" jsonschema:"Cooperative Patent Classification code to narrow by technology area (e.g. G06F for computing, H04L for networking)."`
 	YearFrom     int    `json:"year_from,omitempty" jsonschema:"Only include patents filed in or after this year."`
 	YearTo       int    `json:"year_to,omitempty" jsonschema:"Only include patents filed in or before this year."`
+	Provider     string `json:"provider,omitempty" jsonschema:"Force a specific patent provider: searchapi, epo, lens, uspto (patent-specific), or google, brave, serper, searxng (web search fallback). Omit for automatic selection based on configured providers and region."`
 }
 
 func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "patent_search",
-		Description:  "Search Google Patents for prior art, competitive landscapes, or specific patents by number. Returns JSON with fields: patents (array of {title, url, number, abstract}), query, searchType, resultCount. Query accepts patent numbers (e.g. 'US11234567') or natural-language invention descriptions. search_type adjusts strategy: prior_art (broad technical), specific (exact lookup), landscape (competitive overview). Auto-generates assignee name variations (with/without Inc, LLC, Corp, Ltd suffixes). On no matches returns resultCount: 0 with empty array; on failure returns isError with message. Subject to upstream API quotas with automatic provider fallback. Use academic_search for published research papers, or web_search for general technical content. Results cached 24 hours.",
+		Description:  "Search Google Patents for prior art, competitive landscapes, or specific patents by number. Returns JSON with fields: patents (array of {title, url, number, abstract, assignee, filed, granted}), query, searchType, resultCount, searchUrl. Query accepts patent numbers (e.g. 'US11234567') or natural-language invention descriptions. search_type adjusts strategy: prior_art (broad technical), specific (exact lookup), landscape (competitive overview). Auto-generates assignee name variations (with/without Inc, LLC, Corp, Ltd suffixes). On no matches returns resultCount: 0 with empty array; on failure returns isError with message. Discovers patents via web_search then enriches each result from the patent detail page for accurate structured data. Use academic_search for published research papers, or web_search for general technical content. Results cached 24 hours.",
 		Annotations:  readOnlyAnnotations(true, true),
 		OutputSchema: patentSearchOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input patentSearchInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
 
-		if input.Query == "" {
-			return toolError("query is required"), nil, nil
+		if input.Query == "" && input.Assignee == "" && input.Inventor == "" {
+			return toolError("query, assignee, or inventor is required"), nil, nil
 		}
 
 		numResults := input.NumResults
 		if numResults <= 0 {
 			numResults = 5
 		}
+		if numResults > 10 {
+			numResults = 10
+		}
 		searchType := input.SearchType
 		if searchType == "" {
 			searchType = "prior_art"
 		}
 
-		cacheKey := searchCacheKey("patent", input.Query, numResults, searchType, input.PatentOffice, input.Assignee, input.CPCCode)
+		cacheKey := searchCacheKey("patent", input.Query, numResults, searchType, input.PatentOffice, input.Assignee, input.CPCCode, input.Provider)
 		if cached, ok := deps.Cache.Get(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("patent_search", time.Since(start), nil, "", true)
 			auditToolCall(ctx, deps, "patent_search", time.Since(start), nil, "")
 			return structuredResult(cached), nil, nil
 		}
 
-		searchQuery := buildPatentQuery(input.Query, input.Assignee, input.Inventor, input.CPCCode, input.PatentOffice, input.YearFrom, input.YearTo)
-
-		results, err := deps.Search.Web(ctx, search.WebSearchParams{
-			Query:      searchQuery + " site:patents.google.com",
-			NumResults: numResults,
-		})
-		if err != nil {
-			errCode := "upstream_error"
-			if isRateLimitError(err) {
-				errCode = "rate_limited"
-			}
-			deps.Metrics.RecordToolCall("patent_search", time.Since(start), err, errCode, false)
-			auditToolCall(ctx, deps, "patent_search", time.Since(start), err, errCode)
-			if isRateLimitError(err) {
-				return rateLimitError(err), nil, nil
-			}
-			return toolError(fmt.Sprintf("patent search failed: %v", err)), nil, nil
+		searchParams := search.PatentSearchParams{
+			Query:        input.Query,
+			Assignee:     normalizeAssignee(input.Assignee),
+			Inventor:     input.Inventor,
+			PatentOffice: input.PatentOffice,
+			YearFrom:     input.YearFrom,
+			YearTo:       input.YearTo,
+			NumResults:   numResults,
 		}
 
-		patents := make([]map[string]any, 0, len(results))
-		for _, r := range results {
-			number := extractPatentNumber(r.URL)
-			if input.PatentOffice != "" && input.PatentOffice != "all" && !matchesPatentOffice(number, input.PatentOffice) {
-				continue
+		var patents []scraper.PatentResult
+
+		var source string
+
+		// Strategy 1: If a specific provider is requested, try it directly
+		if input.Provider != "" {
+			ps, errResult := resolvePatentSearcher(deps, input.Provider)
+			if errResult != nil {
+				return errResult, nil, nil
 			}
-			patent := map[string]any{
-				"title":  r.Title,
-				"url":    r.URL,
-				"number": number,
+			if ps != nil {
+				apiResults, err := ps.Patents(ctx, searchParams)
+				if err == nil && len(apiResults) > 0 {
+					patents = convertPatentResults(apiResults)
+					source = input.Provider
+				} else if err != nil && isRateLimitError(err) {
+					deps.Metrics.RecordToolCall("patent_search", time.Since(start), err, "rate_limited", false)
+					auditToolCall(ctx, deps, "patent_search", time.Since(start), err, "rate_limited")
+					return rateLimitError(err), nil, nil
+				}
 			}
-			if r.Snippet != "" {
-				patent["abstract"] = r.Snippet
+		}
+
+		// Strategy 2: Try the main provider (Router implements PatentSearcher)
+		if len(patents) == 0 && input.Provider == "" {
+			if ps, ok := deps.Search.(search.PatentSearcher); ok {
+				apiResults, err := ps.Patents(ctx, searchParams)
+				if err == nil && len(apiResults) > 0 {
+					patents = convertPatentResults(apiResults)
+					source = deps.Search.Name()
+				}
 			}
-			patents = append(patents, patent)
+		}
+
+		// Strategy 3: Try patent-only providers directly (non-router mode)
+		if len(patents) == 0 && input.Provider == "" {
+			for name, pp := range deps.PatentProviders {
+				if !pp.Metadata().MatchesRegion(input.PatentOffice) {
+					continue
+				}
+				apiResults, err := pp.Patents(ctx, searchParams)
+				if err == nil && len(apiResults) > 0 {
+					patents = convertPatentResults(apiResults)
+					source = name
+					break
+				} else if err != nil && isRateLimitError(err) {
+					break
+				}
+			}
+		}
+
+		// Strategy 4: Fallback — discover via web search + enrich from detail pages
+		if len(patents) == 0 {
+			provider, errResult := resolveProvider(deps, "")
+			if errResult != nil {
+				return errResult, nil, nil
+			}
+
+			searchQuery := buildPatentDiscoveryQuery(input)
+			webResults, err := provider.Web(ctx, search.WebSearchParams{
+				Query:      searchQuery,
+				NumResults: numResults + 5,
+			})
+			if err != nil {
+				errCode := "upstream_error"
+				if isRateLimitError(err) {
+					errCode = "rate_limited"
+				}
+				deps.Metrics.RecordToolCall("patent_search", time.Since(start), err, errCode, false)
+				auditToolCall(ctx, deps, "patent_search", time.Since(start), err, errCode)
+				if isRateLimitError(err) {
+					return rateLimitError(err), nil, nil
+				}
+				return toolError(fmt.Sprintf("patent search failed: %v", err)), nil, nil
+			}
+
+			var patentNumbers []string
+			seen := make(map[string]bool)
+			for _, r := range webResults {
+				number := scraper.ExtractPatentNumberFromURL(r.URL)
+				if number == "" {
+					continue
+				}
+				if input.PatentOffice != "" && input.PatentOffice != "all" && !matchesPatentOffice(number, input.PatentOffice) {
+					continue
+				}
+				if !seen[number] {
+					seen[number] = true
+					patentNumbers = append(patentNumbers, number)
+				}
+				if len(patentNumbers) >= numResults {
+					break
+				}
+			}
+
+			patents = enrichPatents(ctx, deps.Scraper, patentNumbers)
+			if len(patents) > 0 {
+				source = "web_discovery"
+			}
+		}
+
+		// Build the Google Patents search URL for reference
+		params := scraper.PatentSearchParams{
+			Query:        input.Query,
+			Assignee:     normalizeAssignee(input.Assignee),
+			Inventor:     input.Inventor,
+			CPCCode:      input.CPCCode,
+			PatentOffice: input.PatentOffice,
+			YearFrom:     input.YearFrom,
+			YearTo:       input.YearTo,
+			NumResults:   numResults,
 		}
 
 		output := map[string]any{
@@ -94,10 +187,14 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 			"query":       input.Query,
 			"searchType":  searchType,
 			"resultCount": len(patents),
+			"source":      source,
+			"searchUrl":   scraper.BuildGooglePatentsURL(params),
 		}
 
 		jsonBytes, _ := json.Marshal(output)
-		deps.Cache.Set(ctx, cacheKey, jsonBytes, 24*time.Hour)
+		if len(patents) > 0 {
+			deps.Cache.Set(ctx, cacheKey, jsonBytes, 24*time.Hour)
+		}
 		deps.Metrics.RecordToolCall("patent_search", time.Since(start), nil, "", false)
 		auditToolCall(ctx, deps, "patent_search", time.Since(start), nil, "")
 
@@ -105,65 +202,106 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 	})
 }
 
-func buildPatentQuery(query, assignee, inventor, cpcCode, office string, yearFrom, yearTo int) string {
-	parts := []string{query}
-
-	if assignee != "" {
-		variations := companyVariations(assignee)
-		parts = append(parts, "("+strings.Join(variations, " OR ")+")")
+func buildPatentDiscoveryQuery(input patentSearchInput) string {
+	var parts []string
+	if input.Query != "" {
+		parts = append(parts, input.Query)
 	}
-	if inventor != "" {
-		parts = append(parts, fmt.Sprintf("inventor:%q", inventor))
+	if input.Assignee != "" {
+		parts = append(parts, fmt.Sprintf("%q", input.Assignee))
 	}
-	if cpcCode != "" {
-		parts = append(parts, fmt.Sprintf("cpc:%s", cpcCode))
+	if input.Inventor != "" {
+		parts = append(parts, fmt.Sprintf("inventor:%q", input.Inventor))
 	}
-	if office != "" && office != "all" {
-		parts = append(parts, fmt.Sprintf("country:%s", office))
+	if input.PatentOffice != "" && input.PatentOffice != "all" {
+		parts = append(parts, input.PatentOffice)
 	}
-	if yearFrom > 0 {
-		parts = append(parts, fmt.Sprintf("after:%d", yearFrom-1))
+	if input.YearFrom > 0 {
+		parts = append(parts, fmt.Sprintf("%d", input.YearFrom))
 	}
-	if yearTo > 0 {
-		parts = append(parts, fmt.Sprintf("before:%d", yearTo+1))
+	if input.YearTo > 0 && input.YearTo != input.YearFrom {
+		parts = append(parts, fmt.Sprintf("%d", input.YearTo))
 	}
 
-	return strings.Join(parts, " ")
+	if len(parts) == 0 {
+		parts = append(parts, "patent")
+	}
+
+	return strings.Join(parts, " ") + " site:patents.google.com"
 }
 
-func companyVariations(name string) []string {
-	name = strings.TrimSpace(name)
-	variations := []string{
-		fmt.Sprintf("%q", name),
+func enrichPatents(ctx context.Context, pipeline *scraper.Pipeline, numbers []string) []scraper.PatentResult {
+	if len(numbers) == 0 {
+		return nil
 	}
 
-	suffixes := []string{" Inc", " Inc.", " LLC", " Ltd", " Ltd.", " Corp", " Corp.", " Co.", " GmbH", " AG"}
-	baseName := name
-	for _, s := range suffixes {
-		baseName = strings.TrimSuffix(baseName, s)
-	}
-	if baseName != name {
-		variations = append(variations, fmt.Sprintf("%q", baseName))
+	results := make([]scraper.PatentResult, len(numbers))
+	var wg sync.WaitGroup
+
+	// Limit concurrency to 3 parallel detail fetches
+	sem := make(chan struct{}, 3)
+
+	for i, number := range numbers {
+		wg.Add(1)
+		go func(idx int, num string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			detail, err := pipeline.ScrapePatentDetail(ctx, num)
+			if err != nil || detail == nil {
+				// Fallback: return minimal info
+				results[idx] = scraper.PatentResult{
+					Number: num,
+					URL:    "https://patents.google.com/patent/" + num,
+				}
+				return
+			}
+			results[idx] = *detail
+		}(i, number)
 	}
 
-	noSpaces := strings.ReplaceAll(baseName, " ", "")
-	if noSpaces != baseName {
-		variations = append(variations, fmt.Sprintf("%q", noSpaces))
-	}
+	wg.Wait()
 
-	return variations
-}
-
-func extractPatentNumber(url string) string {
-	parts := strings.Split(url, "/patent/")
-	if len(parts) >= 2 {
-		number := parts[1]
-		if idx := strings.Index(number, "/"); idx > 0 {
-			number = number[:idx]
+	// Filter out empty results
+	var filtered []scraper.PatentResult
+	for _, r := range results {
+		if r.Number != "" {
+			filtered = append(filtered, r)
 		}
-		return number
 	}
-	return ""
+	return filtered
+}
+
+func normalizeAssignee(assignee string) string {
+	if assignee == "" {
+		return ""
+	}
+	assignee = strings.TrimSpace(assignee)
+	suffixes := []string{" Inc", " Inc.", " LLC", " Ltd", " Ltd.", " Corp", " Corp.", " Co.", " GmbH", " AG"}
+	for _, s := range suffixes {
+		assignee = strings.TrimSuffix(assignee, s)
+	}
+	return assignee
+}
+
+func convertPatentResults(apiResults []search.PatentResult) []scraper.PatentResult {
+	results := make([]scraper.PatentResult, 0, len(apiResults))
+	for _, r := range apiResults {
+		results = append(results, scraper.PatentResult{
+			Title:    r.Title,
+			Number:   r.Number,
+			URL:      r.URL,
+			Abstract: r.Abstract,
+			Assignee: r.Assignee,
+			Inventor: r.Inventor,
+			Filed:    r.Filed,
+			Granted:  r.Granted,
+			PDF:      r.PDF,
+			Status:   r.Status,
+		})
+	}
+	return results
 }
 
 func matchesPatentOffice(patentNumber, office string) bool {

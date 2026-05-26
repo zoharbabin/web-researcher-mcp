@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -144,7 +145,8 @@ func corsMiddleware(allowedOrigins []string, next http.Handler) http.Handler {
 
 func adminAuth(key string, handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("X-Admin-Key") != key {
+		provided := r.Header.Get("X-Admin-Key")
+		if subtle.ConstantTimeCompare([]byte(provided), []byte(key)) != 1 {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}

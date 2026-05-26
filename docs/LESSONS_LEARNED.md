@@ -32,7 +32,7 @@ Users wanted Brave, Bing (go figure), and other providers. But the TypeScript co
 
 The in-memory cache was lost on every process restart — which happened frequently with npx-launched servers. The complex persistence manager offered four strategies (Periodic, WriteThrough, OnShutdown, Hybrid), but none reliably survived the volatile process lifecycle.
 
-**Go fix**: A `cache.Cache` interface with a hybrid implementation: memory LRU + AES-encrypted disk + optional Redis. Simple, testable, and it never loses data because the disk layer persists across restarts.
+**Go fix**: A `cache.Cache` interface with a hybrid implementation: memory + AES-encrypted disk. Simple, testable, and it never loses data because the disk layer persists across restarts.
 
 ### Monolithic Architecture (Issue #40)
 
@@ -78,7 +78,7 @@ MCP servers run alongside AI assistants on developer machines. They're always-on
 
 ### 4. Caching Architecture Should Be Boring
 
-The old project had four persistence strategies with complex heuristics for when to flush. The new one has: memory LRU + optional encrypted disk + optional Redis. Each layer is simple and independently testable. No heuristics, no race conditions, no data loss.
+The old project had four persistence strategies with complex heuristics for when to flush. The new one has: memory + encrypted disk. Each layer is simple and independently testable. No heuristics, no race conditions, no data loss.
 
 **Takeaway**: Boring infrastructure is reliable infrastructure. If your caching layer needs its own debugging session, it's too complex.
 

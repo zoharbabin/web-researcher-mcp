@@ -953,6 +953,130 @@ func TestNewProvider_SearchAPI(t *testing.T) {
 	}
 }
 
+func TestSearchAPIProvider_PatentSearch(t *testing.T) {
+	t.Parallel()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("engine") != "google_patents" {
+			t.Errorf("expected engine=google_patents, got %s", r.URL.Query().Get("engine"))
+		}
+		resp := searchAPIPatentResponse{
+			OrganicResults: []searchAPIPatentResult{
+				{
+					Title:    "<b>Kaltura</b> Video Platform",
+					PatentID: "patent/US10165245B2/en",
+					Link:     "https://patents.google.com/patent/US10165245B2/en",
+					Snippet:  "A system for <b>pre-fetching</b> video content",
+					Assignee: "<b>Kaltura</b>, Inc.",
+					Inventor: "Christopher Hayes",
+					FilingDate:  "2013-07-03",
+					GrantDate:   "2018-12-25",
+					PDF:         "https://patentimages.storage.googleapis.com/US10165245.pdf",
+				},
+				{
+					Title:             "Image Compression",
+					PublicationNumber: "US8774534B2",
+					Snippet:           "Method for image compression",
+					Assignee:          "Watchitoo, Inc.",
+					Inventor:          "Rony Zarom",
+					FilingDate:        "2010-04-08",
+				},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer ts.Close()
+
+	deps := Deps{HTTPClient: ts.Client(), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	s := NewSearchAPIProvider("key", deps)
+	s.SetBaseURL(ts.URL)
+
+	results, err := s.Patents(context.Background(), PatentSearchParams{
+		Assignee:   "Kaltura",
+		NumResults: 5,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+
+	// Verify HTML stripping
+	if results[0].Title != "Kaltura Video Platform" {
+		t.Errorf("expected HTML-stripped title, got %q", results[0].Title)
+	}
+	if results[0].Assignee != "Kaltura, Inc." {
+		t.Errorf("expected HTML-stripped assignee, got %q", results[0].Assignee)
+	}
+	// Verify patent number extraction from path
+	if results[0].Number != "US10165245B2" {
+		t.Errorf("expected extracted patent number US10165245B2, got %q", results[0].Number)
+	}
+	// Verify URL is used directly from link field
+	if results[0].URL != "https://patents.google.com/patent/US10165245B2/en" {
+		t.Errorf("unexpected URL: %s", results[0].URL)
+	}
+	if results[0].PDF != "https://patentimages.storage.googleapis.com/US10165245.pdf" {
+		t.Errorf("unexpected PDF: %s", results[0].PDF)
+	}
+	// Verify fallback to publication_number
+	if results[1].Number != "US8774534B2" {
+		t.Errorf("expected publication_number fallback, got %q", results[1].Number)
+	}
+}
+
+func TestExtractPatentNumber(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"patent/US9270715B2/en", "US9270715B2"},
+		{"patent/US20140149867A1/en", "US20140149867A1"},
+		{"patent/HK1202995B/en", "HK1202995B"},
+		{"patent/EP1234567A1/en", "EP1234567A1"},
+		{"US10165245B2", "US10165245B2"},
+		{"", ""},
+		{"  patent/CN123456B/en  ", "CN123456B"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := extractPatentNumber(tt.input)
+			if got != tt.want {
+				t.Errorf("extractPatentNumber(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStripHTMLTags(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"<b>Kaltura</b>, Inc.", "Kaltura, Inc."},
+		{"No tags here", "No tags here"},
+		{"<em>multiple</em> <strong>tags</strong>", "multiple tags"},
+		{"", ""},
+		{"plain text", "plain text"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := stripHTMLTags(tt.input)
+			if got != tt.want {
+				t.Errorf("stripHTMLTags(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 // =============================================================================
 // Router Tests
 // =============================================================================
@@ -1166,6 +1290,174 @@ func TestRouter_NoProviders(t *testing.T) {
 	if !strings.Contains(err.Error(), "no providers available") {
 		t.Errorf("unexpected error: %v", err)
 	}
+}
+
+// =============================================================================
+// Router Patent Search Tests
+// =============================================================================
+
+type mockPatentProvider struct {
+	name    string
+	meta    ProviderMeta
+	results []PatentResult
+	err     error
+}
+
+func (m *mockPatentProvider) Name() string           { return m.name }
+func (m *mockPatentProvider) Metadata() ProviderMeta { return m.meta }
+func (m *mockPatentProvider) Patents(_ context.Context, _ PatentSearchParams) ([]PatentResult, error) {
+	return m.results, m.err
+}
+
+func TestRouter_PatentsUsesPatentProviders(t *testing.T) {
+	epo := &mockPatentProvider{
+		name: "epo",
+		meta: ProviderMeta{Regions: []string{"*"}},
+		results: []PatentResult{
+			{Title: "EPO Patent", Number: "EP1234567"},
+		},
+	}
+	router := NewRouter(map[string]Provider{}, RouterConfig{
+		Routing:         RoutingConfig{Patents: []string{"epo"}},
+		PatentProviders: map[string]PatentProvider{"epo": epo},
+	})
+
+	results, err := router.Patents(context.Background(), PatentSearchParams{Query: "test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 1 || results[0].Title != "EPO Patent" {
+		t.Errorf("unexpected results: %v", results)
+	}
+}
+
+func TestRouter_PatentsRegionFiltering(t *testing.T) {
+	usOnly := &mockPatentProvider{
+		name:    "uspto",
+		meta:    ProviderMeta{Regions: []string{"US"}},
+		results: []PatentResult{{Title: "US Patent", Number: "US123"}},
+	}
+	worldwide := &mockPatentProvider{
+		name:    "epo",
+		meta:    ProviderMeta{Regions: []string{"*"}},
+		results: []PatentResult{{Title: "EPO Patent", Number: "EP456"}},
+	}
+
+	router := NewRouter(map[string]Provider{}, RouterConfig{
+		Routing:         RoutingConfig{Patents: []string{"uspto", "epo"}},
+		PatentProviders: map[string]PatentProvider{"uspto": usOnly, "epo": worldwide},
+	})
+
+	// Searching for EP patents should skip USPTO
+	results, err := router.Patents(context.Background(), PatentSearchParams{
+		Query:        "video",
+		PatentOffice: "EP",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 1 || results[0].Number != "EP456" {
+		t.Errorf("expected EPO result (USPTO should be skipped for EP), got: %v", results)
+	}
+}
+
+func TestRouter_PatentsFallbackOnError(t *testing.T) {
+	failing := &mockPatentProvider{
+		name: "epo",
+		meta: ProviderMeta{Regions: []string{"*"}},
+		err:  fmt.Errorf("epo: rate limited"),
+	}
+	fallback := &mockPatentProvider{
+		name:    "lens",
+		meta:    ProviderMeta{Regions: []string{"*"}},
+		results: []PatentResult{{Title: "Lens Result", Number: "US789"}},
+	}
+
+	router := NewRouter(map[string]Provider{}, RouterConfig{
+		Routing:         RoutingConfig{Patents: []string{"epo", "lens"}},
+		PatentProviders: map[string]PatentProvider{"epo": failing, "lens": fallback},
+	})
+
+	results, err := router.Patents(context.Background(), PatentSearchParams{Query: "test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 1 || results[0].Title != "Lens Result" {
+		t.Errorf("expected fallback to lens, got: %v", results)
+	}
+}
+
+func TestRouter_PatentsNoProviders(t *testing.T) {
+	router := NewRouter(map[string]Provider{}, RouterConfig{})
+
+	_, err := router.Patents(context.Background(), PatentSearchParams{Query: "test"})
+	if err == nil {
+		t.Fatal("expected error with no patent providers")
+	}
+	if !strings.Contains(err.Error(), "no providers available") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestRouter_PatentProviderByName(t *testing.T) {
+	epo := &mockPatentProvider{
+		name: "epo",
+		meta: ProviderMeta{Regions: []string{"*"}},
+	}
+	router := NewRouter(map[string]Provider{}, RouterConfig{
+		PatentProviders: map[string]PatentProvider{"epo": epo},
+	})
+
+	ps, found := router.PatentProviderByName("epo")
+	if !found || ps == nil {
+		t.Fatal("expected to find epo patent provider")
+	}
+
+	_, found = router.PatentProviderByName("nonexistent")
+	if found {
+		t.Error("expected not to find nonexistent provider")
+	}
+}
+
+func TestRouter_PatentsMixesFullAndPatentOnlyProviders(t *testing.T) {
+	// SearchAPI is a full provider that also implements PatentSearcher
+	searchapi := &mockPatentFullProvider{
+		successProvider: successProvider{name: "searchapi"},
+		results:         []PatentResult{{Title: "SearchAPI Patent", Number: "US111"}},
+	}
+
+	epo := &mockPatentProvider{
+		name:    "epo",
+		meta:    ProviderMeta{Regions: []string{"*"}},
+		results: []PatentResult{{Title: "EPO Patent", Number: "EP222"}},
+	}
+
+	router := NewRouter(
+		map[string]Provider{"searchapi": searchapi},
+		RouterConfig{
+			Routing:         RoutingConfig{Patents: []string{"searchapi", "epo"}},
+			PatentProviders: map[string]PatentProvider{"epo": epo},
+		},
+	)
+
+	results, err := router.Patents(context.Background(), PatentSearchParams{Query: "test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// SearchAPI is first in priority and healthy → should get its results
+	if len(results) != 1 || results[0].Title != "SearchAPI Patent" {
+		t.Errorf("expected SearchAPI result (first in priority), got: %v", results)
+	}
+}
+
+// mockPatentFullProvider implements both Provider and PatentSearcher
+type mockPatentFullProvider struct {
+	successProvider
+	results []PatentResult
+}
+
+func (m *mockPatentFullProvider) Patents(_ context.Context, _ PatentSearchParams) ([]PatentResult, error) {
+	return m.results, nil
 }
 
 // =============================================================================

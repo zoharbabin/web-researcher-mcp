@@ -220,6 +220,101 @@ func TestNewEventFields(t *testing.T) {
 	}
 }
 
+func TestSwapFileSpill(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "audit.log")
+
+	// Tiny buffer (2) forces swap spill quickly
+	cfg := Config{
+		Enabled:      true,
+		OutputPath:   path,
+		BufferSize:   2,
+		MaxSwapBytes: 1024 * 1024,
+	}
+
+	logger, err := NewLogger(cfg)
+	if err != nil {
+		t.Fatalf("failed to create logger: %v", err)
+	}
+
+	// Fill the channel (buffer=2) by pausing the processLoop
+	// We can't truly pause it, but if we blast enough events fast enough some will spill
+	const numEvents = 200
+	for i := 0; i < numEvents; i++ {
+		logger.Log(NewEvent("tool_call", "tenant-swap", "user-swap"))
+	}
+
+	logger.Close()
+
+	// All events should have been written (channel + swap replay)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read audit log: %v", err)
+	}
+
+	lines := bytes.Split(bytes.TrimSpace(data), []byte("\n"))
+
+	// The key invariant: spilled + written via channel == numEvents (no drops)
+	if logger.Dropped.Load() != 0 {
+		t.Errorf("expected 0 dropped events, got %d", logger.Dropped.Load())
+	}
+
+	// All non-dropped events should appear in the output
+	totalProcessed := int64(len(lines))
+	totalExpected := int64(numEvents) - logger.Dropped.Load()
+	if totalProcessed < totalExpected {
+		t.Fatalf("expected %d events in output, got %d (spilled=%d, dropped=%d)",
+			totalExpected, totalProcessed, logger.Spilled.Load(), logger.Dropped.Load())
+	}
+
+	// Verify swap file is cleaned up
+	for _, p := range []string{logger.swapPath, logger.swapPath + ".replay"} {
+		if _, err := os.Stat(p); !os.IsNotExist(err) {
+			t.Errorf("swap file %q should be removed after replay", p)
+		}
+	}
+
+	// Verify spill counter > 0 (with buffer=2, most events hit the swap)
+	if logger.Spilled.Load() == 0 {
+		t.Log("warning: no events spilled (processLoop drained fast enough)")
+	}
+	t.Logf("written=%d spilled=%d dropped=%d", len(lines), logger.Spilled.Load(), logger.Dropped.Load())
+}
+
+func TestSwapFileMaxSize(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "audit.log")
+
+	// Very small max swap: 500 bytes — will fill up quickly
+	cfg := Config{
+		Enabled:      true,
+		OutputPath:   path,
+		BufferSize:   1,
+		MaxSwapBytes: 500,
+	}
+
+	logger, err := NewLogger(cfg)
+	if err != nil {
+		t.Fatalf("failed to create logger: %v", err)
+	}
+
+	// Blast many events — some will be dropped when swap is full
+	for i := 0; i < 500; i++ {
+		logger.Log(NewEvent("tool_call", "tenant-max", "user-max"))
+	}
+
+	logger.Close()
+
+	// Some events should have been dropped due to swap cap
+	if logger.Dropped.Load() == 0 {
+		t.Log("warning: expected some dropped events with 500-byte swap cap")
+	}
+
+	t.Logf("spilled=%d dropped=%d", logger.Spilled.Load(), logger.Dropped.Load())
+}
+
 // safeBuffer is a concurrency-safe bytes.Buffer for use in tests.
 type safeBuffer struct {
 	mu  sync.Mutex

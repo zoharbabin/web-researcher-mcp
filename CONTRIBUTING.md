@@ -23,7 +23,6 @@ Whether you're fixing a typo, adding a search provider, improving documentation,
   - Google Custom Search: `GOOGLE_CUSTOM_SEARCH_API_KEY` and `GOOGLE_CUSTOM_SEARCH_ID`
   - Brave Search (optional): `BRAVE_API_KEY`
 - **Chrome/Chromium** — optional, only needed for headless scraping features
-- **Redis** — optional, only for multi-instance cache testing
 - **golangci-lint v2** — for linting (see [install docs](https://golangci-lint.run/welcome/install/))
 
 ### Getting Started
@@ -164,7 +163,7 @@ This project uses [Conventional Commits](https://www.conventionalcommits.org/en/
 ```
 feat(search): add Brave Search provider
 fix(scraper): handle timeout on large PDF downloads
-docs: update deployment guide for Redis configuration
+docs: update deployment guide for patent providers
 test(cache): add benchmark for hybrid cache operations
 refactor(content): extract sanitization into pipeline pattern
 perf(scraper): reduce allocations in HTML parsing

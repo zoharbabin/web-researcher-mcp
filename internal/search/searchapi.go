@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 )
 
 type SearchAPIProvider struct {
@@ -197,10 +198,86 @@ func (s *SearchAPIProvider) doNewsSearch(ctx context.Context, params NewsSearchP
 	return results, nil
 }
 
+func (s *SearchAPIProvider) Patents(ctx context.Context, params PatentSearchParams) ([]PatentResult, error) {
+	var results []PatentResult
+	err := s.deps.Breaker.Execute(func() error {
+		var e error
+		results, e = s.doPatentSearch(ctx, params)
+		return e
+	})
+	return results, err
+}
+
+func (s *SearchAPIProvider) doPatentSearch(ctx context.Context, params PatentSearchParams) ([]PatentResult, error) {
+	q := url.Values{}
+	q.Set("engine", "google_patents")
+
+	// Google Patents supports wildcard query — use * when filtering by assignee/inventor only
+	query := params.Query
+	if query == "" {
+		query = "*"
+	}
+	q.Set("q", query)
+
+	if params.NumResults > 0 {
+		q.Set("num", strconv.Itoa(clamp(params.NumResults, 1, 10)))
+	}
+	if params.Assignee != "" {
+		q.Set("assignee", params.Assignee)
+	}
+	if params.Inventor != "" {
+		q.Set("inventor", params.Inventor)
+	}
+	if params.PatentOffice != "" && params.PatentOffice != "all" {
+		q.Set("countries", params.PatentOffice)
+	}
+	if params.YearFrom > 0 {
+		q.Set("after", fmt.Sprintf("filing:%d0101", params.YearFrom))
+	}
+	if params.YearTo > 0 {
+		q.Set("before", fmt.Sprintf("filing:%d1231", params.YearTo))
+	}
+
+	body, err := s.doRequest(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp searchAPIPatentResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("searchapi: failed to parse patent response: %w", err)
+	}
+
+	results := make([]PatentResult, 0, len(resp.OrganicResults))
+	for _, r := range resp.OrganicResults {
+		number := extractPatentNumber(r.PatentID)
+		if number == "" {
+			number = extractPatentNumber(r.PublicationNumber)
+		}
+		result := PatentResult{
+			Title:    stripHTMLTags(r.Title),
+			Number:   number,
+			Abstract: stripHTMLTags(r.Snippet),
+			Assignee: stripHTMLTags(r.Assignee),
+			Inventor: stripHTMLTags(r.Inventor),
+			Filed:    r.FilingDate,
+			Granted:  r.GrantDate,
+			PDF:      r.PDF,
+		}
+		if r.Link != "" {
+			result.URL = r.Link
+		} else if result.Number != "" {
+			result.URL = "https://patents.google.com/patent/" + result.Number
+		}
+		results = append(results, result)
+	}
+	return results, nil
+}
+
 func (s *SearchAPIProvider) doRequest(ctx context.Context, params url.Values) ([]byte, error) {
 	params.Set("api_key", s.apiKey)
 
-	reqURL := s.baseURL + "?" + params.Encode()
+	reqURL := s.baseURL + "?" + strings.ReplaceAll(params.Encode(), "%2A", "*")
 	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 	if err != nil {
 		return nil, err
@@ -277,6 +354,43 @@ func mapSearchAPIColorType(ct string) string {
 	}
 }
 
+// extractPatentNumber extracts the bare patent number from SearchAPI's patent_id
+// format (e.g. "patent/US9270715B2/en" → "US9270715B2").
+func extractPatentNumber(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	parts := strings.Split(raw, "/")
+	for _, p := range parts {
+		if len(p) >= 4 && (p[0] >= 'A' && p[0] <= 'Z') {
+			return p
+		}
+	}
+	return raw
+}
+
+// stripHTMLTags removes simple HTML tags (e.g. <b>, </b>) from API responses.
+func stripHTMLTags(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	inTag := false
+	for _, r := range s {
+		if r == '<' {
+			inTag = true
+			continue
+		}
+		if r == '>' {
+			inTag = false
+			continue
+		}
+		if !inTag {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 // Response types
 
 type searchAPIWebResponse struct {
@@ -314,4 +428,26 @@ type searchAPINewsResult struct {
 	Source  string `json:"source"`
 	Date    string `json:"date"`
 	Snippet string `json:"snippet"`
+}
+
+type searchAPIPatentResponse struct {
+	OrganicResults []searchAPIPatentResult `json:"organic_results"`
+	Error          string                  `json:"error"`
+}
+
+type searchAPIPatentResult struct {
+	Position          int    `json:"position"`
+	Title             string `json:"title"`
+	PatentID          string `json:"patent_id"`
+	PublicationNumber string `json:"publication_number"`
+	Link              string `json:"link"`
+	Snippet           string `json:"snippet"`
+	Assignee          string `json:"assignee"`
+	Inventor          string `json:"inventor"`
+	PriorityDate      string `json:"priority_date"`
+	FilingDate        string `json:"filing_date"`
+	GrantDate         string `json:"grant_date"`
+	PublicationDate   string `json:"publication_date"`
+	PDF               string `json:"pdf"`
+	Language          string `json:"language"`
 }

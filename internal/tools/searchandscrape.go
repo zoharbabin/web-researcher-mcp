@@ -21,6 +21,7 @@ type searchAndScrapeInput struct {
 	MaxLengthPerSource int    `json:"max_length_per_source,omitempty" jsonschema:"Max content bytes extracted per source (default: 50000)."`
 	TotalMaxLength     int    `json:"total_max_length,omitempty" jsonschema:"Max total bytes for combined output (default: 300000). Reduce for faster, more concise results."`
 	FilterByQuery      bool   `json:"filter_by_query,omitempty" jsonschema:"Remove sources with low relevance to the query (default: false). Enable for precision over recall."`
+	Provider           string `json:"provider,omitempty" jsonschema:"Force a specific search provider: google, brave, serper, searxng, searchapi. Omit to use configured default."`
 }
 
 func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
@@ -51,7 +52,12 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 			totalMaxLen = 300000
 		}
 
-		searchResults, err := deps.Search.Web(ctx, search.WebSearchParams{
+		provider, errResult := resolveProvider(deps, input.Provider)
+		if errResult != nil {
+			return errResult, nil, nil
+		}
+
+		searchResults, err := provider.Web(ctx, search.WebSearchParams{
 			Query:      input.Query,
 			NumResults: numResults,
 		})

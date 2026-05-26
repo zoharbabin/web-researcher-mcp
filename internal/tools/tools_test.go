@@ -309,6 +309,7 @@ func TestSequentialSearchTool(t *testing.T) {
 func TestPatentSearchTool(t *testing.T) {
 	ctx := context.Background()
 	deps := setupTestDeps()
+	deps.Search = &mockProviderWithURL{url: "https://patents.google.com/patent/US20200012345A1/en"}
 	srv := createTestServer(deps)
 	session := connectTestClient(ctx, t, srv)
 	defer session.Close()

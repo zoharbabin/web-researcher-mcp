@@ -1,10 +1,13 @@
 package audit
 
 import (
+	"bufio"
 	"encoding/json"
 	"io"
 	"os"
+	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -49,6 +52,7 @@ type Config struct {
 	Enabled            bool
 	OutputPath         string // empty = stderr, path = file
 	BufferSize         int
+	MaxSwapBytes       int64  // max swap file size before dropping (default 50MB)
 	IncludeRequestBody bool
 }
 
@@ -60,6 +64,15 @@ type Logger struct {
 	eventCh chan AuditEvent
 	done    chan struct{}
 	wg      sync.WaitGroup
+
+	// Swap file spill — preserves events when channel is full
+	swapMu       sync.Mutex
+	swapFile     *os.File
+	swapPath     string
+	swapSize     int64
+	maxSwapBytes int64
+	Spilled      atomic.Int64 // count of events spilled to swap (exported for metrics)
+	Dropped      atomic.Int64 // count of events dropped (swap also full)
 }
 
 // NewLogger creates a new audit Logger from the given config.
@@ -88,11 +101,25 @@ func NewLogger(cfg Config) (*Logger, error) {
 		writer = f
 	}
 
+	maxSwap := cfg.MaxSwapBytes
+	if maxSwap <= 0 {
+		maxSwap = 50 * 1024 * 1024 // 50MB
+	}
+
+	// Swap file lives next to the audit log (or in temp dir for stderr mode)
+	swapDir := os.TempDir()
+	if cfg.OutputPath != "" {
+		swapDir = filepath.Dir(cfg.OutputPath)
+	}
+	swapPath := filepath.Join(swapDir, ".audit-swap.jsonl")
+
 	l := &Logger{
-		writer:  writer,
-		file:    file,
-		eventCh: make(chan AuditEvent, bufSize),
-		done:    make(chan struct{}),
+		writer:       writer,
+		file:         file,
+		eventCh:      make(chan AuditEvent, bufSize),
+		done:         make(chan struct{}),
+		swapPath:     swapPath,
+		maxSwapBytes: maxSwap,
 	}
 
 	l.wg.Add(1)
@@ -102,21 +129,64 @@ func NewLogger(cfg Config) (*Logger, error) {
 }
 
 // Log enqueues an audit event for async writing. Non-blocking; if the
-// buffer is full the event is dropped (defense against backpressure).
+// channel buffer is full, the event is spilled to a swap file on disk.
+// Events are only dropped if the swap file also exceeds its size cap.
 func (l *Logger) Log(event AuditEvent) {
 	select {
 	case l.eventCh <- event:
 	default:
-		// Buffer full — drop event to avoid blocking callers.
+		l.spillToSwap(event)
 	}
 }
 
+func (l *Logger) spillToSwap(event AuditEvent) {
+	l.swapMu.Lock()
+	defer l.swapMu.Unlock()
+
+	if l.swapSize >= l.maxSwapBytes {
+		l.Dropped.Add(1)
+		return
+	}
+
+	if l.swapFile == nil {
+		f, err := os.OpenFile(l.swapPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+		if err != nil {
+			l.Dropped.Add(1)
+			return
+		}
+		l.swapFile = f
+	}
+
+	data, err := json.Marshal(event)
+	if err != nil {
+		l.Dropped.Add(1)
+		return
+	}
+	data = append(data, '\n')
+
+	n, err := l.swapFile.Write(data)
+	if err != nil {
+		l.Dropped.Add(1)
+		return
+	}
+	l.swapSize += int64(n)
+	l.Spilled.Add(1)
+}
+
 // Close signals the logger to drain remaining events and stop.
-// It blocks until all buffered events are written.
+// It blocks until all buffered events (channel + swap file) are written.
 func (l *Logger) Close() {
 	close(l.eventCh)
 	l.wg.Wait()
 	close(l.done)
+
+	l.swapMu.Lock()
+	if l.swapFile != nil {
+		l.swapFile.Close()
+		l.swapFile = nil
+	}
+	l.swapMu.Unlock()
+
 	if l.file != nil {
 		l.file.Close()
 	}
@@ -125,9 +195,53 @@ func (l *Logger) Close() {
 func (l *Logger) processLoop() {
 	defer l.wg.Done()
 	enc := json.NewEncoder(l.writer)
+
 	for event := range l.eventCh {
 		_ = enc.Encode(event)
+
+		// After draining available channel events, replay swap if it has data
+		if len(l.eventCh) == 0 {
+			l.replaySwap(enc)
+		}
 	}
+
+	// Final replay on shutdown
+	l.replaySwap(enc)
+}
+
+func (l *Logger) replaySwap(enc *json.Encoder) {
+	l.swapMu.Lock()
+	if l.swapFile == nil || l.swapSize == 0 {
+		l.swapMu.Unlock()
+		return
+	}
+	// Close the write handle and atomically rename so concurrent spillToSwap
+	// creates a fresh file rather than appending to the one we're about to read.
+	l.swapFile.Close()
+	l.swapFile = nil
+	l.swapSize = 0
+	replayPath := l.swapPath + ".replay"
+	if err := os.Rename(l.swapPath, replayPath); err != nil {
+		l.swapMu.Unlock()
+		return
+	}
+	l.swapMu.Unlock()
+
+	f, err := os.Open(replayPath)
+	if err != nil {
+		return
+	}
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 64*1024), 256*1024)
+	for scanner.Scan() {
+		var event AuditEvent
+		if json.Unmarshal(scanner.Bytes(), &event) == nil {
+			_ = enc.Encode(event)
+		}
+	}
+	f.Close()
+	os.Remove(replayPath)
 }
 
 // Noop is an Auditor implementation that does nothing.

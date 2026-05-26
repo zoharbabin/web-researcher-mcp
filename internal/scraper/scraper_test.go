@@ -12,6 +12,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/PuerkitoBio/goquery"
 )
 
 // =============================================================================
@@ -1560,4 +1562,159 @@ type writerAdapter struct {
 
 func (w writerAdapter) Write(p []byte) (int, error) {
 	return w.Builder.Write(p)
+}
+
+// =============================================================================
+// Google Patents Tests
+// =============================================================================
+
+func TestBuildGooglePatentsURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		params   PatentSearchParams
+		contains []string
+	}{
+		{
+			name: "basic query",
+			params: PatentSearchParams{
+				Query:      "machine learning",
+				NumResults: 5,
+			},
+			contains: []string{"patents.google.com", "q=machine+learning", "num=5"},
+		},
+		{
+			name: "with assignee",
+			params: PatentSearchParams{
+				Query:      "LLM inference",
+				Assignee:   "Apple",
+				NumResults: 10,
+			},
+			contains: []string{"assignee=Apple", "q=LLM+inference"},
+		},
+		{
+			name: "with date range",
+			params: PatentSearchParams{
+				Query:    "neural network",
+				YearFrom: 2024,
+				YearTo:   2026,
+			},
+			contains: []string{"after=priority%3A20240101", "before=priority%3A20261231"},
+		},
+		{
+			name: "with patent office",
+			params: PatentSearchParams{
+				Query:        "battery",
+				PatentOffice: "US",
+			},
+			contains: []string{"country=US"},
+		},
+		{
+			name: "with inventor",
+			params: PatentSearchParams{
+				Query:    "transformer",
+				Inventor: "John Smith",
+			},
+			contains: []string{"inventor=John+Smith"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			url := BuildGooglePatentsURL(tt.params)
+			for _, want := range tt.contains {
+				if !strings.Contains(url, want) {
+					t.Errorf("URL %q should contain %q", url, want)
+				}
+			}
+		})
+	}
+}
+
+func TestParsePatentDetailPage(t *testing.T) {
+	t.Parallel()
+
+	html := `<html><head>
+		<meta name="DC.title" content="System and method for video coordination">
+		<meta name="DC.description" content="A system for coordinating multiple video streams in real-time.">
+	</head><body>
+		<dd itemprop="assigneeOriginal">Kaltura, Inc.</dd>
+		<dd itemprop="filingDate">2014-06-16</dd>
+		<dd itemprop="events"><span itemprop="type">Grant</span><time itemprop="date">2016-02-23</time></dd>
+	</body></html>`
+
+	doc, err := goQueryFromString(html)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result := parsePatentDetailPage(doc, "US9270715B2", "https://patents.google.com/patent/US9270715B2/en")
+
+	if result.Title != "System and method for video coordination" {
+		t.Errorf("expected title, got %q", result.Title)
+	}
+	if result.Abstract != "A system for coordinating multiple video streams in real-time." {
+		t.Errorf("expected abstract, got %q", result.Abstract)
+	}
+	if result.Assignee != "Kaltura, Inc." {
+		t.Errorf("expected Kaltura, Inc., got %q", result.Assignee)
+	}
+	if result.Filed != "2014-06-16" {
+		t.Errorf("expected 2014-06-16, got %q", result.Filed)
+	}
+	if result.Granted != "2016-02-23" {
+		t.Errorf("expected 2016-02-23, got %q", result.Granted)
+	}
+}
+
+func TestExtractPatentNumberFromURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		url    string
+		expect string
+	}{
+		{"/patent/US11234567/en", "US11234567"},
+		{"/patent/EP3456789A1/en", "EP3456789A1"},
+		{"https://patents.google.com/patent/WO2024123456/en", "WO2024123456"},
+		{"/about", ""},
+		{"/patent/CN115678901B/en?q=test", "CN115678901B"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.url, func(t *testing.T) {
+			t.Parallel()
+			got := ExtractPatentNumberFromURL(tt.url)
+			if got != tt.expect {
+				t.Errorf("ExtractPatentNumberFromURL(%q) = %q, want %q", tt.url, got, tt.expect)
+			}
+		})
+	}
+}
+
+func TestScrapePatentDetail_MockServer(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<html><head>
+			<meta name="DC.title" content="Method for efficient LLM inference">
+			<meta name="DC.description" content="A method for deploying language models on mobile devices.">
+		</head><body>
+			<dd itemprop="assigneeOriginal">Apple Inc.</dd>
+			<dd itemprop="filingDate">2024-03-15</dd>
+			<dd itemprop="events"><span itemprop="type">Grant</span><time itemprop="date">2025-01-10</time></dd>
+		</body></html>`))
+	}))
+	defer server.Close()
+
+	p := NewPipeline(PipelineConfig{AllowPrivateIPs: true})
+	_ = p
+	_ = server
+}
+
+func goQueryFromString(html string) (*goquery.Document, error) {
+	return goquery.NewDocumentFromReader(strings.NewReader(html))
 }

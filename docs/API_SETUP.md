@@ -172,7 +172,7 @@ If Brave is down or rate-limited, requests automatically fall to Google, then Se
 For per-operation routing (different providers for different search types):
 
 ```bash
-export SEARCH_ROUTING='{"web":"brave,google","news":"brave,serper","images":"google,brave","default":"brave,google,searchapi"}'
+export SEARCH_ROUTING='{"web":"brave,google","news":"brave,serper","images":"google,brave","patents":"epo,lens,searchapi,uspto","default":"brave,google,searchapi"}'
 ```
 
 See [docs/DEPLOYMENT.md](DEPLOYMENT.md) for advanced routing configuration.

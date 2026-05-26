@@ -72,10 +72,42 @@ type Provider interface {
 	Name() string
 }
 
+// PatentSearcher is an optional interface that providers can implement to
+// support structured patent search (e.g. SerpAPI's Google Patents engine).
+type PatentSearcher interface {
+	Patents(ctx context.Context, params PatentSearchParams) ([]PatentResult, error)
+}
+
+type PatentSearchParams struct {
+	Query        string
+	Assignee     string
+	Inventor     string
+	PatentOffice string
+	YearFrom     int
+	YearTo       int
+	NumResults   int
+}
+
+type PatentResult struct {
+	Title    string `json:"title"`
+	Number   string `json:"number"`
+	URL      string `json:"url"`
+	Abstract string `json:"abstract"`
+	Assignee string `json:"assignee"`
+	Inventor string `json:"inventor,omitempty"`
+	Filed    string `json:"filed"`
+	Granted  string `json:"granted,omitempty"`
+	PDF      string `json:"pdf,omitempty"`
+	Status   string `json:"status,omitempty"`
+}
+
 type Deps struct {
 	HTTPClient *http.Client
 	Breaker    *circuit.Breaker
 }
+
+// SupportedProviders lists all provider names that can be configured.
+var SupportedProviders = []string{"google", "brave", "serper", "searxng", "searchapi"}
 
 func NewProvider(cfg config.SearchConfig, deps Deps) Provider {
 	switch cfg.Provider {

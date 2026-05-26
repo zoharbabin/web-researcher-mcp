@@ -7,7 +7,7 @@ This is an MCP (Model Context Protocol) server that provides AI assistants with 
 - **Reliability** — clean process lifecycle, no orphan processes, immediate EOF detection
 - **Modularity** — one package per concern, interface-driven, testable in isolation
 - **Security** — SSRF protection, content sanitization, session isolation, audit logging
-- **Scalability** — horizontal scaling via Redis, bounded concurrency, backpressure
+- **Scalability** — bounded concurrency, backpressure, stateless HTTP transport for multi-instance
 - **Extensibility** — pluggable search backends, custom lenses, new tools as simple additions
 
 ## Design Principles
@@ -25,8 +25,8 @@ This is an MCP (Model Context Protocol) server that provides AI assistants with 
 ┌─────────────────────────────────────────────────────────────────┐
 │                         MCP Protocol Layer                        │
 │  ┌──────────────────┐              ┌─────────────────────────┐  │
-│  │  STDIO Transport │              │  HTTP/SSE Transport     │  │
-│  │  (zero-config)   │              │  (OAuth 2.1 + CORS)     │  │
+│  │  STDIO Transport │              │  HTTP Transport         │  │
+│  │  (zero-config)   │              │  (Streamable, OAuth 2.1)│  │
 │  └────────┬─────────┘              └──────────┬──────────────┘  │
 │           │                                    │                  │
 │           └────────────────┬───────────────────┘                 │
@@ -57,8 +57,8 @@ This is an MCP (Model Context Protocol) server that provides AI assistants with 
 │  ┌────▼────┐ ┌───▼─────────────────────────────┐               │
 │  │ Router  │ │ Scraper Implementations          │               │
 │  │(fallbk) │ │ ┌──────────┐ ┌───────┐ ┌──────┐│               │
-│  │ Brave   │ │ │ Markdown │ │goquery│ │chrom-││               │
-│  │ Google  │ │ │ Negotiat.│ │(HTML) │ │  dp  ││               │
+│  │ Brave   │ │ │ Markdown │ │goquery│ │go-rod││               │
+│  │ Google  │ │ │ Negotiat.│ │(HTML) │ │(CDP) ││               │
 │  │ Serper  │ │ └──────────┘ └───────┘ └──────┘│               │
 │  │ SearXNG │                                    │               │
 │  │SearchAPI│                                    │               │
@@ -150,6 +150,19 @@ Five providers implement this interface: Google PSE, Brave, Serper, SearXNG, and
 
 When `SEARCH_ROUTING` is configured, the Router wraps all available providers with per-provider circuit breakers and priority-ordered fallback. Search lenses inject `site:` operators and route through the configured provider. Lenses with a dedicated `cx` field route directly to that Google PSE engine.
 
+#### Domain-Specific Providers (Patents)
+
+In addition to the general `Provider` interface, the system supports domain-specific providers via a `PatentProvider` interface (see `internal/search/domain.go`):
+
+```go
+type PatentProvider interface {
+    DomainProvider
+    Patents(ctx context.Context, params PatentSearchParams) ([]PatentResult, error)
+}
+```
+
+Each patent provider carries metadata declaring its regional coverage and capabilities (`ProviderMeta`). The patent tool filters providers by region before calling them — e.g., if `patent_office=EP`, providers covering only US are skipped. Four patent providers are available: SearchAPI (via its native patent engine), EPO OPS (worldwide, OAuth2), The Lens (worldwide, token-based), and USPTO (US-only). Each gets an independent circuit breaker.
+
 ### 3. Tiered Scraping Pipeline
 
 ```go
@@ -186,7 +199,7 @@ Every request carries a `context.Context` with deadline. Session and tenant IDs 
 | MCP Protocol | `github.com/modelcontextprotocol/go-sdk` | Official MCP SDK, full spec compliance |
 | HTML Parsing | `github.com/PuerkitoBio/goquery` | jQuery-style CSS selectors |
 | Headless Browser | `github.com/go-rod/rod` + `go-rod/stealth` | DevTools Protocol, auto-download Chromium, anti-detection |
-| In-Memory Cache | Custom `sync.RWMutex` + map | Simple LRU with TTL, size-bounded |
+| In-Memory Cache | Custom `sync.RWMutex` + map | Expiry-ordered eviction with TTL, size-bounded |
 | Disk Cache | File-based with AES-256-GCM | Custom implementation, no external dependency |
 | JWT/JWKS | Custom RS256 implementation | Minimal, no external JWT library |
 | Rate Limiting | `golang.org/x/time/rate` | Token bucket, stdlib-adjacent |
@@ -219,12 +232,12 @@ Global request throughput:    1000 req/s     (RATE_LIMIT_GLOBAL)
 Per-tenant rate limit:        120 req/min    (RATE_LIMIT_PER_TENANT)  [HTTP mode only]
 Daily quota per tenant:       5000 req/day   (DAILY_QUOTA_PER_TENANT) [HTTP mode only]
 Scraping semaphore:           5 slots        (MAX_SCRAPE_CONCURRENCY)
-Browser pool (go-rod):        3 slots        (subset of scraping slots)
+Browser pool (go-rod):        serialized     (mutex-protected shared instance)
 ```
 
 Rate limiting applies only in HTTP mode. STDIO mode (the default for Claude Code, Cursor, and Claude Desktop) has no internal rate limiting — only upstream API quotas apply.
 
-Browser scrapes hold both a scraping slot and a browser slot simultaneously.
+Browser scrapes hold a scraping semaphore slot and then acquire the browser pool mutex (serializing browser access to a single shared instance).
 
 ## Error Handling
 

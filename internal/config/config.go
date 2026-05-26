@@ -53,6 +53,12 @@ type SearchConfig struct {
 	SearchAPIKey     string
 	SearXNGURL       string
 	CustomLensesPath string
+
+	// Patent-specific providers (optional, enables structured patent search)
+	USPTOAPIKey       string
+	EPOConsumerKey    string
+	EPOConsumerSecret string
+	LensAPIToken      string
 }
 
 type OAuthConfig struct {
@@ -118,16 +124,20 @@ func Load() (*Config, error) {
 		GoogleAPIKey: googleKey,
 		GoogleCX:     googleCX,
 		Search: SearchConfig{
-			Provider:         provider,
-			FallbackProvider: os.Getenv("SEARCH_FALLBACK_PROVIDER"),
-			Routing:          os.Getenv("SEARCH_ROUTING"),
-			GoogleAPIKey:     googleKey,
-			GoogleCX:         googleCX,
-			BraveAPIKey:      braveKey,
-			SerperAPIKey:     serperKey,
-			SearchAPIKey:     searchAPIKey,
-			SearXNGURL:       searxngURL,
-			CustomLensesPath: os.Getenv("CUSTOM_LENSES_PATH"),
+			Provider:          provider,
+			FallbackProvider:  os.Getenv("SEARCH_FALLBACK_PROVIDER"),
+			Routing:           os.Getenv("SEARCH_ROUTING"),
+			GoogleAPIKey:      googleKey,
+			GoogleCX:          googleCX,
+			BraveAPIKey:       braveKey,
+			SerperAPIKey:      serperKey,
+			SearchAPIKey:      searchAPIKey,
+			SearXNGURL:        searxngURL,
+			CustomLensesPath:  os.Getenv("CUSTOM_LENSES_PATH"),
+			USPTOAPIKey:       os.Getenv("USPTO_API_KEY"),
+			EPOConsumerKey:    os.Getenv("EPO_OPS_CONSUMER_KEY"),
+			EPOConsumerSecret: os.Getenv("EPO_OPS_CONSUMER_SECRET"),
+			LensAPIToken:      os.Getenv("LENS_API_TOKEN"),
 		},
 		Port: port,
 		OAuth: OAuthConfig{

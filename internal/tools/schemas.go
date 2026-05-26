@@ -96,6 +96,8 @@ var patentSearchOutputSchema = map[string]any{
 		"query":       map[string]any{"type": "string"},
 		"searchType":  map[string]any{"type": "string"},
 		"resultCount": map[string]any{"type": "integer"},
+		"source":      map[string]any{"type": "string"},
+		"searchUrl":   map[string]any{"type": "string"},
 		"patents": map[string]any{
 			"type": "array",
 			"items": map[string]any{
@@ -105,6 +107,12 @@ var patentSearchOutputSchema = map[string]any{
 					"url":      map[string]any{"type": "string"},
 					"number":   map[string]any{"type": "string"},
 					"abstract": map[string]any{"type": "string"},
+					"assignee": map[string]any{"type": "string"},
+					"inventor": map[string]any{"type": "string"},
+					"filed":    map[string]any{"type": "string"},
+					"granted":  map[string]any{"type": "string"},
+					"pdf":      map[string]any{"type": "string"},
+					"status":   map[string]any{"type": "string"},
 				},
 			},
 		},

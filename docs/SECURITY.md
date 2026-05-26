@@ -127,9 +127,8 @@ Client → [Authorization: Bearer <token>] → MCP Server
 
 **Rules:**
 1. Sequential search sessions are keyed by `{tenantID}:{sessionID}` — never shared
-2. Search history (`search://recent` resource) is per-tenant
-3. Cache can be shared for public content (search results, scraped pages are not user-specific)
-4. Audit logs include tenant ID for filtering
+2. Cache can be shared for public content (search results, scraped pages are not user-specific)
+3. Audit logs include tenant ID for filtering
 
 **Shared vs. Isolated Cache:**
 - Search results: SHARED (same query = same results regardless of who asked)
@@ -315,14 +314,14 @@ See `internal/audit/logger.go` for the canonical `AuditEvent` struct. Key fields
 
 ### GDPR
 
-| Right | Implementation |
-|-------|----------------|
-| **Access** (Art. 15) | `GET /users/{id}/data` — returns all stored data |
-| **Erasure** (Art. 17) | `DELETE /users/{id}/data` — purges cache, sessions, audit logs |
-| **Portability** (Art. 20) | JSON export of all user-associated data |
-| **Restriction** (Art. 18) | Disable caching per tenant via `CACHE_ISOLATION=tenant` |
+| Right | Status |
+|-------|--------|
+| **Access** (Art. 15) | Not yet implemented. Planned: `GET /users/{id}/data` endpoint |
+| **Erasure** (Art. 17) | Not yet implemented. Planned: `DELETE /users/{id}/data` endpoint |
+| **Portability** (Art. 20) | Not yet implemented. Planned: JSON export of user-associated data |
+| **Restriction** (Art. 18) | `CACHE_ISOLATION=tenant` config accepted but not yet enforced — cache keys are content-addressed and shared across tenants |
 
-Data minimization: cache stores content hashes for dedup (not copies), audit logs store parameter hashes (not raw queries), no persistent PII storage beyond cache TTLs.
+Data minimization (implemented): audit logs store parameter hashes (not raw queries), no persistent PII storage beyond cache TTLs.
 
 ### FedRAMP (Moderate Baseline)
 
@@ -353,7 +352,7 @@ GOEXPERIMENT=boringcrypto CGO_ENABLED=0 \
 | Search history | — | Per-tenant |
 | Audit logs | — | Filterable by tenant |
 
-Set `CACHE_ISOLATION=tenant` to isolate cache per tenant (compliance requirement).
+**Note:** `CACHE_ISOLATION=tenant` is accepted as configuration but not yet enforced in the cache implementation. Cache keys are currently content-addressed (based on query parameters) and shared across tenants. For search results this is safe (same query returns same results regardless of tenant), but deployments requiring strict tenant data isolation should be aware of this limitation.
 
 ### Supply Chain Security
 

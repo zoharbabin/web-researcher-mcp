@@ -15,14 +15,15 @@ import (
 )
 
 type Dependencies struct {
-	Cache    cache.Cache
-	Search   search.Provider
-	Scraper  *scraper.Pipeline
-	Content  *content.Processor
-	Sessions *session.Manager
-	Metrics  *metrics.Collector
-	Auditor  audit.Auditor
-	Logger   *slog.Logger
+	Cache           cache.Cache
+	Search          search.Provider
+	PatentProviders map[string]search.PatentProvider
+	Scraper         *scraper.Pipeline
+	Content         *content.Processor
+	Sessions        *session.Manager
+	Metrics         *metrics.Collector
+	Auditor         audit.Auditor
+	Logger          *slog.Logger
 }
 
 func RegisterAll(srv *mcp.Server, deps Dependencies) {

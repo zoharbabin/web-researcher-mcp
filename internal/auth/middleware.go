@@ -215,6 +215,9 @@ func (m *Middleware) validateClaims(payload *jwtPayload) error {
 	if payload.Iat != 0 && payload.Iat > now+60 {
 		return errors.New("token issued in the future")
 	}
+	if payload.Nbf != 0 && now < payload.Nbf-60 {
+		return errors.New("token not yet valid")
+	}
 	if payload.Iss != m.config.IssuerURL {
 		return fmt.Errorf("issuer mismatch: got %q, want %q", payload.Iss, m.config.IssuerURL)
 	}
@@ -387,6 +390,7 @@ type jwtPayload struct {
 	Sub       string   `json:"sub"`
 	Aud       audience `json:"aud"`
 	Exp       int64    `json:"exp"`
+	Nbf       int64    `json:"nbf"`
 	Iat       int64    `json:"iat"`
 	Jti       string   `json:"jti"`
 	TenantID  string   `json:"tenant_id"`
