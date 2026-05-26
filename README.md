@@ -676,5 +676,5 @@ Contributions are welcome. Please see [CONTRIBUTING.md](CONTRIBUTING.md) for cod
 <p align="center">
   Built with <a href="https://go.dev">Go</a> and the <a href="https://modelcontextprotocol.io/">Model Context Protocol</a>
   <br/><br/>
-  If this project helps your workflow, consider giving it a ⭐
+  If you're tired of AI making things up, give this a try — and a ⭐ if it helps.
 </p>
