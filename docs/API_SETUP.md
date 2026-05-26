@@ -2,6 +2,49 @@
 
 This guide covers how to obtain API keys for each supported search provider. You only need credentials for the providers you plan to use — configure one for single-provider mode, or multiple for multi-provider routing with automatic fallback.
 
+## How to Configure Keys
+
+Pass API keys as environment variables. How you set them depends on your MCP client:
+
+**Claude Code** (CLI / VS Code / JetBrains):
+```json
+// In ~/.claude/settings.json under "mcpServers":
+{
+  "web-researcher": {
+    "command": "web-researcher-mcp",
+    "env": {
+      "BRAVE_API_KEY": "your-key",
+      "EPO_OPS_CONSUMER_KEY": "your-key",
+      "EPO_OPS_CONSUMER_SECRET": "your-secret"
+    }
+  }
+}
+```
+
+**Claude Desktop**:
+```json
+// In ~/Library/Application Support/Claude/claude_desktop_config.json (macOS)
+// or %APPDATA%\Claude\claude_desktop_config.json (Windows)
+{
+  "mcpServers": {
+    "web-researcher": {
+      "command": "/path/to/web-researcher-mcp",
+      "env": {
+        "BRAVE_API_KEY": "your-key"
+      }
+    }
+  }
+}
+```
+
+**Shell (direct / Docker)**:
+```bash
+export BRAVE_API_KEY=your-key
+web-researcher-mcp
+```
+
+Keys set in the MCP client config are passed directly to the server process — no `.env` file needed.
+
 ---
 
 ## Google Custom Search (Programmable Search Engine)

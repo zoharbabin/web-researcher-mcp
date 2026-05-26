@@ -156,6 +156,17 @@ Done. Your AI assistant now has access to all research tools.
 | `SEARXNG_URL` | SearXNG instance URL | |
 | `SEARCH_ROUTING` | Multi-provider routing with automatic fallback (see [Deployment docs](docs/DEPLOYMENT.md#multi-provider-routing)) | |
 
+### Patent Providers (Optional)
+
+| Variable | Description | How to Get |
+|----------|-------------|-----------|
+| `EPO_OPS_CONSUMER_KEY` | EPO Open Patent Services key | [developers.epo.org](https://developers.epo.org) |
+| `EPO_OPS_CONSUMER_SECRET` | EPO OPS secret | Same as above |
+| `USPTO_API_KEY` | US Patent & Trademark Office API | [developer.uspto.gov](https://developer.uspto.gov) |
+| `LENS_API_TOKEN` | The Lens patent + scholarly API | [lens.org](https://www.lens.org) |
+
+> These enable structured patent search with rich metadata. Without them, `patent_search` falls back to web search. See [docs/API_SETUP.md](docs/API_SETUP.md#patent-search-providers-optional) for detailed setup instructions.
+
 ### HTTP Transport (Optional)
 
 | Variable | Description | Default |
