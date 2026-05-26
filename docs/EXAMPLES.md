@@ -37,7 +37,7 @@ Use a search lens to restrict results to curated high-quality sources for a spec
 }
 ```
 
-The `programming` lens restricts results to sites like stackoverflow.com, github.com, go.dev, developer.mozilla.org, and other curated programming resources. Available lenses include: `programming`, `news`, `tech`, `legal`, `medical`, `finance`, `science`, `government`.
+The `programming` lens restricts results to sites like stackoverflow.com, github.com, go.dev, developer.mozilla.org, and other curated programming resources. Available lenses: `docs`, `academic`, `clinical`, `security`, `journalism`, `programming`, `news`, `tech`, `legal`, `medical`, `finance`, `science`, `government`.
 
 ---
 

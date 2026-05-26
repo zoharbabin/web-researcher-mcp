@@ -4,7 +4,12 @@
 </p>
 <h1 align="center">web-researcher-mcp</h1>
 <p align="center">
-  A production-grade MCP server that gives AI assistants the power to search the web, extract content, and conduct multi-source research.
+  <strong>Your AI searches sources you trust — not the open web's SEO spam and AI slop.</strong>
+</p>
+<p align="center">
+  Open-source research toolkit that gives Claude, Cursor, or any AI assistant 8 specialized tools<br/>
+  with domain-focused search lenses, multi-provider fallback, and full privacy.<br/>
+  You control what gets searched. Every citation is real and verifiable.
 </p>
 
 <p align="center">
@@ -18,24 +23,72 @@
   <a href="https://github.com/zoharbabin/web-researcher-mcp/stargazers"><img src="https://img.shields.io/github/stars/zoharbabin/web-researcher-mcp?style=social" alt="GitHub Stars"></a>
 </p>
 
+### Get started in 30 seconds
+
+```bash
+go install github.com/zoharbabin/web-researcher-mcp/cmd/web-researcher-mcp@latest
+claude mcp add web-researcher -- web-researcher-mcp
+```
+
+Your AI can now search the web, extract full-text content, find academic papers, search patents, and conduct multi-step research — all from sources you control.
+
 ---
 
 ## Why Web Researcher MCP?
 
-AI assistants are only as good as the information they can access. **web-researcher-mcp** bridges the gap between LLMs and the live internet through the [Model Context Protocol](https://modelcontextprotocol.io/) standard:
+AI search tools like Perplexity [fabricate ~20% of citations](https://www.jmir.org/2024/1/e56764) and present all sources — SEO spam, AI-generated slop, and authoritative research — with equal confidence. When your work depends on accurate research, that's not a minor inconvenience. It's a liability.
 
-- **Multiple specialized research tools** in a single server (see [Tools](#tools) below)
-- **Pluggable search backends** with multi-provider routing and automatic fallback (Google, Brave, Serper, SearXNG, SearchAPI.io)
-- **4-tier content extraction** -- markdown negotiation, stealth HTTP, HTML parsing, headless browser (go-rod + stealth)
-- **Search lenses** for domain-focused research (programming, news, legal, medical, and more)
-- **Single static binary** with optional Chromium for JS rendering (auto-downloaded on first use)
-- **Enterprise-ready** with OAuth 2.1, multi-tenancy, rate limiting, and audit logging
+**web-researcher-mcp** takes a different approach: instead of searching the entire web and hoping for the best, you control exactly which sources your AI searches through [domain-focused lenses](#search-lenses). Legal research hits CourtListener and Cornell LII. Medical research hits PubMed and NIH. Academic research queries OpenAlex and CrossRef directly for real DOIs. Every citation links to a real document you can verify.
+
+| What you get | Why it matters |
+|---|---|
+| **Search lenses** — curated domain lists for each field | Your AI searches trusted sources, not the entire SEO-polluted web |
+| **8 specialized research tools** | Academic papers, patents, news, web, images, scraping, combined search+extract, multi-step sessions |
+| **5 search providers with automatic failover** | No vendor lock-in; if one provider goes down, research continues |
+| **Full-text extraction with quality scoring** | 4-tier pipeline handles 95%+ of the web; results ranked by authority and freshness |
+| **Auto-generated citations (APA/MLA)** | Every scraped source gets a formatted citation with real URL |
+| **Complete privacy** | Self-hosted — your research queries never leave your machine |
+| **Audit trail** | Every search logged with structured metadata for reproducible research |
 
 Works with Claude Code, Claude Desktop, Cursor, and any MCP-compatible client.
+
+### Who uses this
+
+- **Academic researchers** — literature reviews with real DOIs from OpenAlex/CrossRef, not fabricated citations
+- **Business analysts** — verifiable data points for client deliverables, finance lens restricts to SEC/Bloomberg
+- **Legal professionals** — court-defensible research from verified legal databases, zero hallucination risk
+- **Journalists** — source triangulation from public records, government databases, and primary documents
+- **Medical researchers** — clinical evidence from PubMed, Cochrane, and FDA — not health blogs
+- **Graduate students** — free, real citations in APA/MLA format, academic search with DOIs
+- **Enterprise teams** — self-hosted privacy, audit trails, compliance-ready
 
 ---
 
 https://github.com/user-attachments/assets/8dd5b595-3a5b-4eac-a50a-8cfeab0be21e
+
+---
+
+## How It Compares
+
+|  | web-researcher-mcp | Perplexity | Scite.ai | Elicit | Exa / Tavily |
+|---|---|---|---|---|---|
+| You choose which sources are searched | **Yes** (13 lenses) | No | No | No | No |
+| Fabricated citations | **Impossible** (real URLs from real searches) | ~20% fabricated | Low (journals only) | Low | Low |
+| Specialized tools (academic, patent, news) | **8 tools** | 1 (generic) | 1 (citation check) | 1 (papers) | 1 (generic) |
+| Multi-provider failover | **5 providers** | 1 | 1 | 1 | 1 |
+| Covers all domains (not just academic) | **Yes** | Yes | No (journals only) | No (papers only) | Yes |
+| Research queries stay private | **Yes** (self-hosted) | No | No | No | No |
+| Works with your existing AI | **Any MCP client** | Perplexity only | MCP or standalone | Standalone | API only |
+| Audit trail for compliance | **Yes** | Enterprise only | No | No | No |
+| Cost | **Free** (open source, MIT) | $20/mo | $20/mo | $10-49/mo | $49+/mo |
+
+### When to use what
+
+- **Perplexity** — Quick answers for casual questions where you'll verify independently anyway
+- **Scite.ai / Elicit / Consensus** — Browsing pre-indexed paper databases with a standalone UI
+- **DuckDuckGo / Brave MCP** — Simple single-tool web search when source control doesn't matter
+- **web-researcher-mcp** — Professional research where source authority, verifiable citations, privacy, and multi-tool depth matter
+- **Claude built-in search** — One-off web lookups during conversation
 
 ---
 
@@ -369,6 +422,11 @@ Search lenses are curated domain lists that focus search results on high-quality
 
 | Lens | Focus |
 |------|-------|
+| `docs` | Official documentation and API references only |
+| `academic` | Preprint servers, repositories, open-access journals |
+| `clinical` | Clinical trials, drug safety, evidence-based medicine |
+| `security` | CVEs, advisories, vulnerability research |
+| `journalism` | Public records, corporate filings, FOIA |
 | `programming` | Code docs, tutorials, Q&A |
 | `news` | Current events, journalism |
 | `tech` | Technology industry |
