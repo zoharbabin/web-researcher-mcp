@@ -54,12 +54,12 @@ body:
   - type: dropdown
     id: transport
     attributes:
-      label: Transport Mode
-      description: How are you running the MCP server?
+      label: How are you running it?
+      description: Pick the option that matches your setup
       options:
-        - STDIO (default)
-        - HTTP/SSE
-        - Docker
+        - Desktop app integration (default — STDIO)
+        - Web/HTTP mode
+        - Docker container
     validations:
       required: true
 

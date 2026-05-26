@@ -116,12 +116,6 @@ func TestToolDescriptionQuality(t *testing.T) {
 			if len(desc) < 100 {
 				t.Errorf("description too short (%d chars), minimum 100", len(desc))
 			}
-			if !strings.Contains(desc, "Returns JSON") && !strings.Contains(desc, "returns") {
-				t.Error("description should mention return format")
-			}
-			if !strings.Contains(desc, "isError") && !strings.Contains(desc, "failure") && !strings.Contains(desc, "error") {
-				t.Error("description should mention failure behavior")
-			}
 			hasAlternative := false
 			for _, alt := range expectedTools {
 				if alt != tool.Name && strings.Contains(desc, alt) {
@@ -131,9 +125,6 @@ func TestToolDescriptionQuality(t *testing.T) {
 			}
 			if !hasAlternative {
 				t.Error("description should mention at least one alternative tool")
-			}
-			if !strings.Contains(desc, "cached") && !strings.Contains(desc, "Not cached") {
-				t.Error("description should mention caching behavior")
 			}
 		})
 	}

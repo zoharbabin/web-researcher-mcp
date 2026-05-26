@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "web-researcher-mcp",
   "version": "0.0.0-template",
-  "description": "MCP server providing web search, content extraction, and multi-source research tools for AI assistants",
+  "description": "AI research without the made-up sources — you pick the sites, every citation is real",
   "author": {
     "name": "Zohar Babin",
     "url": "https://github.com/zoharbabin"
@@ -47,15 +47,15 @@
   "tools": [
     {
       "name": "web_search",
-      "description": "Search the web using configurable providers with optional search lenses"
+      "description": "Search the web and get results from only the sites you trust, using search lenses"
     },
     {
       "name": "scrape_page",
-      "description": "Extract content from URLs (web pages, PDFs, DOCX, YouTube) using a 4-tier scraping pipeline"
+      "description": "Read the full text from any URL — web pages, PDFs, Word docs, YouTube transcripts"
     },
     {
       "name": "search_and_scrape",
-      "description": "Combined search and content extraction pipeline with quality scoring"
+      "description": "Search the web and read the top results in one step, ranked by quality"
     },
     {
       "name": "image_search",
@@ -75,7 +75,7 @@
     },
     {
       "name": "sequential_search",
-      "description": "Multi-step research workflows with context tracking across queries"
+      "description": "Track multi-step research projects, noting what you found and what's still unanswered"
     }
   ]
 }

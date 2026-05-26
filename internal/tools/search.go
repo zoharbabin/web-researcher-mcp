@@ -26,14 +26,14 @@ type webSearchInput struct {
 	ExactTerms   string `json:"exact_terms,omitempty" jsonschema:"Phrase that must appear verbatim in results."`
 	ExcludeTerms string `json:"exclude_terms,omitempty" jsonschema:"Terms to exclude from results (space-separated)."`
 	Country      string `json:"country,omitempty" jsonschema:"Restrict to a country using ISO 3166-1 alpha-2 code (e.g. US, GB)."`
-	Lens         string `json:"lens,omitempty" jsonschema:"Apply a curated domain-restricted search lens: docs, academic, clinical, security, journalism, programming, news, tech, legal, medical, finance, science, government. Overrides site parameter."`
-	Provider     string `json:"provider,omitempty" jsonschema:"Force a specific search provider for this query: google, brave, serper, searxng, searchapi. Omit to use the configured default. Returns an error if the requested provider is not configured."`
+	Lens         string `json:"lens,omitempty" jsonschema:"Focus your search on trusted sites in a specific field: docs, academic, clinical, security, journalism, programming, news, tech, legal, medical, finance, science, government. Only one lens can be active at a time (overrides the site parameter)."`
+	Provider     string `json:"provider,omitempty" jsonschema:"Choose which search engine to use for this query: google, brave, serper, searxng, searchapi. Leave empty to use the default. Returns an error if the chosen provider isn't set up."`
 }
 
 func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "web_search",
-		Description:  "Search the web for URLs and metadata without fetching page content. Returns JSON with fields: urls (string array), results (array of {title, url, snippet, displayLink}), query, resultCount. lens and site are mutually exclusive (lens overrides site if both provided). On no matches returns resultCount: 0 with empty results array; on failure returns isError with message. Subject to upstream API quotas with automatic provider fallback and circuit breaker recovery. Supports lenses (docs, academic, clinical, security, journalism, programming, news, tech, legal, medical, finance, science, government) for domain-restricted search. Use search_and_scrape instead when you need full page content; use news_search for time-sensitive current events; use academic_search for scholarly papers. Results cached 30 min; use time_range to constrain freshness when cache staleness is a concern.",
+		Description:  "Search the web and get a list of relevant pages with titles and snippets — without reading the full page content. You can focus results on specific domains using the site parameter, or apply a search lens (like docs, academic, clinical, security, journalism, programming, news, tech, legal, medical, finance, science, government) to only search trusted sites in that category. Use search_and_scrape if you need full page text, news_search for current events, or academic_search for research papers. Results stay fresh for 30 minutes; use time_range to get more recent results.",
 		Annotations:  readOnlyAnnotations(true, true),
 		OutputSchema: webSearchOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input webSearchInput) (*mcp.CallToolResult, any, error) {
@@ -176,7 +176,7 @@ func toolError(msg string) *mcp.CallToolResult {
 }
 
 func rateLimitError(err error) *mcp.CallToolResult {
-	msg := fmt.Sprintf("Rate limited by upstream provider: %v. Retry after 60s, or use a different search provider.", err)
+	msg := fmt.Sprintf("The search service is temporarily busy: %v. Please wait about 60 seconds and try again, or try a different search provider.", err)
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
 			&mcp.TextContent{Text: msg},

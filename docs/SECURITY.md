@@ -1,8 +1,10 @@
 # Security Architecture
 
+Your research stays private and your infrastructure stays protected. This document describes how the server defends against the threats specific to AI-powered web research.
+
 ## Threat Model
 
-This MCP server operates in a unique threat environment:
+This server operates in a unique threat environment:
 1. It fetches arbitrary URLs from the internet on behalf of an LLM
 2. Scraped content is returned to the LLM which may interpret it as instructions (indirect prompt injection)
 3. Multiple users/agents may share a single server instance (multi-tenancy)

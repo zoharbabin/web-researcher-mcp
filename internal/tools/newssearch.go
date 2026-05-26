@@ -23,7 +23,7 @@ type newsSearchInput struct {
 func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "news_search",
-		Description:  "Search recent news articles by topic with time-based freshness filtering. Returns JSON with fields: articles (array of {title, url, source, publishedAt, snippet}), query, resultCount. Default freshness is 'week'; use 'hour' or 'day' for breaking news. On no matches returns resultCount: 0 with empty array; on failure returns isError with message. Subject to upstream API quotas with automatic provider fallback. Coverage depends on configured search provider. Use web_search instead for evergreen/non-news content; use academic_search for peer-reviewed findings; use search_and_scrape if you need full article text beyond snippets. Results cached 15 min due to news volatility.",
+		Description:  "Find recent news articles on any topic. By default returns articles from the past week — use 'hour' or 'day' for breaking news, or 'month'/'year' to look further back. You can also filter by news source (e.g. reuters.com). Use web_search for non-news content, academic_search for research papers, or search_and_scrape if you need the full article text. Results refresh every 15 minutes.",
 		Annotations:  readOnlyAnnotations(true, true),
 		OutputSchema: newsSearchOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input newsSearchInput) (*mcp.CallToolResult, any, error) {

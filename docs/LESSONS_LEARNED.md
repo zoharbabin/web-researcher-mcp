@@ -20,7 +20,7 @@ Myself and collaborators spent three versions (v6.2.0 through v6.4.0) building i
 
 Google announced it would be discontinuing support for Programmable Search Engines configured to search the "entire web." The project was named `google-researcher-mcp` — the dependency on a single search provider was an foundational risk.
 
-**Go fix**: Interface-driven `search.Provider` with multiple implementations, plus a Router that provides multi-provider routing with automatic failover via per-provider circuit breakers.
+**Go fix**: A clean provider interface that lets you swap search backends freely, plus a routing layer that automatically switches to the next provider when one fails.
 
 ### Alternative Search Engines (Issue #55)
 
@@ -101,7 +101,7 @@ What improved (without breaking backwards compatibility):
 
 - OAuth 2.1 authentication for multi-client deployments
 - Multi-tenancy with per-tenant session isolation
-- Per-provider circuit breakers with automatic fallback
+- Automatic failover between search providers when one goes down
 - Prometheus metrics for observability
 - Structured audit logging for compliance
 
@@ -113,7 +113,7 @@ Since launching the Go version:
 - Multiple search providers with automatic failover (vs. single provider)
 - 4-tier scraping pipeline that tries lightweight methods first (vs. Playwright-only)
 - Sub-100ms cold startup (vs. 2-4 seconds)
-- Production-ready: rate limiting, circuit breakers, session isolation, audit trail
+- Production-ready: rate limiting, automatic failover, user isolation, and a compliance-ready audit trail
 
 ## Should You Rewrite?
 

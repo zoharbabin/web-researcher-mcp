@@ -26,7 +26,7 @@ type imageSearchInput struct {
 func registerImageSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "image_search",
-		Description:  "Find images by query with filters for size, type, color, and format. Returns JSON with fields: images (array of {title, link, thumbnailLink, displayLink, contextLink, width, height, fileSize}), query, resultCount. Results sorted by relevance; max 10 per call, no pagination. On no matches returns resultCount: 0 with empty array; on failure returns isError with message. Subject to upstream API quotas with automatic provider fallback. Use this for visual assets or image references — not for text information. Use web_search for pages containing images, or scrape_page to extract images from a known URL. Results cached 30 min.",
+		Description:  "Find images on the web matching your description. Filter by size, type (photo, clipart, line art, etc.), dominant color, or file format. Returns up to 10 image links per search. Best for finding visual references or assets — use web_search if you need text content from pages that contain images. Results stay fresh for 30 minutes.",
 		Annotations:  readOnlyAnnotations(true, true),
 		OutputSchema: imageSearchOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input imageSearchInput) (*mcp.CallToolResult, any, error) {

@@ -1,6 +1,6 @@
-# Search Provider Setup
+# Setting Up Your Search Keys
 
-This guide covers how to obtain API keys for each supported search provider. You only need credentials for the providers you plan to use — configure one for single-provider mode, or multiple for multi-provider routing with automatic fallback.
+This guide shows you how to get the API keys that power your searches. You only need one provider to get started — or set up several, and the server will automatically switch between them if one goes down.
 
 ## How to Configure Keys
 
@@ -8,7 +8,7 @@ Pass API keys as environment variables. How you set them depends on your MCP cli
 
 **Claude Code** (CLI / VS Code / JetBrains):
 ```json
-// In ~/.claude/settings.json under "mcpServers":
+// In ~/.claude.json under "mcpServers":
 {
   "web-researcher": {
     "command": "web-researcher-mcp",
@@ -210,7 +210,7 @@ export SERPER_API_KEY=...
 export SEARCH_ROUTING=brave,google,serper
 ```
 
-If Brave is down or rate-limited, requests automatically fall to Google, then Serper. Each provider has an independent circuit breaker.
+If Brave is down or rate-limited, requests automatically switch to Google, then Serper. If one provider starts failing repeatedly, the server stops trying it and routes to the next one.
 
 For per-operation routing (different providers for different search types):
 
@@ -285,7 +285,7 @@ export LENS_API_TOKEN=your-api-token
 
 ### Patent Routing
 
-When multiple patent providers are configured, the router tries them in priority order with automatic fallback:
+When you have multiple patent providers configured, the server tries each one in order — if the first doesn't have results, it moves to the next:
 
 ```bash
 export SEARCH_ROUTING='{"patents":"epo,lens,searchapi,uspto","default":"brave,google"}'

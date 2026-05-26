@@ -28,7 +28,7 @@ type sequentialSearchInput struct {
 func registerSequentialSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "sequential_search",
-		Description:  "Track multi-step research progress with persistent sessions, branching, and knowledge gap tracking. This is a state tracker, not a search tool — pair with web_search or search_and_scrape for actual searches. Call with stepNumber=1 (omit sessionId) to start a new session. Returns JSON with fields: sessionId, currentStep, totalStepsEstimate, isComplete, steps (array of {stepNumber, description, isRevision, revisesStep, branchId, timestamp}), sources, gaps (array of {description, foundInStep}), startedAt, completedAt (only when isComplete=true). Pass sessionId for steps 2+; each call returns the full accumulated session state. Set nextStepNeeded=false on final step to mark complete. Sessions expire after 30 min of inactivity (returns 'session expired or not found' error); max 50 concurrent sessions per tenant. Use branchFromStep + branchId to explore alternative directions without losing the main thread. Not cached.",
+		Description:  "Keep track of a multi-step research project. Use this alongside web_search or search_and_scrape to record what you've found at each step, note unanswered questions, and explore alternative angles (branching). Start a new session with stepNumber=1, then pass the returned sessionId for each follow-up step. Mark the session complete by setting nextStepNeeded=false. Sessions stay active for 30 minutes between steps. Useful for complex investigations that require several rounds of searching.",
 		Annotations:  readOnlyAnnotations(false, false),
 		OutputSchema: sequentialSearchOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input sequentialSearchInput) (*mcp.CallToolResult, any, error) {
@@ -52,7 +52,7 @@ func registerSequentialSearch(srv *mcp.Server, deps Dependencies) {
 			var ok bool
 			sess, ok = deps.Sessions.Get(tenantID, input.SessionID)
 			if !ok {
-				return toolError("session expired or not found"), nil, nil
+				return toolError("This research session has expired or doesn't exist. Sessions expire after 30 minutes of inactivity. Start a new session by setting stepNumber=1 without a sessionId."), nil, nil
 			}
 		}
 

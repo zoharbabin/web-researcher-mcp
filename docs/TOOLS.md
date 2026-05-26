@@ -1,8 +1,8 @@
 # Tool Specifications
 
-Each tool is registered via `mcp.AddTool` with a typed input struct. This document specifies the contract for each tool — the schemas, behavior, caching, and error conditions that the implementation must satisfy.
+These tools let your AI assistant search the web, read pages, find academic papers, track multi-step research, and more — always returning real, verifiable sources. Below are the detailed schemas and behavioral contracts for each tool.
 
-> **Note:** Output schemas shown below describe the JSON shape returned by each tool. They are documentation of the response contract — see the corresponding `internal/tools/*.go` file for the actual implementation. Input schemas are auto-generated from the struct `jsonschema` tags.
+> **Note:** Output schemas describe the JSON shape returned by each tool. See the corresponding `internal/tools/*.go` file for the implementation. Input schemas are auto-generated from struct `jsonschema` tags.
 
 ## Tool Registration Pattern
 

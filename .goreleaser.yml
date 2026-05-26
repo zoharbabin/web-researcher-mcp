@@ -60,7 +60,7 @@ dockers:
     build_flag_templates:
       - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.title={{ .ProjectName }}"
-      - "--label=org.opencontainers.image.description=MCP server for web search, content extraction, and multi-source research"
+      - "--label=org.opencontainers.image.description=AI research without the made-up sources — you pick the sites, every citation is real"
       - "--label=org.opencontainers.image.version={{ .Version }}"
       - "--label=org.opencontainers.image.created={{ .Date }}"
       - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
@@ -80,7 +80,7 @@ dockers:
     build_flag_templates:
       - "--platform=linux/arm64"
       - "--label=org.opencontainers.image.title={{ .ProjectName }}"
-      - "--label=org.opencontainers.image.description=MCP server for web search, content extraction, and multi-source research"
+      - "--label=org.opencontainers.image.description=AI research without the made-up sources — you pick the sites, every citation is real"
       - "--label=org.opencontainers.image.version={{ .Version }}"
       - "--label=org.opencontainers.image.created={{ .Date }}"
       - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
@@ -101,7 +101,7 @@ dockers:
     build_flag_templates:
       - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.title={{ .ProjectName }}"
-      - "--label=org.opencontainers.image.description=MCP server for web search, content extraction, and multi-source research"
+      - "--label=org.opencontainers.image.description=AI research without the made-up sources — you pick the sites, every citation is real"
       - "--label=org.opencontainers.image.version={{ .Version }}"
       - "--label=org.opencontainers.image.created={{ .Date }}"
       - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
@@ -121,7 +121,7 @@ dockers:
     build_flag_templates:
       - "--platform=linux/arm64"
       - "--label=org.opencontainers.image.title={{ .ProjectName }}"
-      - "--label=org.opencontainers.image.description=MCP server for web search, content extraction, and multi-source research"
+      - "--label=org.opencontainers.image.description=AI research without the made-up sources — you pick the sites, every citation is real"
       - "--label=org.opencontainers.image.version={{ .Version }}"
       - "--label=org.opencontainers.image.created={{ .Date }}"
       - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
@@ -162,7 +162,7 @@ brews:
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     directory: Formula
     homepage: "https://github.com/zoharbabin/web-researcher-mcp"
-    description: "MCP server providing web search, content extraction, and multi-source research tools for AI assistants"
+    description: "AI research without the made-up sources — lets your AI search only the sites you trust"
     license: "MIT"
     skip_upload: true
     test: |

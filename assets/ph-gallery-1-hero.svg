@@ -29,20 +29,20 @@
   <text x="635" y="540"
         font-family="'Inter', 'SF Pro Display', sans-serif"
         font-size="28" font-weight="400" fill="#94A3B8" letter-spacing="-0.3"
-        text-anchor="middle" text-rendering="optimizeLegibility">Web research superpowers for any AI assistant</text>
+        text-anchor="middle" text-rendering="optimizeLegibility">AI research without the made-up sources</text>
 
   <!-- Stats row -->
   <g font-family="'Inter', 'SF Pro Display', sans-serif" text-rendering="optimizeLegibility">
-    <text x="370" y="640" font-size="36" font-weight="700" fill="#22F0E8" text-anchor="middle">8</text>
-    <text x="370" y="670" font-size="16" font-weight="400" fill="#64748B" text-anchor="middle">Research Tools</text>
+    <text x="330" y="640" font-size="36" font-weight="700" fill="#22F0E8" text-anchor="middle">100%</text>
+    <text x="330" y="670" font-size="16" font-weight="400" fill="#64748B" text-anchor="middle">Real Citations</text>
 
-    <text x="530" y="640" font-size="36" font-weight="700" fill="#22F0E8" text-anchor="middle">5</text>
-    <text x="530" y="670" font-size="16" font-weight="400" fill="#64748B" text-anchor="middle">Search Providers</text>
+    <text x="530" y="640" font-size="36" font-weight="700" fill="#22F0E8" text-anchor="middle">13</text>
+    <text x="530" y="670" font-size="16" font-weight="400" fill="#64748B" text-anchor="middle">Search Lenses</text>
 
-    <text x="740" y="640" font-size="36" font-weight="700" fill="#22F0E8" text-anchor="middle">25MB</text>
-    <text x="740" y="670" font-size="16" font-weight="400" fill="#64748B" text-anchor="middle">Memory Usage</text>
+    <text x="740" y="640" font-size="36" font-weight="700" fill="#22F0E8" text-anchor="middle">5</text>
+    <text x="740" y="670" font-size="16" font-weight="400" fill="#64748B" text-anchor="middle">Search Providers</text>
 
-    <text x="900" y="640" font-size="36" font-weight="700" fill="#22F0E8" text-anchor="middle">&lt;100ms</text>
-    <text x="900" y="670" font-size="16" font-weight="400" fill="#64748B" text-anchor="middle">Startup Time</text>
+    <text x="940" y="640" font-size="36" font-weight="700" fill="#22F0E8" text-anchor="middle">Private</text>
+    <text x="940" y="670" font-size="16" font-weight="400" fill="#64748B" text-anchor="middle">Runs on Your Machine</text>
   </g>
 </svg>

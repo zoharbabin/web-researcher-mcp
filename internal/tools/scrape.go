@@ -22,7 +22,7 @@ type scrapePageInput struct {
 func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "scrape_page",
-		Description:  "Extract readable content from a single URL. Handles web pages (HTML and JS-rendered SPAs), PDFs, DOCX, PPTX, and YouTube transcripts via auto-detected extraction with tiered fallback (markdown, stealth, HTML, headless browser). Returns JSON with fields: url, content, contentType, contentLength, truncated, estimatedTokens, sizeCategory, citation (with formatted APA/MLA), metadata ({title, author}). Content capped at max_length (default 50000 bytes); truncated=true if cut. Mode 'preview' forces max_length to 5000 bytes for quick relevance checks. Max 5 concurrent scrapes; additional calls queue. On failure returns isError with reason (e.g. blocked, timeout, invalid URL). Use search_and_scrape instead to discover and extract in one step; use web_search if you only need URLs. Results cached 1 hour.",
+		Description:  "Read and extract the main content from any URL — web pages (including JavaScript-heavy sites), PDFs, Word docs, PowerPoint files, and YouTube transcripts. Automatically picks the best extraction method. Returns the readable text along with a citation you can use (APA/MLA format) and page metadata. Use 'preview' mode for a quick look (first ~5000 characters). Use search_and_scrape to find and read pages in one step, or web_search if you just need links. Results stay fresh for 1 hour.",
 		Annotations:  readOnlyAnnotations(true, true),
 		OutputSchema: scrapePageOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input scrapePageInput) (*mcp.CallToolResult, any, error) {

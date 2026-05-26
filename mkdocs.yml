@@ -8,10 +8,16 @@ extra:
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/zoharbabin/web-researcher-mcp
+    - icon: fontawesome/brands/x-twitter
+      link: https://x.com/zohar
+    - icon: fontawesome/brands/docker
+      link: https://hub.docker.com/r/zoharbabin/web-researcher-mcp
 
 theme:
   name: material
   custom_dir: overrides
+  logo: https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/logo-final-transparent.svg
+  favicon: https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/favicon.ico
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
@@ -36,14 +42,15 @@ docs_dir: site_src
 
 nav:
   - Home: index.md
-  - Architecture: architecture.md
-  - Tools: tools.md
   - Examples: examples.md
+  - Tools: tools.md
   - API Setup: api-setup.md
   - Deployment: deployment.md
   - Security: security.md
+  - Architecture: architecture.md
   - Contributing: contributing.md
-  - Lessons Learned: lessons-learned.md
+  - Brand Guidelines: brand-guidelines.md
+  - Our Story: lessons-learned.md
   - Migration: migration.md
 
 markdown_extensions:

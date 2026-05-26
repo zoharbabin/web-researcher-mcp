@@ -20,7 +20,7 @@ func registerResources(srv *mcp.Server, metricsCollector *metrics.Collector, ses
 	srv.AddResource(&mcp.Resource{
 		URI:         "stats://tools",
 		Name:        "Tool Statistics",
-		Description: "Per-tool execution metrics including call counts, latency, and error rates",
+		Description: "Usage stats for each tool — how many times it's been called, how fast it responded, and how often errors occurred",
 		MIMEType:    "application/json",
 	}, func(_ context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 		stats := metricsCollector.GetToolStats()
@@ -61,7 +61,7 @@ func registerResources(srv *mcp.Server, metricsCollector *metrics.Collector, ses
 	srv.AddResource(&mcp.Resource{
 		URI:         "stats://rate-limits",
 		Name:        "Rate Limit Status",
-		Description: "Current rate limit configuration and usage. Shows per-tenant limits, daily quota remaining, and reset times. Only active in HTTP mode.",
+		Description: "How many requests you can make and how many you have left today. Only applies when connecting over the network (not in local mode).",
 		MIMEType:    "application/json",
 	}, func(_ context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 		cfg := rateLimiter.Config()
@@ -73,7 +73,7 @@ func registerResources(srv *mcp.Server, metricsCollector *metrics.Collector, ses
 				"dailyPerTenant":     cfg.DailyQuota,
 			},
 			"defaultTenant": stats,
-			"guidance":      "Rate limiting applies only in HTTP mode. In STDIO mode, only upstream API quotas apply. Without OAuth, all clients share the 'default' tenant bucket. Set RATE_LIMIT_PER_TENANT and DAILY_QUOTA_PER_TENANT env vars to adjust.",
+			"guidance":      "Rate limits apply when connecting over the network. In local mode, only the search service's own limits apply. Without authentication set up, all users share the same allowance. Admins can adjust limits using the RATE_LIMIT_PER_TENANT and DAILY_QUOTA_PER_TENANT settings.",
 		}
 		jsonBytes, _ := json.MarshalIndent(result, "", "  ")
 		return &mcp.ReadResourceResult{

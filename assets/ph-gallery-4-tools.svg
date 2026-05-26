@@ -7,12 +7,12 @@
   <text x="635" y="80"
         font-family="'Inter', 'SF Pro Display', sans-serif"
         font-size="36" font-weight="700" fill="#FFFFFF" letter-spacing="-1"
-        text-anchor="middle" text-rendering="optimizeLegibility">One server. Eight specialized tools.</text>
+        text-anchor="middle" text-rendering="optimizeLegibility">Eight research tools, ready to use.</text>
 
   <text x="635" y="120"
         font-family="'Inter', 'SF Pro Display', sans-serif"
         font-size="20" font-weight="400" fill="#64748B"
-        text-anchor="middle" text-rendering="optimizeLegibility">Each tool designed for a specific research task. All accessible via MCP.</text>
+        text-anchor="middle" text-rendering="optimizeLegibility">Each one built for a specific research task. Just ask your AI — it figures out which to use.</text>
 
   <!-- Tool grid: 2 rows x 4 columns -->
   <!-- Row 1 -->
@@ -92,7 +92,7 @@
   <!-- Bottom -->
   <text x="635" y="680"
         font-family="'Inter', sans-serif" font-size="18" fill="#475569"
-        text-anchor="middle" text-rendering="optimizeLegibility">All tools auto-discovered via MCP. No configuration per tool — just ask your AI.</text>
+        text-anchor="middle" text-rendering="optimizeLegibility">Your AI picks the right tool automatically. No configuration needed — just ask your question.</text>
 
   <text x="635" y="720"
         font-family="'Inter', sans-serif" font-size="16" fill="#64748B"

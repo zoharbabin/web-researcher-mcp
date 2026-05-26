@@ -1,5 +1,7 @@
 # Deployment Guide
 
+This guide covers how to build, configure, and run web-researcher-mcp — whether locally on your machine or deployed to a server. Most users only need the Quick Start in the README; this doc is for production deployments and advanced configuration.
+
 ## Build
 
 ```bash

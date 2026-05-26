@@ -27,7 +27,7 @@ type searchAndScrapeInput struct {
 func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "search_and_scrape",
-		Description:  "Search the web and extract full content from top results in one call. Scrapes in parallel (max 5 concurrent), deduplicates content across sources, and scores each source on relevance and quality. Returns JSON with fields: query, combinedContent, sources (array of {url, title, content, contentType, scores} — included when include_sources=true), summary ({urlsSearched, urlsScraped, processingTimeMs}), sizeMetadata ({totalLength, estimatedTokens, sizeCategory}). On zero search matches returns empty combinedContent with urlsSearched: 0. Individual scrape failures are silently skipped (urlsScraped < urlsSearched indicates partial failures). num_results controls sources scraped (more = slower, typically 2-15s). Subject to upstream API quotas with automatic provider fallback. Use web_search instead if you only need URLs; use scrape_page for a single known URL. Not cached (combines live search + scrape).",
+		Description:  "Search the web and read the full content from the top results, all in one step. Combines content from multiple sources, removes duplicates, and scores each source for quality and relevance. Great for in-depth research on a topic. More sources means more thorough results but takes longer (typically 2-15 seconds). Use web_search if you only need links, or scrape_page to read one specific URL you already have.",
 		Annotations:  readOnlyAnnotations(true, true),
 		OutputSchema: searchAndScrapeOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input searchAndScrapeInput) (*mcp.CallToolResult, any, error) {

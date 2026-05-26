@@ -1,12 +1,12 @@
-# Usage Examples
+# Examples: What You Can Research
 
-Real-world examples showing how to call each tool with JSON arguments and what to expect in the response.
+Real-world examples showing what each research capability does and the kind of results you get back.
 
 ---
 
 ## Quick Web Search
 
-Search the web and get structured results with URLs, titles, and snippets.
+Search the web and get back a clean list of results — each with a title, link, and summary snippet.
 
 ```json
 {
@@ -18,7 +18,7 @@ Search the web and get structured results with URLs, titles, and snippets.
 }
 ```
 
-**Response** contains: `urls` (array of result URLs), `query` (echoed back), `resultCount`, and `results` (array with `title`, `url`, `snippet`, `displayLink` for each result). Results are cached — repeated identical queries return instantly.
+**Response** contains: `urls` (array of result URLs), `query` (echoed back), `resultCount`, and `results` (array with `title`, `url`, `snippet`, `displayLink` for each result). Results are saved temporarily — if you run the same search again, it responds instantly without using another API call.
 
 ---
 
@@ -37,13 +37,13 @@ Use a search lens to restrict results to curated high-quality sources for a spec
 }
 ```
 
-The `programming` lens restricts results to sites like stackoverflow.com, github.com, go.dev, developer.mozilla.org, and other curated programming resources. Available lenses: `docs`, `academic`, `clinical`, `security`, `journalism`, `programming`, `news`, `tech`, `legal`, `medical`, `finance`, `science`, `government`.
+The "programming" lens focuses your search on trusted developer sources — Stack Overflow, GitHub, Go docs, MDN, and other curated sites. This means fewer noise results and more relevant answers. Available lenses: `docs`, `academic`, `clinical`, `security`, `journalism`, `programming`, `news`, `tech`, `legal`, `medical`, `finance`, `science`, `government`.
 
 ---
 
 ## Deep Research with search_and_scrape
 
-Combines search and content extraction in a single call. Searches the web, then scrapes the top results to extract full-text content.
+Searches the web, then reads the top results for you — pulling out the full text so you get the actual content, not just a list of links.
 
 ```json
 {
@@ -57,7 +57,7 @@ Combines search and content extraction in a single call. Searches the web, then 
 }
 ```
 
-**Response** contains: `query`, `combinedContent` (merged extracted text), `sources` (array with `url`, `title`, `content`, `contentType`, `scores` — included when `include_sources=true`), `summary` (`urlsSearched`, `urlsScraped`, `processingTimeMs`), and `sizeMetadata` (`totalLength`, `estimatedTokens`, `sizeCategory`). Content is sanitized, deduplicated, and truncated at natural sentence boundaries.
+**Response** contains: `query`, `combinedContent` (merged extracted text), `sources` (array with `url`, `title`, `content`, `contentType`, `scores` — included when `include_sources=true`), `summary` (`urlsSearched`, `urlsScraped`, `processingTimeMs`), and `sizeMetadata` (`totalLength`, `estimatedTokens`, `sizeCategory`). Duplicate paragraphs are removed, and long content is trimmed at sentence breaks so nothing cuts off mid-thought.
 
 ---
 
@@ -75,7 +75,7 @@ Search peer-reviewed papers, preprints, and academic databases.
 }
 ```
 
-**Response** contains: `papers` (array of `{title, url, source, abstract}`), `query`, `totalResults`, `resultCount`, and `source`. The search targets scholarly databases including arXiv, PubMed, IEEE, Nature, and Springer. Pair with `scrape_page` to extract full paper content from accessible URLs.
+**Response** contains: `papers` (array of `{title, url, source, abstract}`), `query`, `totalResults`, `resultCount`, and `source`. Results come from scholarly databases (arXiv, PubMed, IEEE, Nature, Springer). If you want the full text of a paper, follow up by reading the URL — the tool handles PDFs and paywalled previews automatically.
 
 ---
 
@@ -95,7 +95,7 @@ Search patent databases with classification codes and office filtering.
 }
 ```
 
-**Response** contains: `patents` (array of `{title, url, number, abstract, assignee, inventor, filed, granted, pdf, status}`), `query`, `searchType`, `resultCount`, `source` (which provider answered), and `searchUrl`. Supports strict office filtering (US, EP, WO, JP, CN, KR), CPC classification codes, and automatic provider selection based on region.
+**Response** contains: `patents` (array of `{title, url, number, abstract, assignee, inventor, filed, granted, pdf, status}`), `query`, `searchType`, `resultCount`, `source` (which provider answered), and `searchUrl`. You can filter by patent office (US, European, international, Japan, China, Korea) and by technology category codes. The server automatically picks the best data source for your region.
 
 ---
 
@@ -151,7 +151,7 @@ Extract content from any URL — web pages, PDFs, DOCX, PPTX, or YouTube transcr
 }
 ```
 
-**Response** contains: `url`, `content` (extracted text), `contentType` (html/markdown/youtube/pdf/docx/pptx), `contentLength`, `truncated`, `estimatedTokens`, `sizeCategory`, `citation` (with APA/MLA formatted citations), and optionally `metadata` (`{title, author}`). The 4-tier pipeline tries lightweight methods first and only falls back to the headless browser for JavaScript-heavy sites.
+**Response** contains: `url`, `content` (extracted text), `contentType` (html/markdown/youtube/pdf/docx/pptx), `contentLength`, `truncated`, `estimatedTokens`, `sizeCategory`, `citation` (with APA/MLA formatted citations), and optionally `metadata` (`{title, author}`). The tool uses the fastest method available and only launches a full browser for sites that require JavaScript — so most pages load in under a second.
 
 ---
 

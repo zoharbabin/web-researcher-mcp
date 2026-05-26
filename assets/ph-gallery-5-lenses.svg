@@ -14,12 +14,12 @@
   <text x="635" y="80"
         font-family="'Inter', 'SF Pro Display', sans-serif"
         font-size="36" font-weight="700" fill="#FFFFFF" letter-spacing="-1"
-        text-anchor="middle" text-rendering="optimizeLegibility">Search Lenses: Focus on high-quality sources</text>
+        text-anchor="middle" text-rendering="optimizeLegibility">Search Lenses: You choose which sources to trust</text>
 
   <text x="635" y="120"
         font-family="'Inter', 'SF Pro Display', sans-serif"
         font-size="20" font-weight="400" fill="#64748B"
-        text-anchor="middle" text-rendering="optimizeLegibility">Curated domain lists restrict searches to authoritative sites for each domain.</text>
+        text-anchor="middle" text-rendering="optimizeLegibility">Each lens limits your AI to searching only the websites you actually trust for that topic.</text>
 
   <!-- Lens cards: 2 rows x 3 columns -->
   <!-- Row 1 -->
@@ -93,9 +93,9 @@
   <!-- Bottom -->
   <text x="635" y="700"
         font-family="'Inter', sans-serif" font-size="18" fill="#475569"
-        text-anchor="middle" text-rendering="optimizeLegibility">No more SEO spam in your AI research. Lenses ensure high-signal results.</text>
+        text-anchor="middle" text-rendering="optimizeLegibility">No more SEO spam or random blogs in your research. Only sources that matter.</text>
 
   <text x="635" y="735"
         font-family="'Inter', sans-serif" font-size="16" fill="#64748B"
-        text-anchor="middle">Just add lens: "programming" to any search query</text>
+        text-anchor="middle">13 lenses included. Create your own in seconds.</text>
 </svg>

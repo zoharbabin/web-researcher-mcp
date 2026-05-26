@@ -2,7 +2,7 @@
 
 ## Context
 
-This is an MCP (Model Context Protocol) server that provides AI assistants with web search, content extraction, and multi-source research capabilities. It is designed for:
+This is the architecture reference for web-researcher-mcp — the tool that gives AI assistants reliable, cited web research capabilities. It communicates with AI apps via the Model Context Protocol (MCP). The system is designed for:
 
 - **Reliability** — clean process lifecycle, no orphan processes, immediate EOF detection
 - **Modularity** — one package per concern, interface-driven, testable in isolation

@@ -14,12 +14,12 @@
   <text x="635" y="80"
         font-family="'Inter', 'SF Pro Display', sans-serif"
         font-size="36" font-weight="700" fill="#FFFFFF" letter-spacing="-1"
-        text-anchor="middle" text-rendering="optimizeLegibility">5 search providers. Automatic failover.</text>
+        text-anchor="middle" text-rendering="optimizeLegibility">5 search providers. Never goes down.</text>
 
   <text x="635" y="120"
         font-family="'Inter', 'SF Pro Display', sans-serif"
         font-size="20" font-weight="400" fill="#64748B"
-        text-anchor="middle" text-rendering="optimizeLegibility">Circuit breakers detect failures. Traffic routes to healthy providers instantly.</text>
+        text-anchor="middle" text-rendering="optimizeLegibility">If one search engine has issues, your research automatically switches to the next one.</text>
 
   <!-- AI box on the left -->
   <rect x="80" y="320" width="180" height="80" rx="16" fill="#1E293B" stroke="#334155" stroke-width="2"/>
@@ -37,10 +37,10 @@
         text-anchor="middle">Smart Router</text>
   <text x="490" y="400"
         font-family="'Inter', sans-serif" font-size="13" font-weight="400" fill="#64748B"
-        text-anchor="middle">Circuit Breakers</text>
+        text-anchor="middle">Detects problems</text>
   <text x="490" y="420"
         font-family="'Inter', sans-serif" font-size="13" font-weight="400" fill="#64748B"
-        text-anchor="middle">Priority Fallback</text>
+        text-anchor="middle">Switches automatically</text>
 
   <!-- Arrow: AI → MCP -->
   <path d="M260 360 L370 360" stroke="#475569" stroke-width="2" stroke-dasharray="6 4"/>
@@ -85,17 +85,17 @@
   <!-- Bottom feature callouts -->
   <g font-family="'Inter', sans-serif" text-rendering="optimizeLegibility">
     <rect x="180" y="620" width="240" height="44" rx="22" fill="#1E293B"/>
-    <text x="300" y="647" font-size="15" font-weight="500" fill="#22F0E8" text-anchor="middle">Per-provider rate limits</text>
+    <text x="300" y="647" font-size="15" font-weight="500" fill="#22F0E8" text-anchor="middle">No single point of failure</text>
 
     <rect x="450" y="620" width="280" height="44" rx="22" fill="#1E293B"/>
-    <text x="590" y="647" font-size="15" font-weight="500" fill="#22F0E8" text-anchor="middle">Automatic health detection</text>
+    <text x="590" y="647" font-size="15" font-weight="500" fill="#22F0E8" text-anchor="middle">Switches providers instantly</text>
 
     <rect x="760" y="620" width="260" height="44" rx="22" fill="#1E293B"/>
-    <text x="890" y="647" font-size="15" font-weight="500" fill="#22F0E8" text-anchor="middle">Zero vendor lock-in</text>
+    <text x="890" y="647" font-size="15" font-weight="500" fill="#22F0E8" text-anchor="middle">You're never locked in</text>
   </g>
 
   <!-- Bottom note -->
   <text x="635" y="720"
         font-family="'Inter', sans-serif" font-size="16" fill="#475569"
-        text-anchor="middle">Configure once. The router handles the rest — transparent to your AI.</text>
+        text-anchor="middle">Set it up once. Your research keeps working no matter what.</text>
 </svg>

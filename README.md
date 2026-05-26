@@ -45,8 +45,8 @@ If your work gets cited, published, submitted to a court, or shown to a client �
 | What you get | What that means for you |
 |---|---|
 | **Search lenses** — choose your sources by field | Your AI only sees the sites you trust (PubMed, SEC.gov, arXiv — not random blogs) |
-| **8 research tools** | Papers, patents, news, web pages, images, full-text reading, and multi-step deep research |
-| **Never goes down** | 5 search engines working together — if one has issues, the others pick up automatically |
+| **Research tools for every source type** | Papers, patents, news, web pages, images, full-text reading, and multi-step deep research |
+| **Always has a backup** | Multiple search engines working together — if one has issues, the others pick up automatically |
 | **Reads full articles** | Doesn't just give you snippets — extracts and reads entire pages, PDFs, Word docs, even YouTube transcripts |
 | **Real citations, formatted** | Every source comes with a proper APA/MLA citation and a link that actually works |
 | **Your queries stay private** | Runs on your machine — nobody sees what you're researching. Not us, not anyone. |
@@ -74,7 +74,7 @@ https://github.com/user-attachments/assets/8dd5b595-3a5b-4eac-a50a-8cfeab0be21e
 
 |  | web-researcher-mcp | Perplexity | Scite.ai | Elicit |
 |---|---|---|---|---|
-| You pick which sources are searched | **Yes** (13 lenses) | No | No | No |
+| You pick which sources are searched | **Yes** (built-in + custom lenses) | No | No | No |
 | Makes up citations | **Never** — every link is real | ~20% fabricated | Rare (journals only) | Rare |
 | Works across all fields | **Yes** — legal, medical, news, patents, everything | Yes | Journals only | Papers only |
 | Keeps your research private | **Yes** — runs on your machine | No (they see everything) | No | No |
@@ -497,7 +497,7 @@ For the full threat model, see [docs/SECURITY.md](docs/SECURITY.md).
 
 ### Claude Code
 
-Add to your settings (`~/.claude/settings.json`):
+Add to your MCP config (`~/.claude.json`):
 
 ```json
 {
