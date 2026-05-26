@@ -4,12 +4,12 @@
 </p>
 <h1 align="center">web-researcher-mcp</h1>
 <p align="center">
-  <strong>Your AI searches sources you trust — not the open web's SEO spam and AI slop.</strong>
+  <strong>AI research without the made-up sources.</strong>
 </p>
 <p align="center">
-  Open-source research toolkit that gives Claude, Cursor, or any AI assistant 8 specialized tools<br/>
-  with domain-focused search lenses, multi-provider fallback, and full privacy.<br/>
-  You control what gets searched. Every citation is real and verifiable.
+  Perplexity makes things up. ChatGPT searches garbage. Your reputation is on the line.<br/>
+  This tool lets you choose exactly which sources your AI searches —<br/>
+  so every citation is real, every link works, and nothing is fabricated.
 </p>
 
 <p align="center">
@@ -30,37 +30,39 @@ go install github.com/zoharbabin/web-researcher-mcp/cmd/web-researcher-mcp@lates
 claude mcp add web-researcher -- web-researcher-mcp
 ```
 
-Your AI can now search the web, extract full-text content, find academic papers, search patents, and conduct multi-step research — all from sources you control.
+That's it. Your AI can now search the web, read full articles, find academic papers, look up patents, and run multi-step research — only from sources you pick.
 
 ---
 
-## Why Web Researcher MCP?
+## Why does this exist?
 
-AI search tools like Perplexity [fabricate ~20% of citations](https://www.jmir.org/2024/1/e56764) and present all sources — SEO spam, AI-generated slop, and authoritative research — with equal confidence. When your work depends on accurate research, that's not a minor inconvenience. It's a liability.
+Perplexity [fabricates ~20% of its citations](https://www.jmir.org/2024/1/e56764). It links to papers that don't exist, invents DOIs, and presents SEO spam with the same confidence as peer-reviewed research. ChatGPT's web search isn't much better — it can't tell a blog post from a court filing.
 
-**web-researcher-mcp** takes a different approach: instead of searching the entire web and hoping for the best, you control exactly which sources your AI searches through [domain-focused lenses](#search-lenses). Legal research hits CourtListener and Cornell LII. Medical research hits PubMed and NIH. Academic research queries OpenAlex and CrossRef directly for real DOIs. Every citation links to a real document you can verify.
+If your work gets cited, published, submitted to a court, or shown to a client — you can't afford "probably real" sources.
 
-| What you get | Why it matters |
+**This tool fixes the root cause:** instead of searching the entire web and hoping, you tell your AI *exactly which sources to search*. We call these "search lenses" — curated lists of trusted sites for each field.
+
+| What you get | What that means for you |
 |---|---|
-| **Search lenses** — curated domain lists for each field | Your AI searches trusted sources, not the entire SEO-polluted web |
-| **8 specialized research tools** | Academic papers, patents, news, web, images, scraping, combined search+extract, multi-step sessions |
-| **5 search providers with automatic failover** | No vendor lock-in; if one provider goes down, research continues |
-| **Full-text extraction with quality scoring** | 4-tier pipeline handles 95%+ of the web; results ranked by authority and freshness |
-| **Auto-generated citations (APA/MLA)** | Every scraped source gets a formatted citation with real URL |
-| **Complete privacy** | Self-hosted — your research queries never leave your machine |
-| **Audit trail** | Every search logged with structured metadata for reproducible research |
+| **Search lenses** — choose your sources by field | Your AI only sees the sites you trust (PubMed, SEC.gov, arXiv — not random blogs) |
+| **8 research tools** | Papers, patents, news, web pages, images, full-text reading, and multi-step deep research |
+| **Never goes down** | 5 search engines working together — if one has issues, the others pick up automatically |
+| **Reads full articles** | Doesn't just give you snippets — extracts and reads entire pages, PDFs, Word docs, even YouTube transcripts |
+| **Real citations, formatted** | Every source comes with a proper APA/MLA citation and a link that actually works |
+| **Your queries stay private** | Runs on your machine — nobody sees what you're researching. Not us, not anyone. |
+| **Paper trail** | Every search is logged so you can reproduce your research process months later |
 
-Works with Claude Code, Claude Desktop, Cursor, and any MCP-compatible client.
+Works with Claude, Claude Desktop, Cursor, and any AI assistant that supports tool use.
 
 ### Who uses this
 
-- **Academic researchers** — literature reviews with real DOIs from OpenAlex/CrossRef, not fabricated citations
-- **Business analysts** — verifiable data points for client deliverables, finance lens restricts to SEC/Bloomberg
-- **Legal professionals** — court-defensible research from verified legal databases, zero hallucination risk
-- **Journalists** — source triangulation from public records, government databases, and primary documents
-- **Medical researchers** — clinical evidence from PubMed, Cochrane, and FDA — not health blogs
-- **Graduate students** — free, real citations in APA/MLA format, academic search with DOIs
-- **Enterprise teams** — self-hosted privacy, audit trails, compliance-ready
+- **Academic researchers** — "I need a literature review with real DOIs, not made-up citations"
+- **Business analysts** — "My deliverable needs sources a client can actually click and verify"
+- **Lawyers** — "If I cite a case that doesn't exist, I get fined $50,000"
+- **Journalists** — "I need to cross-check government records and court filings, not Perplexity summaries"
+- **Medical researchers** — "Clinical decisions based on a health blog could hurt someone"
+- **Graduate students** — "I spent 3 hours tracking down a citation my AI invented"
+- **Enterprise teams** — "Our competitive research can't go through a third party's servers"
 
 ---
 
@@ -70,65 +72,50 @@ https://github.com/user-attachments/assets/8dd5b595-3a5b-4eac-a50a-8cfeab0be21e
 
 ## How It Compares
 
-|  | web-researcher-mcp | Perplexity | Scite.ai | Elicit | Exa / Tavily |
-|---|---|---|---|---|---|
-| You choose which sources are searched | **Yes** (13 lenses) | No | No | No | No |
-| Fabricated citations | **Impossible** (real URLs from real searches) | ~20% fabricated | Low (journals only) | Low | Low |
-| Specialized tools (academic, patent, news) | **8 tools** | 1 (generic) | 1 (citation check) | 1 (papers) | 1 (generic) |
-| Multi-provider failover | **5 providers** | 1 | 1 | 1 | 1 |
-| Covers all domains (not just academic) | **Yes** | Yes | No (journals only) | No (papers only) | Yes |
-| Research queries stay private | **Yes** (self-hosted) | No | No | No | No |
-| Works with your existing AI | **Any MCP client** | Perplexity only | MCP or standalone | Standalone | API only |
-| Audit trail for compliance | **Yes** | Enterprise only | No | No | No |
-| Cost | **Free** (open source, MIT) | $20/mo | $20/mo | $10-49/mo | $49+/mo |
+|  | web-researcher-mcp | Perplexity | Scite.ai | Elicit |
+|---|---|---|---|---|
+| You pick which sources are searched | **Yes** (13 lenses) | No | No | No |
+| Makes up citations | **Never** — every link is real | ~20% fabricated | Rare (journals only) | Rare |
+| Works across all fields | **Yes** — legal, medical, news, patents, everything | Yes | Journals only | Papers only |
+| Keeps your research private | **Yes** — runs on your machine | No (they see everything) | No | No |
+| Works inside your existing AI (Claude, Cursor, etc.) | **Yes** | No (separate app) | Partially | No (separate app) |
+| Can read full articles, not just snippets | **Yes** — pages, PDFs, Word docs, YouTube | No | No | Limited |
+| Cost | **Free forever** (open source) | $20/mo | $20/mo | $10-49/mo |
 
 ### When to use what
 
-- **Perplexity** — Quick answers for casual questions where you'll verify independently anyway
-- **Scite.ai / Elicit / Consensus** — Browsing pre-indexed paper databases with a standalone UI
-- **DuckDuckGo / Brave MCP** — Simple single-tool web search when source control doesn't matter
-- **web-researcher-mcp** — Professional research where source authority, verifiable citations, privacy, and multi-tool depth matter
-- **Claude built-in search** — One-off web lookups during conversation
+- **Perplexity** — Quick casual lookups where you don't need to cite your sources
+- **Scite.ai / Elicit** — Browsing a specific database of academic papers
+- **web-researcher-mcp** — Anything where your reputation is attached to the research: client work, court filings, publications, grant proposals, medical decisions, journalism
+- **Claude built-in search** — Quick one-off lookups mid-conversation
 
 ---
 
-## Tools
+## What your AI can do with this
 
-| Tool | Description |
+| Tool | What it does |
 |------|-------------|
-| `web_search` | General web search with optional search lenses for domain-focused results |
-| `scrape_page` | Extract content from any URL -- web pages, PDFs, DOCX, PPTX, YouTube transcripts (4-tier fallback) |
-| `search_and_scrape` | Combined search + extraction pipeline with quality scoring and deduplication |
-| `image_search` | Search for images with size, type, color, and file format filters |
-| `news_search` | Search news sources with freshness controls and source filtering |
-| `academic_search` | Search scholarly papers via OpenAlex/CrossRef (DOI, authors, citations, open-access) with web search fallback |
-| `patent_search` | Search patent databases with CPC classification, strict office filtering (US/EP/WO/JP/CN/KR) |
-| `sequential_search` | Multi-step research tracking with session state for iterative investigation |
+| `web_search` | Search the web — optionally restricted to only the sources you trust via lenses |
+| `scrape_page` | Read any URL in full — web pages, PDFs, Word docs, slideshows, YouTube transcripts |
+| `search_and_scrape` | Search and then read the best results — with quality scoring to surface the most reliable sources |
+| `image_search` | Find images by size, type, color, or format |
+| `news_search` | Search recent news with date controls and source filtering |
+| `academic_search` | Find real papers with real DOIs — authors, citation counts, open-access links |
+| `patent_search` | Search patent offices (US, Europe, international) with classification codes |
+| `sequential_search` | Multi-step deep research — your AI remembers what it already found and builds on it |
 
 ---
 
 ## Quick Start
 
-### Option 1: Install with Go (Recommended)
+### Option 1: Download (simplest)
+
+Download the ready-to-use binary for your system from [Releases](https://github.com/zoharbabin/web-researcher-mcp/releases). No programming tools needed.
+
+### Option 2: One command (if you have Go installed)
 
 ```bash
 go install github.com/zoharbabin/web-researcher-mcp/cmd/web-researcher-mcp@latest
-```
-
-The binary is now in your `$GOPATH/bin`. Add to Claude Code:
-
-```bash
-claude mcp add --scope user --transport stdio web-researcher -- web-researcher-mcp
-```
-
-### Option 2: Download Binary
-
-Download the latest release for your platform from [Releases](https://github.com/zoharbabin/web-researcher-mcp/releases). Archives are named `web-researcher-mcp_<version>_<os>_<arch>.tar.gz`.
-
-```bash
-# Example: macOS Apple Silicon (replace VERSION with the latest from Releases)
-curl -L https://github.com/zoharbabin/web-researcher-mcp/releases/download/v${VERSION}/web-researcher-mcp_${VERSION}_darwin_arm64.tar.gz | tar xz
-chmod +x web-researcher-mcp
 ```
 
 ### Option 3: Docker
@@ -139,9 +126,8 @@ docker run -e GOOGLE_CUSTOM_SEARCH_API_KEY=YOUR_KEY \
            docker.io/zoharbabin/web-researcher-mcp:latest
 ```
 
-Also available from GHCR: `ghcr.io/zoharbabin/web-researcher-mcp:latest`
-
-### Option 4: Build from Source
+<details>
+<summary><strong>Option 4: Build from source</strong></summary>
 
 ```bash
 git clone https://github.com/zoharbabin/web-researcher-mcp.git
@@ -149,9 +135,18 @@ cd web-researcher-mcp
 go build -o web-researcher-mcp ./cmd/web-researcher-mcp
 ```
 
+</details>
+
 ### Connect to Your AI Assistant
 
-Add this to your MCP client configuration (example for Claude Code `~/.claude/settings.json`):
+Tell your AI where to find the tool. Here's how for each app:
+
+**Claude Code** (terminal — fastest setup):
+```bash
+claude mcp add --scope user --transport stdio web-researcher -- web-researcher-mcp
+```
+
+**Or add manually** to your AI's config file:
 
 ```json
 {
@@ -189,64 +184,78 @@ Done. Your AI assistant now has access to all research tools.
 
 ## Configuration
 
-### Required (unless using `SEARCH_ROUTING`)
+You need at least one search provider's API key. Pick whichever is easiest for you:
 
-| Variable | Description | How to Get |
+### Option A: Google (default)
+
+| Variable | What it is | Where to get it |
 |----------|-------------|-----------|
-| `GOOGLE_CUSTOM_SEARCH_API_KEY` | Google API key | [Google Cloud Console](https://developers.google.com/custom-search/v1/introduction) |
-| `GOOGLE_CUSTOM_SEARCH_ID` | Programmable Search Engine ID | [PSE Console](https://programmablesearchengine.google.com/) |
+| `GOOGLE_CUSTOM_SEARCH_API_KEY` | Your Google API key | [Get one here](https://developers.google.com/custom-search/v1/introduction) (free, 100 searches/day) |
+| `GOOGLE_CUSTOM_SEARCH_ID` | Your search engine ID | [Create one here](https://programmablesearchengine.google.com/) |
 
-> **Note:** When `SEARCH_ROUTING` is set with non-Google providers (e.g., `brave,serper`), Google keys are not required. You only need credentials for the providers you configure.
+### Option B: Brave Search (simpler signup)
 
-### Search Provider
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `SEARCH_PROVIDER` | Backend: `google`, `brave`, `serper`, `searxng`, or `searchapi` | `google` |
-| `BRAVE_API_KEY` | Brave Search API key | |
-| `SERPER_API_KEY` | Serper.dev API key | |
-| `SEARCHAPI_API_KEY` | SearchAPI.io API key | |
-| `SEARXNG_URL` | SearXNG instance URL | |
-| `SEARCH_ROUTING` | Multi-provider routing with automatic fallback (see [Deployment docs](docs/DEPLOYMENT.md#multi-provider-routing)) | |
-
-### Academic Providers (Optional)
-
-| Variable | Description | How to Get |
+| Variable | What it is | Where to get it |
 |----------|-------------|-----------|
-| `OPENALEX_EMAIL` | Contact email for OpenAlex polite pool (higher rate limits) | Any valid email — no registration |
-| `CROSSREF_EMAIL` | Contact email for CrossRef polite pool (higher rate limits) | Any valid email — no registration |
+| `BRAVE_API_KEY` | Your Brave API key | [Get one here](https://brave.com/search/api/) (free tier available) |
 
-> These enable structured scholarly search with DOI, authors, citations, open-access status, and PDF links. Without them, `academic_search` falls back to site-restricted web search. See [docs/API_SETUP.md](docs/API_SETUP.md#academic-search-providers-optional) for details.
+Set `SEARCH_PROVIDER=brave` and you're done. No Google keys needed.
 
-### Patent Providers (Optional)
-
-| Variable | Description | How to Get |
-|----------|-------------|-----------|
-| `EPO_OPS_CONSUMER_KEY` | EPO Open Patent Services key | [developers.epo.org](https://developers.epo.org) |
-| `EPO_OPS_CONSUMER_SECRET` | EPO OPS secret | Same as above |
-| `USPTO_API_KEY` | US Patent & Trademark Office API | [developer.uspto.gov](https://developer.uspto.gov) |
-| `LENS_API_TOKEN` | The Lens patent + scholarly API | [lens.org](https://www.lens.org) |
-
-> These enable structured patent search with rich metadata. Without them, `patent_search` falls back to web search. See [docs/API_SETUP.md](docs/API_SETUP.md#patent-search-providers-optional) for detailed setup instructions.
-
-### HTTP Transport (Optional)
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PORT` | Enable HTTP mode | STDIO only |
-| `OAUTH_ISSUER_URL` | JWT issuer URL for token validation | |
-| `OAUTH_AUDIENCE` | Expected JWT audience claim | |
+> **Tip:** You can set up multiple providers for automatic backup — see [Search Providers](#search-providers) below.
 
 <details>
-<summary><strong>All Environment Variables</strong></summary>
+<summary><strong>All Search Provider Options</strong></summary>
 
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#environment-variables) for the complete reference of all environment variables (cache, rate limiting, scraping, observability, etc.).
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SEARCH_PROVIDER` | Which engine to use: `google`, `brave`, `serper`, `searxng`, or `searchapi` | `google` |
+| `BRAVE_API_KEY` | Brave Search API key | |
+| `SERPER_API_KEY` | Serper.dev API key (uses Google results) | |
+| `SEARCHAPI_API_KEY` | SearchAPI.io key | |
+| `SEARXNG_URL` | Your own SearXNG instance (fully private, no third-party API needed) | |
+| `SEARCH_ROUTING` | Use multiple providers with automatic backup (see [docs](docs/DEPLOYMENT.md#multi-provider-routing)) | |
+
+</details>
+
+### Academic Search (Optional — no signup needed)
+
+| Variable | What to put | Why |
+|----------|-------------|-----|
+| `OPENALEX_EMAIL` | Your email address | Unlocks faster access to 250M+ scholarly works — no registration, just an email |
+| `CROSSREF_EMAIL` | Your email address | Same — faster access to DOI metadata for citations |
+
+> With these set, `academic_search` returns real papers with DOIs, authors, citation counts, and open-access PDF links. Without them, it still works but uses web search as a fallback.
+
+### Patent Search (Optional)
+
+| Variable | What it is | Where to get it |
+|----------|-------------|-----------|
+| `EPO_OPS_CONSUMER_KEY` | European Patent Office key | [developers.epo.org](https://developers.epo.org) (free) |
+| `EPO_OPS_CONSUMER_SECRET` | EPO secret | Same as above |
+| `USPTO_API_KEY` | US patent office key | [developer.uspto.gov](https://developer.uspto.gov) (free) |
+| `LENS_API_TOKEN` | The Lens (patents + scholarly) | [lens.org](https://www.lens.org) |
+
+> With these, `patent_search` returns structured patent data with classification codes, dates, and inventors. Without them, it falls back to web search.
+
+<details>
+<summary><strong>Advanced: HTTP mode, OAuth, and all other settings</strong></summary>
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PORT` | Run as a web server (for team/shared setups) | Off (runs locally) |
+| `OAUTH_ISSUER_URL` | Authentication server URL (for team access control) | |
+| `OAUTH_AUDIENCE` | Expected audience claim | |
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#environment-variables) for the complete list of all settings (cache, rate limiting, scraping, observability, etc.).
 
 </details>
 
 ---
 
-## Architecture
+## Under the Hood
+
+<details>
+<summary><strong>Architecture (for developers and contributors)</strong></summary>
 
 ```
 web-researcher-mcp/
@@ -329,7 +338,8 @@ web-researcher-mcp/
 
 </details>
 
-### Design Principles
+<details>
+<summary><strong>Design Principles (for developers)</strong></summary>
 
 1. **Zero global state** -- all dependencies injected via constructors
 2. **Interface-driven** -- every external dependency behind an interface for testing and swapping
@@ -337,11 +347,15 @@ web-researcher-mcp/
 4. **Defense in depth** -- SSRF protection, rate limiting, content sanitization at every layer
 5. **Fail loud** -- errors returned, never swallowed; validation at boundaries
 
+</details>
+
+</details>
+
 ---
 
 ## Search Providers
 
-All providers implement the same interface and support lenses via `site:` operator injection.
+You choose which search engine powers your research. All of them work with lenses.
 
 | Provider | Whole-Web | Images | News | Notes |
 |----------|:---------:|:------:|:----:|-------|
@@ -351,33 +365,21 @@ All providers implement the same interface and support lenses via `site:` operat
 | **SearXNG** | Yes | Yes | Yes | Self-hosted, privacy-first, air-gapped deployments |
 | **SearchAPI.io** | Yes | Yes | Yes | Unified API with multiple engine backends |
 
-### Multi-Provider Routing
+### Multiple Providers (recommended)
 
-When `SEARCH_ROUTING` is set, the server uses multiple providers with automatic fallback:
+Set up multiple search engines so if one has issues, your research doesn't stop:
 
 ```bash
-# Priority-ordered list — requests go to the first healthy provider
 export SEARCH_ROUTING=brave,google,serper
-
-# Per-operation routing (JSON) — different priorities for different search types
-export SEARCH_ROUTING='{"web":"brave,google","news":"brave,serper","images":"google,brave","patents":"epo,lens,searchapi,uspto","default":"brave,google,searchapi"}'
 ```
 
-Each provider gets an independent circuit breaker. If a provider fails (timeout, rate limit, 5xx), the next provider in the priority list is tried automatically. Lenses can override routing via the `routing` field in their JSON definition.
+If Brave is down, it automatically tries Google. If Google is rate-limited, it falls through to Serper. Your research just works.
 
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#multi-provider-routing) for full routing documentation.
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#multi-provider-routing) for advanced routing options (per-topic routing, patent-specific providers, etc.).
 
-### Single-Provider Routing
+### Single Provider
 
-When `SEARCH_ROUTING` is not set, the server uses a single provider:
-
-```
-Request arrives
-  |-- lens with dedicated CX? --> That specific Google PSE engine
-  |-- lens (no CX)?           --> Configured provider + site: operators
-  |-- site: param set?        --> Configured provider + site: operator
-  `-- unrestricted?           --> Configured SEARCH_PROVIDER
-```
+If you only have one search API key, that works too — just set it up and go.
 
 <details>
 <summary><strong>Provider Setup Examples</strong></summary>
@@ -416,7 +418,7 @@ export GOOGLE_CUSTOM_SEARCH_ID=017...
 
 ## Search Lenses
 
-Search lenses are curated domain lists that focus search results on high-quality sources for specific topics. They inject `site:` operators into queries and route through your configured search provider.
+Search lenses let you control which websites your AI is allowed to search. Instead of searching the entire web (and getting blogs, spam, and AI-generated junk), a lens restricts results to only the sources you trust for that topic.
 
 ### Built-in Lenses
 
@@ -436,118 +438,66 @@ Search lenses are curated domain lists that focus search results on high-quality
 | `science` | Research, papers |
 | `government` | Policy, regulations |
 
-Each lens is a JSON file in `lenses/` containing the curated domain list. See [Creating Custom Lenses](#search-lenses) below for the format.
+You can also [create your own lenses](#search-lenses) for any field — just list the domains you trust.
 
-### Usage Example
+### How it works
 
-```json
-{
-  "tool": "web_search",
-  "arguments": {
-    "query": "golang context best practices",
-    "lens": "programming"
-  }
-}
-```
+When you (or your AI) use a lens, results come only from the sites in that lens. For example, using the `medical` lens means your AI searches PubMed, WHO, NIH, and other clinical sources — never health blogs or supplement ads.
 
-This searches only stackoverflow.com, github.com, go.dev, developer.mozilla.org, and other curated programming sites.
+Your AI uses lenses automatically when you ask it to. For example: *"Search for recent findings on SGLT2 inhibitors using the clinical lens."*
 
 <details>
-<summary><strong>Creating Custom Lenses</strong></summary>
+<summary><strong>Creating Your Own Lens</strong></summary>
 
-Add a JSON file to the `lenses/` directory:
+Add a JSON file to the `lenses/` directory with the sites you trust:
 
 ```json
 {
-  "name": "my-custom-lens",
-  "description": "Description of what this lens covers",
+  "name": "my-industry",
+  "description": "Only searches sources I trust for my field",
   "domains": [
-    "example.com",
-    "docs.example.org",
-    "*.trusted-source.io"
+    "trusted-source.com",
+    "industry-journal.org",
+    "official-database.gov"
   ],
   "cx": "",
   "routing": ""
 }
 ```
 
-Fields:
-- **domains** -- URL patterns for the lens (up to ~10 injected per query via `site:` operators)
-- **cx** -- Optional dedicated Google PSE engine ID. If set, bypasses site injection and routes directly to that PSE engine (supports up to 5,000 domains)
-- **routing** -- Optional provider override for this lens (e.g., `"google"` or `"searchapi,google"`). When set, this lens routes through the specified provider(s) regardless of global routing config
+That's it. Now your AI will only search those sites when you use this lens. You can add up to ~10 domains per lens.
+
+**Advanced options** (optional — most users can ignore these):
+- **cx** — If you have a Google Programmable Search Engine with up to 5,000 domains, put the engine ID here
+- **routing** — Force this lens to use a specific search provider (e.g., `"google"`)
 
 </details>
 
 ---
 
-## Security
+## Privacy & Security
+
+Your research queries go directly from your machine to the search provider you chose. They never pass through our servers (we don't have servers). The tool runs entirely on your computer.
 
 <details>
-<summary><strong>SSRF Protection</strong></summary>
+<summary><strong>Technical security details (for enterprise / compliance teams)</strong></summary>
 
-The server implements a custom `DialContext` that validates all resolved IPs before connecting:
+- **SSRF protection** — blocks internal network access, cloud metadata endpoints, DNS rebinding attacks
+- **OAuth 2.1** (HTTP mode) — JWKS token validation, per-tenant isolation, audience/issuer validation
+- **Rate limiting** (HTTP mode) — per-tenant + global limits to protect upstream APIs
+- **Content sanitization** — HTML cleaned via whitelist policy, deduplication, quality scoring
 
-- Blocks all private/reserved IP ranges (127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, fc00::/7)
-- Blocks cloud metadata endpoints (169.254.169.254)
-- Validates against DNS rebinding by connecting only to the first resolved IP
-- Re-validates redirect targets at each hop
-
-</details>
-
-<details>
-<summary><strong>Authentication and Authorization</strong></summary>
-
-In HTTP mode, the server supports OAuth 2.1 with:
-
-- JWKS-based token validation with automatic key rotation
-- Per-tenant session isolation
-- Audience and issuer validation
-- Configurable claim extraction for multi-tenancy
+For the full threat model, see [docs/SECURITY.md](docs/SECURITY.md).
 
 </details>
-
-<details>
-<summary><strong>Rate Limiting</strong></summary>
-
-Rate limiting applies only in **HTTP mode** (when `PORT` is set). STDIO mode has no internal rate limiting — only upstream API quotas apply.
-
-In HTTP mode, three tiers protect the server and upstream APIs:
-
-| Tier | Env Variable | Default | Scope |
-|------|-------------|---------|-------|
-| Per-tenant | `RATE_LIMIT_PER_TENANT` | 120 req/min | Per authenticated tenant (or shared "default" bucket if no OAuth) |
-| Daily quota | `DAILY_QUOTA_PER_TENANT` | 5000 req/day | Per tenant |
-| Global | `RATE_LIMIT_GLOBAL` | 1000 req/s | Server-wide backpressure |
-
-**Important:** Without OAuth, all clients share a single "default" tenant bucket. If you run multiple AI sessions against one HTTP instance, raise the per-tenant limit:
-
-```bash
-RATE_LIMIT_PER_TENANT=200 DAILY_QUOTA_PER_TENANT=5000 PORT=3000 ./web-researcher-mcp
-```
-
-For STDIO deployments (Claude Code, Cursor, Claude Desktop), the only limits are your upstream search API quotas (e.g., Google PSE free tier: 100 queries/day).
-
-</details>
-
-<details>
-<summary><strong>Content Safety</strong></summary>
-
-- HTML sanitization via whitelist-based policy (bluemonday)
-- Paragraph-level deduplication across scraped results
-- Smart truncation at natural content breakpoints
-- Quality scoring to filter low-value results before returning to the LLM
-
-</details>
-
-For the full threat model and security architecture, see [docs/SECURITY.md](docs/SECURITY.md).
 
 ---
 
-## MCP Client Integration
+## Setup for Each AI App
 
 ### Claude Code
 
-Add to `~/.claude/settings.json`:
+Add to your settings (`~/.claude/settings.json`):
 
 ```json
 {
@@ -601,9 +551,9 @@ Add to `.cursor/mcp.json` in your project root:
 }
 ```
 
-### HTTP Mode (Multi-Client, Teams)
+### HTTP Mode (Teams / Shared Server)
 
-For shared deployments serving multiple clients or web applications:
+For teams that want one shared instance everyone connects to:
 
 ```bash
 PORT=3000 \
@@ -612,7 +562,7 @@ OAUTH_AUDIENCE=https://api.example.com \
 ./web-researcher-mcp
 ```
 
-Connect any MCP client to `http://localhost:3000/mcp/` (Streamable HTTP transport).
+Then connect any AI app to `http://localhost:3000/mcp/`.
 
 <details>
 <summary><strong>Docker Compose Example</strong></summary>
@@ -637,7 +587,7 @@ services:
 
 ## Performance
 
-Search results are cached in-memory for sub-millisecond hits. The scraping pipeline tries the fastest tier first and falls back progressively — most pages resolve in under a second via stealth HTTP, with the headless browser reserved for JS-heavy sites. See [ARCHITECTURE.md](ARCHITECTURE.md#performance-characteristics) for detailed latency breakdowns.
+Searches come back in under a second. Previously-seen results are cached so repeats are instant. Full article extraction works on 95%+ of the web — including sites that try to block bots. Heavy JavaScript sites get a real browser behind the scenes (automatic, no setup needed).
 
 ---
 
@@ -664,9 +614,9 @@ The server starts even with missing credentials (to allow MCP handshake). Set yo
 </details>
 
 <details>
-<summary><strong>scrape_page returns empty content for JavaScript-heavy sites</strong></summary>
+<summary><strong>Some pages come back empty</strong></summary>
 
-The browser tier (go-rod) requires Chromium. On first use it auto-downloads ~200MB. Set `CHROME_PATH` to use an existing Chrome installation, or use the Docker image which includes headless Chrome.
+For JavaScript-heavy sites, the tool uses a real browser (Chromium). It auto-downloads on first use (~200MB). If you already have Chrome installed, set `CHROME_PATH` to point to it, or use the Docker image which has everything included.
 
 </details>
 
@@ -678,15 +628,12 @@ The disk cache lives at your OS cache directory (e.g., `~/Library/Caches/web-res
 </details>
 
 <details>
-<summary><strong>Getting 429 errors (rate limited)</strong></summary>
+<summary><strong>Hitting search limits (429 errors)</strong></summary>
 
-Two different things can cause 429s:
-
-1. **Internal rate limiter** (HTTP mode only): The server's per-tenant limit (default 120 req/min) is shared across all unauthenticated clients hitting the same "default" tenant bucket. Fix: raise the limit with `RATE_LIMIT_PER_TENANT=200` or configure OAuth so each client gets its own bucket.
-
-2. **Upstream API quota** (any mode): Google PSE free tier allows 100 queries/day. Fix: upgrade to paid ($5/1K queries), switch to Brave Search (`SEARCH_PROVIDER=brave`), or configure multi-provider routing (`SEARCH_ROUTING=brave,google`) so rate-limited providers fail over automatically.
-
-To tell which one you hit: internal limits return immediately; upstream 429s appear after a network round-trip and include the provider name in the error message (e.g., "google API rate limited").
+Google's free tier allows 100 searches/day. If you're hitting that:
+- Switch to Brave Search (`SEARCH_PROVIDER=brave`) — more generous free tier
+- Set up multiple providers (`SEARCH_ROUTING=brave,google`) — if one is rate-limited, it uses the other
+- Or upgrade Google to paid ($5 per 1,000 searches)
 
 </details>
 
