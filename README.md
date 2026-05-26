@@ -35,6 +35,10 @@ Works with Claude Code, Claude Desktop, Cursor, and any MCP-compatible client.
 
 ---
 
+https://github.com/user-attachments/assets/8dd5b595-3a5b-4eac-a50a-8cfeab0be21e
+
+---
+
 ## Tools
 
 | Tool | Description |
