@@ -28,9 +28,7 @@ startCommand:
       searxng_url:
         type: string
         description: "SearXNG instance URL (required if using searxng provider)"
-    required:
-      - google_api_key
-      - google_cx
+    required: []
   commandFunction:
     - web-researcher-mcp
   env:
