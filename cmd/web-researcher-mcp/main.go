@@ -66,6 +66,12 @@ func main() {
 	}
 	patentProviders := search.AvailablePatentProviders(patentCfg, searchDeps)
 
+	academicCfg := search.AcademicProviderConfig{
+		OpenAlexEmail: cfg.Search.OpenAlexEmail,
+		CrossRefEmail: cfg.Search.CrossRefEmail,
+	}
+	academicProviders := search.AvailableAcademicProviders(academicCfg, searchDeps)
+
 	var searchProvider search.Provider
 	if cfg.Search.Routing != "" {
 		routingCfg, routeErr := search.ParseRoutingConfig(cfg.Search.Routing)
@@ -79,16 +85,19 @@ func main() {
 			os.Exit(1)
 		}
 		searchProvider = search.NewRouter(providers, search.RouterConfig{
-			Routing:         routingCfg,
-			Logger:          logger,
-			PatentProviders: patentProviders,
+			Routing:           routingCfg,
+			Logger:            logger,
+			PatentProviders:   patentProviders,
+			AcademicProviders: academicProviders,
 		})
 		logger.Info("search router initialized", "providers", len(providers),
-			"patentProviders", len(patentProviders), "routing", cfg.Search.Routing)
+			"patentProviders", len(patentProviders),
+			"academicProviders", len(academicProviders), "routing", cfg.Search.Routing)
 	} else {
 		searchProvider = search.NewProvider(cfg.Search, searchDeps)
 		logger.Info("search provider initialized", "provider", searchProvider.Name(),
-			"patentProviders", len(patentProviders))
+			"patentProviders", len(patentProviders),
+			"academicProviders", len(academicProviders))
 	}
 
 	scraperPipeline := scraper.NewPipeline(scraper.PipelineConfig{
@@ -126,15 +135,16 @@ func main() {
 	defer auditor.Close()
 
 	toolDeps := tools.Dependencies{
-		Cache:           cacheStore,
-		Search:          searchProvider,
-		PatentProviders: patentProviders,
-		Scraper:         scraperPipeline,
-		Content:         contentProcessor,
-		Sessions:        sessionManager,
-		Metrics:         metricsCollector,
-		Auditor:         auditor,
-		Logger:          logger,
+		Cache:             cacheStore,
+		Search:            searchProvider,
+		PatentProviders:   patentProviders,
+		AcademicProviders: academicProviders,
+		Scraper:           scraperPipeline,
+		Content:           contentProcessor,
+		Sessions:          sessionManager,
+		Metrics:           metricsCollector,
+		Auditor:           auditor,
+		Logger:            logger,
 	}
 
 	srv := server.New(server.Config{

@@ -292,3 +292,47 @@ export SEARCH_ROUTING='{"patents":"epo,lens,searchapi,uspto","default":"brave,go
 ```
 
 Without explicit routing, all configured patent providers are tried in order until one returns results. The `patent_office` parameter in search requests enables intelligent routing — e.g., a search restricted to `EP` skips USPTO automatically.
+
+---
+
+## Academic Search Providers (Optional)
+
+These providers enable structured scholarly search via `academic_search`. All are optional — without them, academic search falls back to site-restricted web discovery via your configured web search provider.
+
+### OpenAlex (Worldwide — 287M+ Works)
+
+Open scholarly metadata covering all academic disciplines. Returns DOIs, authors with affiliations, citation counts, open-access status, PDF links, and funding data.
+
+**Step 1**: No registration needed — just provide a contact email for the polite pool (100 RPS instead of 10 RPS).
+
+**Step 2**: Configure
+
+```bash
+export OPENALEX_EMAIL=you@example.com
+```
+
+**Notes**: CC0 data, no API key required. The email is used for the "polite pool" (higher rate limits, priority support). Abstracts are returned in inverted index format and reconstructed automatically.
+
+### CrossRef (Worldwide — 140M+ DOI Works)
+
+Authoritative DOI metadata with 99.94% documented uptime. Returns structured journal metadata, publication dates, and citation counts for peer-reviewed works.
+
+**Step 1**: No registration needed — just provide a contact email for the polite pool (50 RPS instead of 5 RPS).
+
+**Step 2**: Configure
+
+```bash
+export CROSSREF_EMAIL=you@example.com
+```
+
+**Notes**: The email is used for the polite pool (higher rate limits). CrossRef is the official DOI registration agency — every DOI-registered work appears here with authoritative metadata.
+
+### Academic Routing
+
+When multiple academic providers are configured, the router tries them in priority order with automatic fallback:
+
+```bash
+export SEARCH_ROUTING='{"academic":"openalex,crossref","patents":"epo,lens","default":"brave,google"}'
+```
+
+Without explicit routing, all configured academic providers are tried in order until one returns results. If no academic providers are configured, `academic_search` automatically falls back to site-restricted web search (zero behavioral change from previous versions).

@@ -48,13 +48,14 @@ type academicSearchInput struct {
 	Source     string `json:"source,omitempty" jsonschema:"Restrict to an academic source: all (default), arxiv, pubmed, ieee, nature, springer."`
 	PDFOnly    bool   `json:"pdf_only,omitempty" jsonschema:"Only return papers with direct PDF links (default: false). Useful when you plan to scrape the full paper."`
 	SortBy     string `json:"sort_by,omitempty" jsonschema:"Sort order: relevance (default) or date (newest first)."`
-	Provider   string `json:"provider,omitempty" jsonschema:"Force a specific search provider: google, brave, serper, searxng, searchapi. Omit to use configured default."`
+	Provider   string `json:"provider,omitempty" jsonschema:"Force a specific provider. Academic: openalex, crossref. Web fallback: google, brave, serper, searxng, searchapi. Omit to use automatic selection (recommended)."`
+	OpenAccess bool   `json:"open_access,omitempty" jsonschema:"Only return open-access papers with free full-text (default: false)."`
 }
 
 func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "academic_search",
-		Description:  "Search peer-reviewed papers across arXiv, PubMed, IEEE, Nature, Springer, and 12+ scholarly databases via site-restricted web search. Returns JSON with fields: papers (array of {title, url, source, abstract}), query, totalResults, resultCount, source. No special query syntax needed — use technical terms directly. year_from/year_to combine with source filter to narrow scope. On no matches returns resultCount: 0 with empty array; on failure returns isError with message. Subject to upstream API quotas with automatic provider fallback. Use this for scientific research, literature reviews, or citations — not for general content. Use web_search for non-academic technical content, or news_search for recent scientific announcements. Set pdf_only=true when you plan to pass URLs to scrape_page for full-text extraction. Results cached 24 hours.",
+		Description:  "Search peer-reviewed academic papers and scholarly literature. Returns structured metadata: title, URL, DOI, authors, journal, publication year, abstract, citation count, open-access status, and PDF links. Use technical terms and specific concepts as the query — no special syntax needed. Narrow results with year_from/year_to for publication date range, source for discipline (arxiv, pubmed, ieee, nature, springer), and open_access=true for freely available papers. Set pdf_only=true when you plan to pass URLs to scrape_page for full-text extraction. Returns JSON: papers (array), query, totalResults, resultCount, source. On no matches returns resultCount: 0; on failure returns isError. Use this for literature reviews, prior art research, finding citations, or locating specific papers by topic. Use web_search for non-academic content, news_search for current events. Results cached 1 hour.",
 		Annotations:  readOnlyAnnotations(true, true),
 		OutputSchema: academicSearchOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input academicSearchInput) (*mcp.CallToolResult, any, error) {
@@ -63,66 +64,125 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 		if input.Query == "" {
 			return toolError("query is required"), nil, nil
 		}
+		if len(input.Query) > 500 {
+			return toolError("query must be 500 characters or less"), nil, nil
+		}
 
 		numResults := input.NumResults
 		if numResults <= 0 {
 			numResults = 5
+		}
+		if numResults > 10 {
+			numResults = 10
 		}
 		source := input.Source
 		if source == "" {
 			source = "all"
 		}
 
-		cacheKey := searchCacheKey("academic", input.Query, numResults, input.YearFrom, input.YearTo, source)
+		cacheKey := searchCacheKey("academic", input.Query, numResults, input.YearFrom, input.YearTo, source, input.Provider, input.OpenAccess, input.PDFOnly)
 		if cached, ok := deps.Cache.Get(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("academic_search", time.Since(start), nil, "", true)
 			auditToolCall(ctx, deps, "academic_search", time.Since(start), nil, "")
 			return structuredResult(cached), nil, nil
 		}
 
-		sites := academicSites
-		if source != "all" {
-			if s, ok := sourceToSites[source]; ok {
-				sites = s
-			}
-		}
-
-		siteOps := make([]string, len(sites))
-		for i, s := range sites {
-			siteOps[i] = "site:" + s
-		}
-		siteQuery := input.Query + " (" + strings.Join(siteOps, " OR ") + ")"
-
-		if input.YearFrom > 0 {
-			siteQuery += fmt.Sprintf(" after:%d", input.YearFrom-1)
-		}
-		if input.YearTo > 0 {
-			siteQuery += fmt.Sprintf(" before:%d", input.YearTo+1)
-		}
-		if input.PDFOnly {
-			siteQuery += " filetype:pdf"
-		}
-
-		provider, errResult := resolveProvider(deps, input.Provider)
-		if errResult != nil {
-			return errResult, nil, nil
-		}
-
-		results, err := provider.Web(ctx, search.WebSearchParams{
-			Query:      siteQuery,
+		searchParams := search.AcademicSearchParams{
+			Query:      input.Query,
+			YearFrom:   input.YearFrom,
+			YearTo:     input.YearTo,
+			Source:     source,
 			NumResults: numResults,
-		})
-		if err != nil {
-			errCode := "upstream_error"
-			if isRateLimitError(err) {
-				errCode = "rate_limited"
+			OpenAccess: input.OpenAccess,
+		}
+
+		var results []search.AcademicResult
+		var providerSource string
+
+		// Strategy 1: If a specific provider is requested, try it directly
+		if input.Provider != "" {
+			as, errResult := resolveAcademicSearcher(deps, input.Provider)
+			if errResult != nil {
+				return errResult, nil, nil
 			}
-			deps.Metrics.RecordToolCall("academic_search", time.Since(start), err, errCode, false)
-			auditToolCall(ctx, deps, "academic_search", time.Since(start), err, errCode)
-			if isRateLimitError(err) {
-				return rateLimitError(err), nil, nil
+			if as != nil {
+				// It's a recognized academic provider
+				apiResults, err := as.Scholarly(ctx, searchParams)
+				if err == nil {
+					results = apiResults
+					providerSource = input.Provider
+				} else if isRateLimitError(err) {
+					deps.Metrics.RecordToolCall("academic_search", time.Since(start), err, "rate_limited", false)
+					auditToolCall(ctx, deps, "academic_search", time.Since(start), err, "rate_limited")
+					return rateLimitError(err), nil, nil
+				} else {
+					deps.Metrics.RecordToolCall("academic_search", time.Since(start), err, "upstream_error", false)
+					auditToolCall(ctx, deps, "academic_search", time.Since(start), err, "upstream_error")
+					return toolError(fmt.Sprintf("academic search failed (%s): %v", input.Provider, err)), nil, nil
+				}
+			} else {
+				// Not an academic provider — treat as web search provider for fallback
+				webResults, webSource, errResult := academicWebFallback(ctx, deps, input)
+				if errResult != nil {
+					deps.Metrics.RecordToolCall("academic_search", time.Since(start), fmt.Errorf("fallback failed"), "upstream_error", false)
+					auditToolCall(ctx, deps, "academic_search", time.Since(start), fmt.Errorf("fallback failed"), "upstream_error")
+					return errResult, nil, nil
+				}
+				results = webResults
+				providerSource = webSource
 			}
-			return toolError(fmt.Sprintf("academic search failed: %v", err)), nil, nil
+		}
+
+		// Strategy 2: Try the Router's Scholarly() method (uses routing config)
+		if len(results) == 0 && input.Provider == "" {
+			if as, ok := deps.Search.(search.AcademicSearcher); ok {
+				apiResults, err := as.Scholarly(ctx, searchParams)
+				if err == nil && len(apiResults) > 0 {
+					results = apiResults
+					providerSource = "router"
+				}
+			}
+		}
+
+		// Strategy 3: Try academic providers directly (non-router mode, deterministic order)
+		if len(results) == 0 && input.Provider == "" {
+			for _, name := range search.SupportedAcademicProviders {
+				ap, ok := deps.AcademicProviders[name]
+				if !ok {
+					continue
+				}
+				apiResults, err := ap.Scholarly(ctx, searchParams)
+				if err == nil && len(apiResults) > 0 {
+					results = apiResults
+					providerSource = name
+					break
+				} else if err != nil && isRateLimitError(err) {
+					break
+				}
+			}
+		}
+
+		// Strategy 4: Fallback — site-restricted web search (zero regression)
+		if len(results) == 0 && input.Provider == "" {
+			webResults, webSource, errResult := academicWebFallback(ctx, deps, input)
+			if errResult != nil {
+				deps.Metrics.RecordToolCall("academic_search", time.Since(start), fmt.Errorf("fallback failed"), "upstream_error", false)
+				auditToolCall(ctx, deps, "academic_search", time.Since(start), fmt.Errorf("fallback failed"), "upstream_error")
+				return errResult, nil, nil
+			}
+			results = webResults
+			providerSource = webSource
+		}
+
+		// Filter PDF-only if requested
+		if input.PDFOnly && len(results) > 0 {
+			filtered := make([]search.AcademicResult, 0, len(results))
+			for _, r := range results {
+				if r.PDFUrl != "" {
+					filtered = append(filtered, r)
+				}
+			}
+			results = filtered
 		}
 
 		papers := make([]map[string]any, 0, len(results))
@@ -130,10 +190,31 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 			paper := map[string]any{
 				"title":  r.Title,
 				"url":    r.URL,
-				"source": detectAcademicSource(r.URL),
+				"source": r.Source,
 			}
-			if r.Snippet != "" {
-				paper["abstract"] = r.Snippet
+			if r.DOI != "" {
+				paper["doi"] = r.DOI
+			}
+			if len(r.Authors) > 0 {
+				paper["authors"] = r.Authors
+			}
+			if r.Journal != "" {
+				paper["journal"] = r.Journal
+			}
+			if r.Year > 0 {
+				paper["year"] = r.Year
+			}
+			if r.Abstract != "" {
+				paper["abstract"] = r.Abstract
+			}
+			if r.CitationCount > 0 {
+				paper["citationCount"] = r.CitationCount
+			}
+			if r.OpenAccess {
+				paper["openAccess"] = r.OpenAccess
+			}
+			if r.PDFUrl != "" {
+				paper["pdfUrl"] = r.PDFUrl
 			}
 			papers = append(papers, paper)
 		}
@@ -143,16 +224,142 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 			"query":        input.Query,
 			"totalResults": len(papers),
 			"resultCount":  len(papers),
-			"source":       source,
+			"source":       providerSource,
 		}
 
 		jsonBytes, _ := json.Marshal(output)
-		deps.Cache.Set(ctx, cacheKey, jsonBytes, 24*time.Hour)
+		if len(papers) > 0 {
+			deps.Cache.Set(ctx, cacheKey, jsonBytes, 1*time.Hour)
+		}
 		deps.Metrics.RecordToolCall("academic_search", time.Since(start), nil, "", false)
 		auditToolCall(ctx, deps, "academic_search", time.Since(start), nil, "")
 
 		return structuredResult(jsonBytes), nil, nil
 	})
+}
+
+// academicWebFallback performs site-restricted web search as a last resort.
+func academicWebFallback(ctx context.Context, deps Dependencies, input academicSearchInput) ([]search.AcademicResult, string, *mcp.CallToolResult) {
+	source := input.Source
+	if source == "" {
+		source = "all"
+	}
+
+	sites := academicSites
+	if source != "all" {
+		if s, ok := sourceToSites[source]; ok {
+			sites = s
+		}
+	}
+
+	siteOps := make([]string, len(sites))
+	for i, s := range sites {
+		siteOps[i] = "site:" + s
+	}
+	siteQuery := input.Query + " (" + strings.Join(siteOps, " OR ") + ")"
+
+	if input.YearFrom > 0 {
+		siteQuery += fmt.Sprintf(" after:%d", input.YearFrom-1)
+	}
+	if input.YearTo > 0 {
+		siteQuery += fmt.Sprintf(" before:%d", input.YearTo+1)
+	}
+	if input.PDFOnly {
+		siteQuery += " filetype:pdf"
+	}
+
+	numResults := input.NumResults
+	if numResults <= 0 {
+		numResults = 5
+	}
+
+	// Use explicit provider if it's a web search provider, otherwise use default
+	webProvider := input.Provider
+	isAcademic := false
+	for _, name := range search.SupportedAcademicProviders {
+		if name == webProvider {
+			isAcademic = true
+			break
+		}
+	}
+	if isAcademic {
+		webProvider = ""
+	}
+	provider, errResult := resolveProvider(deps, webProvider)
+	if errResult != nil {
+		return nil, "", errResult
+	}
+
+	webResults, err := provider.Web(ctx, search.WebSearchParams{
+		Query:      siteQuery,
+		NumResults: numResults,
+	})
+	if err != nil {
+		if isRateLimitError(err) {
+			return nil, "", rateLimitError(err)
+		}
+		return nil, "", toolError(fmt.Sprintf("academic search failed: %v", err))
+	}
+
+	results := make([]search.AcademicResult, 0, len(webResults))
+	for _, r := range webResults {
+		result := search.AcademicResult{
+			Title:  r.Title,
+			URL:    r.URL,
+			Source: detectAcademicSource(r.URL),
+		}
+		if r.Snippet != "" {
+			result.Abstract = r.Snippet
+		}
+		results = append(results, result)
+	}
+
+	return results, "web_search", nil
+}
+
+// resolveAcademicSearcher returns an AcademicSearcher for a given provider name.
+func resolveAcademicSearcher(deps Dependencies, providerName string) (search.AcademicSearcher, *mcp.CallToolResult) {
+	if providerName == "" {
+		if as, ok := deps.Search.(search.AcademicSearcher); ok {
+			return as, nil
+		}
+		return nil, nil
+	}
+
+	// Check if it's a known academic provider
+	for _, name := range search.SupportedAcademicProviders {
+		if name == providerName {
+			// Try router first
+			if router, ok := deps.Search.(*search.Router); ok {
+				if as, found := router.AcademicProviderByName(providerName); found {
+					return as, nil
+				}
+			}
+			// Try direct academic providers
+			if ap, ok := deps.AcademicProviders[providerName]; ok {
+				return ap, nil
+			}
+			envHint := academicProviderEnvHint(providerName)
+			return nil, toolError(fmt.Sprintf(
+				"Academic provider %q is not configured. %s See docs/API_SETUP.md for details.",
+				providerName, envHint))
+		}
+	}
+
+	// Not an academic-specific provider — it might be a web search provider for fallback
+	// Return nil so caller falls through to web search fallback
+	return nil, nil
+}
+
+func academicProviderEnvHint(name string) string {
+	switch name {
+	case "openalex":
+		return "Set OPENALEX_EMAIL to your contact email."
+	case "crossref":
+		return "Set CROSSREF_EMAIL to your contact email."
+	default:
+		return ""
+	}
 }
 
 func detectAcademicSource(url string) string {

@@ -353,32 +353,40 @@ type NewsArticle struct {
 | `source` | string | no | `all` | all, arxiv, pubmed, ieee, nature, springer |
 | `pdf_only` | bool | no | false | — |
 | `sort_by` | string | no | `relevance` | relevance, date |
-| `provider` | string | no | — | Force provider: google, brave, serper, searxng, searchapi |
+| `open_access` | bool | no | false | Only return open-access papers |
+| `provider` | string | no | — | Force provider: openalex, crossref (academic APIs), or google, brave, serper, searxng, searchapi (web fallback) |
 
-### Academic Site Pool (site-restricted via configured provider)
+### Output Fields
+
+Each paper in the `papers` array contains:
+
+| Field | Type | Always Present | Description |
+|-------|------|---------------|-------------|
+| `title` | string | yes | Paper title |
+| `url` | string | yes | Link to paper (DOI URL or publisher page) |
+| `source` | string | yes | Provider that returned this result |
+| `doi` | string | no | Digital Object Identifier |
+| `authors` | []string | no | Author names |
+| `journal` | string | no | Journal or venue name |
+| `year` | int | no | Publication year |
+| `abstract` | string | no | Paper abstract (up to 500 chars) |
+| `citationCount` | int | no | Number of citations |
+| `openAccess` | bool | no | Whether the paper is freely available |
+| `pdfUrl` | string | no | Direct link to PDF |
+
+Additional output fields: `query`, `totalResults`, `resultCount`, `source` (which provider answered: openalex, crossref, router, web_search).
+
+### Behavior
+- 4-strategy fallback: explicit provider → router → academic providers → site-restricted web search
+- When academic providers (OpenAlex, CrossRef) are configured, returns rich metadata (DOI, authors, citations, OA status)
+- Without academic env vars, falls back to site-restricted web search (identical to previous behavior)
+- Academic providers require only an email address (no API key registration)
+
+### Academic Site Pool (web search fallback)
 arxiv.org, pubmed.ncbi.nlm.nih.gov, scholar.google.com, ieeexplore.ieee.org, dl.acm.org, nature.com, sciencedirect.com, link.springer.com, researchgate.net, plos.org, frontiersin.org, mdpi.com, wiley.com, jstor.org, semanticscholar.org, biorxiv.org, medrxiv.org
 
-### Output Schema
-
-```go
-type AcademicSearchOutput struct {
-    Papers       []AcademicPaper `json:"papers"`
-    Query        string          `json:"query"`
-    TotalResults int             `json:"totalResults"`
-    ResultCount  int             `json:"resultCount"`
-    Source       string          `json:"source"`
-}
-
-type AcademicPaper struct {
-    Title    string `json:"title"`
-    URL      string `json:"url"`
-    Source   string `json:"source"`
-    Abstract string `json:"abstract"`
-}
-```
-
 ### Cache
-- TTL: 24 hours (papers don't change)
+- TTL: 1 hour (academic providers use semantic ranking that can shift)
 
 ---
 

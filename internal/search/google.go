@@ -281,3 +281,13 @@ func clamp(val, min, max int) int {
 	}
 	return val
 }
+
+// truncateText safely truncates text to maxRunes, appending "..." if truncated.
+// Operates on runes to avoid splitting multi-byte UTF-8 characters.
+func truncateText(s string, maxRunes int) string {
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
+		return s
+	}
+	return string(runes[:maxRunes]) + "..."
+}

@@ -41,22 +41,25 @@ type FallbackNotifier func(op Operation, from, to, reason string)
 // It holds multiple configured providers and routes requests based on
 // operation type, provider health (circuit breakers), and priority ordering.
 type Router struct {
-	mu              sync.RWMutex
-	providers       map[string]Provider
-	breakers        map[string]*circuit.Breaker
-	patentProviders map[string]PatentProvider
-	patentBreakers  map[string]*circuit.Breaker
-	routing         RoutingConfig
-	notifier        FallbackNotifier
-	logger          *slog.Logger
+	mu                sync.RWMutex
+	providers         map[string]Provider
+	breakers          map[string]*circuit.Breaker
+	patentProviders   map[string]PatentProvider
+	patentBreakers    map[string]*circuit.Breaker
+	academicProviders map[string]AcademicProvider
+	academicBreakers  map[string]*circuit.Breaker
+	routing           RoutingConfig
+	notifier          FallbackNotifier
+	logger            *slog.Logger
 }
 
 // RouterConfig configures the Router.
 type RouterConfig struct {
-	Routing         RoutingConfig
-	Notifier        FallbackNotifier
-	Logger          *slog.Logger
-	PatentProviders map[string]PatentProvider
+	Routing           RoutingConfig
+	Notifier          FallbackNotifier
+	Logger            *slog.Logger
+	PatentProviders   map[string]PatentProvider
+	AcademicProviders map[string]AcademicProvider
 }
 
 // NewRouter creates a multi-provider router. Providers must be pre-constructed
@@ -84,19 +87,34 @@ func NewRouter(providers map[string]Provider, cfg RouterConfig) *Router {
 		})
 	}
 
+	academicProviders := cfg.AcademicProviders
+	if academicProviders == nil {
+		academicProviders = make(map[string]AcademicProvider)
+	}
+	academicBreakers := make(map[string]*circuit.Breaker, len(academicProviders))
+	for name := range academicProviders {
+		academicBreakers[name] = circuit.New(circuit.Config{
+			FailureThreshold: 3,
+			ResetTimeout:     30,
+			HalfOpenAttempts: 1,
+		})
+	}
+
 	logger := cfg.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
 
 	return &Router{
-		providers:       providers,
-		breakers:        breakers,
-		patentProviders: patentProviders,
-		patentBreakers:  patentBreakers,
-		routing:         cfg.Routing,
-		notifier:        cfg.Notifier,
-		logger:          logger,
+		providers:         providers,
+		breakers:          breakers,
+		patentProviders:   patentProviders,
+		patentBreakers:    patentBreakers,
+		academicProviders: academicProviders,
+		academicBreakers:  academicBreakers,
+		routing:           cfg.Routing,
+		notifier:          cfg.Notifier,
+		logger:            logger,
 	}
 }
 
@@ -331,6 +349,109 @@ func (r *Router) patentPriority() []string {
 		seen[name] = true
 	}
 	for name := range r.patentProviders {
+		if !seen[name] {
+			priority = append(priority, name)
+		}
+	}
+	return priority
+}
+
+// Scholarly implements AcademicSearcher by routing to academic-capable providers
+// in priority order with circuit breaker fallback.
+func (r *Router) Scholarly(ctx context.Context, params AcademicSearchParams) ([]AcademicResult, error) {
+	priority := r.academicPriority()
+	var lastErr error
+
+	for i, name := range priority {
+		r.mu.RLock()
+		ap, ok := r.academicProviders[name]
+		breaker, hasBrk := r.academicBreakers[name]
+		r.mu.RUnlock()
+		if !ok {
+			continue
+		}
+		if hasBrk && breaker.State() == circuit.StateOpen {
+			continue
+		}
+
+		results, err := ap.Scholarly(ctx, params)
+		if err == nil {
+			if hasBrk {
+				_ = breaker.Execute(func() error { return nil })
+			}
+			return results, nil
+		}
+		lastErr = err
+		if hasBrk {
+			_ = breaker.Execute(func() error { return err })
+		}
+		r.logger.Warn("academic provider failed, trying next",
+			"provider", name, "operation", "academic", "error", err)
+		if i+1 < len(priority) {
+			r.notifyFallback(OpAcademic, name, priority[i+1], err.Error())
+		}
+	}
+
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, fmt.Errorf("no providers available for academic search")
+}
+
+// RegisterAcademicProviders adds academic providers to the router.
+func (r *Router) RegisterAcademicProviders(providers map[string]AcademicProvider) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for name, p := range providers {
+		r.academicProviders[name] = p
+		if _, exists := r.academicBreakers[name]; !exists {
+			r.academicBreakers[name] = circuit.New(circuit.Config{
+				FailureThreshold: 3,
+				ResetTimeout:     30,
+				HalfOpenAttempts: 1,
+			})
+		}
+	}
+}
+
+// AcademicProviderByName returns an academic provider by name.
+func (r *Router) AcademicProviderByName(name string) (AcademicSearcher, bool) {
+	r.mu.RLock()
+	ap, ok := r.academicProviders[name]
+	r.mu.RUnlock()
+	if ok {
+		return ap, true
+	}
+	return nil, false
+}
+
+// academicPriority returns the ordered list of academic provider names to try.
+func (r *Router) academicPriority() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	// Use explicit routing config if present
+	var configured []string
+	if len(r.routing.Academic) > 0 {
+		configured = r.routing.Academic
+	}
+
+	// Filter to only include providers that are actually registered
+	var priority []string
+	if len(configured) > 0 {
+		for _, name := range configured {
+			if _, ok := r.academicProviders[name]; ok {
+				priority = append(priority, name)
+			}
+		}
+	}
+
+	// Add any registered providers not already in the priority list
+	seen := make(map[string]bool, len(priority))
+	for _, name := range priority {
+		seen[name] = true
+	}
+	for name := range r.academicProviders {
 		if !seen[name] {
 			priority = append(priority, name)
 		}

@@ -103,6 +103,82 @@ type PatentProviderConfig struct {
 	SearchAPIKey      string
 }
 
+// AcademicSearcher is an optional interface for structured academic paper search.
+type AcademicSearcher interface {
+	Scholarly(ctx context.Context, params AcademicSearchParams) ([]AcademicResult, error)
+}
+
+// AcademicProvider is a specialized provider for academic/scholarly search.
+type AcademicProvider interface {
+	AcademicSearcher
+	Name() string
+	Metadata() ProviderMeta
+}
+
+// AcademicSearchParams defines parameters for scholarly paper search.
+type AcademicSearchParams struct {
+	Query      string
+	YearFrom   int
+	YearTo     int
+	Source     string // hint: "arxiv", "pubmed" — provider-specific filtering
+	NumResults int
+	OpenAccess bool
+}
+
+// AcademicResult represents a scholarly paper from an academic search provider.
+type AcademicResult struct {
+	Title         string   `json:"title"`
+	URL           string   `json:"url"`
+	DOI           string   `json:"doi,omitempty"`
+	Authors       []string `json:"authors,omitempty"`
+	Journal       string   `json:"journal,omitempty"`
+	Year          int      `json:"year,omitempty"`
+	Abstract      string   `json:"abstract,omitempty"`
+	CitationCount int      `json:"citationCount,omitempty"`
+	Source        string   `json:"source"`
+	OpenAccess    bool     `json:"openAccess,omitempty"`
+	PDFUrl        string   `json:"pdfUrl,omitempty"`
+}
+
+// AcademicProviderConfig holds credentials for academic-specific providers.
+type AcademicProviderConfig struct {
+	OpenAlexEmail string
+	CrossRefEmail string
+}
+
+// SupportedAcademicProviders lists all academic provider names.
+var SupportedAcademicProviders = []string{"openalex", "crossref"}
+
+// NewAcademicProviderByName creates an academic provider by name if configured.
+func NewAcademicProviderByName(name string, cfg AcademicProviderConfig, deps Deps) AcademicProvider {
+	switch name {
+	case "openalex":
+		if cfg.OpenAlexEmail != "" {
+			return NewOpenAlexProvider(cfg.OpenAlexEmail, deps)
+		}
+	case "crossref":
+		if cfg.CrossRefEmail != "" {
+			return NewCrossRefProvider(cfg.CrossRefEmail, deps)
+		}
+	}
+	return nil
+}
+
+// AvailableAcademicProviders returns all academic providers that can be constructed.
+func AvailableAcademicProviders(cfg AcademicProviderConfig, deps Deps) map[string]AcademicProvider {
+	providers := make(map[string]AcademicProvider)
+	for _, name := range SupportedAcademicProviders {
+		provDeps := Deps{
+			HTTPClient: deps.HTTPClient,
+			Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+		}
+		if p := NewAcademicProviderByName(name, cfg, provDeps); p != nil {
+			providers[name] = p
+		}
+	}
+	return providers
+}
+
 // AvailablePatentProviders returns all patent providers that can be constructed from config.
 // Each provider gets its own circuit breaker for isolation — a failure in one provider
 // does not block fallback to another.

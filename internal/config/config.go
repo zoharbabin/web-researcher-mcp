@@ -59,6 +59,10 @@ type SearchConfig struct {
 	EPOConsumerKey    string
 	EPOConsumerSecret string
 	LensAPIToken      string
+
+	// Academic-specific providers (optional, enables structured scholarly search)
+	OpenAlexEmail string
+	CrossRefEmail string
 }
 
 type OAuthConfig struct {
@@ -138,6 +142,8 @@ func Load() (*Config, error) {
 			EPOConsumerKey:    os.Getenv("EPO_OPS_CONSUMER_KEY"),
 			EPOConsumerSecret: os.Getenv("EPO_OPS_CONSUMER_SECRET"),
 			LensAPIToken:      os.Getenv("LENS_API_TOKEN"),
+			OpenAlexEmail:     os.Getenv("OPENALEX_EMAIL"),
+			CrossRefEmail:     os.Getenv("CROSSREF_EMAIL"),
 		},
 		Port: port,
 		OAuth: OAuthConfig{

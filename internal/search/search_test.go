@@ -1461,6 +1461,144 @@ func (m *mockPatentFullProvider) Patents(_ context.Context, _ PatentSearchParams
 }
 
 // =============================================================================
+// Router Academic Provider Tests
+// =============================================================================
+
+func TestRouter_ScholarlyUsesAcademicProviders(t *testing.T) {
+	t.Parallel()
+
+	openalex := &mockAcademicProvider{
+		name: "openalex",
+		results: []AcademicResult{
+			{Title: "Attention Is All You Need", DOI: "10.48550/arXiv.1706.03762", Source: "openalex"},
+		},
+	}
+
+	router := NewRouter(
+		map[string]Provider{"brave": &successProvider{name: "brave"}},
+		RouterConfig{
+			AcademicProviders: map[string]AcademicProvider{"openalex": openalex},
+		},
+	)
+
+	results, err := router.Scholarly(context.Background(), AcademicSearchParams{Query: "transformers"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 1 || results[0].Title != "Attention Is All You Need" {
+		t.Errorf("unexpected results: %v", results)
+	}
+}
+
+func TestRouter_ScholarlyFallbackOnError(t *testing.T) {
+	t.Parallel()
+
+	failing := &mockAcademicProvider{
+		name: "openalex",
+		err:  fmt.Errorf("openalex: rate limited"),
+	}
+	crossref := &mockAcademicProvider{
+		name:    "crossref",
+		results: []AcademicResult{{Title: "CrossRef Result", Source: "crossref"}},
+	}
+
+	router := NewRouter(
+		map[string]Provider{"brave": &successProvider{name: "brave"}},
+		RouterConfig{
+			Routing:           RoutingConfig{Academic: []string{"openalex", "crossref"}},
+			AcademicProviders: map[string]AcademicProvider{"openalex": failing, "crossref": crossref},
+		},
+	)
+
+	results, err := router.Scholarly(context.Background(), AcademicSearchParams{Query: "test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 1 || results[0].Title != "CrossRef Result" {
+		t.Errorf("expected CrossRef fallback result, got: %v", results)
+	}
+}
+
+func TestRouter_ScholarlyNoProviders(t *testing.T) {
+	t.Parallel()
+
+	router := NewRouter(
+		map[string]Provider{"brave": &successProvider{name: "brave"}},
+		RouterConfig{},
+	)
+
+	_, err := router.Scholarly(context.Background(), AcademicSearchParams{Query: "test"})
+	if err == nil {
+		t.Fatal("expected error when no academic providers configured")
+	}
+	if !strings.Contains(err.Error(), "no providers available") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestRouter_AcademicProviderByName(t *testing.T) {
+	t.Parallel()
+
+	openalex := &mockAcademicProvider{name: "openalex"}
+	router := NewRouter(
+		map[string]Provider{"brave": &successProvider{name: "brave"}},
+		RouterConfig{
+			AcademicProviders: map[string]AcademicProvider{"openalex": openalex},
+		},
+	)
+
+	ap, found := router.AcademicProviderByName("openalex")
+	if !found || ap == nil {
+		t.Error("expected to find openalex academic provider")
+	}
+
+	_, found = router.AcademicProviderByName("crossref")
+	if found {
+		t.Error("expected crossref to not be found")
+	}
+}
+
+func TestRouter_RegisterAcademicProviders(t *testing.T) {
+	t.Parallel()
+
+	router := NewRouter(
+		map[string]Provider{"brave": &successProvider{name: "brave"}},
+		RouterConfig{},
+	)
+
+	crossref := &mockAcademicProvider{
+		name:    "crossref",
+		results: []AcademicResult{{Title: "Late Addition", Source: "crossref"}},
+	}
+	router.RegisterAcademicProviders(map[string]AcademicProvider{"crossref": crossref})
+
+	results, err := router.Scholarly(context.Background(), AcademicSearchParams{Query: "test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 1 || results[0].Source != "crossref" {
+		t.Errorf("expected crossref result after registration, got: %v", results)
+	}
+}
+
+type mockAcademicProvider struct {
+	name    string
+	results []AcademicResult
+	err     error
+}
+
+func (m *mockAcademicProvider) Name() string { return m.name }
+func (m *mockAcademicProvider) Metadata() ProviderMeta {
+	return ProviderMeta{Regions: []string{"*"}, Capabilities: []string{"search"}, RateClass: "free"}
+}
+func (m *mockAcademicProvider) Scholarly(_ context.Context, _ AcademicSearchParams) ([]AcademicResult, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.results, nil
+}
+
+// =============================================================================
 // ParseRoutingConfig Tests
 // =============================================================================
 

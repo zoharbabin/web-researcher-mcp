@@ -48,7 +48,7 @@ https://github.com/user-attachments/assets/8dd5b595-3a5b-4eac-a50a-8cfeab0be21e
 | `search_and_scrape` | Combined search + extraction pipeline with quality scoring and deduplication |
 | `image_search` | Search for images with size, type, color, and file format filters |
 | `news_search` | Search news sources with freshness controls and source filtering |
-| `academic_search` | Search peer-reviewed papers across arXiv, PubMed, IEEE, Nature, Springer, and other scholarly databases |
+| `academic_search` | Search scholarly papers via OpenAlex/CrossRef (DOI, authors, citations, open-access) with web search fallback |
 | `patent_search` | Search patent databases with CPC classification, strict office filtering (US/EP/WO/JP/CN/KR) |
 | `sequential_search` | Multi-step research tracking with session state for iterative investigation |
 
@@ -155,6 +155,15 @@ Done. Your AI assistant now has access to all research tools.
 | `SEARCHAPI_API_KEY` | SearchAPI.io API key | |
 | `SEARXNG_URL` | SearXNG instance URL | |
 | `SEARCH_ROUTING` | Multi-provider routing with automatic fallback (see [Deployment docs](docs/DEPLOYMENT.md#multi-provider-routing)) | |
+
+### Academic Providers (Optional)
+
+| Variable | Description | How to Get |
+|----------|-------------|-----------|
+| `OPENALEX_EMAIL` | Contact email for OpenAlex polite pool (higher rate limits) | Any valid email — no registration |
+| `CROSSREF_EMAIL` | Contact email for CrossRef polite pool (higher rate limits) | Any valid email — no registration |
+
+> These enable structured scholarly search with DOI, authors, citations, open-access status, and PDF links. Without them, `academic_search` falls back to site-restricted web search. See [docs/API_SETUP.md](docs/API_SETUP.md#academic-search-providers-optional) for details.
 
 ### Patent Providers (Optional)
 
