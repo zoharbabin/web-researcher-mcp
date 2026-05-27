@@ -210,23 +210,53 @@ var sequentialSearchOutputSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{
 		"sessionId":          map[string]any{"type": "string"},
+		"responseMode":       map[string]any{"type": "string"},
+		"researchGoal":       map[string]any{"type": "string"},
 		"currentStep":        map[string]any{"type": "integer"},
 		"totalStepsEstimate": map[string]any{"type": "integer"},
 		"isComplete":         map[string]any{"type": "boolean"},
 		"startedAt":          map[string]any{"type": "string"},
 		"completedAt":        map[string]any{"type": "string"},
-		"sources":            map[string]any{"type": "array"},
+		"warning":            map[string]any{"type": "string"},
+		"summary":            map[string]any{"type": "string"},
 		"steps": map[string]any{
 			"type": "array",
 			"items": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"stepNumber":  map[string]any{"type": "integer"},
-					"description": map[string]any{"type": "string"},
-					"isRevision":  map[string]any{"type": "boolean"},
-					"revisesStep": map[string]any{"type": "integer"},
+					"oneLiner":    map[string]any{"type": "string"},
 					"branchId":    map[string]any{"type": "string"},
-					"timestamp":   map[string]any{"type": "string"},
+					"confidence":  map[string]any{"type": "string"},
+				},
+			},
+		},
+		"stepIndex": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"stepNumber": map[string]any{"type": "integer"},
+					"oneLiner":   map[string]any{"type": "string"},
+					"branchId":   map[string]any{"type": "string"},
+					"confidence": map[string]any{"type": "string"},
+				},
+			},
+		},
+		"lastSteps": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"stepNumber":         map[string]any{"type": "integer"},
+					"description":        map[string]any{"type": "string"},
+					"reasoning":          map[string]any{"type": "string"},
+					"confidence":         map[string]any{"type": "string"},
+					"rejectedApproaches": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"isRevision":         map[string]any{"type": "boolean"},
+					"revisesStep":        map[string]any{"type": "integer"},
+					"branchId":           map[string]any{"type": "string"},
+					"timestamp":          map[string]any{"type": "string"},
 				},
 			},
 		},
@@ -238,6 +268,71 @@ var sequentialSearchOutputSchema = map[string]any{
 					"description": map[string]any{"type": "string"},
 					"foundInStep": map[string]any{"type": "integer"},
 				},
+			},
+		},
+	},
+}
+
+var getSessionOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"sessionId":    map[string]any{"type": "string"},
+		"responseMode": map[string]any{"type": "string"},
+		"researchGoal": map[string]any{"type": "string"},
+		"stepCount":    map[string]any{"type": "integer"},
+		"summary":      map[string]any{"type": "string"},
+		"startedAt":    map[string]any{"type": "string"},
+		"stepIndex": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"stepNumber": map[string]any{"type": "integer"},
+					"oneLiner":   map[string]any{"type": "string"},
+					"branchId":   map[string]any{"type": "string"},
+					"confidence": map[string]any{"type": "string"},
+				},
+			},
+		},
+		"lastSteps": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"stepNumber":         map[string]any{"type": "integer"},
+					"description":        map[string]any{"type": "string"},
+					"reasoning":          map[string]any{"type": "string"},
+					"confidence":         map[string]any{"type": "string"},
+					"rejectedApproaches": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"isRevision":         map[string]any{"type": "boolean"},
+					"revisesStep":        map[string]any{"type": "integer"},
+					"branchId":           map[string]any{"type": "string"},
+					"timestamp":          map[string]any{"type": "string"},
+				},
+			},
+		},
+		"gaps": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"description": map[string]any{"type": "string"},
+					"foundInStep": map[string]any{"type": "integer"},
+				},
+			},
+		},
+		"step": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"stepNumber":         map[string]any{"type": "integer"},
+				"description":        map[string]any{"type": "string"},
+				"reasoning":          map[string]any{"type": "string"},
+				"confidence":         map[string]any{"type": "string"},
+				"rejectedApproaches": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+				"isRevision":         map[string]any{"type": "boolean"},
+				"revisesStep":        map[string]any{"type": "integer"},
+				"branchId":           map[string]any{"type": "string"},
+				"timestamp":          map[string]any{"type": "string"},
 			},
 		},
 	},

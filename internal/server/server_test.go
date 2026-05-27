@@ -148,7 +148,7 @@ func TestAdminFlushCacheNil(t *testing.T) {
 }
 
 func TestAdminFlushSessions(t *testing.T) {
-	mgr := session.NewManager(session.Config{MaxSessions: 10, SessionTTL: time.Hour})
+	mgr, _ := session.NewManager(session.Config{MaxSessions: 10, SessionTTL: time.Hour})
 	defer mgr.Close()
 
 	_, _ = mgr.Create("tenant-1")
@@ -229,7 +229,7 @@ func buildTestHTTPServer(t *testing.T) *httptest.Server {
 
 	metricsCollector := metrics.NewCollector()
 	c := cache.NewMemory(cache.MemoryConfig{MaxSizeMB: 1})
-	mgr := session.NewManager(session.Config{MaxSessions: 10, SessionTTL: time.Hour})
+	mgr, _ := session.NewManager(session.Config{MaxSessions: 10, SessionTTL: time.Hour})
 
 	mux := http.NewServeMux()
 
@@ -477,7 +477,7 @@ func TestServeHTTP_ContextCancellation(t *testing.T) {
 			Metrics:        metricsCollector,
 			AdminKey:       "key",
 			Cache:          cache.NewNoop(),
-			Sessions:       session.NewManager(session.Config{MaxSessions: 10, SessionTTL: time.Hour}),
+			Sessions:       func() *session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 10, SessionTTL: time.Hour}); return m }(),
 		})
 	}()
 

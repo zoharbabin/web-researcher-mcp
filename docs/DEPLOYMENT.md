@@ -259,6 +259,9 @@ When no explicit routing is configured for an operation, the `default` list is u
 | `CACHE_MAX_MEMORY_MB` | Max memory cache size | `64` |
 | `CACHE_ENCRYPTION_KEY` | 64 hex chars for AES-256-GCM | — (plaintext) |
 | `REDIS_URL` | Redis connection string (accepted but not yet used — reserved for future distributed sessions) | — |
+| `SESSION_TTL` | Session idle timeout (resets on every step addition) | `4h` |
+| `SESSION_DATA_DIR` | Directory for encrypted session files | `{CACHE_DIR}/sessions` |
+| `SESSION_MAX_STEPS` | Maximum steps per research session before auto-completion | `200` |
 
 ### Rate Limiting
 
@@ -341,7 +344,7 @@ DAILY_QUOTA_PER_TENANT=10000
 **Current state:** The server uses in-memory session state and per-instance rate limit counters. This means:
 
 - **Cache:** Each instance has its own memory + disk cache. Cache hits are local only. This is acceptable since search results are deterministic (same query = same results).
-- **Sessions:** Sequential search sessions are stored in-memory (`sync.Map`). If a client reconnects to a different instance mid-session, the session is lost. Use session-affinity (sticky sessions) at your load balancer.
+- **Sessions:** Sequential search sessions persist to local encrypted disk with an in-memory index. Sessions survive server restarts within the TTL window (default 4 hours). If a client reconnects to a different instance, the session is not available on the new instance. Use session-affinity (sticky sessions) at your load balancer.
 - **Rate limits:** Per-instance, not distributed. A tenant hitting N instances gets N times the per-tenant limit.
 - **go-rod browser instances** are per-pod. No shared browser pool. Each pod manages its own headless Chrome.
 

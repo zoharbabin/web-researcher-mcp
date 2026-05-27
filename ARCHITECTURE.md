@@ -101,7 +101,7 @@ web-researcher-mcp/
 │   ├── cache/                    # Hybrid cache (memory + disk)
 │   ├── auth/                     # OAuth 2.1 middleware (JWT/JWKS)
 │   ├── audit/                    # Structured audit logging
-│   ├── session/                  # Per-tenant session management
+│   ├── session/                  # Per-tenant session persistence (memory index + encrypted disk)
 │   ├── content/                  # Sanitize, dedup, truncate, quality
 │   ├── metrics/                  # Prometheus metrics
 │   ├── ratelimit/                # Three-tier rate limiting

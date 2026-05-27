@@ -461,10 +461,14 @@ Multi-step research tracking with session persistence, branching, and knowledge 
 ### Session Management
 - Sessions created on first call (stepNumber=1)
 - Session ID: UUID v4, returned in output
-- TTL: 30 minutes of inactivity (configurable)
-- Max concurrent sessions: 50 per server instance
-- Cleanup: goroutine every 5 minutes
+- TTL: 4 hours of inactivity (configurable via `SESSION_TTL`), resets on every access
+- Max concurrent sessions: 50 per tenant (oldest evicted when exceeded)
+- Max steps per session: 200 (configurable via `SESSION_MAX_STEPS`)
+- Persistence: encrypted disk (AES-256-GCM), survives server restarts
+- Cleanup: goroutine every 15 minutes removes expired sessions from memory + disk
 - Per-tenant isolation: sessions keyed by `{tenantID}:{sessionID}`
+- Recovery: use `get_research_session` tool after context loss
+- Response modes: "full" for ≤8 steps, "summary" for >8 (override with `responseMode` input)
 
 ### Output Schema
 
@@ -486,6 +490,37 @@ type SequentialSearchOutput struct {
 ### State Management
 - In-memory `sync.Map` per tenant (requires session-affinity in multi-instance deployments)
 - No cache (state tracking, not content)
+
+---
+
+## Tool 9: `get_research_session`
+
+Recover a `sequential_search` session after context loss. Returns the session summary, step index, and most recent steps. Use `stepId` to retrieve full details of a specific earlier step.
+
+### Input Schema
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `sessionId` | string | yes | The session ID to recover |
+| `stepId` | integer | no | Retrieve full details for a specific step number |
+
+### Behavior
+
+1. Without `stepId`: returns session summary view from memory (no disk I/O)
+   - Includes: researchGoal, summary, stepIndex, last 3 full steps, active gaps
+2. With `stepId`: loads full step data from disk for that specific step number
+
+### Annotations
+- ReadOnly: true
+- Idempotent: true (safe to call repeatedly)
+- OpenWorld: false (reads internal state only)
+
+### Error Conditions
+- Session not found → "Session not found or expired. Sessions last 4 hours from last activity."
+- Step not found → error with step number
+
+### Cache
+- No cache (reads internal session state)
 
 ---
 

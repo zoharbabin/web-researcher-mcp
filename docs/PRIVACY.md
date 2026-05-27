@@ -76,7 +76,7 @@ This mode is entirely self-hosted. We still do not receive or have access to any
 
 - **Cache location:** Your machine only (in-memory + optional encrypted disk)
 - **Encryption:** AES-256-GCM when disk caching is enabled
-- **Default retention:** Search results expire after 30 minutes, scraped pages after 1 hour
+- **Default retention:** Search results expire after 30 minutes, scraped pages after 1 hour, research sessions after 4 hours of inactivity
 - **Clearing cache:** Restart the server or delete the cache directory
 - **No remote sync:** Cache is never transmitted anywhere
 

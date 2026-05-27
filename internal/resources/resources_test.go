@@ -39,7 +39,7 @@ func connectTestClient(ctx context.Context, t *testing.T, srv *mcp.Server) *mcp.
 
 func TestRegisterAllDoesNotPanic(t *testing.T) {
 	m := metrics.NewCollector()
-	s := session.NewManager(session.Config{MaxSessions: 10})
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
 	createTestServer(m, s)
 }
 
@@ -50,7 +50,7 @@ func TestRegisterAllDoesNotPanic(t *testing.T) {
 func TestToolStatsResource(t *testing.T) {
 	ctx := context.Background()
 	m := metrics.NewCollector()
-	s := session.NewManager(session.Config{MaxSessions: 10})
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
 	srv := createTestServer(m, s)
 	cs := connectTestClient(ctx, t, srv)
 	defer cs.Close()
@@ -107,7 +107,7 @@ func TestToolStatsResource(t *testing.T) {
 func TestSessionsResource(t *testing.T) {
 	ctx := context.Background()
 	m := metrics.NewCollector()
-	s := session.NewManager(session.Config{MaxSessions: 10, SessionTTL: time.Hour})
+	s, _ := session.NewManager(session.Config{MaxSessions: 10, SessionTTL: time.Hour})
 	srv := createTestServer(m, s)
 	cs := connectTestClient(ctx, t, srv)
 	defer cs.Close()
@@ -142,7 +142,7 @@ func TestSessionsResource(t *testing.T) {
 func TestSessionsResourceZero(t *testing.T) {
 	ctx := context.Background()
 	m := metrics.NewCollector()
-	s := session.NewManager(session.Config{MaxSessions: 10})
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
 	srv := createTestServer(m, s)
 	cs := connectTestClient(ctx, t, srv)
 	defer cs.Close()
@@ -169,7 +169,7 @@ func TestSessionsResourceZero(t *testing.T) {
 func TestComprehensiveResearchPrompt(t *testing.T) {
 	ctx := context.Background()
 	m := metrics.NewCollector()
-	s := session.NewManager(session.Config{MaxSessions: 10})
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
 	srv := createTestServer(m, s)
 	cs := connectTestClient(ctx, t, srv)
 	defer cs.Close()
@@ -205,7 +205,7 @@ func TestComprehensiveResearchPrompt(t *testing.T) {
 func TestComprehensiveResearchPromptQuick(t *testing.T) {
 	ctx := context.Background()
 	m := metrics.NewCollector()
-	s := session.NewManager(session.Config{MaxSessions: 10})
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
 	srv := createTestServer(m, s)
 	cs := connectTestClient(ctx, t, srv)
 	defer cs.Close()
@@ -230,7 +230,7 @@ func TestComprehensiveResearchPromptQuick(t *testing.T) {
 func TestFactCheckPrompt(t *testing.T) {
 	ctx := context.Background()
 	m := metrics.NewCollector()
-	s := session.NewManager(session.Config{MaxSessions: 10})
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
 	srv := createTestServer(m, s)
 	cs := connectTestClient(ctx, t, srv)
 	defer cs.Close()
@@ -262,7 +262,7 @@ func TestFactCheckPrompt(t *testing.T) {
 func TestCompetitiveAnalysisPrompt(t *testing.T) {
 	ctx := context.Background()
 	m := metrics.NewCollector()
-	s := session.NewManager(session.Config{MaxSessions: 10})
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
 	srv := createTestServer(m, s)
 	cs := connectTestClient(ctx, t, srv)
 	defer cs.Close()
@@ -290,7 +290,7 @@ func TestCompetitiveAnalysisPrompt(t *testing.T) {
 func TestLiteratureReviewPrompt(t *testing.T) {
 	ctx := context.Background()
 	m := metrics.NewCollector()
-	s := session.NewManager(session.Config{MaxSessions: 10})
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
 	srv := createTestServer(m, s)
 	cs := connectTestClient(ctx, t, srv)
 	defer cs.Close()
@@ -319,7 +319,7 @@ func TestLiteratureReviewPrompt(t *testing.T) {
 func TestToolStatsResourceWithErrors(t *testing.T) {
 	ctx := context.Background()
 	m := metrics.NewCollector()
-	s := session.NewManager(session.Config{MaxSessions: 10})
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
 	srv := createTestServer(m, s)
 	cs := connectTestClient(ctx, t, srv)
 	defer cs.Close()
@@ -354,7 +354,7 @@ func TestToolStatsResourceWithErrors(t *testing.T) {
 func TestRateLimitResource(t *testing.T) {
 	ctx := context.Background()
 	m := metrics.NewCollector()
-	s := session.NewManager(session.Config{MaxSessions: 10})
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
 	srv := createTestServer(m, s)
 	cs := connectTestClient(ctx, t, srv)
 	defer cs.Close()

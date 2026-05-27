@@ -134,15 +134,35 @@
     },
     {
       "name": "sequential_search",
-      "description": "Track multi-step research projects, noting what you found and what's still unanswered",
+      "description": "Track multi-step research projects, noting what you found and what's still unanswered. Sessions persist for 4 hours and survive restarts.",
       "inputSchema": {
         "type": "object",
         "properties": {
-          "query": {"type": "string", "description": "Search query for this research step"},
-          "session_id": {"type": "string", "description": "Session ID to continue a research thread"},
-          "previous_findings": {"type": "string", "description": "Summary of what was found so far"}
+          "searchStep": {"type": "string", "description": "Summary of what was researched or discovered in this step"},
+          "stepNumber": {"type": "integer", "description": "Current step number (start at 1 for new session)"},
+          "nextStepNeeded": {"type": "boolean", "description": "True if more steps follow; false to complete"},
+          "sessionId": {"type": "string", "description": "Session ID from first call. Required for steps 2+"},
+          "researchGoal": {"type": "string", "description": "The question or goal driving this research (step 1)"},
+          "reasoning": {"type": "string", "description": "Why you chose this direction over alternatives"},
+          "confidence": {"type": "string", "description": "Confidence in findings: high, medium, or low"},
+          "rejectedApproaches": {"type": "array", "items": {"type": "string"}, "description": "Approaches rejected with reasons"},
+          "sessionSummary": {"type": "string", "description": "Running summary for session recovery"},
+          "responseMode": {"type": "string", "description": "Force response format: full or summary"},
+          "knowledgeGap": {"type": "string", "description": "Unanswered question identified in this step"}
         },
-        "required": ["query"]
+        "required": ["searchStep", "stepNumber", "nextStepNeeded"]
+      }
+    },
+    {
+      "name": "get_research_session",
+      "description": "Recover a sequential_search session after context loss. Returns summary and recent steps.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {"type": "string", "description": "The session ID to recover"},
+          "stepId": {"type": "integer", "description": "Specific step number for full details"}
+        },
+        "required": ["sessionId"]
       }
     }
   ]

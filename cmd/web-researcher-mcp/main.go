@@ -109,11 +109,18 @@ func main() {
 	defer scraperPipeline.Close()
 
 	contentProcessor := content.NewProcessor()
-	sessionManager := session.NewManager(session.Config{
-		MaxSessions: 50,
-		SessionTTL:  cfg.SessionTTL,
-		RedisURL:    cfg.RedisURL,
+	sessionManager, err := session.NewManager(session.Config{
+		MaxSessions:        50,
+		MaxStepsPerSession: cfg.SessionMaxSteps,
+		SessionTTL:         cfg.SessionTTL,
+		DataDir:            cfg.SessionDataDir,
+		EncryptionKey:      cfg.CacheEncryptionKey,
+		RedisURL:           cfg.RedisURL,
 	})
+	if err != nil {
+		logger.Error("failed to create session manager", "err", err)
+		os.Exit(1)
+	}
 	defer sessionManager.Close()
 
 	var auditor audit.Auditor

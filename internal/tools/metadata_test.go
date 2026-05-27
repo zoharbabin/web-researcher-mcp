@@ -19,6 +19,7 @@ var expectedTools = []string{
 	"scrape_page",
 	"search_and_scrape",
 	"sequential_search",
+	"get_research_session",
 }
 
 func listTools(t *testing.T) []*mcp.Tool {
@@ -67,14 +68,22 @@ func TestAllToolsHaveAnnotations(t *testing.T) {
 			if tool.Annotations.OpenWorldHint == nil {
 				t.Error("OpenWorldHint should be set")
 			}
-			if tool.Name == "sequential_search" {
+			switch tool.Name {
+			case "sequential_search":
 				if tool.Annotations.IdempotentHint {
 					t.Error("sequential_search should NOT be idempotent")
 				}
 				if *tool.Annotations.OpenWorldHint {
 					t.Error("sequential_search should NOT be open-world")
 				}
-			} else {
+			case "get_research_session":
+				if !tool.Annotations.IdempotentHint {
+					t.Error("get_research_session should be idempotent")
+				}
+				if *tool.Annotations.OpenWorldHint {
+					t.Error("get_research_session should NOT be open-world")
+				}
+			default:
 				if !tool.Annotations.IdempotentHint {
 					t.Errorf("%s should be idempotent", tool.Name)
 				}

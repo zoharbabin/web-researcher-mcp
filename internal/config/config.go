@@ -28,6 +28,8 @@ type Config struct {
 	ChromePath           string
 	MaxScrapeConcurrency int
 	SessionTTL           time.Duration
+	SessionDataDir       string
+	SessionMaxSteps      int
 	LogLevel             slog.Level
 	LogFormat            string
 	MetricsEnabled       bool
@@ -166,7 +168,9 @@ func Load() (*Config, error) {
 		AllowedDomains:       splitCSV(os.Getenv("ALLOWED_DOMAINS")),
 		ChromePath:           os.Getenv("CHROME_PATH"),
 		MaxScrapeConcurrency: envInt("MAX_SCRAPE_CONCURRENCY", 5),
-		SessionTTL:           30 * time.Minute,
+		SessionTTL:           envDuration("SESSION_TTL", 4*time.Hour),
+		SessionDataDir:       envOrDefault("SESSION_DATA_DIR", filepath.Join(envOrDefault("CACHE_DIR", defaultCacheDir()), "sessions")),
+		SessionMaxSteps:      envInt("SESSION_MAX_STEPS", 200),
 		LogLevel:             logLevel,
 		LogFormat:            envOrDefault("LOG_FORMAT", "json"),
 		MetricsEnabled:       envBool("METRICS_ENABLED", true),

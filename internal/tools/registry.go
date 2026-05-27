@@ -36,6 +36,7 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	registerAcademicSearch(srv, deps)
 	registerPatentSearch(srv, deps)
 	registerSequentialSearch(srv, deps)
+	registerGetSession(srv, deps)
 }
 
 func boolPtr(b bool) *bool { return &b }

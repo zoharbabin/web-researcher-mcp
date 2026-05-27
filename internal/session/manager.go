@@ -1,6 +1,12 @@
 package session
 
 import (
+	"crypto/cipher"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -8,75 +14,60 @@ import (
 )
 
 type Config struct {
-	MaxSessions int
-	SessionTTL  time.Duration
-	RedisURL    string
+	MaxSessions        int
+	MaxStepsPerSession int
+	SessionTTL         time.Duration
+	DataDir            string
+	EncryptionKey      string
+	RedisURL           string
 }
 
 type Manager struct {
-	mu       sync.RWMutex
-	sessions map[string]*Session
-	config   Config
-	done     chan struct{}
+	mu     sync.Mutex
+	index  map[string]*SessionIndex
+	keys   map[string]string // fileHash → compound key (for rebuild)
+	store  *Store
+	config Config
+	done   chan struct{}
 }
 
-type Session struct {
-	ID        string
-	TenantID  string
-	CreatedAt time.Time
-	LastUsed  time.Time
-	Steps     []ResearchStep
-	Sources   []ResearchSource
-	Gaps      []KnowledgeGap
-}
-
-type ResearchStep struct {
-	StepNumber  int    `json:"stepNumber"`
-	Description string `json:"description"`
-	IsRevision  bool   `json:"isRevision,omitempty"`
-	RevisesStep int    `json:"revisesStep,omitempty"`
-	BranchID    string `json:"branchId,omitempty"`
-	Timestamp   string `json:"timestamp"`
-}
-
-type ResearchSource struct {
-	URL         string `json:"url"`
-	Title       string `json:"title,omitempty"`
-	Relevance   string `json:"relevance,omitempty"`
-	FoundInStep int    `json:"foundInStep"`
-}
-
-type KnowledgeGap struct {
-	Description string `json:"description"`
-	FoundInStep int    `json:"foundInStep"`
-}
-
-func NewManager(cfg Config) *Manager {
+func NewManager(cfg Config) (*Manager, error) {
 	if cfg.MaxSessions <= 0 {
 		cfg.MaxSessions = 50
 	}
+	if cfg.MaxStepsPerSession <= 0 {
+		cfg.MaxStepsPerSession = 200
+	}
 	if cfg.SessionTTL <= 0 {
-		cfg.SessionTTL = 30 * time.Minute
+		cfg.SessionTTL = 4 * time.Hour
+	}
+
+	store, err := NewStore(cfg.DataDir, cfg.EncryptionKey)
+	if err != nil {
+		return nil, fmt.Errorf("session store: %w", err)
 	}
 
 	m := &Manager{
-		sessions: make(map[string]*Session),
-		config:   cfg,
-		done:     make(chan struct{}),
+		index:  make(map[string]*SessionIndex),
+		keys:   make(map[string]string),
+		store:  store,
+		config: cfg,
+		done:   make(chan struct{}),
 	}
 
+	store.CleanOrphans()
+	m.rebuildIndex()
 	go m.cleanup()
-	return m
+	return m, nil
 }
 
-func (m *Manager) Create(tenantID string) (*Session, error) {
+func (m *Manager) Create(tenantID string) (*SessionIndex, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Count tenant sessions
 	count := 0
-	for _, s := range m.sessions {
-		if s.TenantID == tenantID {
+	for _, idx := range m.index {
+		if idx.TenantID == tenantID {
 			count++
 		}
 	}
@@ -92,54 +83,209 @@ func (m *Manager) Create(tenantID string) (*Session, error) {
 	}
 
 	key := tenantID + ":" + sess.ID
-	m.sessions[key] = sess
-	return sess, nil
+	if err := m.store.Save(key, sess, m.config.SessionTTL); err != nil {
+		return nil, err
+	}
+
+	idx := buildIndexFromSession(sess)
+	m.index[key] = idx
+	m.keys[fileHash(key)] = key
+	return idx, nil
 }
 
-func (m *Manager) Get(tenantID, sessionID string) (*Session, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	key := tenantID + ":" + sessionID
-	sess, ok := m.sessions[key]
-	if !ok {
-		return nil, false
-	}
-	if time.Since(sess.LastUsed) > m.config.SessionTTL {
-		return nil, false
-	}
-	return sess, true
-}
-
-func (m *Manager) Update(tenantID string, sess *Session) {
+func (m *Manager) AppendStep(tenantID, sessionID string, step ResearchStep, gap *KnowledgeGap, summary string) (*SessionIndex, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	key := tenantID + ":" + sessionID
+	idx, ok := m.index[key]
+	if !ok {
+		return nil, fmt.Errorf("session not found")
+	}
+	if time.Since(idx.LastUsed) > m.config.SessionTTL {
+		m.deleteUnlocked(key)
+		return nil, fmt.Errorf("session expired")
+	}
+
+	if idx.StepCount >= m.config.MaxStepsPerSession {
+		idx.Warning = "session_limit_reached"
+		return idx, nil
+	}
+
+	sess, err := m.store.Load(key)
+	if err != nil {
+		m.deleteUnlocked(key)
+		return nil, fmt.Errorf("session data corrupt")
+	}
+
+	sess.Steps = append(sess.Steps, step)
 	sess.LastUsed = time.Now()
-	key := tenantID + ":" + sess.ID
-	m.sessions[key] = sess
+
+	if gap != nil {
+		sess.Gaps = append(sess.Gaps, *gap)
+	}
+
+	if err := m.store.Save(key, sess, m.config.SessionTTL); err != nil {
+		return nil, err
+	}
+
+	idx = buildIndexFromSession(sess)
+	if summary != "" {
+		idx.Summary = summary
+	}
+	m.index[key] = idx
+	return idx, nil
+}
+
+func (m *Manager) SetResearchGoal(tenantID, sessionID, goal string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	key := tenantID + ":" + sessionID
+	idx, ok := m.index[key]
+	if !ok {
+		return fmt.Errorf("session not found")
+	}
+
+	sess, err := m.store.Load(key)
+	if err != nil {
+		return err
+	}
+
+	sess.ResearchGoal = goal
+	sess.LastUsed = time.Now()
+	if err := m.store.Save(key, sess, m.config.SessionTTL); err != nil {
+		return err
+	}
+
+	idx.ResearchGoal = goal
+	idx.LastUsed = sess.LastUsed
+	return nil
+}
+
+func (m *Manager) GetIndex(tenantID, sessionID string) (*SessionIndex, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	key := tenantID + ":" + sessionID
+	idx, ok := m.index[key]
+	if !ok {
+		return nil, false
+	}
+	if time.Since(idx.LastUsed) > m.config.SessionTTL {
+		m.deleteUnlocked(key)
+		return nil, false
+	}
+	idx.LastUsed = time.Now()
+	return idx, true
+}
+
+func (m *Manager) GetFull(tenantID, sessionID string) (*Session, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	key := tenantID + ":" + sessionID
+	idx, ok := m.index[key]
+	if !ok {
+		return nil, fmt.Errorf("session not found")
+	}
+	if time.Since(idx.LastUsed) > m.config.SessionTTL {
+		m.deleteUnlocked(key)
+		return nil, fmt.Errorf("session expired")
+	}
+
+	idx.LastUsed = time.Now()
+
+	sess, err := m.store.Load(key)
+	if err != nil {
+		m.deleteUnlocked(key)
+		return nil, fmt.Errorf("session data corrupt")
+	}
+	return sess, nil
+}
+
+func (m *Manager) GetStep(tenantID, sessionID string, stepNum int) (*ResearchStep, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	key := tenantID + ":" + sessionID
+	idx, ok := m.index[key]
+	if !ok {
+		return nil, fmt.Errorf("session not found")
+	}
+	if time.Since(idx.LastUsed) > m.config.SessionTTL {
+		m.deleteUnlocked(key)
+		return nil, fmt.Errorf("session expired")
+	}
+
+	idx.LastUsed = time.Now()
+
+	sess, err := m.store.Load(key)
+	if err != nil {
+		m.deleteUnlocked(key)
+		return nil, fmt.Errorf("session data corrupt")
+	}
+
+	for i := range sess.Steps {
+		if sess.Steps[i].StepNumber == stepNum {
+			return &sess.Steps[i], nil
+		}
+	}
+	return nil, fmt.Errorf("step %d not found", stepNum)
 }
 
 func (m *Manager) Delete(tenantID, sessionID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
-	key := tenantID + ":" + sessionID
-	delete(m.sessions, key)
+	m.deleteUnlocked(tenantID + ":" + sessionID)
 }
 
 func (m *Manager) DeleteAll() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.sessions = make(map[string]*Session)
+	for key := range m.index {
+		m.store.Delete(key)
+	}
+	m.index = make(map[string]*SessionIndex)
+	m.keys = make(map[string]string)
 }
 
 func (m *Manager) Close() {
 	close(m.done)
 }
 
+func (m *Manager) ActiveCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.index)
+}
+
+func (m *Manager) deleteUnlocked(key string) {
+	delete(m.index, key)
+	delete(m.keys, fileHash(key))
+	m.store.Delete(key)
+}
+
+func (m *Manager) evictOldest(tenantID string) {
+	var oldestKey string
+	var oldestTime time.Time
+
+	for key, idx := range m.index {
+		if idx.TenantID != tenantID {
+			continue
+		}
+		if oldestKey == "" || idx.LastUsed.Before(oldestTime) {
+			oldestKey = key
+			oldestTime = idx.LastUsed
+		}
+	}
+	if oldestKey != "" {
+		m.deleteUnlocked(oldestKey)
+	}
+}
+
 func (m *Manager) cleanup() {
-	ticker := time.NewTicker(5 * time.Minute)
+	ticker := time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
 
 	for {
@@ -147,9 +293,9 @@ func (m *Manager) cleanup() {
 		case <-ticker.C:
 			m.mu.Lock()
 			now := time.Now()
-			for key, sess := range m.sessions {
-				if now.Sub(sess.LastUsed) > m.config.SessionTTL {
-					delete(m.sessions, key)
+			for key, idx := range m.index {
+				if now.Sub(idx.LastUsed) > m.config.SessionTTL {
+					m.deleteUnlocked(key)
 				}
 			}
 			m.mu.Unlock()
@@ -159,26 +305,118 @@ func (m *Manager) cleanup() {
 	}
 }
 
-func (m *Manager) evictOldest(tenantID string) {
-	var oldestKey string
-	var oldestTime time.Time
+func (m *Manager) rebuildIndex() {
+	hashes, err := m.store.ListValid(time.Now())
+	if err != nil {
+		slog.Warn("failed to list session files", "err", err)
+		return
+	}
 
-	for key, sess := range m.sessions {
-		if sess.TenantID != tenantID {
+	for _, hash := range hashes {
+		// We need to try loading each file. Since ListValid returns filename hashes
+		// and we can't reverse SHA-256, we read directly using the file path.
+		fp := m.store.dir + "/" + hash + ".session"
+		data, err := readSessionFile(fp, m.store.gcm)
+		if err != nil {
+			slog.Warn("corrupt session file during rebuild, removing", "hash", hash, "err", err)
+			os.Remove(fp)
 			continue
 		}
-		if oldestKey == "" || sess.LastUsed.Before(oldestTime) {
-			oldestKey = key
-			oldestTime = sess.LastUsed
+
+		key := data.TenantID + ":" + data.ID
+		if fileHash(key) != hash {
+			slog.Warn("session file hash mismatch, removing", "hash", hash)
+			os.Remove(fp)
+			continue
 		}
+
+		idx := buildIndexFromSession(data)
+		m.index[key] = idx
+		m.keys[hash] = key
 	}
-	if oldestKey != "" {
-		delete(m.sessions, oldestKey)
+
+	if len(m.index) > 0 {
+		slog.Info("sessions rebuilt from disk", "count", len(m.index))
 	}
 }
 
-func (m *Manager) ActiveCount() int {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return len(m.sessions)
+func readSessionFile(fp string, gcm cipher.AEAD) (*Session, error) {
+	data, err := os.ReadFile(fp)
+	if err != nil {
+		return nil, err
+	}
+	if len(data) < 8 {
+		return nil, ErrCorrupt
+	}
+
+	payload := data[8:]
+	if gcm != nil {
+		nonceSize := gcm.NonceSize()
+		if len(payload) < nonceSize {
+			return nil, ErrCorrupt
+		}
+		nonce, ct := payload[:nonceSize], payload[nonceSize:]
+		decrypted, err := gcm.Open(nil, nonce, ct, nil)
+		if err != nil {
+			return nil, ErrCorrupt
+		}
+		payload = decrypted
+	}
+
+	var sess Session
+	if err := json.Unmarshal(payload, &sess); err != nil {
+		return nil, ErrCorrupt
+	}
+	return &sess, nil
+}
+
+func buildIndexFromSession(sess *Session) *SessionIndex {
+	idx := &SessionIndex{
+		ID:           sess.ID,
+		TenantID:     sess.TenantID,
+		ResearchGoal: sess.ResearchGoal,
+		CreatedAt:    sess.CreatedAt,
+		LastUsed:     sess.LastUsed,
+		StepCount:    len(sess.Steps),
+		ActiveGaps:   sess.Gaps,
+	}
+
+	for _, step := range sess.Steps {
+		oneLiner := step.Description
+		if len(oneLiner) > 120 {
+			oneLiner = oneLiner[:120]
+		}
+		idx.StepIndex = append(idx.StepIndex, StepIndexEntry{
+			StepNumber: step.StepNumber,
+			BranchID:   step.BranchID,
+			OneLiner:   oneLiner,
+			Confidence: step.Confidence,
+		})
+	}
+
+	// Keep last 3 steps
+	if len(sess.Steps) > 3 {
+		idx.LastSteps = sess.Steps[len(sess.Steps)-3:]
+	} else {
+		idx.LastSteps = sess.Steps
+	}
+
+	// Auto-generate summary if not externally provided
+	if sess.ResearchGoal != "" && len(sess.Steps) > 0 {
+		parts := []string{}
+		start := len(sess.Steps) - 5
+		if start < 0 {
+			start = 0
+		}
+		for _, s := range sess.Steps[start:] {
+			ol := s.Description
+			if len(ol) > 80 {
+				ol = ol[:80]
+			}
+			parts = append(parts, ol)
+		}
+		idx.Summary = sess.ResearchGoal + ". Progress: " + strings.Join(parts, "; ") + "."
+	}
+
+	return idx
 }

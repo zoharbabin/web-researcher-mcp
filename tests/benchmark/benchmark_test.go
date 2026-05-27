@@ -106,7 +106,7 @@ func BenchmarkMemoryCacheSetGet(b *testing.B) {
 // --- Session benchmarks ---
 
 func BenchmarkSessionCreate(b *testing.B) {
-	mgr := session.NewManager(session.Config{
+	mgr, _ := session.NewManager(session.Config{
 		MaxSessions: 10000,
 		SessionTTL:  time.Hour,
 	})
@@ -119,7 +119,7 @@ func BenchmarkSessionCreate(b *testing.B) {
 }
 
 func BenchmarkSessionGet(b *testing.B) {
-	mgr := session.NewManager(session.Config{
+	mgr, _ := session.NewManager(session.Config{
 		MaxSessions: 10000,
 		SessionTTL:  time.Hour,
 	})
@@ -140,6 +140,6 @@ func BenchmarkSessionGet(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		e := entries[i%len(entries)]
-		mgr.Get(e.tenantID, e.sessionID)
+		mgr.GetIndex(e.tenantID, e.sessionID)
 	}
 }
