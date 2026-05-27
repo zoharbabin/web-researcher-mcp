@@ -42,6 +42,7 @@ jobs:
                 -e 's|docs/LESSONS_LEARNED.md|lessons-learned.md|g' \
                 -e 's|docs/BRAND_GUIDELINES.md|brand-guidelines.md|g' \
                 -e 's|docs/PRIVACY.md|privacy.md|g' \
+                -e 's|docs/SESSION_PERSISTENCE.md|session-persistence.md|g' \
                 -e 's|ARCHITECTURE.md|architecture.md|g' \
                 -e 's|CONTRIBUTING.md|contributing.md|g' \
                 -e 's|SECURITY.md|security.md|g' \
@@ -50,7 +51,7 @@ jobs:
           done
           mv site_src/readme.md site_src/index.md
           # Copy docs/ files with cross-link rewriting
-          for f in docs/TOOLS.md docs/DEPLOYMENT.md docs/SECURITY.md docs/MIGRATION.md docs/EXAMPLES.md docs/API_SETUP.md docs/LESSONS_LEARNED.md docs/BRAND_GUIDELINES.md docs/PRIVACY.md; do
+          for f in docs/TOOLS.md docs/DEPLOYMENT.md docs/SECURITY.md docs/MIGRATION.md docs/EXAMPLES.md docs/API_SETUP.md docs/LESSONS_LEARNED.md docs/BRAND_GUIDELINES.md docs/PRIVACY.md docs/SESSION_PERSISTENCE.md; do
             sed -e 's|ARCHITECTURE.md|architecture.md|g' \
                 -e 's|CONTRIBUTING.md|contributing.md|g' \
                 -e 's|SECURITY.md|security.md|g' \
@@ -62,11 +63,13 @@ jobs:
                 -e 's|LESSONS_LEARNED.md|lessons-learned.md|g' \
                 -e 's|BRAND_GUIDELINES.md|brand-guidelines.md|g' \
                 -e 's|PRIVACY.md|privacy.md|g' \
+                -e 's|SESSION_PERSISTENCE.md|session-persistence.md|g' \
                 "$f" > "site_src/$(basename "$f" | tr '[:upper:]' '[:lower:]')"
           done
           # Rename files with underscores to hyphens for clean URLs
           [ -f site_src/api_setup.md ] && mv site_src/api_setup.md site_src/api-setup.md
           [ -f site_src/lessons_learned.md ] && mv site_src/lessons_learned.md site_src/lessons-learned.md
           [ -f site_src/brand_guidelines.md ] && mv site_src/brand_guidelines.md site_src/brand-guidelines.md
+          [ -f site_src/session_persistence.md ] && mv site_src/session_persistence.md site_src/session-persistence.md
 
       - run: mkdocs gh-deploy --force

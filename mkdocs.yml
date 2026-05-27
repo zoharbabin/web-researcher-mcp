@@ -52,6 +52,7 @@ nav:
   - Privacy Policy: privacy.md
   - Brand Guidelines: brand-guidelines.md
   - Our Story: lessons-learned.md
+  - Session Persistence: session-persistence.md
   - Migration: migration.md
 
 markdown_extensions:
