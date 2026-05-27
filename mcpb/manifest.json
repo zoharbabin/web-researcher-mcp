@@ -21,14 +21,14 @@
   "user_config": {
     "GOOGLE_CUSTOM_SEARCH_API_KEY": {
       "type": "string",
-      "description": "Google Custom Search API key",
-      "required": true,
+      "description": "Google Custom Search API key (optional if using Brave or other providers)",
+      "required": false,
       "is_secret": true
     },
     "GOOGLE_CUSTOM_SEARCH_ID": {
       "type": "string",
-      "description": "Google Custom Search engine ID",
-      "required": true,
+      "description": "Google Custom Search engine ID (optional if using Brave or other providers)",
+      "required": false,
       "is_secret": false
     },
     "SEARCH_PROVIDER": {

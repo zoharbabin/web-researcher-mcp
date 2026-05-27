@@ -1,0 +1,43 @@
+{
+  "name": "web-researcher-mcp",
+  "displayName": "Web Researcher",
+  "description": "AI research without the made-up sources — you pick the sites, every citation is real",
+  "version": "1.0.0",
+  "author": {
+    "name": "Zohar Babin",
+    "url": "https://github.com/zoharbabin"
+  },
+  "repository": "https://github.com/zoharbabin/web-researcher-mcp",
+  "license": "MIT",
+  "keywords": ["research", "search", "web", "academic", "citations", "patents", "news"],
+  "userConfig": {
+    "google_api_key": {
+      "type": "string",
+      "title": "Google Custom Search API Key",
+      "description": "Get one free at https://console.cloud.google.com (optional if using Brave or other providers)",
+      "sensitive": true
+    },
+    "google_cx": {
+      "type": "string",
+      "title": "Google Custom Search Engine ID",
+      "description": "Create at https://programmablesearchengine.google.com (optional if using Brave or other providers)"
+    },
+    "brave_api_key": {
+      "type": "string",
+      "title": "Brave Search API Key",
+      "description": "Get one free at https://brave.com/search/api/ (optional alternative to Google)",
+      "sensitive": true
+    },
+    "search_provider": {
+      "type": "string",
+      "title": "Search Provider",
+      "description": "Which search engine to use: google, brave, serper, searxng, or searchapi",
+      "default": "google"
+    },
+    "search_routing": {
+      "type": "string",
+      "title": "Multi-Provider Routing",
+      "description": "Use multiple providers with automatic switching (e.g. brave,google,serper)"
+    }
+  }
+}

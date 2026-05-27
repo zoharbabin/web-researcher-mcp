@@ -116,3 +116,53 @@ jobs:
           IMAGE="ghcr.io/zoharbabin/web-researcher-mcp:${GITHUB_REF_NAME#v}"
           DIGEST=$(docker buildx imagetools inspect "$IMAGE" --format '{{json .Manifest}}' | jq -r '.digest')
           cosign sign --yes "ghcr.io/zoharbabin/web-researcher-mcp@${DIGEST}"
+
+  publish-mcp-registry:
+    name: Publish to MCP Registry
+    runs-on: ubuntu-latest
+    needs: docker-sign
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Update server.json with release version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          jq --arg v "$VERSION" \
+             --arg ghcr "ghcr.io/zoharbabin/web-researcher-mcp:$VERSION" \
+             --arg dh "docker.io/zoharbabin/web-researcher-mcp:$VERSION" \
+             '.version = $v | .packages[0].identifier = $ghcr | .packages[1].identifier = $dh' \
+             server.json > server.json.tmp && mv server.json.tmp server.json
+
+      - name: Install mcp-publisher
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz
+          chmod +x mcp-publisher
+
+      - name: Authenticate via GitHub OIDC
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish to MCP Registry
+        run: ./mcp-publisher publish
+
+  publish-smithery:
+    name: Publish to Smithery
+    runs-on: ubuntu-latest
+    needs: release
+    if: ${{ vars.SMITHERY_ENABLED == 'true' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Publish to Smithery
+        env:
+          SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          curl -fsSL -X PUT \
+            "https://api.smithery.ai/servers/zoharbabin%2Fweb-researcher-mcp/releases" \
+            -H "Authorization: Bearer $SMITHERY_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"version\": \"$VERSION\",
+              \"repository\": \"https://github.com/zoharbabin/web-researcher-mcp\",
+              \"tag\": \"v$VERSION\"
+            }" || echo "Smithery publish failed (non-fatal)"

@@ -36,7 +36,7 @@ That's it. Your AI can now search the web, read full articles, find academic pap
 
 ## Why does this exist?
 
-Perplexity [fabricates ~20% of its citations](https://www.jmir.org/2024/1/e56764). It links to papers that don't exist, invents DOIs, and presents SEO spam with the same confidence as peer-reviewed research. ChatGPT's web search isn't much better — it can't tell a blog post from a court filing.
+Perplexity [gets its citations wrong over a third of the time](https://www.cjr.org/tow_center/we-compared-eight-ai-search-engines-theyre-all-bad-at-citing-news.php). It links to papers that don't exist, invents DOIs, and presents SEO spam with the same confidence as peer-reviewed research. ChatGPT's web search isn't much better — it can't tell a blog post from a court filing.
 
 If your work gets cited, published, submitted to a court, or shown to a client — you can't afford "probably real" sources.
 
@@ -75,7 +75,7 @@ https://github.com/user-attachments/assets/17fa3484-e4c5-4099-982d-785f544b3a94
 |  | web-researcher-mcp | Perplexity | Scite.ai | Elicit |
 |---|---|---|---|---|
 | You pick which sources are searched | **Yes** (built-in + custom lenses) | No | No | No |
-| Makes up citations | **Never** — every link is real | ~20% fabricated | Rare (journals only) | Rare |
+| Makes up citations | **Never** — every link is real | ~37% incorrect | Rare (journals only) | Rare |
 | Works across all fields | **Yes** — legal, medical, news, patents, everything | Yes | Journals only | Papers only |
 | Keeps your research private | **Yes** — runs on your machine | No (they see everything) | No | No |
 | Works inside your existing AI (Claude, Cursor, etc.) | **Yes** | No (separate app) | Partially | No (separate app) |

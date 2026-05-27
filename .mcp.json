@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "web-researcher": {
+      "command": "web-researcher-mcp",
+      "args": [],
+      "env": {
+        "GOOGLE_CUSTOM_SEARCH_API_KEY": "${user_config.google_api_key}",
+        "GOOGLE_CUSTOM_SEARCH_ID": "${user_config.google_cx}",
+        "BRAVE_API_KEY": "${user_config.brave_api_key}",
+        "SEARCH_PROVIDER": "${user_config.search_provider}",
+        "SEARCH_ROUTING": "${user_config.search_routing}"
+      }
+    }
+  }
+}

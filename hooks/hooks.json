@@ -1,0 +1,9 @@
+{
+  "hooks": [
+    {
+      "event": "SessionStart",
+      "command": "bash \"${CLAUDE_PLUGIN_ROOT}/bin/install.sh\"",
+      "description": "Ensures web-researcher-mcp binary is installed"
+    }
+  ]
+}
