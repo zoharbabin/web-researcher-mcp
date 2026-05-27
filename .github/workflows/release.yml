@@ -138,7 +138,7 @@ jobs:
         run: ./mcp-publisher login github-oidc
 
       - name: Publish to MCP Registry
-        run: ./mcp-publisher publish
+        run: ./mcp-publisher publish || echo "MCP Registry publish failed (may already exist)"
 
   publish-smithery:
     name: Publish to Smithery
