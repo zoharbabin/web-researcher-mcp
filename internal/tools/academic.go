@@ -50,6 +50,7 @@ type academicSearchInput struct {
 	SortBy     string `json:"sort_by,omitempty" jsonschema:"Sort order: relevance (default) or date (newest first)."`
 	Provider   string `json:"provider,omitempty" jsonschema:"Force a specific provider. Academic: openalex, crossref. Web fallback: google, brave, serper, searxng, searchapi. Omit to use automatic selection (recommended)."`
 	OpenAccess bool   `json:"open_access,omitempty" jsonschema:"Only return open-access papers with free full-text (default: false)."`
+	SessionID  string `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. Sources are automatically recorded for recovery after context loss."`
 }
 
 func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
@@ -233,6 +234,10 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 		}
 		deps.Metrics.RecordToolCall("academic_search", time.Since(start), nil, "", false)
 		auditToolCall(ctx, deps, "academic_search", time.Since(start), nil, "")
+
+		if input.SessionID != "" {
+			trackSources(ctx, deps, input.SessionID, academicResultsToSources(results))
+		}
 
 		return structuredResult(jsonBytes), nil, nil
 	})

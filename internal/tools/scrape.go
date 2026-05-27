@@ -11,12 +11,14 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
+	"github.com/zoharbabin/web-researcher-mcp/internal/session"
 )
 
 type scrapePageInput struct {
 	URL       string `json:"url" jsonschema:"The HTTP/HTTPS URL to extract content from. Supports web pages, PDFs, DOCX, PPTX, and YouTube video URLs.,required"`
 	Mode      string `json:"mode,omitempty" jsonschema:"Extraction depth: full (default, up to max_length) or preview (first 5000 bytes, faster). Use preview for quick relevance checks."`
 	MaxLength int    `json:"max_length,omitempty" jsonschema:"Maximum content length in bytes (default: 50000). Reduce for faster responses when you only need a summary."`
+	SessionID string `json:"sessionId,omitempty" jsonschema:"Link this page to a sequential_search session. The URL and title are automatically recorded as a source for recovery after context loss."`
 }
 
 func registerScrapePage(srv *mcp.Server, deps Dependencies) {
@@ -89,6 +91,12 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		deps.Cache.Set(ctx, cacheKey, jsonBytes, time.Hour)
 		deps.Metrics.RecordToolCall("scrape_page", time.Since(start), nil, "", false)
 		auditToolCall(ctx, deps, "scrape_page", time.Since(start), nil, "")
+
+		if input.SessionID != "" {
+			trackSources(ctx, deps, input.SessionID, []session.ResearchSource{
+				{URL: input.URL, Title: result.Title, Relevance: "scraped"},
+			})
+		}
 
 		return structuredResult(jsonBytes), nil, nil
 	})

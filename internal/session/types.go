@@ -48,6 +48,7 @@ type SessionIndex struct {
 	StepIndex    []StepIndexEntry `json:"stepIndex"`
 	LastSteps    []ResearchStep   `json:"lastSteps"`
 	ActiveGaps   []KnowledgeGap   `json:"activeGaps"`
+	Sources      []ResearchSource `json:"sources"`
 	Warning      string           `json:"warning,omitempty"`
 }
 

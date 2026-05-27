@@ -22,6 +22,7 @@ type searchAndScrapeInput struct {
 	TotalMaxLength     int    `json:"total_max_length,omitempty" jsonschema:"Max total bytes for combined output (default: 300000). Reduce for faster, more concise results."`
 	FilterByQuery      bool   `json:"filter_by_query,omitempty" jsonschema:"Remove sources with low relevance to the query (default: false). Enable for precision over recall."`
 	Provider           string `json:"provider,omitempty" jsonschema:"Force a specific search provider: google, brave, serper, searxng, searchapi. Omit to use configured default."`
+	SessionID          string `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. All scraped sources are automatically recorded for recovery after context loss."`
 }
 
 func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
@@ -111,6 +112,10 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 		jsonBytes, _ := json.Marshal(output)
 		deps.Metrics.RecordToolCall("search_and_scrape", time.Since(start), nil, "", false)
 		auditToolCall(ctx, deps, "search_and_scrape", time.Since(start), nil, "")
+
+		if input.SessionID != "" {
+			trackSources(ctx, deps, input.SessionID, sourceOutputsToSources(sources))
+		}
 
 		return structuredResult(jsonBytes), nil, nil
 	})

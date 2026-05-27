@@ -270,6 +270,18 @@ var sequentialSearchOutputSchema = map[string]any{
 				},
 			},
 		},
+		"sources": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"url":         map[string]any{"type": "string"},
+					"title":       map[string]any{"type": "string"},
+					"relevance":   map[string]any{"type": "string"},
+					"foundInStep": map[string]any{"type": "integer"},
+				},
+			},
+		},
 	},
 }
 
@@ -317,6 +329,18 @@ var getSessionOutputSchema = map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"description": map[string]any{"type": "string"},
+					"foundInStep": map[string]any{"type": "integer"},
+				},
+			},
+		},
+		"sources": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"url":         map[string]any{"type": "string"},
+					"title":       map[string]any{"type": "string"},
+					"relevance":   map[string]any{"type": "string"},
 					"foundInStep": map[string]any{"type": "integer"},
 				},
 			},

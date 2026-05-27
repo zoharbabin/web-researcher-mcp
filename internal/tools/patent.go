@@ -25,6 +25,7 @@ type patentSearchInput struct {
 	YearFrom     int    `json:"year_from,omitempty" jsonschema:"Only include patents filed in or after this year."`
 	YearTo       int    `json:"year_to,omitempty" jsonschema:"Only include patents filed in or before this year."`
 	Provider     string `json:"provider,omitempty" jsonschema:"Force a specific patent provider: searchapi, epo, lens, uspto (patent-specific), or google, brave, serper, searxng (web search fallback). Omit for automatic selection based on configured providers and region."`
+	SessionID    string `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. Sources are automatically recorded for recovery after context loss."`
 }
 
 func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
@@ -197,6 +198,10 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 		}
 		deps.Metrics.RecordToolCall("patent_search", time.Since(start), nil, "", false)
 		auditToolCall(ctx, deps, "patent_search", time.Since(start), nil, "")
+
+		if input.SessionID != "" {
+			trackSources(ctx, deps, input.SessionID, patentResultsToSources(patents))
+		}
 
 		return structuredResult(jsonBytes), nil, nil
 	})

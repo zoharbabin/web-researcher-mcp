@@ -65,6 +65,7 @@ func registerGetSession(srv *mcp.Server, deps Dependencies) {
 			"stepIndex":    idx.StepIndex,
 			"lastSteps":    idx.LastSteps,
 			"gaps":         idx.ActiveGaps,
+			"sources":      idx.Sources,
 			"startedAt":    idx.CreatedAt.Format(time.RFC3339),
 		}
 

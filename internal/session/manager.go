@@ -163,6 +163,42 @@ func (m *Manager) SetResearchGoal(tenantID, sessionID, goal string) error {
 	return nil
 }
 
+func (m *Manager) AddSources(tenantID, sessionID string, sources []ResearchSource) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	key := tenantID + ":" + sessionID
+	_, ok := m.index[key]
+	if !ok {
+		return fmt.Errorf("session not found")
+	}
+
+	sess, err := m.store.Load(key)
+	if err != nil {
+		return err
+	}
+
+	existing := make(map[string]struct{}, len(sess.Sources))
+	for _, s := range sess.Sources {
+		existing[s.URL] = struct{}{}
+	}
+	for _, s := range sources {
+		if _, dup := existing[s.URL]; !dup {
+			sess.Sources = append(sess.Sources, s)
+			existing[s.URL] = struct{}{}
+		}
+	}
+
+	sess.LastUsed = time.Now()
+	if err := m.store.Save(key, sess, m.config.SessionTTL); err != nil {
+		return err
+	}
+
+	idx := buildIndexFromSession(sess)
+	m.index[key] = idx
+	return nil
+}
+
 func (m *Manager) GetIndex(tenantID, sessionID string) (*SessionIndex, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -379,6 +415,7 @@ func buildIndexFromSession(sess *Session) *SessionIndex {
 		LastUsed:     sess.LastUsed,
 		StepCount:    len(sess.Steps),
 		ActiveGaps:   sess.Gaps,
+		Sources:      sess.Sources,
 	}
 
 	for _, step := range sess.Steps {

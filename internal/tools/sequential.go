@@ -141,11 +141,13 @@ func buildSequentialResponse(idx *session.SessionIndex, input sequentialSearchIn
 		output["steps"] = idx.StepIndex
 		output["lastSteps"] = idx.LastSteps
 		output["gaps"] = idx.ActiveGaps
+		output["sources"] = idx.Sources
 	case "summary":
 		output["summary"] = idx.Summary
 		output["stepIndex"] = idx.StepIndex
 		output["lastSteps"] = idx.LastSteps
 		output["gaps"] = idx.ActiveGaps
+		output["sources"] = idx.Sources
 	}
 
 	return output

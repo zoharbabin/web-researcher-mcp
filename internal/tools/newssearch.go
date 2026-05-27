@@ -18,6 +18,7 @@ type newsSearchInput struct {
 	SortBy     string `json:"sort_by,omitempty" jsonschema:"Sort order: relevance (default) or date (newest first)."`
 	NewsSource string `json:"news_source,omitempty" jsonschema:"Restrict to a specific news outlet domain (e.g. reuters.com, bbc.co.uk)."`
 	Provider   string `json:"provider,omitempty" jsonschema:"Force a specific search provider: google, brave, serper, searxng, searchapi. Omit to use configured default."`
+	SessionID  string `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. Sources are automatically recorded for recovery after context loss."`
 }
 
 func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
@@ -88,6 +89,10 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 		deps.Cache.Set(ctx, cacheKey, jsonBytes, 15*time.Minute)
 		deps.Metrics.RecordToolCall("news_search", time.Since(start), nil, "", false)
 		auditToolCall(ctx, deps, "news_search", time.Since(start), nil, "")
+
+		if input.SessionID != "" {
+			trackSources(ctx, deps, input.SessionID, newsResultsToSources(results))
+		}
 
 		return structuredResult(jsonBytes), nil, nil
 	})
