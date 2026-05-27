@@ -34,7 +34,7 @@ The practical impact: without persistence, any research session longer than ~8 s
 
 ## How We Solve It
 
-Three mechanisms work together:
+Four mechanisms work together:
 
 ### 1. Every step is written to disk immediately
 
@@ -54,18 +54,29 @@ The write is **atomic**: a temporary file is written, flushed to the physical di
 
 Loading the full session from disk on every read would be wasteful. Instead, we maintain a small index in memory:
 
-| In Memory (~5 KB) | On Disk (~50-200 KB) |
+| In Memory (index) | Only on Disk (full session) |
 |---|---|
-| Research goal | Full step descriptions |
-| Step count | Complete reasoning for each step |
-| One-line summary per step (≤120 chars) | All rejected approaches |
-| Last 3 full steps | Full source metadata |
-| Knowledge gaps | Everything above combined |
-| Timestamps | Timestamps |
+| Research goal | — |
+| Step count | — |
+| One-line summary per step (≤120 chars) | Full description + reasoning for every step |
+| Last 3 full steps | All steps (including rejected approaches) |
+| Knowledge gaps | — |
+| All discovered source URLs + titles | — |
+| Timestamps | — |
+
+The index contains everything needed for recovery. Disk adds the full detail of older steps (beyond the last 3) — only needed when the AI requests a specific earlier step by number.
 
 The index is rebuilt from disk on server startup — so even a full restart (server update, machine reboot) doesn't lose sessions.
 
-### 3. An explicit recovery tool pages state back in
+### 3. Sources are tracked server-side (not by the LLM)
+
+When search tools (`web_search`, `scrape_page`, `search_and_scrape`, `news_search`, `academic_search`, `patent_search`) are called with a `sessionId` parameter, the server automatically records discovered URLs and titles as session sources. This happens server-side — no LLM relay needed.
+
+Why this matters: if the LLM were responsible for reporting sources back to the session, it could hallucinate URLs, forget to record some, or lose them during compaction. By recording at the server level — where the actual API responses are — the source list is always accurate and complete.
+
+Sources are deduplicated by URL (the same page found via multiple searches is stored once) and included in every session response and recovery output.
+
+### 4. An explicit recovery tool pages state back in
 
 After context compaction, the AI calls `get_research_session` with the session ID. This returns the index — enough context to understand where the research stands and what to do next, without flooding the (now-limited) context window with the full history.
 
@@ -74,7 +85,7 @@ After context compaction, the AI calls `get_research_session` with the session I
      ↓
 AI calls get_research_session("session-id-here")
      ↓
-Returns: goal, summary, step index, last 3 steps, open gaps
+Returns: goal, summary, step index, last 3 steps, open gaps, all source URLs
      ↓
 AI continues research from where it left off
 ```
@@ -145,6 +156,7 @@ Summary mode returns:
 - One-line index of all steps (what happened)
 - Last 3 full steps (recent context)
 - Active gaps (what's left)
+- All discovered source URLs (what we found)
 
 This is typically 5-10 KB — enough to continue coherently without overwhelming the window.
 
@@ -174,6 +186,21 @@ In STDIO mode (single user), the tenant ID defaults to "default" — no isolatio
 9. Release mutex
 ```
 
+### Source Tracking Path (AddSources)
+
+```
+1. Acquire mutex
+2. Check index exists
+3. Load full Session from disk
+4. Deduplicate new sources by URL against existing
+5. Append new sources
+6. Write back to disk
+7. Rebuild index
+8. Release mutex
+```
+
+Called automatically by search tools when `sessionId` is provided.
+
 ### Read Path (GetIndex)
 
 ```
@@ -185,14 +212,25 @@ In STDIO mode (single user), the tenant ID defaults to "default" — no isolatio
 6. Release mutex
 ```
 
-### Recovery Path (GetStep)
+### Recovery Path (get_research_session)
 
+Without `stepId` — returns the index from memory (no disk I/O):
+```
+1. Acquire mutex
+2. Look up index by tenantID:sessionID
+3. Check TTL not expired
+4. Update LastUsed timestamp
+5. Return index (goal, summary, steps, gaps, sources)
+6. Release mutex
+```
+
+With `stepId` — loads a specific step from disk:
 ```
 1. Acquire mutex
 2. Look up index (verify session exists and alive)
 3. Load full Session from disk
 4. Find step by number
-5. Return single step
+5. Return single step with full detail
 6. Release mutex
 ```
 
