@@ -52,19 +52,20 @@ The write is **atomic**: a temporary file is written, flushed to the physical di
 
 ### 2. A lightweight index stays in memory for instant access
 
-Loading the full session from disk on every read would be wasteful. Instead, we maintain a small index in memory:
+Loading the full session from disk on every read would be wasteful. Instead, we maintain a smaller index in memory for fast access:
 
-| In Memory (index) | Only on Disk (full session) |
-|---|---|
-| Research goal | — |
-| Step count | — |
-| One-line summary per step (≤120 chars) | Full description + reasoning for every step |
-| Last 3 full steps | All steps (including rejected approaches) |
-| Knowledge gaps | — |
-| All discovered source URLs + titles | — |
-| Timestamps | — |
+| Field | In Memory (index) | On Disk (full session) |
+|---|---|---|
+| Research goal | ✓ | ✓ |
+| Step count | ✓ | ✓ |
+| Per-step summary | One-line (≤120 chars) | Full description + reasoning |
+| Recent steps | Last 3 (full detail) | All steps (full detail) |
+| Knowledge gaps | ✓ | ✓ |
+| Source URLs + titles | ✓ | ✓ |
+| Rejected approaches | — | ✓ (per step) |
+| Timestamps | ✓ | ✓ |
 
-The index contains everything needed for recovery. Disk adds the full detail of older steps (beyond the last 3) — only needed when the AI requests a specific earlier step by number.
+Disk is the source of truth — it has everything. The in-memory index is a lightweight view rebuilt from disk on startup. The only data that requires a disk read to access is the full detail of older steps (beyond the last 3) and per-step rejected approaches.
 
 The index is rebuilt from disk on server startup — so even a full restart (server update, machine reboot) doesn't lose sessions.
 
