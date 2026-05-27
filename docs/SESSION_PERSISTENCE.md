@@ -283,7 +283,10 @@ A background goroutine runs every 15 minutes:
 
 ## Further Reading
 
-- [MemGPT: Towards LLMs as Operating Systems](https://arxiv.org/abs/2310.08560) — Packer et al., 2023. The foundational paper on explicit memory management for LLMs.
-- [Gorilla: Large Language Model Connected with Massive APIs](https://arxiv.org/abs/2305.15334) — Patil et al., 2023. How retrieval augmentation improves LLM accuracy when calling external APIs.
-- [Lost in the Middle](https://arxiv.org/abs/2307.03172) — Liu et al., 2023. Why LLMs retrieve information better from the start and end of long contexts — supporting our choice to keep responses compact rather than dumping full history.
-- [MCP Specification](https://modelcontextprotocol.io/specification) — The Model Context Protocol's session lifecycle definition.
+- [MemGPT: Towards LLMs as Operating Systems](https://arxiv.org/abs/2310.08560) — Packer et al., 2023 (UC Berkeley). The foundational paper on explicit memory management for LLMs — paging state in and out of a limited context window.
+- [Generative Agents: Interactive Simulacra of Human Behavior](https://arxiv.org/abs/2304.03442) — Park et al., 2023 (Stanford / Google). Implements a two-tier memory architecture (full memory stream + retrieval index) to work around context limits — the closest architectural precedent to our design.
+- [ReAct: Synergizing Reasoning and Acting in Language Models](https://arxiv.org/abs/2210.03629) — Yao et al., 2022 (Princeton / Google Brain). Establishes the reason-then-act loop that underpins our explicit retrieval pattern: the model reasons it needs state, then acts by calling the recovery tool.
+- [Voyager: An Open-Ended Embodied Agent with Large Language Models](https://arxiv.org/abs/2305.16291) — Wang et al., 2023 (NVIDIA). Persistent skill library surviving across sessions using an indexed store — parallels our session persistence architecture (description index for fast lookup, full content loaded on demand).
+- [Gorilla: Large Language Model Connected with Massive APIs](https://arxiv.org/abs/2305.15334) — Patil et al., 2023 (UC Berkeley). How retrieval augmentation improves LLM accuracy when calling external APIs — supporting our server-side source tracking over LLM self-reporting.
+- [Lost in the Middle](https://arxiv.org/abs/2307.03172) — Liu et al., 2023 (Stanford). Why LLMs retrieve information better from the start and end of long contexts — supporting our choice to keep recovery responses compact rather than dumping full history.
+- [MCP Specification — Session Management](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#session-management) — The Model Context Protocol's transport-level session lifecycle definition.
