@@ -1,0 +1,126 @@
+# Privacy Policy
+
+**Effective Date:** May 26, 2026  
+**Last Updated:** May 26, 2026
+
+## Overview
+
+web-researcher-mcp is open-source software that runs entirely on your device. It gives AI assistants the ability to search the web and read pages on your behalf. We (the developers) have no servers, no accounts, and no way to see what you search for.
+
+This policy explains what data flows where when you use the software.
+
+## What We Do NOT Collect
+
+We want to be unambiguous about this:
+
+- **No telemetry.** We do not track how you use the software.
+- **No analytics.** We do not measure usage, sessions, or feature adoption.
+- **No personal information.** We never ask for your name, email, or any identifier.
+- **No conversation data.** We do not access Claude's memory, chat history, or your uploaded files.
+- **No advertising or profiling.** There is nothing to sell because we have nothing.
+
+Because we operate no servers and collect no data, there is nothing stored on our end to access, correct, or delete.
+
+## What Happens When You Use the Software
+
+When you ask your AI assistant to search or read a page, here is exactly what happens:
+
+| What | Where it goes | Who sees it |
+|------|--------------|-------------|
+| Your search query | Directly to the search provider you configured (Google, Brave, etc.) | The search provider — not us |
+| Your API keys | Stored locally on your machine, sent only to the respective provider | Only the provider — never us |
+| Search results | Returned to your machine and cached locally | Only you |
+| Scraped page content | Fetched directly from the website to your machine | Only you |
+| Local cache | Stored on your device, optionally encrypted (AES-256) | Only you |
+
+The key point: **your search queries travel directly from your machine to the search provider.** We are not in the middle. We never see what you search for.
+
+## Third-Party Search Providers
+
+When you search, your query goes directly to whichever provider you configured. Each provider has their own data practices:
+
+| Provider | What they receive | Their privacy policy |
+|----------|------------------|---------------------|
+| Google Custom Search | Your query, your API key | [policies.google.com/privacy](https://policies.google.com/privacy) |
+| Brave Search | Your query, your API key | [brave.com/privacy](https://brave.com/privacy/browser/) |
+| Serper.dev | Your query, your API key | [serper.dev/privacy](https://serper.dev/privacy) |
+| SearchAPI.io | Your query, your API key | [searchapi.io/privacy](https://www.searchapi.io/privacy-policy) |
+| SearXNG | Your query (self-hosted — no third party) | N/A (you control the server) |
+| OpenAlex | Your academic query | [openalex.org/legal](https://openalex.org/legal/privacy-policy) |
+| CrossRef | Your academic query | [crossref.org/privacy](https://www.crossref.org/privacy/) |
+
+**You choose which provider to use.** If you want maximum privacy, SearXNG lets you self-host the entire search backend with no third-party involvement.
+
+## MCP Platform Disclosure
+
+When this software runs as a Claude tool (via MCP), Anthropic may independently collect tool call metadata according to their own privacy policy at [anthropic.com/privacy](https://www.anthropic.com/privacy). This is between you and Anthropic — our software does not add any additional data collection on top of what the MCP platform itself logs.
+
+We confirm that this software:
+- Does NOT access Claude's memory or conversation history
+- Does NOT collect extraneous conversation data
+- Does NOT query or extract data from user-generated files
+- Only processes the specific query parameters passed to each tool call
+
+## HTTP Server Mode (Optional)
+
+If you choose to deploy the software as an HTTP server (multi-tenant mode), additional data is processed **on your own infrastructure**:
+
+- **OAuth tokens** — validated for authentication, not stored beyond the session
+- **Tenant identifiers** — used to isolate rate limits and sessions between users
+- **Audit logs** — tool invocations are logged locally (no raw queries, only parameter hashes)
+- **Rate limit counters** — in-memory, cleared on restart
+
+This mode is entirely self-hosted. We still do not receive or have access to any of this data. You are the data controller for your deployment.
+
+## Local Data Storage
+
+- **Cache location:** Your machine only (in-memory + optional encrypted disk)
+- **Encryption:** AES-256-GCM when disk caching is enabled
+- **Default retention:** Search results expire after 30 minutes, scraped pages after 1 hour
+- **Clearing cache:** Restart the server or delete the cache directory
+- **No remote sync:** Cache is never transmitted anywhere
+
+## Your Rights
+
+### For EU/EEA residents (GDPR)
+
+This software runs entirely on your device. We do not act as a data controller or processor for any personal data you process using this software, as no personal data is transmitted to or accessible by us.
+
+When you use third-party search APIs through this software, those API providers act as independent data controllers. Please review their respective privacy policies (linked above) for information about how they handle your data.
+
+### For California residents (CCPA/CPRA)
+
+We do not collect, sell, or share personal information as defined by the California Consumer Privacy Act. Because this software operates locally on your device and we have no access to your data, there is no personal information held by us to request access to, deletion of, or correction of.
+
+### For everyone
+
+You have full control over your data. You can:
+- **Stop sharing queries** — stop using the software, or switch to a self-hosted SearXNG provider
+- **Delete local cache** — restart the server or delete the cache directory
+- **Revoke API keys** — delete them from your provider's dashboard
+- **Audit the code** — the full source is open at [github.com/zoharbabin/web-researcher-mcp](https://github.com/zoharbabin/web-researcher-mcp)
+
+## Children's Privacy
+
+This software is not directed at children under 16. We do not knowingly collect information from children because we do not collect information from anyone.
+
+## Security
+
+- SSRF protection prevents the software from being used to probe internal networks
+- Content sanitization strips potentially malicious content from scraped pages
+- Rate limiting prevents abuse in HTTP server mode
+- The full security architecture is documented at [SECURITY.md](https://github.com/zoharbabin/web-researcher-mcp/blob/main/docs/SECURITY.md)
+- The source code is open for audit
+
+## Open Source Transparency
+
+This software is MIT-licensed and fully open source. You can read every line of code to verify these claims. Our security and architecture documentation is public. If you find a discrepancy between this policy and the code's behavior, please report it as a security issue.
+
+## Changes to This Policy
+
+If we change this policy, the change will appear in a GitHub commit with a clear diff. We will note material changes in release notes. The "Last Updated" date at the top will always reflect the most recent revision.
+
+## Contact
+
+- **GitHub Issues:** [github.com/zoharbabin/web-researcher-mcp/issues](https://github.com/zoharbabin/web-researcher-mcp/issues)
+- **Maintainer:** Zohar Babin — [github.com/zoharbabin](https://github.com/zoharbabin)
