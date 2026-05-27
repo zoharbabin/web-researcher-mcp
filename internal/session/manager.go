@@ -55,7 +55,7 @@ func NewManager(cfg Config) (*Manager, error) {
 		done:   make(chan struct{}),
 	}
 
-	store.CleanOrphans()
+	_ = store.CleanOrphans()
 	m.rebuildIndex()
 	go m.cleanup()
 	return m, nil
@@ -244,7 +244,7 @@ func (m *Manager) DeleteAll() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for key := range m.index {
-		m.store.Delete(key)
+		_ = m.store.Delete(key)
 	}
 	m.index = make(map[string]*SessionIndex)
 	m.keys = make(map[string]string)
@@ -263,7 +263,7 @@ func (m *Manager) ActiveCount() int {
 func (m *Manager) deleteUnlocked(key string) {
 	delete(m.index, key)
 	delete(m.keys, fileHash(key))
-	m.store.Delete(key)
+	_ = m.store.Delete(key)
 }
 
 func (m *Manager) evictOldest(tenantID string) {

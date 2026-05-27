@@ -63,7 +63,7 @@ func registerSequentialSearch(srv *mcp.Server, deps Dependencies) {
 				}
 			}
 			if goal != "" {
-				deps.Sessions.SetResearchGoal(tenantID, idx.ID, goal)
+				_ = deps.Sessions.SetResearchGoal(tenantID, idx.ID, goal)
 			}
 		}
 
