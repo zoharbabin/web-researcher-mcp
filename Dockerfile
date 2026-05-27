@@ -27,7 +27,7 @@ FROM alpine:3.23
 RUN apk add --no-cache ca-certificates curl
 
 LABEL org.opencontainers.image.title="web-researcher-mcp"
-LABEL org.opencontainers.image.description="AI research without the made-up sources — you pick the sites, every citation is real"
+LABEL org.opencontainers.image.description="Your AI research assistant that cites real sources and stays honest"
 LABEL org.opencontainers.image.source="https://github.com/zoharbabin/web-researcher-mcp"
 LABEL org.opencontainers.image.licenses="MIT"
 

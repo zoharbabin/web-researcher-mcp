@@ -29,7 +29,7 @@
   <text x="635" y="540"
         font-family="'Inter', 'SF Pro Display', sans-serif"
         font-size="28" font-weight="400" fill="#94A3B8" letter-spacing="-0.3"
-        text-anchor="middle" text-rendering="optimizeLegibility">AI research without the made-up sources</text>
+        text-anchor="middle" text-rendering="optimizeLegibility">Your AI research assistant that cites real sources and stays honest</text>
 
   <!-- Stats row -->
   <g font-family="'Inter', 'SF Pro Display', sans-serif" text-rendering="optimizeLegibility">

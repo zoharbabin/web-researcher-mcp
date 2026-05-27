@@ -8,11 +8,11 @@ How to represent web-researcher-mcp visually and verbally. Follow these guidelin
 
 ### Tagline
 
-**AI research without the made-up sources.**
+**Your AI research assistant that cites real sources and stays honest.**
 
 ### Supporting message
 
-Perplexity makes things up. ChatGPT searches garbage. Your reputation is on the line. This tool lets you choose exactly which sources your AI searches — so every citation is real, every link works, and nothing is fabricated.
+Search the entire web or narrow it down to just the sites you trust; medical journals, court databases, news outlets, academic papers. Analyze the full source, not just snippets. Links that work, citations you can trust, no made up closed garden pre-synthesized results.
 
 ### Three positioning pillars
 

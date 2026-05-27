@@ -4,12 +4,13 @@
 </p>
 <h1 align="center">web-researcher-mcp</h1>
 <p align="center">
-  <strong>AI research without the made-up sources.</strong>
+  <strong>Your AI research assistant that cites real sources and stays honest.</strong>
 </p>
 <p align="center">
-  Perplexity makes things up. ChatGPT searches garbage. Your reputation is on the line.<br/>
-  This tool lets you choose exactly which sources your AI searches —<br/>
-  so every citation is real, every link works, and nothing is fabricated.
+  Search the entire web or narrow it down to just the sites you trust;<br/>
+  medical journals, court databases, news outlets, academic papers.<br/>
+  Analyze the full source, not just snippets. Links that work, citations you can trust,<br/>
+  no made up closed garden pre-synthesized results.
 </p>
 
 <p align="center">

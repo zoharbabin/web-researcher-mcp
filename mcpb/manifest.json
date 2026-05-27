@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "web-researcher-mcp",
   "version": "0.0.0-template",
-  "description": "AI research without the made-up sources — you pick the sites, every citation is real",
+  "description": "Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust. Links that work, citations you can trust, no made up closed garden pre-synthesized results.",
   "author": {
     "name": "Zohar Babin",
     "url": "https://github.com/zoharbabin"
