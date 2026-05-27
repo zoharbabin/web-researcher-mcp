@@ -26,7 +26,7 @@ This isn't a bug — it's a fundamental constraint of how LLMs work. The model l
 
 ### Why This Matters in Practice
 
-Research on multi-turn tool use ([Patil et al., 2023](https://arxiv.org/abs/2305.15334)) demonstrated that LLMs lose coherence on multi-step tasks when intermediate state isn't explicitly recoverable. The MemGPT paper ([Packer et al., 2023](https://arxiv.org/abs/2310.08560)) showed that explicitly paging state in and out — rather than relying on the context window to hold everything — produces dramatically better results on long-horizon tasks.
+Research on LLM tool use ([Patil et al., 2023](https://arxiv.org/abs/2305.15334)) showed that without proper grounding, models produce incorrect API calls as task complexity grows — they need external state to stay accurate. The MemGPT paper ([Packer et al., 2023](https://arxiv.org/abs/2310.08560)) demonstrated that explicitly paging state in and out — rather than relying on the context window to hold everything — produces dramatically better results on long-horizon tasks.
 
 The practical impact: without persistence, any research session longer than ~8 steps risks losing accumulated findings when the context window fills up. For a literature review, competitive analysis, or patent landscape search, that can mean hours of wasted work.
 
@@ -284,6 +284,6 @@ A background goroutine runs every 15 minutes:
 ## Further Reading
 
 - [MemGPT: Towards LLMs as Operating Systems](https://arxiv.org/abs/2310.08560) — Packer et al., 2023. The foundational paper on explicit memory management for LLMs.
-- [Gorilla: Large Language Model Connected with Massive APIs](https://arxiv.org/abs/2305.15334) — Patil et al., 2023. Multi-turn tool use and state tracking challenges.
-- [Lost in the Middle](https://arxiv.org/abs/2307.03172) — Liu et al., 2023. Why LLMs retrieve information better from the start and end of context, informing our response field ordering.
-- [MCP Specification — Sessions](https://spec.modelcontextprotocol.io/) — The Model Context Protocol's session lifecycle definition.
+- [Gorilla: Large Language Model Connected with Massive APIs](https://arxiv.org/abs/2305.15334) — Patil et al., 2023. How retrieval augmentation improves LLM accuracy when calling external APIs.
+- [Lost in the Middle](https://arxiv.org/abs/2307.03172) — Liu et al., 2023. Why LLMs retrieve information better from the start and end of long contexts — supporting our choice to keep responses compact rather than dumping full history.
+- [MCP Specification](https://modelcontextprotocol.io/specification) — The Model Context Protocol's session lifecycle definition.
