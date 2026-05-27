@@ -66,7 +66,7 @@ Works with Claude, Claude Desktop, Cursor, and any AI assistant that supports to
 
 ---
 
-https://github.com/user-attachments/assets/8dd5b595-3a5b-4eac-a50a-8cfeab0be21e
+https://github.com/user-attachments/assets/17fa3484-e4c5-4099-982d-785f544b3a94
 
 ---
 
