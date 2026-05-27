@@ -16,6 +16,8 @@ extra:
 theme:
   name: material
   custom_dir: overrides
+  icon:
+    repo: fontawesome/brands/github
   logo: https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/logo-final-transparent.svg
   favicon: https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/favicon.ico
   palette:
