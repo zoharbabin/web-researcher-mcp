@@ -35,7 +35,7 @@ GOOGLE_CUSTOM_SEARCH_API_KEY=AIza... GOOGLE_CUSTOM_SEARCH_ID=017... ./web-resear
 
 The server reads MCP JSON-RPC from stdin, writes to stdout. No port, no network.
 
-**Claude Code config** (`~/.claude/settings.json`):
+**Claude Code config** (`~/.claude.json`):
 ```json
 {
   "mcpServers": {

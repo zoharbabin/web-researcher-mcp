@@ -29,7 +29,7 @@ internal/
 ├── server/       # MCP server lifecycle (STDIO + Streamable HTTP)
 ├── auth/         # OAuth 2.1 middleware (JWKS, audience/issuer validation)
 ├── audit/        # Auditor interface + structured JSON logging
-├── session/      # Per-tenant session state (in-memory sync.Map)
+├── session/      # Per-tenant session persistence (memory index + encrypted disk)
 ├── metrics/      # Prometheus counters/histograms per tool
 ├── ratelimit/    # Token bucket (per-tenant + global)
 ├── circuit/      # Circuit breaker for external APIs

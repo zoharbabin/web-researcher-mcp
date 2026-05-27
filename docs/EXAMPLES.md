@@ -157,7 +157,7 @@ Extract content from any URL — web pages, PDFs, DOCX, PPTX, or YouTube transcr
 
 ## Multi-Step Investigation (sequential_search)
 
-Track multi-step research with persistent sessions for iterative investigation.
+Track multi-step research with persistent sessions. Sessions survive server restarts (encrypted disk) and can be recovered after context loss.
 
 ### Step 1: Start a new session
 
@@ -168,12 +168,15 @@ Track multi-step research with persistent sessions for iterative investigation.
     "searchStep": "Initial research on MCP server implementations in Go",
     "stepNumber": 1,
     "nextStepNeeded": true,
+    "researchGoal": "Compare MCP server architectures for stateful multi-turn research",
+    "reasoning": "Starting broad to map the landscape before narrowing",
+    "confidence": "medium",
     "totalStepsEstimate": 3
   }
 }
 ```
 
-**Response** returns a `sessionId` that you use for subsequent steps.
+**Response** returns a `sessionId` that you use for subsequent steps, plus `researchGoal`, `responseMode`, and the step index.
 
 ### Step 2: Continue the session
 
@@ -182,10 +185,14 @@ Track multi-step research with persistent sessions for iterative investigation.
   "tool": "sequential_search",
   "arguments": {
     "sessionId": "abc123-from-step-1",
-    "searchStep": "Compared caching strategies across implementations",
+    "searchStep": "Compared caching strategies across implementations — found two-tier (memory+disk) is standard",
     "stepNumber": 2,
     "nextStepNeeded": true,
-    "knowledgeGap": "Need to understand how other servers handle multi-tenancy"
+    "reasoning": "Narrowing to caching since it's the most complex subsystem",
+    "confidence": "high",
+    "rejectedApproaches": ["Redis-only approach - adds deployment complexity for single-instance use"],
+    "knowledgeGap": "Need to understand how other servers handle multi-tenancy",
+    "sessionSummary": "MCP servers in Go use interface-driven design. Two-tier caching is standard."
   }
 }
 ```
@@ -199,12 +206,44 @@ Track multi-step research with persistent sessions for iterative investigation.
     "sessionId": "abc123-from-step-1",
     "searchStep": "Synthesized findings on architecture patterns for MCP servers",
     "stepNumber": 3,
-    "nextStepNeeded": false
+    "nextStepNeeded": false,
+    "confidence": "high"
   }
 }
 ```
 
-**Response** contains the full session state: `sessionId`, `currentStep`, `isComplete`, `steps` (array of all research steps with timestamps), `gaps` (knowledge gaps identified), `startedAt`, and `completedAt`. Use `branchFromStep` + `branchId` to explore alternative research directions without losing the main thread.
+**Response** contains the full session state: `sessionId`, `currentStep`, `isComplete`, `steps` (array of all research steps with timestamps and reasoning), `gaps` (knowledge gaps identified), `startedAt`, and `completedAt`. Use `branchFromStep` + `branchId` to explore alternative research directions without losing the main thread.
+
+Sessions persist for 4 hours from last activity and survive server restarts.
+
+---
+
+## Recovering a Session (get_research_session)
+
+After context loss (e.g., LLM context window compaction), recover your session state:
+
+```json
+{
+  "tool": "get_research_session",
+  "arguments": {
+    "sessionId": "abc123-from-earlier"
+  }
+}
+```
+
+**Response** contains: `researchGoal`, `summary`, `stepCount`, `stepIndex` (one-liner per step with confidence), `lastSteps` (last 3 full steps), and `gaps` (open questions).
+
+To retrieve full details of a specific earlier step:
+
+```json
+{
+  "tool": "get_research_session",
+  "arguments": {
+    "sessionId": "abc123-from-earlier",
+    "stepId": 2
+  }
+}
+```
 
 ---
 

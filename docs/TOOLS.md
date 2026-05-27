@@ -450,8 +450,15 @@ Multi-step research tracking with session persistence, branching, and knowledge 
 |-------|------|----------|---------|-------------|
 | `searchStep` | string | yes | — | Description of this step |
 | `stepNumber` | int | yes | — | Starts at 1 |
-| `totalStepsEstimate` | int | no | — | Estimated total |
 | `nextStepNeeded` | bool | yes | — | Whether more steps follow |
+| `sessionId` | string | no | — | Session ID (required for steps 2+) |
+| `researchGoal` | string | no | — | Set on step 1; defines the research objective |
+| `reasoning` | string | no | — | Why this search direction was chosen |
+| `confidence` | string | no | — | Confidence in this step: high, medium, or low |
+| `rejectedApproaches` | []string | no | — | Approaches considered but rejected |
+| `sessionSummary` | string | no | — | Running summary (used for recovery) |
+| `responseMode` | string | no | auto | Force `full` or `summary` output |
+| `totalStepsEstimate` | int | no | — | Estimated total steps |
 | `isRevision` | bool | no | false | Revising a previous step |
 | `revisesStep` | int | no | — | Step being revised |
 | `branchFromStep` | int | no | — | Branching point |
@@ -488,8 +495,10 @@ type SequentialSearchOutput struct {
 ```
 
 ### State Management
-- In-memory `sync.Map` per tenant (requires session-affinity in multi-instance deployments)
-- No cache (state tracking, not content)
+- Two-tier: in-memory index (lightweight) + encrypted disk (full session JSON)
+- Write-through on every step (crash-safe: temp → fsync → rename)
+- Index rebuilt from disk on server startup — no data loss across restarts
+- Behind a load balancer, use session-affinity (sticky sessions) so clients reconnect to the same instance
 
 ---
 

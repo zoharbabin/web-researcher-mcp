@@ -101,8 +101,8 @@ govulncheck ./...
 # Standard build
 go build -o web-researcher-mcp ./cmd/web-researcher-mcp
 
-# With version info
-go build -ldflags "-X main.version=$(git describe --tags)" -o web-researcher-mcp ./cmd/web-researcher-mcp
+# With version info (reads from VERSION file)
+go build -ldflags "-X main.version=$(cat VERSION)" -o web-researcher-mcp ./cmd/web-researcher-mcp
 
 # Docker build
 docker build -t web-researcher-mcp .

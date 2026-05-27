@@ -129,7 +129,8 @@ Once configured, the following tools become available:
 5. **news_search** — Search recent news articles with freshness controls
 6. **academic_search** — Find academic papers with real DOIs via OpenAlex and CrossRef
 7. **patent_search** — Search patents across US, EP, WO, JP, CN, KR offices
-8. **sequential_search** — Track multi-step research with session persistence
+8. **sequential_search** — Track multi-step research with persistent sessions (survives restarts)
+9. **get_research_session** — Recover a research session after context loss
 
 ## Verification
 

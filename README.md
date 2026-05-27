@@ -104,6 +104,7 @@ https://github.com/user-attachments/assets/17fa3484-e4c5-4099-982d-785f544b3a94
 | `academic_search` | Find real papers with real DOIs — authors, citation counts, open-access links |
 | `patent_search` | Search patent offices (US, Europe, international) with classification codes |
 | `sequential_search` | Multi-step deep research — your AI remembers what it already found and builds on it |
+| `get_research_session` | Recover a research session after context loss — picks up right where you left off |
 
 ---
 
@@ -271,7 +272,7 @@ web-researcher-mcp/
 │   ├── cache/                  # Hybrid cache (memory + AES-encrypted disk)
 │   ├── auth/                   # OAuth 2.1 middleware + JWKS
 │   ├── audit/                  # Structured audit logging
-│   ├── session/                # Per-tenant session management
+│   ├── session/                # Per-tenant session persistence (memory index + encrypted disk)
 │   ├── content/                # Sanitize, dedup, truncate, quality score
 │   ├── metrics/                # Prometheus metrics + per-tool stats
 │   ├── ratelimit/              # Three-tier rate limiting

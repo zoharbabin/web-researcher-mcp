@@ -37,7 +37,7 @@ Delete the `google-researcher` entry from your MCP configuration file:
 }
 ```
 
-**Claude Code** (`~/.claude/settings.json` or `.mcp.json`):
+**Claude Code** (`~/.claude.json` or `.mcp.json`):
 ```json
 {
   "mcpServers": {
