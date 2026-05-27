@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="${1:-$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")}"
+VERSION="${1:-$(cat VERSION 2>/dev/null || git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")}"
 VERSION="${VERSION#v}"
 DIST_DIR="dist/mcpb"
 MANIFEST_TEMPLATE="mcpb/manifest.json"

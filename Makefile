@@ -1,7 +1,7 @@
-.PHONY: build test lint vet vuln clean run dev
+.PHONY: build test lint vet vuln clean run dev version-sync
 
 BINARY = web-researcher-mcp
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+VERSION ?= $(shell cat VERSION 2>/dev/null || git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS = -ldflags="-s -w -X main.version=$(VERSION)"
 
 build:
@@ -49,5 +49,8 @@ docker:
 
 release:
 	goreleaser release --snapshot --clean
+
+version-sync:
+	bash scripts/sync-version.sh
 
 all: lint vet vuln test build

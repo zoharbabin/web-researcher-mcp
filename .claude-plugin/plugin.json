@@ -9,7 +9,15 @@
   },
   "repository": "https://github.com/zoharbabin/web-researcher-mcp",
   "license": "MIT",
-  "keywords": ["research", "search", "web", "academic", "citations", "patents", "news"],
+  "keywords": [
+    "research",
+    "search",
+    "web",
+    "academic",
+    "citations",
+    "patents",
+    "news"
+  ],
   "userConfig": {
     "google_api_key": {
       "type": "string",
