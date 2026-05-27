@@ -26,7 +26,7 @@ This isn't a bug — it's a fundamental constraint of how LLMs work. The model l
 
 ### Why This Matters in Practice
 
-Research published by Microsoft Research on multi-turn tool use ([Patil et al., 2023](https://arxiv.org/abs/2307.16789)) found that LLMs lose coherence on multi-step tasks when intermediate state isn't explicitly recoverable. The MemGPT paper ([Packer et al., 2023](https://arxiv.org/abs/2310.08560)) demonstrated that explicitly paging state in and out — rather than relying on the context window to hold everything — produces dramatically better results on long-horizon tasks.
+Research on multi-turn tool use ([Patil et al., 2023](https://arxiv.org/abs/2305.15334)) demonstrated that LLMs lose coherence on multi-step tasks when intermediate state isn't explicitly recoverable. The MemGPT paper ([Packer et al., 2023](https://arxiv.org/abs/2310.08560)) showed that explicitly paging state in and out — rather than relying on the context window to hold everything — produces dramatically better results on long-horizon tasks.
 
 The practical impact: without persistence, any research session longer than ~8 steps risks losing accumulated findings when the context window fills up. For a literature review, competitive analysis, or patent landscape search, that can mean hours of wasted work.
 
@@ -58,10 +58,10 @@ Loading the full session from disk on every read would be wasteful. Instead, we 
 |---|---|
 | Research goal | Full step descriptions |
 | Step count | Complete reasoning for each step |
-| One-line summary per step | All rejected approaches |
+| One-line summary per step (≤120 chars) | All rejected approaches |
 | Last 3 full steps | Full source metadata |
-| Active knowledge gaps | Historical gaps |
-| Timestamps | Everything above + timestamps |
+| Knowledge gaps | Everything above combined |
+| Timestamps | Timestamps |
 
 The index is rebuilt from disk on server startup — so even a full restart (server update, machine reboot) doesn't lose sessions.
 
@@ -124,7 +124,7 @@ The TTL determines how long a session survives without activity before being cle
 
 - **Too short** (30 min): A researcher takes a lunch break, comes back, session gone.
 - **Too long** (24h+): Disk fills with abandoned sessions. Stale research misleads the AI if accidentally recovered.
-- **Sliding window**: Every access (read or write) resets the timer. A session actively being used never expires.
+- **Sliding window**: Every access (read or write) resets the in-memory timer. The disk expiry header is updated on writes only. A session actively being used never expires during runtime; after a server restart, the timer resumes from the last write.
 
 Four hours accommodates:
 - Context compaction + recovery (usually happens within minutes)
@@ -135,9 +135,9 @@ The TTL is configurable via `SESSION_TTL` for organizations with different requi
 
 ### Why response mode switching at step 9?
 
-For short sessions (1-8 steps), returning everything is fine — it fits comfortably in a context window. But at step 9+, the full history starts competing with the AI's working memory for the current task.
+For short sessions (1-8 steps), the step index plus recent steps fit comfortably in a context window. But at step 9+, even the index starts competing with the AI's working memory for the current task.
 
-The automatic switch to summary mode at step 9 is based on empirical observation of Claude's context utilization during research tasks. At ~8 steps with full descriptions, the session output approaches 30-50 KB — roughly 7,000-12,000 tokens. Beyond this, returning full history provides diminishing returns while consuming context the AI needs for reasoning.
+The automatic switch to summary mode at step 9 is based on empirical observation of Claude's context utilization during research tasks. Beyond 8 steps, the step index alone grows large enough that adding a synthesized summary helps the AI orient faster without reading every entry.
 
 Summary mode returns:
 - The research goal (what are we doing)
@@ -148,7 +148,7 @@ Summary mode returns:
 
 This is typically 5-10 KB — enough to continue coherently without overwhelming the window.
 
-The AI can override this with `responseMode: "full"` when it specifically needs the complete history.
+The AI can override this with `responseMode: "full"` to skip the synthesized summary and receive the step index directly. To retrieve full details of a specific earlier step, the AI uses `get_research_session` with a `stepId`.
 
 ### Why per-tenant isolation?
 
@@ -223,7 +223,7 @@ A background goroutine runs every 15 minutes:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SESSION_TTL` | `4h` | Idle timeout (resets on every access) |
+| `SESSION_TTL` | `4h` | Idle timeout (resets on every read/write in memory; disk header updates on writes) |
 | `SESSION_DATA_DIR` | `{CACHE_DIR}/sessions` | Where encrypted session files live |
 | `SESSION_MAX_STEPS` | `200` | Max steps before session auto-completes |
 | `CACHE_ENCRYPTION_KEY` | — | 64 hex chars for AES-256-GCM (omit for plaintext) |
