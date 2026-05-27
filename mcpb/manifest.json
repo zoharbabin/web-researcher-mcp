@@ -47,35 +47,103 @@
   "tools": [
     {
       "name": "web_search",
-      "description": "Search the web and get results from only the sites you trust, using search lenses"
+      "description": "Search the web and get results from only the sites you trust, using search lenses",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string", "description": "Search query"},
+          "lens": {"type": "string", "description": "Search lens to restrict results to trusted domains"},
+          "num_results": {"type": "integer", "description": "Number of results to return"}
+        },
+        "required": ["query"]
+      }
     },
     {
       "name": "scrape_page",
-      "description": "Read the full text from any URL — web pages, PDFs, Word docs, YouTube transcripts"
+      "description": "Read the full text from any URL — web pages, PDFs, Word docs, YouTube transcripts",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {"type": "string", "description": "URL to scrape"},
+          "extract_links": {"type": "boolean", "description": "Whether to extract links"}
+        },
+        "required": ["url"]
+      }
     },
     {
       "name": "search_and_scrape",
-      "description": "Search the web and read the top results in one step, ranked by quality"
+      "description": "Search the web and read the top results in one step, ranked by quality",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string", "description": "Search query"},
+          "num_results": {"type": "integer", "description": "Number of results to scrape"},
+          "lens": {"type": "string", "description": "Search lens to restrict results"}
+        },
+        "required": ["query"]
+      }
     },
     {
       "name": "image_search",
-      "description": "Search for images with size and type filters"
+      "description": "Search for images with size and type filters",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string", "description": "Image search query"},
+          "size": {"type": "string", "description": "Image size filter"},
+          "type": {"type": "string", "description": "Image type filter"}
+        },
+        "required": ["query"]
+      }
     },
     {
       "name": "news_search",
-      "description": "Search news articles with freshness controls"
+      "description": "Search news articles with freshness controls",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string", "description": "News search query"},
+          "freshness": {"type": "string", "description": "Freshness filter (day, week, month)"}
+        },
+        "required": ["query"]
+      }
     },
     {
       "name": "academic_search",
-      "description": "Search academic papers via Scholar, arXiv, and PubMed"
+      "description": "Search academic papers via Scholar, arXiv, and PubMed",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string", "description": "Academic search query"},
+          "source": {"type": "string", "description": "Academic source (scholar, arxiv, pubmed, openalex, crossref)"}
+        },
+        "required": ["query"]
+      }
     },
     {
       "name": "patent_search",
-      "description": "Search patents with multi-office filtering (US, EP, WO, CN, JP, KR)"
+      "description": "Search patents with multi-office filtering (US, EP, WO, CN, JP, KR)",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string", "description": "Patent search query"},
+          "office": {"type": "string", "description": "Patent office filter"}
+        },
+        "required": ["query"]
+      }
     },
     {
       "name": "sequential_search",
-      "description": "Track multi-step research projects, noting what you found and what's still unanswered"
+      "description": "Track multi-step research projects, noting what you found and what's still unanswered",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string", "description": "Search query for this research step"},
+          "session_id": {"type": "string", "description": "Session ID to continue a research thread"},
+          "previous_findings": {"type": "string", "description": "Summary of what was found so far"}
+        },
+        "required": ["query"]
+      }
     }
   ]
 }

@@ -152,17 +152,29 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25"
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Smithery CLI
+        run: npm install -g @smithery/cli
+
+      - name: Build .mcpb bundle
+        run: |
+          sudo apt-get install -y jq zip
+          bash scripts/build-mcpb.sh "${GITHUB_REF_NAME}"
+
       - name: Publish to Smithery
         env:
           SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          curl -fsSL -X PUT \
-            "https://api.smithery.ai/servers/zoharbabin%2Fweb-researcher-mcp/releases" \
-            -H "Authorization: Bearer $SMITHERY_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"version\": \"$VERSION\",
-              \"repository\": \"https://github.com/zoharbabin/web-researcher-mcp\",
-              \"tag\": \"v$VERSION\"
-            }" || echo "Smithery publish failed (non-fatal)"
+          mkdir -p "$HOME/.config/smithery"
+          echo "{\"apiKey\":\"${SMITHERY_API_KEY}\"}" > "$HOME/.config/smithery/settings.json"
+          smithery mcp publish "dist/mcpb/web-researcher-mcp_${VERSION}_linux_amd64.mcpb" \
+            -n web-researcher-mcp/web-researcher-mcp || echo "Smithery publish failed (non-fatal)"
