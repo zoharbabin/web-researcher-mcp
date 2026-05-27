@@ -1,0 +1,250 @@
+# How Sessions Survive Context Loss
+
+When an AI assistant runs out of memory mid-research, what happens to the work it already did?
+
+This document explains the problem, how web-researcher-mcp solves it, and the design decisions behind the approach. Whether you're evaluating tools, building on this project, or just curious about LLM state management — this covers it.
+
+---
+
+## The Problem
+
+Large language models have a fixed context window. When a conversation gets long enough, older content gets **compacted** — summarized or dropped to make room for new tokens. This is normal and necessary. But it creates a specific problem for multi-step research:
+
+```
+Step 1: Search for X → found A, B, C
+Step 2: Read source A → discovered D
+Step 3: Search for D → found E, F
+Step 4: Read source E → discovered G
+     ↓
+  [context compaction happens here]
+     ↓
+Step 5: The AI no longer remembers steps 1-3, the session ID,
+        or what gaps remain. Research stalls or restarts from zero.
+```
+
+This isn't a bug — it's a fundamental constraint of how LLMs work. The model literally cannot see information that was compacted away. Any tool that accumulates state across multiple calls (like a research session) must account for this.
+
+### Why This Matters in Practice
+
+Research published by Microsoft Research on multi-turn tool use ([Patil et al., 2023](https://arxiv.org/abs/2307.16789)) found that LLMs lose coherence on multi-step tasks when intermediate state isn't explicitly recoverable. The MemGPT paper ([Packer et al., 2023](https://arxiv.org/abs/2310.08560)) demonstrated that explicitly paging state in and out — rather than relying on the context window to hold everything — produces dramatically better results on long-horizon tasks.
+
+The practical impact: without persistence, any research session longer than ~8 steps risks losing accumulated findings when the context window fills up. For a literature review, competitive analysis, or patent landscape search, that can mean hours of wasted work.
+
+---
+
+## How We Solve It
+
+Three mechanisms work together:
+
+### 1. Every step is written to disk immediately
+
+When the AI records a research step, it's persisted to encrypted disk within the same call — not buffered, not deferred. If the server crashes one millisecond after the call returns, the step is safe.
+
+```
+AI calls sequential_search(step 5)
+  → Manager appends step to Session
+  → Session written to disk (atomic: temp → fsync → rename)
+  → In-memory index updated
+  → Response returned to AI
+```
+
+The write is **atomic**: a temporary file is written, flushed to the physical disk, then renamed over the previous file in a single OS operation. This means the file on disk is always either the old valid state or the new valid state — never a half-written corrupt mess.
+
+### 2. A lightweight index stays in memory for instant access
+
+Loading the full session from disk on every read would be wasteful. Instead, we maintain a small index in memory:
+
+| In Memory (~5 KB) | On Disk (~50-200 KB) |
+|---|---|
+| Research goal | Full step descriptions |
+| Step count | Complete reasoning for each step |
+| One-line summary per step | All rejected approaches |
+| Last 3 full steps | Full source metadata |
+| Active knowledge gaps | Historical gaps |
+| Timestamps | Everything above + timestamps |
+
+The index is rebuilt from disk on server startup — so even a full restart (server update, machine reboot) doesn't lose sessions.
+
+### 3. An explicit recovery tool pages state back in
+
+After context compaction, the AI calls `get_research_session` with the session ID. This returns the index — enough context to understand where the research stands and what to do next, without flooding the (now-limited) context window with the full history.
+
+```
+[Context compacted — AI lost session state]
+     ↓
+AI calls get_research_session("session-id-here")
+     ↓
+Returns: goal, summary, step index, last 3 steps, open gaps
+     ↓
+AI continues research from where it left off
+```
+
+If the AI needs details about a specific earlier step, it can request just that one step by number — minimizing context usage.
+
+---
+
+## Design Decisions and Why
+
+### Why explicit recovery instead of automatic injection?
+
+We considered automatically injecting session state into every response. We rejected it because:
+
+1. **Context budget**: Injecting full state into every call wastes tokens when the AI hasn't lost context yet (the common case for steps 1-8).
+2. **Unpredictable compaction**: We can't know *when* compaction happens — it's controlled by the client, not the tool server. Injecting preemptively means guessing wrong most of the time.
+3. **MemGPT principle**: Research shows that explicit retrieval (the AI decides when it needs state) outperforms implicit injection (the system always provides state). The model learns to ask when uncertain.
+
+This follows the pattern established by MemGPT ([Packer et al., 2023](https://arxiv.org/abs/2310.08560)): give the model a tool to page state in, rather than trying to keep everything resident.
+
+### Why a two-tier architecture (memory + disk)?
+
+| Alternative | Why we didn't use it |
+|---|---|
+| Memory only | Lost on restart. Unacceptable for 4-hour sessions. |
+| Disk only | Too slow for reads — every `GetIndex` call would need I/O. |
+| Database (Redis/SQLite) | Adds deployment complexity for a tool that should be `go install && done`. |
+| Memory + lazy flush | Risk of data loss on crash. We chose correctness over throughput. |
+
+The two-tier approach gives us: instant reads (memory), durability (disk), crash safety (atomic writes), and zero external dependencies.
+
+### Why AES-256-GCM encryption at rest?
+
+Research sessions can contain sensitive queries — medical conditions, legal strategies, competitive intelligence, trade secrets. Even on a local disk, encryption at rest is a baseline expectation for:
+
+- **Enterprise compliance** (SOC 2 CC6.1, FedRAMP SC-28)
+- **Multi-tenant HTTP deployments** where sessions from different users share a filesystem
+- **Defense in depth** — if the disk is compromised, session content remains protected
+
+GCM mode provides both confidentiality (nobody can read it) and authenticity (nobody can tamper with it without detection). Each file gets a random 12-byte nonce, preventing identical sessions from producing identical ciphertext.
+
+Encryption is optional — omit `CACHE_ENCRYPTION_KEY` and sessions are stored as plaintext. For single-user STDIO mode on a personal machine, this is a reasonable tradeoff.
+
+### Why 4 hours idle TTL (not 30 minutes, not infinite)?
+
+The TTL determines how long a session survives without activity before being cleaned up.
+
+- **Too short** (30 min): A researcher takes a lunch break, comes back, session gone.
+- **Too long** (24h+): Disk fills with abandoned sessions. Stale research misleads the AI if accidentally recovered.
+- **Sliding window**: Every access (read or write) resets the timer. A session actively being used never expires.
+
+Four hours accommodates:
+- Context compaction + recovery (usually happens within minutes)
+- Coffee breaks and interruptions
+- Switching between tasks and coming back
+
+The TTL is configurable via `SESSION_TTL` for organizations with different requirements.
+
+### Why response mode switching at step 9?
+
+For short sessions (1-8 steps), returning everything is fine — it fits comfortably in a context window. But at step 9+, the full history starts competing with the AI's working memory for the current task.
+
+The automatic switch to summary mode at step 9 is based on empirical observation of Claude's context utilization during research tasks. At ~8 steps with full descriptions, the session output approaches 30-50 KB — roughly 7,000-12,000 tokens. Beyond this, returning full history provides diminishing returns while consuming context the AI needs for reasoning.
+
+Summary mode returns:
+- The research goal (what are we doing)
+- A synthesized summary (where are we)
+- One-line index of all steps (what happened)
+- Last 3 full steps (recent context)
+- Active gaps (what's left)
+
+This is typically 5-10 KB — enough to continue coherently without overwhelming the window.
+
+The AI can override this with `responseMode: "full"` when it specifically needs the complete history.
+
+### Why per-tenant isolation?
+
+In HTTP mode (shared server), sessions are keyed by `{tenantID}:{sessionID}`. Tenant A cannot access Tenant B's sessions — not by guessing session IDs, not by enumeration, not by accident.
+
+In STDIO mode (single user), the tenant ID defaults to "default" — no isolation needed because there's only one user.
+
+---
+
+## For Contributors: Data Flow Reference
+
+### Write Path (AppendStep)
+
+```
+1. Acquire mutex
+2. Check index exists and TTL not expired
+3. Check MaxSteps not exceeded
+4. Load full Session from disk (decrypt if configured)
+5. Append step, update timestamps
+6. Write back to disk (encrypt → temp → fsync → rename)
+7. Rebuild SessionIndex from Session
+8. Update in-memory index
+9. Release mutex
+```
+
+### Read Path (GetIndex)
+
+```
+1. Acquire mutex
+2. Look up index by tenantID:sessionID
+3. Check TTL not expired
+4. Update LastUsed timestamp
+5. Return index (no disk I/O)
+6. Release mutex
+```
+
+### Recovery Path (GetStep)
+
+```
+1. Acquire mutex
+2. Look up index (verify session exists and alive)
+3. Load full Session from disk
+4. Find step by number
+5. Return single step
+6. Release mutex
+```
+
+### Startup Path (Rebuild)
+
+```
+1. Scan data directory for .session files
+2. For each file:
+   a. Check 8-byte timestamp header (skip if expired)
+   b. Decrypt payload
+   c. Unmarshal JSON → Session
+   d. Verify: sha256(tenantID:sessionID) matches filename
+   e. Build index, populate maps
+3. Remove corrupt/expired files
+4. Start cleanup goroutine (every 15 min)
+```
+
+### Cleanup
+
+A background goroutine runs every 15 minutes:
+- Iterates all index entries
+- Removes any where `now - LastUsed > SessionTTL`
+- Deletes corresponding disk files
+
+---
+
+## Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SESSION_TTL` | `4h` | Idle timeout (resets on every access) |
+| `SESSION_DATA_DIR` | `{CACHE_DIR}/sessions` | Where encrypted session files live |
+| `SESSION_MAX_STEPS` | `200` | Max steps before session auto-completes |
+| `CACHE_ENCRYPTION_KEY` | — | 64 hex chars for AES-256-GCM (omit for plaintext) |
+
+---
+
+## Comparison with Other Approaches
+
+| Approach | Survives compaction? | Survives restart? | Privacy | Deployment complexity |
+|---|---|---|---|---|
+| **Rely on context window** | No | No | N/A | None |
+| **System prompt injection** | Partially (fixed budget) | No | N/A | None |
+| **External database (Redis/Postgres)** | Yes | Yes | Depends | High (requires infra) |
+| **Cloud-hosted session service** | Yes | Yes | Low (3rd party sees data) | Medium |
+| **web-researcher-mcp (this approach)** | Yes | Yes | High (local, encrypted) | None (built-in) |
+
+---
+
+## Further Reading
+
+- [MemGPT: Towards LLMs as Operating Systems](https://arxiv.org/abs/2310.08560) — Packer et al., 2023. The foundational paper on explicit memory management for LLMs.
+- [Gorilla: Large Language Model Connected with Massive APIs](https://arxiv.org/abs/2305.15334) — Patil et al., 2023. Multi-turn tool use and state tracking challenges.
+- [Lost in the Middle](https://arxiv.org/abs/2307.03172) — Liu et al., 2023. Why LLMs retrieve information better from the start and end of context, informing our response field ordering.
+- [MCP Specification — Sessions](https://spec.modelcontextprotocol.io/) — The Model Context Protocol's session lifecycle definition.
