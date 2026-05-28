@@ -3,7 +3,6 @@ package tools
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -70,10 +69,7 @@ func registerImageSearch(srv *mcp.Server, deps Dependencies) {
 			}
 			deps.Metrics.RecordToolCall("image_search", time.Since(start), err, errCode, false)
 			auditToolCall(ctx, deps, "image_search", time.Since(start), err, errCode)
-			if isRateLimitError(err) {
-				return rateLimitError(err), nil, nil
-			}
-			return toolError(fmt.Sprintf("image search failed: %v", err)), nil, nil
+			return upstreamErrorResponse("image search", err), nil, nil
 		}
 
 		output := map[string]any{

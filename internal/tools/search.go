@@ -110,10 +110,7 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 			ev.ErrorCode = errCode
 			ev.Metadata = map[string]any{"query": input.Query, "error": err.Error()}
 			deps.Auditor.Log(ev)
-			if isRateLimitError(err) {
-				return rateLimitError(err), nil, nil
-			}
-			return toolError(fmt.Sprintf("search failed: %v", err)), nil, nil
+			return upstreamErrorResponse("search", err), nil, nil
 		}
 
 		urls := make([]string, len(results))
@@ -198,6 +195,29 @@ func isRateLimitError(err error) bool {
 	return strings.Contains(s, "rate limited") || strings.Contains(s, "429") || strings.Contains(s, "quota")
 }
 
+func isAuthError(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "401") || strings.Contains(s, "API key not valid") || strings.Contains(s, "unauthorized") || strings.Contains(s, "INVALID_ARGUMENT")
+}
+
+func upstreamErrorResponse(toolName string, err error) *mcp.CallToolResult {
+	if isRateLimitError(err) {
+		return rateLimitError(err)
+	}
+	if isAuthError(err) {
+		return toolError(fmt.Sprintf(
+			"%s failed: %v. Check that the required API key is set correctly in your environment. "+
+				"See .env.example for the required variables.",
+			toolName, err))
+	}
+	return toolError(fmt.Sprintf(
+		"%s failed: %v. If this persists, try a different provider or report at %s",
+		toolName, err, issueURL))
+}
+
 func textResult(text string) *mcp.CallToolResult {
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
@@ -250,14 +270,21 @@ func resolveProvider(deps Dependencies, providerName string) (search.Provider, *
 			providerName, strings.Join(all, ", ")))
 	}
 
-	// Try to get it from the router
+	// Check if the default provider matches
+	if deps.Search.Name() == providerName {
+		return deps.Search, nil
+	}
+
+	// Check all available providers (any provider with credentials is instantiated)
+	if p, ok := deps.SearchProviders[providerName]; ok {
+		return p, nil
+	}
+
+	// Try the router if available (for backward compatibility)
 	if router, ok := deps.Search.(*search.Router); ok {
-		p, found := router.ProviderByName(providerName)
-		if found {
+		if p, found := router.ProviderByName(providerName); found {
 			return p, nil
 		}
-	} else if deps.Search.Name() == providerName {
-		return deps.Search, nil
 	}
 
 	return nil, toolError(fmt.Sprintf(

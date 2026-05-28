@@ -10,6 +10,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
+	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
@@ -69,10 +70,7 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 			}
 			deps.Metrics.RecordToolCall("search_and_scrape", time.Since(start), err, errCode, false)
 			auditToolCall(ctx, deps, "search_and_scrape", time.Since(start), err, errCode)
-			if isRateLimitError(err) {
-				return rateLimitError(err), nil, nil
-			}
-			return toolError(fmt.Sprintf("search failed: %v", err)), nil, nil
+			return upstreamErrorResponse("search", err), nil, nil
 		}
 
 		if len(searchResults) == 0 {
@@ -87,7 +85,7 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 		}
 
 		results := parallelScrape(ctx, deps, searchResults, maxLenPerSource)
-		sources, combinedParts, scraped := buildSources(results, input.Query, input.FilterByQuery)
+		sources, combinedParts, scraped, failures := buildSources(results, input.Query, input.FilterByQuery)
 		combined := assembleCombined(combinedParts, deduplicate, totalMaxLen)
 
 		output := map[string]any{
@@ -103,6 +101,16 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 				"estimatedTokens": content.EstimateTokens(combined),
 				"sizeCategory":    content.SizeCategory(len(combined)),
 			},
+		}
+
+		if len(failures) > 0 {
+			output["scrapeFailures"] = failures
+			if scraped == 0 {
+				output["note"] = fmt.Sprintf(
+					"All %d pages failed to scrape. This may indicate the sites require JavaScript rendering (install Chrome and set CHROME_PATH), "+
+						"use bot detection, or require authentication. If this is unexpected, report at %s",
+					len(failures), issueURL)
+			}
 		}
 
 		if includeSources {
@@ -163,13 +171,27 @@ func parallelScrape(ctx context.Context, deps Dependencies, searchResults []sear
 	return results
 }
 
-func buildSources(results []scrapeResult, query string, filterByQuery bool) ([]sourceOutput, []string, int) {
+type scrapeFailureOutput struct {
+	URL    string `json:"url"`
+	Reason string `json:"reason"`
+	Kind   string `json:"kind,omitempty"`
+}
+
+func buildSources(results []scrapeResult, query string, filterByQuery bool) ([]sourceOutput, []string, int, []scrapeFailureOutput) {
 	var sources []sourceOutput
 	var combinedParts []string
+	var failures []scrapeFailureOutput
 	scraped := 0
 
 	for _, r := range results {
 		if r.err != nil || r.content == "" {
+			if r.err != nil {
+				f := scrapeFailureOutput{URL: r.url, Reason: r.err.Error()}
+				if se, ok := r.err.(*scraper.ScrapeError); ok {
+					f.Kind = scrapeErrorKindName(se.Kind)
+				}
+				failures = append(failures, f)
+			}
 			continue
 		}
 		scraped++
@@ -195,7 +217,26 @@ func buildSources(results []scrapeResult, query string, filterByQuery bool) ([]s
 		combinedParts = append(combinedParts, r.content)
 	}
 
-	return sources, combinedParts, scraped
+	return sources, combinedParts, scraped, failures
+}
+
+func scrapeErrorKindName(kind scraper.ErrorKind) string {
+	switch kind {
+	case scraper.ErrNetwork:
+		return "network"
+	case scraper.ErrBlocked:
+		return "blocked"
+	case scraper.ErrBrowser:
+		return "browser_unavailable"
+	case scraper.ErrContent:
+		return "no_content"
+	case scraper.ErrAuth:
+		return "auth_required"
+	case scraper.ErrRateLimit:
+		return "rate_limited"
+	default:
+		return "unknown"
+	}
 }
 
 func assembleCombined(parts []string, deduplicate bool, totalMaxLen int) string {

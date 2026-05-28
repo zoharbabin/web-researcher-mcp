@@ -85,10 +85,14 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 				if err == nil && len(apiResults) > 0 {
 					patents = convertPatentResults(apiResults)
 					source = input.Provider
-				} else if err != nil && isRateLimitError(err) {
-					deps.Metrics.RecordToolCall("patent_search", time.Since(start), err, "rate_limited", false)
-					auditToolCall(ctx, deps, "patent_search", time.Since(start), err, "rate_limited")
-					return rateLimitError(err), nil, nil
+				} else if err != nil {
+					errCode := "upstream_error"
+					if isRateLimitError(err) {
+						errCode = "rate_limited"
+					}
+					deps.Metrics.RecordToolCall("patent_search", time.Since(start), err, errCode, false)
+					auditToolCall(ctx, deps, "patent_search", time.Since(start), err, errCode)
+					return upstreamErrorResponse("patent search", err), nil, nil
 				}
 			}
 		}
@@ -140,10 +144,7 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 				}
 				deps.Metrics.RecordToolCall("patent_search", time.Since(start), err, errCode, false)
 				auditToolCall(ctx, deps, "patent_search", time.Since(start), err, errCode)
-				if isRateLimitError(err) {
-					return rateLimitError(err), nil, nil
-				}
-				return toolError(fmt.Sprintf("patent search failed: %v", err)), nil, nil
+				return upstreamErrorResponse("patent search", err), nil, nil
 			}
 
 			var patentNumbers []string

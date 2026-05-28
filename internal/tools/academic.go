@@ -112,14 +112,14 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 				if err == nil {
 					results = apiResults
 					providerSource = input.Provider
-				} else if isRateLimitError(err) {
-					deps.Metrics.RecordToolCall("academic_search", time.Since(start), err, "rate_limited", false)
-					auditToolCall(ctx, deps, "academic_search", time.Since(start), err, "rate_limited")
-					return rateLimitError(err), nil, nil
 				} else {
-					deps.Metrics.RecordToolCall("academic_search", time.Since(start), err, "upstream_error", false)
-					auditToolCall(ctx, deps, "academic_search", time.Since(start), err, "upstream_error")
-					return toolError(fmt.Sprintf("academic search failed (%s): %v", input.Provider, err)), nil, nil
+					errCode := "upstream_error"
+					if isRateLimitError(err) {
+						errCode = "rate_limited"
+					}
+					deps.Metrics.RecordToolCall("academic_search", time.Since(start), err, errCode, false)
+					auditToolCall(ctx, deps, "academic_search", time.Since(start), err, errCode)
+					return upstreamErrorResponse("academic search", err), nil, nil
 				}
 			} else {
 				// Not an academic provider — treat as web search provider for fallback
@@ -300,10 +300,7 @@ func academicWebFallback(ctx context.Context, deps Dependencies, input academicS
 		NumResults: numResults,
 	})
 	if err != nil {
-		if isRateLimitError(err) {
-			return nil, "", rateLimitError(err)
-		}
-		return nil, "", toolError(fmt.Sprintf("academic search failed: %v", err))
+		return nil, "", upstreamErrorResponse("academic search", err)
 	}
 
 	results := make([]search.AcademicResult, 0, len(webResults))
