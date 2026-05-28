@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os/exec"
 	"strings"
 	"time"
 )
@@ -54,23 +55,32 @@ func (p *Pipeline) Scrape(ctx context.Context, url string, maxLength int) (*Scra
 	}
 
 	if !p.isDomainAllowed(url) {
-		return nil, fmt.Errorf("domain not in allowed list")
+		return nil, blockedError(url, "", nil, "domain not in allowed list")
 	}
 
-	// Detect content type — route to specialized scrapers
-	if isYouTubeURL(url) {
-		return p.scrapeYouTube(ctx, url, maxLength)
+	var result *ScrapeResult
+	var err error
+
+	switch {
+	case isYouTubeURL(url):
+		result, err = p.scrapeYouTube(ctx, url, maxLength)
+	case isDocumentURL(url):
+		result, err = p.scrapeDocument(ctx, url, maxLength)
+	default:
+		result, err = p.scrapeWithTieredFallback(ctx, url, maxLength)
 	}
 
-	if isDocumentURL(url) {
-		return p.scrapeDocument(ctx, url, maxLength)
+	if err != nil {
+		return nil, classifyRawError(err, url)
 	}
-
-	return p.scrapeWithTieredFallback(ctx, url, maxLength)
+	return result, nil
 }
 
 func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, maxLength int) (*ScrapeResult, error) {
-	type scrapeFunc func(context.Context, string, int) (*ScrapeResult, error)
+	type namedTier struct {
+		name string
+		fn   func(context.Context, string, int) (*ScrapeResult, error)
+	}
 
 	hasBrowser := p.config.ChromePath != "" || chromeAvailable()
 
@@ -81,39 +91,76 @@ func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, max
 		}
 	}
 
-	tiers := []scrapeFunc{
-		p.scrapeMarkdown,
-		p.scrapeStealth,
-		p.scrapeHTML,
+	tiers := []namedTier{
+		{"markdown", p.scrapeMarkdown},
+		{"stealth", p.scrapeStealth},
+		{"html", p.scrapeHTML},
 	}
 
 	if hasBrowser {
-		tiers = append(tiers, p.scrapeBrowser)
+		tiers = append(tiers, namedTier{"browser", p.scrapeBrowser})
 	}
 
-	var lastResult *ScrapeResult
-	var lastErr error
+	type tierOutcome struct {
+		name   string
+		result *ScrapeResult
+		err    error
+	}
 
-	for _, fn := range tiers {
-		result, err := fn(ctx, url, maxLength)
+	var outcomes []tierOutcome
+	var lastResult *ScrapeResult
+
+	for _, tier := range tiers {
+		result, err := tier.fn(ctx, url, maxLength)
 		if err == nil && result != nil && len(result.Content) > 100 {
 			return result, nil
 		}
-		if result != nil {
+		outcomes = append(outcomes, tierOutcome{tier.name, result, err})
+		if result != nil && len(result.Content) > 0 {
 			lastResult = result
-		}
-		if err != nil {
-			lastErr = err
 		}
 	}
 
 	if lastResult != nil && len(lastResult.Content) > 0 {
 		return lastResult, nil
 	}
-	if lastErr != nil {
-		return nil, lastErr
+
+	// Compose a diagnostic error showing what each tier saw
+	var parts []string
+	allNetwork := true
+	var highestKind ErrorKind = ErrContent
+	for _, o := range outcomes {
+		switch {
+		case o.err != nil:
+			parts = append(parts, fmt.Sprintf("%s: %v", o.name, o.err))
+			if se, ok := o.err.(*ScrapeError); ok {
+				switch se.Kind {
+				case ErrBlocked, ErrAuth, ErrRateLimit, ErrBrowser:
+					highestKind = se.Kind
+					allNetwork = false
+				case ErrNetwork:
+					// keep allNetwork true
+				default:
+					allNetwork = false
+				}
+			} else {
+				allNetwork = false
+			}
+		case o.result != nil:
+			parts = append(parts, fmt.Sprintf("%s: %d bytes", o.name, len(o.result.Content)))
+			allNetwork = false
+		default:
+			parts = append(parts, fmt.Sprintf("%s: empty", o.name))
+			allNetwork = false
+		}
 	}
-	return nil, fmt.Errorf("no content extracted from %s", url)
+	if allNetwork && len(outcomes) > 0 {
+		highestKind = ErrNetwork
+	}
+
+	detail := strings.Join(parts, ", ")
+	msg := fmt.Sprintf("no content extracted from %s (%s)", url, detail)
+	return nil, &ScrapeError{Kind: highestKind, Message: msg, URL: url}
 }
 
 func (p *Pipeline) Close() {
@@ -165,17 +212,26 @@ func isSPADomain(url string) bool {
 }
 
 func chromeAvailable() bool {
-	// Check common Chrome paths
 	paths := []string{
 		"/usr/bin/chromium",
 		"/usr/bin/chromium-browser",
 		"/usr/bin/google-chrome",
+		"/usr/bin/google-chrome-stable",
+		"/opt/homebrew/bin/chromium",
+		"/usr/local/bin/chromium",
+		"/snap/bin/chromium",
 		"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
 	}
 	for _, path := range paths {
 		if fileExists(path) {
 			return true
 		}
+	}
+	if _, err := exec.LookPath("chromium"); err == nil {
+		return true
+	}
+	if _, err := exec.LookPath("google-chrome"); err == nil {
+		return true
 	}
 	return false
 }

@@ -28,12 +28,12 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int)
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, networkError(url, "stealth", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return nil, &httpError{statusCode: resp.StatusCode}
+		return nil, classifyHTTPStatus(resp.StatusCode, url, "stealth")
 	}
 
 	reader, err := decompressBody(resp)
@@ -161,14 +161,6 @@ func extractArticleContent(doc *goquery.Document) string {
 	// Fall back to body
 	text := cleanText(doc.Find("body").Text())
 	return text
-}
-
-type httpError struct {
-	statusCode int
-}
-
-func (e *httpError) Error() string {
-	return http.StatusText(e.statusCode)
 }
 
 func newSSRFSafeDialer() *net.Dialer {

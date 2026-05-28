@@ -3,6 +3,7 @@ package scraper
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +19,7 @@ type browserPool struct {
 	browser  *rod.Browser
 	launcher *launcher.Launcher
 	maxPages int
+	initErr  error
 }
 
 var (
@@ -56,11 +58,15 @@ func (bp *browserPool) init(chromePath string) {
 
 	controlURL, err := l.Launch()
 	if err != nil {
+		bp.initErr = fmt.Errorf("chrome launch failed: %w", err)
+		slog.Warn("browser pool init failed", "phase", "launch", "error", err, "chromePath", chromePath)
 		return
 	}
 
 	browser := rod.New().ControlURL(controlURL)
 	if err := browser.Connect(); err != nil {
+		bp.initErr = fmt.Errorf("chrome connect failed: %w", err)
+		slog.Warn("browser pool init failed", "phase", "connect", "error", err)
 		l.Kill()
 		return
 	}
@@ -92,7 +98,11 @@ func (p *Pipeline) scrapeBrowser(ctx context.Context, url string, maxLength int)
 	bp.mu.Unlock()
 
 	if browser == nil {
-		return nil, fmt.Errorf("browser not available")
+		msg := "browser not available (chrome not found)"
+		if bp.initErr != nil {
+			msg = bp.initErr.Error()
+		}
+		return nil, browserError(url, bp.initErr, msg)
 	}
 
 	page, err := stealth.Page(browser)
@@ -112,10 +122,14 @@ func (p *Pipeline) scrapeBrowser(ctx context.Context, url string, maxLength int)
 
 	err = page.Navigate(url)
 	if err != nil {
-		return nil, fmt.Errorf("navigation failed: %w", err)
+		return nil, networkError(url, "browser", fmt.Errorf("navigation failed: %w", err))
 	}
 
-	_ = page.WaitStable(500 * time.Millisecond)
+	waitTime := 500 * time.Millisecond
+	if isSPADomain(url) {
+		waitTime = 2 * time.Second
+	}
+	_ = page.WaitStable(waitTime)
 
 	// Extract content via JavaScript
 	content, err := extractPageContent(page)

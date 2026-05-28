@@ -2,7 +2,6 @@ package scraper
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -26,12 +25,12 @@ func (p *Pipeline) scrapeHTML(ctx context.Context, url string, maxLength int) (*
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, networkError(url, "html", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("HTTP %d for %s", resp.StatusCode, url)
+		return nil, classifyHTTPStatus(resp.StatusCode, url, "html")
 	}
 
 	reader, err := decompressBody(resp)

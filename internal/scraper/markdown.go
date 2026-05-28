@@ -22,7 +22,7 @@ func (p *Pipeline) scrapeMarkdown(ctx context.Context, url string, maxLength int
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, networkError(url, "markdown", err)
 	}
 	defer resp.Body.Close()
 
