@@ -72,6 +72,8 @@ func main() {
 	}
 	academicProviders := search.AvailableAcademicProviders(academicCfg, searchDeps)
 
+	allProviders := search.AvailableProviders(cfg.Search, searchDeps)
+
 	var searchProvider search.Provider
 	if cfg.Search.Routing != "" {
 		routingCfg, routeErr := search.ParseRoutingConfig(cfg.Search.Routing)
@@ -79,25 +81,25 @@ func main() {
 			logger.Error("invalid SEARCH_ROUTING", "err", routeErr)
 			os.Exit(1)
 		}
-		providers := search.AvailableProviders(cfg.Search, searchDeps)
-		if len(providers) == 0 {
+		if len(allProviders) == 0 {
 			logger.Error("no search providers available for routing")
 			os.Exit(1)
 		}
-		searchProvider = search.NewRouter(providers, search.RouterConfig{
+		searchProvider = search.NewRouter(allProviders, search.RouterConfig{
 			Routing:           routingCfg,
 			Logger:            logger,
 			PatentProviders:   patentProviders,
 			AcademicProviders: academicProviders,
 		})
-		logger.Info("search router initialized", "providers", len(providers),
+		logger.Info("search router initialized", "providers", len(allProviders),
 			"patentProviders", len(patentProviders),
 			"academicProviders", len(academicProviders), "routing", cfg.Search.Routing)
 	} else {
 		searchProvider = search.NewProvider(cfg.Search, searchDeps)
 		logger.Info("search provider initialized", "provider", searchProvider.Name(),
 			"patentProviders", len(patentProviders),
-			"academicProviders", len(academicProviders))
+			"academicProviders", len(academicProviders),
+			"availableProviders", len(allProviders))
 	}
 
 	scraperPipeline := scraper.NewPipeline(scraper.PipelineConfig{
@@ -144,6 +146,7 @@ func main() {
 	toolDeps := tools.Dependencies{
 		Cache:             cacheStore,
 		Search:            searchProvider,
+		SearchProviders:   allProviders,
 		PatentProviders:   patentProviders,
 		AcademicProviders: academicProviders,
 		Scraper:           scraperPipeline,

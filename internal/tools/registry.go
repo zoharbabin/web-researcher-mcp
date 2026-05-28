@@ -17,6 +17,7 @@ import (
 type Dependencies struct {
 	Cache             cache.Cache
 	Search            search.Provider
+	SearchProviders   map[string]search.Provider
 	PatentProviders   map[string]search.PatentProvider
 	AcademicProviders map[string]search.AcademicProvider
 	Scraper           *scraper.Pipeline
