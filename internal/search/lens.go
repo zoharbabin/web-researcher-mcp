@@ -93,9 +93,9 @@ func (l *LensProvider) doSearch(ctx context.Context, params PatentSearchParams) 
 	results := make([]PatentResult, 0, len(response.Data))
 	for _, doc := range response.Data {
 		result := PatentResult{
-			Title:    doc.Title,
+			Title:    doc.title(),
 			Number:   doc.patentNumber(),
-			Abstract: doc.Abstract,
+			Abstract: doc.abstract(),
 			Assignee: doc.firstApplicant(),
 			Inventor: doc.firstInventor(),
 			Filed:    doc.FilingDate,
@@ -180,20 +180,69 @@ type lensResponse struct {
 }
 
 type lensDoc struct {
-	LensID      string        `json:"lens_id"`
-	Country     string        `json:"jurisdiction"`
-	DocNumber   string        `json:"doc_number"`
-	Kind        string        `json:"kind"`
-	Title       string        `json:"title"`
-	Abstract    string        `json:"abstract"`
-	FilingDate  string        `json:"date_published"`
-	Applicants  []lensParty   `json:"applicants"`
-	Inventors   []lensParty   `json:"inventors"`
-	LegalStatus lensLegal     `json:"legal_status"`
+	LensID      string          `json:"lens_id"`
+	Country     string          `json:"jurisdiction"`
+	DocNumber   json.RawMessage `json:"doc_number"`
+	Kind        string          `json:"kind"`
+	RawAbstract json.RawMessage `json:"abstract"`
+	FilingDate  string          `json:"date_published"`
+	Biblio      lensBiblio      `json:"biblio"`
+	LegalStatus lensLegal       `json:"legal_status"`
 }
 
-type lensParty struct {
-	Name string `json:"name"`
+type lensBiblio struct {
+	InventionTitle json.RawMessage `json:"invention_title"`
+	Parties        lensParties     `json:"parties"`
+}
+
+type lensParties struct {
+	Applicants []lensPartyEntry `json:"applicants"`
+	Inventors  []lensPartyEntry `json:"inventors"`
+}
+
+type lensPartyEntry struct {
+	ExtractedName lensExtractedName `json:"extracted_name"`
+}
+
+type lensExtractedName struct {
+	Value string `json:"value"`
+}
+
+func (d *lensDoc) abstract() string {
+	if len(d.RawAbstract) == 0 {
+		return ""
+	}
+	// Try array of objects: [{"text": "...", "lang": "..."}]
+	var arrObj []struct {
+		Text string `json:"text"`
+	}
+	if json.Unmarshal(d.RawAbstract, &arrObj) == nil && len(arrObj) > 0 && arrObj[0].Text != "" {
+		parts := make([]string, 0, len(arrObj))
+		for _, o := range arrObj {
+			if o.Text != "" {
+				parts = append(parts, o.Text)
+			}
+		}
+		return strings.Join(parts, " ")
+	}
+	// Try single object: {"text": "...", "lang": "..."}
+	var obj struct {
+		Text string `json:"text"`
+	}
+	if json.Unmarshal(d.RawAbstract, &obj) == nil && obj.Text != "" {
+		return obj.Text
+	}
+	// Try plain string
+	var s string
+	if json.Unmarshal(d.RawAbstract, &s) == nil && s != "" {
+		return s
+	}
+	// Try array of strings
+	var arr []string
+	if json.Unmarshal(d.RawAbstract, &arr) == nil && len(arr) > 0 {
+		return strings.Join(arr, " ")
+	}
+	return ""
 }
 
 type lensLegal struct {
@@ -201,27 +250,70 @@ type lensLegal struct {
 	GrantDate string `json:"grant_date"`
 }
 
+func (d *lensDoc) title() string {
+	if len(d.Biblio.InventionTitle) == 0 {
+		return ""
+	}
+	// Try object: {"text": "...", "lang": "..."}
+	var obj struct {
+		Text string `json:"text"`
+	}
+	if json.Unmarshal(d.Biblio.InventionTitle, &obj) == nil && obj.Text != "" {
+		return obj.Text
+	}
+	// Try array: [{"text": "...", "lang": "..."}]
+	var arr []struct {
+		Text string `json:"text"`
+	}
+	if json.Unmarshal(d.Biblio.InventionTitle, &arr) == nil && len(arr) > 0 {
+		return arr[0].Text
+	}
+	// Try plain string
+	var s string
+	if json.Unmarshal(d.Biblio.InventionTitle, &s) == nil {
+		return s
+	}
+	return ""
+}
+
+func (d *lensDoc) docNumber() string {
+	if len(d.DocNumber) == 0 {
+		return ""
+	}
+	// API returns doc_number as either string or number
+	var s string
+	if json.Unmarshal(d.DocNumber, &s) == nil {
+		return s
+	}
+	var n json.Number
+	if json.Unmarshal(d.DocNumber, &n) == nil {
+		return n.String()
+	}
+	return ""
+}
+
 func (d *lensDoc) patentNumber() string {
-	if d.DocNumber == "" {
+	num := d.docNumber()
+	if num == "" {
 		return ""
 	}
 	country := d.Country
 	if country == "" {
-		return d.DocNumber
+		return num
 	}
-	return strings.ToUpper(country) + d.DocNumber
+	return strings.ToUpper(country) + num
 }
 
 func (d *lensDoc) firstApplicant() string {
-	if len(d.Applicants) > 0 {
-		return d.Applicants[0].Name
+	if len(d.Biblio.Parties.Applicants) > 0 {
+		return d.Biblio.Parties.Applicants[0].ExtractedName.Value
 	}
 	return ""
 }
 
 func (d *lensDoc) firstInventor() string {
-	if len(d.Inventors) > 0 {
-		return d.Inventors[0].Name
+	if len(d.Biblio.Parties.Inventors) > 0 {
+		return d.Biblio.Parties.Inventors[0].ExtractedName.Value
 	}
 	return ""
 }

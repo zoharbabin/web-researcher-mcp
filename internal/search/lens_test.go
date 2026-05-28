@@ -50,23 +50,31 @@ func TestLensProvider_Patents(t *testing.T) {
 				{
 					LensID:    "119-951-128-551-362",
 					Country:   "US",
-					DocNumber: "10123456",
+					DocNumber: json.RawMessage(`"10123456"`),
 					Kind:      "B2",
-					Title:     "Video Transcoding Platform",
-					Abstract:  "A platform for transcoding video content across multiple formats.",
-					FilingDate: "2019-03-15",
-					Applicants: []lensParty{{Name: "Kaltura Inc"}},
+					Biblio: lensBiblio{
+						InventionTitle: json.RawMessage(`[{"text": "Video Transcoding Platform", "lang": "en"}]`),
+						Parties: lensParties{
+							Applicants: []lensPartyEntry{{ExtractedName: lensExtractedName{Value: "Kaltura Inc"}}},
+						},
+					},
+					RawAbstract: json.RawMessage(`[{"text": "A platform for transcoding video content across multiple formats.", "lang": "en"}]`),
+					FilingDate:  "2019-03-15",
 					LegalStatus: lensLegal{Granted: true, GrantDate: "2021-11-30"},
 				},
 				{
 					LensID:    "220-062-239-662-473",
 					Country:   "WO",
-					DocNumber: "2020123456",
+					DocNumber: json.RawMessage(`"2020123456"`),
 					Kind:      "A1",
-					Title:     "Adaptive Streaming Method",
-					Abstract:  "Method for adaptive bitrate streaming with ML-based prediction.",
-					FilingDate: "2020-01-10",
-					Applicants: []lensParty{{Name: "Kaltura Inc"}},
+					Biblio: lensBiblio{
+						InventionTitle: json.RawMessage(`[{"text": "Adaptive Streaming Method", "lang": "en"}]`),
+						Parties: lensParties{
+							Applicants: []lensPartyEntry{{ExtractedName: lensExtractedName{Value: "Kaltura Inc"}}},
+						},
+					},
+					RawAbstract: json.RawMessage(`[{"text": "Method for adaptive bitrate streaming with ML-based prediction.", "lang": "en"}]`),
+					FilingDate:  "2020-01-10",
 					LegalStatus: lensLegal{Granted: false},
 				},
 			},
@@ -240,5 +248,63 @@ func TestLensProvider_Metadata(t *testing.T) {
 	}
 	if !meta.HasCapability("scholarly") {
 		t.Error("expected scholarly capability")
+	}
+}
+
+func TestLensDoc_AbstractObjectFormat(t *testing.T) {
+	t.Parallel()
+
+	doc := lensDoc{
+		RawAbstract: json.RawMessage(`{"text": "A method for video compression using neural networks.", "lang": "en"}`),
+	}
+	got := doc.abstract()
+	if got != "A method for video compression using neural networks." {
+		t.Errorf("expected text from object, got: %q", got)
+	}
+}
+
+func TestLensDoc_AbstractArrayOfObjects(t *testing.T) {
+	t.Parallel()
+
+	doc := lensDoc{
+		RawAbstract: json.RawMessage(`[{"text": "First paragraph.", "lang": "en"}, {"text": "Second paragraph.", "lang": "en"}]`),
+	}
+	got := doc.abstract()
+	if got != "First paragraph. Second paragraph." {
+		t.Errorf("expected joined array of objects, got: %q", got)
+	}
+}
+
+func TestLensDoc_AbstractArrayFormat(t *testing.T) {
+	t.Parallel()
+
+	doc := lensDoc{
+		RawAbstract: json.RawMessage(`["First paragraph of abstract.", "Second paragraph continues."]`),
+	}
+	got := doc.abstract()
+	if got != "First paragraph of abstract. Second paragraph continues." {
+		t.Errorf("expected joined array, got: %q", got)
+	}
+}
+
+func TestLensDoc_AbstractStringFormat(t *testing.T) {
+	t.Parallel()
+
+	doc := lensDoc{
+		RawAbstract: json.RawMessage(`"A simple string abstract."`),
+	}
+	got := doc.abstract()
+	if got != "A simple string abstract." {
+		t.Errorf("expected string, got: %q", got)
+	}
+}
+
+func TestLensDoc_AbstractEmpty(t *testing.T) {
+	t.Parallel()
+
+	doc := lensDoc{}
+	got := doc.abstract()
+	if got != "" {
+		t.Errorf("expected empty, got: %q", got)
 	}
 }
