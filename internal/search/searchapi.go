@@ -248,8 +248,12 @@ func (s *SearchAPIProvider) doPatentSearch(ctx context.Context, params PatentSea
 		return nil, fmt.Errorf("searchapi: failed to parse patent response: %w", err)
 	}
 
-	results := make([]PatentResult, 0, len(resp.OrganicResults))
+	maxResults := clamp(params.NumResults, 1, 10)
+	results := make([]PatentResult, 0, maxResults)
 	for _, r := range resp.OrganicResults {
+		if len(results) >= maxResults {
+			break
+		}
 		number := extractPatentNumber(r.PatentID)
 		if number == "" {
 			number = extractPatentNumber(r.PublicationNumber)

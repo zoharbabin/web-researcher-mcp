@@ -244,30 +244,21 @@ func resolveProvider(deps Dependencies, providerName string) (search.Provider, *
 		return deps.Search, nil
 	}
 
-	// Check if it's a known/supported provider name (web or patent-specific)
+	// Check if it's a known/supported provider name
 	supported := false
-	for _, name := range search.SupportedProviders {
+	for _, name := range allSupportedProviders() {
 		if name == providerName {
 			supported = true
 			break
 		}
 	}
-	if !supported {
-		for _, name := range search.SupportedPatentProviders {
-			if name == providerName {
-				supported = true
-				break
-			}
-		}
-	}
 
 	if !supported {
-		all := append(search.SupportedProviders, search.SupportedPatentProviders...)
 		return nil, toolError(fmt.Sprintf(
 			"Unknown search provider %q. Supported providers: %s. "+
 				"If you'd like us to add support for this provider, please open an issue at "+
 				"https://github.com/zoharbabin/web-researcher-mcp/issues",
-			providerName, strings.Join(all, ", ")))
+			providerName, strings.Join(allSupportedProviders(), ", ")))
 	}
 
 	// Check if the default provider matches
@@ -336,6 +327,24 @@ func resolvePatentSearcher(deps Dependencies, providerName string) (search.Paten
 	}
 
 	return nil, nil
+}
+
+func allSupportedProviders() []string {
+	seen := make(map[string]bool)
+	var all []string
+	for _, lists := range [][]string{
+		search.SupportedProviders,
+		search.SupportedPatentProviders,
+		search.SupportedAcademicProviders,
+	} {
+		for _, name := range lists {
+			if !seen[name] {
+				seen[name] = true
+				all = append(all, name)
+			}
+		}
+	}
+	return all
 }
 
 func patentProviderEnvHint(name string) string {

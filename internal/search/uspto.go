@@ -59,6 +59,7 @@ func (u *USPTOProvider) doSearch(ctx context.Context, params PatentSearchParams)
 	q := url.Values{}
 	q.Set("q", query)
 	q.Set("rows", strconv.Itoa(clamp(params.NumResults, 1, 10)))
+	q.Set("sort", "score desc,applicationMetaData.filingDate desc")
 
 	reqURL := u.baseURL + "?" + q.Encode()
 	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
@@ -159,7 +160,7 @@ func (u *USPTOProvider) buildQuery(params PatentSearchParams) string {
 	var parts []string
 
 	if params.Query != "" {
-		parts = append(parts, params.Query)
+		parts = append(parts, fmt.Sprintf("applicationMetaData.inventionTitle:(%s)", params.Query))
 	}
 	if params.Assignee != "" {
 		parts = append(parts, fmt.Sprintf("applicationMetaData.firstApplicantName:%s", params.Assignee))

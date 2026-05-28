@@ -122,12 +122,12 @@ func (l *LensProvider) buildQuery(params PatentSearchParams) []byte {
 	}
 	if params.Assignee != "" {
 		must = append(must, map[string]any{
-			"match": map[string]any{"applicant.name": params.Assignee},
+			"match_phrase": map[string]any{"applicant.name": params.Assignee},
 		})
 	}
 	if params.Inventor != "" {
 		must = append(must, map[string]any{
-			"match": map[string]any{"inventor.name": params.Inventor},
+			"match_phrase": map[string]any{"inventor.name": params.Inventor},
 		})
 	}
 	if params.PatentOffice != "" && params.PatentOffice != "all" {
