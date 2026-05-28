@@ -3,6 +3,8 @@ package scraper
 import (
 	"compress/gzip"
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -1010,12 +1012,15 @@ func TestScrapeStealth_HTTP4xxError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for 403 response")
 	}
-	httpErr, ok := err.(*httpError)
+	scrapeErr, ok := err.(*ScrapeError)
 	if !ok {
-		t.Fatalf("expected *httpError, got %T", err)
+		t.Fatalf("expected *ScrapeError, got %T", err)
 	}
-	if httpErr.statusCode != 403 {
-		t.Errorf("expected status 403, got %d", httpErr.statusCode)
+	if scrapeErr.Kind != ErrBlocked {
+		t.Errorf("expected ErrBlocked, got %v", scrapeErr.Kind)
+	}
+	if scrapeErr.Tier != "stealth" {
+		t.Errorf("expected tier stealth, got %q", scrapeErr.Tier)
 	}
 }
 
@@ -1717,4 +1722,423 @@ func TestScrapePatentDetail_MockServer(t *testing.T) {
 
 func goQueryFromString(html string) (*goquery.Document, error) {
 	return goquery.NewDocumentFromReader(strings.NewReader(html))
+}
+
+// =============================================================================
+// Error Taxonomy Tests
+// =============================================================================
+
+func TestScrapeError_Interface(t *testing.T) {
+	cause := fmt.Errorf("underlying issue")
+	se := &ScrapeError{
+		Kind:    ErrBrowser,
+		Message: "chrome launch failed: underlying issue",
+		Cause:   cause,
+		URL:     "https://example.com",
+		Tier:    "browser",
+	}
+
+	if se.Error() != "chrome launch failed: underlying issue" {
+		t.Errorf("unexpected Error(): %q", se.Error())
+	}
+	if se.Unwrap() != cause {
+		t.Error("Unwrap should return the cause")
+	}
+
+	var target *ScrapeError
+	if !errors.As(se, &target) {
+		t.Fatal("errors.As should match *ScrapeError")
+	}
+	if target.Kind != ErrBrowser {
+		t.Errorf("expected ErrBrowser, got %v", target.Kind)
+	}
+}
+
+func TestClassifyHTTPStatus(t *testing.T) {
+	tests := []struct {
+		code int
+		kind ErrorKind
+	}{
+		{401, ErrAuth},
+		{403, ErrBlocked},
+		{429, ErrRateLimit},
+		{500, ErrNetwork},
+		{502, ErrNetwork},
+		{404, ErrNetwork},
+	}
+	for _, tt := range tests {
+		se := classifyHTTPStatus(tt.code, "https://example.com", "stealth")
+		if se.Kind != tt.kind {
+			t.Errorf("HTTP %d: expected kind %v, got %v", tt.code, tt.kind, se.Kind)
+		}
+		if se.Tier != "stealth" {
+			t.Errorf("HTTP %d: expected tier stealth, got %q", tt.code, se.Tier)
+		}
+	}
+}
+
+func TestPipeline_TieredFallback_DiagnosticError(t *testing.T) {
+	// All tiers return < 100 bytes or error
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<html><body>tiny</body></html>`))
+	}))
+	defer ts.Close()
+
+	// Override statFile to prevent browser detection
+	orig := statFile
+	statFile = func(path string) (any, error) {
+		return nil, fmt.Errorf("not found")
+	}
+	defer func() { statFile = orig }()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	_, err := p.Scrape(context.Background(), ts.URL, 50000)
+	if err == nil {
+		t.Fatal("expected error when all tiers produce thin content")
+	}
+
+	se, ok := err.(*ScrapeError)
+	if !ok {
+		t.Fatalf("expected *ScrapeError, got %T: %v", err, err)
+	}
+
+	// Should contain per-tier diagnostics
+	if !strings.Contains(se.Message, "markdown:") || !strings.Contains(se.Message, "stealth:") || !strings.Contains(se.Message, "html:") {
+		t.Errorf("diagnostic message missing tier details: %q", se.Message)
+	}
+}
+
+func TestScrapeStealth_AuthError(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	_, err := p.scrapeStealth(context.Background(), ts.URL, 50000)
+	if err == nil {
+		t.Fatal("expected error for 401")
+	}
+	se, ok := err.(*ScrapeError)
+	if !ok {
+		t.Fatalf("expected *ScrapeError, got %T", err)
+	}
+	if se.Kind != ErrAuth {
+		t.Errorf("expected ErrAuth, got %v", se.Kind)
+	}
+}
+
+func TestScrapeStealth_RateLimitError(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	_, err := p.scrapeStealth(context.Background(), ts.URL, 50000)
+	if err == nil {
+		t.Fatal("expected error for 429")
+	}
+	se, ok := err.(*ScrapeError)
+	if !ok {
+		t.Fatalf("expected *ScrapeError, got %T", err)
+	}
+	if se.Kind != ErrRateLimit {
+		t.Errorf("expected ErrRateLimit, got %v", se.Kind)
+	}
+}
+
+func TestScrapeHTML_ClassifiedErrors(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	_, err := p.scrapeHTML(context.Background(), ts.URL, 50000)
+	if err == nil {
+		t.Fatal("expected error for 403")
+	}
+	se, ok := err.(*ScrapeError)
+	if !ok {
+		t.Fatalf("expected *ScrapeError, got %T", err)
+	}
+	if se.Kind != ErrBlocked {
+		t.Errorf("expected ErrBlocked, got %v", se.Kind)
+	}
+	if se.Tier != "html" {
+		t.Errorf("expected tier html, got %q", se.Tier)
+	}
+}
+
+func TestScrapeHTML_429_ClassifiesAsRateLimit(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	_, err := p.scrapeHTML(context.Background(), ts.URL, 50000)
+	if err == nil {
+		t.Fatal("expected error for 429")
+	}
+	se, ok := err.(*ScrapeError)
+	if !ok {
+		t.Fatalf("expected *ScrapeError, got %T", err)
+	}
+	if se.Kind != ErrRateLimit {
+		t.Errorf("expected ErrRateLimit, got %v", se.Kind)
+	}
+	if se.Tier != "html" {
+		t.Errorf("expected tier html, got %q", se.Tier)
+	}
+}
+
+func TestPipeline_DiagnosticError_EscalatesKind(t *testing.T) {
+	// If one tier returns ErrBlocked (403), the composite error
+	// should escalate to ErrBlocked even though other tiers got ErrContent
+	callCount := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		// First request (markdown) gets thin content
+		// Stealth gets 403
+		// HTML gets thin content
+		if callCount == 2 {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<html><body>tiny</body></html>`))
+	}))
+	defer ts.Close()
+
+	orig := statFile
+	statFile = func(path string) (any, error) {
+		return nil, fmt.Errorf("not found")
+	}
+	defer func() { statFile = orig }()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	_, err := p.Scrape(context.Background(), ts.URL, 50000)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	se, ok := err.(*ScrapeError)
+	if !ok {
+		t.Fatalf("expected *ScrapeError, got %T: %v", err, err)
+	}
+	// Should escalate to ErrBlocked because stealth tier returned 403
+	if se.Kind != ErrBlocked {
+		t.Errorf("expected escalated kind ErrBlocked, got %v (message: %s)", se.Kind, se.Message)
+	}
+}
+
+func TestPipeline_SuccessfulTierStopsFallback(t *testing.T) {
+	// Markdown tier fails, stealth tier succeeds with good content
+	callCount := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		w.Header().Set("Content-Type", "text/html")
+		content := strings.Repeat("Good content from the server. ", 20)
+		fmt.Fprintf(w, `<html><head><title>Success</title></head><body><article>%s</article></body></html>`, content)
+	}))
+	defer ts.Close()
+
+	orig := statFile
+	statFile = func(path string) (any, error) {
+		return nil, fmt.Errorf("not found")
+	}
+	defer func() { statFile = orig }()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	result, err := p.Scrape(context.Background(), ts.URL, 50000)
+	if err != nil {
+		t.Fatalf("expected success, got error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if !strings.Contains(result.Content, "Good content") {
+		t.Errorf("expected content, got: %s", result.Content[:100])
+	}
+}
+
+func TestBrowserError_TypedErrorCreation(t *testing.T) {
+	t.Parallel()
+	// Test that browserError() creates a properly typed error
+	// without needing actual Chrome (avoids singleton pool issues)
+	cause := fmt.Errorf("exec: chromium: not found")
+	se := browserError("https://x.com/status/123", cause, "chrome launch failed: exec: chromium: not found")
+
+	if se.Kind != ErrBrowser {
+		t.Errorf("expected ErrBrowser, got %v", se.Kind)
+	}
+	if se.Tier != "browser" {
+		t.Errorf("expected tier browser, got %q", se.Tier)
+	}
+	if se.URL != "https://x.com/status/123" {
+		t.Errorf("expected URL preserved, got %q", se.URL)
+	}
+	if se.Unwrap() != cause {
+		t.Error("expected cause to be preserved via Unwrap()")
+	}
+	if !strings.Contains(se.Error(), "chrome launch failed") {
+		t.Errorf("expected descriptive message, got: %s", se.Error())
+	}
+}
+
+func TestPipeline_DomainAllowlist_RejectsDisallowed(t *testing.T) {
+	p := NewPipeline(PipelineConfig{
+		MaxConcurrency: 2,
+		AllowedDomains: []string{"allowed.example.com"},
+	})
+
+	_, err := p.Scrape(context.Background(), "https://blocked.example.com/page", 50000)
+	if err == nil {
+		t.Fatal("expected error for disallowed domain")
+	}
+	if !strings.Contains(err.Error(), "not in allowed list") {
+		t.Errorf("expected domain allowlist error, got: %v", err)
+	}
+}
+
+func TestPipeline_DomainAllowlist_AllowsListed(t *testing.T) {
+	content := strings.Repeat("Allowed domain content here. ", 20)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, `<html><body><article>%s</article></body></html>`, content)
+	}))
+	defer ts.Close()
+
+	// Use the test server's host as the allowed domain
+	p := NewPipeline(PipelineConfig{
+		MaxConcurrency: 2,
+		AllowPrivateIPs: true,
+		AllowedDomains: []string{"127.0.0.1"},
+	})
+
+	result, err := p.Scrape(context.Background(), ts.URL, 50000)
+	if err != nil {
+		t.Fatalf("expected success for allowed domain, got: %v", err)
+	}
+	if result == nil || !strings.Contains(result.Content, "Allowed domain content") {
+		t.Error("expected content from allowed domain")
+	}
+}
+
+func TestHelperConstructors(t *testing.T) {
+	t.Parallel()
+
+	t.Run("networkError", func(t *testing.T) {
+		cause := fmt.Errorf("connection refused")
+		se := networkError("https://example.com", "stealth", cause)
+		if se.Kind != ErrNetwork {
+			t.Errorf("expected ErrNetwork, got %v", se.Kind)
+		}
+		if se.Unwrap() != cause {
+			t.Error("expected cause to be wrapped")
+		}
+		if !strings.Contains(se.Error(), "connection refused") {
+			t.Errorf("expected cause in message, got: %s", se.Error())
+		}
+	})
+
+	t.Run("blockedError", func(t *testing.T) {
+		se := blockedError("https://example.com", "html", nil, "HTTP 403")
+		if se.Kind != ErrBlocked {
+			t.Errorf("expected ErrBlocked, got %v", se.Kind)
+		}
+		if !strings.Contains(se.Error(), "HTTP 403") {
+			t.Errorf("expected detail in message, got: %s", se.Error())
+		}
+	})
+
+	t.Run("browserError", func(t *testing.T) {
+		cause := fmt.Errorf("exec: chromium: not found")
+		se := browserError("https://x.com", cause, "chrome launch failed: exec: chromium: not found")
+		if se.Kind != ErrBrowser {
+			t.Errorf("expected ErrBrowser, got %v", se.Kind)
+		}
+		if se.Tier != "browser" {
+			t.Errorf("expected tier browser, got %q", se.Tier)
+		}
+	})
+
+	t.Run("contentError", func(t *testing.T) {
+		se := contentError("https://spa.example.com", "no usable content")
+		if se.Kind != ErrContent {
+			t.Errorf("expected ErrContent, got %v", se.Kind)
+		}
+		if se.Tier != "" {
+			t.Errorf("expected empty tier for content errors, got %q", se.Tier)
+		}
+	})
+
+	t.Run("authError", func(t *testing.T) {
+		se := authError("https://private.example.com", "stealth", 401)
+		if se.Kind != ErrAuth {
+			t.Errorf("expected ErrAuth, got %v", se.Kind)
+		}
+		if !strings.Contains(se.Error(), "401") {
+			t.Errorf("expected status in message, got: %s", se.Error())
+		}
+	})
+
+	t.Run("rateLimitError", func(t *testing.T) {
+		se := rateLimitError("https://example.com", "html")
+		if se.Kind != ErrRateLimit {
+			t.Errorf("expected ErrRateLimit, got %v", se.Kind)
+		}
+		if !strings.Contains(se.Error(), "429") {
+			t.Errorf("expected 429 in message, got: %s", se.Error())
+		}
+	})
+}
+
+func TestPipeline_ConcurrentScrapes_ErrorIsolation(t *testing.T) {
+	// Verify that concurrent scrapes don't contaminate each other's errors
+	successContent := strings.Repeat("Successful page content. ", 20)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/success" {
+			w.Header().Set("Content-Type", "text/html")
+			fmt.Fprintf(w, `<html><body><article>%s</article></body></html>`, successContent)
+		} else {
+			w.WriteHeader(http.StatusForbidden)
+		}
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 5, AllowPrivateIPs: true})
+
+	var wg sync.WaitGroup
+	successCount := atomic.Int32{}
+	errorCount := atomic.Int32{}
+
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			var url string
+			if i%2 == 0 {
+				url = ts.URL + "/success"
+			} else {
+				url = ts.URL + "/fail"
+			}
+			result, err := p.Scrape(context.Background(), url, 50000)
+			if err == nil && result != nil && len(result.Content) > 100 {
+				successCount.Add(1)
+			} else {
+				errorCount.Add(1)
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	if successCount.Load() != 5 {
+		t.Errorf("expected 5 successes, got %d", successCount.Load())
+	}
+	if errorCount.Load() != 5 {
+		t.Errorf("expected 5 errors, got %d", errorCount.Load())
+	}
 }
