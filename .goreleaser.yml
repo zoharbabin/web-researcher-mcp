@@ -164,7 +164,7 @@ brews:
     homepage: "https://github.com/zoharbabin/web-researcher-mcp"
     description: "Your AI research assistant that cites real sources and stays honest"
     license: "MIT"
-    skip_upload: true
+    skip_upload: auto
     test: |
       system "#{bin}/web-researcher-mcp", "--help"
     install: |

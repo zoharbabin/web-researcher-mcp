@@ -26,12 +26,24 @@
 
 ### Get started in 30 seconds
 
+**macOS (Homebrew):**
 ```bash
-go install github.com/zoharbabin/web-researcher-mcp/cmd/web-researcher-mcp@latest
-claude mcp add web-researcher -- web-researcher-mcp
+brew install zoharbabin/tap/web-researcher-mcp
 ```
 
-That's it. Your AI can now search the web, read full articles, find academic papers, look up patents, and run multi-step research — only from sources you pick.
+**macOS / Linux (no package manager):**
+```bash
+curl -fsSL https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/install.sh | sh
+```
+
+**Windows (PowerShell):**
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/install.ps1 | iex"
+```
+
+That's it — no dev tools needed. Downloads the binary, verifies its checksum, puts it on your PATH, and registers it with Claude Code automatically.
+
+Your AI can now search the web, read full articles, find academic papers, look up patents, and run multi-step research — only from sources you pick.
 
 ---
 
@@ -110,27 +122,50 @@ https://github.com/user-attachments/assets/17fa3484-e4c5-4099-982d-785f544b3a94
 
 ## Quick Start
 
-### Option 1: Download (simplest)
-
-Download the ready-to-use binary for your system from [Releases](https://github.com/zoharbabin/web-researcher-mcp/releases). No programming tools needed.
-
-### Option 2: One command (if you have Go installed)
+### Option 1: Homebrew (macOS / Linux — recommended)
 
 ```bash
-go install github.com/zoharbabin/web-researcher-mcp/cmd/web-researcher-mcp@latest
+brew install zoharbabin/tap/web-researcher-mcp
+claude mcp add --scope user web-researcher -- web-researcher-mcp
 ```
 
-### Option 3: Docker
+Homebrew handles trust, updates, and PATH for you — no signing warnings.
 
+### Option 2: One-command install (any OS — no dev tools needed)
+
+**macOS / Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/install.sh | sh
+```
+
+**Windows (PowerShell):**
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/install.ps1 | iex"
+```
+
+Downloads the binary, verifies its SHA-256 checksum against the signed release, puts it on your PATH, and registers it with Claude Code if installed. Customize the install location:
+
+```bash
+INSTALL_DIR=/opt/tools curl -fsSL https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/install.sh | sh
+```
+
+<details>
+<summary><strong>Other install methods</strong></summary>
+
+**Go install** (if you have Go):
+```bash
+go install github.com/zoharbabin/web-researcher-mcp/cmd/web-researcher-mcp@latest
+claude mcp add --scope user web-researcher -- web-researcher-mcp
+```
+
+**Docker:**
 ```bash
 docker run -e GOOGLE_CUSTOM_SEARCH_API_KEY=YOUR_KEY \
            -e GOOGLE_CUSTOM_SEARCH_ID=YOUR_CX \
            docker.io/zoharbabin/web-researcher-mcp:latest
 ```
 
-<details>
-<summary><strong>Option 4: Build from source</strong></summary>
-
+**Build from source:**
 ```bash
 git clone https://github.com/zoharbabin/web-researcher-mcp.git
 cd web-researcher-mcp
@@ -141,20 +176,13 @@ go build -o web-researcher-mcp ./cmd/web-researcher-mcp
 
 ### Connect to Your AI Assistant
 
-Tell your AI where to find the tool. Here's how for each app:
-
-**Claude Code** (terminal — fastest setup):
-```bash
-claude mcp add --scope user --transport stdio web-researcher -- web-researcher-mcp
-```
-
-**Or add manually** to your AI's config file:
+The install script registers with Claude Code automatically. For other apps, add to your AI's config file:
 
 ```json
 {
   "mcpServers": {
     "web-researcher": {
-      "command": "/path/to/web-researcher-mcp",
+      "command": "web-researcher-mcp",
       "env": {
         "GOOGLE_CUSTOM_SEARCH_API_KEY": "YOUR_GOOGLE_API_KEY",
         "GOOGLE_CUSTOM_SEARCH_ID": "YOUR_SEARCH_ENGINE_ID"
@@ -170,7 +198,7 @@ Or with Brave Search (no Google keys needed):
 {
   "mcpServers": {
     "web-researcher": {
-      "command": "/path/to/web-researcher-mcp",
+      "command": "web-researcher-mcp",
       "env": {
         "SEARCH_ROUTING": "brave",
         "BRAVE_API_KEY": "YOUR_BRAVE_API_KEY"

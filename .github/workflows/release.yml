@@ -8,6 +8,7 @@ permissions:
   contents: write
   packages: write
   id-token: write
+  actions: read
 
 jobs:
   release:
@@ -59,6 +60,72 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+
+      - name: Sign Windows binary (SignPath)
+        if: ${{ vars.SIGNPATH_ENABLED == 'true' }}
+        id: sign-windows
+        run: |
+          # Find the Windows exe built by GoReleaser
+          WIN_EXE=$(find dist -name "web-researcher-mcp.exe" -path "*windows*" | head -1)
+          if [ -z "$WIN_EXE" ]; then
+            echo "::warning::Windows exe not found in dist/, skipping signing"
+            exit 0
+          fi
+          echo "exe_path=$WIN_EXE" >> "$GITHUB_OUTPUT"
+          mkdir -p unsigned-artifact
+          cp "$WIN_EXE" unsigned-artifact/web-researcher-mcp.exe
+
+      - name: Upload unsigned Windows binary
+        if: ${{ vars.SIGNPATH_ENABLED == 'true' && steps.sign-windows.outputs.exe_path != '' }}
+        id: upload-unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-researcher-mcp-unsigned
+          path: unsigned-artifact/web-researcher-mcp.exe
+
+      - name: Submit SignPath signing request
+        if: ${{ vars.SIGNPATH_ENABLED == 'true' && steps.sign-windows.outputs.exe_path != '' }}
+        id: signpath-sign
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: Web-Researcher-MCP
+          signing-policy-slug: release-signing
+          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed-artifact
+          wait-for-completion-timeout-in-seconds: 300
+
+      - name: Replace unsigned exe in release zip
+        if: ${{ vars.SIGNPATH_ENABLED == 'true' && steps.sign-windows.outputs.exe_path != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ZIP_NAME="web-researcher-mcp_${VERSION}_windows_amd64.zip"
+          ZIP_PATH="dist/$ZIP_NAME"
+
+          if [ -f "signed-artifact/web-researcher-mcp.exe" ] && [ -f "$ZIP_PATH" ]; then
+            # Replace the exe inside the zip
+            cd signed-artifact
+            zip -j "../$ZIP_PATH" web-researcher-mcp.exe
+            cd ..
+
+            # Re-upload the zip to the release
+            gh release upload "${{ github.ref_name }}" "$ZIP_PATH" --clobber
+
+            # Update checksums
+            sha256sum "$ZIP_PATH" | sed "s|dist/||" > /tmp/new_checksum.txt
+            if [ -f dist/checksums.txt ]; then
+              grep -v "$ZIP_NAME" dist/checksums.txt > /tmp/remaining.txt || true
+              cat /tmp/remaining.txt /tmp/new_checksum.txt > dist/checksums.txt
+              gh release upload "${{ github.ref_name }}" dist/checksums.txt --clobber
+            fi
+            echo "::notice::Windows binary signed and release updated"
+          else
+            echo "::warning::Signed artifact not found, release contains unsigned binary"
+          fi
 
       - name: Build .mcpb bundles
         run: |
