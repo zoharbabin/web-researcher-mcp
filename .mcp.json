@@ -4,11 +4,25 @@
       "command": "web-researcher-mcp",
       "args": [],
       "env": {
-        "GOOGLE_CUSTOM_SEARCH_API_KEY": "${user_config.google_api_key}",
-        "GOOGLE_CUSTOM_SEARCH_ID": "${user_config.google_cx}",
-        "BRAVE_API_KEY": "${user_config.brave_api_key}",
-        "SEARCH_PROVIDER": "${user_config.search_provider}",
-        "SEARCH_ROUTING": "${user_config.search_routing}"
+        "GOOGLE_CUSTOM_SEARCH_API_KEY": "${GOOGLE_CUSTOM_SEARCH_API_KEY:-}",
+        "GOOGLE_CUSTOM_SEARCH_ID": "${GOOGLE_CUSTOM_SEARCH_ID:-}",
+        "BRAVE_API_KEY": "${BRAVE_API_KEY:-}",
+        "SERPER_API_KEY": "${SERPER_API_KEY:-}",
+        "SEARCHAPI_API_KEY": "${SEARCHAPI_API_KEY:-}",
+        "SEARXNG_URL": "${SEARXNG_URL:-}",
+        "SEARCH_PROVIDER": "${SEARCH_PROVIDER:-google}",
+        "SEARCH_ROUTING": "${SEARCH_ROUTING:-}",
+        "SEARCH_FALLBACK_PROVIDER": "${SEARCH_FALLBACK_PROVIDER:-}",
+        "USPTO_API_KEY": "${USPTO_API_KEY:-}",
+        "EPO_OPS_CONSUMER_KEY": "${EPO_OPS_CONSUMER_KEY:-}",
+        "EPO_OPS_CONSUMER_SECRET": "${EPO_OPS_CONSUMER_SECRET:-}",
+        "LENS_API_TOKEN": "${LENS_API_TOKEN:-}",
+        "OPENALEX_EMAIL": "${OPENALEX_EMAIL:-}",
+        "CROSSREF_EMAIL": "${CROSSREF_EMAIL:-}",
+        "CHROME_PATH": "${CHROME_PATH:-}",
+        "ALLOW_PRIVATE_IPS": "${ALLOW_PRIVATE_IPS:-false}",
+        "MAX_SCRAPE_CONCURRENCY": "${MAX_SCRAPE_CONCURRENCY:-5}",
+        "LOG_LEVEL": "${LOG_LEVEL:-info}"
       }
     }
   }
