@@ -241,9 +241,9 @@ Browser scrapes hold a scraping semaphore slot and then acquire the browser pool
 
 ## Error Handling
 
-Three-layer architecture: typed scraper errors (`ScrapeError{Kind}` in `internal/scraper/errors.go`) → tool-level response mapping (`upstreamErrorResponse()`, `scrapeErrorResponse()` in `internal/tools/`) → MCP protocol (`IsError: true` with actionable text).
+Three-layer architecture: typed scraper errors (`ScrapeError{Kind}` in `internal/scraper/errors.go`) → structured tool-level responses (`structuredError()`, `upstreamErrorResponse()` in `internal/tools/errors.go`) → MCP protocol (`IsError: true` with dual-format text: natural language + JSON metadata).
 
-Key design: errors guide LLM clients toward resolution — including suggesting GitHub issue reports when the MCP server itself could improve. Errors are categorized by `ErrorKind` enum (Network, Blocked, Browser, Content, Auth, RateLimit), not parsed as strings.
+Every error response includes machine-readable JSON: `{"error":{"kind":"...","retryable":...,"suggestedAction":"..."}}`. This lets LLM clients branch programmatically on error type. Error kinds: `rate_limited`, `auth_required`, `blocked`, `network`, `content_empty`, `browser_unavailable`, `config`, `upstream_unavailable`.
 
 Full specification: see `docs/ERROR_HANDLING.md`.
 

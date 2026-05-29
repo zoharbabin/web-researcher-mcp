@@ -227,8 +227,11 @@ Combined search + scrape pipeline with quality scoring, deduplication, and sourc
 ```go
 type SearchAndScrapeOutput struct {
     Query           string          `json:"query"`
+    Status          string          `json:"status"`           // "complete", "partial", or "failed"
     Sources         []SourceResult  `json:"sources"`
     CombinedContent string          `json:"combinedContent"`
+    ScrapeFailures  []FailureInfo   `json:"scrapeFailures,omitempty"`
+    Note            string          `json:"note,omitempty"`   // guidance when status="failed"
     Summary         PipelineSummary `json:"summary"`
     SizeMetadata    SizeMetadata    `json:"sizeMetadata"`
 }
@@ -239,6 +242,14 @@ type SourceResult struct {
     Content     string        `json:"content"`
     ContentType string        `json:"contentType"`
     Scores      *QualityScore `json:"scores,omitempty"`
+}
+
+type FailureInfo struct {
+    URL             string `json:"url"`
+    Kind            string `json:"kind"`            // error category (blocked, auth_required, etc.)
+    Reason          string `json:"reason"`
+    Retryable       bool   `json:"retryable"`
+    SuggestedAction string `json:"suggestedAction"` // recovery hint
 }
 
 type QualityScore struct {
@@ -252,6 +263,7 @@ type QualityScore struct {
 type PipelineSummary struct {
     URLsSearched     int `json:"urlsSearched"`
     URLsScraped      int `json:"urlsScraped"`
+    URLsFailed       int `json:"urlsFailed"`
     ProcessingTimeMs int `json:"processingTimeMs"`
 }
 ```
@@ -586,9 +598,17 @@ Recover a `sequential_search` session after context loss. Returns the session su
 
 ### Unified Error Handling
 
-All tools follow a consistent error response pattern with actionable messages for LLM clients. Errors are categorized, never opaque strings. When the MCP server itself could improve (blocked sites, missing content types), error messages include a GitHub issue link to guide users toward reporting.
+All tools use a **dual-format error response**: a natural-language first line + a JSON block with machine-readable metadata:
 
-Full details: see `docs/ERROR_HANDLING.md` — covers the three-layer error architecture, the scrape error taxonomy, provider error detection, and contributor guidelines.
+```
+Rate limited (google). Wait 60 seconds and retry, or try a different provider.
+
+{"error":{"kind":"rate_limited","retryable":true,"retryAfterSeconds":60,"suggestedAction":"retry_after_delay","provider":"google"}}
+```
+
+Error kinds: `rate_limited`, `auth_required`, `blocked`, `network`, `content_empty`, `browser_unavailable`, `config`, `upstream_unavailable`. Each maps to a `suggestedAction` the LLM can branch on programmatically.
+
+Full details: see `docs/ERROR_HANDLING.md` — covers the three-layer architecture, all error kinds and actions, and contributor patterns.
 
 ### Tool Annotations (MCP Protocol)
 

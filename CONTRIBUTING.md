@@ -278,7 +278,7 @@ func registerMyTool(srv *mcp.Server, deps Dependencies) {
 Key conventions:
 - All tool inputs use typed structs with `jsonschema` tags (the SDK auto-generates JSON Schema from these)
 - Use `deps.Cache` for caching, `deps.Metrics` for telemetry, `deps.Auditor` for audit logging
-- Return errors via `toolError(msg)` and success via `structuredResult(jsonBytes)` (see `internal/tools/search.go` for helpers)
+- Return validation errors via `toolError(msg)`, upstream errors via `upstreamErrorResponse(toolName, err)`, success via `structuredResult(jsonBytes)` (see `internal/tools/errors.go` and `docs/ERROR_HANDLING.md` for the full pattern)
 - Update `docs/TOOLS.md` with the parameter schema
 
 ## Adding a Patent Provider

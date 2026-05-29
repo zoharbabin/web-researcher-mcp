@@ -57,7 +57,7 @@ Searches the web, then reads the top results for you — pulling out the full te
 }
 ```
 
-**Response** contains: `query`, `combinedContent` (merged extracted text), `sources` (array with `url`, `title`, `content`, `contentType`, `scores` — included when `include_sources=true`), `summary` (`urlsSearched`, `urlsScraped`, `processingTimeMs`), and `sizeMetadata` (`totalLength`, `estimatedTokens`, `sizeCategory`). Duplicate paragraphs are removed, and long content is trimmed at sentence breaks so nothing cuts off mid-thought.
+**Response** contains: `status` (`"complete"`, `"partial"`, or `"failed"`), `query`, `combinedContent` (merged extracted text), `sources` (array with `url`, `title`, `content`, `contentType`, `scores` — included when `include_sources=true`), `summary` (`urlsSearched`, `urlsScraped`, `urlsFailed`, `processingTimeMs`), and `sizeMetadata` (`totalLength`, `estimatedTokens`, `sizeCategory`). When scrapes fail, `scrapeFailures` lists each with `url`, `kind`, `reason`, `retryable`, and `suggestedAction`. Duplicate paragraphs are removed, and long content is trimmed at sentence breaks so nothing cuts off mid-thought.
 
 ---
 
@@ -75,7 +75,7 @@ Search peer-reviewed papers, preprints, and academic databases.
 }
 ```
 
-**Response** contains: `papers` (array of `{title, url, source, abstract}`), `query`, `totalResults`, `resultCount`, and `source`. Results come from scholarly databases (arXiv, PubMed, IEEE, Nature, Springer). If you want the full text of a paper, follow up by reading the URL — the tool handles PDFs and paywalled previews automatically.
+**Response** contains: `papers` (array of `{title, url, source, doi, authors, journal, year, abstract, citationCount, openAccess, pdfUrl}`), `query`, `totalResults`, `resultCount`, and `source` (which provider answered). When no results are found, a `hints` object explains why and suggests actions (e.g., remove restrictive filters, try a different source). Results come from scholarly databases (OpenAlex, CrossRef) or site-restricted web search as fallback.
 
 ---
 
@@ -95,7 +95,7 @@ Search patent databases with classification codes and office filtering.
 }
 ```
 
-**Response** contains: `patents` (array of `{title, url, number, abstract, assignee, inventor, filed, granted, pdf, status}`), `query`, `searchType`, `resultCount`, `source` (which provider answered), and `searchUrl`. You can filter by patent office (US, European, international, Japan, China, Korea) and by technology category codes. The server automatically picks the best data source for your region.
+**Response** contains: `patents` (array of `{title, url, number, abstract, assignee, inventor, filed, granted, pdf, status}`), `query`, `searchType`, `resultCount`, `source` (which provider answered), and `searchUrl`. When no results are found, a `hints` object explains why (e.g., provider doesn't cover the requested region) and suggests alternatives. You can filter by patent office (US, European, international, Japan, China, Korea) and by technology category codes. The server picks the best data source for your region, or you can force a specific provider.
 
 ---
 

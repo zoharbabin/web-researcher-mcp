@@ -121,58 +121,73 @@ The composite error's `Kind` is escalated:
 
 ---
 
-## Layer 2: Tool-Level Error Response Functions
+## Layer 2: Structured Error Responses
 
-**File:** `internal/tools/search.go` (shared), `internal/tools/scrape.go` (scrape-specific)
+**Files:** `internal/tools/errors.go` (types + helpers), `internal/tools/search.go`, `internal/tools/scrape.go`
 
-### Scrape Errors → LLM Messages
+All error responses use a **dual-format** pattern: a natural-language first line (for LLMs and legacy clients) followed by a JSON block with machine-readable metadata (for programmatic parsing).
 
-**Function:** `scrapeErrorResponse(err error, url string) *mcp.CallToolResult`
+### Response Format
 
-Maps `ScrapeError.Kind` to an actionable message for the LLM client:
-
-| Kind | LLM Receives | Includes Issue Link |
-|------|-------------|---------------------|
-| `ErrBrowser` | "Chrome is not available. Set CHROME_PATH..." | Yes |
-| `ErrBlocked` | "access was blocked — site may use bot detection..." | Yes |
-| `ErrContent` | "page loaded but no readable content extracted..." | Yes |
-| `ErrAuth` | "authentication required — behind a login wall" | No |
-| `ErrRateLimit` | "rate limited — try again in 60 seconds" | No |
-| `ErrNetwork` | "network error — check connectivity or try again" | No |
-
-### Search/Provider Errors → LLM Messages
-
-**Function:** `upstreamErrorResponse(toolName string, err error) *mcp.CallToolResult`
-
-Detects the error category and formats an appropriate response:
-
-| Detection | LLM Receives |
-|-----------|-------------|
-| `isRateLimitError(err)` → contains "rate limited", "429", "quota" | "service temporarily busy... wait 60 seconds or try different provider" |
-| `isAuthError(err)` → contains "401", "API key not valid", "unauthorized" | "check that the required API key is set... see .env.example" |
-| General failure | "failed: {error}... try different provider or report at {issueURL}" |
-
-### Provider Not Found
-
-**Function:** `resolveProvider()`, `resolvePatentSearcher()`, `resolveAcademicSearcher()`
-
-When a user requests an unknown provider:
 ```
-Unknown search provider "foo". Supported providers: google, brave, serper, searxng, searchapi, epo, lens, uspto, openalex, crossref.
+Rate limited (google). Wait 60 seconds and retry, or try a different provider.
+
+{"error":{"kind":"rate_limited","retryable":true,"retryAfterSeconds":60,"suggestedAction":"retry_after_delay","provider":"google"}}
 ```
 
-The provider list is generated dynamically via `allSupportedProviders()` which deduplicates across all three provider lists. No hardcoded list to drift.
+### Structured Error Fields (`ToolError` in `internal/tools/errors.go`)
 
-When a user requests a known provider that's not configured:
-```
-Patent provider "epo" is not configured. Set EPO_OPS_CONSUMER_KEY and EPO_OPS_CONSUMER_SECRET. See .env.example for details.
-```
+| Field | Type | Description |
+|-------|------|-------------|
+| `kind` | string | Error category (see enum below) |
+| `retryable` | bool | Whether retrying the same call might succeed |
+| `retryAfterSeconds` | int (optional) | Seconds to wait before retrying |
+| `suggestedAction` | string | Recovery strategy for the LLM |
+| `provider` | string (optional) | Which provider failed |
+| `alternatives` | []string (optional) | Other available providers |
+| `detail` | string (optional) | Technical detail for debugging |
+
+### Error Kind Enum (`ErrorKind`)
+
+| Kind | When | Retryable | Suggested Action |
+|------|------|-----------|-----------------|
+| `rate_limited` | HTTP 429, quota exceeded | true | `retry_after_delay` |
+| `auth_required` | HTTP 401, invalid API key | false | `check_api_key` |
+| `blocked` | HTTP 403, bot detection, SSRF | true | `report_bug` |
+| `network` | DNS failure, timeout, connection refused | true | `retry_after_delay` |
+| `content_empty` | Page loaded but no text extracted | true | `report_bug` |
+| `browser_unavailable` | Chrome not found/failed | false | `report_bug` |
+| `config` | Unknown/unconfigured provider | false | `try_different_provider` or `check_api_key` |
+| `upstream_unavailable` | General provider failure | true | `try_different_provider` |
+| `validation` | Invalid input params | false | `broaden_query` |
+
+### Suggested Action Vocabulary
+
+| Action | LLM Should |
+|--------|------------|
+| `retry_after_delay` | Wait N seconds, call same tool again |
+| `try_different_provider` | Re-call with a different `provider` param |
+| `check_api_key` | Tell user to verify API key configuration |
+| `broaden_query` | Remove filters or use broader terms |
+| `inform_user` | Tell user this content is permanently inaccessible |
+| `report_bug` | Suggest user file a GitHub issue |
+
+### Key Functions
+
+| Function | File | Purpose |
+|----------|------|---------|
+| `structuredError(msg, ToolError)` | errors.go | Builds dual-format error response |
+| `scrapeErrorResponse(err, url)` | scrape.go | Maps ScrapeError → structured response |
+| `upstreamErrorResponse(toolName, err)` | search.go | Maps provider errors → structured response |
+| `upstreamErrorWithAlternatives(toolName, err, deps)` | search.go | Same + lists healthy alternative providers |
+| `resolveProvider()` | search.go | Returns structured error for unknown providers |
+| `resolvePatentSearcher()` | search.go | Same for patent providers |
+| `resolveAcademicSearcher()` | academic.go | Same for academic providers |
+| `toolError(msg)` | search.go | Plain-text validation errors (no JSON block) |
 
 ### Validation Errors
 
-**Function:** `toolError(msg string) *mcp.CallToolResult`
-
-For input validation failures (missing required params, values out of range):
+**Function:** `toolError(msg string)` — used only for input validation (no structured JSON needed since there's nothing to retry):
 ```
 query is required
 query must be 500 characters or less
@@ -183,10 +198,12 @@ query, assignee, or inventor is required
 
 ## Layer 3: MCP Protocol Contract
 
-All error responses set `IsError: true` on the MCP `CallToolResult`. The text content is always:
-- A single natural-language message (not JSON, not a stack trace)
-- Written for an LLM to read and relay to the user
-- Self-contained: includes what failed, why, and what to do next
+All error responses set `IsError: true` on the MCP `CallToolResult`. The text content contains:
+- Line 1: natural-language message (what failed + what to do next)
+- Blank line separator
+- JSON block: `{"error":{...}}` with machine-readable metadata
+
+`StructuredContent` is always nil on error responses (per MCP spec — SDKs exempt `isError: true` from outputSchema validation).
 
 Tools never panic. Tools never return Go errors from the handler function (the third return value is always `nil`). All failures are communicated via the MCP result.
 
@@ -197,7 +214,12 @@ Tools never panic. Tools never return Go errors from the handler function (the t
 ### 1. Errors are actionable, not diagnostic
 
 Bad: `"error: HTTP 403"`
-Good: `"Scrape failed for https://x.com/post/123: access was blocked (HTTP 403). The site may use bot detection that this scraper cannot bypass. If this is a commonly-needed site, consider reporting at https://github.com/zoharbabin/web-researcher-mcp/issues"`
+Good:
+```
+Blocked: x.com uses bot detection. Try alternative source or report at https://github.com/zoharbabin/web-researcher-mcp/issues
+
+{"error":{"kind":"blocked","retryable":true,"suggestedAction":"report_bug","detail":"access blocked: HTTP 403"}}
+```
 
 ### 2. Errors are categorized, not strings
 
@@ -255,6 +277,11 @@ results, err := provider.Web(ctx, params)
 if err != nil {
     return upstreamErrorResponse("my_tool", err), nil, nil
 }
+
+// For validation errors (no structured JSON needed):
+if input.Query == "" {
+    return toolError("query is required"), nil, nil
+}
 ```
 
 ---
@@ -263,9 +290,10 @@ if err != nil {
 
 | File | Owns |
 |------|------|
-| `internal/scraper/errors.go` | `ScrapeError` type, `ErrorKind` enum, helper constructors, classifiers |
+| `internal/tools/errors.go` | `ToolError` struct, `ErrorKind`/`SuggestedAction` enums, `structuredError()`, `FailureInfo`, `ZeroResultHints`, cache freshness helpers |
+| `internal/scraper/errors.go` | `ScrapeError` type, scraper `ErrorKind` enum, helper constructors, classifiers |
 | `internal/scraper/pipeline.go` | Composite error assembly (per-tier diagnostics) |
-| `internal/tools/scrape.go` | `scrapeErrorResponse()` — maps ScrapeError to LLM message |
-| `internal/tools/search.go` | `upstreamErrorResponse()`, `toolError()`, `rateLimitError()`, `isRateLimitError()`, `isAuthError()`, `resolveProvider()`, `resolvePatentSearcher()`, `resolveAcademicSearcher()`, `allSupportedProviders()` |
+| `internal/tools/scrape.go` | `scrapeErrorResponse()`, negative cache helpers |
+| `internal/tools/search.go` | `upstreamErrorResponse()`, `toolError()`, `rateLimitError()`, resolver functions, `allSupportedProviders()` |
 | `internal/tools/scrape_errors_test.go` | Integration tests for error → response mapping |
 | `internal/scraper/scraper_test.go` | Unit tests for error classification |
