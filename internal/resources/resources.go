@@ -11,12 +11,18 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
 )
 
-func RegisterAll(srv *mcp.Server, metricsCollector *metrics.Collector, sessionManager *session.Manager, rateLimiter *ratelimit.Limiter) {
-	registerResources(srv, metricsCollector, sessionManager, rateLimiter)
+// ProviderInfo describes a configured search provider for the stats resource.
+type ProviderInfo struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+func RegisterAll(srv *mcp.Server, metricsCollector *metrics.Collector, sessionManager *session.Manager, rateLimiter *ratelimit.Limiter, providers []ProviderInfo) {
+	registerResources(srv, metricsCollector, sessionManager, rateLimiter, providers)
 	registerPrompts(srv)
 }
 
-func registerResources(srv *mcp.Server, metricsCollector *metrics.Collector, sessionManager *session.Manager, rateLimiter *ratelimit.Limiter) {
+func registerResources(srv *mcp.Server, metricsCollector *metrics.Collector, sessionManager *session.Manager, rateLimiter *ratelimit.Limiter, providers []ProviderInfo) {
 	srv.AddResource(&mcp.Resource{
 		URI:         "stats://tools",
 		Name:        "Tool Statistics",
@@ -80,6 +86,24 @@ func registerResources(srv *mcp.Server, metricsCollector *metrics.Collector, ses
 			Contents: []*mcp.ResourceContents{
 				{
 					URI:      "stats://rate-limits",
+					MIMEType: "application/json",
+					Text:     string(jsonBytes),
+				},
+			},
+		}, nil
+	})
+
+	srv.AddResource(&mcp.Resource{
+		URI:         "stats://providers",
+		Name:        "Configured Providers",
+		Description: "Search, patent, and academic providers currently configured and available for use",
+		MIMEType:    "application/json",
+	}, func(_ context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		jsonBytes, _ := json.MarshalIndent(map[string]any{"providers": providers}, "", "  ")
+		return &mcp.ReadResourceResult{
+			Contents: []*mcp.ResourceContents{
+				{
+					URI:      "stats://providers",
 					MIMEType: "application/json",
 					Text:     string(jsonBytes),
 				},

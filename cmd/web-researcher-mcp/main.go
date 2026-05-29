@@ -164,7 +164,18 @@ func main() {
 	})
 
 	tools.RegisterAll(srv.MCP(), toolDeps)
-	resources.RegisterAll(srv.MCP(), metricsCollector, sessionManager, rateLimiter)
+
+	var providerInfos []resources.ProviderInfo
+	for name := range allProviders {
+		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "web"})
+	}
+	for name := range patentProviders {
+		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "patent"})
+	}
+	for name := range academicProviders {
+		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "academic"})
+	}
+	resources.RegisterAll(srv.MCP(), metricsCollector, sessionManager, rateLimiter, providerInfos)
 
 	ctx, cancel := signal.NotifyContext(context.Background(),
 		syscall.SIGINT, syscall.SIGTERM)

@@ -60,6 +60,11 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		if err != nil {
 			deps.Metrics.RecordToolCall("scrape_page", time.Since(start), err, "upstream_error", false)
 			auditToolCall(ctx, deps, "scrape_page", time.Since(start), err, "upstream_error")
+			var se *scraper.ScrapeError
+			if errors.As(err, &se) {
+				key := negCacheKey(input.URL, se.Kind)
+				deps.Cache.Set(ctx, key, []byte("1"), negCacheTTL(se.Kind))
+			}
 			return scrapeErrorResponse(err, input.URL), nil, nil
 		}
 
@@ -111,6 +116,46 @@ func scrapeCacheKey(url, mode string) string {
 }
 
 const issueURL = "https://github.com/zoharbabin/web-researcher-mcp/issues"
+
+// negCacheKey builds a cache key for negative caching of scrape errors.
+func negCacheKey(url string, kind scraper.ErrorKind) string {
+	domain := extractDomain(url)
+	return "neg:" + domain + ":" + string(mapScrapeErrorKind(kind))
+}
+
+func extractDomain(rawURL string) string {
+	if idx := indexOf(rawURL, "://"); idx >= 0 {
+		rawURL = rawURL[idx+3:]
+	}
+	if idx := indexOf(rawURL, "/"); idx >= 0 {
+		rawURL = rawURL[:idx]
+	}
+	return rawURL
+}
+
+func indexOf(s, sub string) int {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return i
+		}
+	}
+	return -1
+}
+
+func negCacheTTL(kind scraper.ErrorKind) time.Duration {
+	switch kind {
+	case scraper.ErrBlocked, scraper.ErrAuth:
+		return 30 * time.Minute
+	case scraper.ErrRateLimit:
+		return 90 * time.Second
+	case scraper.ErrNetwork:
+		return 2 * time.Minute
+	case scraper.ErrBrowser:
+		return 4 * time.Hour
+	default:
+		return 10 * time.Minute
+	}
+}
 
 func scrapeErrorResponse(err error, url string) *mcp.CallToolResult {
 	var se *scraper.ScrapeError
