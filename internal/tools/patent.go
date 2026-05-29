@@ -198,6 +198,10 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 			"searchUrl":   scraper.BuildGooglePatentsURL(params),
 		}
 
+		if len(patents) == 0 {
+			output["hints"] = buildPatentHints(input, source, deps)
+		}
+
 		jsonBytes, _ := json.Marshal(output)
 		if len(patents) > 0 {
 			deps.Cache.Set(ctx, cacheKey, jsonBytes, 24*time.Hour)
@@ -342,4 +346,39 @@ func matchesPatentOffice(patentNumber, office string) bool {
 		}
 	}
 	return false
+}
+
+func buildPatentHints(input patentSearchInput, source string, deps Dependencies) *ZeroResultHints {
+	filters := map[string]string{}
+	if input.PatentOffice != "" && input.PatentOffice != "all" {
+		filters["patent_office"] = input.PatentOffice
+	}
+	if input.YearFrom > 0 {
+		filters["year_from"] = fmt.Sprintf("%d", input.YearFrom)
+	}
+	if input.YearTo > 0 {
+		filters["year_to"] = fmt.Sprintf("%d", input.YearTo)
+	}
+
+	var alts []string
+	if input.Provider != "" {
+		for name := range deps.PatentProviders {
+			if name != input.Provider {
+				alts = append(alts, name)
+			}
+		}
+	}
+
+	hints := buildZeroResultHints(source, filters, alts)
+
+	if input.Provider == "uspto" && input.PatentOffice != "" && input.PatentOffice != "US" {
+		hints.Reason = "coverage_miss"
+		hints.SuggestedActions = []HintAction{{
+			Action: "switch_provider",
+			Value:  "lens",
+			Detail: "USPTO only covers US patents. Use lens or epo for worldwide coverage",
+		}}
+	}
+
+	return hints
 }

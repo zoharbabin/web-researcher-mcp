@@ -229,6 +229,10 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 			"source":       providerSource,
 		}
 
+		if len(papers) == 0 {
+			output["hints"] = buildAcademicHints(input, providerSource)
+		}
+
 		jsonBytes, _ := json.Marshal(output)
 		if len(papers) > 0 {
 			deps.Cache.Set(ctx, cacheKey, jsonBytes, 1*time.Hour)
@@ -378,4 +382,45 @@ func detectAcademicSource(url string) string {
 		return "google_scholar"
 	}
 	return "other"
+}
+
+func buildAcademicHints(input academicSearchInput, provider string) *ZeroResultHints {
+	filters := map[string]string{}
+	if input.YearFrom > 0 {
+		filters["year_from"] = fmt.Sprintf("%d", input.YearFrom)
+	}
+	if input.YearTo > 0 {
+		filters["year_to"] = fmt.Sprintf("%d", input.YearTo)
+	}
+	if input.Source != "" && input.Source != "all" {
+		filters["source"] = input.Source
+	}
+	if input.OpenAccess {
+		filters["open_access"] = "true"
+	}
+	if input.PDFOnly {
+		filters["pdf_only"] = "true"
+	}
+
+	hints := buildZeroResultHints(provider, filters, nil)
+
+	if input.PDFOnly {
+		hints.SuggestedActions = append([]HintAction{{
+			Action:    "remove_filter",
+			Parameter: "pdf_only",
+			Detail:    "PDF-only filter is restrictive. Remove to get papers without direct PDF links",
+		}}, hints.SuggestedActions...)
+	}
+	if input.OpenAccess {
+		hints.SuggestedActions = append([]HintAction{{
+			Action:    "remove_filter",
+			Parameter: "open_access",
+			Detail:    "Open-access filter excludes paywalled papers. Remove for broader results",
+		}}, hints.SuggestedActions...)
+	}
+
+	if len(hints.SuggestedActions) > 3 {
+		hints.SuggestedActions = hints.SuggestedActions[:3]
+	}
+	return hints
 }

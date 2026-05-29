@@ -75,6 +75,7 @@ var academicSearchOutputSchema = map[string]any{
 		"totalResults": map[string]any{"type": "integer"},
 		"resultCount":  map[string]any{"type": "integer"},
 		"source":       map[string]any{"type": "string"},
+		"hints":        map[string]any{"type": "object"},
 		"papers": map[string]any{
 			"type": "array",
 			"items": map[string]any{
@@ -105,6 +106,7 @@ var patentSearchOutputSchema = map[string]any{
 		"resultCount": map[string]any{"type": "integer"},
 		"source":      map[string]any{"type": "string"},
 		"searchUrl":   map[string]any{"type": "string"},
+		"hints":       map[string]any{"type": "object"},
 		"patents": map[string]any{
 			"type": "array",
 			"items": map[string]any{
@@ -173,7 +175,10 @@ var searchAndScrapeOutputSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{
 		"query":           map[string]any{"type": "string"},
+		"status":          map[string]any{"type": "string"},
 		"combinedContent": map[string]any{"type": "string"},
+		"note":            map[string]any{"type": "string"},
+		"scrapeFailures":  map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
 		"sources": map[string]any{
 			"type": "array",
 			"items": map[string]any{
@@ -190,17 +195,18 @@ var searchAndScrapeOutputSchema = map[string]any{
 		"summary": map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"urlsSearched":    map[string]any{"type": "integer"},
-				"urlsScraped":     map[string]any{"type": "integer"},
+				"urlsSearched":     map[string]any{"type": "integer"},
+				"urlsScraped":      map[string]any{"type": "integer"},
+				"urlsFailed":       map[string]any{"type": "integer"},
 				"processingTimeMs": map[string]any{"type": "integer"},
 			},
 		},
 		"sizeMetadata": map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"totalLength":    map[string]any{"type": "integer"},
+				"totalLength":     map[string]any{"type": "integer"},
 				"estimatedTokens": map[string]any{"type": "integer"},
-				"sizeCategory":   map[string]any{"type": "string"},
+				"sizeCategory":    map[string]any{"type": "string"},
 			},
 		},
 	},
