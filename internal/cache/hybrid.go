@@ -49,6 +49,21 @@ func (h *Hybrid) Get(ctx context.Context, key string) ([]byte, bool) {
 	return nil, false
 }
 
+func (h *Hybrid) GetWithMeta(ctx context.Context, key string) ([]byte, *EntryMeta, bool) {
+	// L1: memory (has accurate metadata)
+	if val, meta, ok := h.memory.GetWithMeta(ctx, key); ok {
+		return val, meta, true
+	}
+
+	// L2: disk (metadata may be less precise due to promotion)
+	if val, meta, ok := h.disk.GetWithMeta(ctx, key); ok {
+		h.memory.Set(ctx, key, val, 30*time.Minute)
+		return val, meta, true
+	}
+
+	return nil, nil, false
+}
+
 func (h *Hybrid) Set(ctx context.Context, key string, value []byte, ttl time.Duration) {
 	h.memory.Set(ctx, key, value, ttl)
 	h.disk.Set(ctx, key, value, ttl)

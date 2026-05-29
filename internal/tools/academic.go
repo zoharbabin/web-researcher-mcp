@@ -82,10 +82,10 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 		}
 
 		cacheKey := searchCacheKey("academic", input.Query, numResults, input.YearFrom, input.YearTo, source, input.Provider, input.OpenAccess, input.PDFOnly)
-		if cached, ok := deps.Cache.Get(ctx, cacheKey); ok {
+		if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("academic_search", time.Since(start), nil, "", true)
 			auditToolCall(ctx, deps, "academic_search", time.Since(start), nil, "")
-			return structuredResult(cached), nil, nil
+			return cachedResultWithMeta(cached, meta), nil, nil
 		}
 
 		searchParams := search.AcademicSearchParams{

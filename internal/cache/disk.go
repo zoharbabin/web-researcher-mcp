@@ -24,7 +24,9 @@ type DiskCache struct {
 
 type diskEntry struct {
 	value     []byte
+	storedAt  time.Time
 	expiresAt time.Time
+	ttl       time.Duration
 }
 
 func NewDiskCache(cfg DiskConfig) *DiskCache {
@@ -93,13 +95,35 @@ func (d *DiskCache) Get(_ context.Context, key string) ([]byte, bool) {
 	return entry.value, true
 }
 
+func (d *DiskCache) GetWithMeta(_ context.Context, key string) ([]byte, *EntryMeta, bool) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	entry, ok := d.entries[key]
+	if !ok {
+		val, ok := d.getFromFile(key)
+		if !ok {
+			return nil, nil, false
+		}
+		return val, nil, true
+	}
+	if time.Now().After(entry.expiresAt) {
+		return nil, nil, false
+	}
+	meta := &EntryMeta{StoredAt: entry.storedAt, TTL: entry.ttl}
+	return entry.value, meta, true
+}
+
 func (d *DiskCache) Set(_ context.Context, key string, value []byte, ttl time.Duration) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
+	now := time.Now()
 	d.entries[key] = diskEntry{
 		value:     value,
-		expiresAt: time.Now().Add(ttl),
+		storedAt:  now,
+		expiresAt: now.Add(ttl),
+		ttl:       ttl,
 	}
 }
 

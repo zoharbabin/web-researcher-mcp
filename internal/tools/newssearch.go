@@ -47,10 +47,10 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 		}
 
 		cacheKey := searchCacheKey("news", input.Query, numResults, freshness, sortBy, input.NewsSource)
-		if cached, ok := deps.Cache.Get(ctx, cacheKey); ok {
+		if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("news_search", time.Since(start), nil, "", true)
 			auditToolCall(ctx, deps, "news_search", time.Since(start), nil, "")
-			return structuredResult(cached), nil, nil
+			return cachedResultWithMeta(cached, meta), nil, nil
 		}
 
 		provider, errResult := resolveProvider(deps, input.Provider)

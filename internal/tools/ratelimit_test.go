@@ -93,8 +93,8 @@ func TestRateLimitErrorFormat(t *testing.T) {
 
 	text := result.Content[0].(*mcp.TextContent).Text
 
-	if !strings.HasPrefix(text, "The search service is temporarily busy") {
-		t.Errorf("error should start with 'The search service is temporarily busy', got: %s", text)
+	if !strings.Contains(text, "Rate limited") && !strings.Contains(text, "rate_limited") {
+		t.Errorf("error should mention rate limiting, got: %s", text)
 	}
 
 	if !strings.Contains(text, "60 seconds") {
@@ -135,8 +135,8 @@ func TestWebSearchRateLimitError(t *testing.T) {
 	}
 
 	text := res.Content[0].(*mcp.TextContent).Text
-	if !strings.HasPrefix(text, "The search service is temporarily busy") {
-		t.Errorf("expected rate limit error format, got: %s", text)
+	if !strings.Contains(text, "Rate limited") && !strings.Contains(text, "rate_limited") {
+		t.Errorf("error should mention rate limiting, got: %s", text)
 	}
 }
 
@@ -161,8 +161,8 @@ func TestImageSearchRateLimitError(t *testing.T) {
 	}
 
 	text := res.Content[0].(*mcp.TextContent).Text
-	if !strings.HasPrefix(text, "The search service is temporarily busy") {
-		t.Errorf("expected rate limit error format, got: %s", text)
+	if !strings.Contains(text, "Rate limited") && !strings.Contains(text, "rate_limited") {
+		t.Errorf("error should mention rate limiting, got: %s", text)
 	}
 }
 
@@ -187,8 +187,8 @@ func TestNewsSearchRateLimitError(t *testing.T) {
 	}
 
 	text := res.Content[0].(*mcp.TextContent).Text
-	if !strings.HasPrefix(text, "The search service is temporarily busy") {
-		t.Errorf("expected rate limit error format, got: %s", text)
+	if !strings.Contains(text, "Rate limited") && !strings.Contains(text, "rate_limited") {
+		t.Errorf("error should mention rate limiting, got: %s", text)
 	}
 }
 
@@ -213,8 +213,8 @@ func TestAcademicSearchRateLimitError(t *testing.T) {
 	}
 
 	text := res.Content[0].(*mcp.TextContent).Text
-	if !strings.HasPrefix(text, "The search service is temporarily busy") {
-		t.Errorf("expected rate limit error format, got: %s", text)
+	if !strings.Contains(text, "Rate limited") && !strings.Contains(text, "rate_limited") {
+		t.Errorf("error should mention rate limiting, got: %s", text)
 	}
 }
 
@@ -239,8 +239,8 @@ func TestPatentSearchRateLimitError(t *testing.T) {
 	}
 
 	text := res.Content[0].(*mcp.TextContent).Text
-	if !strings.HasPrefix(text, "The search service is temporarily busy") {
-		t.Errorf("expected rate limit error format, got: %s", text)
+	if !strings.Contains(text, "Rate limited") && !strings.Contains(text, "rate_limited") {
+		t.Errorf("error should mention rate limiting, got: %s", text)
 	}
 }
 
@@ -265,8 +265,8 @@ func TestSearchAndScrapeRateLimitError(t *testing.T) {
 	}
 
 	text := res.Content[0].(*mcp.TextContent).Text
-	if !strings.HasPrefix(text, "The search service is temporarily busy") {
-		t.Errorf("expected rate limit error format, got: %s", text)
+	if !strings.Contains(text, "Rate limited") && !strings.Contains(text, "rate_limited") {
+		t.Errorf("error should mention rate limiting, got: %s", text)
 	}
 }
 
@@ -295,11 +295,11 @@ func TestWebSearchGenericErrorNotRateLimit(t *testing.T) {
 	}
 
 	text := res.Content[0].(*mcp.TextContent).Text
-	if strings.HasPrefix(text, "Rate limited") {
-		t.Errorf("generic errors should NOT use rate limit format, got: %s", text)
+	if strings.Contains(text, "rate_limited") {
+		t.Errorf("generic errors should NOT use rate limit kind, got: %s", text)
 	}
-	if !strings.Contains(text, "search failed") {
-		t.Errorf("expected generic error format, got: %s", text)
+	if !strings.Contains(text, "failed") {
+		t.Errorf("expected failure message, got: %s", text)
 	}
 }
 

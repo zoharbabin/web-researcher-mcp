@@ -85,15 +85,25 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 		}
 
 		results := parallelScrape(ctx, deps, searchResults, maxLenPerSource)
-		sources, combinedParts, scraped, failures := buildSources(results, input.Query, input.FilterByQuery)
+		sources, combinedParts, scraped, structuredFailures := buildSourcesStructured(results, input.Query, input.FilterByQuery)
 		combined := assembleCombined(combinedParts, deduplicate, totalMaxLen)
+
+		// Phase 1B: top-level status field
+		status := "complete"
+		if scraped == 0 && len(structuredFailures) > 0 {
+			status = "failed"
+		} else if len(structuredFailures) > 0 {
+			status = "partial"
+		}
 
 		output := map[string]any{
 			"query":           input.Query,
+			"status":          status,
 			"combinedContent": combined,
 			"summary": map[string]any{
 				"urlsSearched":     len(searchResults),
 				"urlsScraped":      scraped,
+				"urlsFailed":       len(structuredFailures),
 				"processingTimeMs": int(time.Since(start).Milliseconds()),
 			},
 			"sizeMetadata": map[string]any{
@@ -103,13 +113,12 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 			},
 		}
 
-		if len(failures) > 0 {
-			output["scrapeFailures"] = failures
-			if scraped == 0 {
+		if len(structuredFailures) > 0 {
+			output["scrapeFailures"] = structuredFailures
+			if status == "failed" {
 				output["note"] = fmt.Sprintf(
-					"All %d pages failed to scrape. This may indicate the sites require JavaScript rendering (install Chrome and set CHROME_PATH), "+
-						"use bot detection, or require authentication. If this is unexpected, report at %s",
-					len(failures), issueURL)
+					"All %d pages failed. Install Chrome (set CHROME_PATH) for JS sites, or report at %s",
+					len(structuredFailures), issueURL)
 			}
 		}
 
@@ -171,26 +180,16 @@ func parallelScrape(ctx context.Context, deps Dependencies, searchResults []sear
 	return results
 }
 
-type scrapeFailureOutput struct {
-	URL    string `json:"url"`
-	Reason string `json:"reason"`
-	Kind   string `json:"kind,omitempty"`
-}
-
-func buildSources(results []scrapeResult, query string, filterByQuery bool) ([]sourceOutput, []string, int, []scrapeFailureOutput) {
+func buildSourcesStructured(results []scrapeResult, query string, filterByQuery bool) ([]sourceOutput, []string, int, []FailureInfo) {
 	var sources []sourceOutput
 	var combinedParts []string
-	var failures []scrapeFailureOutput
+	var failures []FailureInfo
 	scraped := 0
 
 	for _, r := range results {
 		if r.err != nil || r.content == "" {
 			if r.err != nil {
-				f := scrapeFailureOutput{URL: r.url, Reason: r.err.Error()}
-				if se, ok := r.err.(*scraper.ScrapeError); ok {
-					f.Kind = scrapeErrorKindName(se.Kind)
-				}
-				failures = append(failures, f)
+				failures = append(failures, failureFromScrapeError(r.url, r.err))
 			}
 			continue
 		}
@@ -221,22 +220,7 @@ func buildSources(results []scrapeResult, query string, filterByQuery bool) ([]s
 }
 
 func scrapeErrorKindName(kind scraper.ErrorKind) string {
-	switch kind {
-	case scraper.ErrNetwork:
-		return "network"
-	case scraper.ErrBlocked:
-		return "blocked"
-	case scraper.ErrBrowser:
-		return "browser_unavailable"
-	case scraper.ErrContent:
-		return "no_content"
-	case scraper.ErrAuth:
-		return "auth_required"
-	case scraper.ErrRateLimit:
-		return "rate_limited"
-	default:
-		return "unknown"
-	}
+	return string(mapScrapeErrorKind(kind))
 }
 
 func assembleCombined(parts []string, deduplicate bool, totalMaxLen int) string {

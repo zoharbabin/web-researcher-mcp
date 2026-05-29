@@ -12,7 +12,9 @@ type MemoryConfig struct {
 
 type memoryEntry struct {
 	value     []byte
+	storedAt  time.Time
 	expiresAt time.Time
+	ttl       time.Duration
 }
 
 type Memory struct {
@@ -48,6 +50,21 @@ func (m *Memory) Get(_ context.Context, key string) ([]byte, bool) {
 	return entry.value, true
 }
 
+func (m *Memory) GetWithMeta(_ context.Context, key string) ([]byte, *EntryMeta, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	entry, ok := m.entries[key]
+	if !ok {
+		return nil, nil, false
+	}
+	if time.Now().After(entry.expiresAt) {
+		return nil, nil, false
+	}
+	meta := &EntryMeta{StoredAt: entry.storedAt, TTL: entry.ttl}
+	return entry.value, meta, true
+}
+
 func (m *Memory) Set(_ context.Context, key string, value []byte, ttl time.Duration) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -63,9 +80,12 @@ func (m *Memory) Set(_ context.Context, key string, value []byte, ttl time.Durat
 		m.evictOne()
 	}
 
+	now := time.Now()
 	m.entries[key] = memoryEntry{
 		value:     value,
-		expiresAt: time.Now().Add(ttl),
+		storedAt:  now,
+		expiresAt: now.Add(ttl),
+		ttl:       ttl,
 	}
 	m.size += entrySize
 }

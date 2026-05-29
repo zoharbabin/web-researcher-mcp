@@ -53,7 +53,7 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 		}
 
 		cacheKey := searchCacheKey("web", input.Query, numResults, input.TimeRange, input.Safe, input.Language, input.Site, input.Lens)
-		if cached, ok := deps.Cache.Get(ctx, cacheKey); ok {
+		if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("web_search", time.Since(start), nil, "", true)
 			ev := audit.NewEvent("tool_call", auth.TenantIDFromContext(ctx), auth.UserIDFromContext(ctx))
 			ev.ToolName = "web_search"
@@ -61,7 +61,7 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 			ev.Success = true
 			ev.Metadata = map[string]any{"cache_hit": true, "query": input.Query}
 			deps.Auditor.Log(ev)
-			return structuredResult(cached), nil, nil
+			return cachedResultWithMeta(cached, meta), nil, nil
 		}
 
 		params := search.WebSearchParams{
@@ -125,8 +125,9 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 			"results":     results,
 		}
 
+		const webSearchTTL = 30 * time.Minute
 		jsonBytes, _ := json.Marshal(output)
-		deps.Cache.Set(ctx, cacheKey, jsonBytes, 30*time.Minute)
+		deps.Cache.Set(ctx, cacheKey, jsonBytes, webSearchTTL)
 		deps.Metrics.RecordToolCall("web_search", time.Since(start), nil, "", false)
 		ev := audit.NewEvent("tool_call", auth.TenantIDFromContext(ctx), auth.UserIDFromContext(ctx))
 		ev.ToolName = "web_search"
@@ -139,7 +140,7 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 			trackSources(ctx, deps, input.SessionID, searchResultsToSources(results))
 		}
 
-		return structuredResult(jsonBytes), nil, nil
+		return freshResult(jsonBytes, webSearchTTL), nil, nil
 	})
 }
 
@@ -178,13 +179,18 @@ func toolError(msg string) *mcp.CallToolResult {
 }
 
 func rateLimitError(err error) *mcp.CallToolResult {
-	msg := fmt.Sprintf("The search service is temporarily busy: %v. Please wait about 60 seconds and try again, or try a different search provider.", err)
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			&mcp.TextContent{Text: msg},
+	seconds := 60
+	provider := extractProviderName(err)
+	return structuredError(
+		fmt.Sprintf("Rate limited (%s). Wait 60 seconds and retry, or try a different provider.", provider),
+		ToolError{
+			Kind:              ErrKindRateLimit,
+			Retryable:         true,
+			RetryAfterSeconds: &seconds,
+			SuggestedAction:   ActionRetryAfterDelay,
+			Provider:          provider,
 		},
-		IsError: true,
-	}
+	)
 }
 
 func isRateLimitError(err error) bool {
@@ -207,15 +213,29 @@ func upstreamErrorResponse(toolName string, err error) *mcp.CallToolResult {
 	if isRateLimitError(err) {
 		return rateLimitError(err)
 	}
+	provider := extractProviderName(err)
 	if isAuthError(err) {
-		return toolError(fmt.Sprintf(
-			"%s failed: %v. Check that the required API key is set correctly in your environment. "+
-				"See .env.example for the required variables.",
-			toolName, err))
+		return structuredError(
+			fmt.Sprintf("%s: authentication failed. Check API key in .env.example.", toolName),
+			ToolError{
+				Kind:            ErrKindAuth,
+				Retryable:       false,
+				SuggestedAction: ActionCheckAPIKey,
+				Provider:        provider,
+				Detail:          err.Error(),
+			},
+		)
 	}
-	return toolError(fmt.Sprintf(
-		"%s failed: %v. If this persists, try a different provider or report at %s",
-		toolName, err, issueURL))
+	return structuredError(
+		fmt.Sprintf("%s failed: %v. Try a different provider or report at %s", toolName, err, issueURL),
+		ToolError{
+			Kind:            ErrKindUpstream,
+			Retryable:       true,
+			SuggestedAction: ActionTryDifferentProvider,
+			Provider:        provider,
+			Detail:          err.Error(),
+		},
+	)
 }
 
 func textResult(text string) *mcp.CallToolResult {

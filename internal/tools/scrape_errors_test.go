@@ -34,7 +34,7 @@ func TestScrapeErrorResponse_BrowserError(t *testing.T) {
 	if !result.IsError {
 		t.Fatal("expected IsError=true")
 	}
-	if !strings.Contains(text, "Chrome is not available") {
+	if !strings.Contains(text, "Chrome unavailable") {
 		t.Errorf("expected Chrome guidance, got: %s", text)
 	}
 	if !strings.Contains(text, "CHROME_PATH") {
@@ -166,8 +166,8 @@ func TestScrapeErrorResponse_NonScrapeError(t *testing.T) {
 	if !result.IsError {
 		t.Fatal("expected IsError=true")
 	}
-	if !strings.Contains(text, "scrape failed: some random error") {
-		t.Errorf("expected generic fallback message, got: %s", text)
+	if !strings.Contains(text, "some random error") {
+		t.Errorf("expected error message in response, got: %s", text)
 	}
 }
 
@@ -579,7 +579,7 @@ func TestScrapeTool_SSRF_ReturnsBlockedError(t *testing.T) {
 		t.Fatal("expected error response for SSRF-blocked URL")
 	}
 	text := res.Content[0].(*mcp.TextContent).Text
-	if !strings.Contains(text, "Scrape failed") {
-		t.Errorf("expected scrape failed message, got: %s", text)
+	if !strings.Contains(text, "error") && !strings.Contains(text, "Network") && !strings.Contains(text, "Blocked") {
+		t.Errorf("expected error message, got: %s", text)
 	}
 }

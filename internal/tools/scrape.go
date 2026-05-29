@@ -50,10 +50,10 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		}
 
 		cacheKey := scrapeCacheKey(input.URL, mode)
-		if cached, ok := deps.Cache.Get(ctx, cacheKey); ok {
+		if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("scrape_page", time.Since(start), nil, "", true)
 			auditToolCall(ctx, deps, "scrape_page", time.Since(start), nil, "")
-			return structuredResult(cached), nil, nil
+			return cachedResultWithMeta(cached, meta), nil, nil
 		}
 
 		result, err := deps.Scraper.Scrape(ctx, input.URL, maxLength)
@@ -115,38 +115,30 @@ const issueURL = "https://github.com/zoharbabin/web-researcher-mcp/issues"
 func scrapeErrorResponse(err error, url string) *mcp.CallToolResult {
 	var se *scraper.ScrapeError
 	if !errors.As(err, &se) {
-		return toolError(fmt.Sprintf("scrape failed: %v", err))
+		return structuredError(
+			fmt.Sprintf("Scrape failed for %s: %v", url, err),
+			ToolError{Kind: ErrKindUpstream, Retryable: true, SuggestedAction: ActionRetryAfterDelay},
+		)
 	}
 
+	te := scrapeErrorToToolError(se)
 	var msg string
 	switch se.Kind {
 	case scraper.ErrBrowser:
-		msg = fmt.Sprintf("Scrape failed for %s: %s. "+
-			"This site requires JavaScript rendering but Chrome is not available. "+
-			"Set the CHROME_PATH environment variable to a Chromium binary, or install Chrome/Chromium. "+
-			"If you believe this site should work without a browser, report at %s",
-			url, se.Message, issueURL)
+		msg = fmt.Sprintf("Scrape failed: Chrome unavailable. Set CHROME_PATH or install Chrome. Report at %s", issueURL)
 	case scraper.ErrBlocked:
-		msg = fmt.Sprintf("Scrape failed for %s: %s. "+
-			"The site may use bot detection that this scraper cannot bypass. "+
-			"If this is a commonly-needed site, consider reporting at %s",
-			url, se.Message, issueURL)
+		msg = fmt.Sprintf("Blocked: %s uses bot detection. Try alternative source or report at %s", url, issueURL)
 	case scraper.ErrContent:
-		msg = fmt.Sprintf("Scrape failed for %s: %s. "+
-			"The page may require authentication, be a single-page app needing browser support, or use a format not yet supported. "+
-			"If this seems like a bug, report at %s",
-			url, se.Message, issueURL)
+		msg = fmt.Sprintf("No content extracted from %s. May need browser rendering. Report at %s", url, issueURL)
 	case scraper.ErrAuth:
-		msg = fmt.Sprintf("Scrape failed for %s: %s. "+
-			"This page is behind a login wall and cannot be accessed by the scraper.",
-			url, se.Message)
+		msg = fmt.Sprintf("Auth required: %s is behind a login wall.", url)
 	case scraper.ErrRateLimit:
-		msg = fmt.Sprintf("Scrape temporarily unavailable for %s: rate limited. Try again in 60 seconds.", url)
+		msg = fmt.Sprintf("Rate limited on %s. Retry in 60 seconds.", url)
 	case scraper.ErrNetwork:
-		msg = fmt.Sprintf("Scrape failed for %s: %s. Check connectivity or try again.", url, se.Message)
+		msg = fmt.Sprintf("Network error on %s: %s. Check connectivity.", url, se.Message)
 	default:
-		msg = fmt.Sprintf("scrape failed: %v", err)
+		msg = fmt.Sprintf("Scrape failed for %s: %v", url, err)
 	}
 
-	return toolError(msg)
+	return structuredError(msg, te)
 }

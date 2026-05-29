@@ -41,10 +41,10 @@ func registerImageSearch(srv *mcp.Server, deps Dependencies) {
 		}
 
 		cacheKey := searchCacheKey("image", input.Query, numResults, input.Size, input.Type, input.ColorType, input.DominantColor, input.FileType)
-		if cached, ok := deps.Cache.Get(ctx, cacheKey); ok {
+		if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("image_search", time.Since(start), nil, "", true)
 			auditToolCall(ctx, deps, "image_search", time.Since(start), nil, "")
-			return structuredResult(cached), nil, nil
+			return cachedResultWithMeta(cached, meta), nil, nil
 		}
 
 		provider, errResult := resolveProvider(deps, input.Provider)
