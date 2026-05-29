@@ -197,8 +197,8 @@ func TestComprehensiveResearchPrompt(t *testing.T) {
 	if !strings.Contains(tc.Text, "quantum computing") {
 		t.Error("expected prompt to mention the topic")
 	}
-	if !strings.Contains(tc.Text, "ACADEMIC") {
-		t.Error("expected deep research to include academic step")
+	if !strings.Contains(tc.Text, "academic_search") {
+		t.Error("expected deep research to mention academic_search tool")
 	}
 }
 

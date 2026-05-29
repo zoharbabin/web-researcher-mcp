@@ -70,6 +70,22 @@ When `PORT` is set, the server starts an HTTP listener in addition to STDIO.
 - `GET /metrics` — Prometheus metrics
 - `GET /.well-known/oauth-authorization-server` — OAuth metadata
 
+### Transport Mode Differences
+
+| Behavior | STDIO (Local) | HTTP (Cloud/Team) |
+|----------|:---:|:---:|
+| Tool functionality | Identical | Identical |
+| Tool descriptions | Identical | Identical |
+| Auth required | No | Yes (OAuth 2.1) |
+| Rate limiting (server-side) | None | Per-tenant + global |
+| Rate limiting (upstream APIs) | Applies | Applies |
+| Session persistence | Local disk | Local disk (use sticky sessions for multi-instance) |
+| Audit logging | Yes | Yes |
+| SSRF protection | Yes | Yes |
+| Cache | Local memory + disk | Local memory + disk |
+
+**Design intent:** STDIO mode trusts the local user implicitly (it runs as their process). HTTP mode adds auth and rate limiting for untrusted network clients. Tool handlers execute identically regardless of transport.
+
 ---
 
 ## Docker

@@ -135,20 +135,15 @@ func registerPrompts(srv *mcp.Server) {
 		}
 
 		prompt := "Research the topic: " + topic + "\n\n" +
-			"Follow this systematic process (" + steps + " steps):\n\n" +
-			"1. BROAD SEARCH: Use web_search to find overview information.\n" +
-			"2. IDENTIFY SOURCES: From the results, identify the most authoritative sources.\n" +
-			"3. DEEP DIVE: Use scrape_page on the top 3-5 sources to extract detailed content.\n"
-
-		if depth != "quick" {
-			prompt += "4. CROSS-REFERENCE: Compare findings across sources for consistency.\n" +
-				"5. IDENTIFY GAPS: Note any knowledge gaps or contradictions.\n"
-		}
-		if depth == "deep" {
-			prompt += "6. ACADEMIC: Use academic_search for peer-reviewed sources on the topic.\n"
-		}
-
-		prompt += "\nSummarize findings with citations. Use sequential_search to track your research progress."
+			"Available tools: web_search, scrape_page, search_and_scrape, news_search, academic_search, patent_search, image_search.\n" +
+			"Use sequential_search to track progress across steps (pass sessionId between calls).\n\n" +
+			"Research depth: " + depth + " (" + steps + " steps)\n\n" +
+			"Guidance:\n" +
+			"- Start broad, then go deeper based on what you find.\n" +
+			"- If a tool returns zero results with a 'hints' object, follow its suggestedActions.\n" +
+			"- If errors include retryable:true, respect retryAfterSeconds before retrying.\n" +
+			"- Cross-reference findings across multiple sources for accuracy.\n" +
+			"- End with a summary including citations from scrape_page results.\n"
 
 		return &mcp.GetPromptResult{
 			Description: "Comprehensive research guide for: " + topic,
@@ -176,12 +171,13 @@ func registerPrompts(srv *mcp.Server) {
 		if extra != "" {
 			prompt += "Context: " + extra + "\n\n"
 		}
-		prompt += "Process:\n" +
-			"1. Search for evidence supporting the claim\n" +
-			"2. Search for evidence contradicting the claim\n" +
-			"3. Evaluate source authority and recency\n" +
-			"4. Report confidence level (high/medium/low) with reasoning\n\n" +
-			"Use web_search and scrape_page to gather evidence from multiple independent sources."
+		prompt += "Available tools: web_search, news_search, search_and_scrape, scrape_page, academic_search.\n" +
+			"Use sequential_search to track your verification steps.\n\n" +
+			"Approach:\n" +
+			"- Search for evidence both supporting and contradicting the claim.\n" +
+			"- Evaluate source authority and recency.\n" +
+			"- If search_and_scrape returns status:'partial', check scrapeFailures for context.\n" +
+			"- Report confidence level (high/medium/low) with reasoning and cited sources.\n"
 
 		return &mcp.GetPromptResult{
 			Description: "Fact-check: " + claim,
@@ -209,12 +205,14 @@ func registerPrompts(srv *mcp.Server) {
 		if market != "" {
 			prompt += "Market: " + market + "\n"
 		}
-		prompt += "\nResearch plan:\n" +
-			"1. Use web_search to find company information and recent news\n" +
-			"2. Use news_search to find recent developments and announcements\n" +
-			"3. Use patent_search to analyze their patent portfolio and R&D focus\n" +
-			"4. Synthesize findings into strengths, weaknesses, opportunities, threats\n\n" +
-			"Use search_and_scrape for deeper analysis of key sources."
+		prompt += "\nAvailable tools: web_search, news_search, patent_search, search_and_scrape, scrape_page, academic_search.\n" +
+			"Use sequential_search to track research across steps (preserves progress if context is lost).\n\n" +
+			"Research areas to cover:\n" +
+			"- Company information, recent developments, and market position\n" +
+			"- Patent portfolio and R&D direction (via patent_search with assignee parameter)\n" +
+			"- News coverage and announcements\n" +
+			"- Synthesize into strengths, weaknesses, opportunities, threats\n\n" +
+			"If any tool returns zero results with hints, follow the suggestedActions to broaden or redirect your search.\n"
 
 		return &mcp.GetPromptResult{
 			Description: "Competitive analysis: " + company,
@@ -244,13 +242,13 @@ func registerPrompts(srv *mcp.Server) {
 		if yearFrom != "" || yearTo != "" {
 			prompt += "Time range: " + yearFrom + " to " + yearTo + "\n\n"
 		}
-		prompt += "Process:\n" +
-			"1. Use academic_search to find relevant papers\n" +
-			"2. Use scrape_page to get abstracts and key findings\n" +
-			"3. Identify major themes, methodologies, and findings\n" +
-			"4. Note gaps in the literature and future research directions\n" +
-			"5. Provide properly formatted citations\n\n" +
-			"Use sequential_search to track progress across multiple search iterations."
+		prompt += "Available tools: academic_search, web_search, scrape_page, search_and_scrape.\n" +
+			"Use sequential_search to track progress across iterations (sessions persist 4 hours and survive restarts).\n\n" +
+			"Approach:\n" +
+			"- Use academic_search with year filters and source parameters for targeted results.\n" +
+			"- Use scrape_page on paper URLs to get abstracts and key findings (returns APA/MLA citations).\n" +
+			"- Identify major themes, methodologies, and gaps in the literature.\n" +
+			"- If academic_search returns a hints object, follow its suggestions to broaden coverage.\n"
 
 		return &mcp.GetPromptResult{
 			Description: "Literature review: " + topic,

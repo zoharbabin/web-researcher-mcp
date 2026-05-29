@@ -209,6 +209,40 @@ Tools never panic. Tools never return Go errors from the handler function (the t
 
 ---
 
+## For LLM Agents: Parsing and Recovery
+
+When consuming error responses, LLM agents can use the structured JSON for autonomous recovery:
+
+### Recovery Decision Tree
+
+```
+1. Parse JSON block from the error response (after the blank line)
+2. Check retryable:
+   - true  → check retryAfterSeconds (if present, wait; then retry)
+   - false → follow suggestedAction directly
+3. Check suggestedAction:
+   - "retry_after_delay"      → wait retryAfterSeconds, retry same call
+   - "try_different_provider" → re-call with provider set to one from alternatives[]
+   - "check_api_key"          → inform user their API key needs configuration
+   - "broaden_query"          → remove filters or use broader terms
+   - "inform_user"            → tell user this content is inaccessible
+   - "report_bug"             → suggest user file a GitHub issue
+```
+
+### Zero-Result Responses (Not Errors)
+
+When `resultCount` is 0, patent_search and academic_search include a `hints` object:
+
+```json
+{"resultCount": 0, "hints": {"reason": "coverage_miss", "suggestedActions": [{"action": "switch_provider", "value": "lens"}]}}
+```
+
+### Partial Success (search_and_scrape)
+
+The `status` field tells you immediately: `"complete"`, `"partial"`, or `"failed"`. On `"partial"`, check `scrapeFailures[]` for per-URL recovery options.
+
+---
+
 ## Design Principles
 
 ### 1. Errors are actionable, not diagnostic

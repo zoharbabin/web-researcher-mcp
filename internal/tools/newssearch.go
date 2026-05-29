@@ -23,7 +23,7 @@ type newsSearchInput struct {
 func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "news_search",
-		Description:  "Find recent news articles on any topic. By default returns articles from the past week — use 'hour' or 'day' for breaking news, or 'month'/'year' to look further back. You can also filter by news source (e.g. reuters.com). Use web_search for non-news content, academic_search for research papers, or search_and_scrape if you need the full article text. Results refresh every 15 minutes.",
+		Description:  "Find recent news articles on any topic. By default returns articles from the past week — use 'hour' or 'day' for breaking news, or 'month'/'year' to look further back. You can also filter by news source (e.g. reuters.com). Each article includes title, url, source, publishedAt, and snippet. Errors return structured JSON (kind, retryable, suggestedAction). Use web_search for non-news content, academic_search for research papers, or search_and_scrape if you need the full article text. Results refresh every 15 minutes.",
 		Annotations:  readOnlyAnnotations(true, true),
 		OutputSchema: newsSearchOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input newsSearchInput) (*mcp.CallToolResult, any, error) {

@@ -26,7 +26,7 @@ type scrapePageInput struct {
 func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "scrape_page",
-		Description:  "Read and extract the main content from any URL — web pages (including JavaScript-heavy sites), PDFs, Word docs, PowerPoint files, and YouTube transcripts. Automatically picks the best extraction method. Returns the readable text along with a citation you can use (APA/MLA format) and page metadata. Use 'preview' mode for a quick look (first ~5000 characters). Use search_and_scrape to find and read pages in one step, or web_search if you just need links. Results stay fresh for 1 hour.",
+		Description:  "Read and extract the main content from any URL — web pages (including JavaScript-heavy sites), PDFs, Word docs, PowerPoint files, and YouTube transcripts. Automatically picks the best extraction method. Returns readable text, citation (APA/MLA), contentLength, estimatedTokens, and truncated flag. Some sites block extraction (bot detection, login walls); errors return structured JSON with kind (blocked, auth_required, rate_limited, network), retryable flag, and suggestedAction for recovery. Use 'preview' mode for a quick look (first ~5000 characters). Use search_and_scrape to find and read pages in one step, or web_search if you just need links. Results stay fresh for 1 hour.",
 		Annotations:  readOnlyAnnotations(true, true),
 		OutputSchema: scrapePageOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input scrapePageInput) (*mcp.CallToolResult, any, error) {
