@@ -123,6 +123,7 @@ type AcademicSearchParams struct {
 	Source     string // hint: "arxiv", "pubmed" — provider-specific filtering
 	NumResults int
 	OpenAccess bool
+	SortBy     string // "relevance" (default) or "date"
 }
 
 // AcademicResult represents a scholarly paper from an academic search provider.

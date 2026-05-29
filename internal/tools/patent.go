@@ -93,12 +93,17 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 					deps.Metrics.RecordToolCall("patent_search", time.Since(start), err, errCode, false)
 					auditToolCall(ctx, deps, "patent_search", time.Since(start), err, errCode)
 					return upstreamErrorResponse("patent search", err), nil, nil
+				} else {
+					// Provider returned nil results (e.g., USPTO for non-US office).
+					// When a specific provider was explicitly requested, don't silently
+					// fall back — return empty results from that provider.
+					source = input.Provider
 				}
 			}
 		}
 
 		// Strategy 2: Try the main provider (Router implements PatentSearcher)
-		if len(patents) == 0 && input.Provider == "" {
+		if len(patents) == 0 && source == "" {
 			if ps, ok := deps.Search.(search.PatentSearcher); ok {
 				apiResults, err := ps.Patents(ctx, searchParams)
 				if err == nil && len(apiResults) > 0 {
@@ -109,7 +114,7 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 		}
 
 		// Strategy 3: Try patent-only providers directly (non-router mode)
-		if len(patents) == 0 && input.Provider == "" {
+		if len(patents) == 0 && source == "" {
 			for name, pp := range deps.PatentProviders {
 				if !pp.Metadata().MatchesRegion(input.PatentOffice) {
 					continue
@@ -126,7 +131,7 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 		}
 
 		// Strategy 4: Fallback — discover via web search + enrich from detail pages
-		if len(patents) == 0 {
+		if len(patents) == 0 && source == "" {
 			provider, errResult := resolveProvider(deps, "")
 			if errResult != nil {
 				return errResult, nil, nil

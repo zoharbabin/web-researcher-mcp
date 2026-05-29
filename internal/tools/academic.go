@@ -95,6 +95,7 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 			Source:     source,
 			NumResults: numResults,
 			OpenAccess: input.OpenAccess,
+			SortBy:     input.SortBy,
 		}
 
 		var results []search.AcademicResult

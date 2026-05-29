@@ -59,7 +59,6 @@ func (u *USPTOProvider) doSearch(ctx context.Context, params PatentSearchParams)
 	q := url.Values{}
 	q.Set("q", query)
 	q.Set("rows", strconv.Itoa(clamp(params.NumResults, 1, 10)))
-	q.Set("sort", "score desc,applicationMetaData.filingDate desc")
 
 	reqURL := u.baseURL + "?" + q.Encode()
 	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
@@ -157,29 +156,25 @@ func (u *USPTOProvider) assigneeFromAssignments(assignments []usptoAssignment) s
 }
 
 func (u *USPTOProvider) buildQuery(params PatentSearchParams) string {
+	// USPTO PEDS API uses simple full-text search. Field-qualified queries
+	// (applicationMetaData.inventionTitle:...) and sort parameters are rejected
+	// with HTTP 400. Use quoted phrases for precision.
 	var parts []string
 
 	if params.Query != "" {
-		parts = append(parts, fmt.Sprintf("applicationMetaData.inventionTitle:(%s)", params.Query))
+		parts = append(parts, fmt.Sprintf("%q", params.Query))
 	}
 	if params.Assignee != "" {
-		parts = append(parts, fmt.Sprintf("applicationMetaData.firstApplicantName:%s", params.Assignee))
+		parts = append(parts, fmt.Sprintf("%q", params.Assignee))
 	}
 	if params.Inventor != "" {
-		parts = append(parts, fmt.Sprintf("applicationMetaData.firstInventorName:%s", params.Inventor))
-	}
-	if params.YearFrom > 0 && params.YearTo > 0 {
-		parts = append(parts, fmt.Sprintf("applicationMetaData.filingDate:[%d-01-01 TO %d-12-31]", params.YearFrom, params.YearTo))
-	} else if params.YearFrom > 0 {
-		parts = append(parts, fmt.Sprintf("applicationMetaData.filingDate:[%d-01-01 TO 9999-12-31]", params.YearFrom))
-	} else if params.YearTo > 0 {
-		parts = append(parts, fmt.Sprintf("applicationMetaData.filingDate:[0000-01-01 TO %d-12-31]", params.YearTo))
+		parts = append(parts, fmt.Sprintf("%q", params.Inventor))
 	}
 
 	if len(parts) == 0 {
 		return "*"
 	}
-	return strings.Join(parts, " AND ")
+	return strings.Join(parts, " ")
 }
 
 // SetBaseURL overrides the API base URL (used in testing).

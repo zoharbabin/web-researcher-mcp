@@ -326,7 +326,18 @@ func resolvePatentSearcher(deps Dependencies, providerName string) (search.Paten
 		}
 	}
 
-	return nil, nil
+	// Check if it's a known web search provider (valid for fallback)
+	for _, name := range search.SupportedProviders {
+		if name == providerName {
+			return nil, nil
+		}
+	}
+
+	// Completely unknown provider — return error with full list
+	return nil, toolError(fmt.Sprintf(
+		"Unknown patent provider %q. Supported providers: %s. "+
+			"If you need a provider that isn't listed, report at %s",
+		providerName, strings.Join(allSupportedProviders(), ", "), issueURL))
 }
 
 func allSupportedProviders() []string {

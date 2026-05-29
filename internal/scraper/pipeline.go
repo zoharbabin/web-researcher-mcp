@@ -191,7 +191,8 @@ func isDocumentURL(url string) bool {
 	return strings.HasSuffix(lower, ".pdf") ||
 		strings.HasSuffix(lower, ".docx") ||
 		strings.HasSuffix(lower, ".pptx") ||
-		strings.Contains(lower, "application/pdf")
+		strings.Contains(lower, "application/pdf") ||
+		strings.Contains(lower, "arxiv.org/pdf/")
 }
 
 var knownSPADomains = []string{

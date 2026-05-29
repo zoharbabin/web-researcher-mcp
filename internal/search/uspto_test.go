@@ -205,22 +205,22 @@ func TestUSPTOProvider_QueryConstruction(t *testing.T) {
 		{
 			name:   "simple query",
 			params: PatentSearchParams{Query: "video encoding"},
-			want:   "applicationMetaData.inventionTitle:(video encoding)",
+			want:   `"video encoding"`,
 		},
 		{
 			name:   "with assignee",
 			params: PatentSearchParams{Query: "video", Assignee: "Kaltura"},
-			want:   `applicationMetaData.inventionTitle:(video) AND applicationMetaData.firstApplicantName:Kaltura`,
+			want:   `"video" "Kaltura"`,
 		},
 		{
-			name:   "with year range",
-			params: PatentSearchParams{Query: "AI", YearFrom: 2020, YearTo: 2024},
-			want:   `applicationMetaData.inventionTitle:(AI) AND applicationMetaData.filingDate:[2020-01-01 TO 2024-12-31]`,
+			name:   "query with inventor",
+			params: PatentSearchParams{Query: "AI", Inventor: "Smith"},
+			want:   `"AI" "Smith"`,
 		},
 		{
 			name:   "assignee only",
 			params: PatentSearchParams{Assignee: "Google"},
-			want:   `applicationMetaData.firstApplicantName:Google`,
+			want:   `"Google"`,
 		},
 	}
 

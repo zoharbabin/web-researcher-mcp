@@ -67,8 +67,15 @@ func (p *OpenAlexProvider) doSearch(ctx context.Context, params AcademicSearchPa
 	if params.OpenAccess {
 		filters = append(filters, "open_access.is_oa:true")
 	}
+	if sourceID := openAlexSourceID(params.Source); sourceID != "" {
+		filters = append(filters, "primary_location.source.id:"+sourceID)
+	}
 	if len(filters) > 0 {
 		q.Set("filter", strings.Join(filters, ","))
+	}
+
+	if params.SortBy == "date" {
+		q.Set("sort", "publication_date:desc")
 	}
 
 	reqURL := p.baseURL + "/works?" + q.Encode()
@@ -189,6 +196,24 @@ func parseOpenAlexResponse(data []byte) ([]AcademicResult, error) {
 	}
 
 	return results, nil
+}
+
+// openAlexSourceID maps user-friendly source names to OpenAlex source IDs.
+func openAlexSourceID(source string) string {
+	switch strings.ToLower(source) {
+	case "arxiv":
+		return "S4306400194"
+	case "pubmed":
+		return "S4306525036"
+	case "ieee":
+		return "S202467917"
+	case "nature":
+		return "S137773608"
+	case "springer":
+		return "S70931966"
+	default:
+		return ""
+	}
 }
 
 // reconstructAbstract rebuilds abstract text from OpenAlex's inverted index format.
