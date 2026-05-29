@@ -42,11 +42,13 @@ tests/benchmark/  # Performance benchmarks
 ## Design Rules
 
 1. **Zero global state** — all deps flow through `tools.Dependencies` struct (constructed in `main.go`)
-2. **Interface-driven** — `cache.Cache`, `search.Provider`, `audit.Auditor` are interfaces; swap implementations without touching callers
-3. **Errors are values** — tool handlers return `toolError("message")` which sets `IsError: true` on the MCP result; never panic
+2. **Interface-driven** — `cache.Cache`, `search.Provider`, `audit.Auditor` are interfaces; swap implementations without touching callers. Specialized interfaces: `search.PatentSearcher`, `search.AcademicSearcher`, `search.PatentProvider`, `search.AcademicProvider`
+3. **Errors are values** — tool handlers return `toolError("message")` which sets `IsError: true` on the MCP result; never panic. Upstream errors use `upstreamErrorResponse()`. Scrape errors use typed `ScrapeError{Kind}` (see `internal/scraper/errors.go`)
 4. **Bounded concurrency** — scraping semaphore (5 slots), mutex-serialized browser, per-tenant rate limits
 5. **Lens routing** — if `lens` is set, `site:` operators are injected and routed to the configured provider; lenses with a dedicated `cx` route directly to that Google PSE engine
 6. **Multi-provider routing** — when `SEARCH_ROUTING` is set, the Router wraps all available providers with per-provider circuit breakers and priority-ordered fallback; transparent to tools via the `search.Provider` interface
+7. **Explicit provider honoring** — when a user explicitly requests a provider via the `provider` field, that provider is used exclusively; if it returns empty results (e.g., USPTO for non-US patents), the tool returns empty — no silent fallback
+8. **Provider maps** — `deps.SearchProviders`, `deps.PatentProviders`, `deps.AcademicProviders` hold all configured providers by name; built at startup via `AvailableProviders()`, independent of routing config
 
 ## How to Add a Tool
 
@@ -54,7 +56,8 @@ tests/benchmark/  # Performance benchmarks
    - Define a typed input struct with `json` + `jsonschema` tags
    - Write a `register<Name>(srv *mcp.Server, deps Dependencies)` function
    - Use `deps.Cache` for caching, `deps.Metrics` for telemetry, `deps.Auditor` for audit
-   - Return errors via `toolError(msg)`, success via `textResult(json)`
+   - Return validation errors via `toolError(msg)`, upstream errors via `upstreamErrorResponse(toolName, err)`, success via `structuredResult(jsonBytes)`
+   - Add `Annotations: readOnlyAnnotations(idempotent, openWorld)` to the tool definition
 2. Add `register<Name>(srv, deps)` to `RegisterAll()` in `internal/tools/registry.go`
 3. Add tests to `internal/tools/tools_test.go`
 4. Document the schema in `docs/TOOLS.md`
@@ -69,10 +72,13 @@ tests/benchmark/  # Performance benchmarks
 ## Key Patterns
 
 - **Tool handler signature**: `func(ctx context.Context, req *mcp.CallToolRequest, input T) (*mcp.CallToolResult, any, error)`
+- **Error responses**: `toolError(msg)` for validation; `upstreamErrorResponse(toolName, err)` for provider failures (detects rate limit, auth, general); `scrapeErrorResponse(err, url)` for scrape failures (categorized by `ScrapeError.Kind`)
+- **Provider resolution**: `resolveProvider()` for web search; `resolvePatentSearcher()` for patents; `resolveAcademicSearcher()` for academic — all return `*mcp.CallToolResult` errors with full provider list on unknown provider
 - **Cache key**: SHA-256 of deterministic params → `deps.Cache.Get/Set`
 - **Audit**: every tool call logs `audit.AuditEvent{ToolName, Duration, Success, Metadata, ...}` via `deps.Auditor.Log()`
 - **SSRF protection**: `scraper.NewSSRFSafeClient()` validates all resolved IPs before connecting
 - **Content pipeline**: raw HTML → sanitize (bluemonday) → dedup (paragraph hashing) → truncate (sentence boundary) → quality score
+- **Tool annotations**: all tools use `readOnlyAnnotations(idempotent, openWorld)` — enforced by `TestAllToolsHaveAnnotations` in CI
 
 ## Environment
 
@@ -93,21 +99,37 @@ Push a `v*` tag → CI runs GoReleaser → cross-platform binaries + Docker mult
 
 ## Documentation Guidelines
 
-Docs must be **drift-resistant by design**:
+Docs must be **drift-resistant by design** and **always reflect the current codebase accurately**:
 
-1. **No hardcoded counts** — don't write "8 tools" or "4 providers"; use "multiple" or let a table speak for itself
-2. **No version numbers** — `go.mod` is the source of truth for dependency versions; never inline them in prose or tables
-3. **No duplicated content** — each fact lives in one place; other docs point to it (e.g., env vars live in `docs/DEPLOYMENT.md`, not also in README)
-4. **No detailed file listings** — use package-level overviews; readers can run `tree` or `find` for the full picture
-5. **No inlined code snippets that mirror source** — describe the pattern and point to the canonical file (e.g., "see `internal/tools/search.go`") instead of copy-pasting structs that will rot
-6. **Source-of-truth pointers** — when referencing something that changes (versions, schemas, domains), name the file where it's defined
+### What docs MUST do:
+1. **Stay current** — every feature, config, architecture flow, and workflow must be accurately documented. No drifts, no hallucinations, no outdated claims
+2. **Be easy to get started with** — copy-paste ready commands, no prose to parse for setup
+3. **Never contain secrets** — no API keys, tokens, or private data; only placeholders
+4. **Tool descriptions must match code** — side effects, read/write capability, idempotency clearly marked
+5. **Output schemas include provenance** — `source` field tells which provider answered; `citation` shows where data came from
+
+### What to deliberately EXCLUDE (prevents drift):
+- No hardcoded counts (tool count, provider count — `registry.go` / `provider.go` are sources of truth)
+- No version numbers (`go.mod` is the source of truth)
+- No duplicated content (each fact lives in one place; other docs point to it)
+- No env var tables in README (`.env.example` and `docs/DEPLOYMENT.md` are authoritative)
+- No dependency lists (`go.mod` is the source of truth)
+- No inlined code snippets that mirror source — describe the pattern and point to the canonical file
+
+### Drift-resistant patterns:
+- Reference file paths and function names that are structural (unlikely to change)
+- Reference interfaces by name (stable contracts)
+- Point to other docs for detail rather than duplicating
+- `TestAllToolsHaveAnnotations` in CI catches annotation drift at build time
 
 ## Reference Docs
 
 | File | When to read |
 |------|--------------|
 | `ARCHITECTURE.md` | Understanding design decisions, tech stack, concurrency model |
-| `CONTRIBUTING.md` | Code style, commit format, PR process, adding tools |
-| `docs/TOOLS.md` | Tool parameter schemas and behavior contracts |
+| `CONTRIBUTING.md` | Code style, commit format, PR process, adding tools/providers |
+| `docs/TOOLS.md` | Tool parameter schemas, behavior contracts, error taxonomy |
 | `docs/SECURITY.md` | Threat model, SSRF, auth, compliance (SOC2/GDPR/FedRAMP) |
-| `docs/DEPLOYMENT.md` | Docker, K8s, client configs, admin endpoints, scaling |
+| `docs/DEPLOYMENT.md` | Docker, K8s, client configs, env vars, admin endpoints, scaling |
+| `docs/API_SETUP.md` | Getting API keys for each provider (step-by-step) |
+| `docs/EXAMPLES.md` | Example tool calls and expected response shapes |

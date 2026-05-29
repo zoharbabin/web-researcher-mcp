@@ -192,7 +192,7 @@ spec:
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `GOOGLE_CUSTOM_SEARCH_API_KEY` | Google API key (required unless `SEARCH_ROUTING` is set) | `AIzaSy...` (39 chars) |
-| `GOOGLE_CUSTOM_SEARCH_ID` | Search engine ID (required unless `SEARCH_ROUTING` is set) | `017576662512468239146:omuauf_gy1x` |
+| `GOOGLE_CUSTOM_SEARCH_ID` | Search engine ID (required unless `SEARCH_ROUTING` is set) | From [PSE console](https://programmablesearchengine.google.com/) |
 
 ### Search Provider
 

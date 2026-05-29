@@ -73,7 +73,7 @@ Keys set in the MCP client config are passed directly to the server process — 
 
 ```bash
 export GOOGLE_CUSTOM_SEARCH_API_KEY=AIzaSy...your-key
-export GOOGLE_CUSTOM_SEARCH_ID=017576662512468239146:omuauf_gy1x
+export GOOGLE_CUSTOM_SEARCH_ID=your-search-engine-id
 ```
 
 ---

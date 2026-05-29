@@ -24,11 +24,13 @@ Perform a web search and return structured result URLs with metadata.
 | `time_range` | string | no | — | `day`, `week`, `month`, `year` |
 | `safe` | string | no | `medium` | `off`, `medium`, `high` |
 | `language` | string | no | — | ISO 639-1 code |
-| `site` | string | no | — | Domain restriction |
+| `site` | string | no | — | Domain restriction (cannot combine with `lens`) |
 | `exact_terms` | string | no | — | Exact phrase match |
 | `exclude_terms` | string | no | — | Terms to exclude |
 | `country` | string | no | — | ISO 3166-1 alpha-2 |
-| `lens` | string | no | — | Search lens name |
+| `lens` | string | no | — | Domain lens (overrides `site`). See `lenses/` directory for available lenses |
+| `provider` | string | no | — | Force search provider. Returns error listing available providers if unknown |
+| `sessionId` | string | no | — | Link results to a `sequential_search` session |
 
 ### Output Schema
 
@@ -61,9 +63,11 @@ type SearchResult struct {
 - TTL: 30 minutes
 
 ### Error Conditions
-- Invalid API key → return error with setup instructions
-- Rate limited → circuit breaker opens, return 429
+- Unknown provider → error listing all supported providers (no duplicates)
+- Invalid/missing API key → `upstreamErrorResponse()` with setup instructions referencing `.env.example`
+- Rate limited → `rateLimitError()` suggesting 60s wait or different provider
 - No results → return empty `urls` array (not an error)
+- All errors use `upstreamErrorResponse()` from `internal/tools/search.go` for consistent formatting
 
 ---
 
@@ -77,8 +81,9 @@ Extract content from a URL, supporting web pages, documents, and YouTube videos.
 | Field | Type | Required | Default | Constraints |
 |-------|------|----------|---------|-------------|
 | `url` | string | yes | — | Valid HTTP(S) URL |
-| `mode` | string | no | `full` | `full`, `preview` |
+| `mode` | string | no | `full` | `full`, `preview` (first ~5000 bytes) |
 | `max_length` | int | no | 50000 | Bytes |
+| `sessionId` | string | no | — | Link to a `sequential_search` session |
 
 ### Output Schema
 
@@ -160,7 +165,7 @@ type CitationFormats struct {
       ├─ Browser pool with lazy init + singleton pattern
       ├─ go-rod/stealth plugin (navigator spoofing, WebGL masking)
       ├─ Used for: Known SPA domains, JS-rendered content, bot challenges
-      ├─ Wait for: page stability (500ms) OR 30s timeout
+      ├─ Wait for: page stability (2s for SPA domains, 500ms otherwise) OR 30s timeout
       ├─ Extract: rendered DOM via JavaScript evaluation
       └─ Graceful cleanup via Pipeline.Close()
 
@@ -175,16 +180,26 @@ type CitationFormats struct {
 - patents.google.com, scholar.google.com, news.google.com
 - trends.google.com, twitter.com, x.com
 - linkedin.com, facebook.com, instagram.com
+- medium.com, dev.to
 
 ### Cache
 - Key: SHA-256 of (url + mode)
 - TTL: 1 hour
 
-### Error Conditions
-- SSRF violation → return error, do not fetch
-- Timeout → return partial content if available, else error
-- 404/5xx → return error with HTTP status
-- Empty content after extraction → return error
+### Error Taxonomy (`internal/scraper/errors.go`)
+
+All scrape errors are typed as `ScrapeError{Kind, Message, Cause, URL, Tier}`. The `scrapeErrorResponse()` function in `internal/tools/scrape.go` maps each kind to an actionable LLM-facing message:
+
+| ErrorKind | Trigger | LLM Message Includes |
+|-----------|---------|---------------------|
+| `ErrNetwork` | DNS failure, timeout, connection refused | "network error — check connectivity or try again" |
+| `ErrBlocked` | HTTP 403, bot detection, SSRF, domain allowlist | "access was blocked" + GitHub issue link |
+| `ErrBrowser` | Chrome not found, launch failed, connect failed | "Chrome not available" + CHROME_PATH guidance |
+| `ErrContent` | Page loaded but <100 bytes extracted | "no readable content" + GitHub issue link |
+| `ErrAuth` | HTTP 401, login redirect | "authentication required" |
+| `ErrRateLimit` | HTTP 429 | "rate limited — try again in 60 seconds" |
+
+When all tiers fail, the composite error message lists each tier's outcome (e.g., `markdown: empty, stealth: HTTP 403, html: 12 bytes, browser: chrome launch failed`).
 
 ---
 
@@ -204,6 +219,8 @@ Combined search + scrape pipeline with quality scoring, deduplication, and sourc
 | `max_length_per_source` | int | no | 50000 | Bytes |
 | `total_max_length` | int | no | 300000 | Bytes |
 | `filter_by_query` | bool | no | false | — |
+| `provider` | string | no | — | Force search provider for the search phase |
+| `sessionId` | string | no | — | Link results to a `sequential_search` session |
 
 ### Output Schema
 
@@ -269,6 +286,7 @@ type PipelineSummary struct {
 | `dominant_color` | string | no | — | black, blue, brown, gray, green, orange, pink, purple, red, teal, white, yellow |
 | `file_type` | string | no | — | jpg, gif, png, bmp, svg, webp |
 | `safe` | string | no | `medium` | off, medium, high |
+| `provider` | string | no | — | Force search provider |
 
 ### Output Schema
 
@@ -308,6 +326,8 @@ type ImageResult struct {
 | `freshness` | string | no | `week` | hour, day, week, month, year |
 | `sort_by` | string | no | `relevance` | relevance, date |
 | `news_source` | string | no | — | Domain filter |
+| `provider` | string | no | — | Force search provider |
+| `sessionId` | string | no | — | Link results to a `sequential_search` session |
 
 ### Output Schema
 
@@ -381,6 +401,9 @@ Additional output fields: `query`, `totalResults`, `resultCount`, `source` (whic
 - When academic providers (OpenAlex, CrossRef) are configured, returns rich metadata (DOI, authors, citations, OA status)
 - Without academic env vars, falls back to site-restricted web search (identical to previous behavior)
 - Academic providers require only an email address (no API key registration)
+- `source` filter: when set (e.g., "arxiv"), OpenAlex filters by source ID; web fallback restricts to that source's domain
+- `sort_by=date`: OpenAlex sorts by `publication_date:desc`; CrossRef uses `published:desc`
+- `pdf_only`: post-filters results to only those with `PDFUrl` populated (may reduce result count)
 
 ### Academic Site Pool (web search fallback)
 arxiv.org, pubmed.ncbi.nlm.nih.gov, scholar.google.com, ieeexplore.ieee.org, dl.acm.org, nature.com, sciencedirect.com, link.springer.com, researchgate.net, plos.org, frontiersin.org, mdpi.com, wiley.com, jstor.org, semanticscholar.org, biorxiv.org, medrxiv.org
@@ -428,11 +451,14 @@ Additional output fields: `query`, `searchType`, `resultCount`, `source` (which 
 
 ### Behavior
 - 4-strategy fallback: explicit provider → router → patent-only providers → web search discovery
+- **When an explicit provider is set**: that provider is used exclusively. If it returns empty results (e.g., USPTO for non-US patents), empty results are returned — no silent fallback to web_discovery
+- **Unknown provider**: returns error listing all supported providers (no duplicates)
 - Strips HTML from API responses; extracts clean patent numbers from paths
 - Normalizes assignee names (removes Inc/LLC/Corp/Ltd suffixes for matching)
 - Region-aware routing: `patent_office` filters which providers are tried
 - Post-filter results by patent number prefix when `patent_office` is specified
 - Does not cache empty results (only caches when patents are found)
+- USPTO uses simple full-text search (quoted phrases); Lens uses Elasticsearch bool queries with match_phrase
 
 ### Cache
 - TTL: 24 hours (only for non-empty results)
@@ -557,3 +583,45 @@ Recover a `sequential_search` session after context loss. Returns the session su
 ### Token Estimation
 - Formula: `len(content) / 4` (conservative, ~4 chars per token)
 - Size categories: small (<5K chars), medium (<20K), large (<50K), very_large (>=50K)
+
+### Unified Error Handling (`internal/tools/search.go`)
+
+All tools follow a consistent error response pattern:
+
+| Error Type | Function | When Used |
+|-----------|----------|-----------|
+| Validation | `toolError(msg)` | Missing required params, invalid values |
+| Unknown provider | `toolError(...)` | Lists all supported providers via `allSupportedProviders()` |
+| Rate limited | `rateLimitError(err)` | HTTP 429 from upstream — suggests 60s wait |
+| Auth failure | `upstreamErrorResponse(tool, err)` | Invalid API key — points to `.env.example` |
+| General upstream | `upstreamErrorResponse(tool, err)` | Provider failure — suggests alternative provider or GitHub issue |
+| Scrape failure | `scrapeErrorResponse(err, url)` | Categorized by `ScrapeError.Kind` — see scrape_page section |
+
+Error messages are designed to be **actionable for LLM clients**: they explain what went wrong, what to try next, and when to suggest the user report a bug.
+
+### Tool Annotations (MCP Protocol)
+
+All tools declare annotations for client consumption (enforced by `TestAllToolsHaveAnnotations`):
+
+| Tool | ReadOnly | Idempotent | OpenWorld | Destructive |
+|------|----------|------------|-----------|-------------|
+| web_search | true | true | true | false |
+| scrape_page | true | true | true | false |
+| search_and_scrape | true | true | true | false |
+| image_search | true | true | true | false |
+| news_search | true | true | true | false |
+| academic_search | true | true | true | false |
+| patent_search | true | true | true | false |
+| sequential_search | true | **false** | false | false |
+| get_research_session | true | true | false | false |
+
+`sequential_search` is non-idempotent because it writes session state to disk on every call.
+
+### Provider Resolution
+
+When a `provider` field is set on any search tool:
+1. If provider is in the `SearchProviders`/`PatentProviders`/`AcademicProviders` map → use it
+2. If provider is known but not configured → error with env var hint
+3. If provider is completely unknown → error listing all supported providers (via `allSupportedProviders()`)
+
+Source of truth for supported providers: `search.SupportedProviders`, `search.SupportedPatentProviders`, `search.SupportedAcademicProviders` in `internal/search/provider.go`.

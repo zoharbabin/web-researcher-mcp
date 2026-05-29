@@ -11,7 +11,7 @@ An MCP server that gives AI assistants web search, content extraction, academic 
 One of:
 - macOS (arm64 or amd64), Linux (amd64 or arm64), or Windows (amd64)
 - OR Docker installed
-- OR Go 1.21+ installed
+- OR Go (version per `go.mod`) installed
 
 ## Option A: Binary Install (recommended)
 
