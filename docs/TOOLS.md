@@ -636,3 +636,17 @@ When a `provider` field is set on any search tool:
 3. If provider is completely unknown → error listing all supported providers (via `allSupportedProviders()`)
 
 Source of truth for supported providers: `search.SupportedProviders`, `search.SupportedPatentProviders`, `search.SupportedAcademicProviders` in `internal/search/provider.go`.
+
+### Known Provider Behaviors (not bugs)
+
+These are upstream behaviors we cannot control — they reflect how the underlying APIs work:
+
+| Provider | Behavior | Impact |
+|----------|----------|--------|
+| SearchAPI | May return fewer results than `num_results` requested | Query has limited coverage in their index; not an error |
+| Google (news) | `freshness=hour` may return articles 5-10 hours old | Google's "last hour" filter is approximate, not strict |
+| Google (images) | `size=large` may return images as small as 600x600 | Google's size thresholds differ from typical expectations |
+| USPTO | Full-text search only (no field-qualified queries) | API rejects field syntax; results rely on relevance ranking |
+| OpenAlex | `pdf_only` may return 0 results for common topics | Not all papers have PDF URLs indexed in their metadata |
+
+These are not errors in web-researcher-mcp. The tool faithfully passes parameters to the upstream API and returns whatever the API provides.
