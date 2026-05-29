@@ -180,9 +180,9 @@ func TestGoPDFCompareWithCurrent(t *testing.T) {
 	url := "https://arxiv.org/pdf/2301.00234"
 	data := downloadPDF(t, url)
 
-	// Current parser.
+	// Current parser (now uses gopdf internally).
 	reader := &byteReaderAt{data: data}
-	currentText, _, currentErr := parsePDF(reader, int64(len(data)))
+	currentText, _, currentErr := parsePDF(reader, int64(len(data)), data)
 
 	// gopdf parser.
 	doc, gopdfErr := pdf.OpenBytes(data)

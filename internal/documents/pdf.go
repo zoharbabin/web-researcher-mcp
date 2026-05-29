@@ -1,81 +1,36 @@
 package documents
 
 import (
-	"bytes"
 	"fmt"
 	"io"
-	"regexp"
-	"strings"
+
+	"github.com/razvandimescu/gopdf/pdf"
 )
 
-var pdfTextRegex = regexp.MustCompile(`\(((?:[^\\)]|\\.)*)\)`)
-
-func parsePDF(reader io.ReaderAt, size int64) (string, Metadata, error) {
+func parsePDF(_ io.ReaderAt, size int64, data []byte) (string, Metadata, error) {
 	meta := Metadata{
 		FileSize: size,
 	}
 
-	// Read entire content
-	buf := make([]byte, size)
-	_, err := reader.ReadAt(buf, 0)
-	if err != nil && err != io.EOF {
-		return "", meta, fmt.Errorf("failed to read PDF: %w", err)
-	}
-
-	// Basic PDF text extraction - extract text between stream/endstream
-	// and parenthesized strings in text objects
-	content := string(buf)
-
-	if !bytes.HasPrefix(buf, []byte("%PDF")) {
+	if len(data) < 4 || string(data[:4]) != "%PDF" {
 		return "", meta, fmt.Errorf("not a valid PDF file")
 	}
 
-	// Count pages (rough estimate)
-	meta.PageCount = strings.Count(content, "/Type /Page")
-	if meta.PageCount == 0 {
-		meta.PageCount = strings.Count(content, "/Type/Page")
+	doc, err := pdf.OpenBytes(data)
+	if err != nil {
+		return "", meta, fmt.Errorf("failed to parse PDF: %w", err)
 	}
 
-	// Extract text from PDF text objects
-	var sb strings.Builder
-	matches := pdfTextRegex.FindAllStringSubmatch(content, -1)
-	for _, m := range matches {
-		if len(m) >= 2 {
-			text := unescapePDFString(m[1])
-			if isReadableText(text) {
-				sb.WriteString(text)
-				sb.WriteString(" ")
-			}
-		}
+	meta.PageCount = doc.NumPages()
+
+	text, err := doc.Text()
+	if err != nil {
+		return "", meta, fmt.Errorf("no extractable text in PDF: %w", err)
 	}
 
-	result := strings.TrimSpace(sb.String())
-	if result == "" {
+	if text == "" {
 		return "", meta, fmt.Errorf("no extractable text in PDF (may be image-based)")
 	}
 
-	return result, meta, nil
-}
-
-func unescapePDFString(s string) string {
-	s = strings.ReplaceAll(s, "\\n", "\n")
-	s = strings.ReplaceAll(s, "\\r", "\r")
-	s = strings.ReplaceAll(s, "\\t", "\t")
-	s = strings.ReplaceAll(s, "\\(", "(")
-	s = strings.ReplaceAll(s, "\\)", ")")
-	s = strings.ReplaceAll(s, "\\\\", "\\")
-	return s
-}
-
-func isReadableText(s string) bool {
-	if len(s) < 2 {
-		return false
-	}
-	readable := 0
-	for _, r := range s {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == ' ' || r == '.' || r == ',' {
-			readable++
-		}
-	}
-	return float64(readable)/float64(len(s)) > 0.5
+	return text, meta, nil
 }

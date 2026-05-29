@@ -16,7 +16,7 @@ type Metadata struct {
 func Parse(data []byte, docType string) (string, Metadata, error) {
 	switch docType {
 	case "pdf":
-		return parsePDF(bytes.NewReader(data), int64(len(data)))
+		return parsePDF(bytes.NewReader(data), int64(len(data)), data)
 	case "docx":
 		return parseDOCX(data)
 	case "pptx":
