@@ -64,6 +64,8 @@ func (p *Pipeline) Scrape(ctx context.Context, url string, maxLength int) (*Scra
 	switch {
 	case isYouTubeURL(url):
 		result, err = p.scrapeYouTube(ctx, url, maxLength)
+	case isTwitterURL(url):
+		result, err = p.scrapeTwitter(ctx, url, maxLength)
 	case isDocumentURL(url):
 		result, err = p.scrapeDocument(ctx, url, maxLength)
 	default:
@@ -198,7 +200,7 @@ func isDocumentURL(url string) bool {
 var knownSPADomains = []string{
 	"go.dev", "pkg.go.dev",
 	"patents.google.com", "scholar.google.com", "news.google.com",
-	"trends.google.com", "twitter.com", "x.com",
+	"trends.google.com",
 	"linkedin.com", "facebook.com", "instagram.com",
 	"medium.com", "dev.to",
 }

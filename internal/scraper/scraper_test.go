@@ -869,7 +869,7 @@ func TestIsSPADomain(t *testing.T) {
 		expect bool
 	}{
 		{"https://patents.google.com/patent/US123", true},
-		{"https://twitter.com/user/status/123", true},
+		{"https://twitter.com/user/status/123", false}, // handled by dedicated twitter path
 		{"https://www.linkedin.com/in/user", true},
 		{"https://example.com/page", false},
 	}
