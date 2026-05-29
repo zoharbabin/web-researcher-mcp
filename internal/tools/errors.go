@@ -117,31 +117,6 @@ func scrapeErrorToToolError(se *scraper.ScrapeError) ToolError {
 	return te
 }
 
-// classifyUpstreamError detects the error category from an upstream provider error.
-func classifyUpstreamError(err error) (ErrorKind, bool) {
-	if err == nil {
-		return "", false
-	}
-	s := err.Error()
-	if strings.Contains(s, "rate limited") || strings.Contains(s, "429") || strings.Contains(s, "quota") {
-		return ErrKindRateLimit, true
-	}
-	if strings.Contains(s, "401") || strings.Contains(s, "API key not valid") || strings.Contains(s, "unauthorized") || strings.Contains(s, "INVALID_ARGUMENT") {
-		return ErrKindAuth, true
-	}
-	return ErrKindUpstream, true
-}
-
-// healthyAlternatives returns configured provider names excluding the failed one.
-func healthyAlternatives(deps Dependencies, failed string) []string {
-	var alts []string
-	for name := range deps.SearchProviders {
-		if name != failed {
-			alts = append(alts, name)
-		}
-	}
-	return alts
-}
 
 // extractProviderName attempts to extract the provider name from an error string.
 func extractProviderName(err error) string {

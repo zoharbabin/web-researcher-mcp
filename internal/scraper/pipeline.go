@@ -130,7 +130,7 @@ func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, max
 	// Compose a diagnostic error showing what each tier saw
 	var parts []string
 	allNetwork := true
-	var highestKind ErrorKind = ErrContent
+	highestKind := ErrContent
 	for _, o := range outcomes {
 		switch {
 		case o.err != nil:

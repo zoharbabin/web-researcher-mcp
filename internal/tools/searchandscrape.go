@@ -10,7 +10,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
-	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
@@ -217,10 +216,6 @@ func buildSourcesStructured(results []scrapeResult, query string, filterByQuery 
 	}
 
 	return sources, combinedParts, scraped, failures
-}
-
-func scrapeErrorKindName(kind scraper.ErrorKind) string {
-	return string(mapScrapeErrorKind(kind))
 }
 
 func assembleCombined(parts []string, deduplicate bool, totalMaxLen int) string {

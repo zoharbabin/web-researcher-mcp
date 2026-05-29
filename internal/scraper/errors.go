@@ -56,12 +56,12 @@ func rateLimitError(url, tier string) *ScrapeError {
 }
 
 func classifyHTTPStatus(statusCode int, url, tier string) *ScrapeError {
-	switch {
-	case statusCode == 401:
+	switch statusCode {
+	case 401:
 		return authError(url, tier, statusCode)
-	case statusCode == 403:
+	case 403:
 		return blockedError(url, tier, nil, fmt.Sprintf("HTTP %d", statusCode))
-	case statusCode == 429:
+	case 429:
 		return rateLimitError(url, tier)
 	default:
 		return newScrapeError(ErrNetwork, url, tier, nil, fmt.Sprintf("HTTP %d", statusCode))

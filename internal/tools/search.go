@@ -238,39 +238,6 @@ func upstreamErrorResponse(toolName string, err error) *mcp.CallToolResult {
 	)
 }
 
-// upstreamErrorWithAlternatives adds available alternative providers to the error.
-func upstreamErrorWithAlternatives(toolName string, err error, deps Dependencies) *mcp.CallToolResult {
-	if isRateLimitError(err) {
-		return rateLimitError(err)
-	}
-	provider := extractProviderName(err)
-	alts := healthyAlternatives(deps, provider)
-	if isAuthError(err) {
-		return structuredError(
-			fmt.Sprintf("%s: authentication failed. Check API key in .env.example.", toolName),
-			ToolError{
-				Kind:            ErrKindAuth,
-				Retryable:       false,
-				SuggestedAction: ActionCheckAPIKey,
-				Provider:        provider,
-				Alternatives:    alts,
-				Detail:          err.Error(),
-			},
-		)
-	}
-	return structuredError(
-		fmt.Sprintf("%s failed: %v. Try a different provider or report at %s", toolName, err, issueURL),
-		ToolError{
-			Kind:            ErrKindUpstream,
-			Retryable:       true,
-			SuggestedAction: ActionTryDifferentProvider,
-			Provider:        provider,
-			Alternatives:    alts,
-			Detail:          err.Error(),
-		},
-	)
-}
-
 func textResult(text string) *mcp.CallToolResult {
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
