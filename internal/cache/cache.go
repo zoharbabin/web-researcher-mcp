@@ -43,6 +43,45 @@ func (m *EntryMeta) Freshness() string {
 	}
 }
 
+// TenantAware wraps a Cache and prefixes all keys with the tenant ID
+// extracted from context, providing per-tenant cache isolation.
+// When tenantFromCtx returns "", keys pass through unmodified (shared mode).
+type TenantAware struct {
+	inner         Cache
+	tenantFromCtx func(ctx context.Context) string
+}
+
+func NewTenantAware(inner Cache, tenantFromCtx func(ctx context.Context) string) *TenantAware {
+	return &TenantAware{inner: inner, tenantFromCtx: tenantFromCtx}
+}
+
+func (t *TenantAware) scopedKey(ctx context.Context, key string) string {
+	tenant := t.tenantFromCtx(ctx)
+	if tenant == "" || tenant == "default" {
+		return key
+	}
+	return tenant + ":" + key
+}
+
+func (t *TenantAware) Get(ctx context.Context, key string) ([]byte, bool) {
+	return t.inner.Get(ctx, t.scopedKey(ctx, key))
+}
+
+func (t *TenantAware) GetWithMeta(ctx context.Context, key string) ([]byte, *EntryMeta, bool) {
+	return t.inner.GetWithMeta(ctx, t.scopedKey(ctx, key))
+}
+
+func (t *TenantAware) Set(ctx context.Context, key string, value []byte, ttl time.Duration) {
+	t.inner.Set(ctx, t.scopedKey(ctx, key), value, ttl)
+}
+
+func (t *TenantAware) Delete(ctx context.Context, key string) {
+	t.inner.Delete(ctx, t.scopedKey(ctx, key))
+}
+
+func (t *TenantAware) Flush()       { t.inner.Flush() }
+func (t *TenantAware) Close() error { return t.inner.Close() }
+
 type Noop struct{}
 
 func NewNoop() *Noop                                                                   { return &Noop{} }

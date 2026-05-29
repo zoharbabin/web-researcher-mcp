@@ -321,7 +321,7 @@ See `internal/audit/logger.go` for the canonical `AuditEvent` struct. Key fields
 | **Access** (Art. 15) | Not yet implemented. Planned: `GET /users/{id}/data` endpoint |
 | **Erasure** (Art. 17) | Not yet implemented. Planned: `DELETE /users/{id}/data` endpoint |
 | **Portability** (Art. 20) | Not yet implemented. Planned: JSON export of user-associated data |
-| **Restriction** (Art. 18) | `CACHE_ISOLATION=tenant` config accepted but not yet enforced — cache keys are content-addressed and shared across tenants |
+| **Restriction** (Art. 18) | Set `CACHE_ISOLATION=tenant` to scope all cache keys by tenant ID — prevents cross-tenant cache access |
 
 Data minimization (implemented): audit logs store parameter hashes (not raw queries), no persistent PII storage beyond cache TTLs.
 
@@ -354,7 +354,7 @@ GOEXPERIMENT=boringcrypto CGO_ENABLED=0 \
 | Search history | — | Per-tenant |
 | Audit logs | — | Filterable by tenant |
 
-**Note:** `CACHE_ISOLATION=tenant` is accepted as configuration but not yet enforced in the cache implementation. Cache keys are currently content-addressed (based on query parameters) and shared across tenants. For search results this is safe (same query returns same results regardless of tenant), but deployments requiring strict tenant data isolation should be aware of this limitation.
+**Note:** Set `CACHE_ISOLATION=tenant` to enforce per-tenant cache isolation. When enabled, all cache keys are prefixed with the authenticated tenant ID, preventing cross-tenant cache access. Default is `shared` (cache keys are content-addressed, identical queries share results across tenants). For search results sharing is safe (same query returns same results), but scrape cache may contain tenant-specific content — use `tenant` mode for strict data isolation deployments.
 
 ### Supply Chain Security
 

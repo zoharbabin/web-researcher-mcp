@@ -9,7 +9,7 @@ type HybridConfig struct {
 	Memory         MemoryConfig
 	Disk           DiskConfig
 	RedisURL       string
-	CacheIsolation string
+	CacheIsolation string // read by main.go to decide whether to wrap with TenantAware
 }
 
 type DiskConfig struct {

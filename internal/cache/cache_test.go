@@ -9,6 +9,108 @@ import (
 	"time"
 )
 
+// --- TenantAware Cache Tests ---
+
+type tenantCtxKey struct{}
+
+func TestTenantAware_Isolation(t *testing.T) {
+	t.Parallel()
+	inner := NewMemory(MemoryConfig{MaxSizeMB: 1})
+	ta := NewTenantAware(inner, func(ctx context.Context) string {
+		if v := ctx.Value(tenantCtxKey{}); v != nil {
+			return v.(string)
+		}
+		return "default"
+	})
+
+	ctxA := context.WithValue(context.Background(), tenantCtxKey{}, "tenant-a")
+	ctxB := context.WithValue(context.Background(), tenantCtxKey{}, "tenant-b")
+
+	ta.Set(ctxA, "key1", []byte("value-a"), time.Minute)
+	ta.Set(ctxB, "key1", []byte("value-b"), time.Minute)
+
+	valA, ok := ta.Get(ctxA, "key1")
+	if !ok || string(valA) != "value-a" {
+		t.Errorf("tenant-a expected 'value-a', got %q (ok=%v)", valA, ok)
+	}
+
+	valB, ok := ta.Get(ctxB, "key1")
+	if !ok || string(valB) != "value-b" {
+		t.Errorf("tenant-b expected 'value-b', got %q (ok=%v)", valB, ok)
+	}
+}
+
+func TestTenantAware_DefaultTenantNoPrefix(t *testing.T) {
+	t.Parallel()
+	inner := NewMemory(MemoryConfig{MaxSizeMB: 1})
+	ta := NewTenantAware(inner, func(ctx context.Context) string { return "default" })
+	ctx := context.Background()
+
+	ta.Set(ctx, "mykey", []byte("myval"), time.Minute)
+
+	// Should be accessible directly from inner (no prefix for "default")
+	val, ok := inner.Get(ctx, "mykey")
+	if !ok || string(val) != "myval" {
+		t.Errorf("default tenant should not prefix keys, got ok=%v val=%q", ok, val)
+	}
+}
+
+func TestTenantAware_DeleteScoped(t *testing.T) {
+	t.Parallel()
+	inner := NewMemory(MemoryConfig{MaxSizeMB: 1})
+	ta := NewTenantAware(inner, func(ctx context.Context) string {
+		if v := ctx.Value(tenantCtxKey{}); v != nil {
+			return v.(string)
+		}
+		return "default"
+	})
+
+	ctxA := context.WithValue(context.Background(), tenantCtxKey{}, "tenant-a")
+	ctxB := context.WithValue(context.Background(), tenantCtxKey{}, "tenant-b")
+
+	ta.Set(ctxA, "key1", []byte("a"), time.Minute)
+	ta.Set(ctxB, "key1", []byte("b"), time.Minute)
+
+	ta.Delete(ctxA, "key1")
+
+	_, ok := ta.Get(ctxA, "key1")
+	if ok {
+		t.Error("tenant-a key should be deleted")
+	}
+	val, ok := ta.Get(ctxB, "key1")
+	if !ok || string(val) != "b" {
+		t.Error("tenant-b key should still exist")
+	}
+}
+
+func TestTenantAware_GetWithMeta(t *testing.T) {
+	t.Parallel()
+	inner := NewMemory(MemoryConfig{MaxSizeMB: 1})
+	ta := NewTenantAware(inner, func(ctx context.Context) string {
+		if v := ctx.Value(tenantCtxKey{}); v != nil {
+			return v.(string)
+		}
+		return "default"
+	})
+
+	ctx := context.WithValue(context.Background(), tenantCtxKey{}, "org-1")
+	ta.Set(ctx, "k", []byte("v"), 5*time.Minute)
+
+	val, meta, ok := ta.GetWithMeta(ctx, "k")
+	if !ok {
+		t.Fatal("expected cache hit")
+	}
+	if string(val) != "v" {
+		t.Errorf("expected 'v', got %q", val)
+	}
+	if meta == nil {
+		t.Fatal("expected non-nil meta")
+	}
+	if meta.TTL != 5*time.Minute {
+		t.Errorf("expected TTL 5m, got %v", meta.TTL)
+	}
+}
+
 // --- Noop Cache Tests ---
 
 func TestNoop_GetAlwaysMiss(t *testing.T) {

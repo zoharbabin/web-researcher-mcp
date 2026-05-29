@@ -344,7 +344,7 @@ DAILY_QUOTA_PER_TENANT=10000
 |----------|-------------|---------|
 | `CACHE_ISOLATION` | Cache isolation mode (`shared` or `tenant`) | `shared` |
 
-**Note:** `CACHE_ISOLATION=tenant` is accepted but not yet enforced in the cache implementation. Cache keys are content-addressed and shared across tenants. For search results this is safe (same query returns same results), but deployments requiring strict tenant data isolation should be aware of this limitation.
+When `CACHE_ISOLATION=tenant`, all cache keys are prefixed with the authenticated tenant ID from the JWT token. This ensures tenant A's cached results are invisible to tenant B. Default (`shared`) is appropriate for single-tenant deployments or when search results are inherently public. Use `tenant` for multi-tenant deployments with strict data isolation requirements.
 
 ### Auth (Advanced)
 

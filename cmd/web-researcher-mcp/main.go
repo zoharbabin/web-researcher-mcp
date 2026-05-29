@@ -36,13 +36,19 @@ func main() {
 	}))
 	slog.SetDefault(logger)
 
-	cacheStore := cache.NewHybrid(cache.HybridConfig{
+	hybridCache := cache.NewHybrid(cache.HybridConfig{
 		Memory:         cache.MemoryConfig{MaxSizeMB: cfg.CacheMaxMemoryMB},
 		Disk:           cache.DiskConfig{Dir: cfg.CacheDir, EncryptionKey: cfg.CacheEncryptionKey, Version: version},
 		RedisURL:       cfg.RedisURL,
 		CacheIsolation: cfg.CacheIsolation,
 	})
-	defer cacheStore.Close()
+	defer hybridCache.Close()
+
+	var cacheStore cache.Cache = hybridCache
+	if cfg.CacheIsolation == "tenant" {
+		cacheStore = cache.NewTenantAware(hybridCache, auth.TenantIDFromContext)
+		logger.Info("cache isolation enabled", "mode", "per-tenant")
+	}
 
 	metricsCollector := metrics.NewCollector()
 	rateLimiter := ratelimit.New(cfg.RateLimit)
