@@ -584,20 +584,11 @@ Recover a `sequential_search` session after context loss. Returns the session su
 - Formula: `len(content) / 4` (conservative, ~4 chars per token)
 - Size categories: small (<5K chars), medium (<20K), large (<50K), very_large (>=50K)
 
-### Unified Error Handling (`internal/tools/search.go`)
+### Unified Error Handling
 
-All tools follow a consistent error response pattern:
+All tools follow a consistent error response pattern with actionable messages for LLM clients. Errors are categorized, never opaque strings. When the MCP server itself could improve (blocked sites, missing content types), error messages include a GitHub issue link to guide users toward reporting.
 
-| Error Type | Function | When Used |
-|-----------|----------|-----------|
-| Validation | `toolError(msg)` | Missing required params, invalid values |
-| Unknown provider | `toolError(...)` | Lists all supported providers via `allSupportedProviders()` |
-| Rate limited | `rateLimitError(err)` | HTTP 429 from upstream — suggests 60s wait |
-| Auth failure | `upstreamErrorResponse(tool, err)` | Invalid API key — points to `.env.example` |
-| General upstream | `upstreamErrorResponse(tool, err)` | Provider failure — suggests alternative provider or GitHub issue |
-| Scrape failure | `scrapeErrorResponse(err, url)` | Categorized by `ScrapeError.Kind` — see scrape_page section |
-
-Error messages are designed to be **actionable for LLM clients**: they explain what went wrong, what to try next, and when to suggest the user report a bug.
+Full details: see `docs/ERROR_HANDLING.md` — covers the three-layer error architecture, the scrape error taxonomy, provider error detection, and contributor guidelines.
 
 ### Tool Annotations (MCP Protocol)
 

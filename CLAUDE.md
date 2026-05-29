@@ -43,7 +43,7 @@ tests/benchmark/  # Performance benchmarks
 
 1. **Zero global state** — all deps flow through `tools.Dependencies` struct (constructed in `main.go`)
 2. **Interface-driven** — `cache.Cache`, `search.Provider`, `audit.Auditor` are interfaces; swap implementations without touching callers. Specialized interfaces: `search.PatentSearcher`, `search.AcademicSearcher`, `search.PatentProvider`, `search.AcademicProvider`
-3. **Errors are values** — tool handlers return `toolError("message")` which sets `IsError: true` on the MCP result; never panic. Upstream errors use `upstreamErrorResponse()`. Scrape errors use typed `ScrapeError{Kind}` (see `internal/scraper/errors.go`)
+3. **Errors are values** — tool handlers return `toolError("message")` which sets `IsError: true` on the MCP result; never panic. Upstream errors use `upstreamErrorResponse()`. Scrape errors use typed `ScrapeError{Kind}`. Full error architecture: see `docs/ERROR_HANDLING.md`
 4. **Bounded concurrency** — scraping semaphore (5 slots), mutex-serialized browser, per-tenant rate limits
 5. **Lens routing** — if `lens` is set, `site:` operators are injected and routed to the configured provider; lenses with a dedicated `cx` route directly to that Google PSE engine
 6. **Multi-provider routing** — when `SEARCH_ROUTING` is set, the Router wraps all available providers with per-provider circuit breakers and priority-ordered fallback; transparent to tools via the `search.Provider` interface
@@ -128,7 +128,8 @@ Docs must be **drift-resistant by design** and **always reflect the current code
 |------|--------------|
 | `ARCHITECTURE.md` | Understanding design decisions, tech stack, concurrency model |
 | `CONTRIBUTING.md` | Code style, commit format, PR process, adding tools/providers |
-| `docs/TOOLS.md` | Tool parameter schemas, behavior contracts, error taxonomy |
+| `docs/TOOLS.md` | Tool parameter schemas and behavior contracts |
+| `docs/ERROR_HANDLING.md` | Error taxonomy, LLM-facing messages, GitHub issue guidance, contributor patterns |
 | `docs/SECURITY.md` | Threat model, SSRF, auth, compliance (SOC2/GDPR/FedRAMP) |
 | `docs/DEPLOYMENT.md` | Docker, K8s, client configs, env vars, admin endpoints, scaling |
 | `docs/API_SETUP.md` | Getting API keys for each provider (step-by-step) |

@@ -241,15 +241,11 @@ Browser scrapes hold a scraping semaphore slot and then acquire the browser pool
 
 ## Error Handling
 
-Tool handlers return errors as MCP tool results with `IsError: true`:
+Three-layer architecture: typed scraper errors (`ScrapeError{Kind}` in `internal/scraper/errors.go`) → tool-level response mapping (`upstreamErrorResponse()`, `scrapeErrorResponse()` in `internal/tools/`) → MCP protocol (`IsError: true` with actionable text).
 
-| Error Type | MCP Response |
-|------------|-------------|
-| `context.DeadlineExceeded` | Tool error: timeout message |
-| `ErrCircuitOpen` | Tool error: "service temporarily unavailable" |
-| `ErrSSRFBlocked` | Tool error: "URL blocked by SSRF protection" |
-| Invalid input | Tool error: descriptive validation message |
-| Protocol-level errors | Handled by go-sdk (invalid JSON-RPC, unknown method) |
+Key design: errors guide LLM clients toward resolution — including suggesting GitHub issue reports when the MCP server itself could improve. Errors are categorized by `ErrorKind` enum (Network, Blocked, Browser, Content, Auth, RateLimit), not parsed as strings.
+
+Full specification: see `docs/ERROR_HANDLING.md`.
 
 ## Binary Output
 
