@@ -347,9 +347,14 @@ func resolveAcademicSearcher(deps Dependencies, providerName string) (search.Aca
 				return ap, nil
 			}
 			envHint := academicProviderEnvHint(providerName)
-			return nil, toolError(fmt.Sprintf(
-				"Academic provider %q is not configured. %s See docs/API_SETUP.md for details.",
-				providerName, envHint))
+			return nil, structuredError(
+				fmt.Sprintf("Academic provider %q is not configured. %s", providerName, envHint),
+				ToolError{
+					Kind:            ErrKindConfig,
+					Retryable:       false,
+					SuggestedAction: ActionCheckAPIKey,
+					Provider:        providerName,
+				})
 		}
 	}
 

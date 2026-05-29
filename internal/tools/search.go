@@ -307,11 +307,15 @@ func resolveProvider(deps Dependencies, providerName string) (search.Provider, *
 	}
 
 	if !supported {
-		return nil, toolError(fmt.Sprintf(
-			"Unknown search provider %q. Supported providers: %s. "+
-				"If you'd like us to add support for this provider, please open an issue at "+
-				"https://github.com/zoharbabin/web-researcher-mcp/issues",
-			providerName, strings.Join(allSupportedProviders(), ", ")))
+		return nil, structuredError(
+			fmt.Sprintf("Unknown search provider %q. Supported providers: %s.",
+				providerName, strings.Join(allSupportedProviders(), ", ")),
+			ToolError{
+				Kind:            ErrKindConfig,
+				Retryable:       false,
+				SuggestedAction: ActionTryDifferentProvider,
+				Alternatives:    allSupportedProviders(),
+			})
 	}
 
 	// Check if the default provider matches
@@ -331,10 +335,15 @@ func resolveProvider(deps Dependencies, providerName string) (search.Provider, *
 		}
 	}
 
-	return nil, toolError(fmt.Sprintf(
-		"Search provider %q is not configured. To use it, set the appropriate API key "+
-			"in your environment. See .env.example for required variables per provider.",
-		providerName))
+	return nil, structuredError(
+		fmt.Sprintf("Search provider %q is not configured. Set the appropriate API key. See .env.example.",
+			providerName),
+		ToolError{
+			Kind:            ErrKindConfig,
+			Retryable:       false,
+			SuggestedAction: ActionCheckAPIKey,
+			Provider:        providerName,
+		})
 }
 
 // resolvePatentSearcher returns a PatentSearcher for a given provider name.
@@ -373,9 +382,14 @@ func resolvePatentSearcher(deps Dependencies, providerName string) (search.Paten
 	for _, name := range search.SupportedPatentProviders {
 		if name == providerName {
 			envHint := patentProviderEnvHint(providerName)
-			return nil, toolError(fmt.Sprintf(
-				"Patent provider %q is not configured. %s See .env.example for details.",
-				providerName, envHint))
+			return nil, structuredError(
+				fmt.Sprintf("Patent provider %q is not configured. %s", providerName, envHint),
+				ToolError{
+					Kind:            ErrKindConfig,
+					Retryable:       false,
+					SuggestedAction: ActionCheckAPIKey,
+					Provider:        providerName,
+				})
 		}
 	}
 
@@ -387,10 +401,15 @@ func resolvePatentSearcher(deps Dependencies, providerName string) (search.Paten
 	}
 
 	// Completely unknown provider — return error with full list
-	return nil, toolError(fmt.Sprintf(
-		"Unknown patent provider %q. Supported providers: %s. "+
-			"If you need a provider that isn't listed, report at %s",
-		providerName, strings.Join(allSupportedProviders(), ", "), issueURL))
+	return nil, structuredError(
+		fmt.Sprintf("Unknown patent provider %q. Supported providers: %s.",
+			providerName, strings.Join(allSupportedProviders(), ", ")),
+		ToolError{
+			Kind:            ErrKindConfig,
+			Retryable:       false,
+			SuggestedAction: ActionTryDifferentProvider,
+			Alternatives:    allSupportedProviders(),
+		})
 }
 
 func allSupportedProviders() []string {
