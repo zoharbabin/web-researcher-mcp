@@ -214,7 +214,7 @@ spec:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SEARCH_PROVIDER` | Primary provider: google, brave, serper, searxng, searchapi | `google` |
+| `SEARCH_PROVIDER` | Primary provider: google, brave, serper, searxng, searchapi, duckduckgo | `duckduckgo` (if no API keys set) |
 | `SEARCH_FALLBACK_PROVIDER` | Fallback provider (simple fallback) | — |
 | `SEARCH_ROUTING` | Multi-provider routing (see below) | — |
 | `BRAVE_API_KEY` | Brave Search API key | — |
