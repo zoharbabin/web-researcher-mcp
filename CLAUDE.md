@@ -72,7 +72,7 @@ tests/benchmark/  # Performance benchmarks
 ## Key Patterns
 
 - **Tool handler signature**: `func(ctx context.Context, req *mcp.CallToolRequest, input T) (*mcp.CallToolResult, any, error)`
-- **Error responses**: `toolError(msg)` for validation; `upstreamErrorResponse(toolName, err)` for provider failures (detects rate limit, auth, general); `scrapeErrorResponse(err, url)` for scrape failures (categorized by `ScrapeError.Kind`)
+- **Error responses**: `structuredError(msg, ToolError{})` for dual-format errors (text + JSON); `toolError(msg)` for validation-only; `upstreamErrorResponse(toolName, err)` for provider failures; `scrapeErrorResponse(err, url)` for scrape failures. All defined in `internal/tools/errors.go`
 - **Provider resolution**: `resolveProvider()` for web search; `resolvePatentSearcher()` for patents; `resolveAcademicSearcher()` for academic — all return `*mcp.CallToolResult` errors with full provider list on unknown provider
 - **Cache key**: SHA-256 of deterministic params → `deps.Cache.Get/Set`
 - **Audit**: every tool call logs `audit.AuditEvent{ToolName, Duration, Success, Metadata, ...}` via `deps.Auditor.Log()`
@@ -108,6 +108,8 @@ Docs must be **drift-resistant by design** and **always reflect the current code
 3. **Never contain secrets** — no API keys, tokens, or private data; only placeholders
 4. **Tool descriptions must match code** — side effects, read/write capability, idempotency clearly marked
 5. **Output schemas include provenance** — `source` field tells which provider answered; `citation` shows where data came from
+6. **No destructive operations hidden behind flags** — if a tool writes state, it must be a separate tool (not a parameter on a read tool)
+7. **Auth/tenant scope visible** — audit receipts capture tenant_id and user_id; cache isolation enforced via `CACHE_ISOLATION=tenant`
 
 ### What to deliberately EXCLUDE (prevents drift):
 - No hardcoded counts (tool count, provider count — `registry.go` / `provider.go` are sources of truth)
