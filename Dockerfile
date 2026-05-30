@@ -24,7 +24,18 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 # --- Runtime stage ---
 FROM alpine:3.23
 
-RUN apk add --no-cache ca-certificates curl
+RUN apk add --no-cache \
+    ca-certificates \
+    curl \
+    chromium \
+    font-noto \
+    font-noto-cjk \
+    font-noto-emoji \
+    harfbuzz \
+    nss \
+    freetype \
+    ttf-freefont \
+    && rm -rf /var/cache/apk/*
 
 LABEL org.opencontainers.image.title="web-researcher-mcp"
 LABEL org.opencontainers.image.description="Your AI research assistant that cites real sources and stays honest"
@@ -39,5 +50,6 @@ RUN mkdir -p /tmp/cache && chown 65534:65534 /tmp/cache
 USER 65534:65534
 
 ENV CACHE_DIR=/tmp/cache
+ENV CHROME_PATH=/usr/bin/chromium-browser
 
 ENTRYPOINT ["web-researcher-mcp"]

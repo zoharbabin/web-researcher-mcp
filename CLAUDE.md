@@ -119,11 +119,39 @@ Docs must be **drift-resistant by design** and **always reflect the current code
 - No dependency lists (`go.mod` is the source of truth)
 - No inlined code snippets that mirror source — describe the pattern and point to the canonical file
 
+### Markdown formatting (GitHub compliance):
+- All `.md` files must be valid GitHub Flavored Markdown (GFM)
+- Use two trailing spaces or `<br>` for line breaks within a paragraph — bare newlines inside a paragraph are NOT rendered as line breaks on GitHub
+- Use blank lines between block elements (headings, paragraphs, lists, tables, code blocks)
+- Tables must have a header separator row (`|---|---|`)
+- Fenced code blocks use triple backticks with language identifier
+- No trailing whitespace on lines that don't need a line break
+- Links and images use standard `[text](url)` / `![alt](url)` syntax
+
 ### Drift-resistant patterns:
 - Reference file paths and function names that are structural (unlikely to change)
 - Reference interfaces by name (stable contracts)
 - Point to other docs for detail rather than duplicating
 - `TestAllToolsHaveAnnotations` in CI catches annotation drift at build time
+
+## Security Rules
+
+Non-negotiable rules for all code changes (human or AI agent):
+
+1. **No OWASP Top 10 vulnerabilities** — no command injection, XSS, SQL injection, SSRF, path traversal. If unsure, ask.
+2. **Use `scraper.NewSSRFSafeClient()`** for all outbound HTTP fetching user-specified URLs. Never `http.DefaultClient`.
+3. **Never log secrets** — API keys, tokens, encryption keys must never appear in logs or error messages, even at debug level.
+4. **Errors are values, never panics** — return `toolError()` / `upstreamErrorResponse()` / `structuredError()`. No `panic()` in production paths.
+5. **Validate at system boundaries** — tool inputs, HTTP params, env vars, scraped content. Trust within, validate at the edge.
+6. **Respect tenant boundaries** — any new shared state must consider: "Can tenant A see tenant B's data?" Answer must be no.
+7. **Don't accumulate data** — new features should not store data beyond the request lifecycle without TTLs and explicit opt-in.
+8. **Constant-time comparison for secrets** — use `subtle.ConstantTimeCompare()`, never `==` for auth tokens/keys.
+9. **Encrypt sensitive persistent data** — use existing `cache.DiskCache` GCM infrastructure when storing to disk.
+10. **Minimal dependencies** — prefer Go stdlib. Each new dependency is a supply chain risk. Justify in PR.
+11. **Annotate all tools** — every tool must declare `readOnlyAnnotations(idempotent, openWorld)`. CI test enforces this.
+
+Security-sensitive changes (auth, SSRF, cache keys, Dockerfile, CI) require focused review.  
+Full security and compliance guidelines: see `docs/SECURITY_AND_COMPLIANCE.md`.
 
 ## Reference Docs
 
@@ -133,7 +161,8 @@ Docs must be **drift-resistant by design** and **always reflect the current code
 | `CONTRIBUTING.md` | Code style, commit format, PR process, adding tools/providers |
 | `docs/TOOLS.md` | Tool parameter schemas and behavior contracts |
 | `docs/ERROR_HANDLING.md` | Error taxonomy, LLM-facing messages, GitHub issue guidance, contributor patterns |
-| `docs/SECURITY.md` | Threat model, SSRF, auth, compliance (SOC2/GDPR/FedRAMP) |
+| `docs/SECURITY_AND_COMPLIANCE.md` | **Comprehensive security, privacy & compliance guide** (all audiences) |
+| `docs/SECURITY.md` | Detailed technical security architecture (threat model, defense layers) |
 | `docs/DEPLOYMENT.md` | Docker, K8s, client configs, env vars, admin endpoints, scaling |
 | `docs/API_SETUP.md` | Getting API keys for each provider (step-by-step) |
 | `docs/EXAMPLES.md` | Example tool calls and expected response shapes |
