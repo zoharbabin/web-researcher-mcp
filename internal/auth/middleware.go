@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/config"
+	"github.com/zoharbabin/web-researcher-mcp/internal/persist"
 )
 
 type contextKey string
@@ -25,6 +26,8 @@ const (
 	ContextKeyTenantID  contextKey = "tenantID"
 	ContextKeyUserID    contextKey = "userID"
 	ContextKeySessionID contextKey = "sessionID"
+	ContextKeyScopes    contextKey = "scopes"
+	ContextKeyRequestID contextKey = "requestID"
 )
 
 // Middleware provides JWT-based authentication for HTTP handlers.
@@ -39,6 +42,15 @@ type Middleware struct {
 // NewMiddleware creates a new auth middleware. If the config has a non-empty
 // IssuerURL, it starts a background goroutine to refresh JWKS periodically.
 func NewMiddleware(cfg config.OAuthConfig) *Middleware {
+	return NewMiddlewareWithStore(cfg, nil)
+}
+
+// NewMiddlewareWithStore is like NewMiddleware but backs the token-revocation
+// set with a persist.Store so revocations survive restarts (H2). Passing a nil
+// store keeps the pure in-memory zero-config behavior. The in-memory set always
+// remains authoritative for the running process; the store adds durability and
+// is consulted as an additional source of truth on each check.
+func NewMiddlewareWithStore(cfg config.OAuthConfig, store persist.Store) *Middleware {
 	refreshInterval := cfg.JWKSRefreshInterval
 	if refreshInterval == 0 {
 		refreshInterval = 1 * time.Hour
@@ -47,7 +59,7 @@ func NewMiddleware(cfg config.OAuthConfig) *Middleware {
 	m := &Middleware{
 		config:    cfg,
 		jwksCache: newJWKSCache(),
-		revoked:   newRevocationStore(),
+		revoked:   newRevocationStore(store),
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
@@ -106,6 +118,10 @@ func (m *Middleware) Wrap(next http.Handler) http.Handler {
 		if claims.SessionID != "" {
 			ctx = context.WithValue(ctx, ContextKeySessionID, claims.SessionID)
 		}
+		// Always attach the parsed scopes (possibly empty) so the downstream
+		// tools/call scope gate can distinguish "no scope claim" (allow) from
+		// "scope claim present but insufficient" (reject).
+		ctx = context.WithValue(ctx, ContextKeyScopes, claims.Scopes)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -116,6 +132,9 @@ type Claims struct {
 	TenantID  string
 	UserID    string
 	SessionID string
+	// Scopes holds the union of the space-delimited "scope" claim and the
+	// array "scp" claim. Nil/empty means the token carried no scope claim.
+	Scopes []string
 }
 
 // validateToken performs full RS256 JWT validation.
@@ -236,6 +255,7 @@ func (m *Middleware) extractClaims(payload *jwtPayload) *Claims {
 		TenantID:  payload.TenantID,
 		UserID:    payload.Sub,
 		SessionID: payload.SessionID,
+		Scopes:    payload.scopes(),
 	}
 
 	if claims.TenantID == "" {
@@ -395,6 +415,55 @@ type jwtPayload struct {
 	Jti       string   `json:"jti"`
 	TenantID  string   `json:"tenant_id"`
 	SessionID string   `json:"session_id"`
+	// Scope is the OAuth 2.0 space-delimited scope string (RFC 8693 / RFC 6749).
+	Scope string `json:"scope"`
+	// Scp is the array-form scope claim used by some IdPs (e.g. Azure AD, Okta).
+	Scp scopeList `json:"scp"`
+}
+
+// scopes returns the de-duplicated union of the space-delimited "scope" claim
+// and the array "scp" claim, preserving first-seen order. An empty result means
+// the token carried no scope claim at all.
+func (p *jwtPayload) scopes() []string {
+	seen := make(map[string]struct{})
+	var out []string
+	add := func(s string) {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return
+		}
+		if _, ok := seen[s]; ok {
+			return
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	for _, s := range strings.Fields(p.Scope) {
+		add(s)
+	}
+	for _, s := range p.Scp {
+		add(s)
+	}
+	return out
+}
+
+// scopeList tolerates the "scp" claim arriving as either a JSON array of
+// strings or a single space-delimited string, mirroring the audience handling.
+type scopeList []string
+
+func (s *scopeList) UnmarshalJSON(data []byte) error {
+	var multi []string
+	if err := json.Unmarshal(data, &multi); err == nil {
+		*s = scopeList(multi)
+		return nil
+	}
+
+	var single string
+	if err := json.Unmarshal(data, &single); err != nil {
+		return err
+	}
+	*s = scopeList(strings.Fields(single))
+	return nil
 }
 
 // audience handles the fact that "aud" can be a string or array of strings.
@@ -430,28 +499,60 @@ type revocationEntry struct {
 	expiry time.Time
 }
 
+// revocationKeyPrefix namespaces revocation entries within a shared persist.Store
+// so they cannot collide with other subsystems (e.g. rate-limit quotas).
+const revocationKeyPrefix = "auth/revoked/"
+
+// revocationStore tracks revoked JTIs. The in-memory map is always authoritative
+// for the running process; an optional persist.Store (H2) adds durability across
+// restarts and is consulted as an additional source of truth. A JTI is treated
+// as revoked if it is present in EITHER the memory map or the backing store
+// (fail-closed: a revocation is never lost because one layer missed it).
 type revocationStore struct {
 	mu      sync.RWMutex
 	entries map[string]revocationEntry
+	store   persist.Store
 }
 
-func newRevocationStore() *revocationStore {
+func newRevocationStore(store persist.Store) *revocationStore {
 	return &revocationStore{
 		entries: make(map[string]revocationEntry),
+		store:   store,
 	}
 }
 
 func (s *revocationStore) add(jti string, expiry time.Time) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.entries[jti] = revocationEntry{expiry: expiry}
+	store := s.store
+	s.mu.Unlock()
+
+	if store != nil {
+		// Persist with a TTL matching natural token expiry so the backing
+		// store self-cleans. A non-positive TTL would store without expiry;
+		// guard against already-expired inputs by skipping the write.
+		ttl := time.Until(expiry)
+		if ttl > 0 {
+			store.Set(context.Background(), revocationKeyPrefix+jti, []byte{1}, ttl)
+		}
+	}
 }
 
 func (s *revocationStore) isRevoked(jti string) bool {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
 	_, ok := s.entries[jti]
-	return ok
+	store := s.store
+	s.mu.RUnlock()
+
+	if ok {
+		return true
+	}
+	if store != nil {
+		if _, found := store.Get(context.Background(), revocationKeyPrefix+jti); found {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *revocationStore) cleanup() {
@@ -463,6 +564,8 @@ func (s *revocationStore) cleanup() {
 			delete(s.entries, jti)
 		}
 	}
+	// The backing store self-expires entries via their TTL, so no explicit
+	// store cleanup is required here.
 }
 
 // --- Helpers ---
@@ -492,4 +595,77 @@ func UserIDFromContext(ctx context.Context) string {
 		return v.(string)
 	}
 	return "anonymous"
+}
+
+// ScopesFromContext returns the scopes attached to the request context by Wrap,
+// or nil if none were set (no auth, or a token without a scope claim). It is
+// empty-safe: a nil context value or a value of an unexpected type yields nil.
+func ScopesFromContext(ctx context.Context) []string {
+	if v := ctx.Value(ContextKeyScopes); v != nil {
+		if scopes, ok := v.([]string); ok {
+			return scopes
+		}
+	}
+	return nil
+}
+
+// RequestIDFromContext returns the request correlation ID attached to the
+// context (by the transport-layer ingress middleware), or "" if none is set.
+// Empty-safe for nil values and unexpected types.
+func RequestIDFromContext(ctx context.Context) string {
+	if v := ctx.Value(ContextKeyRequestID); v != nil {
+		if id, ok := v.(string); ok {
+			return id
+		}
+	}
+	return ""
+}
+
+// EnforceScopes decides whether a caller carrying the given token scopes may
+// invoke the named tool. It centralizes the scope-gate policy so the SDK
+// receiving-middleware (wired in main.go) and any future caller share one
+// implementation. It returns nil to allow, or a non-nil error describing the
+// missing scope to deny.
+//
+// Policy (permissive by default, fail-closed only on present-but-insufficient):
+//   - ENFORCE_SCOPES=false              => always allow.
+//   - ENFORCE_SCOPES=true, no scopes    => allow (backward-compatible: tokens
+//     issued before scopes existed keep working).
+//   - ENFORCE_SCOPES=true, scopes set   => require one of: the wildcard
+//     "tool:*", the exact "tool:<toolName>", or the coarse-grained "research"
+//     scope; AND every entry in REQUIRED_SCOPES (if configured) must be present.
+//     Otherwise reject.
+func (m *Middleware) EnforceScopes(scopes []string, toolName string) error {
+	if !m.config.EnforceScopes {
+		return nil
+	}
+	if len(scopes) == 0 {
+		// Token carried no scope claim: permissive, backward-compatible.
+		return nil
+	}
+
+	have := make(map[string]struct{}, len(scopes))
+	for _, s := range scopes {
+		have[s] = struct{}{}
+	}
+
+	// Every explicitly required scope must be present.
+	for _, req := range m.config.RequiredScopes {
+		if _, ok := have[req]; !ok {
+			return fmt.Errorf("missing required scope %q", req)
+		}
+	}
+
+	// Per-tool authorization: wildcard, exact tool scope, or coarse "research".
+	if _, ok := have["tool:*"]; ok {
+		return nil
+	}
+	if _, ok := have["tool:"+toolName]; ok {
+		return nil
+	}
+	if _, ok := have["research"]; ok {
+		return nil
+	}
+
+	return fmt.Errorf("insufficient scope for tool %q: require one of tool:*, tool:%s, or research", toolName, toolName)
 }

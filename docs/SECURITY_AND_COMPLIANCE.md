@@ -129,16 +129,23 @@ Scraped content passes through a configurable sanitization pipeline:
 1. **Default mode**: HTML sanitization (bluemonday allowlist — strips scripts,
    iframes, event handlers), hidden content removal (display:none, zero-width
    chars), size enforcement (50KB per source, 300KB total)
-2. **Raw mode** (`mode: "raw"`): Returns full page source including scripts and
-   styles — for code analysis, security research, and web development use cases.
-   Content is still SSRF-validated and size-limited but not sanitized.
+2. **Raw mode** (`mode: "raw"`, `scrape_page` only): Returns the fetched bytes
+   verbatim — scripts, styles, and markup intact — for inspecting source such as
+   JSON, HTML, or JavaScript (code analysis, security research, web development).
+   Only `content.Process` is skipped; the request still passes through
+   `validateScrapeURL`, the SSRF-safe client, the `ALLOWED_DOMAINS` allowlist,
+   and an `io.LimitReader` bounded by `max_length`. The returned content is
+   UNTRUSTED (it may carry indirect prompt-injection payloads), so callers must
+   never execute or render it. `search_and_scrape` has no raw mode and is always
+   sanitized.
 3. **Size limits**: Configurable per-request via `maxLength` parameter. The LLM
    decides how much content it needs based on context window and task.
    Defaults protect against context flooding; explicit overrides serve
    legitimate research needs (analyzing large codebases, full-page audits).
-4. **Structured output**: `contentType` field signals whether content is
-   sanitized (`text/markdown`) or raw (`text/html`) — downstream consumers
-   know what they're handling.
+4. **Structured output**: in sanitized modes the `contentType` field reflects
+   the extracted form (e.g. `text/markdown`); in raw mode it carries the
+   server's real `Content-Type` header (which may be empty) and the output sets
+   `"raw": true` — downstream consumers always know what they are handling.
 
 The pipeline defends against prompt injection and context flooding by default,
 while allowing full access to page source when the research task requires it.
@@ -152,9 +159,30 @@ OAuth 2.1 Resource Server pattern:
 - RS256 JWT signature verification via JWKS endpoint
 - Auto-refreshing key cache (configurable interval, default 1 hour)
 - Audience and issuer validation
-- Token revocation via JTI (in-memory, Redis when available)
+- Token revocation via JTI — in-memory by default, optionally backed by the
+  encrypted `persist.Store` so revocations survive restarts (fail-closed: a JTI
+  is revoked if present in either layer)
+- Scope-based per-tool authorization (opt-in via `ENFORCE_SCOPES`; see below)
 - Constant-time comparison for admin key authentication
 - Rejects HS256 from external issuers (algorithm confusion prevention)
+
+**Scope-based authorization (RBAC).** When `ENFORCE_SCOPES=true`, a token that
+carries a `scope`/`scp` claim must hold one of `tool:*`, `tool:<name>`, or the
+coarse `research` scope to invoke a tool (plus any `REQUIRED_SCOPES`). It is
+permissive by design: `ENFORCE_SCOPES=false` (default) ignores scopes, and a
+token with no scope claim is always allowed (backward-compatible). It fails
+closed only on a present-but-insufficient scope. See `Middleware.EnforceScopes`
+in `internal/auth/middleware.go` and the crosswalk in `docs/SECURITY.md`.
+
+**Session identifiers (accepted risk).** Sequential-search session IDs are
+static UUIDv4 values that do not rotate over the life of a session. This is an
+accepted, documented risk: a session ID is a research-continuity handle, not an
+authentication credential. Authorization is always derived from the validated
+JWT (tenant/user/scope), and sessions are keyed by the compound
+`{tenantID}:{sessionID}` so a guessed or leaked session ID cannot cross a tenant
+boundary or grant access without a valid token. Rotation was deliberately not
+added to avoid breaking the recovery-after-context-loss workflow the IDs exist
+to support.
 
 STDIO mode: no authentication (the calling process is the trust boundary).
 
@@ -199,8 +227,12 @@ Every tool invocation produces a structured JSON event:
 Design: async channel-based (never blocks tool calls), swap-to-disk overflow
 (never drops events under normal load), configurable output (stderr or file).
 
-What is NOT logged: raw query text, scraped content, full request parameters
-(PII risk). Only parameter hashes for correlation.
+What is NOT logged by default: raw query text (a length/hash is recorded
+instead, unless `AUDIT_INCLUDE_REQUEST_BODY=true`), scraped content, and full
+request parameters (PII risk). Audit metadata and upstream error messages pass
+through `audit.MaskSecrets` so any credential echoed back by a provider is
+redacted before it reaches a sink. Audit files rotate at `AUDIT_MAX_BYTES` and
+are pruned after `AUDIT_RETENTION_DAYS` (default 180, clamped to `[180, 3650]`).
 
 ---
 
@@ -352,11 +384,16 @@ Deployment recommendations:
 | Env Var | Default | Effect |
 |---------|---------|--------|
 | `CACHE_ENCRYPTION_KEY` | (unset = plaintext) | 64-char hex key enables AES-256-GCM disk encryption |
+| `CACHE_ENCRYPTION_KEY_PREV` | (unset) | 64-char hex previous key for zero-downtime rotation (decrypt fallback + lazy re-encrypt) |
 | `ALLOW_PRIVATE_IPS` | `false` | When `true`, allows scraping private/RFC1918 IPs |
 | `ALLOWED_DOMAINS` | (unset = all) | Comma-separated allowlist restricts scraping targets |
-| `ALLOWED_ORIGINS` | (unset = deny cross-origin) | CORS allowlist for HTTP mode |
+| `ALLOWED_ORIGINS` | (unset) | CORS allowlist for HTTP mode. Empty behavior depends on `CORS_STRICT` |
+| `CORS_STRICT` | `false` | When `false`, empty `ALLOWED_ORIGINS` reflects any Origin; when `true`, denies all cross-origin (a future release flips this default — see `docs/MIGRATION.md`) |
+| `ENFORCE_SCOPES` | `false` | When `true`, scoped tokens need `tool:*`/`tool:<name>`/`research` per tool (permissive for unscoped tokens) |
+| `REQUIRED_SCOPES` | (unset) | CSV of scopes every request must carry when `ENFORCE_SCOPES=true` |
 | `CACHE_ISOLATION` | `shared` | Set `tenant` for per-tenant cache isolation |
-| `CACHE_ADMIN_KEY` | (unset = no admin API) | Enables admin endpoints when set |
+| `CACHE_ADMIN_KEY` | (unset = no admin API) | Enables admin endpoints when set (min 16 chars) |
+| `RATE_LIMIT_PER_IP` | `0` (disabled) | Pre-auth per-IP request ceiling (req/min); `TRUST_PROXY` selects the client-IP source |
 
 ### Authentication (HTTP mode only)
 
@@ -702,17 +739,31 @@ Our security controls map to MITRE ATT&CK techniques:
 
 ## Roadmap Considerations
 
+### Implemented
+
+These items shipped and are no longer roadmap candidates:
+
+- **Scope-based authorization (RBAC)** — JWT `scope`/`scp` claims mapped to tool
+  permissions, opt-in via `ENFORCE_SCOPES` (`internal/auth/middleware.go`)
+- **Key rotation** — `CACHE_ENCRYPTION_KEY_PREV` provides versioned keys with
+  lazy re-encryption on read, with key-bound GCM AAD
+- **Restart-durable revocation & quota** — token revocation and daily quota can
+  persist via the encrypted `persist.Store` (`RATE_LIMIT_PERSIST`)
+- **W3C Trace Context ingress** — requests adopt a sanitized `X-Request-Id` or
+  `traceparent` trace-id for audit correlation, echoed on the response
+- **NIST CSF 2.0 crosswalk + MITRE ATT&CK mapping** — see `docs/SECURITY.md`
+- **HTTP hardening** — server timeouts, body/header caps, security headers,
+  `CORS_STRICT`, and a pre-auth per-IP rate limit
+
 ### Security features planned or under consideration:
 
-- **Scope-based authorization (RBAC)** — JWT scope claims mapped to tool permissions
 - **DPoP token binding (RFC 9449)** — proof-of-possession prevents token theft
-- **Distributed tracing** — W3C Trace Context propagation (MCP spec requirement)
 - **Hash-chained audit logs** — tamper-evident logging for government deployments
-- **Key rotation** — versioned encryption keys with lazy re-encryption
 - **Breach notification pipeline** — webhook alerting on security anomalies
 - **in-toto build attestations** — full supply chain provenance (SLSA Level 3)
 - **Seccomp profiles** — container syscall restriction for hardened deployments
-- **NIST CSF 2.0 formal mapping** — crosswalk table for enterprise procurement
+- **`RedisStore` backend** — distributed `persist.Store` for cache/sessions/
+  rate limits (`REDIS_URL` is reserved and currently a no-op)
 - **UK Cyber Essentials certification** — UK public sector market access
 - **Global CBPR certification** — cross-border data transfer for APAC markets
 

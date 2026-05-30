@@ -12,11 +12,21 @@ import (
 
 var ErrSSRFBlocked = errors.New("ssrf: request blocked (private IP or blocked hostname)")
 
+// blockedHostnames lists cloud-provider link-local metadata endpoints and
+// in-cluster service hostnames that must never be reachable via user-supplied
+// URLs. Entries are matched case-insensitively as an exact hostname or as a
+// dot-bounded suffix (see isBlockedHostname), so "kubernetes.default.svc"
+// matches itself and "*.svc.cluster.local" matches any in-cluster service.
 var blockedHostnames = []string{
 	"metadata.google.internal",
 	"metadata.azure.com",
-	"169.254.169.254",
+	"metadata.tencentyun.com",
+	"169.254.169.254", // AWS / Azure / GCP / DigitalOcean / OpenStack link-local
+	"192.0.0.192",     // Oracle Cloud metadata
+	"100.100.100.200", // Alibaba Cloud metadata
 	"instance-data",
+	"kubernetes.default.svc",
+	"svc.cluster.local",
 }
 
 func NewSSRFSafeClient(allowPrivate bool) *http.Client {
@@ -73,10 +83,14 @@ func newSSRFSafeTransport(allowPrivate bool) *http.Transport {
 	}
 }
 
+// isBlockedHostname reports whether host matches a blocked metadata/in-cluster
+// endpoint. Matching is case-insensitive and either exact or dot-bounded suffix:
+// "svc.cluster.local" matches "foo.svc.cluster.local" but NOT
+// "svc.cluster.local.evil.com" (the latter is a different registrable domain).
 func isBlockedHostname(host string) bool {
-	hostLower := strings.ToLower(host)
+	hostLower := strings.ToLower(strings.TrimSuffix(host, "."))
 	for _, blocked := range blockedHostnames {
-		if hostLower == blocked {
+		if hostLower == blocked || strings.HasSuffix(hostLower, "."+blocked) {
 			return true
 		}
 	}
@@ -142,6 +156,10 @@ func isPrivateIP(ip net.IP) bool {
 	return false
 }
 
+// mustParseCIDR parses a constant CIDR string at package-init time and panics
+// on error. Contract: callers MUST pass only compile-time-constant CIDR
+// literals (never user input), so a panic here means a programmer typo, not a
+// runtime/request-path failure. Validated by TestPrivateRangesParse.
 func mustParseCIDR(s string) *net.IPNet {
 	_, network, err := net.ParseCIDR(s)
 	if err != nil {

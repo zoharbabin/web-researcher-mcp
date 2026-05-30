@@ -2,12 +2,9 @@ package cache
 
 import (
 	"context"
-	"crypto/aes"
 	"crypto/cipher"
-	"crypto/rand"
 	"encoding/binary"
 	"encoding/hex"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -15,10 +12,18 @@ import (
 	"time"
 )
 
+// diskFormatVersion is bumped whenever the on-disk blob format changes
+// (independent of the build version). It is mixed into the version sentinel so
+// a format break invalidates the cache cleanly even when the build version is
+// unchanged, avoiding decrypt-failure churn. Bumped to v2 for the AAD-bound
+// AES-GCM format (M7).
+const diskFormatVersion = "v2"
+
 type DiskCache struct {
 	mu      sync.RWMutex
 	dir     string
-	gcm     cipher.AEAD
+	gcm     cipher.AEAD // current key; nil when encryption disabled
+	gcmPrev cipher.AEAD // previous key for rotation fallback; nil when unset
 	entries map[string]diskEntry
 }
 
@@ -44,22 +49,22 @@ func NewDiskCache(cfg DiskConfig) *DiskCache {
 		entries: make(map[string]diskEntry),
 	}
 
-	if cfg.EncryptionKey != "" {
-		key, err := hex.DecodeString(cfg.EncryptionKey)
-		if err == nil && len(key) == 32 {
-			block, err := aes.NewCipher(key)
-			if err == nil {
-				gcm, err := cipher.NewGCM(block)
-				if err == nil {
-					dc.gcm = gcm
-				}
-			}
-		}
+	// Best-effort: a malformed key falls back to plaintext (matching prior
+	// behavior). Config validation already rejects non-64-hex keys upstream.
+	if gcm, err := NewGCM(cfg.EncryptionKey); err == nil {
+		dc.gcm = gcm
+	} else {
+		slog.Warn("disk cache encryption key invalid; storing plaintext", "err", err)
+	}
+	if gcm, err := NewGCM(cfg.EncryptionKeyPrev); err == nil {
+		dc.gcmPrev = gcm
+	} else {
+		slog.Warn("disk cache previous encryption key invalid; rotation fallback disabled", "err", err)
 	}
 
-	if cfg.Version != "" {
-		dc.invalidateOnVersionChange(cfg.Version)
-	}
+	// Mix the on-disk format version with the build version so either a format
+	// break or a build change invalidates the cache cleanly.
+	dc.invalidateOnVersionChange(diskFormatVersion + ":" + cfg.Version)
 
 	go dc.cleanup()
 	return dc
@@ -184,10 +189,17 @@ func (d *DiskCache) filePath(key string) string {
 	return filepath.Join(d.dir, safe+".cache")
 }
 
+// aad binds a blob to its cache key so a ciphertext written for one key cannot
+// be moved to another key's file and decrypted (M7). GCM authenticates this
+// additional data; a mismatch fails Open.
+func (d *DiskCache) aad(key string) []byte {
+	return []byte(key)
+}
+
 func (d *DiskCache) writeToFile(key string, entry diskEntry) {
 	data := entry.value
 	if d.gcm != nil {
-		data = d.encrypt(data)
+		data = GCMEncrypt(d.gcm, data, d.aad(key))
 	}
 
 	// Prepend expiry timestamp
@@ -211,36 +223,31 @@ func (d *DiskCache) getFromFile(key string) ([]byte, bool) {
 	}
 
 	expiresUnix := binary.BigEndian.Uint64(data[:8])
-	if time.Now().Unix() > int64(expiresUnix) {
+	expiresAt := time.Unix(int64(expiresUnix), 0)
+	if time.Now().After(expiresAt) {
 		_ = os.Remove(fp)
 		return nil, false
 	}
 
 	payload := data[8:]
-	if d.gcm != nil {
-		decrypted, err := d.decrypt(payload)
-		if err != nil {
-			return nil, false
+	if d.gcm == nil {
+		return payload, true
+	}
+
+	aad := d.aad(key)
+	if decrypted, err := GCMDecrypt(d.gcm, payload, aad); err == nil {
+		return decrypted, true
+	}
+
+	// Current key failed: try the previous key for zero-downtime rotation (M1).
+	if d.gcmPrev != nil {
+		if decrypted, err := GCMDecrypt(d.gcmPrev, payload, aad); err == nil {
+			// Lazy re-encrypt with the current key and rewrite the file so the
+			// blob is upgraded on first read after rotation.
+			d.writeToFile(key, diskEntry{value: decrypted, expiresAt: expiresAt})
+			return decrypted, true
 		}
-		payload = decrypted
 	}
 
-	return payload, true
-}
-
-func (d *DiskCache) encrypt(plaintext []byte) []byte {
-	nonce := make([]byte, d.gcm.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return plaintext
-	}
-	return d.gcm.Seal(nonce, nonce, plaintext, nil)
-}
-
-func (d *DiskCache) decrypt(ciphertext []byte) ([]byte, error) {
-	nonceSize := d.gcm.NonceSize()
-	if len(ciphertext) < nonceSize {
-		return nil, io.ErrUnexpectedEOF
-	}
-	nonce, ct := ciphertext[:nonceSize], ciphertext[nonceSize:]
-	return d.gcm.Open(nil, nonce, ct, nil)
+	return nil, false
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/zoharbabin/web-researcher-mcp/internal/audit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/cache"
 	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
 )
@@ -31,12 +32,12 @@ const (
 type SuggestedAction string
 
 const (
-	ActionRetryAfterDelay    SuggestedAction = "retry_after_delay"
+	ActionRetryAfterDelay      SuggestedAction = "retry_after_delay"
 	ActionTryDifferentProvider SuggestedAction = "try_different_provider"
-	ActionCheckAPIKey        SuggestedAction = "check_api_key"
-	ActionBroadenQuery       SuggestedAction = "broaden_query"
-	ActionInformUser         SuggestedAction = "inform_user"
-	ActionReportBug          SuggestedAction = "report_bug"
+	ActionCheckAPIKey          SuggestedAction = "check_api_key"
+	ActionBroadenQuery         SuggestedAction = "broaden_query"
+	ActionInformUser           SuggestedAction = "inform_user"
+	ActionReportBug            SuggestedAction = "report_bug"
 )
 
 // ToolError is the structured error metadata embedded in error responses.
@@ -113,10 +114,11 @@ func scrapeErrorToToolError(se *scraper.ScrapeError) ToolError {
 		seconds := 5
 		te.RetryAfterSeconds = &seconds
 	}
-	te.Detail = se.Message
+	// Scrape messages can include the target URL with embedded credentials;
+	// mask before the detail reaches an LLM-facing result.
+	te.Detail = audit.MaskSecrets(se.Message)
 	return te
 }
-
 
 // extractProviderName attempts to extract the provider name from an error string.
 func extractProviderName(err error) string {
@@ -140,7 +142,7 @@ type FailureInfo struct {
 
 // failureFromScrapeError builds a FailureInfo from a scrape error.
 func failureFromScrapeError(url string, err error) FailureInfo {
-	f := FailureInfo{URL: url, Reason: err.Error()}
+	f := FailureInfo{URL: url, Reason: audit.MaskSecrets(err.Error())}
 	var se *scraper.ScrapeError
 	if ok := isAsScrapeError(err, &se); ok {
 		f.Kind = string(mapScrapeErrorKind(se.Kind))

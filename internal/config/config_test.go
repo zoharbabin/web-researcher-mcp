@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 )
 
 func setRequiredEnv(t *testing.T) {
@@ -475,6 +476,415 @@ func TestSplitCSVTrimsSpaces(t *testing.T) {
 	}
 	if cfg.AllowedOrigins[1] != "http://b.com" {
 		t.Errorf("expected second origin=http://b.com, got %s", cfg.AllowedOrigins[1])
+	}
+}
+
+func TestLoadHTTPHardeningDefaults(t *testing.T) {
+	setRequiredEnv(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.HTTP.ReadHeaderTimeout != 5*time.Second {
+		t.Errorf("expected default ReadHeaderTimeout=5s, got %v", cfg.HTTP.ReadHeaderTimeout)
+	}
+	if cfg.HTTP.ReadTimeout != 30*time.Second {
+		t.Errorf("expected default ReadTimeout=30s, got %v", cfg.HTTP.ReadTimeout)
+	}
+	if cfg.HTTP.WriteTimeout != 0 {
+		t.Errorf("expected default WriteTimeout=0 (unlimited), got %v", cfg.HTTP.WriteTimeout)
+	}
+	if cfg.HTTP.IdleTimeout != 120*time.Second {
+		t.Errorf("expected default IdleTimeout=120s, got %v", cfg.HTTP.IdleTimeout)
+	}
+	if cfg.HTTP.MaxHeaderBytes != 1<<20 {
+		t.Errorf("expected default MaxHeaderBytes=1MB, got %d", cfg.HTTP.MaxHeaderBytes)
+	}
+	if cfg.HTTP.MaxRequestBody != 10<<20 {
+		t.Errorf("expected default MaxRequestBody=10MB, got %d", cfg.HTTP.MaxRequestBody)
+	}
+	if cfg.HTTP.CSP != "default-src 'none'; frame-ancestors 'none'" {
+		t.Errorf("unexpected default CSP: %q", cfg.HTTP.CSP)
+	}
+	if cfg.HTTP.ReferrerPolicy != "no-referrer" {
+		t.Errorf("unexpected default ReferrerPolicy: %q", cfg.HTTP.ReferrerPolicy)
+	}
+	if cfg.HTTP.PermissionsPolicy != "geolocation=(), camera=(), microphone=()" {
+		t.Errorf("unexpected default PermissionsPolicy: %q", cfg.HTTP.PermissionsPolicy)
+	}
+	if cfg.CORSStrict {
+		t.Error("expected default CORSStrict=false")
+	}
+}
+
+func TestLoadHTTPHardeningCustom(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("HTTP_READ_HEADER_TIMEOUT", "2s")
+	t.Setenv("HTTP_READ_TIMEOUT", "10s")
+	t.Setenv("HTTP_WRITE_TIMEOUT", "90s")
+	t.Setenv("HTTP_IDLE_TIMEOUT", "60s")
+	t.Setenv("HTTP_MAX_HEADER_BYTES", "2048")
+	t.Setenv("MAX_REQUEST_BODY_BYTES", "4096")
+	t.Setenv("HTTP_CSP", "default-src 'self'")
+	t.Setenv("HTTP_REFERRER_POLICY", "same-origin")
+	t.Setenv("HTTP_PERMISSIONS_POLICY", "camera=()")
+	t.Setenv("CORS_STRICT", "true")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.HTTP.ReadHeaderTimeout != 2*time.Second {
+		t.Errorf("expected ReadHeaderTimeout=2s, got %v", cfg.HTTP.ReadHeaderTimeout)
+	}
+	if cfg.HTTP.ReadTimeout != 10*time.Second {
+		t.Errorf("expected ReadTimeout=10s, got %v", cfg.HTTP.ReadTimeout)
+	}
+	if cfg.HTTP.WriteTimeout != 90*time.Second {
+		t.Errorf("expected WriteTimeout=90s, got %v", cfg.HTTP.WriteTimeout)
+	}
+	if cfg.HTTP.IdleTimeout != 60*time.Second {
+		t.Errorf("expected IdleTimeout=60s, got %v", cfg.HTTP.IdleTimeout)
+	}
+	if cfg.HTTP.MaxHeaderBytes != 2048 {
+		t.Errorf("expected MaxHeaderBytes=2048, got %d", cfg.HTTP.MaxHeaderBytes)
+	}
+	if cfg.HTTP.MaxRequestBody != 4096 {
+		t.Errorf("expected MaxRequestBody=4096, got %d", cfg.HTTP.MaxRequestBody)
+	}
+	if cfg.HTTP.CSP != "default-src 'self'" {
+		t.Errorf("expected CSP set, got %q", cfg.HTTP.CSP)
+	}
+	if cfg.HTTP.ReferrerPolicy != "same-origin" {
+		t.Errorf("expected ReferrerPolicy=same-origin, got %q", cfg.HTTP.ReferrerPolicy)
+	}
+	if cfg.HTTP.PermissionsPolicy != "camera=()" {
+		t.Errorf("expected PermissionsPolicy=camera=(), got %q", cfg.HTTP.PermissionsPolicy)
+	}
+	if !cfg.CORSStrict {
+		t.Error("expected CORSStrict=true")
+	}
+}
+
+func TestLoadHTTPHardeningInvalidFallback(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("HTTP_READ_HEADER_TIMEOUT", "not-a-duration")
+	t.Setenv("HTTP_MAX_HEADER_BYTES", "not-an-int")
+	t.Setenv("CORS_STRICT", "not-a-bool")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.HTTP.ReadHeaderTimeout != 5*time.Second {
+		t.Errorf("expected fallback ReadHeaderTimeout=5s for invalid duration, got %v", cfg.HTTP.ReadHeaderTimeout)
+	}
+	if cfg.HTTP.MaxHeaderBytes != 1<<20 {
+		t.Errorf("expected fallback MaxHeaderBytes=1MB for invalid int, got %d", cfg.HTTP.MaxHeaderBytes)
+	}
+	if cfg.CORSStrict {
+		t.Error("expected fallback CORSStrict=false for invalid bool")
+	}
+}
+
+func TestLoadScopeDefaults(t *testing.T) {
+	setRequiredEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.OAuth.EnforceScopes {
+		t.Error("expected default EnforceScopes=false")
+	}
+	if cfg.OAuth.RequiredScopes != nil {
+		t.Errorf("expected default RequiredScopes=nil, got %v", cfg.OAuth.RequiredScopes)
+	}
+}
+
+func TestLoadScopeCustom(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("ENFORCE_SCOPES", "true")
+	t.Setenv("REQUIRED_SCOPES", "research, tool:web_search")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cfg.OAuth.EnforceScopes {
+		t.Error("expected EnforceScopes=true")
+	}
+	if len(cfg.OAuth.RequiredScopes) != 2 || cfg.OAuth.RequiredScopes[0] != "research" || cfg.OAuth.RequiredScopes[1] != "tool:web_search" {
+		t.Errorf("unexpected RequiredScopes: %v", cfg.OAuth.RequiredScopes)
+	}
+}
+
+func TestLoadEnforceScopesInvalidFallback(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("ENFORCE_SCOPES", "not-a-bool")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.OAuth.EnforceScopes {
+		t.Error("expected fallback EnforceScopes=false for invalid bool")
+	}
+}
+
+func TestLoadRateLimitNewDefaults(t *testing.T) {
+	setRequiredEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.RateLimit.PerIP != 0 {
+		t.Errorf("expected default PerIP=0, got %d", cfg.RateLimit.PerIP)
+	}
+	if cfg.RateLimit.TrustProxy {
+		t.Error("expected default TrustProxy=false")
+	}
+	if cfg.RateLimit.Persist {
+		t.Error("expected default Persist=false")
+	}
+}
+
+func TestLoadRateLimitNewCustom(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("RATE_LIMIT_PER_IP", "300")
+	t.Setenv("TRUST_PROXY", "true")
+	t.Setenv("RATE_LIMIT_PERSIST", "true")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.RateLimit.PerIP != 300 {
+		t.Errorf("expected PerIP=300, got %d", cfg.RateLimit.PerIP)
+	}
+	if !cfg.RateLimit.TrustProxy {
+		t.Error("expected TrustProxy=true")
+	}
+	if !cfg.RateLimit.Persist {
+		t.Error("expected Persist=true")
+	}
+}
+
+func TestLoadRateLimitPerIPInvalidFallback(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("RATE_LIMIT_PER_IP", "not-an-int")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.RateLimit.PerIP != 0 {
+		t.Errorf("expected fallback PerIP=0, got %d", cfg.RateLimit.PerIP)
+	}
+}
+
+func TestLoadAuditNewDefaults(t *testing.T) {
+	setRequiredEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Audit.MaxBytes != 100<<20 {
+		t.Errorf("expected default Audit.MaxBytes=100MB, got %d", cfg.Audit.MaxBytes)
+	}
+	if cfg.Audit.RetentionDays != 180 {
+		t.Errorf("expected default Audit.RetentionDays=180, got %d", cfg.Audit.RetentionDays)
+	}
+}
+
+func TestLoadAuditMaxBytesCustom(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("AUDIT_MAX_BYTES", "5242880")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Audit.MaxBytes != 5242880 {
+		t.Errorf("expected Audit.MaxBytes=5242880, got %d", cfg.Audit.MaxBytes)
+	}
+}
+
+func TestLoadAuditMaxBytesInvalidFallback(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("AUDIT_MAX_BYTES", "not-an-int")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Audit.MaxBytes != 100<<20 {
+		t.Errorf("expected fallback Audit.MaxBytes=100MB, got %d", cfg.Audit.MaxBytes)
+	}
+}
+
+func TestLoadAuditRetentionClamp(t *testing.T) {
+	tests := []struct {
+		env      string
+		expected int
+	}{
+		{"0", 0},        // disabled, not clamped
+		{"1", 180},      // below floor clamps up
+		{"179", 180},    // just below floor
+		{"180", 180},    // at floor
+		{"365", 365},    // within range, unchanged
+		{"3650", 3650},  // at ceiling
+		{"99999", 3650}, // above ceiling clamps down
+	}
+	for _, tt := range tests {
+		t.Run("AUDIT_RETENTION_DAYS="+tt.env, func(t *testing.T) {
+			setRequiredEnv(t)
+			t.Setenv("AUDIT_RETENTION_DAYS", tt.env)
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if cfg.Audit.RetentionDays != tt.expected {
+				t.Errorf("for AUDIT_RETENTION_DAYS=%s expected %d, got %d", tt.env, tt.expected, cfg.Audit.RetentionDays)
+			}
+		})
+	}
+}
+
+func TestLoadAuditRetentionInvalidFallback(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("AUDIT_RETENTION_DAYS", "not-an-int")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// envInt falls back to 180 (the default), which is the clamp floor.
+	if cfg.Audit.RetentionDays != 180 {
+		t.Errorf("expected fallback Audit.RetentionDays=180, got %d", cfg.Audit.RetentionDays)
+	}
+}
+
+func TestLoadCacheAdminKeyTooShort(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("CACHE_ADMIN_KEY", strings.Repeat("a", 15)) // 15 chars
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for CACHE_ADMIN_KEY shorter than 16 chars")
+	}
+	if !strings.Contains(err.Error(), "CACHE_ADMIN_KEY must be at least 16 characters") {
+		t.Errorf("expected error about admin key length, got: %v", err)
+	}
+}
+
+func TestLoadCacheAdminKeyAccepted(t *testing.T) {
+	setRequiredEnv(t)
+	key := strings.Repeat("a", 16) // 16 chars
+	t.Setenv("CACHE_ADMIN_KEY", key)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error with 16-char admin key: %v", err)
+	}
+	if cfg.CacheAdminKey != key {
+		t.Errorf("expected CacheAdminKey to be set")
+	}
+}
+
+func TestLoadCacheAdminKeyEmptyAllowed(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("CACHE_ADMIN_KEY", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error with empty admin key: %v", err)
+	}
+	if cfg.CacheAdminKey != "" {
+		t.Errorf("expected empty CacheAdminKey")
+	}
+}
+
+func TestLoadCacheEncryptionKeyPrevValidation(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("CACHE_ENCRYPTION_KEY_PREV", "not-hex-and-too-short")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for invalid CACHE_ENCRYPTION_KEY_PREV")
+	}
+	if !strings.Contains(err.Error(), "CACHE_ENCRYPTION_KEY_PREV must be exactly 64 hex characters") {
+		t.Errorf("expected error about prev key, got: %v", err)
+	}
+}
+
+func TestLoadCacheEncryptionKeyPrevNonHex64(t *testing.T) {
+	setRequiredEnv(t)
+	// Exactly 64 chars but not all hex (contains 'g').
+	t.Setenv("CACHE_ENCRYPTION_KEY_PREV", strings.Repeat("g", 64))
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for 64-char non-hex CACHE_ENCRYPTION_KEY_PREV")
+	}
+	if !strings.Contains(err.Error(), "CACHE_ENCRYPTION_KEY_PREV must be exactly 64 hex characters") {
+		t.Errorf("expected error about prev key, got: %v", err)
+	}
+}
+
+func TestLoadCacheEncryptionKeyPrevValid(t *testing.T) {
+	setRequiredEnv(t)
+	validKey := strings.Repeat("ab", 32) // 64 hex chars
+	t.Setenv("CACHE_ENCRYPTION_KEY_PREV", validKey)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error with valid prev key: %v", err)
+	}
+	if cfg.CacheEncryptionKeyPrev != validKey {
+		t.Errorf("expected CacheEncryptionKeyPrev to be set")
+	}
+}
+
+func TestLoadDataRegion(t *testing.T) {
+	setRequiredEnv(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.DataRegion != "" {
+		t.Errorf("expected default DataRegion empty, got %q", cfg.DataRegion)
+	}
+
+	t.Setenv("DATA_REGION", "eu-central-1")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.DataRegion != "eu-central-1" {
+		t.Errorf("expected DataRegion=eu-central-1, got %q", cfg.DataRegion)
+	}
+}
+
+func TestIsHex64(t *testing.T) {
+	tests := []struct {
+		in   string
+		want bool
+	}{
+		{strings.Repeat("a", 64), true},
+		{strings.Repeat("A", 64), true},
+		{strings.Repeat("0", 64), true},
+		{strings.Repeat("F", 64), true},
+		{strings.Repeat("a", 63), false}, // too short
+		{strings.Repeat("a", 65), false}, // too long
+		{strings.Repeat("g", 64), false}, // non-hex
+		{"", false},
+	}
+	for _, tt := range tests {
+		if got := isHex64(tt.in); got != tt.want {
+			t.Errorf("isHex64(len=%d) = %v, want %v", len(tt.in), got, tt.want)
+		}
 	}
 }
 
