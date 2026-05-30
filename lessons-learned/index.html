@@ -1,0 +1,1352 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust.">
+      
+      
+      
+        <link rel="canonical" href="https://zoharbabin.github.io/web-researcher-mcp/lessons-learned/">
+      
+      
+        <link rel="prev" href="../brand-guidelines/">
+      
+      
+        <link rel="next" href="../session-persistence/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Our Story - Web Researcher MCP</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Our Story - Web Researcher MCP" />
+  <meta property="og:description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust. Free, private, open source." />
+  <meta property="og:image" content="https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/social-preview.png" />
+  <meta property="og:url" content="https://zoharbabin.github.io/web-researcher-mcp/lessons-learned/" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Our Story - Web Researcher MCP" />
+  <meta name="twitter:description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust. Free, private, open source." />
+  <meta name="twitter:image" content="https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/social-preview.png" />
+
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#from-nodejs-to-go-rebuilding-an-mcp-server-for-production" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+        <aside class="md-banner">
+          <div class="md-banner__inner md-grid md-typeset">
+            
+            
+  <a href="https://github.com/zoharbabin/web-researcher-mcp" style="display:inline-flex;align-items:center;gap:.4em;">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25z"/></svg>
+    Star us on GitHub
+  </a>
+
+          </div>
+          
+        </aside>
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Web Researcher MCP" class="md-header__button md-logo" aria-label="Web Researcher MCP" data-md-component="logo">
+      
+  <img src="https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/logo-final-transparent.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Web Researcher MCP
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Our Story
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/zoharbabin/web-researcher-mcp" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    zoharbabin/web-researcher-mcp
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Web Researcher MCP" class="md-nav__button md-logo" aria-label="Web Researcher MCP" data-md-component="logo">
+      
+  <img src="https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/logo-final-transparent.svg" alt="logo">
+
+    </a>
+    Web Researcher MCP
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/zoharbabin/web-researcher-mcp" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    zoharbabin/web-researcher-mcp
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../privacy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Privacy Policy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../brand-guidelines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Brand Guidelines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Our Story
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Our Story
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-starting-point" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Starting Point
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-rewrite-in-go-not-refactored" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why Rewrite in Go (Not Refactored)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Why Rewrite in Go (Not Refactored)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#orphan-processes-issue-108" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Orphan Processes (Issue #108)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#google-discontinuing-entire-web-search-issue-107" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Google Discontinuing "Entire Web" Search (Issue #107)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#alternative-search-engines-issue-55" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Alternative Search Engines (Issue #55)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#redis-caching-issue-72" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Redis Caching (Issue #72)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#monolithic-architecture-issue-40" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Monolithic Architecture (Issue #40)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-changed-architecturally" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What Changed Architecturally
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#key-lessons-learned" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Lessons Learned
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Key Lessons Learned">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-dont-fight-your-runtime" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Don't Fight Your Runtime
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-interface-driven-design-enables-fearless-extension" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Interface-Driven Design Enables Fearless Extension
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-memory-matters-for-mcp-servers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Memory Matters for MCP Servers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-caching-architecture-should-be-boring" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Caching Architecture Should Be Boring
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-documentation-should-be-drift-resistant" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Documentation Should Be Drift-Resistant
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-we-kept" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What We Kept
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#results" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Results
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#should-you-rewrite" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Should You Rewrite?
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../session-persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Session Persistence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Migration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-starting-point" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Starting Point
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-rewrite-in-go-not-refactored" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why Rewrite in Go (Not Refactored)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Why Rewrite in Go (Not Refactored)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#orphan-processes-issue-108" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Orphan Processes (Issue #108)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#google-discontinuing-entire-web-search-issue-107" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Google Discontinuing "Entire Web" Search (Issue #107)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#alternative-search-engines-issue-55" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Alternative Search Engines (Issue #55)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#redis-caching-issue-72" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Redis Caching (Issue #72)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#monolithic-architecture-issue-40" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Monolithic Architecture (Issue #40)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-changed-architecturally" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What Changed Architecturally
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#key-lessons-learned" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Lessons Learned
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Key Lessons Learned">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-dont-fight-your-runtime" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Don't Fight Your Runtime
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-interface-driven-design-enables-fearless-extension" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Interface-Driven Design Enables Fearless Extension
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-memory-matters-for-mcp-servers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Memory Matters for MCP Servers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-caching-architecture-should-be-boring" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Caching Architecture Should Be Boring
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-documentation-should-be-drift-resistant" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Documentation Should Be Drift-Resistant
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-we-kept" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What We Kept
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#results" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Results
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#should-you-rewrite" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Should You Rewrite?
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="from-nodejs-to-go-rebuilding-an-mcp-server-for-production">From Node.js to Go: Rebuilding an MCP Server for Production<a class="headerlink" href="#from-nodejs-to-go-rebuilding-an-mcp-server-for-production" title="Permanent link">&para;</a></h1>
+<p>This is the story of why I rebuilt <a href="https://github.com/zoharbabin/google-researcher-mcp">google-researcher-mcp</a> (Node.js/TypeScript) from scratch as <a href="https://github.com/zoharbabin/web-researcher-mcp">web-researcher-mcp</a> (Go), and what the lessons learned along the way.</p>
+<h2 id="the-starting-point">The Starting Point<a class="headerlink" href="#the-starting-point" title="Permanent link">&para;</a></h2>
+<p>The original project — <code>google-researcher-mcp</code> — was a TypeScript/Node.js MCP server distributed via npm. It had real traction: 36 GitHub stars, 6,500+ npm downloads, 860+ tests, and active users. But five critical issues kept surfacing that couldn't be solved within the existing architecture.</p>
+<h2 id="why-rewrite-in-go-not-refactored">Why Rewrite in Go (Not Refactored)<a class="headerlink" href="#why-rewrite-in-go-not-refactored" title="Permanent link">&para;</a></h2>
+<h3 id="orphan-processes-issue-108">Orphan Processes (Issue #108)<a class="headerlink" href="#orphan-processes-issue-108" title="Permanent link">&para;</a></h3>
+<p>npx spawns deeply nested process trees. When the parent MCP client (Claude Desktop, Cursor) crashes or closes unexpectedly, the Node.js process doesn't receive a signal — it keeps running, consuming memory and holding file locks.</p>
+<p>Myself and collaborators spent three versions (v6.2.0 through v6.4.0) building increasingly complex orphan detection: a Worker thread watchdog with CPU spin detection, three-layer parent-alive checks, and graceful degradation. It was all band-aids on a fundamental runtime limitation.</p>
+<p><strong>Go fix</strong>: A single static binary. No runtime process tree. EOF on stdin = immediate exit. The entire problem category disappeared.</p>
+<h3 id="google-discontinuing-entire-web-search-issue-107">Google Discontinuing "Entire Web" Search (Issue #107)<a class="headerlink" href="#google-discontinuing-entire-web-search-issue-107" title="Permanent link">&para;</a></h3>
+<p>Google announced it would be discontinuing support for Programmable Search Engines configured to search the "entire web." The project was named <code>google-researcher-mcp</code> — the dependency on a single search provider was an foundational risk.</p>
+<p><strong>Go fix</strong>: A clean provider interface that lets you swap search backends freely, plus a routing layer that automatically switches to the next provider when one fails.</p>
+<h3 id="alternative-search-engines-issue-55">Alternative Search Engines (Issue #55)<a class="headerlink" href="#alternative-search-engines-issue-55" title="Permanent link">&para;</a></h3>
+<p>Users wanted Brave, Bing (go figure), and other providers. But the TypeScript codebase was too tightly coupled to Google's API response format — the shared directory (41 files) made every change risky and far-reaching.</p>
+<p><strong>Go fix</strong>: A clean <code>Provider</code> interface — each adapter normalizes provider-specific responses to common types (<code>SearchResult</code>, <code>ImageResult</code>, <code>NewsResult</code>). Adding a new provider is one file implementing one interface.</p>
+<h3 id="redis-caching-issue-72">Redis Caching (Issue #72)<a class="headerlink" href="#redis-caching-issue-72" title="Permanent link">&para;</a></h3>
+<p>The in-memory cache was lost on every process restart — which happened frequently with npx-launched servers. The complex persistence manager offered four strategies (Periodic, WriteThrough, OnShutdown, Hybrid), but none reliably survived the volatile process lifecycle.</p>
+<p><strong>Go fix</strong>: A <code>cache.Cache</code> interface with a hybrid implementation: memory + AES-encrypted disk. Simple, testable, and it never loses data because the disk layer persists across restarts.</p>
+<h3 id="monolithic-architecture-issue-40">Monolithic Architecture (Issue #40)<a class="headerlink" href="#monolithic-architecture-issue-40" title="Permanent link">&para;</a></h3>
+<p>The project had 100+ source files but a tightly coupled <code>shared/</code> directory with 41 files. Adding a single tool required touching 4+ documentation sections, and the import graph made refactoring perilous.</p>
+<p><strong>Go fix</strong>: One package per concern. Tool handlers are self-contained files. Adding a tool means writing one file and one line in the registry.</p>
+<h2 id="what-changed-architecturally">What Changed Architecturally<a class="headerlink" href="#what-changed-architecturally" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Aspect</th>
+<th>Node.js (old)</th>
+<th>Go (new)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Distribution</td>
+<td>npm/npx (runtime required)</td>
+<td>Single static binary</td>
+</tr>
+<tr>
+<td>Memory</td>
+<td>430MB idle (80MB after optimization)</td>
+<td>~25MB baseline</td>
+</tr>
+<tr>
+<td>Startup</td>
+<td>2-4 seconds (lazy imports)</td>
+<td>&lt;100ms</td>
+</tr>
+<tr>
+<td>Process lifecycle</td>
+<td>Worker thread watchdog</td>
+<td>EOF detection, no orphans</td>
+</tr>
+<tr>
+<td>Search providers</td>
+<td>Google only</td>
+<td>Multiple providers + fallback routing</td>
+</tr>
+<tr>
+<td>Concurrency</td>
+<td>Event loop + async/await</td>
+<td>Goroutines + semaphores</td>
+</tr>
+<tr>
+<td>Type safety</td>
+<td>TypeScript + Zod</td>
+<td>Go type system + struct tags</td>
+</tr>
+<tr>
+<td>Testing</td>
+<td>860+ Jest tests</td>
+<td>Table-driven tests + race detector</td>
+</tr>
+<tr>
+<td>Scraping</td>
+<td>Playwright (heavy)</td>
+<td>4-tier pipeline (lightweight first)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="key-lessons-learned">Key Lessons Learned<a class="headerlink" href="#key-lessons-learned" title="Permanent link">&para;</a></h2>
+<h3 id="1-dont-fight-your-runtime">1. Don't Fight Your Runtime<a class="headerlink" href="#1-dont-fight-your-runtime" title="Permanent link">&para;</a></h3>
+<p>Node.js process management is fundamentally fragile for long-lived servers launched via npx. The runtime doesn't support robust parent-death detection, and the nested process tree (npx → node → worker) makes signal propagation unreliable. We spent three versions building increasingly complex orphan detection. Go's single binary eliminated the entire category of problems.</p>
+<p><strong>Takeaway</strong>: If you're spending significant engineering effort working around your runtime's limitations, that's a signal to evaluate whether the runtime fits the problem.</p>
+<blockquote>
+<p>Side note: looking for a better runtime I looked into both Go and Rust (isn't Rust aweoms!?). Go won primarily for its lightweight goroutines exceling at I/O-bound operations, and the mcp-go SDK is superbly maintained. </p>
+</blockquote>
+<h3 id="2-interface-driven-design-enables-fearless-extension">2. Interface-Driven Design Enables Fearless Extension<a class="headerlink" href="#2-interface-driven-design-enables-fearless-extension" title="Permanent link">&para;</a></h3>
+<p>Adding Brave Search in the Go version was one file implementing one interface — about 200 lines including tests. In the Node.js version, the equivalent change would have touched 6+ files due to tightly coupled imports in the shared directory.</p>
+<p><strong>Takeaway</strong>: When you know extension is likely (new providers, new tools), invest in clean interfaces upfront. The interface is the specification; implementations are interchangeable.</p>
+<h3 id="3-memory-matters-for-mcp-servers">3. Memory Matters for MCP Servers<a class="headerlink" href="#3-memory-matters-for-mcp-servers" title="Permanent link">&para;</a></h3>
+<p>MCP servers run alongside AI assistants on developer machines. They're always-on background processes. A 430MB idle memory footprint was unacceptable — users would notice and uninstall. Go's ~25MB baseline lets the server stay resident without impact.</p>
+<p><strong>Takeaway</strong>: For developer tools that run continuously, memory efficiency is a feature, not an optimization. Choose your runtime accordingly.</p>
+<h3 id="4-caching-architecture-should-be-boring">4. Caching Architecture Should Be Boring<a class="headerlink" href="#4-caching-architecture-should-be-boring" title="Permanent link">&para;</a></h3>
+<p>The old project had four persistence strategies with complex heuristics for when to flush. The new one has: memory + encrypted disk. Each layer is simple and independently testable. No heuristics, no race conditions, no data loss.</p>
+<p><strong>Takeaway</strong>: Boring infrastructure is reliable infrastructure. If your caching layer needs its own debugging session, it's too complex.</p>
+<h3 id="5-documentation-should-be-drift-resistant">5. Documentation Should Be Drift-Resistant<a class="headerlink" href="#5-documentation-should-be-drift-resistant" title="Permanent link">&para;</a></h3>
+<p>The old project required updating four separate documentation files per new tool. Inevitably, docs drifted from reality. The new project's test suite programmatically validates documentation claims — tool descriptions must mention alternatives, output schemas must match actual responses, and annotations must be consistent.</p>
+<p><strong>Takeaway</strong>: If documentation can be wrong without a test failing, it will eventually be wrong.</p>
+<h2 id="what-we-kept">What We Kept<a class="headerlink" href="#what-we-kept" title="Permanent link">&para;</a></h2>
+<p>The rewrite preserved the user-facing contract:</p>
+<ul>
+<li><strong>Same tools</strong> with identical semantics and parameter names</li>
+<li><strong>Same MCP protocol</strong> compatibility (Claude Desktop, Cursor, VS Code, any MCP client)</li>
+<li><strong>Same environment variables</strong> (drop-in replacement for existing configs)</li>
+<li><strong>Same search lenses</strong> (curated domain lists, identical JSON format)</li>
+</ul>
+<p>What improved (without breaking backwards compatibility):</p>
+<ul>
+<li>OAuth 2.1 authentication for multi-client deployments</li>
+<li>Multi-tenancy with per-tenant session isolation</li>
+<li>Automatic failover between search providers when one goes down</li>
+<li>Prometheus metrics for observability</li>
+<li>Structured audit logging for compliance</li>
+</ul>
+<h2 id="results">Results<a class="headerlink" href="#results" title="Permanent link">&para;</a></h2>
+<p>Since launching the Go version:</p>
+<ul>
+<li>Zero orphan process reports (vs. recurring issue in Node.js version)</li>
+<li>Multiple search providers with automatic failover (vs. single provider)</li>
+<li>4-tier scraping pipeline that tries lightweight methods first (vs. Playwright-only)</li>
+<li>Sub-100ms cold startup (vs. 2-4 seconds)</li>
+<li>Production-ready: rate limiting, automatic failover, user isolation, and a compliance-ready audit trail</li>
+</ul>
+<h2 id="should-you-rewrite">Should You Rewrite?<a class="headerlink" href="#should-you-rewrite" title="Permanent link">&para;</a></h2>
+<p>Probably not. Most rewrites fail because they're motivated by developer preference ("I want to use a new language") rather than architectural necessity. Ours succeeded because:</p>
+<ol>
+<li>The problems were <strong>architectural</strong>, not implementational — no amount of refactoring within Node.js would fix process orphaning</li>
+<li>The user-facing contract was <strong>well-defined</strong> — MCP provides a clean protocol boundary</li>
+<li>The scope was <strong>bounded</strong> — we knew exactly what the server needed to do</li>
+<li>We had <strong>comprehensive tests</strong> on the old version to validate behavioral equivalence</li>
+</ol>
+<p>If your problems are solvable within your current architecture, refactor. If they're fundamentally incompatible with your runtime or architecture, consider a rewrite — but only with clear success criteria and a well-defined boundary.</p>
+<hr />
+<p><em>This article covers the migration from <a href="https://github.com/zoharbabin/google-researcher-mcp">google-researcher-mcp</a> to <a href="https://github.com/zoharbabin/web-researcher-mcp">web-researcher-mcp</a>. The new project is open source under MIT and works with any MCP-compatible AI assistant.</em></p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/zoharbabin/web-researcher-mcp" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://x.com/zohar" target="_blank" rel="noopener" title="x.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M357.2 48h70.6L273.6 224.2 455 464H313L201.7 318.6 74.5 464H3.8l164.9-188.5L-5.2 48h145.6l100.5 132.9zm-24.8 373.8h39.1L119.1 88h-42z"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://hub.docker.com/r/zoharbabin/web-researcher-mcp" target="_blank" rel="noopener" title="hub.docker.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M349.9 236.3h-66.1v-59.4h66.1zm0-204.3h-66.1v60.7h66.1zm78.2 144.8H362v59.4h66.1zm-156.3-72.1h-66.1v60.1h66.1zm78.1 0h-66.1v60.1h66.1zm276.8 100c-14.4-9.7-47.6-13.2-73.1-8.4-3.3-24-16.7-44.9-41.1-63.7l-14-9.3-9.3 14c-18.4 27.8-23.4 73.6-3.7 103.8-8.7 4.7-25.8 11.1-48.4 10.7H2.4c-8.7 50.8 5.8 116.8 44 162.1 37.1 43.9 92.7 66.2 165.4 66.2 157.4 0 273.9-72.5 328.4-204.2 21.4.4 67.6.1 91.3-45.2 1.5-2.5 6.6-13.2 8.5-17.1zm-511.1-27.9h-66v59.4h66.1v-59.4zm78.1 0h-66.1v59.4h66.1zm78.1 0h-66.1v59.4h66.1zm-78.1-72.1h-66.1v60.1h66.1z"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.sections", "navigation.top", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

@@ -1,0 +1,3759 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust.">
+      
+      
+      
+        <link rel="canonical" href="https://zoharbabin.github.io/web-researcher-mcp/tools/">
+      
+      
+        <link rel="prev" href="../examples/">
+      
+      
+        <link rel="next" href="../api-setup/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Tools - Web Researcher MCP</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Tools - Web Researcher MCP" />
+  <meta property="og:description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust. Free, private, open source." />
+  <meta property="og:image" content="https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/social-preview.png" />
+  <meta property="og:url" content="https://zoharbabin.github.io/web-researcher-mcp/tools/" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Tools - Web Researcher MCP" />
+  <meta name="twitter:description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust. Free, private, open source." />
+  <meta name="twitter:image" content="https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/social-preview.png" />
+
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#tool-specifications" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+        <aside class="md-banner">
+          <div class="md-banner__inner md-grid md-typeset">
+            
+            
+  <a href="https://github.com/zoharbabin/web-researcher-mcp" style="display:inline-flex;align-items:center;gap:.4em;">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25z"/></svg>
+    Star us on GitHub
+  </a>
+
+          </div>
+          
+        </aside>
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Web Researcher MCP" class="md-header__button md-logo" aria-label="Web Researcher MCP" data-md-component="logo">
+      
+  <img src="https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/logo-final-transparent.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Web Researcher MCP
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Tools
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/zoharbabin/web-researcher-mcp" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    zoharbabin/web-researcher-mcp
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Web Researcher MCP" class="md-nav__button md-logo" aria-label="Web Researcher MCP" data-md-component="logo">
+      
+  <img src="https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/logo-final-transparent.svg" alt="logo">
+
+    </a>
+    Web Researcher MCP
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/zoharbabin/web-researcher-mcp" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    zoharbabin/web-researcher-mcp
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tools
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#tool-registration-pattern" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool Registration Pattern
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tool-1-web_search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool 1: web_search
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tool 1: web_search">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#purpose" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Purpose
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#input-schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#output-schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#behavior" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Behavior
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cache" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cache
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#error-conditions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error Conditions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tool-2-scrape_page" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool 2: scrape_page
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tool 2: scrape_page">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#purpose_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Purpose
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#input-schema_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#output-schema_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scraping-strategy-tiered-fallback" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scraping Strategy (Tiered Fallback)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#known-spa-domains-require-headless-browser" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known SPA Domains (require headless browser)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cache_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cache
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#error-taxonomy-internalscrapererrorsgo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error Taxonomy (internal/scraper/errors.go)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tool-3-search_and_scrape" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool 3: search_and_scrape
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tool 3: search_and_scrape">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#purpose_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Purpose
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#input-schema_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#output-schema_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#behavior_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Behavior
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cache_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cache
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tool-4-image_search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool 4: image_search
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tool 4: image_search">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#input-schema_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#output-schema_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cache_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cache
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tool-5-news_search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool 5: news_search
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tool 5: news_search">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#input-schema_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#output-schema_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#behavior_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Behavior
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cache_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cache
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tool-6-academic_search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool 6: academic_search
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tool 6: academic_search">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#input-schema_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#output-fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#behavior_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Behavior
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#academic-site-pool-web-search-fallback" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Academic Site Pool (web search fallback)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cache_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cache
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tool-7-patent_search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool 7: patent_search
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tool 7: patent_search">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#input-schema_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#output-fields_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#behavior_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Behavior
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cache_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cache
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tool-8-sequential_search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool 8: sequential_search
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tool 8: sequential_search">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#purpose_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Purpose
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#input-schema_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#session-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Session Management
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#output-schema_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#state-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        State Management
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tool-9-get_research_session" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool 9: get_research_session
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tool 9: get_research_session">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#input-schema_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#behavior_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Behavior
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#annotations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Annotations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#error-conditions_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error Conditions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cache_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cache
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cross-cutting-concerns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-Cutting Concerns
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cross-Cutting Concerns">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#timeouts-all-configurable-via-env" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Timeouts (all configurable via env)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#content-size-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Content Size Limits
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#token-estimation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Token Estimation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#unified-error-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unified Error Handling
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tool-annotations-mcp-protocol" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool Annotations (MCP Protocol)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#provider-resolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Provider Resolution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#known-provider-behaviors-not-bugs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known Provider Behaviors (not bugs)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../privacy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Privacy Policy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../brand-guidelines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Brand Guidelines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lessons-learned/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Our Story
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../session-persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Session Persistence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Migration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#tool-registration-pattern" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool Registration Pattern
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tool-1-web_search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool 1: web_search
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tool 1: web_search">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#purpose" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Purpose
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#input-schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#output-schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#behavior" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Behavior
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cache" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cache
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#error-conditions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error Conditions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tool-2-scrape_page" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool 2: scrape_page
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tool 2: scrape_page">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#purpose_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Purpose
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#input-schema_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#output-schema_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scraping-strategy-tiered-fallback" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scraping Strategy (Tiered Fallback)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#known-spa-domains-require-headless-browser" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known SPA Domains (require headless browser)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cache_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cache
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#error-taxonomy-internalscrapererrorsgo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error Taxonomy (internal/scraper/errors.go)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tool-3-search_and_scrape" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool 3: search_and_scrape
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tool 3: search_and_scrape">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#purpose_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Purpose
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#input-schema_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#output-schema_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#behavior_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Behavior
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cache_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cache
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tool-4-image_search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool 4: image_search
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tool 4: image_search">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#input-schema_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#output-schema_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cache_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cache
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tool-5-news_search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool 5: news_search
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tool 5: news_search">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#input-schema_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#output-schema_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#behavior_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Behavior
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cache_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cache
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tool-6-academic_search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool 6: academic_search
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tool 6: academic_search">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#input-schema_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#output-fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#behavior_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Behavior
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#academic-site-pool-web-search-fallback" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Academic Site Pool (web search fallback)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cache_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cache
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tool-7-patent_search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool 7: patent_search
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tool 7: patent_search">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#input-schema_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#output-fields_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#behavior_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Behavior
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cache_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cache
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tool-8-sequential_search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool 8: sequential_search
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tool 8: sequential_search">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#purpose_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Purpose
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#input-schema_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#session-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Session Management
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#output-schema_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#state-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        State Management
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tool-9-get_research_session" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool 9: get_research_session
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tool 9: get_research_session">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#input-schema_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#behavior_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Behavior
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#annotations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Annotations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#error-conditions_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error Conditions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cache_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cache
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cross-cutting-concerns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-Cutting Concerns
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cross-Cutting Concerns">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#timeouts-all-configurable-via-env" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Timeouts (all configurable via env)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#content-size-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Content Size Limits
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#token-estimation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Token Estimation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#unified-error-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unified Error Handling
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tool-annotations-mcp-protocol" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool Annotations (MCP Protocol)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#provider-resolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Provider Resolution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#known-provider-behaviors-not-bugs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known Provider Behaviors (not bugs)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="tool-specifications">Tool Specifications<a class="headerlink" href="#tool-specifications" title="Permanent link">&para;</a></h1>
+<p>These tools let your AI assistant search the web, read pages, find academic papers, track multi-step research, and more — always returning real, verifiable sources. Below are the detailed schemas and behavioral contracts for each tool.</p>
+<blockquote>
+<p><strong>Note:</strong> Output schemas describe the JSON shape returned by each tool. See the corresponding <code>internal/tools/*.go</code> file for the implementation. Input schemas are auto-generated from struct <code>jsonschema</code> tags.</p>
+</blockquote>
+<h2 id="tool-registration-pattern">Tool Registration Pattern<a class="headerlink" href="#tool-registration-pattern" title="Permanent link">&para;</a></h2>
+<p>Each tool follows the pattern in <code>internal/tools/registry.go</code>: a typed input struct with <code>jsonschema</code> tags (the SDK auto-generates JSON Schema from these) and a <code>register*</code> function that calls <code>mcp.AddTool</code>. See <code>internal/tools/search.go</code> for a representative example.</p>
+<hr />
+<h2 id="tool-1-web_search">Tool 1: <code>web_search</code><a class="headerlink" href="#tool-1-web_search" title="Permanent link">&para;</a></h2>
+<h3 id="purpose">Purpose<a class="headerlink" href="#purpose" title="Permanent link">&para;</a></h3>
+<p>Perform a web search and return structured result URLs with metadata.</p>
+<h3 id="input-schema">Input Schema<a class="headerlink" href="#input-schema" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+<th>Default</th>
+<th>Constraints</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>query</code></td>
+<td>string</td>
+<td>yes</td>
+<td>—</td>
+<td>1-500 chars</td>
+</tr>
+<tr>
+<td><code>num_results</code></td>
+<td>int</td>
+<td>no</td>
+<td>5</td>
+<td>1-10</td>
+</tr>
+<tr>
+<td><code>time_range</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td><code>day</code>, <code>week</code>, <code>month</code>, <code>year</code></td>
+</tr>
+<tr>
+<td><code>safe</code></td>
+<td>string</td>
+<td>no</td>
+<td><code>medium</code></td>
+<td><code>off</code>, <code>medium</code>, <code>high</code></td>
+</tr>
+<tr>
+<td><code>language</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>ISO 639-1 code</td>
+</tr>
+<tr>
+<td><code>site</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>Domain restriction (cannot combine with <code>lens</code>)</td>
+</tr>
+<tr>
+<td><code>exact_terms</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>Exact phrase match</td>
+</tr>
+<tr>
+<td><code>exclude_terms</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>Terms to exclude</td>
+</tr>
+<tr>
+<td><code>country</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>ISO 3166-1 alpha-2</td>
+</tr>
+<tr>
+<td><code>lens</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>Domain lens (overrides <code>site</code>). See <code>lenses/</code> directory for available lenses</td>
+</tr>
+<tr>
+<td><code>provider</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>Force search provider. Returns error listing available providers if unknown</td>
+</tr>
+<tr>
+<td><code>sessionId</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>Link results to a <code>sequential_search</code> session</td>
+</tr>
+</tbody>
+</table>
+<h3 id="output-schema">Output Schema<a class="headerlink" href="#output-schema" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="kd">type</span><span class="w"> </span><span class="nx">SearchOutput</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">URLs</span><span class="w">        </span><span class="p">[]</span><span class="kt">string</span><span class="w">       </span><span class="s">`json:&quot;urls&quot;`</span>
+<span class="w">    </span><span class="nx">Query</span><span class="w">       </span><span class="kt">string</span><span class="w">         </span><span class="s">`json:&quot;query&quot;`</span>
+<span class="w">    </span><span class="nx">ResultCount</span><span class="w"> </span><span class="kt">int</span><span class="w">            </span><span class="s">`json:&quot;resultCount&quot;`</span>
+<span class="w">    </span><span class="nx">Results</span><span class="w">     </span><span class="p">[]</span><span class="nx">SearchResult</span><span class="w"> </span><span class="s">`json:&quot;results&quot;`</span>
+<span class="p">}</span>
+
+<span class="kd">type</span><span class="w"> </span><span class="nx">SearchResult</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">Title</span><span class="w">       </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:&quot;title&quot;`</span>
+<span class="w">    </span><span class="nx">URL</span><span class="w">         </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:&quot;url&quot;`</span>
+<span class="w">    </span><span class="nx">Snippet</span><span class="w">     </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:&quot;snippet&quot;`</span>
+<span class="w">    </span><span class="nx">DisplayLink</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:&quot;displayLink&quot;`</span>
+<span class="p">}</span>
+</code></pre></div>
+<h3 id="behavior">Behavior<a class="headerlink" href="#behavior" title="Permanent link">&para;</a></h3>
+<ol>
+<li>If <code>SEARCH_ROUTING</code> is set, route through the multi-provider Router (priority-ordered fallback with per-provider circuit breakers).</li>
+<li>If <code>lens</code> is specified and has a dedicated <code>cx</code>, route directly to that Google PSE engine.</li>
+<li>If <code>lens</code> is specified without <code>cx</code>, inject <code>site:</code> operators and route to the configured provider.</li>
+<li>Apply <code>time_range</code> as date restriction parameter.</li>
+<li>Return deduplicated URLs and full result objects.</li>
+</ol>
+<h3 id="cache">Cache<a class="headerlink" href="#cache" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Key: SHA-256 of (provider + query + all params)</li>
+<li>TTL: 30 minutes</li>
+</ul>
+<h3 id="error-conditions">Error Conditions<a class="headerlink" href="#error-conditions" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Unknown provider → error listing all supported providers (no duplicates)</li>
+<li>Invalid/missing API key → <code>upstreamErrorResponse()</code> with setup instructions referencing <code>.env.example</code></li>
+<li>Rate limited → <code>rateLimitError()</code> suggesting 60s wait or different provider</li>
+<li>No results → return empty <code>urls</code> array (not an error)</li>
+<li>All errors use <code>upstreamErrorResponse()</code> from <code>internal/tools/search.go</code> for consistent formatting</li>
+</ul>
+<hr />
+<h2 id="tool-2-scrape_page">Tool 2: <code>scrape_page</code><a class="headerlink" href="#tool-2-scrape_page" title="Permanent link">&para;</a></h2>
+<h3 id="purpose_1">Purpose<a class="headerlink" href="#purpose_1" title="Permanent link">&para;</a></h3>
+<p>Extract content from a URL, supporting web pages, documents, and YouTube videos.</p>
+<h3 id="input-schema_1">Input Schema<a class="headerlink" href="#input-schema_1" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+<th>Default</th>
+<th>Constraints</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>url</code></td>
+<td>string</td>
+<td>yes</td>
+<td>—</td>
+<td>Valid HTTP(S) URL</td>
+</tr>
+<tr>
+<td><code>mode</code></td>
+<td>string</td>
+<td>no</td>
+<td><code>full</code></td>
+<td><code>full</code>, <code>preview</code> (first ~5000 bytes)</td>
+</tr>
+<tr>
+<td><code>max_length</code></td>
+<td>int</td>
+<td>no</td>
+<td>50000</td>
+<td>Bytes</td>
+</tr>
+<tr>
+<td><code>sessionId</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>Link to a <code>sequential_search</code> session</td>
+</tr>
+</tbody>
+</table>
+<h3 id="output-schema_1">Output Schema<a class="headerlink" href="#output-schema_1" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="kd">type</span><span class="w"> </span><span class="nx">ScrapeOutput</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">URL</span><span class="w">            </span><span class="kt">string</span><span class="w">            </span><span class="s">`json:&quot;url&quot;`</span>
+<span class="w">    </span><span class="nx">Content</span><span class="w">        </span><span class="kt">string</span><span class="w">            </span><span class="s">`json:&quot;content&quot;`</span>
+<span class="w">    </span><span class="nx">ContentType</span><span class="w">    </span><span class="kt">string</span><span class="w">            </span><span class="s">`json:&quot;contentType&quot;`</span><span class="w">    </span><span class="c1">// html, markdown, youtube, pdf, docx, pptx</span>
+<span class="w">    </span><span class="nx">ContentLength</span><span class="w">  </span><span class="kt">int</span><span class="w">               </span><span class="s">`json:&quot;contentLength&quot;`</span>
+<span class="w">    </span><span class="nx">Truncated</span><span class="w">      </span><span class="kt">bool</span><span class="w">              </span><span class="s">`json:&quot;truncated&quot;`</span>
+<span class="w">    </span><span class="nx">EstimatedTokens</span><span class="w"> </span><span class="kt">int</span><span class="w">              </span><span class="s">`json:&quot;estimatedTokens&quot;`</span>
+<span class="w">    </span><span class="nx">SizeCategory</span><span class="w">   </span><span class="kt">string</span><span class="w">            </span><span class="s">`json:&quot;sizeCategory&quot;`</span><span class="w">  </span><span class="c1">// small, medium, large, very_large</span>
+<span class="w">    </span><span class="nx">OriginalLength</span><span class="w"> </span><span class="o">*</span><span class="kt">int</span><span class="w">              </span><span class="s">`json:&quot;originalLength,omitempty&quot;`</span>
+<span class="w">    </span><span class="nx">Metadata</span><span class="w">       </span><span class="o">*</span><span class="nx">DocumentMetadata</span><span class="w"> </span><span class="s">`json:&quot;metadata,omitempty&quot;`</span>
+<span class="w">    </span><span class="nx">Citation</span><span class="w">       </span><span class="o">*</span><span class="nx">Citation</span><span class="w">         </span><span class="s">`json:&quot;citation,omitempty&quot;`</span>
+<span class="p">}</span>
+
+<span class="kd">type</span><span class="w"> </span><span class="nx">DocumentMetadata</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">Title</span><span class="w">     </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:&quot;title,omitempty&quot;`</span>
+<span class="w">    </span><span class="nx">Author</span><span class="w">    </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:&quot;author,omitempty&quot;`</span>
+<span class="w">    </span><span class="nx">PageCount</span><span class="w"> </span><span class="kt">int</span><span class="w">    </span><span class="s">`json:&quot;pageCount,omitempty&quot;`</span>
+<span class="w">    </span><span class="nx">CreatedAt</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:&quot;createdAt,omitempty&quot;`</span>
+<span class="w">    </span><span class="nx">FileSize</span><span class="w">  </span><span class="kt">int64</span><span class="w">  </span><span class="s">`json:&quot;fileSize,omitempty&quot;`</span>
+<span class="p">}</span>
+
+<span class="kd">type</span><span class="w"> </span><span class="nx">Citation</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">URL</span><span class="w">          </span><span class="kt">string</span><span class="w">           </span><span class="s">`json:&quot;url&quot;`</span>
+<span class="w">    </span><span class="nx">AccessedDate</span><span class="w"> </span><span class="kt">string</span><span class="w">           </span><span class="s">`json:&quot;accessedDate&quot;`</span>
+<span class="w">    </span><span class="nx">Metadata</span><span class="w">     </span><span class="nx">CitationMetadata</span><span class="w"> </span><span class="s">`json:&quot;metadata&quot;`</span>
+<span class="w">    </span><span class="nx">Formatted</span><span class="w">    </span><span class="nx">CitationFormats</span><span class="w">  </span><span class="s">`json:&quot;formatted&quot;`</span>
+<span class="p">}</span>
+
+<span class="kd">type</span><span class="w"> </span><span class="nx">CitationFormats</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">APA</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:&quot;apa&quot;`</span>
+<span class="w">    </span><span class="nx">MLA</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:&quot;mla&quot;`</span>
+<span class="p">}</span>
+</code></pre></div>
+<h3 id="scraping-strategy-tiered-fallback">Scraping Strategy (Tiered Fallback)<a class="headerlink" href="#scraping-strategy-tiered-fallback" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code>1. SSRF VALIDATION
+   └─ Resolve DNS, check all IPs against private ranges
+   └─ Block: loopback, link-local, RFC1918, metadata endpoints
+
+2. CONTENT TYPE DETECTION
+   ├─ YouTube URL → YouTube extractor (3-strategy fallback):
+   │     Strategy 1: Player response captions (primary + alt regex)
+   │     Strategy 2: Direct timedtext API (en, en-US, en-GB)
+   │     Strategy 3: Video description (shortDescription JSON field)
+   ├─ .pdf / application/pdf → PDF parser
+   ├─ .docx / application/vnd.openxmlformats* → DOCX parser
+   └─ .pptx / application/vnd.ms-powerpoint → PPTX parser
+
+3. WEB PAGE EXTRACTION (4-tier, ordered by speed)
+   a) Tier 1: MARKDOWN NEGOTIATION (fastest, ~200ms)
+      ├─ Send GET with Accept: text/markdown
+      ├─ 5-second timeout
+      ├─ Verify response is actually markdown (heuristic check)
+      └─ If content-type mismatch or too short → next tier
+
+   b) Tier 2: STEALTH HTTP CLIENT (fast, ~300ms)
+      ├─ Browser-like TLS fingerprint (TLS 1.2+, HTTP/2)
+      ├─ Full Chrome 131 headers (User-Agent, Sec-Ch-Ua, Sec-Fetch-*)
+      ├─ Parse with goquery (article &gt; [role=main] &gt; main &gt; body)
+      ├─ Remove: script, style, nav, footer, aside, ads, popups
+      ├─ SSRF protection via safe dialer when AllowPrivateIPs=false
+      └─ If below 100-char threshold → next tier
+
+   c) Tier 3: HTML EXTRACTION via goquery (standard, ~500ms)
+      ├─ Fetch page with standard Accept header
+      ├─ Parse with goquery
+      ├─ Extract: article &gt; main &gt; body (priority order)
+      ├─ Remove: script, style, nav, footer, aside, ads
+      ├─ Minimum content: 100 bytes, 10% meaningful text ratio
+      └─ If below threshold → next tier
+
+   d) Tier 4: HEADLESS BROWSER via go-rod + stealth (slow, ~5s)
+      ├─ Browser pool with lazy init + singleton pattern
+      ├─ go-rod/stealth plugin (navigator spoofing, WebGL masking)
+      ├─ Used for: Known SPA domains, JS-rendered content, bot challenges
+      ├─ Wait for: page stability (2s for SPA domains, 500ms otherwise) OR 30s timeout
+      ├─ Extract: rendered DOM via JavaScript evaluation
+      └─ Graceful cleanup via Pipeline.Close()
+
+4. CONTENT PROCESSING
+   ├─ Sanitize: strip hidden text, zero-width chars, dangerous patterns
+   ├─ Truncate: at paragraph/sentence boundary if &gt; max_length
+   ├─ Estimate tokens: length / 4
+   └─ Extract citation: from &lt;meta&gt; tags, URL, response headers
+</code></pre></div>
+<h3 id="known-spa-domains-require-headless-browser">Known SPA Domains (require headless browser)<a class="headerlink" href="#known-spa-domains-require-headless-browser" title="Permanent link">&para;</a></h3>
+<ul>
+<li>patents.google.com, scholar.google.com, news.google.com</li>
+<li>trends.google.com, twitter.com, x.com</li>
+<li>linkedin.com, facebook.com, instagram.com</li>
+<li>medium.com, dev.to</li>
+</ul>
+<h3 id="cache_1">Cache<a class="headerlink" href="#cache_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Key: SHA-256 of (url + mode)</li>
+<li>TTL: 1 hour</li>
+</ul>
+<h3 id="error-taxonomy-internalscrapererrorsgo">Error Taxonomy (<code>internal/scraper/errors.go</code>)<a class="headerlink" href="#error-taxonomy-internalscrapererrorsgo" title="Permanent link">&para;</a></h3>
+<p>All scrape errors are typed as <code>ScrapeError{Kind, Message, Cause, URL, Tier}</code>. The <code>scrapeErrorResponse()</code> function in <code>internal/tools/scrape.go</code> maps each kind to an actionable LLM-facing message:</p>
+<table>
+<thead>
+<tr>
+<th>ErrorKind</th>
+<th>Trigger</th>
+<th>LLM Message Includes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ErrNetwork</code></td>
+<td>DNS failure, timeout, connection refused</td>
+<td>"network error — check connectivity or try again"</td>
+</tr>
+<tr>
+<td><code>ErrBlocked</code></td>
+<td>HTTP 403, bot detection, SSRF, domain allowlist</td>
+<td>"access was blocked" + GitHub issue link</td>
+</tr>
+<tr>
+<td><code>ErrBrowser</code></td>
+<td>Chrome not found, launch failed, connect failed</td>
+<td>"Chrome not available" + CHROME_PATH guidance</td>
+</tr>
+<tr>
+<td><code>ErrContent</code></td>
+<td>Page loaded but &lt;100 bytes extracted</td>
+<td>"no readable content" + GitHub issue link</td>
+</tr>
+<tr>
+<td><code>ErrAuth</code></td>
+<td>HTTP 401, login redirect</td>
+<td>"authentication required"</td>
+</tr>
+<tr>
+<td><code>ErrRateLimit</code></td>
+<td>HTTP 429</td>
+<td>"rate limited — try again in 60 seconds"</td>
+</tr>
+</tbody>
+</table>
+<p>When all tiers fail, the composite error message lists each tier's outcome (e.g., <code>markdown: empty, stealth: HTTP 403, html: 12 bytes, browser: chrome launch failed</code>).</p>
+<hr />
+<h2 id="tool-3-search_and_scrape">Tool 3: <code>search_and_scrape</code><a class="headerlink" href="#tool-3-search_and_scrape" title="Permanent link">&para;</a></h2>
+<h3 id="purpose_2">Purpose<a class="headerlink" href="#purpose_2" title="Permanent link">&para;</a></h3>
+<p>Combined search + scrape pipeline with quality scoring, deduplication, and source ranking.</p>
+<h3 id="input-schema_2">Input Schema<a class="headerlink" href="#input-schema_2" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+<th>Default</th>
+<th>Constraints</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>query</code></td>
+<td>string</td>
+<td>yes</td>
+<td>—</td>
+<td>1-500 chars</td>
+</tr>
+<tr>
+<td><code>num_results</code></td>
+<td>int</td>
+<td>no</td>
+<td>3</td>
+<td>1-10</td>
+</tr>
+<tr>
+<td><code>include_sources</code></td>
+<td>bool</td>
+<td>no</td>
+<td>true</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>deduplicate</code></td>
+<td>bool</td>
+<td>no</td>
+<td>true</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>max_length_per_source</code></td>
+<td>int</td>
+<td>no</td>
+<td>50000</td>
+<td>Bytes</td>
+</tr>
+<tr>
+<td><code>total_max_length</code></td>
+<td>int</td>
+<td>no</td>
+<td>300000</td>
+<td>Bytes</td>
+</tr>
+<tr>
+<td><code>filter_by_query</code></td>
+<td>bool</td>
+<td>no</td>
+<td>false</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>provider</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>Force search provider for the search phase</td>
+</tr>
+<tr>
+<td><code>sessionId</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>Link results to a <code>sequential_search</code> session</td>
+</tr>
+</tbody>
+</table>
+<h3 id="output-schema_2">Output Schema<a class="headerlink" href="#output-schema_2" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="kd">type</span><span class="w"> </span><span class="nx">SearchAndScrapeOutput</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">Query</span><span class="w">           </span><span class="kt">string</span><span class="w">          </span><span class="s">`json:&quot;query&quot;`</span>
+<span class="w">    </span><span class="nx">Status</span><span class="w">          </span><span class="kt">string</span><span class="w">          </span><span class="s">`json:&quot;status&quot;`</span><span class="w">           </span><span class="c1">// &quot;complete&quot;, &quot;partial&quot;, or &quot;failed&quot;</span>
+<span class="w">    </span><span class="nx">Sources</span><span class="w">         </span><span class="p">[]</span><span class="nx">SourceResult</span><span class="w">  </span><span class="s">`json:&quot;sources&quot;`</span>
+<span class="w">    </span><span class="nx">CombinedContent</span><span class="w"> </span><span class="kt">string</span><span class="w">          </span><span class="s">`json:&quot;combinedContent&quot;`</span>
+<span class="w">    </span><span class="nx">ScrapeFailures</span><span class="w">  </span><span class="p">[]</span><span class="nx">FailureInfo</span><span class="w">   </span><span class="s">`json:&quot;scrapeFailures,omitempty&quot;`</span>
+<span class="w">    </span><span class="nx">Note</span><span class="w">            </span><span class="kt">string</span><span class="w">          </span><span class="s">`json:&quot;note,omitempty&quot;`</span><span class="w">   </span><span class="c1">// guidance when status=&quot;failed&quot;</span>
+<span class="w">    </span><span class="nx">Summary</span><span class="w">         </span><span class="nx">PipelineSummary</span><span class="w"> </span><span class="s">`json:&quot;summary&quot;`</span>
+<span class="w">    </span><span class="nx">SizeMetadata</span><span class="w">    </span><span class="nx">SizeMetadata</span><span class="w">    </span><span class="s">`json:&quot;sizeMetadata&quot;`</span>
+<span class="p">}</span>
+
+<span class="kd">type</span><span class="w"> </span><span class="nx">SourceResult</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">URL</span><span class="w">         </span><span class="kt">string</span><span class="w">        </span><span class="s">`json:&quot;url&quot;`</span>
+<span class="w">    </span><span class="nx">Title</span><span class="w">       </span><span class="kt">string</span><span class="w">        </span><span class="s">`json:&quot;title,omitempty&quot;`</span>
+<span class="w">    </span><span class="nx">Content</span><span class="w">     </span><span class="kt">string</span><span class="w">        </span><span class="s">`json:&quot;content&quot;`</span>
+<span class="w">    </span><span class="nx">ContentType</span><span class="w"> </span><span class="kt">string</span><span class="w">        </span><span class="s">`json:&quot;contentType&quot;`</span>
+<span class="w">    </span><span class="nx">Scores</span><span class="w">      </span><span class="o">*</span><span class="nx">QualityScore</span><span class="w"> </span><span class="s">`json:&quot;scores,omitempty&quot;`</span>
+<span class="p">}</span>
+
+<span class="kd">type</span><span class="w"> </span><span class="nx">FailureInfo</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">URL</span><span class="w">             </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:&quot;url&quot;`</span>
+<span class="w">    </span><span class="nx">Kind</span><span class="w">            </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:&quot;kind&quot;`</span><span class="w">            </span><span class="c1">// error category (blocked, auth_required, etc.)</span>
+<span class="w">    </span><span class="nx">Reason</span><span class="w">          </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:&quot;reason&quot;`</span>
+<span class="w">    </span><span class="nx">Retryable</span><span class="w">       </span><span class="kt">bool</span><span class="w">   </span><span class="s">`json:&quot;retryable&quot;`</span>
+<span class="w">    </span><span class="nx">SuggestedAction</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:&quot;suggestedAction&quot;`</span><span class="w"> </span><span class="c1">// recovery hint</span>
+<span class="p">}</span>
+
+<span class="kd">type</span><span class="w"> </span><span class="nx">QualityScore</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">Overall</span><span class="w">        </span><span class="kt">float64</span><span class="w"> </span><span class="s">`json:&quot;overall&quot;`</span>
+<span class="w">    </span><span class="nx">Relevance</span><span class="w">      </span><span class="kt">float64</span><span class="w"> </span><span class="s">`json:&quot;relevance&quot;`</span>
+<span class="w">    </span><span class="nx">Freshness</span><span class="w">      </span><span class="kt">float64</span><span class="w"> </span><span class="s">`json:&quot;freshness&quot;`</span>
+<span class="w">    </span><span class="nx">Authority</span><span class="w">      </span><span class="kt">float64</span><span class="w"> </span><span class="s">`json:&quot;authority&quot;`</span>
+<span class="w">    </span><span class="nx">ContentQuality</span><span class="w"> </span><span class="kt">float64</span><span class="w"> </span><span class="s">`json:&quot;contentQuality&quot;`</span>
+<span class="p">}</span>
+
+<span class="kd">type</span><span class="w"> </span><span class="nx">PipelineSummary</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">URLsSearched</span><span class="w">     </span><span class="kt">int</span><span class="w"> </span><span class="s">`json:&quot;urlsSearched&quot;`</span>
+<span class="w">    </span><span class="nx">URLsScraped</span><span class="w">      </span><span class="kt">int</span><span class="w"> </span><span class="s">`json:&quot;urlsScraped&quot;`</span>
+<span class="w">    </span><span class="nx">URLsFailed</span><span class="w">       </span><span class="kt">int</span><span class="w"> </span><span class="s">`json:&quot;urlsFailed&quot;`</span>
+<span class="w">    </span><span class="nx">ProcessingTimeMs</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="s">`json:&quot;processingTimeMs&quot;`</span>
+<span class="p">}</span>
+</code></pre></div>
+<h3 id="behavior_1">Behavior<a class="headerlink" href="#behavior_1" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Execute search (via configured provider)</li>
+<li>Scrape all result URLs in parallel (bounded concurrency: 5)</li>
+<li>If <code>deduplicate</code>: paragraph-level hashing (djb2), remove &gt;85% similar blocks</li>
+<li>Score and rank sources by quality (weighted: relevance 35%, freshness 20%, authority 25%, content 20%)</li>
+<li>If <code>filter_by_query</code>: extract keywords, remove sources below relevance threshold</li>
+<li>Combine content, truncate to <code>total_max_length</code></li>
+<li>Return structured result with scores and metadata</li>
+</ol>
+<h3 id="cache_2">Cache<a class="headerlink" href="#cache_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li>NOT cached as a whole (composed of cached sub-operations)</li>
+<li>Individual search and scrape results are cached per their own TTLs</li>
+</ul>
+<hr />
+<h2 id="tool-4-image_search">Tool 4: <code>image_search</code><a class="headerlink" href="#tool-4-image_search" title="Permanent link">&para;</a></h2>
+<h3 id="input-schema_3">Input Schema<a class="headerlink" href="#input-schema_3" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+<th>Default</th>
+<th>Constraints</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>query</code></td>
+<td>string</td>
+<td>yes</td>
+<td>—</td>
+<td>1-500 chars</td>
+</tr>
+<tr>
+<td><code>num_results</code></td>
+<td>int</td>
+<td>no</td>
+<td>5</td>
+<td>1-10</td>
+</tr>
+<tr>
+<td><code>size</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>huge, icon, large, medium, small, xlarge, xxlarge</td>
+</tr>
+<tr>
+<td><code>type</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>clipart, face, lineart, stock, photo, animated</td>
+</tr>
+<tr>
+<td><code>color_type</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>color, gray, mono, trans</td>
+</tr>
+<tr>
+<td><code>dominant_color</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>black, blue, brown, gray, green, orange, pink, purple, red, teal, white, yellow</td>
+</tr>
+<tr>
+<td><code>file_type</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>jpg, gif, png, bmp, svg, webp</td>
+</tr>
+<tr>
+<td><code>safe</code></td>
+<td>string</td>
+<td>no</td>
+<td><code>medium</code></td>
+<td>off, medium, high</td>
+</tr>
+<tr>
+<td><code>provider</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>Force search provider</td>
+</tr>
+</tbody>
+</table>
+<h3 id="output-schema_3">Output Schema<a class="headerlink" href="#output-schema_3" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="kd">type</span><span class="w"> </span><span class="nx">ImageSearchOutput</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">Images</span><span class="w">      </span><span class="p">[]</span><span class="nx">ImageResult</span><span class="w"> </span><span class="s">`json:&quot;images&quot;`</span>
+<span class="w">    </span><span class="nx">Query</span><span class="w">       </span><span class="kt">string</span><span class="w">        </span><span class="s">`json:&quot;query&quot;`</span>
+<span class="w">    </span><span class="nx">ResultCount</span><span class="w"> </span><span class="kt">int</span><span class="w">           </span><span class="s">`json:&quot;resultCount&quot;`</span>
+<span class="p">}</span>
+
+<span class="kd">type</span><span class="w"> </span><span class="nx">ImageResult</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">Title</span><span class="w">         </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:&quot;title&quot;`</span>
+<span class="w">    </span><span class="nx">Link</span><span class="w">          </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:&quot;link&quot;`</span>
+<span class="w">    </span><span class="nx">ThumbnailLink</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:&quot;thumbnailLink,omitempty&quot;`</span>
+<span class="w">    </span><span class="nx">DisplayLink</span><span class="w">   </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:&quot;displayLink&quot;`</span>
+<span class="w">    </span><span class="nx">ContextLink</span><span class="w">   </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:&quot;contextLink,omitempty&quot;`</span>
+<span class="w">    </span><span class="nx">Width</span><span class="w">         </span><span class="kt">int</span><span class="w">    </span><span class="s">`json:&quot;width,omitempty&quot;`</span>
+<span class="w">    </span><span class="nx">Height</span><span class="w">        </span><span class="kt">int</span><span class="w">    </span><span class="s">`json:&quot;height,omitempty&quot;`</span>
+<span class="w">    </span><span class="nx">FileSize</span><span class="w">      </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:&quot;fileSize,omitempty&quot;`</span>
+<span class="p">}</span>
+</code></pre></div>
+<h3 id="cache_3">Cache<a class="headerlink" href="#cache_3" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Key: SHA-256 of (query + all filter params)</li>
+<li>TTL: 30 minutes</li>
+</ul>
+<hr />
+<h2 id="tool-5-news_search">Tool 5: <code>news_search</code><a class="headerlink" href="#tool-5-news_search" title="Permanent link">&para;</a></h2>
+<h3 id="input-schema_4">Input Schema<a class="headerlink" href="#input-schema_4" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+<th>Default</th>
+<th>Constraints</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>query</code></td>
+<td>string</td>
+<td>yes</td>
+<td>—</td>
+<td>1-500 chars</td>
+</tr>
+<tr>
+<td><code>num_results</code></td>
+<td>int</td>
+<td>no</td>
+<td>5</td>
+<td>1-10</td>
+</tr>
+<tr>
+<td><code>freshness</code></td>
+<td>string</td>
+<td>no</td>
+<td><code>week</code></td>
+<td>hour, day, week, month, year</td>
+</tr>
+<tr>
+<td><code>sort_by</code></td>
+<td>string</td>
+<td>no</td>
+<td><code>relevance</code></td>
+<td>relevance, date</td>
+</tr>
+<tr>
+<td><code>news_source</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>Domain filter</td>
+</tr>
+<tr>
+<td><code>provider</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>Force search provider</td>
+</tr>
+<tr>
+<td><code>sessionId</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>Link results to a <code>sequential_search</code> session</td>
+</tr>
+</tbody>
+</table>
+<h3 id="output-schema_4">Output Schema<a class="headerlink" href="#output-schema_4" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="kd">type</span><span class="w"> </span><span class="nx">NewsSearchOutput</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">Articles</span><span class="w">    </span><span class="p">[]</span><span class="nx">NewsArticle</span><span class="w"> </span><span class="s">`json:&quot;articles&quot;`</span>
+<span class="w">    </span><span class="nx">Query</span><span class="w">       </span><span class="kt">string</span><span class="w">        </span><span class="s">`json:&quot;query&quot;`</span>
+<span class="w">    </span><span class="nx">ResultCount</span><span class="w"> </span><span class="kt">int</span><span class="w">           </span><span class="s">`json:&quot;resultCount&quot;`</span>
+<span class="p">}</span>
+
+<span class="kd">type</span><span class="w"> </span><span class="nx">NewsArticle</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">Title</span><span class="w">       </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:&quot;title&quot;`</span>
+<span class="w">    </span><span class="nx">URL</span><span class="w">         </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:&quot;url&quot;`</span>
+<span class="w">    </span><span class="nx">Source</span><span class="w">      </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:&quot;source&quot;`</span>
+<span class="w">    </span><span class="nx">PublishedAt</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:&quot;publishedAt,omitempty&quot;`</span>
+<span class="w">    </span><span class="nx">Snippet</span><span class="w">     </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:&quot;snippet&quot;`</span>
+<span class="p">}</span>
+</code></pre></div>
+<h3 id="behavior_2">Behavior<a class="headerlink" href="#behavior_2" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Route to configured search provider's news endpoint.</li>
+<li>Apply <code>freshness</code> as date restriction.</li>
+<li>If <code>news_source</code> specified, add as domain filter.</li>
+<li>Sort by <code>sort_by</code> parameter.</li>
+<li>Return deduplicated articles.</li>
+</ol>
+<h3 id="cache_4">Cache<a class="headerlink" href="#cache_4" title="Permanent link">&para;</a></h3>
+<ul>
+<li>TTL: 15 minutes (news is time-sensitive)</li>
+</ul>
+<hr />
+<h2 id="tool-6-academic_search">Tool 6: <code>academic_search</code><a class="headerlink" href="#tool-6-academic_search" title="Permanent link">&para;</a></h2>
+<h3 id="input-schema_5">Input Schema<a class="headerlink" href="#input-schema_5" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+<th>Default</th>
+<th>Constraints</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>query</code></td>
+<td>string</td>
+<td>yes</td>
+<td>—</td>
+<td>1-500 chars</td>
+</tr>
+<tr>
+<td><code>num_results</code></td>
+<td>int</td>
+<td>no</td>
+<td>5</td>
+<td>1-10</td>
+</tr>
+<tr>
+<td><code>year_from</code></td>
+<td>int</td>
+<td>no</td>
+<td>—</td>
+<td>1900-2030</td>
+</tr>
+<tr>
+<td><code>year_to</code></td>
+<td>int</td>
+<td>no</td>
+<td>—</td>
+<td>1900-2030</td>
+</tr>
+<tr>
+<td><code>source</code></td>
+<td>string</td>
+<td>no</td>
+<td><code>all</code></td>
+<td>all, arxiv, pubmed, ieee, nature, springer</td>
+</tr>
+<tr>
+<td><code>pdf_only</code></td>
+<td>bool</td>
+<td>no</td>
+<td>false</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>sort_by</code></td>
+<td>string</td>
+<td>no</td>
+<td><code>relevance</code></td>
+<td>relevance, date</td>
+</tr>
+<tr>
+<td><code>open_access</code></td>
+<td>bool</td>
+<td>no</td>
+<td>false</td>
+<td>Only return open-access papers</td>
+</tr>
+<tr>
+<td><code>provider</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>Force provider: openalex, crossref (academic APIs), or google, brave, serper, searxng, searchapi (web fallback)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="output-fields">Output Fields<a class="headerlink" href="#output-fields" title="Permanent link">&para;</a></h3>
+<p>Each paper in the <code>papers</code> array contains:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Always Present</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>title</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Paper title</td>
+</tr>
+<tr>
+<td><code>url</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Link to paper (DOI URL or publisher page)</td>
+</tr>
+<tr>
+<td><code>source</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Provider that returned this result</td>
+</tr>
+<tr>
+<td><code>doi</code></td>
+<td>string</td>
+<td>no</td>
+<td>Digital Object Identifier</td>
+</tr>
+<tr>
+<td><code>authors</code></td>
+<td>[]string</td>
+<td>no</td>
+<td>Author names</td>
+</tr>
+<tr>
+<td><code>journal</code></td>
+<td>string</td>
+<td>no</td>
+<td>Journal or venue name</td>
+</tr>
+<tr>
+<td><code>year</code></td>
+<td>int</td>
+<td>no</td>
+<td>Publication year</td>
+</tr>
+<tr>
+<td><code>abstract</code></td>
+<td>string</td>
+<td>no</td>
+<td>Paper abstract (up to 500 chars)</td>
+</tr>
+<tr>
+<td><code>citationCount</code></td>
+<td>int</td>
+<td>no</td>
+<td>Number of citations</td>
+</tr>
+<tr>
+<td><code>openAccess</code></td>
+<td>bool</td>
+<td>no</td>
+<td>Whether the paper is freely available</td>
+</tr>
+<tr>
+<td><code>pdfUrl</code></td>
+<td>string</td>
+<td>no</td>
+<td>Direct link to PDF</td>
+</tr>
+</tbody>
+</table>
+<p>Additional output fields: <code>query</code>, <code>totalResults</code>, <code>resultCount</code>, <code>source</code> (which provider answered: openalex, crossref, router, web_search).</p>
+<h3 id="behavior_3">Behavior<a class="headerlink" href="#behavior_3" title="Permanent link">&para;</a></h3>
+<ul>
+<li>4-strategy fallback: explicit provider → router → academic providers → site-restricted web search</li>
+<li>When academic providers (OpenAlex, CrossRef) are configured, returns rich metadata (DOI, authors, citations, OA status)</li>
+<li>Without academic env vars, falls back to site-restricted web search (identical to previous behavior)</li>
+<li>Academic providers require only an email address (no API key registration)</li>
+<li><code>source</code> filter: when set (e.g., "arxiv"), OpenAlex filters by source ID; web fallback restricts to that source's domain</li>
+<li><code>sort_by=date</code>: OpenAlex sorts by <code>publication_date:desc</code>; CrossRef uses <code>published:desc</code></li>
+<li><code>pdf_only</code>: post-filters results to only those with <code>PDFUrl</code> populated (may reduce result count)</li>
+</ul>
+<h3 id="academic-site-pool-web-search-fallback">Academic Site Pool (web search fallback)<a class="headerlink" href="#academic-site-pool-web-search-fallback" title="Permanent link">&para;</a></h3>
+<p>arxiv.org, pubmed.ncbi.nlm.nih.gov, scholar.google.com, ieeexplore.ieee.org, dl.acm.org, nature.com, sciencedirect.com, link.springer.com, researchgate.net, plos.org, frontiersin.org, mdpi.com, wiley.com, jstor.org, semanticscholar.org, biorxiv.org, medrxiv.org</p>
+<h3 id="cache_5">Cache<a class="headerlink" href="#cache_5" title="Permanent link">&para;</a></h3>
+<ul>
+<li>TTL: 1 hour (academic providers use semantic ranking that can shift)</li>
+</ul>
+<hr />
+<h2 id="tool-7-patent_search">Tool 7: <code>patent_search</code><a class="headerlink" href="#tool-7-patent_search" title="Permanent link">&para;</a></h2>
+<h3 id="input-schema_6">Input Schema<a class="headerlink" href="#input-schema_6" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+<th>Default</th>
+<th>Constraints</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>query</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>Patent terms or number. Not required when <code>assignee</code> or <code>inventor</code> provided</td>
+</tr>
+<tr>
+<td><code>num_results</code></td>
+<td>int</td>
+<td>no</td>
+<td>5</td>
+<td>1-10</td>
+</tr>
+<tr>
+<td><code>search_type</code></td>
+<td>string</td>
+<td>no</td>
+<td><code>prior_art</code></td>
+<td>prior_art, specific, landscape</td>
+</tr>
+<tr>
+<td><code>patent_office</code></td>
+<td>string</td>
+<td>no</td>
+<td><code>all</code></td>
+<td>all, US, EP, WO, JP, CN, KR</td>
+</tr>
+<tr>
+<td><code>assignee</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>Company name (auto-strips Inc/LLC/Ltd suffixes)</td>
+</tr>
+<tr>
+<td><code>inventor</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>Inventor name</td>
+</tr>
+<tr>
+<td><code>cpc_code</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>CPC classification (e.g., G06F)</td>
+</tr>
+<tr>
+<td><code>year_from</code></td>
+<td>int</td>
+<td>no</td>
+<td>—</td>
+<td>Only patents filed in or after this year</td>
+</tr>
+<tr>
+<td><code>year_to</code></td>
+<td>int</td>
+<td>no</td>
+<td>—</td>
+<td>Only patents filed in or before this year</td>
+</tr>
+<tr>
+<td><code>provider</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>Force provider: searchapi, epo, lens, uspto, or web search providers</td>
+</tr>
+</tbody>
+</table>
+<h3 id="output-fields_1">Output Fields<a class="headerlink" href="#output-fields_1" title="Permanent link">&para;</a></h3>
+<p>Each patent in the <code>patents</code> array contains:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Always Present</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>title</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Patent title</td>
+</tr>
+<tr>
+<td><code>number</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Patent number (e.g., US10165245B2)</td>
+</tr>
+<tr>
+<td><code>url</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Link to patent detail page</td>
+</tr>
+<tr>
+<td><code>abstract</code></td>
+<td>string</td>
+<td>no</td>
+<td>Patent abstract or snippet</td>
+</tr>
+<tr>
+<td><code>assignee</code></td>
+<td>string</td>
+<td>no</td>
+<td>Patent owner/assignee</td>
+</tr>
+<tr>
+<td><code>inventor</code></td>
+<td>string</td>
+<td>no</td>
+<td>Primary inventor name</td>
+</tr>
+<tr>
+<td><code>filed</code></td>
+<td>string</td>
+<td>no</td>
+<td>Filing date (YYYY-MM-DD)</td>
+</tr>
+<tr>
+<td><code>granted</code></td>
+<td>string</td>
+<td>no</td>
+<td>Grant date (YYYY-MM-DD)</td>
+</tr>
+<tr>
+<td><code>pdf</code></td>
+<td>string</td>
+<td>no</td>
+<td>Direct link to patent PDF</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td>string</td>
+<td>no</td>
+<td>Application status (e.g., "Patented Case")</td>
+</tr>
+</tbody>
+</table>
+<p>Additional output fields: <code>query</code>, <code>searchType</code>, <code>resultCount</code>, <code>source</code> (which provider answered), <code>searchUrl</code>.</p>
+<h3 id="behavior_4">Behavior<a class="headerlink" href="#behavior_4" title="Permanent link">&para;</a></h3>
+<ul>
+<li>4-strategy fallback: explicit provider → router → patent-only providers → web search discovery</li>
+<li><strong>When an explicit provider is set</strong>: that provider is used exclusively. If it returns empty results (e.g., USPTO for non-US patents), empty results are returned — no silent fallback to web_discovery</li>
+<li><strong>Unknown provider</strong>: returns error listing all supported providers (no duplicates)</li>
+<li>Strips HTML from API responses; extracts clean patent numbers from paths</li>
+<li>Normalizes assignee names (removes Inc/LLC/Corp/Ltd suffixes for matching)</li>
+<li>Region-aware routing: <code>patent_office</code> filters which providers are tried</li>
+<li>Post-filter results by patent number prefix when <code>patent_office</code> is specified</li>
+<li>Does not cache empty results (only caches when patents are found)</li>
+<li>USPTO uses simple full-text search (quoted phrases); Lens uses Elasticsearch bool queries with match_phrase</li>
+</ul>
+<h3 id="cache_6">Cache<a class="headerlink" href="#cache_6" title="Permanent link">&para;</a></h3>
+<ul>
+<li>TTL: 24 hours (only for non-empty results)</li>
+</ul>
+<hr />
+<h2 id="tool-8-sequential_search">Tool 8: <code>sequential_search</code><a class="headerlink" href="#tool-8-sequential_search" title="Permanent link">&para;</a></h2>
+<h3 id="purpose_3">Purpose<a class="headerlink" href="#purpose_3" title="Permanent link">&para;</a></h3>
+<p>Multi-step research tracking with session persistence, branching, and knowledge gap identification.</p>
+<h3 id="input-schema_7">Input Schema<a class="headerlink" href="#input-schema_7" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+<th>Default</th>
+<th>Constraints</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>searchStep</code></td>
+<td>string</td>
+<td>yes</td>
+<td>—</td>
+<td>Description of this step</td>
+</tr>
+<tr>
+<td><code>stepNumber</code></td>
+<td>int</td>
+<td>yes</td>
+<td>—</td>
+<td>Starts at 1</td>
+</tr>
+<tr>
+<td><code>nextStepNeeded</code></td>
+<td>bool</td>
+<td>yes</td>
+<td>—</td>
+<td>Whether more steps follow</td>
+</tr>
+<tr>
+<td><code>sessionId</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>Session ID (required for steps 2+)</td>
+</tr>
+<tr>
+<td><code>researchGoal</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>Set on step 1; defines the research objective</td>
+</tr>
+<tr>
+<td><code>reasoning</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>Why this search direction was chosen</td>
+</tr>
+<tr>
+<td><code>confidence</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>Confidence in this step: high, medium, or low</td>
+</tr>
+<tr>
+<td><code>rejectedApproaches</code></td>
+<td>[]string</td>
+<td>no</td>
+<td>—</td>
+<td>Approaches considered but rejected</td>
+</tr>
+<tr>
+<td><code>sessionSummary</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>Running summary (used for recovery)</td>
+</tr>
+<tr>
+<td><code>responseMode</code></td>
+<td>string</td>
+<td>no</td>
+<td>auto</td>
+<td>Force <code>full</code> or <code>summary</code> output</td>
+</tr>
+<tr>
+<td><code>totalStepsEstimate</code></td>
+<td>int</td>
+<td>no</td>
+<td>—</td>
+<td>Estimated total steps</td>
+</tr>
+<tr>
+<td><code>isRevision</code></td>
+<td>bool</td>
+<td>no</td>
+<td>false</td>
+<td>Revising a previous step</td>
+</tr>
+<tr>
+<td><code>revisesStep</code></td>
+<td>int</td>
+<td>no</td>
+<td>—</td>
+<td>Step being revised</td>
+</tr>
+<tr>
+<td><code>branchFromStep</code></td>
+<td>int</td>
+<td>no</td>
+<td>—</td>
+<td>Branching point</td>
+</tr>
+<tr>
+<td><code>branchId</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>Branch identifier</td>
+</tr>
+<tr>
+<td><code>knowledgeGap</code></td>
+<td>string</td>
+<td>no</td>
+<td>—</td>
+<td>Gap identified</td>
+</tr>
+</tbody>
+</table>
+<h3 id="session-management">Session Management<a class="headerlink" href="#session-management" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Sessions created on first call (stepNumber=1)</li>
+<li>Session ID: UUID v4, returned in output</li>
+<li>TTL: 4 hours of inactivity (configurable via <code>SESSION_TTL</code>), resets on every access</li>
+<li>Max concurrent sessions: 50 per tenant (oldest evicted when exceeded)</li>
+<li>Max steps per session: 200 (configurable via <code>SESSION_MAX_STEPS</code>)</li>
+<li>Persistence: encrypted disk (AES-256-GCM), survives server restarts</li>
+<li>Cleanup: goroutine every 15 minutes removes expired sessions from memory + disk</li>
+<li>Per-tenant isolation: sessions keyed by <code>{tenantID}:{sessionID}</code></li>
+<li>Recovery: use <code>get_research_session</code> tool after context loss</li>
+<li>Response modes: "full" for ≤8 steps, "summary" for &gt;8 (override with <code>responseMode</code> input)</li>
+</ul>
+<h3 id="output-schema_5">Output Schema<a class="headerlink" href="#output-schema_5" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="kd">type</span><span class="w"> </span><span class="nx">SequentialSearchOutput</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">SessionID</span><span class="w">          </span><span class="kt">string</span><span class="w">          </span><span class="s">`json:&quot;sessionId&quot;`</span>
+<span class="w">    </span><span class="nx">Question</span><span class="w">           </span><span class="kt">string</span><span class="w">          </span><span class="s">`json:&quot;question&quot;`</span>
+<span class="w">    </span><span class="nx">CurrentStep</span><span class="w">        </span><span class="kt">int</span><span class="w">             </span><span class="s">`json:&quot;currentStep&quot;`</span>
+<span class="w">    </span><span class="nx">TotalStepsEstimate</span><span class="w"> </span><span class="kt">int</span><span class="w">             </span><span class="s">`json:&quot;totalStepsEstimate&quot;`</span>
+<span class="w">    </span><span class="nx">IsComplete</span><span class="w">         </span><span class="kt">bool</span><span class="w">            </span><span class="s">`json:&quot;isComplete&quot;`</span>
+<span class="w">    </span><span class="nx">Steps</span><span class="w">              </span><span class="p">[]</span><span class="nx">ResearchStep</span><span class="w">  </span><span class="s">`json:&quot;steps&quot;`</span>
+<span class="w">    </span><span class="nx">Sources</span><span class="w">            </span><span class="p">[]</span><span class="nx">ResearchSource</span><span class="w"> </span><span class="s">`json:&quot;sources&quot;`</span>
+<span class="w">    </span><span class="nx">Gaps</span><span class="w">               </span><span class="p">[]</span><span class="nx">KnowledgeGap</span><span class="w">  </span><span class="s">`json:&quot;gaps&quot;`</span>
+<span class="w">    </span><span class="nx">StartedAt</span><span class="w">          </span><span class="kt">string</span><span class="w">          </span><span class="s">`json:&quot;startedAt&quot;`</span>
+<span class="w">    </span><span class="nx">CompletedAt</span><span class="w">        </span><span class="kt">string</span><span class="w">          </span><span class="s">`json:&quot;completedAt,omitempty&quot;`</span>
+<span class="p">}</span>
+</code></pre></div>
+<h3 id="state-management">State Management<a class="headerlink" href="#state-management" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Two-tier: in-memory index (lightweight) + encrypted disk (full session JSON)</li>
+<li>Write-through on every step (crash-safe: temp → fsync → rename)</li>
+<li>Index rebuilt from disk on server startup — no data loss across restarts</li>
+<li>Behind a load balancer, use session-affinity (sticky sessions) so clients reconnect to the same instance</li>
+</ul>
+<hr />
+<h2 id="tool-9-get_research_session">Tool 9: <code>get_research_session</code><a class="headerlink" href="#tool-9-get_research_session" title="Permanent link">&para;</a></h2>
+<p>Recover a <code>sequential_search</code> session after context loss. Returns the session summary, step index, and most recent steps. Use <code>stepId</code> to retrieve full details of a specific earlier step.</p>
+<h3 id="input-schema_8">Input Schema<a class="headerlink" href="#input-schema_8" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sessionId</code></td>
+<td>string</td>
+<td>yes</td>
+<td>The session ID to recover</td>
+</tr>
+<tr>
+<td><code>stepId</code></td>
+<td>integer</td>
+<td>no</td>
+<td>Retrieve full details for a specific step number</td>
+</tr>
+</tbody>
+</table>
+<h3 id="behavior_5">Behavior<a class="headerlink" href="#behavior_5" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Without <code>stepId</code>: returns session summary view from memory (no disk I/O)</li>
+<li>Includes: researchGoal, summary, stepIndex, last 3 full steps, active gaps</li>
+<li>With <code>stepId</code>: loads full step data from disk for that specific step number</li>
+</ol>
+<h3 id="annotations">Annotations<a class="headerlink" href="#annotations" title="Permanent link">&para;</a></h3>
+<ul>
+<li>ReadOnly: true</li>
+<li>Idempotent: true (safe to call repeatedly)</li>
+<li>OpenWorld: false (reads internal state only)</li>
+</ul>
+<h3 id="error-conditions_1">Error Conditions<a class="headerlink" href="#error-conditions_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Session not found → "Session not found or expired. Sessions last 4 hours from last activity."</li>
+<li>Step not found → error with step number</li>
+</ul>
+<h3 id="cache_7">Cache<a class="headerlink" href="#cache_7" title="Permanent link">&para;</a></h3>
+<ul>
+<li>No cache (reads internal session state)</li>
+</ul>
+<hr />
+<h2 id="cross-cutting-concerns">Cross-Cutting Concerns<a class="headerlink" href="#cross-cutting-concerns" title="Permanent link">&para;</a></h2>
+<h3 id="timeouts-all-configurable-via-env">Timeouts (all configurable via env)<a class="headerlink" href="#timeouts-all-configurable-via-env" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Default</th>
+<th>Max</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Search API call</td>
+<td>10s</td>
+<td>30s</td>
+</tr>
+<tr>
+<td>Markdown negotiation</td>
+<td>5s</td>
+<td>10s</td>
+</tr>
+<tr>
+<td>HTML scrape (goquery)</td>
+<td>15s</td>
+<td>30s</td>
+</tr>
+<tr>
+<td>Browser scrape (go-rod)</td>
+<td>30s</td>
+<td>60s</td>
+</tr>
+<tr>
+<td>YouTube transcript</td>
+<td>30s</td>
+<td>60s</td>
+</tr>
+<tr>
+<td>Document download</td>
+<td>30s</td>
+<td>60s</td>
+</tr>
+<tr>
+<td>Total tool execution</td>
+<td>60s</td>
+<td>120s</td>
+</tr>
+</tbody>
+</table>
+<h3 id="content-size-limits">Content Size Limits<a class="headerlink" href="#content-size-limits" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Content</th>
+<th>Max Size</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Single page content</td>
+<td>50 KB</td>
+</tr>
+<tr>
+<td>Combined research content</td>
+<td>300 KB</td>
+</tr>
+<tr>
+<td>Document download</td>
+<td>10 MB</td>
+</tr>
+<tr>
+<td>YouTube transcript</td>
+<td>100 KB</td>
+</tr>
+</tbody>
+</table>
+<h3 id="token-estimation">Token Estimation<a class="headerlink" href="#token-estimation" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Formula: <code>len(content) / 4</code> (conservative, ~4 chars per token)</li>
+<li>Size categories: small (&lt;5K chars), medium (&lt;20K), large (&lt;50K), very_large (&gt;=50K)</li>
+</ul>
+<h3 id="unified-error-handling">Unified Error Handling<a class="headerlink" href="#unified-error-handling" title="Permanent link">&para;</a></h3>
+<p>All tools use a <strong>dual-format error response</strong>: a natural-language first line + a JSON block with machine-readable metadata:</p>
+<div class="highlight"><pre><span></span><code>Rate limited (google). Wait 60 seconds and retry, or try a different provider.
+
+{&quot;error&quot;:{&quot;kind&quot;:&quot;rate_limited&quot;,&quot;retryable&quot;:true,&quot;retryAfterSeconds&quot;:60,&quot;suggestedAction&quot;:&quot;retry_after_delay&quot;,&quot;provider&quot;:&quot;google&quot;}}
+</code></pre></div>
+<p>Error kinds: <code>rate_limited</code>, <code>auth_required</code>, <code>blocked</code>, <code>network</code>, <code>content_empty</code>, <code>browser_unavailable</code>, <code>config</code>, <code>upstream_unavailable</code>. Each maps to a <code>suggestedAction</code> the LLM can branch on programmatically.</p>
+<p>Full details: see <code>docs/ERROR_HANDLING.md</code> — covers the three-layer architecture, all error kinds and actions, and contributor patterns.</p>
+<h3 id="tool-annotations-mcp-protocol">Tool Annotations (MCP Protocol)<a class="headerlink" href="#tool-annotations-mcp-protocol" title="Permanent link">&para;</a></h3>
+<p>All tools declare annotations for client consumption (enforced by <code>TestAllToolsHaveAnnotations</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>ReadOnly</th>
+<th>Idempotent</th>
+<th>OpenWorld</th>
+<th>Destructive</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>web_search</td>
+<td>true</td>
+<td>true</td>
+<td>true</td>
+<td>false</td>
+</tr>
+<tr>
+<td>scrape_page</td>
+<td>true</td>
+<td>true</td>
+<td>true</td>
+<td>false</td>
+</tr>
+<tr>
+<td>search_and_scrape</td>
+<td>true</td>
+<td>true</td>
+<td>true</td>
+<td>false</td>
+</tr>
+<tr>
+<td>image_search</td>
+<td>true</td>
+<td>true</td>
+<td>true</td>
+<td>false</td>
+</tr>
+<tr>
+<td>news_search</td>
+<td>true</td>
+<td>true</td>
+<td>true</td>
+<td>false</td>
+</tr>
+<tr>
+<td>academic_search</td>
+<td>true</td>
+<td>true</td>
+<td>true</td>
+<td>false</td>
+</tr>
+<tr>
+<td>patent_search</td>
+<td>true</td>
+<td>true</td>
+<td>true</td>
+<td>false</td>
+</tr>
+<tr>
+<td>sequential_search</td>
+<td>true</td>
+<td><strong>false</strong></td>
+<td>false</td>
+<td>false</td>
+</tr>
+<tr>
+<td>get_research_session</td>
+<td>true</td>
+<td>true</td>
+<td>false</td>
+<td>false</td>
+</tr>
+</tbody>
+</table>
+<p><code>sequential_search</code> is non-idempotent because it writes session state to disk on every call.</p>
+<h3 id="provider-resolution">Provider Resolution<a class="headerlink" href="#provider-resolution" title="Permanent link">&para;</a></h3>
+<p>When a <code>provider</code> field is set on any search tool:
+1. If provider is in the <code>SearchProviders</code>/<code>PatentProviders</code>/<code>AcademicProviders</code> map → use it
+2. If provider is known but not configured → error with env var hint
+3. If provider is completely unknown → error listing all supported providers (via <code>allSupportedProviders()</code>)</p>
+<p>Source of truth for supported providers: <code>search.SupportedProviders</code>, <code>search.SupportedPatentProviders</code>, <code>search.SupportedAcademicProviders</code> in <code>internal/search/provider.go</code>.</p>
+<h3 id="known-provider-behaviors-not-bugs">Known Provider Behaviors (not bugs)<a class="headerlink" href="#known-provider-behaviors-not-bugs" title="Permanent link">&para;</a></h3>
+<p>These are upstream behaviors we cannot control — they reflect how the underlying APIs work:</p>
+<table>
+<thead>
+<tr>
+<th>Provider</th>
+<th>Behavior</th>
+<th>Impact</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SearchAPI</td>
+<td>May return fewer results than <code>num_results</code> requested</td>
+<td>Query has limited coverage in their index; not an error</td>
+</tr>
+<tr>
+<td>Google (news)</td>
+<td><code>freshness=hour</code> may return articles 5-10 hours old</td>
+<td>Google's "last hour" filter is approximate, not strict</td>
+</tr>
+<tr>
+<td>Google (images)</td>
+<td><code>size=large</code> may return images as small as 600x600</td>
+<td>Google's size thresholds differ from typical expectations</td>
+</tr>
+<tr>
+<td>USPTO</td>
+<td>Full-text search only (no field-qualified queries)</td>
+<td>API rejects field syntax; results rely on relevance ranking</td>
+</tr>
+<tr>
+<td>OpenAlex</td>
+<td><code>pdf_only</code> may return 0 results for common topics</td>
+<td>Not all papers have PDF URLs indexed in their metadata</td>
+</tr>
+<tr>
+<td>DuckDuckGo</td>
+<td>Rate-limited aggressively from cloud/datacenter IPs</td>
+<td>Works well from local/STDIO; may return 0 results from servers</td>
+</tr>
+<tr>
+<td>DuckDuckGo</td>
+<td>Images and News return empty results</td>
+<td>HTML endpoint doesn't support these categories; Router falls through</td>
+</tr>
+</tbody>
+</table>
+<p>These are not errors in web-researcher-mcp. The tool faithfully passes parameters to the upstream API and returns whatever the API provides.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/zoharbabin/web-researcher-mcp" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://x.com/zohar" target="_blank" rel="noopener" title="x.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M357.2 48h70.6L273.6 224.2 455 464H313L201.7 318.6 74.5 464H3.8l164.9-188.5L-5.2 48h145.6l100.5 132.9zm-24.8 373.8h39.1L119.1 88h-42z"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://hub.docker.com/r/zoharbabin/web-researcher-mcp" target="_blank" rel="noopener" title="hub.docker.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M349.9 236.3h-66.1v-59.4h66.1zm0-204.3h-66.1v60.7h66.1zm78.2 144.8H362v59.4h66.1zm-156.3-72.1h-66.1v60.1h66.1zm78.1 0h-66.1v60.1h66.1zm276.8 100c-14.4-9.7-47.6-13.2-73.1-8.4-3.3-24-16.7-44.9-41.1-63.7l-14-9.3-9.3 14c-18.4 27.8-23.4 73.6-3.7 103.8-8.7 4.7-25.8 11.1-48.4 10.7H2.4c-8.7 50.8 5.8 116.8 44 162.1 37.1 43.9 92.7 66.2 165.4 66.2 157.4 0 273.9-72.5 328.4-204.2 21.4.4 67.6.1 91.3-45.2 1.5-2.5 6.6-13.2 8.5-17.1zm-511.1-27.9h-66v59.4h66.1v-59.4zm78.1 0h-66.1v59.4h66.1zm78.1 0h-66.1v59.4h66.1zm-78.1-72.1h-66.1v60.1h66.1z"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.sections", "navigation.top", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
