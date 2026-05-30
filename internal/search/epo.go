@@ -203,8 +203,8 @@ func (e *EPOProvider) refreshToken(ctx context.Context) (string, error) {
 
 	// EPO returns expires_in as string: {"access_token":"...","expires_in":"1199"}
 	type tokenResp struct {
-		AccessToken string          `json:"access_token"`
-		ExpiresIn   json.Number     `json:"expires_in"`
+		AccessToken string      `json:"access_token"`
+		ExpiresIn   json.Number `json:"expires_in"`
 	}
 	var tr tokenResp
 	if err := json.Unmarshal(body, &tr); err != nil {
@@ -264,8 +264,8 @@ type opsWorldPatentData struct {
 }
 
 type opsSearchResult struct {
-	TotalCount int              `xml:"total-result-count,attr"`
-	Result     opsSearchOutput  `xml:"search-result"`
+	TotalCount int             `xml:"total-result-count,attr"`
+	Result     opsSearchOutput `xml:"search-result"`
 }
 
 type opsSearchOutput struct {
@@ -285,10 +285,10 @@ type opsExchangeDoc struct {
 }
 
 type opsBiblioData struct {
-	Title      []opsTitle     `xml:"invention-title"`
-	Applicants opsParties     `xml:"parties"`
-	PubRef     []opsPubRef    `xml:"publication-reference"`
-	AppRef     []opsAppRef    `xml:"application-reference"`
+	Title      []opsTitle  `xml:"invention-title"`
+	Applicants opsParties  `xml:"parties"`
+	PubRef     []opsPubRef `xml:"publication-reference"`
+	AppRef     []opsAppRef `xml:"application-reference"`
 }
 
 type opsParties struct {
@@ -431,4 +431,3 @@ func cleanEPOAbstract(text string) string {
 	}
 	return text
 }
-

@@ -109,15 +109,15 @@ type crossRefMessage struct {
 }
 
 type crossRefItem struct {
-	DOI            string              `json:"DOI"`
-	Title          []string            `json:"title"`
-	Author         []crossRefAuthor    `json:"author"`
-	ContainerTitle []string            `json:"container-title"`
-	Published      *crossRefDateParts  `json:"published"`
-	IssuedDate     *crossRefDateParts  `json:"issued"`
-	ReferencedBy   int                 `json:"is-referenced-by-count"`
-	Link           []crossRefLink      `json:"link"`
-	Abstract       string              `json:"abstract"`
+	DOI            string             `json:"DOI"`
+	Title          []string           `json:"title"`
+	Author         []crossRefAuthor   `json:"author"`
+	ContainerTitle []string           `json:"container-title"`
+	Published      *crossRefDateParts `json:"published"`
+	IssuedDate     *crossRefDateParts `json:"issued"`
+	ReferencedBy   int                `json:"is-referenced-by-count"`
+	Link           []crossRefLink     `json:"link"`
+	Abstract       string             `json:"abstract"`
 }
 
 type crossRefAuthor struct {
