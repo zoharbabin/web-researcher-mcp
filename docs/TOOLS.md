@@ -648,5 +648,7 @@ These are upstream behaviors we cannot control — they reflect how the underlyi
 | Google (images) | `size=large` may return images as small as 600x600 | Google's size thresholds differ from typical expectations |
 | USPTO | Full-text search only (no field-qualified queries) | API rejects field syntax; results rely on relevance ranking |
 | OpenAlex | `pdf_only` may return 0 results for common topics | Not all papers have PDF URLs indexed in their metadata |
+| DuckDuckGo | Rate-limited aggressively from cloud/datacenter IPs | Works well from local/STDIO; may return 0 results from servers |
+| DuckDuckGo | Images and News return empty results | HTML endpoint doesn't support these categories; Router falls through |
 
 These are not errors in web-researcher-mcp. The tool faithfully passes parameters to the upstream API and returns whatever the API provides.

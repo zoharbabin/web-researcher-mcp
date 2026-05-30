@@ -82,8 +82,9 @@ tests/benchmark/  # Performance benchmarks
 
 ## Environment
 
-Required (unless `SEARCH_ROUTING` is set): `GOOGLE_CUSTOM_SEARCH_API_KEY`, `GOOGLE_CUSTOM_SEARCH_ID`
-Optional: `SEARCH_PROVIDER` (brave|google|serper|searxng|searchapi), `SEARCH_ROUTING` (multi-provider fallback), `BRAVE_API_KEY`, `SEARCHAPI_API_KEY`, `PORT` (enables HTTP)  
+Required: None — DuckDuckGo works as zero-config fallback (no API key needed).  
+For better results: `GOOGLE_CUSTOM_SEARCH_API_KEY`, `GOOGLE_CUSTOM_SEARCH_ID`  
+Optional: `SEARCH_PROVIDER` (google|brave|serper|searxng|searchapi|duckduckgo), `SEARCH_ROUTING`, `BRAVE_API_KEY`, `SEARCHAPI_API_KEY`, `PORT` (enables HTTP)  
 Full list: see `.env.example`
 
 ## Release Process

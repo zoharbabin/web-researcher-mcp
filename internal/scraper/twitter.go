@@ -16,8 +16,8 @@ var (
 	twitterProfileRegex = regexp.MustCompile(`^https?://(x\.com|twitter\.com)/([^/?#]+)/?$`)
 )
 
-// FxTwitterBaseURL can be overridden in tests.
-var FxTwitterBaseURL = "https://api.fxtwitter.com"
+// fxTwitterBaseURL is the default FXTwitter API endpoint.
+const fxTwitterBaseURL = "https://api.fxtwitter.com"
 
 func isTwitterURL(url string) bool {
 	return strings.Contains(url, "x.com/") || strings.Contains(url, "twitter.com/")
@@ -95,7 +95,7 @@ func buildFxTwitterAPIURL(rawURL string) string {
 	if m := twitterTweetRegex.FindStringSubmatch(rawURL); len(m) >= 4 {
 		user := m[2]
 		statusID := m[3]
-		return fmt.Sprintf("%s/%s/status/%s", FxTwitterBaseURL, user, statusID)
+		return fmt.Sprintf("%s/%s/status/%s", fxTwitterBaseURL, user, statusID)
 	}
 	if m := twitterProfileRegex.FindStringSubmatch(rawURL); len(m) >= 3 {
 		user := m[2]
@@ -103,7 +103,7 @@ func buildFxTwitterAPIURL(rawURL string) string {
 		if user == "search" || user == "explore" || user == "home" || user == "notifications" || user == "messages" || user == "i" {
 			return ""
 		}
-		return fmt.Sprintf("%s/%s", FxTwitterBaseURL, user)
+		return fmt.Sprintf("%s/%s", fxTwitterBaseURL, user)
 	}
 	return ""
 }

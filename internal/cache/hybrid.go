@@ -39,10 +39,16 @@ func (h *Hybrid) Get(ctx context.Context, key string) ([]byte, bool) {
 		return val, true
 	}
 
-	// L2: disk
-	if val, ok := h.disk.Get(ctx, key); ok {
-		// Promote to L1
-		h.memory.Set(ctx, key, val, 30*time.Minute)
+	// L2: disk — promote to L1 with remaining TTL
+	if val, meta, ok := h.disk.GetWithMeta(ctx, key); ok {
+		promoteTTL := 30 * time.Minute
+		if meta != nil {
+			remaining := meta.TTL - time.Since(meta.StoredAt)
+			if remaining > 0 {
+				promoteTTL = remaining
+			}
+		}
+		h.memory.Set(ctx, key, val, promoteTTL)
 		return val, true
 	}
 
@@ -55,9 +61,16 @@ func (h *Hybrid) GetWithMeta(ctx context.Context, key string) ([]byte, *EntryMet
 		return val, meta, true
 	}
 
-	// L2: disk (metadata may be less precise due to promotion)
+	// L2: disk — promote to L1 with remaining TTL
 	if val, meta, ok := h.disk.GetWithMeta(ctx, key); ok {
-		h.memory.Set(ctx, key, val, 30*time.Minute)
+		promoteTTL := 30 * time.Minute
+		if meta != nil {
+			remaining := meta.TTL - time.Since(meta.StoredAt)
+			if remaining > 0 {
+				promoteTTL = remaining
+			}
+		}
+		h.memory.Set(ctx, key, val, promoteTTL)
 		return val, meta, true
 	}
 

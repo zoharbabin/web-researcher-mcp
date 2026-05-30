@@ -389,7 +389,8 @@ You choose which search engine powers your research. All of them work with lense
 
 | Provider | Whole-Web | Images | News | Notes |
 |----------|:---------:|:------:|:----:|-------|
-| **Google PSE** | Yes | Yes | Yes | Default; free tier: 100 queries/day |
+| **DuckDuckGo** | Yes | — | — | Zero-config default (no API key needed); rate-limited for heavy use |
+| **Google PSE** | Yes | Yes | Yes | Best quality; free tier: 100 queries/day |
 | **Brave Search** | Yes | Yes | Yes | Recommended for high-volume whole-web |
 | **Serper.dev** | Yes | Yes | Yes | Google-identical results |
 | **SearXNG** | Yes | Yes | Yes | Self-hosted, privacy-first, air-gapped deployments |
