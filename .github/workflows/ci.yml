@@ -11,6 +11,58 @@ permissions:
   contents: read
 
 jobs:
+  # Detects whether this push/PR touches anything that needs the heavy Go jobs
+  # (build, test, e2e, security, docker). Docs/meta-only changes set code=false
+  # so those jobs skip — a skipped *required* job reports as "skipped", which
+  # branch protection counts as passing, so docs PRs go green in seconds without
+  # getting stuck on never-reported required checks.
+  #
+  # Allowlist semantics: a change skips heavy CI ONLY when EVERY changed file
+  # matches a known-harmless pattern. Anything unrecognized (any .go, go.mod,
+  # Dockerfile, Makefile, workflow, lenses/**, etc.) defaults to code=true →
+  # full CI. Safer to over-run than to skip a security scan on real code.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Classify changed files
+        id: filter
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          # PR: diff against the base SHA. Push: diff against the previous SHA.
+          base="${PR_BASE:-$PUSH_BEFORE}"
+          # Fallback for first push / unknown base: run full CI.
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "No usable diff base; running full CI."
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files=$(git diff --name-only "$base" HEAD)
+          echo "Changed files:"; echo "$files"
+          # A file is "harmless" if it matches the allowlist below; if ANY
+          # changed file is not harmless, run full CI (code=true).
+          code=false
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            case "$f" in
+              *.md|docs/*|assets/*|LICENSE|.gitignore|mkdocs.yml|overrides/*|.github/*_TEMPLATE*|.github/ISSUE_TEMPLATE/*)
+                : ;;                       # harmless — keep checking
+              *)
+                code=true; break ;;        # anything else → full CI
+            esac
+          done <<< "$files"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "Decision: code=$code"
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -39,6 +91,8 @@ jobs:
 
   test:
     name: Test (Go ${{ matrix.go-version }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -75,6 +129,8 @@ jobs:
 
   e2e:
     name: E2E (STDIO, network-free)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -99,6 +155,8 @@ jobs:
 
   docker-smoke:
     name: Docker HTTP smoke
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -118,6 +176,8 @@ jobs:
 
   build:
     name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -159,6 +219,8 @@ jobs:
 
   security:
     name: Security
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
