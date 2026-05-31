@@ -249,23 +249,16 @@ When a single agent spawns many parallel tool calls:
 
 Protects against cascading failures when upstream APIs are down.
 
-**States:** CLOSED → OPEN → HALF_OPEN → CLOSED
+**States:** CLOSED → OPEN → HALF_OPEN → CLOSED. Each provider gets an independent breaker, so a failure in one never blocks fallback to another. There are three distinct breaker layers, each with its own thresholds (see `internal/search/provider.go`, `internal/search/domain.go`, and `internal/search/router.go` for the authoritative values):
 
-**Configuration (per-provider breaker):**
-- Failure threshold: 5 consecutive failures
-- Reset timeout: 60 seconds
-- Half-open attempts: 1
+| Layer | Wraps | Threshold | Reset |
+|-------|-------|-----------|-------|
+| Web provider breaker (`AvailableProviders`) | Each web provider (Google, Brave, Serper, SearXNG, SearchAPI, DuckDuckGo) | 3 failures | 120s |
+| Domain provider breaker (`Available{Patent,Academic}Providers`) | Each patent/academic provider's own upstream HTTP calls | 5 failures | 60s |
+| Routing breaker (`SEARCH_ROUTING`) | Fallback decision across the priority list (web, patent, academic) | 3 failures | 30s |
 
-**Configuration (multi-provider router breaker):**
-- Failure threshold: 3 consecutive failures
-- Reset timeout: 30 seconds
-- Half-open attempts: 1
-
-**Per-Provider Breakers:**
-- Each configured search provider (Google, Brave, Serper, SearXNG, SearchAPI, DuckDuckGo) gets an independent circuit breaker
-- When using multi-provider routing (`SEARCH_ROUTING`), the router adds a second breaker layer with tighter thresholds for faster failover
-- Failures in one provider don't affect others
-- Scraping (per domain): optional, prevent hammering broken sites
+- Half-open attempts: 1 (all layers)
+- Scraping (per domain): optional, prevents hammering broken sites
 
 ---
 
