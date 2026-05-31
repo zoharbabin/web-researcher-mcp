@@ -1,3 +1,7 @@
+//go:build live
+
+// Live external-API integration test — excluded from the default suite
+// (non-deterministic external dependency). Run with `make test-live`.
 package search
 
 import (

@@ -29,10 +29,10 @@ func TestProviders_Live(t *testing.T) {
 	}
 
 	providers := []struct {
-		name     string
-		env      []string
-		webQuery string
-		imgQuery string
+		name      string
+		env       []string
+		webQuery  string
+		imgQuery  string
 		newsQuery string
 	}{
 		{
@@ -206,10 +206,17 @@ func newProviderHarness(t *testing.T, extraEnv []string) *providerHarness {
 		t.Fatalf("start: %v", err)
 	}
 
+	// A single JSON-RPC response line can carry up to the server's total
+	// content cap (~300KB for scrape_page), far exceeding bufio.Scanner's
+	// default 64KB MaxScanTokenSize. Raise the buffer so large but legitimate
+	// responses are read in one token instead of failing with "token too long".
+	scanner := bufio.NewScanner(stdout)
+	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+
 	return &providerHarness{
 		t:       t,
 		cmd:     cmd,
-		scanner: bufio.NewScanner(stdout),
+		scanner: scanner,
 		stdin:   stdin,
 		nextID:  1,
 	}

@@ -1,3 +1,9 @@
+//go:build live
+
+// Live external-API integration tests. Excluded from the default suite because
+// they depend on third-party endpoints (ops.epo.org) whose latency/availability
+// makes them non-deterministic — they must never gate CI. Run on demand with
+// `make test-live` (requires the relevant provider credentials in the env).
 package search
 
 import (

@@ -3,6 +3,7 @@ package ratelimit
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -570,5 +571,70 @@ func TestCleanupKeepsActiveIPMap(t *testing.T) {
 
 	if _, ok := l.ips.Load("172.16.0.2"); !ok {
 		t.Fatal("expected an actively-used IP limiter to be retained by Cleanup")
+	}
+}
+
+// TestConcurrentAllowAcrossTenants exercises the limiter under true goroutine
+// contention: many tenants hammered in parallel. Its value is realized under
+// `go test -race` — it proves the sync.Map of tenant limiters and the per-tenant
+// mutex have no data race, not that any particular throughput is achieved. It is
+// bounded (finishes in well under a second) so it is safe to run on every CI run.
+func TestConcurrentAllowAcrossTenants(t *testing.T) {
+	t.Parallel()
+	l := New(config.RateLimitConfig{Global: 1_000_000, PerTenant: 1_000_000, DailyQuota: 1_000_000})
+
+	const goroutines = 16
+	const perG = 200
+	done := make(chan struct{})
+	for g := 0; g < goroutines; g++ {
+		go func(g int) {
+			defer func() { done <- struct{}{} }()
+			// Mix of shared and unique tenants to stress both the LoadOrStore
+			// race (new tenant) and the contended-counter race (shared tenant).
+			tenants := []string{"shared", "shared", fmt.Sprintf("t%d", g)}
+			for i := 0; i < perG; i++ {
+				tid := tenants[i%len(tenants)]
+				l.Allow(tid)
+				l.AllowDaily(tid)
+				_ = l.Stats(tid)
+			}
+		}(g)
+	}
+	for i := 0; i < goroutines; i++ {
+		<-done
+	}
+}
+
+// TestConcurrentAllowDailyWithStore drives AllowDaily concurrently while a
+// persist.Store is attached (the H7 write-through path). Under -race this proves
+// the hydrate + write-through + counter mutation are race-free when many
+// goroutines share one tenant's daily counter. Bounded; runs every CI run.
+func TestConcurrentAllowDailyWithStore(t *testing.T) {
+	t.Parallel()
+	store := persist.NewMemoryStore()
+	// Generous quota so we exercise the increment+write-through path, not the
+	// rejection path, on every call.
+	l := NewWithStore(config.RateLimitConfig{Global: 1_000_000, PerTenant: 1_000_000, DailyQuota: 1_000_000}, store)
+
+	const goroutines = 12
+	const perG = 150
+	done := make(chan struct{})
+	for g := 0; g < goroutines; g++ {
+		go func() {
+			defer func() { done <- struct{}{} }()
+			for i := 0; i < perG; i++ {
+				l.AllowDaily("shared-tenant")
+			}
+		}()
+	}
+	for i := 0; i < goroutines; i++ {
+		<-done
+	}
+
+	// Sanity: the in-memory counter reflects every increment exactly (no lost
+	// updates from the concurrent path). Total calls = goroutines*perG.
+	stats := l.Stats("shared-tenant")
+	if want := int64(goroutines * perG); stats.DailyUsed != want {
+		t.Fatalf("lost updates under concurrency: DailyUsed=%d, want %d", stats.DailyUsed, want)
 	}
 }

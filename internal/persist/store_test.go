@@ -289,3 +289,74 @@ func TestDiskStoreConcurrentAccess(t *testing.T) {
 		<-done
 	}
 }
+
+// --- Defensive error-branch coverage (reachable via real input/disk state) ---
+
+// TestGetFromFileCorruptOrShort verifies the store treats a truncated or
+// garbage file as a clean cache miss rather than crashing or returning junk —
+// the resilience contract for a tampered/partial on-disk blob.
+func TestGetFromFileCorruptOrShort(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dir := t.TempDir()
+	s := mustDiskStore(t, dir, randHexKey(t), "")
+
+	// Write a file shorter than the 8-byte expiry header at the exact path the
+	// store derives for "k", then confirm Get reports a miss (not a panic).
+	short := s.filePath("k")
+	if err := os.WriteFile(short, []byte{0x01, 0x02}, 0o600); err != nil {
+		t.Fatalf("write short file: %v", err)
+	}
+	if _, ok := s.Get(ctx, "k"); ok {
+		t.Fatal("expected miss for sub-header-length file")
+	}
+
+	// Garbage payload of valid length but undecryptable under the key.
+	garbage := make([]byte, 64)
+	for i := range garbage {
+		garbage[i] = byte(i)
+	}
+	if err := os.WriteFile(s.filePath("g"), garbage, 0o600); err != nil {
+		t.Fatalf("write garbage file: %v", err)
+	}
+	if _, ok := s.Get(ctx, "g"); ok {
+		t.Fatal("expected miss for undecryptable file")
+	}
+}
+
+// TestGetExpiredFilePurged verifies that a persisted entry whose expiry has
+// passed is treated as absent on a cold read (index miss → file path), i.e. the
+// TTL is honored even across a restart, not just in the in-memory index.
+func TestGetExpiredFilePurged(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dir := t.TempDir()
+	key := randHexKey(t)
+
+	// Write with a short TTL using one store instance…
+	s1 := mustDiskStore(t, dir, key, "")
+	s1.Set(ctx, "ttl", []byte("v"), 20*time.Millisecond)
+	time.Sleep(40 * time.Millisecond)
+
+	// …then read with a FRESH instance (empty index → forces the file path).
+	s2 := mustDiskStore(t, dir, key, "")
+	if _, ok := s2.Get(ctx, "ttl"); ok {
+		t.Fatal("expected expired entry to be absent on cold read")
+	}
+}
+
+// TestNewDiskStoreUnwritableDir verifies NewDiskStore surfaces a real error when
+// the target directory cannot be created (e.g. a path under a regular file),
+// rather than returning a half-initialized store.
+func TestNewDiskStoreUnwritableDir(t *testing.T) {
+	t.Parallel()
+	// Create a regular file, then ask for a directory *inside* it — MkdirAll
+	// must fail with ENOTDIR.
+	f := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(f, []byte("x"), 0o600); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	if _, err := NewDiskStore(filepath.Join(f, "sub"), "", ""); err == nil {
+		t.Fatal("expected NewDiskStore to fail when dir path is under a file")
+	}
+}

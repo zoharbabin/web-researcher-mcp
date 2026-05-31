@@ -2,6 +2,7 @@ package session
 
 import (
 	"encoding/binary"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -293,5 +294,60 @@ func TestStoreExpiryPrefixPreservedOnReencrypt(t *testing.T) {
 	newExpiry := int64(binary.BigEndian.Uint64(after[:8]))
 	if origExpiry != newExpiry {
 		t.Errorf("expiry changed on re-encrypt: orig=%d new=%d", origExpiry, newExpiry)
+	}
+}
+
+// TestConcurrentSaveLoadDelete drives the encrypted session store under true
+// goroutine contention: many goroutines Save/Load/Delete across a mix of shared
+// and unique keys. Its purpose under `go test -race` is to prove the AES-GCM
+// encrypt/decrypt path, the AAD derivation, and the atomic temp-file+rename
+// writes are race-free when sessions are persisted concurrently (the realistic
+// multi-tenant load). Bounded (sub-second), so it runs on every CI run rather
+// than as a separate costly load test.
+func TestConcurrentSaveLoadDelete(t *testing.T) {
+	dir := t.TempDir()
+	s, err := NewStore(dir, testKey) // encrypted store exercises the GCM+AAD path
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+
+	const goroutines = 12
+	const perG = 60
+	done := make(chan struct{})
+	for g := 0; g < goroutines; g++ {
+		go func(g int) {
+			defer func() { done <- struct{}{} }()
+			for i := 0; i < perG; i++ {
+				// Mix shared keys (contended read/write/decrypt on the same
+				// blob) with unique keys (independent files).
+				keys := []string{
+					"tenant-1:shared",
+					fmt.Sprintf("tenant-%d:sess-%d", g, i),
+				}
+				for _, key := range keys {
+					_ = s.Save(key, newSession("tenant", key), time.Hour)
+					if loaded, err := s.Load(key); err == nil && loaded != nil {
+						// Decrypt round-trip succeeded; AAD matched.
+						_ = loaded.ID
+					}
+					if i%15 == 0 {
+						_ = s.Delete(key)
+					}
+				}
+			}
+		}(g)
+	}
+	for i := 0; i < goroutines; i++ {
+		<-done
+	}
+
+	// Final sanity: a fresh Save/Load round-trips correctly after the storm,
+	// proving the store is not left in a corrupted state.
+	if err := s.Save("tenant-1:final", newSession("tenant-1", "final"), time.Hour); err != nil {
+		t.Fatalf("post-contention Save failed: %v", err)
+	}
+	got, err := s.Load("tenant-1:final")
+	if err != nil || got == nil {
+		t.Fatalf("post-contention Load failed: %v", err)
 	}
 }
