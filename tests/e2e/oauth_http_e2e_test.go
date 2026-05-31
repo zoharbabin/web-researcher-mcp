@@ -13,6 +13,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -203,8 +204,15 @@ func TestOAuth_InsufficientScope_Denied(t *testing.T) {
 	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		t.Fatalf("parse tool result: %v\nraw: %s", err, resp.Result)
 	}
+	// Assert on the scope-gate's own denial marker ("access denied: " from the
+	// receiving middleware in main.go), NOT merely IsError: an authorized call
+	// can also return IsError on an upstream failure (e.g. a bad provider key),
+	// so IsError alone does not prove the *scope gate* fired.
 	if !result.IsError {
 		t.Fatal("insufficient scope should yield IsError=true")
+	}
+	if len(result.Content) == 0 || !strings.Contains(result.Content[0].Text, "access denied") {
+		t.Fatalf("expected an 'access denied' scope-gate message, got: %+v", result.Content)
 	}
 }
 
@@ -222,11 +230,21 @@ func TestOAuth_SufficientScope_Allowed(t *testing.T) {
 
 	var result struct {
 		IsError bool `json:"isError"`
+		Content []struct {
+			Text string `json:"text"`
+		} `json:"content"`
 	}
 	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		t.Fatalf("parse tool result: %v", err)
 	}
-	if result.IsError {
-		t.Errorf("a token with tool:web_search scope must NOT be denied")
+	// An authorized call must NOT be denied by the scope gate. We assert the
+	// absence of the gate's "access denied" marker rather than IsError==false:
+	// the underlying web_search may still fail upstream (e.g. an invalid Google
+	// key in CI), which is orthogonal to authorization. The contract under test
+	// is "the scope gate let it through", not "the search succeeded".
+	for _, c := range result.Content {
+		if strings.Contains(c.Text, "access denied") {
+			t.Fatalf("a token with tool:web_search scope must NOT be denied, got: %s", c.Text)
+		}
 	}
 }
