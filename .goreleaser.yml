@@ -40,7 +40,11 @@ archives:
     files:
       - README.md
       - LICENSE*
-      - lenses/**/*
+      # lens JSON files live flat in lenses/ (no subdirs), so "lenses/**/*"
+      # matched nothing and silently excluded them from release archives.
+      # "lenses/*" captures the flat files; "lenses/**/*" would only match
+      # nested paths.
+      - lenses/*
       - server.json
       - smithery.yaml
 
