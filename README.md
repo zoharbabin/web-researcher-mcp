@@ -729,3 +729,5 @@ Contributions are welcome. Please see [CONTRIBUTING.md](CONTRIBUTING.md) for cod
   <br/><br/>
   If you're tired of AI making things up, give this a try — and a ⭐ if it helps.
 </p>
+
+<!-- copilot ruleset verification, will be discarded -->
