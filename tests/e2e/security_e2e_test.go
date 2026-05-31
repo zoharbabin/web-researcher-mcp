@@ -33,6 +33,17 @@ type scrapeResult struct {
 	} `json:"content"`
 }
 
+// newSecurityHarness starts the server for a security test with the browser
+// rendering tier disabled (CHROME_PATH=disabled). These tests assert the
+// SSRF / scheme / domain / schema boundary, which is independent of browser
+// rendering; disabling it keeps them fast and deterministic in CI (no go-rod
+// chromium auto-download) and avoids stream desync on the shared STDIO harness.
+func newSecurityHarness(t *testing.T, extraEnv ...string) *providerHarness {
+	t.Helper()
+	env := append([]string{"CHROME_PATH=disabled"}, extraEnv...)
+	return newProviderHarness(t, env)
+}
+
 // callScrape invokes scrape_page and returns (isError, firstTextBlock).
 func callScrape(t *testing.T, h *providerHarness, args map[string]interface{}) (bool, string) {
 	t.Helper()
@@ -52,7 +63,7 @@ func callScrape(t *testing.T, h *providerHarness, args map[string]interface{}) (
 // chokepoint (H1 scheme validation, H5 metadata blocklist, private-IP blocking)
 // reject malicious targets at the live tool boundary without making a request.
 func TestSecurity_STDIO_ScrapeBoundary(t *testing.T) {
-	h := newProviderHarness(t, nil)
+	h := newSecurityHarness(t)
 	h.initialize(t)
 	defer h.shutdown()
 
@@ -119,7 +130,7 @@ func TestSecurity_STDIO_ScrapeBoundary(t *testing.T) {
 // enforces the SAME SSRF + scheme guards as default mode — only sanitization is
 // skipped, never the security boundary. (CONTENT-RAW-MODE decision.)
 func TestSecurity_STDIO_RawModeGuards(t *testing.T) {
-	h := newProviderHarness(t, nil)
+	h := newSecurityHarness(t)
 	h.initialize(t)
 	defer h.shutdown()
 
@@ -154,7 +165,7 @@ func TestSecurity_STDIO_RawModeGuards(t *testing.T) {
 // missing required field is caught. This confirms "validate at system
 // boundaries" holds over the live MCP transport.
 func TestSecurity_STDIO_SchemaStrictness(t *testing.T) {
-	h := newProviderHarness(t, nil)
+	h := newSecurityHarness(t)
 	h.initialize(t)
 	defer h.shutdown()
 
@@ -212,7 +223,7 @@ func TestSecurity_STDIO_SchemaStrictness(t *testing.T) {
 func TestSecurity_STDIO_NoAuthByDefault(t *testing.T) {
 	// Explicitly set the scope-enforcement knob ON to prove it is inert without
 	// the HTTP transport / OAuth middleware wiring — STDIO stays permissive.
-	h := newProviderHarness(t, []string{"ENFORCE_SCOPES=true"})
+	h := newSecurityHarness(t, "ENFORCE_SCOPES=true")
 	h.initialize(t)
 	defer h.shutdown()
 
@@ -238,7 +249,7 @@ func TestSecurity_STDIO_NoAuthByDefault(t *testing.T) {
 // intact) that the default sanitized mode would strip, and honors max_length.
 // Network-dependent: skipped if the fetch fails (offline CI).
 func TestSecurity_STDIO_RawModeReturnsUnsanitized(t *testing.T) {
-	h := newProviderHarness(t, nil)
+	h := newSecurityHarness(t)
 	h.initialize(t)
 	defer h.shutdown()
 
@@ -311,6 +322,7 @@ func TestSecurity_STDIO_SessionCryptoRoundTrip(t *testing.T) {
 
 	baseEnv := func(cur, prev string) []string {
 		env := []string{
+			"CHROME_PATH=disabled", // session test needs no browser tier
 			"CACHE_ENCRYPTION_KEY=" + cur,
 			"SESSION_DATA_DIR=" + sessionDir,
 			"CACHE_DIR=" + cacheDir,
@@ -421,7 +433,7 @@ func assertSessionFileEncrypted(t *testing.T, dir, plaintextMarker string) {
 // the list is rejected, AND the classic bypass — embedding an allowed domain in
 // the path/query of a foreign host — does NOT slip through.
 func TestSecurity_STDIO_DomainAllowlist(t *testing.T) {
-	h := newProviderHarness(t, []string{"ALLOWED_DOMAINS=example.com"})
+	h := newSecurityHarness(t, "ALLOWED_DOMAINS=example.com")
 	h.initialize(t)
 	defer h.shutdown()
 
@@ -471,10 +483,10 @@ func TestSecurity_STDIO_SecretsMaskedInAudit(t *testing.T) {
 	auditPath := filepath.Join(t.TempDir(), "audit.jsonl")
 	const fakeKey = "NOT-A-REAL-SECRET-sentinel-value-for-masking-test"
 
-	h := newProviderHarness(t, []string{
+	h := newSecurityHarness(t,
 		"AUDIT_ENABLED=true",
-		"AUDIT_OUTPUT_PATH=" + auditPath,
-	})
+		"AUDIT_OUTPUT_PATH="+auditPath,
+	)
 	h.initialize(t)
 
 	// Private IP => SSRF-blocked before any network call; the error string

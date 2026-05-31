@@ -89,6 +89,12 @@ func (bp *browserPool) close() {
 }
 
 func (p *Pipeline) scrapeBrowser(ctx context.Context, url string, maxLength int) (*ScrapeResult, error) {
+	// Defensive: callers gate on browserEnabled(), but never let the "disabled"
+	// sentinel reach the browser pool as if it were a real binary path.
+	if p.config.ChromePath == chromeDisabled {
+		return nil, browserError(url, nil, "browser tier disabled (CHROME_PATH=disabled)")
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 

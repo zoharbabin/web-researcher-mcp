@@ -2465,3 +2465,30 @@ func TestPipeline_ConcurrentScrapes_ErrorIsolation(t *testing.T) {
 		t.Errorf("expected 5 errors, got %d", errorCount.Load())
 	}
 }
+
+// TestBrowserEnabled verifies the CHROME_PATH semantics, including the
+// documented "disabled" sentinel that turns the browser tier off entirely
+// (no autodetect, no go-rod download). This guards the doc claim in
+// docs/SECURITY_AND_COMPLIANCE.md / DEPLOYMENT.md against drift.
+func TestBrowserEnabled(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		chromePath string
+		want       bool
+	}{
+		{"disabled sentinel turns browser off", "disabled", false},
+		{"explicit path enables browser", "/usr/bin/chromium-browser", true},
+		// empty path => autodetect; result depends on host, so not asserted here.
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			p := NewPipeline(PipelineConfig{ChromePath: tt.chromePath})
+			if got := p.browserEnabled(); got != tt.want {
+				t.Errorf("browserEnabled() with ChromePath=%q = %v, want %v", tt.chromePath, got, tt.want)
+			}
+		})
+	}
+}

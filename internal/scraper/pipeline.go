@@ -95,7 +95,7 @@ func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, max
 		fn   func(context.Context, string, int) (*ScrapeResult, error)
 	}
 
-	hasBrowser := p.config.ChromePath != "" || chromeAvailable()
+	hasBrowser := p.browserEnabled()
 
 	// For known SPA domains, prefer the browser scraper first
 	if hasBrowser && isSPADomain(url) {
@@ -242,6 +242,21 @@ func (p *Pipeline) ScrapeRaw(ctx context.Context, rawURL string, maxLength int) 
 
 func (p *Pipeline) Close() {
 	closeBrowserPool()
+}
+
+// chromeDisabled is the sentinel CHROME_PATH value that turns the browser
+// rendering tier off entirely (no auto-download, no detection). Useful for
+// hardened/headless deployments and for deterministic tests.
+const chromeDisabled = "disabled"
+
+// browserEnabled reports whether the browser (go-rod) scraping tier should run.
+// CHROME_PATH="disabled" forces it off; an explicit path forces it on; an empty
+// path falls back to autodetecting a local Chromium/Chrome install.
+func (p *Pipeline) browserEnabled() bool {
+	if p.config.ChromePath == chromeDisabled {
+		return false
+	}
+	return p.config.ChromePath != "" || chromeAvailable()
 }
 
 // validateScrapeURL is the single boundary validator for all scrape entry
