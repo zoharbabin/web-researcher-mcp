@@ -118,6 +118,19 @@ https://github.com/user-attachments/assets/17fa3484-e4c5-4099-982d-785f544b3a94
 | `sequential_search` | Multi-step deep research — your AI remembers what it already found and builds on it |
 | `get_research_session` | Recover a research session after context loss — picks up right where you left off |
 
+### Ready-made research templates
+
+The server also ships guided **prompt templates** your AI assistant can pull in with one click — they walk it through a proven, multi-step process so you don't have to spell out every instruction:
+
+| Template | What it guides your AI to do |
+|----------|------------------------------|
+| `comprehensive-research` | Run a structured, multi-step deep dive on a topic |
+| `fact-check` | Verify a claim against multiple independent sources |
+| `competitive-analysis` | Size up a company and its market (news, patents, web) |
+| `literature-review` | Systematically review academic literature on a topic |
+
+In most AI apps these show up wherever you pick a prompt or "/" command. The server exposes live **status resources** too (`stats://tools`, `stats://sessions`, `stats://rate-limits`, `stats://providers`) so you — or your AI — can check usage, limits, and which providers are active. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#mcp-resources--prompts) for the full list.
+
 ---
 
 ## Quick Start

@@ -629,6 +629,7 @@ These are HTTP-only operational endpoints, not exposed via MCP tools.
 | `stats://tools` | Per-tool execution metrics (totalCalls, avgLatencyMs, etc.) |
 | `stats://sessions` | Count of active sequential research sessions |
 | `stats://rate-limits` | Rate limit config and usage (per-tenant limits, daily quota remaining, reset time) |
+| `stats://providers` | Search, patent, and academic providers currently configured and available |
 
 ### Prompts
 
