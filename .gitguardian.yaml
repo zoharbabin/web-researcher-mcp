@@ -1,0 +1,36 @@
+# GitGuardian (ggshield) configuration.
+#
+# The only "secrets" in this repository are synthetic, non-functional test
+# vectors used to prove that audit.MaskSecrets() redacts credential-shaped
+# strings. They are not real keys and grant access to nothing. Production code
+# never contains literal secrets (config comes from env vars; see .env.example,
+# which holds only placeholders).
+#
+# Newly added tests build their fixtures at runtime from prefix + filler so no
+# contiguous key-shaped token lands in source (see internal/audit/audit_test.go).
+# This config additionally tells ggshield to ignore the test paths and the
+# specific historical sentinel values, so scans stay green without manual
+# dashboard triage on every run.
+
+version: 2
+
+secret:
+  # Test files legitimately contain credential-shaped fixtures.
+  ignored-paths:
+    - "internal/audit/audit_test.go"
+    - "internal/tools/tools_test.go"
+    - "tests/e2e/security_e2e_test.go"
+
+  # Specific synthetic sentinels that appeared in historical commit diffs.
+  # Each is a fabricated, non-functional test value — not a real credential.
+  ignored-matches:
+    - name: "synthetic Google-shaped test key (mask test)"
+      match: "AIzaSyA1234567890abcdefghijklmnopqrstuv"
+    - name: "synthetic Brave-shaped test key (mask test)"
+      match: "BSAabcdefghijklmnopqrstuvwxyz123456"
+    - name: "synthetic OpenAI-shaped test key (mask test)"
+      match: "sk-proj-ABCDEFGHIJKLMNOPQRSTUVWX1234"
+    - name: "synthetic OAuth-shaped test token (mask test)"
+      match: "ya29.A0ARrdaM-not-a-real-token"
+    - name: "synthetic query-param secret (mask test)"
+      match: "supersecretvalue123"
