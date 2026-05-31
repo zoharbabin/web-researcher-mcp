@@ -115,14 +115,14 @@ type openAlexResponse struct {
 }
 
 type openAlexWork struct {
-	Title                  string                    `json:"display_name"`
-	DOI                    string                    `json:"doi"`
-	PublicationYear        int                       `json:"publication_year"`
-	CitedByCount           int                       `json:"cited_by_count"`
-	Authorships            []openAlexAuthorship      `json:"authorships"`
-	PrimaryLocation        *openAlexLocation         `json:"primary_location"`
-	OpenAccess             openAlexOA                `json:"open_access"`
-	AbstractInvertedIndex  map[string][]int          `json:"abstract_inverted_index"`
+	Title                 string               `json:"display_name"`
+	DOI                   string               `json:"doi"`
+	PublicationYear       int                  `json:"publication_year"`
+	CitedByCount          int                  `json:"cited_by_count"`
+	Authorships           []openAlexAuthorship `json:"authorships"`
+	PrimaryLocation       *openAlexLocation    `json:"primary_location"`
+	OpenAccess            openAlexOA           `json:"open_access"`
+	AbstractInvertedIndex map[string][]int     `json:"abstract_inverted_index"`
 }
 
 type openAlexAuthorship struct {

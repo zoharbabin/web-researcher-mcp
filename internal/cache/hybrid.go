@@ -13,9 +13,10 @@ type HybridConfig struct {
 }
 
 type DiskConfig struct {
-	Dir           string
-	EncryptionKey string
-	Version       string
+	Dir               string
+	EncryptionKey     string
+	EncryptionKeyPrev string // optional previous key for zero-downtime rotation (decrypt-fallback + lazy re-encrypt)
+	Version           string
 }
 
 type Hybrid struct {

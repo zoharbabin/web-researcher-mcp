@@ -47,6 +47,21 @@ Keys set in the MCP client config are passed directly to the server process — 
 
 ---
 
+## DuckDuckGo (Zero-Config Default)
+
+**Free**: No API key, no registration, no query limits to configure.
+
+DuckDuckGo is the built-in fallback and works out of the box. If you set no provider keys at all, web search still works through DuckDuckGo. There is nothing to configure — but you can select it explicitly:
+
+```bash
+export SEARCH_PROVIDER=duckduckgo
+web-researcher-mcp
+```
+
+For better result quality and higher volume, add one of the keyed providers below and the server will prefer it.
+
+---
+
 ## Google Custom Search (Programmable Search Engine)
 
 **Free tier**: 100 queries/day (paid: $5 per 1,000 queries)
@@ -226,6 +241,7 @@ See [docs/DEPLOYMENT.md](DEPLOYMENT.md) for advanced routing configuration.
 
 | Provider | Best For | Limitations |
 |----------|----------|-------------|
+| **DuckDuckGo** | Zero-config start, no signup, fallback | Lower result quality, no image/news depth |
 | **Brave** | High-volume whole-web search, privacy | Newer service, smaller index |
 | **Google PSE** | Broadest index, image search, custom PSE engines | 100/day free, slower for news |
 | **Serper** | Google-identical results without PSE setup | One-time free credit only |

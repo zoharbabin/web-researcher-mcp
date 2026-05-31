@@ -18,12 +18,29 @@ Whether you're fixing a typo, adding a search provider, improving documentation,
 
 ### Prerequisites
 
-- **Go** — version requirement is specified in `go.mod`
+- **Go** — version requirement is specified in `go.mod` (the `toolchain` directive
+  pins the exact patched release; Go auto-downloads it, so you never build with
+  an unpatched compiler)
 - **API keys** (for integration/E2E testing):
   - Google Custom Search: `GOOGLE_CUSTOM_SEARCH_API_KEY` and `GOOGLE_CUSTOM_SEARCH_ID`
   - Brave Search (optional): `BRAVE_API_KEY`
 - **Chrome/Chromium** — optional, only needed for headless scraping features
-- **golangci-lint v2** — for linting (see [install docs](https://golangci-lint.run/welcome/install/))
+
+Linters and the vulnerability scanner are **not** separate installs — they are
+pinned in `go.mod` as `tool` directives and invoked via `go tool`, so every
+contributor and CI run uses byte-identical versions (no drift, no "works on my
+machine").
+
+### One-time setup
+
+```bash
+make tools   # warms the pinned golangci-lint + govulncheck (go tool fetches on first use anyway)
+make hooks   # installs the git pre-commit hook (fmt + vet + lint on staged files)
+```
+
+The pre-commit hook keeps commits fast by checking only staged Go files with the
+quick gates; the full suite (race, vuln, e2e) runs in CI. Bypass a hook in an
+emergency with `git commit --no-verify` — CI still enforces everything.
 
 ### Getting Started
 
@@ -189,12 +206,15 @@ STDIO transport is unaffected.
 
 2. **Keep changes focused** — one logical change per PR. Split large features into smaller, reviewable pieces.
 
-3. **Ensure quality** before requesting review:
-   - All tests pass: `go test -race ./...`
-   - Lint is clean: `golangci-lint run`
-   - No vulnerabilities: `govulncheck ./...`
-   - New code has tests
-   - Documentation is updated if behavior changes
+3. **Ensure quality** before requesting review — one command runs the full gate:
+   - `make verify` — formatting, vet, lint, gosec, govulncheck, race tests, e2e, build
+   - (individual targets exist too: `make test-race`, `make lint`, `make sec`, `make vuln`)
+   - New code has tests; documentation updated if behavior changes
+
+   `main` is branch-protected: the **Lint**, **Test**, **Security** (govulncheck +
+   gosec), and **E2E** CI checks must all pass before a PR can merge, and the
+   branch must be up to date with `main`. Running `make verify` locally
+   reproduces these checks exactly (same pinned tool versions via `go tool`).
 
 4. **Write a clear PR description** — explain what changed and why. Include:
    - Summary of changes
@@ -208,9 +228,7 @@ STDIO transport is unaffected.
 
 ### PR Checklist
 
-- [ ] Tests pass (`go test -race ./...`)
-- [ ] Lint clean (`golangci-lint run`)
-- [ ] No new vulnerabilities (`govulncheck ./...`)
+- [ ] Full gate passes locally (`make verify`)
 - [ ] New functionality has tests
 - [ ] Documentation updated (if applicable)
 - [ ] Commit messages follow Conventional Commits

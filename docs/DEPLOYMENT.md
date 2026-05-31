@@ -61,12 +61,17 @@ OAUTH_AUDIENCE=https://api.example.com \
 ./web-researcher-mcp
 ```
 
-When `PORT` is set, the server starts an HTTP listener in addition to STDIO.
+When `PORT` is set, the server runs the HTTP (Streamable) transport exclusively
+and does not read STDIO; when `PORT` is unset it runs STDIO exclusively. The two
+transports are mutually exclusive, so a container started with `PORT` set but no
+stdin attached (`docker run -p ... -e PORT=...`) stays up serving HTTP.
 
 **Endpoints:**
 - `/mcp/` — Streamable HTTP MCP endpoint (handles POST and streaming)
-- `GET /health/live` — Liveness probe (always 200)
-- `GET /health/ready` — Readiness probe (checks dependencies)
+- `GET /health/live` — Liveness probe (always 200, `ok`)
+- `GET /health/ready` — Readiness probe (always 200, `ready` — a static
+  process-up check, not a dependency health check; the server is fully
+  initialized before the listener binds)
 - `GET /metrics` — Prometheus metrics
 - `GET /.well-known/oauth-authorization-server` — OAuth metadata
 
@@ -76,7 +81,7 @@ When `PORT` is set, the server starts an HTTP listener in addition to STDIO.
 |----------|:---:|:---:|
 | Tool functionality | Identical | Identical |
 | Tool descriptions | Identical | Identical |
-| Auth required | No | Yes (OAuth 2.1) |
+| Auth | No | OAuth 2.1 when `OAUTH_ISSUER_URL` is set; open otherwise |
 | Rate limiting (server-side) | None | Per-tenant + global |
 | Rate limiting (upstream APIs) | Applies | Applies |
 | Session persistence | Local disk | Local disk (use sticky sessions for multi-instance) |
@@ -93,6 +98,8 @@ When `PORT` is set, the server starts an HTTP listener in addition to STDIO.
 The project includes two Dockerfiles in the repo root:
 - `Dockerfile` — multi-stage build (builder + Alpine runtime), used for local builds
 - `Dockerfile.release` — slim Alpine image used by GoReleaser (expects pre-built binary)
+
+Both images bundle Chromium plus the fonts/libraries go-rod needs for full browser-tier rendering, run as a non-root UID (`65534`), and set `CHROME_PATH=/usr/bin/chromium-browser` so the browser scrape tier works out of the box — no extra layers required.
 
 ```bash
 # Build and run locally
@@ -112,7 +119,7 @@ docker run -p 3000:3000 \
   web-researcher-mcp
 ```
 
-**For headless browser (go-rod):** Set `CHROME_PATH` to a Chromium binary inside the container, or extend the Dockerfile to include `chromedp/headless-shell`.
+**For headless browser (go-rod):** The bundled images already ship Chromium and set `CHROME_PATH`. Override `CHROME_PATH` only if you mount a different Chromium/Chrome binary.
 
 ---
 
@@ -150,8 +157,6 @@ spec:
             secretKeyRef:
               name: mcp-secrets
               key: google-api-key
-        - name: REDIS_URL
-          value: "redis://redis-svc:6379"
         resources:
           requests:
             cpu: 100m
@@ -205,10 +210,14 @@ spec:
 
 ### Required
 
+**None.** With no configuration at all, the server falls back to DuckDuckGo (zero-config, no API key). For higher-quality results configure a provider below. `.env.example` is the authoritative source for the full variable set.
+
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `GOOGLE_CUSTOM_SEARCH_API_KEY` | Google API key (required unless `SEARCH_ROUTING` is set) | `AIzaSy...` (39 chars) |
-| `GOOGLE_CUSTOM_SEARCH_ID` | Search engine ID (required unless `SEARCH_ROUTING` is set) | From [PSE console](https://programmablesearchengine.google.com/) |
+| `GOOGLE_CUSTOM_SEARCH_API_KEY` | Google API key. Required **only** when `SEARCH_PROVIDER=google` and routing is unset; otherwise optional | `AIzaSy...` (39 chars) |
+| `GOOGLE_CUSTOM_SEARCH_ID` | Search engine ID (paired with the key above) | From [PSE console](https://programmablesearchengine.google.com/) |
+
+Note: Google keys are validated as required only when you explicitly select `SEARCH_PROVIDER=google` without multi-provider routing. With `SEARCH_PROVIDER` unset (or any other value), the server starts keyless and falls back to the zero-config DuckDuckGo provider — in both STDIO and HTTP mode. A genuine misconfiguration (e.g. `SEARCH_PROVIDER=google` with no key) is fatal in HTTP mode (`PORT` set) and logged-but-non-fatal in STDIO mode so local use is never blocked.
 
 ### Search Provider
 
@@ -265,7 +274,26 @@ When no explicit routing is configured for an operation, the `default` list is u
 | `PORT` | HTTP listen port (enables HTTP mode) | — (STDIO only) |
 | `OAUTH_ISSUER_URL` | JWT issuer URL | — |
 | `OAUTH_AUDIENCE` | Expected JWT audience | — |
-| `ALLOWED_ORIGINS` | CORS origins (comma-separated) | — (all origins) |
+| `ALLOWED_ORIGINS` | CORS origins (comma-separated) | — (reflect any origin when `CORS_STRICT=false`) |
+| `CORS_STRICT` | When `false`, an empty `ALLOWED_ORIGINS` reflects any Origin (permissive). When `true`, an empty `ALLOWED_ORIGINS` denies all cross-origin (fail-closed). A future release will flip this default — see [MIGRATION.md](MIGRATION.md). | `false` |
+| `ENFORCE_SCOPES` | When `true`, a token that carries a `scope`/`scp` claim must include `tool:*`, `tool:<name>`, or the coarse `research` scope to invoke a tool. Tokens with no scope claim are still allowed (permissive; fail-closed only on present-but-insufficient scopes). | `false` |
+| `REQUIRED_SCOPES` | Optional comma-separated scopes that every request must carry when `ENFORCE_SCOPES=true`. Only meaningful with `ENFORCE_SCOPES`. | — |
+
+### HTTP Hardening
+
+These tune the embedded `http.Server` and response security headers. **All are ignored in STDIO mode** (when `PORT` is unset). Defaults are permissive so long scrape/research responses are never truncated — `HTTP_WRITE_TIMEOUT=0` (unlimited) in particular keeps multi-minute responses intact.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `HTTP_READ_HEADER_TIMEOUT` | Max time to read request headers (primary slowloris guard) | `5s` |
+| `HTTP_READ_TIMEOUT` | Max time to read the full request | `30s` |
+| `HTTP_WRITE_TIMEOUT` | Max time to write the response. `0` = unlimited (keep permissive for long responses) | `0` |
+| `HTTP_IDLE_TIMEOUT` | Frees idle keep-alive connections | `120s` |
+| `HTTP_MAX_HEADER_BYTES` | Caps total request header size against header-flood memory exhaustion | `1048576` (1 MB) |
+| `MAX_REQUEST_BODY_BYTES` | Caps `/mcp` and `/admin` request body size; oversized bodies are rejected with `413`. Set higher for large MCP payloads | `10485760` (10 MB) |
+| `HTTP_CSP` | `Content-Security-Policy` response header. Safe for a JSON-only API (no HTML served). An empty value omits the header | `default-src 'none'; frame-ancestors 'none'` |
+| `HTTP_REFERRER_POLICY` | `Referrer-Policy` response header | `no-referrer` |
+| `HTTP_PERMISSIONS_POLICY` | `Permissions-Policy` response header (empty-deny set). An empty value omits the header | `geolocation=(), camera=(), microphone=()` |
 
 ### Cache
 
@@ -274,7 +302,8 @@ When no explicit routing is configured for an operation, the `default` list is u
 | `CACHE_DIR` | Disk cache directory | Platform cache dir (e.g., `~/Library/Caches/web-researcher-mcp`) |
 | `CACHE_MAX_MEMORY_MB` | Max memory cache size | `64` |
 | `CACHE_ENCRYPTION_KEY` | 64 hex chars for AES-256-GCM | — (plaintext) |
-| `REDIS_URL` | Redis connection string (accepted but not yet used — reserved for future distributed sessions) | — |
+| `CACHE_ENCRYPTION_KEY_PREV` | Optional 64-hex previous key for zero-downtime key rotation. When set, the disk cache and session store decrypt-fallback to it and lazily re-encrypt with the current key on read. Empty = no fallback | — |
+| `REDIS_URL` | Reserved for a future `RedisStore` backend; currently a documented no-op. Setting it does not change behavior — see [persistence](#persistence) | — |
 | `SESSION_TTL` | Session idle timeout (resets on every step addition) | `4h` |
 | `SESSION_DATA_DIR` | Directory for encrypted session files | `{CACHE_DIR}/sessions` |
 | `SESSION_MAX_STEPS` | Maximum steps per research session before auto-completion | `200` |
@@ -288,6 +317,9 @@ Rate limiting applies **only in HTTP mode** (when `PORT` is set). STDIO mode has
 | `RATE_LIMIT_PER_TENANT` | Requests per minute per tenant | `120` |
 | `RATE_LIMIT_GLOBAL` | Total requests per second | `1000` |
 | `DAILY_QUOTA_PER_TENANT` | Max API calls per tenant per day | `5000` |
+| `RATE_LIMIT_PER_IP` | Requests per minute per client IP, enforced **pre-auth** (outermost middleware). `0` disables it (default), so zero-config use is never blocked. Set generous (hundreds) for public HTTP | `0` (disabled) |
+| `TRUST_PROXY` | When `true`, the per-IP limiter reads the leftmost `X-Forwarded-For` entry (behind a trusted load balancer). Default `false` uses `RemoteAddr` only, preventing spoofed-IP bypass | `false` |
+| `RATE_LIMIT_PERSIST` | When `true`, daily-quota counters write through to the encrypted persist store and survive restarts. Default `false` keeps the pure in-memory zero-config behavior | `false` |
 
 **How tenant identity works:**
 - With OAuth configured: tenant ID is extracted from the JWT `tenant_id` claim. Each authenticated tenant gets independent rate limit buckets.
@@ -336,15 +368,20 @@ DAILY_QUOTA_PER_TENANT=10000
 | `AUDIT_ENABLED` | Enable structured audit logging | `true` |
 | `AUDIT_OUTPUT_PATH` | File path for audit log output (JSONL format) | — (stderr) |
 | `AUDIT_BUFFER_SIZE` | Internal event buffer size | `1000` |
-| `AUDIT_INCLUDE_REQUEST_BODY` | Include full request bodies in audit records | `false` |
+| `AUDIT_INCLUDE_REQUEST_BODY` | When `true`, raw query text is attached to audit metadata. When `false`, only a length/hash is recorded — raw query text is omitted | `false` |
+| `AUDIT_MAX_BYTES` | Rotate the active audit file to a timestamped sibling at this size. File output only; ignored for stderr/STDIO | `104857600` (100 MB) |
+| `AUDIT_RETENTION_DAYS` | Rotated audit files older than this are deleted on startup and hourly. `0` disables cleanup. Any non-zero value is clamped to `[180, 3650]` per NIS2/HGB retention floors | `180` |
 
 ### Multi-Tenancy
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `CACHE_ISOLATION` | Cache isolation mode (`shared` or `tenant`) | `shared` |
+| `DATA_REGION` | Advisory label for where cache/session/audit data resides; surfaced in stats/audit. No functional restriction | — (unset) |
 
 When `CACHE_ISOLATION=tenant`, all cache keys are prefixed with the authenticated tenant ID from the JWT token. This ensures tenant A's cached results are invisible to tenant B. Default (`shared`) is appropriate for single-tenant deployments or when search results are inherently public. Use `tenant` for multi-tenant deployments with strict data isolation requirements.
+
+`DATA_REGION` is an operator-supplied label only (e.g. `eu-central`, `us-east`). It is echoed in stats and audit records for residency documentation but does not move, restrict, or constrain where data is physically stored — that is governed by `CACHE_DIR`, `SESSION_DATA_DIR`, and `AUDIT_OUTPUT_PATH`.
 
 ### Auth (Advanced)
 
@@ -370,7 +407,20 @@ When `CACHE_ISOLATION=tenant`, all cache keys are prefixed with the authenticate
 2. Set rate limits conservatively (divide by expected instance count)
 3. Accept that cache miss rates will be higher than single-instance (each pod warms independently)
 
-**Note:** `REDIS_URL` is accepted in configuration but not yet wired into cache, sessions, or rate limiting. Distributed state support is planned for a future release.
+**Note:** `REDIS_URL` is accepted in configuration but is a documented no-op (see [Persistence](#persistence)). It is not yet wired into cache, sessions, rate limiting, or revocation. Distributed state support is planned for a future release.
+
+---
+
+## Persistence
+
+Two HTTP-mode subsystems can durably persist state across restarts via a single internal `persist.Store` interface (`internal/persist`):
+
+- **Token revocation** — revoked JWT IDs (JTIs) survive a restart so a revoked token stays revoked.
+- **Daily quota counters** — enabled by `RATE_LIMIT_PERSIST=true`, so per-tenant daily quotas are not reset by a restart.
+
+The default `persist.Store` implementation is the same proven encrypted-disk pattern as the session store: AES-256-GCM (using `CACHE_ENCRYPTION_KEY`, with `CACHE_ENCRYPTION_KEY_PREV` fallback), atomic temp-file-and-rename writes, `0600` file permissions, an 8-byte big-endian expiry prefix, and an in-memory index. Keys are SHA-256-hashed for the on-disk filename and bound as GCM additional authenticated data so a blob cannot be swapped to a different key's file. Local (memory) and disk implementations behave identically, so there is no behavioral drift between STDIO and HTTP deployments.
+
+`REDIS_URL` is **reserved** for a future `RedisStore` backend that will satisfy this same interface. Until that backend ships, setting `REDIS_URL` does not change any behavior — memory or disk is selected by the constructor, not by this variable. There is no `go-redis` dependency in the build today.
 
 ---
 
@@ -531,18 +581,21 @@ This server is distributed via:
 
 | Endpoint | Method | Response | Use |
 |----------|--------|----------|-----|
-| `/health/live` | GET | `200 OK` always | K8s liveness probe |
-| `/health/ready` | GET | `200` if dependencies up, `503` otherwise | K8s readiness probe |
+| `/health/live` | GET | `200 OK` always (`ok`) | K8s liveness probe |
+| `/health/ready` | GET | `200 OK` always (`ready`) | K8s readiness probe |
 
-Readiness checks:
-- At least one search provider is configured with valid credentials
-- Disk cache directory is writable
+Both probes are static process-up checks: a `200` means the process is running
+and the HTTP listener is bound (the server completes all initialization —
+providers, cache, sessions, audit — before binding the port, so a successful
+connection already implies a fully-constructed server). They do not perform live
+dependency health checks; upstream provider availability is handled at call time
+via per-provider circuit breakers and graceful tool errors.
 
 ---
 
 ## Graceful Shutdown
 
-On SIGINT/SIGTERM or stdin EOF:
+On SIGINT/SIGTERM (HTTP mode), or SIGINT/SIGTERM/stdin EOF (STDIO mode):
 1. Stop accepting new connections
 2. Drain in-flight requests (30s timeout)
 3. Flush cache to disk
@@ -576,6 +629,7 @@ These are HTTP-only operational endpoints, not exposed via MCP tools.
 | `stats://tools` | Per-tool execution metrics (totalCalls, avgLatencyMs, etc.) |
 | `stats://sessions` | Count of active sequential research sessions |
 | `stats://rate-limits` | Rate limit config and usage (per-tenant limits, daily quota remaining, reset time) |
+| `stats://providers` | Search, patent, and academic providers currently configured and available |
 
 ### Prompts
 

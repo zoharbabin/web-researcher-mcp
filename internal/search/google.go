@@ -159,7 +159,14 @@ func (g *GoogleProvider) doNewsSearch(ctx context.Context, params NewsSearchPara
 	q.Set("cx", g.cx)
 	q.Set("q", query)
 	q.Set("num", strconv.Itoa(clamp(params.NumResults, 1, 10)))
-	q.Set("sort", "date")
+
+	// Honor the requested sort order. Only "date" applies Google's date sort;
+	// relevance (the documented default) sends no sort param so the engine uses
+	// its native relevance ranking. Previously this was hardcoded to "date",
+	// which silently overrode the relevance default.
+	if params.SortBy == "date" {
+		q.Set("sort", "date")
+	}
 
 	if params.Freshness != "" {
 		q.Set("dateRestrict", mapTimeRange(params.Freshness))
@@ -174,10 +181,11 @@ func (g *GoogleProvider) doNewsSearch(ctx context.Context, params NewsSearchPara
 	var results []NewsResult
 	for _, item := range resp.Items {
 		results = append(results, NewsResult{
-			Title:   item.Title,
-			URL:     item.Link,
-			Source:  item.DisplayLink,
-			Snippet: item.Snippet,
+			Title:       item.Title,
+			URL:         item.Link,
+			Source:      item.DisplayLink,
+			Snippet:     item.Snippet,
+			PublishedAt: item.publishedAt(),
 		})
 	}
 	return results, nil
@@ -233,11 +241,39 @@ type googleResponse struct {
 }
 
 type googleItem struct {
-	Title       string       `json:"title"`
-	Link        string       `json:"link"`
-	Snippet     string       `json:"snippet"`
-	DisplayLink string       `json:"displayLink"`
-	Image       *googleImage `json:"image,omitempty"`
+	Title       string         `json:"title"`
+	Link        string         `json:"link"`
+	Snippet     string         `json:"snippet"`
+	DisplayLink string         `json:"displayLink"`
+	Image       *googleImage   `json:"image,omitempty"`
+	PageMap     *googlePageMap `json:"pagemap,omitempty"`
+}
+
+// googlePageMap holds the structured metadata Google CSE attaches to a result.
+// Only the publish-date-bearing fields are modeled; everything else is ignored.
+type googlePageMap struct {
+	MetaTags    []map[string]string `json:"metatags,omitempty"`
+	NewsArticle []map[string]string `json:"newsarticle,omitempty"`
+}
+
+// publishedAt extracts a best-effort publish timestamp from a result's pagemap,
+// checking the common Open Graph / schema.org fields news sites emit. Returns
+// "" when none are present (the field is then omitted from the response).
+func (it googleItem) publishedAt() string {
+	if it.PageMap == nil {
+		return ""
+	}
+	keys := []string{"article:published_time", "datepublished", "og:published_time", "publishdate", "date", "dc.date.issued"}
+	for _, tags := range [][]map[string]string{it.PageMap.NewsArticle, it.PageMap.MetaTags} {
+		for _, m := range tags {
+			for _, k := range keys {
+				if v, ok := m[k]; ok && v != "" {
+					return v
+				}
+			}
+		}
+	}
+	return ""
 }
 
 type googleImage struct {

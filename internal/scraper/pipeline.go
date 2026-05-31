@@ -3,7 +3,9 @@ package scraper
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"os/exec"
 	"strings"
 	"time"
@@ -45,7 +47,16 @@ func NewPipeline(cfg PipelineConfig) *Pipeline {
 	}
 }
 
-func (p *Pipeline) Scrape(ctx context.Context, url string, maxLength int) (*ScrapeResult, error) {
+func (p *Pipeline) Scrape(ctx context.Context, rawURL string, maxLength int) (*ScrapeResult, error) {
+	// Single validation chokepoint for every entry path (scrape_page and
+	// search_and_scrape both flow through here). Rejects non-http(s) schemes
+	// and empty hosts before any network or semaphore work.
+	if err := validateScrapeURL(rawURL); err != nil {
+		return nil, validationError(rawURL, "", err, err.Error())
+	}
+
+	url := rawURL
+
 	// Acquire semaphore
 	select {
 	case p.semaphore <- struct{}{}:
@@ -55,7 +66,7 @@ func (p *Pipeline) Scrape(ctx context.Context, url string, maxLength int) (*Scra
 	}
 
 	if !p.isDomainAllowed(url) {
-		return nil, blockedError(url, "", nil, "domain not in allowed list")
+		return nil, validationError(url, "", nil, "access blocked: domain not in allowed list")
 	}
 
 	var result *ScrapeResult
@@ -84,7 +95,7 @@ func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, max
 		fn   func(context.Context, string, int) (*ScrapeResult, error)
 	}
 
-	hasBrowser := p.config.ChromePath != "" || chromeAvailable()
+	hasBrowser := p.browserEnabled()
 
 	// For known SPA domains, prefer the browser scraper first
 	if hasBrowser && isSPADomain(url) {
@@ -137,8 +148,16 @@ func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, max
 			parts = append(parts, fmt.Sprintf("%s: %v", o.name, o.err))
 			if se, ok := o.err.(*ScrapeError); ok {
 				switch se.Kind {
+				case ErrValidation:
+					// A security/validation denial is definitive: surface it as
+					// the kind regardless of any sibling tier's timeout, and never
+					// downgrade to network (which would imply a misleading retry).
+					highestKind = ErrValidation
+					allNetwork = false
 				case ErrBlocked, ErrAuth, ErrRateLimit, ErrBrowser:
-					highestKind = se.Kind
+					if highestKind != ErrValidation {
+						highestKind = se.Kind
+					}
 					allNetwork = false
 				case ErrNetwork:
 					// keep allNetwork true
@@ -162,11 +181,138 @@ func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, max
 
 	detail := strings.Join(parts, ", ")
 	msg := fmt.Sprintf("no content extracted from %s (%s)", url, detail)
+
+	// An SSRF / private-IP / blocked-hostname denial is a permanent security
+	// rejection even when the per-tier errors were wrapped as generic network
+	// errors (each tier's SSRF-safe client reports it inside its message). Such a
+	// denial must never be presented as a retryable network failure, so detect it
+	// in the composite detail and classify the whole result as validation.
+	if isSSRFDenial(detail) {
+		highestKind = ErrValidation
+	}
+
 	return nil, &ScrapeError{Kind: highestKind, Message: msg, URL: url}
+}
+
+// ScrapeRaw fetches a URL once and returns the raw response body verbatim,
+// SKIPPING the tiered extraction pipeline and content.Process sanitization.
+// It still enforces the SAME security guards as Scrape: validateScrapeURL,
+// the SSRF-safe HTTP client, the domain allowlist, and io.LimitReader(maxLength)
+// to bound memory. The returned ContentType is the server's real MIME type
+// (Content-Type header, "" if absent). Callers MUST treat the body as untrusted
+// (it may contain active <script>/HTML) — raw mode is opt-in for scrape_page only.
+func (p *Pipeline) ScrapeRaw(ctx context.Context, rawURL string, maxLength int) (*ScrapeResult, error) {
+	if err := validateScrapeURL(rawURL); err != nil {
+		return nil, validationError(rawURL, "", err, err.Error())
+	}
+
+	select {
+	case p.semaphore <- struct{}{}:
+		defer func() { <-p.semaphore }()
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
+	if !p.isDomainAllowed(rawURL) {
+		return nil, blockedError(rawURL, "", nil, "domain not in allowed list")
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, nil)
+	if err != nil {
+		return nil, classifyRawError(err, rawURL)
+	}
+	req.Header.Set("Accept", "*/*")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; web-researcher-mcp/1.0)")
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, networkError(rawURL, "raw", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return nil, classifyHTTPStatus(resp.StatusCode, rawURL, "raw")
+	}
+
+	limit := maxLength
+	if limit <= 0 {
+		limit = 1
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, int64(limit)))
+	if err != nil {
+		return nil, networkError(rawURL, "raw", err)
+	}
+
+	contentType := resp.Header.Get("Content-Type")
+	// Reading up to the limit means more data likely remained on the wire.
+	truncated := len(body) >= limit
+
+	return &ScrapeResult{
+		URL:         rawURL,
+		Content:     string(body),
+		ContentType: contentType,
+		Truncated:   truncated,
+	}, nil
 }
 
 func (p *Pipeline) Close() {
 	closeBrowserPool()
+}
+
+// chromeDisabled is the sentinel CHROME_PATH value that turns the browser
+// rendering tier off entirely (no auto-download, no detection). Useful for
+// hardened/headless deployments and for deterministic tests.
+const chromeDisabled = "disabled"
+
+// browserEnabled reports whether the browser (go-rod) scraping tier should run.
+// CHROME_PATH="disabled" forces it off; an explicit path forces it on; an empty
+// path falls back to autodetecting a local Chromium/Chrome install.
+func (p *Pipeline) browserEnabled() bool {
+	if p.config.ChromePath == chromeDisabled {
+		return false
+	}
+	return p.config.ChromePath != "" || chromeAvailable()
+}
+
+// validateScrapeURL is the single boundary validator for all scrape entry
+// points. It requires an http or https scheme and a non-empty host, rejecting
+// file://, gopher://, ftp://, scheme-relative ("//host"), and host-less URLs.
+func validateScrapeURL(rawURL string) error {
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return fmt.Errorf("invalid URL: %v", err)
+	}
+	scheme := strings.ToLower(u.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return fmt.Errorf("unsupported URL scheme %q (only http and https are allowed)", u.Scheme)
+	}
+	if u.Hostname() == "" {
+		return fmt.Errorf("URL has no host")
+	}
+	return nil
+}
+
+// hostnameMatches reports whether the host of rawURL equals domain or is a
+// dot-bounded subdomain of it. It parses the URL and compares only the host,
+// so "https://example.com.attacker.net/" does NOT match "example.com" and a
+// query like "https://evil.com/?q=example.com" does NOT match either.
+func hostnameMatches(rawURL, domain string) bool {
+	domain = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(domain), "."))
+	if domain == "" {
+		return false
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))
+	if host == "" {
+		return false
+	}
+	return host == domain || strings.HasSuffix(host, "."+domain)
 }
 
 func (p *Pipeline) isDomainAllowed(url string) bool {
@@ -175,26 +321,45 @@ func (p *Pipeline) isDomainAllowed(url string) bool {
 	}
 
 	for _, domain := range p.config.AllowedDomains {
-		if strings.Contains(url, domain) {
+		if hostnameMatches(url, domain) {
 			return true
 		}
 	}
 	return false
 }
 
-func isYouTubeURL(url string) bool {
-	return strings.Contains(url, "youtube.com/watch") ||
-		strings.Contains(url, "youtu.be/") ||
-		strings.Contains(url, "youtube.com/embed")
+func isYouTubeURL(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(strings.TrimPrefix(u.Hostname(), "www."))
+	path := u.Path
+	switch host {
+	case "youtube.com", "m.youtube.com":
+		return strings.HasPrefix(path, "/watch") || strings.HasPrefix(path, "/embed")
+	case "youtu.be":
+		return len(strings.TrimPrefix(path, "/")) > 0
+	}
+	return false
 }
 
-func isDocumentURL(url string) bool {
-	lower := strings.ToLower(url)
-	return strings.HasSuffix(lower, ".pdf") ||
-		strings.HasSuffix(lower, ".docx") ||
-		strings.HasSuffix(lower, ".pptx") ||
-		strings.Contains(lower, "application/pdf") ||
-		strings.Contains(lower, "arxiv.org/pdf/")
+func isDocumentURL(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	lowerPath := strings.ToLower(u.Path)
+	if strings.HasSuffix(lowerPath, ".pdf") ||
+		strings.HasSuffix(lowerPath, ".docx") ||
+		strings.HasSuffix(lowerPath, ".pptx") {
+		return true
+	}
+	// arxiv serves PDFs under the /pdf/ path on its host.
+	if hostnameMatches(rawURL, "arxiv.org") && strings.HasPrefix(lowerPath, "/pdf/") {
+		return true
+	}
+	return false
 }
 
 var knownSPADomains = []string{
@@ -207,7 +372,7 @@ var knownSPADomains = []string{
 
 func isSPADomain(url string) bool {
 	for _, domain := range knownSPADomains {
-		if strings.Contains(url, domain) {
+		if hostnameMatches(url, domain) {
 			return true
 		}
 	}
@@ -255,6 +420,7 @@ func timeoutStat(path string) (any, error) {
 	}
 	ch := make(chan result, 1)
 	go func() {
+		// #nosec G111 -- path is from a fixed internal allowlist of chromium binary locations, not user input
 		_, err := http.Dir("/").Open(path)
 		ch <- result{err}
 	}()

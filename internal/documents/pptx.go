@@ -39,7 +39,7 @@ func parsePPTX(data []byte) (string, Metadata, error) {
 			continue
 		}
 		text := extractSlideText(rc)
-		rc.Close()
+		_ = rc.Close()
 		if text != "" {
 			sb.WriteString(fmt.Sprintf("--- Slide %d ---\n", i+1))
 			sb.WriteString(text)

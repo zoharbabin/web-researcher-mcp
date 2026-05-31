@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -44,6 +45,11 @@ func NewEvent(eventType, tenantID, userID string) AuditEvent {
 // Auditor is the interface for audit logging.
 type Auditor interface {
 	Log(event AuditEvent)
+	// IncludeRequestBody reports whether request bodies (e.g. raw query text)
+	// may be attached to audit metadata. When false, callers must record only
+	// non-sensitive derivatives (length/hash). Controlled by
+	// AUDIT_INCLUDE_REQUEST_BODY; defaults to false (privacy-preserving).
+	IncludeRequestBody() bool
 	Close()
 }
 
@@ -52,8 +58,15 @@ type Config struct {
 	Enabled            bool
 	OutputPath         string // empty = stderr, path = file
 	BufferSize         int
-	MaxSwapBytes       int64  // max swap file size before dropping (default 50MB)
+	MaxSwapBytes       int64 // max swap file size before dropping (default 50MB)
 	IncludeRequestBody bool
+	// MaxBytes is the size threshold (in bytes) at which the active audit file
+	// is rotated to a timestamped sibling. <=0 disables rotation. File output
+	// only — ignored for stderr/STDIO mode.
+	MaxBytes int64
+	// RetentionDays deletes rotated audit siblings older than this many days,
+	// at startup and hourly. 0 disables cleanup. File output only.
+	RetentionDays int
 }
 
 // Logger is a goroutine-safe, channel-based audit logger that writes
@@ -73,6 +86,19 @@ type Logger struct {
 	maxSwapBytes int64
 	Spilled      atomic.Int64 // count of events spilled to swap (exported for metrics)
 	Dropped      atomic.Int64 // count of events dropped (swap also full)
+
+	// Rotation + retention (file output only). Mutated/read only by
+	// processLoop (and NewLogger before the goroutine starts), so they need
+	// no lock — Log() never touches them, keeping it non-blocking.
+	outputPath    string
+	maxBytes      int64
+	retentionDays int
+	curSize       int64        // bytes written to the active file since (re)open
+	Rotations     atomic.Int64 // count of file rotations (exported for metrics)
+
+	// includeRequestBody mirrors Config.IncludeRequestBody; read-only after
+	// construction, so it is safe to expose without synchronization.
+	includeRequestBody bool
 }
 
 // NewLogger creates a new audit Logger from the given config.
@@ -89,6 +115,7 @@ func NewLogger(cfg Config) (*Logger, error) {
 
 	var writer io.Writer
 	var file *os.File
+	var curSize int64
 
 	if cfg.OutputPath == "" {
 		writer = os.Stderr
@@ -99,6 +126,9 @@ func NewLogger(cfg Config) (*Logger, error) {
 		}
 		file = f
 		writer = f
+		if info, statErr := f.Stat(); statErr == nil {
+			curSize = info.Size()
+		}
 	}
 
 	maxSwap := cfg.MaxSwapBytes
@@ -114,12 +144,17 @@ func NewLogger(cfg Config) (*Logger, error) {
 	swapPath := filepath.Join(swapDir, ".audit-swap.jsonl")
 
 	l := &Logger{
-		writer:       writer,
-		file:         file,
-		eventCh:      make(chan AuditEvent, bufSize),
-		done:         make(chan struct{}),
-		swapPath:     swapPath,
-		maxSwapBytes: maxSwap,
+		writer:             writer,
+		file:               file,
+		eventCh:            make(chan AuditEvent, bufSize),
+		done:               make(chan struct{}),
+		swapPath:           swapPath,
+		maxSwapBytes:       maxSwap,
+		outputPath:         cfg.OutputPath,
+		maxBytes:           cfg.MaxBytes,
+		retentionDays:      cfg.RetentionDays,
+		curSize:            curSize,
+		includeRequestBody: cfg.IncludeRequestBody,
 	}
 
 	l.wg.Add(1)
@@ -127,6 +162,10 @@ func NewLogger(cfg Config) (*Logger, error) {
 
 	return l, nil
 }
+
+// IncludeRequestBody reports whether request bodies may be attached to audit
+// metadata. See the Auditor interface for semantics.
+func (l *Logger) IncludeRequestBody() bool { return l.includeRequestBody }
 
 // Log enqueues an audit event for async writing. Non-blocking; if the
 // channel buffer is full, the event is spilled to a swap file on disk.
@@ -182,54 +221,181 @@ func (l *Logger) Close() {
 
 	l.swapMu.Lock()
 	if l.swapFile != nil {
-		l.swapFile.Close()
+		_ = l.swapFile.Close()
 		l.swapFile = nil
 	}
 	l.swapMu.Unlock()
 
 	if l.file != nil {
-		l.file.Close()
+		_ = l.file.Close()
 	}
 }
 
 func (l *Logger) processLoop() {
 	defer l.wg.Done()
+
+	// Retention cleanup at startup, then hourly on a ticker. Both run on this
+	// single goroutine so Log() stays non-blocking and no extra goroutine is
+	// spawned. The ticker is a no-op for stderr mode or when retention is off.
+	l.cleanupRetention()
+	var tickC <-chan time.Time
+	if l.file != nil && l.retentionDays > 0 {
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+		tickC = ticker.C
+	}
+
 	enc := json.NewEncoder(l.writer)
 
-	for event := range l.eventCh {
-		_ = enc.Encode(event)
+	for {
+		select {
+		case event, ok := <-l.eventCh:
+			if !ok {
+				// Channel closed: final replay and return.
+				l.replaySwap(enc)
+				return
+			}
+			enc = l.writeEvent(enc, event)
+			if len(l.eventCh) == 0 {
+				enc = l.replaySwap(enc)
+			}
+		case <-tickC:
+			l.cleanupRetention()
+		}
+	}
+}
 
-		// After draining available channel events, replay swap if it has data
-		if len(l.eventCh) == 0 {
-			l.replaySwap(enc)
+// writeEvent encodes one event, tracks the active file size, and rotates the
+// file when it would exceed maxBytes. Encoding is best-effort (errors ignored)
+// to match the prior behavior; rotation is file-output only. It returns the
+// encoder to use for the next write (rebound after a rotation).
+func (l *Logger) writeEvent(enc *json.Encoder, event AuditEvent) *json.Encoder {
+	if l.file == nil || l.maxBytes <= 0 {
+		_ = enc.Encode(event)
+		return enc
+	}
+
+	data, err := json.Marshal(event)
+	if err != nil {
+		return enc
+	}
+	data = append(data, '\n')
+
+	// Rotate before writing if this line would push us over the threshold and
+	// the file already holds at least one event (avoid rotating an empty file).
+	if l.curSize > 0 && l.curSize+int64(len(data)) > l.maxBytes {
+		if newEnc, ok := l.rotate(); ok {
+			enc = newEnc
 		}
 	}
 
-	// Final replay on shutdown
-	l.replaySwap(enc)
+	n, werr := l.file.Write(data)
+	if werr == nil {
+		l.curSize += int64(n)
+	}
+	return enc
 }
 
-func (l *Logger) replaySwap(enc *json.Encoder) {
+// rotate renames the active audit file to a timestamped sibling and reopens a
+// fresh active file. Returns the encoder for the new file. On any error the
+// existing file/encoder are kept (fail-soft: never lose the ability to log).
+func (l *Logger) rotate() (*json.Encoder, bool) {
+	if l.file == nil || l.outputPath == "" {
+		return nil, false
+	}
+	if err := l.file.Close(); err != nil {
+		// Reopen append handle so logging continues even if Close failed.
+		if f, oerr := os.OpenFile(l.outputPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600); oerr == nil {
+			l.file = f
+			l.writer = f
+		}
+		return json.NewEncoder(l.writer), false
+	}
+
+	ts := time.Now().UTC().Format("20060102T150405.000000000Z")
+	rotated := l.outputPath + "." + ts
+	if err := os.Rename(l.outputPath, rotated); err != nil {
+		// Rename failed — reopen the original and keep appending.
+		f, oerr := os.OpenFile(l.outputPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+		if oerr != nil {
+			return json.NewEncoder(l.writer), false
+		}
+		l.file = f
+		l.writer = f
+		return json.NewEncoder(l.writer), false
+	}
+
+	f, err := os.OpenFile(l.outputPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+	if err != nil {
+		return json.NewEncoder(l.writer), false
+	}
+	l.file = f
+	l.writer = f
+	l.curSize = 0
+	l.Rotations.Add(1)
+	return json.NewEncoder(l.writer), true
+}
+
+// cleanupRetention deletes rotated audit siblings older than retentionDays.
+// No-op for stderr mode or when retention is disabled (0). Rotated files are
+// named "<outputPath>.<timestamp>"; the active file itself is never deleted.
+func (l *Logger) cleanupRetention() {
+	if l.file == nil || l.outputPath == "" || l.retentionDays <= 0 {
+		return
+	}
+	dir := filepath.Dir(l.outputPath)
+	base := filepath.Base(l.outputPath)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-time.Duration(l.retentionDays) * 24 * time.Hour)
+	prefix := base + "."
+	for _, e := range entries {
+		name := e.Name()
+		// Only consider rotated siblings; never the active file or the swap.
+		if name == base || !strings.HasPrefix(name, prefix) {
+			continue
+		}
+		if strings.HasPrefix(name, ".") { // skip hidden helpers like .audit-swap
+			continue
+		}
+		info, ierr := e.Info()
+		if ierr != nil {
+			continue
+		}
+		if info.ModTime().Before(cutoff) {
+			_ = os.Remove(filepath.Join(dir, name))
+		}
+	}
+}
+
+// replaySwap drains the spill file through writeEvent so size tracking and
+// rotation apply uniformly to replayed events. It returns the (possibly
+// rebound) encoder for the active writer; callers must use the return value
+// since a rotation during replay swaps the underlying file.
+func (l *Logger) replaySwap(enc *json.Encoder) *json.Encoder {
 	l.swapMu.Lock()
 	if l.swapFile == nil || l.swapSize == 0 {
 		l.swapMu.Unlock()
-		return
+		return enc
 	}
 	// Close the write handle and atomically rename so concurrent spillToSwap
 	// creates a fresh file rather than appending to the one we're about to read.
-	l.swapFile.Close()
+	_ = l.swapFile.Close()
 	l.swapFile = nil
 	l.swapSize = 0
 	replayPath := l.swapPath + ".replay"
 	if err := os.Rename(l.swapPath, replayPath); err != nil {
 		l.swapMu.Unlock()
-		return
+		return enc
 	}
 	l.swapMu.Unlock()
 
+	// #nosec G304 -- internal path (hash/fixed name under our own dir), not user input
 	f, err := os.Open(replayPath)
 	if err != nil {
-		return
+		return enc
 	}
 
 	scanner := bufio.NewScanner(f)
@@ -237,11 +403,18 @@ func (l *Logger) replaySwap(enc *json.Encoder) {
 	for scanner.Scan() {
 		var event AuditEvent
 		if json.Unmarshal(scanner.Bytes(), &event) == nil {
-			_ = enc.Encode(event)
+			beforeFile := l.file
+			l.writeEvent(enc, event)
+			// writeEvent may have rotated; refresh the encoder to the current
+			// writer so subsequent encodes target the right file.
+			if l.file != beforeFile {
+				enc = json.NewEncoder(l.writer)
+			}
 		}
 	}
-	f.Close()
-	os.Remove(replayPath)
+	_ = f.Close()
+	_ = os.Remove(replayPath)
+	return enc
 }
 
 // Noop is an Auditor implementation that does nothing.
@@ -254,4 +427,8 @@ func NewNoop() *Noop {
 }
 
 func (n *Noop) Log(_ AuditEvent) {}
-func (n *Noop) Close()           {}
+
+// IncludeRequestBody always reports false for the no-op auditor.
+func (n *Noop) IncludeRequestBody() bool { return false }
+
+func (n *Noop) Close() {}

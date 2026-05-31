@@ -96,10 +96,16 @@ func newMCPTestHarness(t *testing.T) *mcpTestHarness {
 		t.Fatalf("failed to start server: %v", err)
 	}
 
+	// Raise the scanner buffer above bufio's default 64KB so large but
+	// legitimate single-line JSON-RPC responses (scrape content can approach
+	// the server's ~300KB total cap) are read without "token too long".
+	scanner := bufio.NewScanner(stdout)
+	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+
 	return &mcpTestHarness{
 		t:       t,
 		cmd:     cmd,
-		scanner: bufio.NewScanner(stdout),
+		scanner: scanner,
 		stdin:   stdin,
 	}
 }

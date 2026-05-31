@@ -34,7 +34,7 @@ type webSearchInput struct {
 func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "web_search",
-		Description:  "Search the web and get a list of relevant pages with titles and snippets — without reading the full page content. You can focus results on specific domains using the site parameter, or apply a search lens (like docs, academic, clinical, security, journalism, programming, news, tech, legal, medical, finance, science, government) to only search trusted sites in that category. Use search_and_scrape if you need full page text, news_search for current events, or academic_search for research papers. Results stay fresh for 30 minutes; use time_range to get more recent results.",
+		Description:  "Search the web and get a list of relevant pages with titles and snippets — without reading the full page content. Narrow results to one domain with the site parameter, or apply a search lens to restrict to trusted sites in a field (see the lens parameter for the full list). Use search_and_scrape if you need full page text, news_search for current events, or academic_search for research papers. Results stay fresh for 30 minutes; use time_range to get more recent results.",
 		Annotations:  readOnlyAnnotations(true, true),
 		OutputSchema: webSearchOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input webSearchInput) (*mcp.CallToolResult, any, error) {
@@ -52,15 +52,14 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 			numResults = 5
 		}
 
-		cacheKey := searchCacheKey("web", input.Query, numResults, input.TimeRange, input.Safe, input.Language, input.Site, input.Lens)
+		// The cache key MUST include every result-affecting parameter — most
+		// importantly the provider, so two providers queried with the same terms
+		// do not collide and serve each other's cached results (idempotency +
+		// consistency across calls).
+		cacheKey := searchCacheKey("web", input.Query, numResults, input.TimeRange, input.Safe, input.Language, input.Site, input.Lens, input.Provider, input.ExactTerms, input.ExcludeTerms, input.Country)
 		if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("web_search", time.Since(start), nil, "", true)
-			ev := audit.NewEvent("tool_call", auth.TenantIDFromContext(ctx), auth.UserIDFromContext(ctx))
-			ev.ToolName = "web_search"
-			ev.Duration = time.Since(start).Milliseconds()
-			ev.Success = true
-			ev.Metadata = map[string]any{"cache_hit": true, "query": input.Query}
-			deps.Auditor.Log(ev)
+			auditToolCallQuery(ctx, deps, "web_search", time.Since(start), nil, "", input.Query, map[string]any{"cache_hit": true})
 			return cachedResultWithMeta(cached, meta), nil, nil
 		}
 
@@ -103,13 +102,7 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 				errCode = "rate_limited"
 			}
 			deps.Metrics.RecordToolCall("web_search", time.Since(start), err, errCode, false)
-			ev := audit.NewEvent("tool_call", auth.TenantIDFromContext(ctx), auth.UserIDFromContext(ctx))
-			ev.ToolName = "web_search"
-			ev.Duration = time.Since(start).Milliseconds()
-			ev.Success = false
-			ev.ErrorCode = errCode
-			ev.Metadata = map[string]any{"query": input.Query, "error": err.Error()}
-			deps.Auditor.Log(ev)
+			auditToolCallQuery(ctx, deps, "web_search", time.Since(start), err, errCode, input.Query, nil)
 			return upstreamErrorResponse("search", err), nil, nil
 		}
 
@@ -129,12 +122,7 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 		jsonBytes, _ := json.Marshal(output)
 		deps.Cache.Set(ctx, cacheKey, jsonBytes, webSearchTTL)
 		deps.Metrics.RecordToolCall("web_search", time.Since(start), nil, "", false)
-		ev := audit.NewEvent("tool_call", auth.TenantIDFromContext(ctx), auth.UserIDFromContext(ctx))
-		ev.ToolName = "web_search"
-		ev.Duration = time.Since(start).Milliseconds()
-		ev.Success = true
-		ev.Metadata = map[string]any{"query": input.Query, "result_count": len(results)}
-		deps.Auditor.Log(ev)
+		auditToolCallQuery(ctx, deps, "web_search", time.Since(start), nil, "", input.Query, map[string]any{"result_count": len(results)})
 
 		if input.SessionID != "" {
 			trackSources(ctx, deps, input.SessionID, searchResultsToSources(results))
@@ -153,18 +141,58 @@ func searchCacheKey(toolName string, parts ...any) string {
 	return "search:" + hex.EncodeToString(h.Sum(nil))[:32]
 }
 
+// auditToolCall is the shared audit sink for tool handlers. It builds a
+// tool_call event, correlates it with the request via
+// auth.RequestIDFromContext (H6), and records duration/success/error. The
+// error string is passed through audit.MaskSecrets so credentials echoed by
+// upstream errors never persist. This signature is used by every tool; the
+// query-bearing variant auditToolCallQuery layers privacy-gated metadata on top.
 func auditToolCall(ctx context.Context, deps Dependencies, toolName string, duration time.Duration, err error, errCode string) {
+	auditToolCallQuery(ctx, deps, toolName, duration, err, errCode, "", nil)
+}
+
+// auditToolCallQuery is the metadata-aware variant for query tools.
+//
+// Privacy (decision f / DOC-VERIFY): the raw query is attached to metadata
+// only when the auditor reports IncludeRequestBody()==true
+// (AUDIT_INCLUDE_REQUEST_BODY). Otherwise only the query length is recorded —
+// never the text. All metadata string values are passed through
+// audit.MaskSecrets so secrets never persist to the audit sink.
+func auditToolCallQuery(ctx context.Context, deps Dependencies, toolName string, duration time.Duration, err error, errCode, query string, extra map[string]any) {
 	if deps.Auditor == nil {
 		return
 	}
-	tenantID := auth.TenantIDFromContext(ctx)
-	userID := auth.UserIDFromContext(ctx)
-	event := audit.NewEvent("tool_call", tenantID, userID)
+	event := audit.NewEvent("tool_call", auth.TenantIDFromContext(ctx), auth.UserIDFromContext(ctx))
 	event.ToolName = toolName
+	if rid := auth.RequestIDFromContext(ctx); rid != "" {
+		event.RequestID = rid
+	}
 	event.Duration = duration.Milliseconds()
 	event.Success = err == nil
 	if errCode != "" {
 		event.ErrorCode = errCode
+	}
+
+	meta := make(map[string]any, len(extra)+2)
+	for k, v := range extra {
+		if s, ok := v.(string); ok {
+			meta[k] = audit.MaskSecrets(s)
+		} else {
+			meta[k] = v
+		}
+	}
+	if query != "" {
+		if deps.Auditor.IncludeRequestBody() {
+			meta["query"] = audit.MaskSecrets(query)
+		} else {
+			meta["query_length"] = len(query)
+		}
+	}
+	if err != nil {
+		meta["error"] = audit.MaskSecrets(err.Error())
+	}
+	if len(meta) > 0 {
+		event.Metadata = meta
 	}
 	deps.Auditor.Log(event)
 }
@@ -214,6 +242,10 @@ func upstreamErrorResponse(toolName string, err error) *mcp.CallToolResult {
 		return rateLimitError(err)
 	}
 	provider := extractProviderName(err)
+	// Upstream error strings occasionally echo back credentials embedded in a
+	// request URL or an API response (e.g. ?key=AIza...). Mask before the text
+	// reaches an LLM-facing result or any downstream audit log.
+	detail := audit.MaskSecrets(err.Error())
 	if isAuthError(err) {
 		return structuredError(
 			fmt.Sprintf("%s: authentication failed. Check API key in .env.example.", toolName),
@@ -222,18 +254,18 @@ func upstreamErrorResponse(toolName string, err error) *mcp.CallToolResult {
 				Retryable:       false,
 				SuggestedAction: ActionCheckAPIKey,
 				Provider:        provider,
-				Detail:          err.Error(),
+				Detail:          detail,
 			},
 		)
 	}
 	return structuredError(
-		fmt.Sprintf("%s failed: %v. Try a different provider or report at %s", toolName, err, issueURL),
+		fmt.Sprintf("%s failed: %s. Try a different provider or report at %s", toolName, detail, issueURL),
 		ToolError{
 			Kind:            ErrKindUpstream,
 			Retryable:       true,
 			SuggestedAction: ActionTryDifferentProvider,
 			Provider:        provider,
-			Detail:          err.Error(),
+			Detail:          detail,
 		},
 	)
 }

@@ -141,6 +141,13 @@ func (u *USPTOProvider) doSearch(ctx context.Context, params PatentSearchParams)
 		}
 		results = append(results, result)
 	}
+
+	// Defensive cap: the USPTO API can return more rows than requested (the
+	// `rows` param is not always honored), so enforce the caller's limit here
+	// to match every other provider's contract.
+	if n := clamp(params.NumResults, 1, 10); len(results) > n {
+		results = results[:n]
+	}
 	return results, nil
 }
 
@@ -188,28 +195,28 @@ type usptoResponse struct {
 }
 
 type usptoFileWrapperDataBag struct {
-	ApplicationNumberText string                  `json:"applicationNumberText"`
+	ApplicationNumberText string                   `json:"applicationNumberText"`
 	ApplicationMetaData   usptoApplicationMetaData `json:"applicationMetaData"`
 	AssignmentBag         []usptoAssignment        `json:"assignmentBag"`
 }
 
 type usptoApplicationMetaData struct {
-	InventionTitle                       string           `json:"inventionTitle"`
-	PatentNumber                         string           `json:"patentNumber"`
-	FilingDate                           string           `json:"filingDate"`
-	EffectiveFilingDate                  string           `json:"effectiveFilingDate"`
-	GrantDate                            string           `json:"grantDate"`
-	ApplicationStatusDescriptionText     string           `json:"applicationStatusDescriptionText"`
-	ApplicationStatusCode                int              `json:"applicationStatusCode"`
-	FirstApplicantName                   string           `json:"firstApplicantName"`
-	FirstInventorName                    string           `json:"firstInventorName"`
-	ApplicationTypeCategory              string           `json:"applicationTypeCategory"`
-	GroupArtUnitNumber                   string           `json:"groupArtUnitNumber"`
-	CPCClassificationBag                 []string         `json:"cpcClassificationBag"`
-	EarliestPublicationNumber            string           `json:"earliestPublicationNumber"`
-	EarliestPublicationDate              string           `json:"earliestPublicationDate"`
-	ApplicantBag                         []usptoApplicant `json:"applicantBag"`
-	InventorBag                          []usptoInventor  `json:"inventorBag"`
+	InventionTitle                   string           `json:"inventionTitle"`
+	PatentNumber                     string           `json:"patentNumber"`
+	FilingDate                       string           `json:"filingDate"`
+	EffectiveFilingDate              string           `json:"effectiveFilingDate"`
+	GrantDate                        string           `json:"grantDate"`
+	ApplicationStatusDescriptionText string           `json:"applicationStatusDescriptionText"`
+	ApplicationStatusCode            int              `json:"applicationStatusCode"`
+	FirstApplicantName               string           `json:"firstApplicantName"`
+	FirstInventorName                string           `json:"firstInventorName"`
+	ApplicationTypeCategory          string           `json:"applicationTypeCategory"`
+	GroupArtUnitNumber               string           `json:"groupArtUnitNumber"`
+	CPCClassificationBag             []string         `json:"cpcClassificationBag"`
+	EarliestPublicationNumber        string           `json:"earliestPublicationNumber"`
+	EarliestPublicationDate          string           `json:"earliestPublicationDate"`
+	ApplicantBag                     []usptoApplicant `json:"applicantBag"`
+	InventorBag                      []usptoInventor  `json:"inventorBag"`
 }
 
 type usptoApplicant struct {
@@ -220,11 +227,11 @@ type usptoApplicant struct {
 }
 
 type usptoInventor struct {
-	FirstName       string `json:"firstName"`
-	MiddleName      string `json:"middleName"`
-	LastName        string `json:"lastName"`
+	FirstName        string `json:"firstName"`
+	MiddleName       string `json:"middleName"`
+	LastName         string `json:"lastName"`
 	InventorNameText string `json:"inventorNameText"`
-	CountryCode     string `json:"countryCode"`
+	CountryCode      string `json:"countryCode"`
 }
 
 type usptoAssignment struct {

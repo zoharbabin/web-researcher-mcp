@@ -100,39 +100,44 @@ Push a `v*` tag → CI runs GoReleaser → cross-platform binaries + Docker mult
 
 ## Documentation Guidelines
 
-Docs must be **drift-resistant by design** and **always reflect the current codebase accurately**:
+**TOP RULE — accuracy above all:** every doc (file *and* inline comment) must reflect the current codebase exactly. No drift, no hallucinations, no stale claims. Every feature, config, architecture flow, and business workflow must be documented, easy to start with, easy to follow, and easy to extend. Never include secrets, private data, or real keys — placeholders only.
 
-### What docs MUST do:
-1. **Stay current** — every feature, config, architecture flow, and workflow must be accurately documented. No drifts, no hallucinations, no outdated claims
-2. **Be easy to get started with** — copy-paste ready commands, no prose to parse for setup
-3. **Never contain secrets** — no API keys, tokens, or private data; only placeholders
-4. **Tool descriptions must match code** — side effects, read/write capability, idempotency clearly marked
-5. **Output schemas include provenance** — `source` field tells which provider answered; `citation` shows where data came from
-6. **No destructive operations hidden behind flags** — if a tool writes state, it must be a separate tool (not a parameter on a read tool)
-7. **Auth/tenant scope visible** — audit receipts capture tenant_id and user_id; cache isolation enforced via `CACHE_ISOLATION=tenant`
+### Write docs for an agent (structure):
+1. **One-line description** at the top — the reader knows what this is without reading further
+2. **Commands** are copy-paste ready — no prose to parse
+3. **Architecture as a map, not a lecture** — each package gets a single-line purpose annotation so the reader navigates to the right file in one step
+4. **Design Rules are mechanical constraints**, not aspirations — "if `lens` is set, inject `site:` and route to the PSE", not "we value flexibility"
+5. **How-to sections give exact file paths + function names** — the reader opens the right file and follows the pattern without grepping
+6. **Key Patterns show real signatures** — the actual helper names, handler signature, and pipeline stages the reader will encounter
+7. **Environment says required vs optional** in one or two lines, then defers to `.env.example` for the full list
+8. **Reference Docs table has a "when to read" column** — the reader opens the one doc relevant to the task
 
-### What to deliberately EXCLUDE (prevents drift):
-- No hardcoded counts (tool count, provider count — `registry.go` / `provider.go` are sources of truth)
-- No version numbers (`go.mod` is the source of truth)
-- No duplicated content (each fact lives in one place; other docs point to it)
-- No env var tables in README (`.env.example` and `docs/DEPLOYMENT.md` are authoritative)
-- No dependency lists (`go.mod` is the source of truth)
-- No inlined code snippets that mirror source — describe the pattern and point to the canonical file
+### Tool-doc correctness (verified in CI):
+- Tool descriptions match code, including side effects; read-only/idempotency explicitly marked
+- Output schemas surface freshness/provenance where relevant (`source`, `citation`, cache `_meta`)
+- Destructive operations are **separate tools**, never a flag on a read tool
+- Auth/tenant scope is visible in the result or audit receipt (`tenant_id`, `user_id`)
+- `internal/tools/metadata_test.go` fails CI on drift: `TestToolsDocMatchesRegistry` (docs/TOOLS.md ↔ registry), `TestAllToolsHaveAnnotations`, `TestOutputSchemaMatchesResponse`, `TestToolDescriptionQuality`
 
-### Markdown formatting (GitHub compliance):
-- All `.md` files must be valid GitHub Flavored Markdown (GFM)
-- Use two trailing spaces or `<br>` for line breaks within a paragraph — bare newlines inside a paragraph are NOT rendered as line breaks on GitHub
-- Use blank lines between block elements (headings, paragraphs, lists, tables, code blocks)
-- Tables must have a header separator row (`|---|---|`)
-- Fenced code blocks use triple backticks with language identifier
-- No trailing whitespace on lines that don't need a line break
-- Links and images use standard `[text](url)` / `![alt](url)` syntax
+### Deliberately EXCLUDE (these change → they drift):
+- No hardcoded counts (tool/provider count — `registry.go` / `search.SupportedProviders` are the truth)
+- No version numbers (`go.mod` is the truth)
+- No line counts
+- No env var tables outside `.env.example` + `docs/DEPLOYMENT.md` (those are authoritative)
+- No dependency lists (`go.mod` is the truth)
+- No architecture diagram duplicated from `ARCHITECTURE.md` (one home, too large to maintain twice)
+- No inlined code that mirrors source — describe the pattern, point to the canonical file
 
-### Drift-resistant patterns:
-- Reference file paths and function names that are structural (unlikely to change)
+### Drift-resistant by design:
+- Reference structural file paths and function names (unlikely to change)
 - Reference interfaces by name (stable contracts)
-- Point to other docs for detail rather than duplicating
-- `TestAllToolsHaveAnnotations` in CI catches annotation drift at build time
+- Point to other docs for detail instead of duplicating
+
+### Markdown (GitHub compliance):
+- Valid GFM; blank lines between block elements (headings, paragraphs, lists, tables, code blocks)
+- Two trailing spaces or `<br>` for intra-paragraph line breaks (bare newlines do NOT break on GitHub)
+- Tables have a header separator row (`|---|---|`); fenced code blocks carry a language identifier
+- No trailing whitespace except intentional line breaks; standard `[text](url)` / `![alt](url)` links
 
 ## Security Rules
 

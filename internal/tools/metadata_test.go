@@ -3,6 +3,10 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -192,6 +196,60 @@ func TestOutputSchemaMatchesResponse(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// repoRoot returns the repository root resolved relative to this test file,
+// independent of the working directory the test is invoked from.
+func repoRoot(t *testing.T) string {
+	t.Helper()
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	// this file is internal/tools/metadata_test.go -> up two dirs to repo root.
+	return filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", ".."))
+}
+
+// TestToolsDocMatchesRegistry is the doc-drift guard: it fails CI if docs/TOOLS.md
+// documents a different set of tools than the server actually registers at
+// runtime. Adding, removing, or renaming a tool without updating TOOLS.md (or
+// vice versa) breaks the build, keeping the doc honest by construction.
+//
+// It parses the "## Tool N: `name`" headers from TOOLS.md and compares that set
+// to the live ListTools result — the runtime is the source of truth.
+func TestToolsDocMatchesRegistry(t *testing.T) {
+	docPath := filepath.Join(repoRoot(t), "docs", "TOOLS.md")
+	data, err := os.ReadFile(docPath) // #nosec G304 -- fixed in-repo doc path, not user input
+	if err != nil {
+		t.Fatalf("read TOOLS.md: %v", err)
+	}
+
+	// Match headers like:  ## Tool 1: `web_search`
+	re := regexp.MustCompile("(?m)^##+\\s+Tool\\s+\\d+:\\s+`([a-z_]+)`")
+	matches := re.FindAllStringSubmatch(string(data), -1)
+	documented := make(map[string]bool, len(matches))
+	for _, m := range matches {
+		documented[m[1]] = true
+	}
+	if len(documented) == 0 {
+		t.Fatal("no tool headers found in docs/TOOLS.md — expected '## Tool N: `name`' format")
+	}
+
+	registered := make(map[string]bool)
+	for _, tool := range listTools(t) {
+		registered[tool.Name] = true
+	}
+
+	for name := range registered {
+		if !documented[name] {
+			t.Errorf("tool %q is registered but NOT documented in docs/TOOLS.md", name)
+		}
+	}
+	for name := range documented {
+		if !registered[name] {
+			t.Errorf("docs/TOOLS.md documents tool %q that is NOT registered (stale doc)", name)
+		}
 	}
 }
 

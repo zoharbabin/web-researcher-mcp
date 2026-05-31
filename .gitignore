@@ -5,8 +5,13 @@
 # Environment
 .env
 
-# Cache
-**/cache/
+# Runtime cache data dirs (scrape/search/session output written at run time).
+# Scoped to top-level / test-output dirs so it never shadows the source
+# package internal/cache/ (a `**/cache/` glob silently ignored new source
+# files there — see internal/cache/crypto.go).
+/cache/
+/tmp/cache/
+testdata/cache/
 
 # IDE
 .idea/

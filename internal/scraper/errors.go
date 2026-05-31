@@ -8,12 +8,13 @@ import (
 type ErrorKind int
 
 const (
-	ErrNetwork   ErrorKind = iota // DNS, timeout, connection refused, TLS
-	ErrBlocked                    // SSRF, allowlist, HTTP 403, bot detection
-	ErrBrowser                    // Chrome not found, launch failed, connect failed
-	ErrContent                    // Page loaded but no usable content extracted
-	ErrAuth                       // HTTP 401, login redirect
-	ErrRateLimit                  // HTTP 429
+	ErrNetwork    ErrorKind = iota // DNS, timeout, connection refused, TLS
+	ErrBlocked                     // remote bot detection / HTTP 403 (a real site refusing us)
+	ErrBrowser                     // Chrome not found, launch failed, connect failed
+	ErrContent                     // Page loaded but no usable content extracted
+	ErrAuth                        // HTTP 401, login redirect
+	ErrRateLimit                   // HTTP 429
+	ErrValidation                  // permanent client/security rejection: bad scheme, empty host, SSRF / private-IP / blocked-hostname denial. NOT retryable.
 )
 
 type ScrapeError struct {
@@ -37,6 +38,20 @@ func networkError(url, tier string, cause error) *ScrapeError {
 
 func blockedError(url, tier string, cause error, detail string) *ScrapeError {
 	return newScrapeError(ErrBlocked, url, tier, cause, fmt.Sprintf("access blocked: %s", detail))
+}
+
+// validationError marks a permanent client/security rejection (unsupported
+// scheme, empty host, SSRF / private-IP / blocked-hostname denial). These are
+// never retryable and must not be reported as transient network errors or as
+// remote "bot detection".
+func validationError(url, tier string, cause error, detail string) *ScrapeError {
+	return newScrapeError(ErrValidation, url, tier, cause, detail)
+}
+
+// isSSRFDenial reports whether an error string is an SSRF / private-IP /
+// blocked-hostname denial raised by the SSRF-safe HTTP client.
+func isSSRFDenial(s string) bool {
+	return containsAny(s, "ssrf:", "request blocked (private ip", "blocked hostname", "private ip or blocked")
 }
 
 func browserError(url string, cause error, detail string) *ScrapeError {
@@ -75,6 +90,11 @@ func classifyRawError(err error, url string) *ScrapeError {
 
 	s := err.Error()
 	switch {
+	case isSSRFDenial(s):
+		// Security denial — permanent, never retryable. Checked before the
+		// generic network/blocked buckets because an SSRF denial can co-occur
+		// with a sibling tier's timeout text.
+		return validationError(url, "", err, s)
 	case containsAny(s, "no such host", "connection refused", "timeout", "deadline exceeded", "network", "navigation failed"):
 		return networkError(url, "", err)
 	case containsAny(s, "blocked", "403", "forbidden"):

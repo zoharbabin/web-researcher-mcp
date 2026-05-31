@@ -22,6 +22,15 @@ jobs:
           go-version: "1.25"
           cache: true
 
+      - name: Check formatting (gofmt -s)
+        run: |
+          unformatted=$(gofmt -s -l $(git ls-files '*.go'))
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files are not gofmt-clean (run 'make fmt'):"
+            echo "$unformatted"
+            exit 1
+          fi
+
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
@@ -63,6 +72,49 @@ jobs:
           name: coverage
           path: coverage.out
           retention-days: 7
+
+  e2e:
+    name: E2E (STDIO, network-free)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25"
+          cache: true
+
+      # The security + lifecycle e2e tests are network-free (they assert on
+      # blocked schemes, private IPs, schema validation, session crypto,
+      # secrets masking, the HTTP transport boundary, and the OAuth/scope gate)
+      # so they run deterministically without API keys (DuckDuckGo is the
+      # zero-config search fallback). Live-provider e2e tests self-skip when
+      # keys are absent.
+      #
+      # The -run alternation MUST match the new test name prefixes
+      # (TestHTTP_/TestOAuth_) or they pass locally but never run here — a silent
+      # coverage gap. Enforced by naming convention.
+      - name: Run E2E security + lifecycle suite (STDIO + HTTP + OAuth)
+        run: go test -race -tags=e2e -count=1 -run 'TestSecurity_STDIO|TestMCPLifecycle|TestHTTP_|TestOAuth_' ./tests/e2e/...
+
+  docker-smoke:
+    name: Docker HTTP smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Builds the shipped image and drives MCP over HTTP end-to-end
+      # (initialize + web_search) with PORT set and NO stdin attached — the
+      # regression guard for the HTTP-lifecycle fix (a container must not exit
+      # on stdin EOF) and for the keyless zero-config startup path. No API keys:
+      # DuckDuckGo is the zero-config search fallback. The image bakes in
+      # Chromium but the smoke does not exercise the browser tier (deterministic,
+      # fast). The script dumps `docker logs` on any failure for diagnosability.
+      - name: Build image and smoke-test HTTP transport
+        run: make docker-smoke
 
   build:
     name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
@@ -116,9 +168,13 @@ jobs:
           go-version: "1.25"
           cache: true
 
-      - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
-
+      # govulncheck + gosec are pinned as go.mod tool directives, so versions
+      # are identical to what contributors run locally via `make vuln` / `make sec`.
       - name: Run govulncheck
-        run: govulncheck ./...
-        continue-on-error: true
+        run: go tool govulncheck ./...
+
+      # gosec: Go security scanner (injection, weak crypto, SSRF sinks, unsafe
+      # file ops). Tuned signal-only (G104 covered by golangci-lint errcheck;
+      # tests excluded). Genuinely-safe sites carry inline `// #nosec` reasons.
+      - name: Run gosec
+        run: go tool gosec -exclude=G104 -exclude-dir=tests -quiet ./...

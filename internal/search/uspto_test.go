@@ -97,6 +97,43 @@ func TestUSPTOProvider_Patents(t *testing.T) {
 	}
 }
 
+// TestUSPTOProvider_CapsResults verifies the defensive result cap: when the API
+// returns more rows than requested (the `rows` param is not always honored), the
+// provider slices down to NumResults to match every other provider's contract.
+func TestUSPTOProvider_CapsResults(t *testing.T) {
+	t.Parallel()
+
+	// Build a response with 10 records.
+	var bag []usptoFileWrapperDataBag
+	for i := 0; i < 10; i++ {
+		bag = append(bag, usptoFileWrapperDataBag{
+			ApplicationNumberText: "16000000",
+			ApplicationMetaData:   usptoApplicationMetaData{InventionTitle: "Patent", PatentNumber: "11000000"},
+		})
+	}
+	response := usptoResponse{Count: 10, PatentFileWrapperDataBag: bag}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer srv.Close()
+
+	provider := NewUSPTOProvider("test-key", Deps{
+		HTTPClient: srv.Client(),
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+	})
+	provider.SetBaseURL(srv.URL)
+
+	results, err := provider.Patents(context.Background(), PatentSearchParams{Query: "x", NumResults: 3})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 3 {
+		t.Fatalf("expected results capped to 3, got %d", len(results))
+	}
+}
+
 func TestUSPTOProvider_AssigneeFromAssignments(t *testing.T) {
 	t.Parallel()
 

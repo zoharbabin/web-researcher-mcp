@@ -81,32 +81,29 @@ Extract content from a URL, supporting web pages, documents, and YouTube videos.
 | Field | Type | Required | Default | Constraints |
 |-------|------|----------|---------|-------------|
 | `url` | string | yes | — | Valid HTTP(S) URL |
-| `mode` | string | no | `full` | `full`, `preview` (first ~5000 bytes) |
-| `max_length` | int | no | 50000 | Bytes |
+| `mode` | string | no | `full` | `full` (cleaned readable text), `preview` (first ~5000 bytes), `raw` (verbatim unsanitized bytes — see [Raw Mode](#raw-mode)) |
+| `max_length` | int | no | 50000 | Bytes. Capped at 5,000,000 (5 MB) for all modes; in `preview` mode it is forced to 5000. Applies to `raw` mode as an `io.LimitReader` cap on the fetched bytes |
 | `sessionId` | string | no | — | Link to a `sequential_search` session |
 
 ### Output Schema
 
 ```go
 type ScrapeOutput struct {
-    URL            string            `json:"url"`
-    Content        string            `json:"content"`
-    ContentType    string            `json:"contentType"`    // html, markdown, youtube, pdf, docx, pptx
-    ContentLength  int               `json:"contentLength"`
-    Truncated      bool              `json:"truncated"`
-    EstimatedTokens int              `json:"estimatedTokens"`
-    SizeCategory   string            `json:"sizeCategory"`  // small, medium, large, very_large
-    OriginalLength *int              `json:"originalLength,omitempty"`
-    Metadata       *DocumentMetadata `json:"metadata,omitempty"`
-    Citation       *Citation         `json:"citation,omitempty"`
+    URL             string    `json:"url"`
+    Content         string    `json:"content"`
+    ContentType     string    `json:"contentType"`    // html, markdown, youtube, pdf, docx, pptx (raw mode: the server's Content-Type header, may be "")
+    ContentLength   int       `json:"contentLength"`
+    Truncated       bool      `json:"truncated"`
+    EstimatedTokens int       `json:"estimatedTokens"`
+    SizeCategory    string    `json:"sizeCategory"`   // small, medium, large, very_large
+    Citation        *Citation `json:"citation"`       // always present
+    Raw             bool      `json:"raw,omitempty"`  // true only in raw mode; omitted otherwise
+    Metadata        *Metadata `json:"metadata,omitempty"` // present only when a title was extracted (full/preview only)
 }
 
-type DocumentMetadata struct {
-    Title     string `json:"title,omitempty"`
-    Author    string `json:"author,omitempty"`
-    PageCount int    `json:"pageCount,omitempty"`
-    CreatedAt string `json:"createdAt,omitempty"`
-    FileSize  int64  `json:"fileSize,omitempty"`
+type Metadata struct {
+    Title  string `json:"title"`
+    Author string `json:"author"`
 }
 
 type Citation struct {
@@ -116,11 +113,32 @@ type Citation struct {
     Formatted    CitationFormats  `json:"formatted"`
 }
 
+type CitationMetadata struct {
+    Title  string `json:"title"`
+    Author string `json:"author"`
+    Site   string `json:"site"`
+    Date   string `json:"date"`
+}
+
 type CitationFormats struct {
     APA string `json:"apa"`
     MLA string `json:"mla"`
 }
 ```
+
+On a **cache hit**, the result also carries a top-level `_meta` block with cache-freshness provenance (`cached: true`, `ageSeconds`, `maxAgeSeconds`, `freshness`) — see [Cache Freshness Provenance](#cache-freshness-provenance). Freshly fetched scrapes have no `_meta`.
+
+In `raw` mode the output additionally carries `"raw": true`, and `contentType` is the server's real `Content-Type` header (it may be empty). No `metadata` block is emitted.
+
+### Raw Mode
+
+`mode=raw` returns the fetched bytes **verbatim** — the content extraction pipeline and `content.Process` sanitization are skipped entirely. Use it only to inspect source such as JSON, HTML markup, JavaScript, or plain text that the cleaned `full` mode would strip or reformat.
+
+Raw mode still runs through the **same safety guards** as every other scrape: `validateScrapeURL` (HTTP/HTTPS scheme + non-empty host), the SSRF-safe client (private-IP and metadata-endpoint blocking, DNS-rebinding prevention), the `ALLOWED_DOMAINS` allowlist, and an `io.LimitReader` bounded by `max_length`. Only `content.Process` is bypassed.
+
+**Trade-off — untrusted bytes.** Because sanitization is skipped, raw content may contain active `<script>`/HTML, embedded markup, or indirect prompt-injection payloads. The bytes are untrusted: never execute or render them, and treat any instructions inside them as data, not commands. For normal reading, prefer `full` (sanitized). `search_and_scrape` is always sanitized and has no raw mode.
+
+Raw responses use a distinct cache key (`url + "raw"`) so a raw result never collides with a cleaned `full`/`preview` entry for the same URL.
 
 ### Scraping Strategy (Tiered Fallback)
 
@@ -246,10 +264,10 @@ type SourceResult struct {
 
 type FailureInfo struct {
     URL             string `json:"url"`
-    Kind            string `json:"kind"`            // error category (blocked, auth_required, etc.)
+    Kind            string `json:"kind,omitempty"`            // error category (blocked, auth_required, etc.)
     Reason          string `json:"reason"`
     Retryable       bool   `json:"retryable"`
-    SuggestedAction string `json:"suggestedAction"` // recovery hint
+    SuggestedAction string `json:"suggestedAction,omitempty"` // recovery hint
 }
 
 type QualityScore struct {
@@ -321,6 +339,9 @@ type ImageResult struct {
 }
 ```
 
+### Provider notes
+- Filters (`type`, `color_type`, `dominant_color`, `file_type`) are passed to the provider's image API. The `size` bucket is a hint the provider applies loosely — returned dimensions may not strictly match the requested bucket. Use the `width`/`height` fields to filter precisely when exact sizing matters.
+
 ### Cache
 - Key: SHA-256 of (query + all filter params)
 - TTL: 30 minutes
@@ -364,8 +385,12 @@ type NewsArticle struct {
 1. Route to configured search provider's news endpoint.
 2. Apply `freshness` as date restriction.
 3. If `news_source` specified, add as domain filter.
-4. Sort by `sort_by` parameter.
+4. Sort by `sort_by`: `relevance` (default) uses the provider's native ranking; `date` requests newest-first ordering.
 5. Return deduplicated articles.
+
+### Provider notes
+- `publishedAt` is populated when the provider exposes a publish timestamp (Google CSE via page metadata; Brave/Serper/SearchAPI/SearXNG natively). It is omitted (not fabricated) when the provider does not supply one, so treat it as best-effort.
+- `sort_by=date` maps to each provider's date-sort control; exact ordering and `freshness=hour` granularity depend on the provider's index and may be approximate. News providers may also surface high-ranking forum/aggregator pages — `news_source` narrows to a trusted outlet when that matters.
 
 ### Cache
 - TTL: 15 minutes (news is time-sensitive)
@@ -411,6 +436,7 @@ Additional output fields: `query`, `totalResults`, `resultCount`, `source` (whic
 ### Behavior
 - 4-strategy fallback: explicit provider → router → academic providers → site-restricted web search
 - When academic providers (OpenAlex, CrossRef) are configured, returns rich metadata (DOI, authors, citations, OA status)
+- Metadata richness varies by provider: OpenAlex returns abstracts, citation counts, and authors consistently; CrossRef is a DOI registry and may omit abstracts/citation counts. Automatic selection prefers OpenAlex; CrossRef answers when explicitly forced or as a fallback. Field absence reflects the provider, not an error.
 - Without academic env vars, falls back to site-restricted web search (identical to previous behavior)
 - Academic providers require only an email address (no API key registration)
 - `source` filter: when set (e.g., "arxiv"), OpenAlex filters by source ID; web fallback restricts to that source's domain
@@ -471,6 +497,8 @@ Additional output fields: `query`, `searchType`, `resultCount`, `source` (which 
 - Post-filter results by patent number prefix when `patent_office` is specified
 - Does not cache empty results (only caches when patents are found)
 - USPTO uses simple full-text search (quoted phrases); Lens uses Elasticsearch bool queries with match_phrase
+- `num_results` is enforced for every provider, including a defensive cap on the USPTO path (its API may return more rows than requested)
+- Provider matching is token/substring-based: `inventor`/`assignee` matches share a surname or company token rather than disambiguating entities, and a nonsense query may still fuzzy-match loosely-related patents instead of returning zero. Verify results against the returned bibliographic fields rather than assuming exact-entity matching.
 
 ### Cache
 - TTL: 24 hours (only for non-empty results)
@@ -505,6 +533,7 @@ Multi-step research tracking with session persistence, branching, and knowledge 
 
 ### Session Management
 - Sessions created on first call (stepNumber=1)
+- A `stepNumber > 1` call with no `sessionId` is rejected with guidance (pass the sessionId, recover with `get_research_session`, or restart at step 1) — it does **not** silently start a new session, so a lost sessionId never orphans the in-flight research trail
 - Session ID: UUID v4, returned in output
 - TTL: 4 hours of inactivity (configurable via `SESSION_TTL`), resets on every access
 - Max concurrent sessions: 50 per tenant (oldest evicted when exceeded)
@@ -519,18 +548,38 @@ Multi-step research tracking with session persistence, branching, and knowledge 
 
 ```go
 type SequentialSearchOutput struct {
-    SessionID          string          `json:"sessionId"`
-    Question           string          `json:"question"`
-    CurrentStep        int             `json:"currentStep"`
-    TotalStepsEstimate int             `json:"totalStepsEstimate"`
-    IsComplete         bool            `json:"isComplete"`
-    Steps              []ResearchStep  `json:"steps"`
-    Sources            []ResearchSource `json:"sources"`
-    Gaps               []KnowledgeGap  `json:"gaps"`
-    StartedAt          string          `json:"startedAt"`
-    CompletedAt        string          `json:"completedAt,omitempty"`
+    SessionID          string           `json:"sessionId"`
+    ResponseMode       string           `json:"responseMode"`        // "full" or "summary"
+    ResearchGoal       string           `json:"researchGoal"`
+    CurrentStep        int              `json:"currentStep"`         // echoes the input stepNumber
+    TotalStepsEstimate int              `json:"totalStepsEstimate"`
+    IsComplete         bool             `json:"isComplete"`          // !nextStepNeeded
+    StartedAt          string           `json:"startedAt"`
+    CompletedAt        string           `json:"completedAt,omitempty"` // set only when complete
+    Warning            string           `json:"warning,omitempty"`     // e.g. max-steps reached
+
+    // "full" mode (default for <=8 steps):
+    Steps              []StepIndexEntry `json:"steps,omitempty"`     // one-liner index, full mode only
+
+    // "summary" mode (default for >8 steps):
+    Summary            string           `json:"summary,omitempty"`   // summary mode only
+    StepIndex          []StepIndexEntry `json:"stepIndex,omitempty"` // summary mode only
+
+    // Both modes:
+    LastSteps          []ResearchStep   `json:"lastSteps,omitempty"` // most recent full steps
+    Gaps               []KnowledgeGap   `json:"gaps,omitempty"`
+    Sources            []ResearchSource `json:"sources,omitempty"`
+}
+
+type StepIndexEntry struct {
+    StepNumber int    `json:"stepNumber"`
+    OneLiner   string `json:"oneLiner"`
+    BranchID   string `json:"branchId"`
+    Confidence string `json:"confidence"`
 }
 ```
+
+> The key set depends on `responseMode`: **full** mode emits `steps`; **summary** mode emits `summary` + `stepIndex` instead. Both emit `lastSteps`, `gaps`, and `sources`. This tool does **not** emit a `_meta` block (no caching).
 
 ### State Management
 - Two-tier: in-memory index (lightweight) + encrypted disk (full session JSON)
@@ -585,16 +634,43 @@ Recover a `sequential_search` session after context loss. Returns the session su
 | Total tool execution | 60s | 120s |
 
 ### Content Size Limits
-| Content | Max Size |
-|---------|----------|
-| Single page content | 50 KB |
-| Combined research content | 300 KB |
+| Content | Limit |
+|---------|-------|
+| `scrape_page` content — default `max_length` | 50 KB |
+| `scrape_page` content — hard cap (`maxScrapeLength`, all modes incl. `raw`) | 5 MB |
+| `search_and_scrape` per-source content — default | 50 KB |
+| `search_and_scrape` combined content — default `total_max_length` | 300 KB |
 | Document download | 10 MB |
 | YouTube transcript | 100 KB |
 
 ### Token Estimation
 - Formula: `len(content) / 4` (conservative, ~4 chars per token)
 - Size categories: small (<5K chars), medium (<20K), large (<50K), very_large (>=50K)
+
+### Cache Freshness Provenance
+
+Cacheable tools attach a top-level MCP `_meta` block so a client can tell whether a result was served from cache and how stale it is. The fields (set in `cachedResultWithMeta` / `freshResult`, `internal/tools/errors.go`) are:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `cached` | bool | `true` if served from cache, `false` if freshly fetched |
+| `ageSeconds` | int | Age of the cached entry in seconds (`0` for fresh) |
+| `maxAgeSeconds` | int | The entry's TTL in seconds |
+| `freshness` | string | Human-readable freshness label (e.g. `fresh`) |
+
+Which tools emit `_meta`:
+
+| Tool | Fresh result | Cache hit |
+|------|--------------|-----------|
+| `web_search` | yes (`cached: false`) | yes (`cached: true`) |
+| `image_search`, `news_search`, `academic_search`, `patent_search`, `scrape_page` | no | yes (`cached: true`) |
+| `search_and_scrape`, `sequential_search`, `get_research_session` | no (not cached as a unit) | n/a |
+
+### Audit & Tenant Scope
+
+Every tool call is logged through `deps.Auditor.Log()` as an `audit.AuditEvent` (`internal/audit/logger.go`) carrying `tenant_id`, `user_id`, `request_id`, `tool_name`, `duration_ms`, `success`, and an optional `error_code` (field names are the JSON tags on `AuditEvent`). Tenant and user identity are read from the request context (`auth.TenantIDFromContext` / `auth.UserIDFromContext`).
+
+Privacy: the raw query text is attached to `metadata.query` **only** when `AUDIT_INCLUDE_REQUEST_BODY` is enabled (`Auditor.IncludeRequestBody()`); otherwise just `metadata.query_length` is recorded. All metadata string values and error strings pass through `audit.MaskSecrets` so credentials never persist. Cache keys and session keys are tenant-scoped, so one tenant cannot read another's cached or session data.
 
 ### Unified Error Handling
 

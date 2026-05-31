@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+#
+# Fast pre-commit gate for web-researcher-mcp.
+#
+# Philosophy (keep commits snappy — heavy checks live in CI):
+#   - Only inspect STAGED Go files, not the whole tree.
+#   - Run only fast, deterministic checks: gofmt, go vet, golangci-lint.
+#   - Skip network/slow gates here (govulncheck, -race, e2e) — CI owns those.
+#   - Tools are invoked via `go tool` (pinned in go.mod), so versions never
+#     drift between contributors or vs CI. No manual install required.
+#
+# Enable once with:  make hooks   (sets core.hooksPath=.githooks)
+# Bypass in a pinch:  git commit --no-verify   (CI still enforces everything)
+
+set -euo pipefail
+
+# Scratch output lives in a temp dir that is always cleaned up — never write
+# artifacts into the working tree (they could otherwise be accidentally staged).
+tmpdir=$(mktemp -d)
+trap 'rm -rf "$tmpdir"' EXIT
+
+# Collect staged Go files (Added/Copied/Modified/Renamed), excluding deletions.
+staged_go=$(git diff --cached --name-only --diff-filter=ACMR | grep '\.go$' || true)
+
+if [ -z "$staged_go" ]; then
+	exit 0
+fi
+
+echo "pre-commit: checking $(echo "$staged_go" | wc -l | tr -d ' ') staged Go file(s)…"
+
+fail=0
+
+# 1) gofmt -s: formatting must be clean. Report offenders; do not auto-fix
+#    (auto-fixing files mid-commit would stage changes the author didn't review).
+unformatted=$(echo "$staged_go" | xargs gofmt -s -l 2>/dev/null || true)
+if [ -n "$unformatted" ]; then
+	echo "✗ gofmt: the following staged files are not formatted (run 'make fmt'):"
+	echo "$unformatted" | sed 's/^/    /'
+	fail=1
+fi
+
+# 2) go vet: catches suspicious constructs. Vet works per-package, so vet the
+#    packages that own the staged files. Pass the project's build tags so
+#    tag-gated files (e2e, live) are included instead of "excluded all files".
+pkgs=$(echo "$staged_go" | xargs -n1 dirname | sort -u | sed 's#^#./#')
+tags="e2e,live"
+if ! go vet -tags="$tags" $pkgs 2>"$tmpdir/vet.err"; then
+	echo "✗ go vet failed:"
+	sed 's/^/    /' "$tmpdir/vet.err"
+	fail=1
+fi
+
+# 3) golangci-lint on the changed packages only (fast). Pinned via go tool.
+if ! go tool golangci-lint run --build-tags="$tags" --timeout=2m $pkgs >"$tmpdir/lint.err" 2>&1; then
+	echo "✗ golangci-lint reported issues:"
+	sed 's/^/    /' "$tmpdir/lint.err"
+	fail=1
+fi
+
+if [ "$fail" -ne 0 ]; then
+	echo ""
+	echo "pre-commit failed. Fix the above, or bypass with 'git commit --no-verify'"
+	echo "(CI will still enforce the full gate on push)."
+	exit 1
+fi
+
+echo "pre-commit: OK"

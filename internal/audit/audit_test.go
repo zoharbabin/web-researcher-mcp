@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -313,6 +314,324 @@ func TestSwapFileMaxSize(t *testing.T) {
 	}
 
 	t.Logf("spilled=%d dropped=%d", logger.Spilled.Load(), logger.Dropped.Load())
+}
+
+func TestMaskSecrets(t *testing.T) {
+	t.Parallel()
+
+	// Test fixtures are assembled at runtime from prefix + filler so no
+	// contiguous credential-shaped literal ever appears in source — this keeps
+	// the values out of automated secret scanners (GitGuardian, gitleaks) while
+	// still producing a fully key-shaped string for the regexes to match. None
+	// of these are real keys; they are synthetic, fixed test vectors.
+	// 64-char filler so every slice below is in bounds.
+	const filler = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	googleKey := "AIza" + filler[:35] // "AIza" + 35 chars matches reGoogleKey
+	skKey := "sk-" + "proj-" + filler[:24]
+	bsaKey := "BSA" + filler[:24]
+	hexKey := filler // exactly 64 hex chars matches reHex64
+	bearerTok := "tok-" + filler[:20]
+	tokenVal := "val-" + filler[:16]
+	accessTok := "at-" + filler[:20]
+
+	tests := []struct {
+		name         string
+		in           string
+		wantRedacted bool   // a [REDACTED] marker must appear
+		wantAbsent   string // this substring must NOT survive in the output
+		wantExact    string // if set, output must equal this exactly
+	}{
+		{name: "empty", in: "", wantExact: ""},
+		{
+			name:         "google api key",
+			in:           "request failed: https://www.googleapis.com/customsearch/v1?key=" + googleKey + "&cx=1",
+			wantRedacted: true,
+			wantAbsent:   googleKey,
+		},
+		{
+			name:         "bearer token",
+			in:           "Authorization: Bearer " + bearerTok,
+			wantRedacted: true,
+			wantAbsent:   bearerTok,
+		},
+		{
+			name:         "openai sk key",
+			in:           "auth error with " + skKey,
+			wantRedacted: true,
+			wantAbsent:   skKey,
+		},
+		{
+			name:         "brave bsa key",
+			in:           "X-Subscription-Token: " + bsaKey,
+			wantRedacted: true,
+			wantAbsent:   bsaKey,
+		},
+		{
+			name:         "64 hex encryption key",
+			in:           "CACHE_ENCRYPTION_KEY=" + hexKey,
+			wantRedacted: true,
+			wantAbsent:   hexKey,
+		},
+		{
+			name:         "token query param",
+			in:           "https://api.example.com/v1/search?q=cats&token=" + tokenVal + "&page=2",
+			wantRedacted: true,
+			wantAbsent:   tokenVal,
+		},
+		{
+			name:         "access_token query param",
+			in:           "callback?access_token=" + accessTok + "&state=xyz",
+			wantRedacted: true,
+			wantAbsent:   accessTok,
+		},
+		{
+			name:      "normal text untouched",
+			in:        "search_and_scrape failed: no results for quantum computing",
+			wantExact: "search_and_scrape failed: no results for quantum computing",
+		},
+		{
+			name:      "short hex not matched",
+			in:        "color #abc123 and id deadbeef",
+			wantExact: "color #abc123 and id deadbeef",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := MaskSecrets(tt.in)
+			if tt.wantExact != "" || tt.name == "empty" {
+				if got != tt.wantExact {
+					t.Fatalf("MaskSecrets(%q) = %q, want exact %q", tt.in, got, tt.wantExact)
+				}
+				return
+			}
+			if tt.wantRedacted && !strings.Contains(got, redacted) {
+				t.Errorf("MaskSecrets(%q) = %q, expected a %s marker", tt.in, got, redacted)
+			}
+			if tt.wantAbsent != "" && strings.Contains(got, tt.wantAbsent) {
+				t.Errorf("MaskSecrets(%q) = %q, secret %q survived", tt.in, got, tt.wantAbsent)
+			}
+		})
+	}
+}
+
+func TestMaskSecretsIdempotent(t *testing.T) {
+	t.Parallel()
+	// Assembled at runtime (see TestMaskSecrets) so no key-shaped literal lands
+	// in source; still exercises the google-key + bearer rules.
+	in := "key=" + "AIza" + "0123456789abcdefghijklmnopqrstuv012" + " and Bearer " + "tok-0123456789abcdef"
+	once := MaskSecrets(in)
+	twice := MaskSecrets(once)
+	if once != twice {
+		t.Errorf("MaskSecrets not idempotent:\n once=%q\ntwice=%q", once, twice)
+	}
+}
+
+func TestRotationNoEventLoss(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "audit.log")
+
+	// Tiny MaxBytes forces frequent rotation; big buffer so nothing spills/drops.
+	cfg := Config{
+		Enabled:    true,
+		OutputPath: path,
+		BufferSize: 10000,
+		MaxBytes:   2048, // ~tens of events per file
+	}
+	logger, err := NewLogger(cfg)
+	if err != nil {
+		t.Fatalf("NewLogger: %v", err)
+	}
+
+	const numEvents = 2000
+	for i := 0; i < numEvents; i++ {
+		ev := NewEvent("tool_call", "tenant-rot", "user-rot")
+		ev.Metadata = map[string]any{"seq": i}
+		logger.Log(ev)
+	}
+	logger.Close()
+
+	if logger.Dropped.Load() != 0 {
+		t.Fatalf("expected 0 dropped events, got %d", logger.Dropped.Load())
+	}
+	if logger.Rotations.Load() == 0 {
+		t.Fatal("expected at least one rotation with 2KB MaxBytes")
+	}
+
+	// Count events across the active file + every rotated sibling.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	total := 0
+	for _, e := range entries {
+		name := e.Name()
+		if name != "audit.log" && !strings.HasPrefix(name, "audit.log.") {
+			continue
+		}
+		data, rerr := os.ReadFile(filepath.Join(dir, name))
+		if rerr != nil {
+			t.Fatalf("ReadFile %s: %v", name, rerr)
+		}
+		trimmed := bytes.TrimSpace(data)
+		if len(trimmed) == 0 {
+			continue
+		}
+		for _, line := range bytes.Split(trimmed, []byte("\n")) {
+			var ev AuditEvent
+			if json.Unmarshal(line, &ev) != nil {
+				t.Fatalf("invalid JSON line in %s: %q", name, line)
+			}
+			total++
+		}
+	}
+	if total != numEvents {
+		t.Fatalf("expected %d events across active+rotated files, got %d (rotations=%d)",
+			numEvents, total, logger.Rotations.Load())
+	}
+}
+
+func TestRetentionDeletesOldFiles(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "audit.log")
+
+	// Pre-create rotated siblings: two old (beyond retention), one recent.
+	oldName := filepath.Join(dir, "audit.log.20200101T000000.000000000Z")
+	old2Name := filepath.Join(dir, "audit.log.20200102T000000.000000000Z")
+	recentName := filepath.Join(dir, "audit.log.recent")
+	for _, n := range []string{oldName, old2Name, recentName} {
+		if err := os.WriteFile(n, []byte("{}\n"), 0600); err != nil {
+			t.Fatalf("seed %s: %v", n, err)
+		}
+	}
+	// Age the two "old" files well beyond the retention window.
+	past := time.Now().Add(-200 * 24 * time.Hour)
+	for _, n := range []string{oldName, old2Name} {
+		if err := os.Chtimes(n, past, past); err != nil {
+			t.Fatalf("chtimes %s: %v", n, err)
+		}
+	}
+
+	cfg := Config{
+		Enabled:       true,
+		OutputPath:    path,
+		BufferSize:    100,
+		RetentionDays: 180,
+	}
+	logger, err := NewLogger(cfg)
+	if err != nil {
+		t.Fatalf("NewLogger: %v", err)
+	}
+	// Cleanup runs at startup inside processLoop; give it a moment.
+	logger.Log(NewEvent("tool_call", "t", "u"))
+	logger.Close()
+
+	if _, err := os.Stat(oldName); !os.IsNotExist(err) {
+		t.Errorf("old rotated file should have been deleted: %v", err)
+	}
+	if _, err := os.Stat(old2Name); !os.IsNotExist(err) {
+		t.Errorf("second old rotated file should have been deleted: %v", err)
+	}
+	if _, err := os.Stat(recentName); err != nil {
+		t.Errorf("recent rotated file should be retained: %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("active audit file must never be deleted: %v", err)
+	}
+}
+
+func TestRetentionDisabledByZero(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "audit.log")
+
+	oldName := filepath.Join(dir, "audit.log.20200101T000000.000000000Z")
+	if err := os.WriteFile(oldName, []byte("{}\n"), 0600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	past := time.Now().Add(-500 * 24 * time.Hour)
+	if err := os.Chtimes(oldName, past, past); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+
+	cfg := Config{
+		Enabled:       true,
+		OutputPath:    path,
+		BufferSize:    100,
+		RetentionDays: 0, // disabled
+	}
+	logger, err := NewLogger(cfg)
+	if err != nil {
+		t.Fatalf("NewLogger: %v", err)
+	}
+	logger.Log(NewEvent("tool_call", "t", "u"))
+	logger.Close()
+
+	if _, err := os.Stat(oldName); err != nil {
+		t.Errorf("with RetentionDays=0 nothing should be deleted: %v", err)
+	}
+}
+
+func TestRotationDisabledByZeroMaxBytes(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "audit.log")
+
+	cfg := Config{
+		Enabled:    true,
+		OutputPath: path,
+		BufferSize: 1000,
+		MaxBytes:   0, // disabled
+	}
+	logger, err := NewLogger(cfg)
+	if err != nil {
+		t.Fatalf("NewLogger: %v", err)
+	}
+	for i := 0; i < 500; i++ {
+		logger.Log(NewEvent("tool_call", "t", "u"))
+	}
+	logger.Close()
+
+	if logger.Rotations.Load() != 0 {
+		t.Errorf("expected 0 rotations with MaxBytes=0, got %d", logger.Rotations.Load())
+	}
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "audit.log.") {
+			t.Errorf("unexpected rotated sibling with rotation disabled: %s", e.Name())
+		}
+	}
+}
+
+func TestIncludeRequestBodyFlag(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	on, err := NewLogger(Config{Enabled: true, OutputPath: filepath.Join(dir, "on.log"), IncludeRequestBody: true})
+	if err != nil {
+		t.Fatalf("NewLogger on: %v", err)
+	}
+	defer on.Close()
+	if !on.IncludeRequestBody() {
+		t.Error("expected IncludeRequestBody()=true")
+	}
+
+	off, err := NewLogger(Config{Enabled: true, OutputPath: filepath.Join(dir, "off.log")})
+	if err != nil {
+		t.Fatalf("NewLogger off: %v", err)
+	}
+	defer off.Close()
+	if off.IncludeRequestBody() {
+		t.Error("expected IncludeRequestBody()=false by default")
+	}
+
+	if NewNoop().IncludeRequestBody() {
+		t.Error("Noop.IncludeRequestBody() must be false")
+	}
 }
 
 // safeBuffer is a concurrency-safe bytes.Buffer for use in tests.

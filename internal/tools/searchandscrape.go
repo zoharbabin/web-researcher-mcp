@@ -68,7 +68,7 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 				errCode = "rate_limited"
 			}
 			deps.Metrics.RecordToolCall("search_and_scrape", time.Since(start), err, errCode, false)
-			auditToolCall(ctx, deps, "search_and_scrape", time.Since(start), err, errCode)
+			auditToolCallQuery(ctx, deps, "search_and_scrape", time.Since(start), err, errCode, input.Query, nil)
 			return upstreamErrorResponse("search", err), nil, nil
 		}
 
@@ -127,7 +127,7 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 
 		jsonBytes, _ := json.Marshal(output)
 		deps.Metrics.RecordToolCall("search_and_scrape", time.Since(start), nil, "", false)
-		auditToolCall(ctx, deps, "search_and_scrape", time.Since(start), nil, "")
+		auditToolCallQuery(ctx, deps, "search_and_scrape", time.Since(start), nil, "", input.Query, map[string]any{"urls_scraped": scraped})
 
 		if input.SessionID != "" {
 			trackSources(ctx, deps, input.SessionID, sourceOutputsToSources(sources))

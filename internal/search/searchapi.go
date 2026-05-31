@@ -414,10 +414,10 @@ type searchAPIImageResponse struct {
 }
 
 type searchAPIImageResult struct {
-	Title         string `json:"title"`
-	Original      string `json:"original"`
-	Thumbnail     string `json:"thumbnail"`
-	Source        string `json:"source"`
+	Title          string `json:"title"`
+	Original       string `json:"original"`
+	Thumbnail      string `json:"thumbnail"`
+	Source         string `json:"source"`
 	OriginalWidth  int    `json:"original_width"`
 	OriginalHeight int    `json:"original_height"`
 }

@@ -306,4 +306,3 @@ func TestReconstructAbstract(t *testing.T) {
 		})
 	}
 }
-

@@ -138,6 +138,7 @@ var scrapePageOutputSchema = map[string]any{
 		"truncated":       map[string]any{"type": "boolean"},
 		"estimatedTokens": map[string]any{"type": "integer"},
 		"sizeCategory":    map[string]any{"type": "string"},
+		"raw":             map[string]any{"type": "boolean"},
 		"citation": map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -230,10 +231,10 @@ var sequentialSearchOutputSchema = map[string]any{
 			"items": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"stepNumber":  map[string]any{"type": "integer"},
-					"oneLiner":    map[string]any{"type": "string"},
-					"branchId":    map[string]any{"type": "string"},
-					"confidence":  map[string]any{"type": "string"},
+					"stepNumber": map[string]any{"type": "integer"},
+					"oneLiner":   map[string]any{"type": "string"},
+					"branchId":   map[string]any{"type": "string"},
+					"confidence": map[string]any{"type": "string"},
 				},
 			},
 		},

@@ -40,7 +40,9 @@ func registerImageSearch(srv *mcp.Server, deps Dependencies) {
 			numResults = 5
 		}
 
-		cacheKey := searchCacheKey("image", input.Query, numResults, input.Size, input.Type, input.ColorType, input.DominantColor, input.FileType)
+		// Include provider + safe so different providers / safe-levels never
+		// collide on the same query (idempotency + consistency across calls).
+		cacheKey := searchCacheKey("image", input.Query, numResults, input.Size, input.Type, input.ColorType, input.DominantColor, input.FileType, input.Safe, input.Provider)
 		if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("image_search", time.Since(start), nil, "", true)
 			auditToolCall(ctx, deps, "image_search", time.Since(start), nil, "")

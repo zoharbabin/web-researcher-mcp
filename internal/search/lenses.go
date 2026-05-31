@@ -49,6 +49,7 @@ func (lr *LensRegistry) LoadFromDir(dir string) error {
 		}
 
 		path := filepath.Join(dir, entry.Name())
+		// #nosec G304 -- reads lens definition files from the operator-configured lenses directory enumerated via os.ReadDir, not request input
 		data, err := os.ReadFile(path)
 		if err != nil {
 			continue

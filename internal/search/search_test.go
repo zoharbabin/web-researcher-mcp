@@ -233,8 +233,10 @@ func TestGoogleProvider_RateLimited(t *testing.T) {
 func TestGoogleProvider_NewsSearch(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		if q.Get("sort") != "date" {
-			t.Errorf("expected sort 'date', got %q", q.Get("sort"))
+		// Default (relevance) must NOT force a date sort — the previous hardcoded
+		// sort=date silently overrode the documented relevance default.
+		if q.Get("sort") != "" {
+			t.Errorf("relevance default should send no sort param, got %q", q.Get("sort"))
 		}
 		query := q.Get("q")
 		if !strings.Contains(query, "site:nytimes.com") {
@@ -243,7 +245,13 @@ func TestGoogleProvider_NewsSearch(t *testing.T) {
 
 		resp := googleResponse{
 			Items: []googleItem{
-				{Title: "News Item", Link: "https://news.example.com/1", Snippet: "Breaking news", DisplayLink: "news.example.com"},
+				{
+					Title: "News Item", Link: "https://news.example.com/1",
+					Snippet: "Breaking news", DisplayLink: "news.example.com",
+					PageMap: &googlePageMap{MetaTags: []map[string]string{
+						{"article:published_time": "2026-05-30T12:00:00Z"},
+					}},
+				},
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -268,6 +276,33 @@ func TestGoogleProvider_NewsSearch(t *testing.T) {
 	}
 	if results[0].Source != "news.example.com" {
 		t.Errorf("expected source 'news.example.com', got %q", results[0].Source)
+	}
+	// PublishedAt must be extracted from the pagemap (was previously dropped).
+	if results[0].PublishedAt != "2026-05-30T12:00:00Z" {
+		t.Errorf("expected PublishedAt from pagemap, got %q", results[0].PublishedAt)
+	}
+}
+
+// TestGoogleProvider_NewsSearch_DateSort verifies sort_by=date applies Google's
+// date sort, but only when explicitly requested.
+func TestGoogleProvider_NewsSearch_DateSort(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("sort"); got != "date" {
+			t.Errorf("expected sort 'date' when SortBy=date, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(googleResponse{Items: []googleItem{
+			{Title: "Recent", Link: "https://e.com/1", Snippet: "x", DisplayLink: "e.com"},
+		}})
+	}))
+	defer ts.Close()
+
+	client := &http.Client{Transport: &rewriteTransport{baseURL: ts.URL, inner: http.DefaultTransport}}
+	deps := Deps{HTTPClient: client, Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	g := NewGoogleProvider("key", "cx", deps)
+
+	if _, err := g.News(context.Background(), NewsSearchParams{Query: "ai", SortBy: "date"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -963,15 +998,15 @@ func TestSearchAPIProvider_PatentSearch(t *testing.T) {
 		resp := searchAPIPatentResponse{
 			OrganicResults: []searchAPIPatentResult{
 				{
-					Title:    "<b>Kaltura</b> Video Platform",
-					PatentID: "patent/US10165245B2/en",
-					Link:     "https://patents.google.com/patent/US10165245B2/en",
-					Snippet:  "A system for <b>pre-fetching</b> video content",
-					Assignee: "<b>Kaltura</b>, Inc.",
-					Inventor: "Christopher Hayes",
-					FilingDate:  "2013-07-03",
-					GrantDate:   "2018-12-25",
-					PDF:         "https://patentimages.storage.googleapis.com/US10165245.pdf",
+					Title:      "<b>Kaltura</b> Video Platform",
+					PatentID:   "patent/US10165245B2/en",
+					Link:       "https://patents.google.com/patent/US10165245B2/en",
+					Snippet:    "A system for <b>pre-fetching</b> video content",
+					Assignee:   "<b>Kaltura</b>, Inc.",
+					Inventor:   "Christopher Hayes",
+					FilingDate: "2013-07-03",
+					GrantDate:  "2018-12-25",
+					PDF:        "https://patentimages.storage.googleapis.com/US10165245.pdf",
 				},
 				{
 					Title:             "Image Compression",
