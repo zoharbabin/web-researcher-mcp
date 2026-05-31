@@ -28,13 +28,16 @@ func TestLoadWithRequiredEnvVars(t *testing.T) {
 	}
 }
 
+// Google keys are required only when the user explicitly opts into the Google
+// provider (SEARCH_PROVIDER=google). These tests pin that contract.
 func TestLoadMissingGoogleAPIKey(t *testing.T) {
+	t.Setenv("SEARCH_PROVIDER", "google")
 	t.Setenv("GOOGLE_CUSTOM_SEARCH_API_KEY", "")
 	t.Setenv("GOOGLE_CUSTOM_SEARCH_ID", "test-cx-id")
 
 	_, err := Load()
 	if err == nil {
-		t.Fatal("expected error when GOOGLE_CUSTOM_SEARCH_API_KEY is missing")
+		t.Fatal("expected error when GOOGLE_CUSTOM_SEARCH_API_KEY is missing under SEARCH_PROVIDER=google")
 	}
 	if !strings.Contains(err.Error(), "GOOGLE_CUSTOM_SEARCH_API_KEY is required") {
 		t.Errorf("expected error about missing API key, got: %v", err)
@@ -42,12 +45,13 @@ func TestLoadMissingGoogleAPIKey(t *testing.T) {
 }
 
 func TestLoadMissingGoogleCX(t *testing.T) {
+	t.Setenv("SEARCH_PROVIDER", "google")
 	t.Setenv("GOOGLE_CUSTOM_SEARCH_API_KEY", "test-key")
 	t.Setenv("GOOGLE_CUSTOM_SEARCH_ID", "")
 
 	_, err := Load()
 	if err == nil {
-		t.Fatal("expected error when GOOGLE_CUSTOM_SEARCH_ID is missing")
+		t.Fatal("expected error when GOOGLE_CUSTOM_SEARCH_ID is missing under SEARCH_PROVIDER=google")
 	}
 	if !strings.Contains(err.Error(), "GOOGLE_CUSTOM_SEARCH_ID is required") {
 		t.Errorf("expected error about missing CX, got: %v", err)
@@ -55,18 +59,50 @@ func TestLoadMissingGoogleCX(t *testing.T) {
 }
 
 func TestLoadMissingBothRequired(t *testing.T) {
+	t.Setenv("SEARCH_PROVIDER", "google")
 	t.Setenv("GOOGLE_CUSTOM_SEARCH_API_KEY", "")
 	t.Setenv("GOOGLE_CUSTOM_SEARCH_ID", "")
 
 	_, err := Load()
 	if err == nil {
-		t.Fatal("expected error when both required vars are missing")
+		t.Fatal("expected error when both Google vars are missing under SEARCH_PROVIDER=google")
 	}
 	if !strings.Contains(err.Error(), "GOOGLE_CUSTOM_SEARCH_API_KEY is required") {
 		t.Errorf("expected error about API key, got: %v", err)
 	}
 	if !strings.Contains(err.Error(), "GOOGLE_CUSTOM_SEARCH_ID is required") {
 		t.Errorf("expected error about CX, got: %v", err)
+	}
+}
+
+// TestLoadZeroConfigDuckDuckGo pins the documented contract: with no provider
+// selected and no Google keys, the server loads cleanly (it falls back to the
+// zero-config DuckDuckGo provider at runtime). This is the keyless startup path
+// exercised by `docker run -e PORT=...`.
+func TestLoadZeroConfigDuckDuckGo(t *testing.T) {
+	t.Setenv("SEARCH_PROVIDER", "")
+	t.Setenv("SEARCH_ROUTING", "")
+	t.Setenv("GOOGLE_CUSTOM_SEARCH_API_KEY", "")
+	t.Setenv("GOOGLE_CUSTOM_SEARCH_ID", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("expected keyless zero-config load to succeed, got: %v", err)
+	}
+	if cfg == nil {
+		t.Fatal("expected non-nil config")
+	}
+}
+
+// TestLoadExplicitDuckDuckGoNoKeys: explicitly selecting DuckDuckGo also needs
+// no keys.
+func TestLoadExplicitDuckDuckGoNoKeys(t *testing.T) {
+	t.Setenv("SEARCH_PROVIDER", "duckduckgo")
+	t.Setenv("GOOGLE_CUSTOM_SEARCH_API_KEY", "")
+	t.Setenv("GOOGLE_CUSTOM_SEARCH_ID", "")
+
+	if _, err := Load(); err != nil {
+		t.Fatalf("expected SEARCH_PROVIDER=duckduckgo to load without keys, got: %v", err)
 	}
 }
 
@@ -889,6 +925,7 @@ func TestIsHex64(t *testing.T) {
 }
 
 func TestConfigStillReturnedOnError(t *testing.T) {
+	t.Setenv("SEARCH_PROVIDER", "google")
 	t.Setenv("GOOGLE_CUSTOM_SEARCH_API_KEY", "")
 	t.Setenv("GOOGLE_CUSTOM_SEARCH_ID", "")
 

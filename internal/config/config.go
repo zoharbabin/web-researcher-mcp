@@ -111,15 +111,21 @@ func Load() (*Config, error) {
 	googleKey := os.Getenv("GOOGLE_CUSTOM_SEARCH_API_KEY")
 	googleCX := os.Getenv("GOOGLE_CUSTOM_SEARCH_ID")
 	routing := os.Getenv("SEARCH_ROUTING")
+	providerEnv := os.Getenv("SEARCH_PROVIDER") // raw; empty when unset
 
-	// Google keys are required unless SEARCH_ROUTING is configured (which enables
-	// multi-provider mode where Google may not be the primary/only provider).
-	if routing == "" {
+	// Google keys are required ONLY when the user explicitly selects the Google
+	// provider (SEARCH_PROVIDER=google) without multi-provider routing. When
+	// SEARCH_PROVIDER is unset or any other value, the server starts keyless:
+	// search.NewProvider falls back to the zero-config DuckDuckGo provider. This
+	// matches the documented contract ("Required: None — DuckDuckGo works as a
+	// zero-config fallback"); requiring Google keys for an unset provider would
+	// make that promise impossible to honor (e.g. `docker run -e PORT=...`).
+	if routing == "" && providerEnv == "google" {
 		if googleKey == "" {
-			errs = append(errs, "GOOGLE_CUSTOM_SEARCH_API_KEY is required")
+			errs = append(errs, "GOOGLE_CUSTOM_SEARCH_API_KEY is required when SEARCH_PROVIDER=google")
 		}
 		if googleCX == "" {
-			errs = append(errs, "GOOGLE_CUSTOM_SEARCH_ID is required")
+			errs = append(errs, "GOOGLE_CUSTOM_SEARCH_ID is required when SEARCH_PROVIDER=google")
 		}
 	}
 

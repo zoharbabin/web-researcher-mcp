@@ -268,14 +268,23 @@ func main() {
 			ReferrerPolicy:    cfg.HTTP.ReferrerPolicy,
 			PermissionsPolicy: cfg.HTTP.PermissionsPolicy,
 		}
-		go func() {
-			if err := srv.ServeHTTP(ctx, httpCfg); err != nil {
-				logger.Error("HTTP server error", "err", err)
-			}
-		}()
-		logger.Info("HTTP transport started", "port", cfg.Port)
+		// HTTP and STDIO are mutually exclusive transports. When a port is
+		// configured the server runs HTTP in the FOREGROUND and returns — it must
+		// NOT fall through to RunSTDIO. A container started with `docker run -p
+		// ... -e PORT=...` (no `-i`) hands the process a stdin already at EOF;
+		// blocking on RunSTDIO there would return instantly and tear down the HTTP
+		// server within milliseconds. Running HTTP in the foreground keeps the
+		// process alive until ctx is cancelled (SIGINT/SIGTERM).
+		logger.Info("HTTP transport starting", "port", cfg.Port, "version", version)
+		if err := srv.ServeHTTP(ctx, httpCfg); err != nil {
+			logger.Error("HTTP server error", "err", err)
+			os.Exit(1)
+		}
+		logger.Info("shutdown complete")
+		return
 	}
 
+	// STDIO transport (Port == 0): unchanged from the single-transport path.
 	logger.Info("STDIO transport starting", "version", version)
 	if err := srv.RunSTDIO(ctx); err != nil {
 		if ctx.Err() == nil {
