@@ -50,6 +50,29 @@ func TestSearchCacheKey_VariesByPart(t *testing.T) {
 	}
 }
 
+// TestScrapeCacheKey_VariesByModeAndMaxLength guards the scrape cache key:
+// content is truncated to max_length before caching, so the key must vary by
+// URL, mode, AND max_length — otherwise a small-max_length request could serve
+// a later larger request a truncated body.
+func TestScrapeCacheKey_VariesByModeAndMaxLength(t *testing.T) {
+	t.Parallel()
+	base := scrapeCacheKey("https://example.com", "full", 50000)
+	variants := map[string]string{
+		"url":       scrapeCacheKey("https://other.com", "full", 50000),
+		"mode":      scrapeCacheKey("https://example.com", "preview", 50000),
+		"maxLength": scrapeCacheKey("https://example.com", "full", 2000),
+	}
+	for name, key := range variants {
+		if key == base {
+			t.Errorf("changing %q must change the scrape cache key", name)
+		}
+	}
+	// Determinism: identical inputs → identical key.
+	if scrapeCacheKey("https://example.com", "full", 50000) != base {
+		t.Error("scrape cache key must be deterministic for identical inputs")
+	}
+}
+
 // TestSearchCacheKey_NamespacedByTool ensures different tools with otherwise
 // identical args do not share cache entries.
 func TestSearchCacheKey_NamespacedByTool(t *testing.T) {

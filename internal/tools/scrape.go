@@ -64,7 +64,7 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 			return scrapeRaw(ctx, deps, input, maxLength, start)
 		}
 
-		cacheKey := scrapeCacheKey(input.URL, mode)
+		cacheKey := scrapeCacheKey(input.URL, mode, maxLength)
 		if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("scrape_page", time.Since(start), nil, "", true)
 			auditToolCall(ctx, deps, "scrape_page", time.Since(start), nil, "")
@@ -132,7 +132,7 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 // intended only for inspecting source (JSON, HTML, plain text). The reported
 // contentType is the server's real Content-Type header (may be "").
 func scrapeRaw(ctx context.Context, deps Dependencies, input scrapePageInput, maxLength int, start time.Time) (*mcp.CallToolResult, any, error) {
-	cacheKey := scrapeCacheKey(input.URL, "raw")
+	cacheKey := scrapeCacheKey(input.URL, "raw", maxLength)
 	if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
 		deps.Metrics.RecordToolCall("scrape_page", time.Since(start), nil, "", true)
 		auditToolCall(ctx, deps, "scrape_page", time.Since(start), nil, "")
@@ -180,9 +180,13 @@ func scrapeRaw(ctx context.Context, deps Dependencies, input scrapePageInput, ma
 	return structuredResult(jsonBytes), nil, nil
 }
 
-func scrapeCacheKey(url, mode string) string {
+// scrapeCacheKey keys a cached scrape by URL, mode, AND the effective
+// max_length. max_length must be part of the key because content is truncated
+// to it before caching — without it, a small-max_length request could serve a
+// later larger request a truncated body (breaking consistency across calls).
+func scrapeCacheKey(url, mode string, maxLength int) string {
 	h := sha256.New()
-	h.Write([]byte("scrape|" + url + "|" + mode))
+	fmt.Fprintf(h, "scrape|%s|%s|%d", url, mode, maxLength)
 	return "scrape:" + hex.EncodeToString(h.Sum(nil))[:32]
 }
 
