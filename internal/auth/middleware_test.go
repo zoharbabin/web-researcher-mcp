@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/config"
+	"github.com/zoharbabin/web-researcher-mcp/internal/persist"
 )
 
 // testKey generates an RSA key pair for testing.
@@ -402,7 +403,7 @@ func TestMiddlewareAudienceAsArray(t *testing.T) {
 }
 
 func TestRevocationStoreCleanup(t *testing.T) {
-	store := newRevocationStore()
+	store := newRevocationStore(nil)
 
 	store.add("expired-jti", time.Now().Add(-1*time.Hour))
 	store.add("valid-jti", time.Now().Add(1*time.Hour))
@@ -527,6 +528,347 @@ func TestUserIDFromContext(t *testing.T) {
 	ctx = context.WithValue(ctx, ContextKeyUserID, "user-123")
 	if UserIDFromContext(ctx) != "user-123" {
 		t.Fatal("expected 'user-123'")
+	}
+}
+
+func TestScopesFromContext(t *testing.T) {
+	t.Parallel()
+
+	// Empty-safe: no value set.
+	if got := ScopesFromContext(context.Background()); got != nil {
+		t.Fatalf("expected nil for missing scopes, got %v", got)
+	}
+
+	// Empty-safe: wrong type stored under the key.
+	wrong := context.WithValue(context.Background(), ContextKeyScopes, "not-a-slice")
+	if got := ScopesFromContext(wrong); got != nil {
+		t.Fatalf("expected nil for wrong type, got %v", got)
+	}
+
+	// Round-trip.
+	want := []string{"tool:web_search", "research"}
+	ctx := context.WithValue(context.Background(), ContextKeyScopes, want)
+	got := ScopesFromContext(ctx)
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("expected %v, got %v", want, got)
+	}
+}
+
+func TestRequestIDFromContext(t *testing.T) {
+	t.Parallel()
+
+	if got := RequestIDFromContext(context.Background()); got != "" {
+		t.Fatalf("expected empty for missing request ID, got %q", got)
+	}
+
+	wrong := context.WithValue(context.Background(), ContextKeyRequestID, 123)
+	if got := RequestIDFromContext(wrong); got != "" {
+		t.Fatalf("expected empty for wrong type, got %q", got)
+	}
+
+	ctx := context.WithValue(context.Background(), ContextKeyRequestID, "req-abc")
+	if got := RequestIDFromContext(ctx); got != "req-abc" {
+		t.Fatalf("expected 'req-abc', got %q", got)
+	}
+}
+
+func TestJWTPayloadScopes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		payload string
+		want    []string
+	}{
+		{
+			name:    "no scope claim",
+			payload: `{}`,
+			want:    nil,
+		},
+		{
+			name:    "space-delimited scope string",
+			payload: `{"scope":"tool:web_search research"}`,
+			want:    []string{"tool:web_search", "research"},
+		},
+		{
+			name:    "scp as array",
+			payload: `{"scp":["tool:scrape_page","tool:*"]}`,
+			want:    []string{"tool:scrape_page", "tool:*"},
+		},
+		{
+			name:    "scp as space-delimited string",
+			payload: `{"scp":"a b c"}`,
+			want:    []string{"a", "b", "c"},
+		},
+		{
+			name:    "union of scope and scp deduplicated, order preserved",
+			payload: `{"scope":"research tool:web_search","scp":["tool:web_search","tool:patent_search"]}`,
+			want:    []string{"research", "tool:web_search", "tool:patent_search"},
+		},
+		{
+			name:    "extra whitespace ignored",
+			payload: `{"scope":"  research   tool:x  "}`,
+			want:    []string{"research", "tool:x"},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var p jwtPayload
+			if err := json.Unmarshal([]byte(tt.payload), &p); err != nil {
+				t.Fatalf("unmarshal payload: %v", err)
+			}
+			got := p.scopes()
+			if len(got) != len(tt.want) {
+				t.Fatalf("scopes() = %v, want %v", got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Fatalf("scopes()[%d] = %q, want %q (full: %v)", i, got[i], tt.want[i], got)
+				}
+			}
+		})
+	}
+}
+
+func TestEnforceScopes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		enforce   bool
+		required  []string
+		scopes    []string
+		tool      string
+		wantAllow bool
+	}{
+		{
+			name:      "enforcement off allows everything",
+			enforce:   false,
+			scopes:    nil,
+			tool:      "web_search",
+			wantAllow: true,
+		},
+		{
+			name:      "enforcement off allows even with unrelated scopes",
+			enforce:   false,
+			scopes:    []string{"tool:other"},
+			tool:      "web_search",
+			wantAllow: true,
+		},
+		{
+			name:      "enforced but no scope claim allows (backward-compat)",
+			enforce:   true,
+			scopes:    nil,
+			tool:      "web_search",
+			wantAllow: true,
+		},
+		{
+			name:      "enforced exact tool scope allows",
+			enforce:   true,
+			scopes:    []string{"tool:web_search"},
+			tool:      "web_search",
+			wantAllow: true,
+		},
+		{
+			name:      "enforced exact tool scope rejects other tool",
+			enforce:   true,
+			scopes:    []string{"tool:web_search"},
+			tool:      "scrape_page",
+			wantAllow: false,
+		},
+		{
+			name:      "enforced wildcard allows any tool",
+			enforce:   true,
+			scopes:    []string{"tool:*"},
+			tool:      "scrape_page",
+			wantAllow: true,
+		},
+		{
+			name:      "enforced coarse research scope allows",
+			enforce:   true,
+			scopes:    []string{"research"},
+			tool:      "patent_search",
+			wantAllow: true,
+		},
+		{
+			name:      "enforced insufficient scope rejects",
+			enforce:   true,
+			scopes:    []string{"tool:image_search"},
+			tool:      "web_search",
+			wantAllow: false,
+		},
+		{
+			name:      "required scope present and tool scope present allows",
+			enforce:   true,
+			required:  []string{"research"},
+			scopes:    []string{"research", "tool:web_search"},
+			tool:      "web_search",
+			wantAllow: true,
+		},
+		{
+			name:      "required scope missing rejects even with tool scope",
+			enforce:   true,
+			required:  []string{"audit"},
+			scopes:    []string{"tool:*"},
+			tool:      "web_search",
+			wantAllow: false,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			m := &Middleware{config: config.OAuthConfig{
+				EnforceScopes:  tt.enforce,
+				RequiredScopes: tt.required,
+			}}
+			err := m.EnforceScopes(tt.scopes, tt.tool)
+			if tt.wantAllow && err != nil {
+				t.Fatalf("expected allow, got error: %v", err)
+			}
+			if !tt.wantAllow && err == nil {
+				t.Fatal("expected reject, got allow")
+			}
+		})
+	}
+}
+
+func TestMiddlewareInjectsScopesIntoContext(t *testing.T) {
+	key := testKey(t)
+	kid := "key-1"
+	m, jwksSrv := setupMiddleware(t, key, kid)
+
+	var captured []string
+	handler := m.Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured = ScopesFromContext(r.Context())
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	payload := validPayload(jwksSrv.URL)
+	payload["scope"] = "research tool:web_search"
+
+	token := signJWT(t, key, kid, payload)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d; body: %s", rec.Code, rec.Body.String())
+	}
+	if len(captured) != 2 || captured[0] != "research" || captured[1] != "tool:web_search" {
+		t.Fatalf("expected scopes [research tool:web_search], got %v", captured)
+	}
+}
+
+func TestRevocationStoreNilStore(t *testing.T) {
+	t.Parallel()
+
+	// A nil backing store preserves pure in-memory behavior.
+	s := newRevocationStore(nil)
+	s.add("jti-1", time.Now().Add(time.Hour))
+	if !s.isRevoked("jti-1") {
+		t.Fatal("expected jti-1 revoked in memory")
+	}
+	if s.isRevoked("jti-2") {
+		t.Fatal("expected jti-2 not revoked")
+	}
+}
+
+func TestRevocationStorePersistsAcrossRestart(t *testing.T) {
+	t.Parallel()
+
+	// Shared store simulates durable backend surviving a process restart.
+	shared := persist.NewMemoryStore()
+
+	first := newRevocationStore(shared)
+	first.add("durable-jti", time.Now().Add(time.Hour))
+	if !first.isRevoked("durable-jti") {
+		t.Fatal("expected revocation visible in first store")
+	}
+
+	// "Restart": a brand-new revocation store with empty memory but the same
+	// backing store must still see the revocation (H2 fail-closed durability).
+	second := newRevocationStore(shared)
+	if _, ok := second.entries["durable-jti"]; ok {
+		t.Fatal("memory map should be empty after restart")
+	}
+	if !second.isRevoked("durable-jti") {
+		t.Fatal("expected revocation to survive restart via backing store")
+	}
+}
+
+func TestRevocationStoreExpiredNotPersisted(t *testing.T) {
+	t.Parallel()
+
+	shared := persist.NewMemoryStore()
+	s := newRevocationStore(shared)
+
+	// An already-expired expiry yields a non-positive TTL; nothing is written
+	// to the backing store, but the in-memory entry still exists until cleanup.
+	s.add("expired-jti", time.Now().Add(-time.Hour))
+	if _, ok := shared.Get(context.Background(), revocationKeyPrefix+"expired-jti"); ok {
+		t.Fatal("expected expired revocation not to be persisted")
+	}
+
+	// A fresh store with only the backing store must not see it.
+	fresh := newRevocationStore(shared)
+	if fresh.isRevoked("expired-jti") {
+		t.Fatal("expected expired-jti not revoked via backing store")
+	}
+}
+
+func TestMiddlewareRevocationViaStore(t *testing.T) {
+	key := testKey(t)
+	kid := "key-1"
+
+	jwksSrv := httptest.NewServer(jwksHandler(t, kid, &key.PublicKey))
+	t.Cleanup(jwksSrv.Close)
+
+	cfg := config.OAuthConfig{
+		IssuerURL:           jwksSrv.URL,
+		Audience:            "mcp-server",
+		JWKSRefreshInterval: 1 * time.Hour,
+	}
+
+	shared := persist.NewMemoryStore()
+
+	// First middleware instance revokes the token.
+	m1 := NewMiddlewareWithStore(cfg, shared)
+	t.Cleanup(m1.Stop)
+	m1.RevokeToken("store-revoked-jti", time.Now().Add(time.Hour))
+
+	// Second instance ("after restart") shares the backing store but has empty
+	// in-memory state; it must still reject the revoked token.
+	m2 := NewMiddlewareWithStore(cfg, shared)
+	t.Cleanup(m2.Stop)
+	if err := m2.fetchJWKS(); err != nil {
+		t.Fatalf("initial JWKS fetch: %v", err)
+	}
+
+	handler := m2.Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	payload := validPayload(jwksSrv.URL)
+	payload["jti"] = "store-revoked-jti"
+	token := signJWT(t, key, kid, payload)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for store-backed revocation, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "revoked") {
+		t.Fatalf("expected 'revoked' error, got: %s", rec.Body.String())
 	}
 }
 

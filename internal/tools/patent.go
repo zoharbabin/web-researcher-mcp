@@ -31,7 +31,7 @@ type patentSearchInput struct {
 func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "patent_search",
-		Description:  "Search patents for prior art, competitive landscapes, or specific patents by number. Search by patent number (e.g. 'US11234567'), invention description, company name, or inventor. Strategies: prior_art (broad), specific (exact lookup), landscape (competitive overview). Handles company name variations automatically. Returns per patent: title, number, abstract, assignee, inventor, filed/granted dates, status. Zero-result responses include a hints object with suggested recovery actions. Errors return structured JSON (kind, retryable, suggestedAction). Use academic_search for research papers, or web_search for general technical content. Results stay fresh for 24 hours.",
+		Description:  "Search patents for prior art, competitive landscape mapping, or to look up a specific patent. Query by patent number (e.g. 'US11234567'), an invention description, a company, or an inventor — company name variations are matched automatically. Each result carries the patent's bibliographic details (title, number, abstract, assignee, inventor, dates, status). Reach for this when the question is about inventions or IP; use academic_search for research papers or web_search for general technical content. Zero-result and error responses come back as structured JSON with recovery hints. Results stay fresh for 24 hours.",
 		Annotations:  readOnlyAnnotations(true, true),
 		OutputSchema: patentSearchOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input patentSearchInput) (*mcp.CallToolResult, any, error) {

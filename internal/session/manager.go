@@ -1,11 +1,10 @@
 package session
 
 import (
-	"crypto/cipher"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +18,7 @@ type Config struct {
 	SessionTTL         time.Duration
 	DataDir            string
 	EncryptionKey      string
+	EncryptionKeyPrev  string
 	RedisURL           string
 }
 
@@ -42,7 +42,7 @@ func NewManager(cfg Config) (*Manager, error) {
 		cfg.SessionTTL = 4 * time.Hour
 	}
 
-	store, err := NewStore(cfg.DataDir, cfg.EncryptionKey)
+	store, err := NewStoreWithPrev(cfg.DataDir, cfg.EncryptionKey, cfg.EncryptionKeyPrev)
 	if err != nil {
 		return nil, fmt.Errorf("session store: %w", err)
 	}
@@ -351,22 +351,32 @@ func (m *Manager) rebuildIndex() {
 	for _, hash := range hashes {
 		// We need to try loading each file. Since ListValid returns filename hashes
 		// and we can't reverse SHA-256, we read directly using the file path.
-		fp := m.store.dir + "/" + hash + ".session"
-		data, err := readSessionFile(fp, m.store.gcm)
+		// The AAD is derived from the on-disk filename hash so it matches the AAD
+		// the Save/Load paths derive via aadForKey(key) (M7).
+		fp := filepath.Join(m.store.dir, hash+".session")
+		sess, plaintext, expiry, usedPrev, err := m.store.loadFile(fp, hash)
 		if err != nil {
 			slog.Warn("corrupt session file during rebuild, removing", "hash", hash, "err", err)
-			os.Remove(fp)
+			_ = os.Remove(fp)
 			continue
 		}
 
-		key := data.TenantID + ":" + data.ID
+		key := sess.TenantID + ":" + sess.ID
 		if fileHash(key) != hash {
 			slog.Warn("session file hash mismatch, removing", "hash", hash)
-			os.Remove(fp)
+			_ = os.Remove(fp)
 			continue
 		}
 
-		idx := buildIndexFromSession(data)
+		if usedPrev {
+			// Blob was decrypted under the previous key during rotation: lazily
+			// re-encrypt with the current key so it is upgraded on rebuild (M1).
+			if err := m.store.rewrite(key, plaintext, expiry); err != nil {
+				slog.Warn("failed to re-encrypt rotated session on rebuild", "hash", hash, "err", err)
+			}
+		}
+
+		idx := buildIndexFromSession(sess)
 		m.index[key] = idx
 		m.keys[hash] = key
 	}
@@ -374,36 +384,6 @@ func (m *Manager) rebuildIndex() {
 	if len(m.index) > 0 {
 		slog.Info("sessions rebuilt from disk", "count", len(m.index))
 	}
-}
-
-func readSessionFile(fp string, gcm cipher.AEAD) (*Session, error) {
-	data, err := os.ReadFile(fp)
-	if err != nil {
-		return nil, err
-	}
-	if len(data) < 8 {
-		return nil, ErrCorrupt
-	}
-
-	payload := data[8:]
-	if gcm != nil {
-		nonceSize := gcm.NonceSize()
-		if len(payload) < nonceSize {
-			return nil, ErrCorrupt
-		}
-		nonce, ct := payload[:nonceSize], payload[nonceSize:]
-		decrypted, err := gcm.Open(nil, nonce, ct, nil)
-		if err != nil {
-			return nil, ErrCorrupt
-		}
-		payload = decrypted
-	}
-
-	var sess Session
-	if err := json.Unmarshal(payload, &sess); err != nil {
-		return nil, ErrCorrupt
-	}
-	return &sess, nil
 }
 
 func buildIndexFromSession(sess *Session) *SessionIndex {

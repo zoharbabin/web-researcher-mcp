@@ -126,7 +126,7 @@ Research sessions can contain sensitive queries — medical conditions, legal st
 - **Multi-tenant HTTP deployments** where sessions from different users share a filesystem
 - **Defense in depth** — if the disk is compromised, session content remains protected
 
-GCM mode provides both confidentiality (nobody can read it) and authenticity (nobody can tamper with it without detection). Each file gets a random 12-byte nonce, preventing identical sessions from producing identical ciphertext.
+GCM mode provides both confidentiality (nobody can read it) and authenticity (nobody can tamper with it without detection). Each file gets a random 12-byte nonce, preventing identical sessions from producing identical ciphertext. Each blob also binds its key (a SHA-256 of the logical key, the same value used for the on-disk filename) as GCM additional authenticated data, so a ciphertext cannot be silently moved to a different key's file.
 
 Encryption is optional — omit `CACHE_ENCRYPTION_KEY` and sessions are stored as plaintext. For single-user STDIO mode on a personal machine, this is a reasonable tradeoff.
 
@@ -266,6 +266,7 @@ A background goroutine runs every 15 minutes:
 | `SESSION_DATA_DIR` | `{CACHE_DIR}/sessions` | Where encrypted session files live |
 | `SESSION_MAX_STEPS` | `200` | Max steps before session auto-completes |
 | `CACHE_ENCRYPTION_KEY` | — | 64 hex chars for AES-256-GCM (omit for plaintext) |
+| `CACHE_ENCRYPTION_KEY_PREV` | — | Optional 64-hex previous key for zero-downtime rotation. Sessions encrypted under the old key are decrypted via fallback and lazily re-encrypted with the current key on the next write |
 
 ---
 

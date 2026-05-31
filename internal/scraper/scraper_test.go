@@ -2013,9 +2013,9 @@ func TestPipeline_DomainAllowlist_AllowsListed(t *testing.T) {
 
 	// Use the test server's host as the allowed domain
 	p := NewPipeline(PipelineConfig{
-		MaxConcurrency: 2,
+		MaxConcurrency:  2,
 		AllowPrivateIPs: true,
-		AllowedDomains: []string{"127.0.0.1"},
+		AllowedDomains:  []string{"127.0.0.1"},
 	})
 
 	result, err := p.Scrape(context.Background(), ts.URL, 50000)
@@ -2094,6 +2094,329 @@ func TestHelperConstructors(t *testing.T) {
 			t.Errorf("expected 429 in message, got: %s", se.Error())
 		}
 	})
+}
+
+// =============================================================================
+// Step 4 — Hardening: hostnameMatches, validateScrapeURL, blocked hostnames,
+// ScrapeRaw, and CIDR-parse smoke test.
+// =============================================================================
+
+func TestHostnameMatches(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		url    string
+		domain string
+		want   bool
+	}{
+		{"exact host", "https://example.com/page", "example.com", true},
+		{"subdomain", "https://sub.example.com/page", "example.com", true},
+		{"deep subdomain", "https://a.b.example.com/", "example.com", true},
+		{"suffix-spoof registrable domain", "https://example.com.attacker.net/", "example.com", false},
+		{"query-string injection", "https://evil.com/?q=example.com", "example.com", false},
+		{"path injection", "https://evil.com/example.com/x", "example.com", false},
+		{"different domain", "https://other.org/", "example.com", false},
+		{"trailing dot host", "https://example.com./page", "example.com", true},
+		{"case-insensitive", "https://EXAMPLE.com/page", "Example.COM", true},
+		{"empty domain", "https://example.com/", "", false},
+		{"unparseable url", "://bad", "example.com", false},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := hostnameMatches(tt.url, tt.domain); got != tt.want {
+				t.Errorf("hostnameMatches(%q, %q) = %v, want %v", tt.url, tt.domain, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsDomainAllowed_HostBased(t *testing.T) {
+	t.Parallel()
+	p := NewPipeline(PipelineConfig{
+		AllowedDomains:  []string{"example.com", "test.org"},
+		AllowPrivateIPs: true,
+	})
+
+	if !p.isDomainAllowed("https://example.com/page") {
+		t.Error("expected example.com allowed")
+	}
+	if !p.isDomainAllowed("https://sub.example.com/page") {
+		t.Error("expected sub.example.com allowed (subdomain)")
+	}
+	if p.isDomainAllowed("https://example.com.attacker.net/page") {
+		t.Error("expected example.com.attacker.net to be BLOCKED (suffix spoof)")
+	}
+	if p.isDomainAllowed("https://evil.com/?ref=example.com") {
+		t.Error("expected evil.com with example.com in query to be BLOCKED")
+	}
+	if p.isDomainAllowed("https://evil.com/page") {
+		t.Error("expected evil.com to be blocked")
+	}
+}
+
+func TestValidateScrapeURL(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		url     string
+		wantErr bool
+	}{
+		{"valid http", "http://example.com/page", false},
+		{"valid https", "https://example.com/page", false},
+		{"https with port", "https://example.com:8443/x", false},
+		{"file scheme", "file:///etc/passwd", true},
+		{"gopher scheme", "gopher://example.com/", true},
+		{"ftp scheme", "ftp://example.com/file", true},
+		{"scheme-relative", "//example.com/page", true},
+		{"no scheme bare host", "example.com/page", true},
+		{"empty host http", "http:///path", true},
+		{"empty string", "", true},
+		{"whitespace only", "   ", true},
+		{"data scheme", "data:text/html,<script>1</script>", true},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateScrapeURL(tt.url)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateScrapeURL(%q) error = %v, wantErr %v", tt.url, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestScrape_RejectsInvalidScheme(t *testing.T) {
+	t.Parallel()
+	p := NewPipeline(PipelineConfig{AllowPrivateIPs: true})
+	_, err := p.Scrape(context.Background(), "file:///etc/passwd", 10000)
+	if err == nil {
+		t.Fatal("expected error for file:// scheme via Scrape chokepoint")
+	}
+	se, ok := err.(*ScrapeError)
+	if !ok {
+		t.Fatalf("expected *ScrapeError, got %T", err)
+	}
+	if se.Kind != ErrBlocked {
+		t.Errorf("expected ErrBlocked, got %v", se.Kind)
+	}
+}
+
+func TestIsBlockedHostname_WidenedAndSuffix(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		host    string
+		blocked bool
+	}{
+		{"metadata.google.internal", true},
+		{"metadata.tencentyun.com", true},
+		{"192.0.0.192", true},     // Oracle Cloud
+		{"100.100.100.200", true}, // Alibaba Cloud
+		{"kubernetes.default.svc", true},
+		{"myservice.svc.cluster.local", true},     // suffix of svc.cluster.local
+		{"a.b.namespace.svc.cluster.local", true}, // deep suffix
+		{"svc.cluster.local", true},               // exact
+		{"SVC.CLUSTER.LOCAL", true},               // case-insensitive
+		{"myservice.svc.cluster.local.", true},    // trailing-dot FQDN
+		{"svc.cluster.local.evil.com", false},     // MUST NOT false-positive
+		{"notmetadata.tencentyun.com.evil.com", false},
+		{"www.example.com", false},
+		{"google.com", false},
+	}
+	for _, tt := range tests {
+		if got := isBlockedHostname(tt.host); got != tt.blocked {
+			t.Errorf("isBlockedHostname(%q) = %v, want %v", tt.host, got, tt.blocked)
+		}
+	}
+}
+
+func TestScrapeRaw_ReturnsBodyAndRealMIME(t *testing.T) {
+	t.Parallel()
+	raw := `<!DOCTYPE html><html><head><style>.x{}</style></head>` +
+		`<body><script>alert('xss')</script><p>raw body content</p></body></html>`
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(raw))
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{AllowPrivateIPs: true})
+	result, err := p.ScrapeRaw(context.Background(), ts.URL, 50000)
+	if err != nil {
+		t.Fatalf("ScrapeRaw error: %v", err)
+	}
+	if result.ContentType != "text/html; charset=utf-8" {
+		t.Errorf("expected real MIME content type, got %q", result.ContentType)
+	}
+	// Raw mode must NOT strip scripts/styles — content.Process is skipped.
+	if !strings.Contains(result.Content, "<script>alert('xss')</script>") {
+		t.Error("expected raw <script> to be preserved in raw mode")
+	}
+	if !strings.Contains(result.Content, "<style>.x{}</style>") {
+		t.Error("expected raw <style> to be preserved in raw mode")
+	}
+	if result.Content != raw {
+		t.Error("expected verbatim body in raw mode")
+	}
+}
+
+func TestScrapeRaw_HonorsLimitReader(t *testing.T) {
+	t.Parallel()
+	body := strings.Repeat("A", 10000)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte(body))
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{AllowPrivateIPs: true})
+	result, err := p.ScrapeRaw(context.Background(), ts.URL, 500)
+	if err != nil {
+		t.Fatalf("ScrapeRaw error: %v", err)
+	}
+	if len(result.Content) != 500 {
+		t.Errorf("expected content capped at 500 bytes, got %d", len(result.Content))
+	}
+	if !result.Truncated {
+		t.Error("expected Truncated=true when body exceeds maxLength")
+	}
+}
+
+func TestScrapeRaw_EnforcesGuards(t *testing.T) {
+	t.Parallel()
+
+	t.Run("rejects invalid scheme", func(t *testing.T) {
+		t.Parallel()
+		p := NewPipeline(PipelineConfig{AllowPrivateIPs: true})
+		if _, err := p.ScrapeRaw(context.Background(), "ftp://example.com/x", 1000); err == nil {
+			t.Fatal("expected scheme rejection")
+		}
+	})
+
+	t.Run("rejects disallowed domain", func(t *testing.T) {
+		t.Parallel()
+		p := NewPipeline(PipelineConfig{
+			AllowPrivateIPs: true,
+			AllowedDomains:  []string{"allowed.com"},
+		})
+		_, err := p.ScrapeRaw(context.Background(), "https://blocked.com/page", 1000)
+		if err == nil {
+			t.Fatal("expected domain rejection")
+		}
+		if !strings.Contains(err.Error(), "not in allowed list") {
+			t.Errorf("expected allowlist error, got: %v", err)
+		}
+	})
+
+	t.Run("rejects private IP via SSRF client", func(t *testing.T) {
+		t.Parallel()
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("secret"))
+		}))
+		defer ts.Close()
+		// allowPrivate=false => SSRF client blocks the localhost test server.
+		p := NewPipeline(PipelineConfig{AllowPrivateIPs: false})
+		if _, err := p.ScrapeRaw(context.Background(), ts.URL, 1000); err == nil {
+			t.Fatal("expected SSRF block for private IP")
+		}
+	})
+}
+
+func TestScrapeRaw_HTTPError(t *testing.T) {
+	t.Parallel()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{AllowPrivateIPs: true})
+	_, err := p.ScrapeRaw(context.Background(), ts.URL, 1000)
+	if err == nil {
+		t.Fatal("expected error for 403")
+	}
+	se, ok := err.(*ScrapeError)
+	if !ok {
+		t.Fatalf("expected *ScrapeError, got %T", err)
+	}
+	if se.Kind != ErrBlocked {
+		t.Errorf("expected ErrBlocked, got %v", se.Kind)
+	}
+}
+
+func TestPrivateRangesParse(t *testing.T) {
+	t.Parallel()
+	// Smoke test for M8: exercising isPrivateIP forces every mustParseCIDR
+	// literal to be parsed; a malformed literal would panic at package init.
+	cases := []struct {
+		ip      string
+		private bool
+	}{
+		{"127.0.0.1", true},
+		{"10.1.2.3", true},
+		{"192.0.0.192", true}, // 192.0.0.0/24
+		{"::1", true},
+		{"fc00::1", true},
+		{"8.8.8.8", false},
+		{"2606:4700:4700::1111", false},
+	}
+	for _, c := range cases {
+		ip := net.ParseIP(c.ip)
+		if ip == nil {
+			t.Fatalf("failed to parse %s", c.ip)
+		}
+		if got := isPrivateIP(ip); got != c.private {
+			t.Errorf("isPrivateIP(%s) = %v, want %v", c.ip, got, c.private)
+		}
+	}
+}
+
+func TestIsTwitterURL_HostBased(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		url    string
+		expect bool
+	}{
+		{"https://x.com/user/status/123", true},
+		{"https://twitter.com/user", true},
+		{"https://www.twitter.com/user", true},
+		{"https://mobile.twitter.com/user", true},
+		{"https://example.com/?ref=x.com/abc", false},
+		{"https://notx.com/page", false},
+		{"https://example.com/twitter.com/x", false},
+	}
+	for _, tt := range tests {
+		if got := isTwitterURL(tt.url); got != tt.expect {
+			t.Errorf("isTwitterURL(%q) = %v, want %v", tt.url, got, tt.expect)
+		}
+	}
+}
+
+func TestIsYouTubeURL_HostBased_NoSpoofing(t *testing.T) {
+	t.Parallel()
+	if isYouTubeURL("https://evil.com/youtube.com/watch?v=x") {
+		t.Error("expected path-embedded youtube.com NOT to match")
+	}
+	if isYouTubeURL("https://example.com/?u=youtu.be/abc") {
+		t.Error("expected query-embedded youtu.be NOT to match")
+	}
+	if !isYouTubeURL("https://m.youtube.com/watch?v=abc") {
+		t.Error("expected m.youtube.com/watch to match")
+	}
+}
+
+func TestIsDocumentURL_HostBased_NoSpoofing(t *testing.T) {
+	t.Parallel()
+	if isDocumentURL("https://evil.com/?x=file.pdf") {
+		t.Error("expected query-embedded .pdf NOT to match (path only)")
+	}
+	if !isDocumentURL("https://arxiv.org/pdf/2401.00001") {
+		t.Error("expected arxiv.org/pdf/ to match")
+	}
+	if isDocumentURL("https://evil.com/arxiv.org/pdf/x") {
+		t.Error("expected path-embedded arxiv.org/pdf NOT to match")
+	}
 }
 
 func TestPipeline_ConcurrentScrapes_ErrorIsolation(t *testing.T) {

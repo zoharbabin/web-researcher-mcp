@@ -79,7 +79,7 @@ func (bp *browserPool) close() {
 	bp.mu.Lock()
 	defer bp.mu.Unlock()
 	if bp.browser != nil {
-		bp.browser.Close()
+		_ = bp.browser.Close()
 		bp.browser = nil
 	}
 	if bp.launcher != nil {

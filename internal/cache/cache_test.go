@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 )
@@ -620,6 +621,167 @@ func TestHybrid_Flush(t *testing.T) {
 		if ok {
 			t.Fatalf("expected miss for k%d after flush", i)
 		}
+	}
+}
+
+// --- Crypto helper tests (crypto.go) ---
+
+func TestNewGCM(t *testing.T) {
+	t.Parallel()
+
+	// Empty key => nil AEAD, nil error (encryption disabled).
+	gcm, err := NewGCM("")
+	if err != nil || gcm != nil {
+		t.Fatalf("empty key: expected (nil,nil), got (%v,%v)", gcm, err)
+	}
+
+	// Valid 64-hex key => usable AEAD.
+	keyBytes := make([]byte, 32)
+	if _, err := rand.Read(keyBytes); err != nil {
+		t.Fatalf("rand: %v", err)
+	}
+	gcm, err = NewGCM(hex.EncodeToString(keyBytes))
+	if err != nil || gcm == nil {
+		t.Fatalf("valid key: expected usable AEAD, got (%v,%v)", gcm, err)
+	}
+
+	// Non-hex => error.
+	if _, err := NewGCM("not-hex-zzzz"); err == nil {
+		t.Fatal("expected error for non-hex key")
+	}
+
+	// Wrong length (32 hex = 16 bytes, AES-128 not allowed here) => error.
+	if _, err := NewGCM(hex.EncodeToString(make([]byte, 16))); err == nil {
+		t.Fatal("expected error for 16-byte key")
+	}
+}
+
+func TestGCMRoundTripWithAAD(t *testing.T) {
+	t.Parallel()
+	keyBytes := make([]byte, 32)
+	if _, err := rand.Read(keyBytes); err != nil {
+		t.Fatalf("rand: %v", err)
+	}
+	gcm, err := NewGCM(hex.EncodeToString(keyBytes))
+	if err != nil {
+		t.Fatalf("NewGCM: %v", err)
+	}
+
+	plaintext := []byte("secret payload")
+	aad := []byte("cache-key-123")
+
+	blob := GCMEncrypt(gcm, plaintext, aad)
+	got, err := GCMDecrypt(gcm, blob, aad)
+	if err != nil {
+		t.Fatalf("GCMDecrypt with matching AAD: %v", err)
+	}
+	if string(got) != string(plaintext) {
+		t.Fatalf("round-trip mismatch: got %q", got)
+	}
+
+	// Wrong AAD must fail authentication.
+	if _, err := GCMDecrypt(gcm, blob, []byte("cache-key-999")); err == nil {
+		t.Fatal("expected GCMDecrypt to fail with mismatched AAD")
+	}
+
+	// Truncated ciphertext => ErrShortCiphertext.
+	if _, err := GCMDecrypt(gcm, []byte{0x00}, aad); err != ErrShortCiphertext {
+		t.Fatalf("expected ErrShortCiphertext, got %v", err)
+	}
+}
+
+// --- Disk cache AAD + key-rotation tests ---
+
+func diskKey(t *testing.T) string {
+	t.Helper()
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		t.Fatalf("rand: %v", err)
+	}
+	return hex.EncodeToString(b)
+}
+
+// TestDiskCache_AADBindsKey confirms a blob written for one key's file cannot be
+// decrypted after being copied to another key's file (M7 swap guard).
+func TestDiskCache_AADBindsKey(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	key := diskKey(t)
+	ctx := context.Background()
+
+	dc := NewDiskCache(DiskConfig{Dir: dir, EncryptionKey: key})
+	dc.Set(ctx, "alpha", []byte("alpha-value"), time.Hour)
+	dc.Set(ctx, "beta", []byte("beta-value"), time.Hour)
+	if err := dc.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	alphaFile := dc.filePath("alpha")
+	betaFile := dc.filePath("beta")
+	alphaBytes, err := os.ReadFile(alphaFile)
+	if err != nil {
+		t.Fatalf("read alpha: %v", err)
+	}
+	if err := os.WriteFile(betaFile, alphaBytes, 0600); err != nil {
+		t.Fatalf("write beta: %v", err)
+	}
+
+	// Fresh instance: reading "beta" reads alpha's blob (AAD="alpha") => reject.
+	dc2 := NewDiskCache(DiskConfig{Dir: dir, EncryptionKey: key})
+	if _, ok := dc2.Get(ctx, "beta"); ok {
+		t.Fatal("expected AAD mismatch to reject swapped blob")
+	}
+}
+
+// TestDiskCache_PrevKeyFallbackAndLazyReEncrypt verifies zero-downtime rotation
+// (M1): a blob written under the old key is readable via prev-key fallback and
+// re-encrypted under the current key so a new-key-only instance can read it.
+func TestDiskCache_PrevKeyFallbackAndLazyReEncrypt(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	oldKey := diskKey(t)
+	newKey := diskKey(t)
+	ctx := context.Background()
+
+	dcOld := NewDiskCache(DiskConfig{Dir: dir, EncryptionKey: oldKey})
+	dcOld.Set(ctx, "rotate", []byte("payload"), time.Hour)
+	if err := dcOld.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	// Rotated config: new current key, old as prev. Reading lazily re-encrypts.
+	// Reuse the same version so invalidateOnVersionChange does not wipe the dir.
+	dcRot := NewDiskCache(DiskConfig{Dir: dir, EncryptionKey: newKey, EncryptionKeyPrev: oldKey})
+	got, ok := dcRot.Get(ctx, "rotate")
+	if !ok || string(got) != "payload" {
+		t.Fatalf("expected prev-key fallback hit, got %q ok=%v", got, ok)
+	}
+
+	// New-key-only instance must read the re-encrypted file.
+	dcNew := NewDiskCache(DiskConfig{Dir: dir, EncryptionKey: newKey})
+	got2, ok := dcNew.Get(ctx, "rotate")
+	if !ok || string(got2) != "payload" {
+		t.Fatalf("expected re-encrypted file readable with new key only, got %q ok=%v", got2, ok)
+	}
+}
+
+// TestDiskCache_VersionBumpInvalidates ensures a version sentinel change clears
+// the directory (the format bump absorbs the AAD wire-format break cleanly).
+func TestDiskCache_VersionBumpInvalidates(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	ctx := context.Background()
+
+	dc := NewDiskCache(DiskConfig{Dir: dir, Version: "build-1"})
+	dc.Set(ctx, "k", []byte("v"), time.Hour)
+	if err := dc.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	// Reopen with a different version => file cleared.
+	dc2 := NewDiskCache(DiskConfig{Dir: dir, Version: "build-2"})
+	if _, ok := dc2.Get(ctx, "k"); ok {
+		t.Fatal("expected entry cleared after version change")
 	}
 }
 

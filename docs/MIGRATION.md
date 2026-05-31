@@ -99,7 +99,7 @@ The new version supports multiple backends for unrestricted whole-web search:
 }
 ```
 
-Supported providers: `google` (default), `brave`, `serper`, `searxng`, `searchapi`.
+Supported providers: `google` (default), `brave`, `serper`, `searxng`, `searchapi`, `duckduckgo` (zero-config fallback, no API key). Canonical list: `search.SupportedProviders`.
 
 You can also enable multi-provider routing with automatic fallback:
 
@@ -150,6 +150,28 @@ The tool names and parameters are identical between old and new:
 - `sequential_search` — same parameters (`searchStep`, `stepNumber`, `nextStepNeeded`, etc.)
 
 No changes needed in your prompts or workflows.
+
+---
+
+## Upgrade Notes (within web-researcher-mcp)
+
+These notes apply when upgrading between versions of `web-researcher-mcp` itself.
+
+### Disk cache is cleared once on first run of this version
+
+The on-disk cache format changed (encrypted blobs now bind their key as GCM additional authenticated data). The internal cache `Version` was bumped so the cache is **invalidated and cleared once** on the first run of this version. This is automatic and safe — there is nothing to do. Cached entries simply repopulate on demand; no configuration, keys, or data outside the cache are affected.
+
+### Planned change: CORS default will flip to fail-closed
+
+Today, in HTTP mode, an empty `ALLOWED_ORIGINS` reflects any `Origin` (permissive) when `CORS_STRICT=false` (the current default). A **future release will flip the default of `CORS_STRICT` to `true`**, so an empty `ALLOWED_ORIGINS` will deny all cross-origin requests (fail-closed). No date is set for this change.
+
+**What to do now to be unaffected by the flip:**
+
+- If you rely on cross-origin browser access, set `ALLOWED_ORIGINS` to the explicit origins you trust (recommended), e.g. `ALLOWED_ORIGINS=https://app.example.com`.
+- Alternatively, to keep the current permissive behavior after the flip, set `CORS_STRICT=false` explicitly.
+- STDIO mode is unaffected — there is no HTTP server and no CORS handling.
+
+Setting `ALLOWED_ORIGINS` explicitly is the durable, recommended configuration: it behaves identically before and after the flip.
 
 ---
 

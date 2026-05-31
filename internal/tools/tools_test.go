@@ -7,11 +7,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/audit"
+	"github.com/zoharbabin/web-researcher-mcp/internal/auth"
 	"github.com/zoharbabin/web-researcher-mcp/internal/cache"
 	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/config"
@@ -623,6 +626,113 @@ func TestScrapePageHTTPError(t *testing.T) {
 	}
 }
 
+func TestScrapePageRawMode(t *testing.T) {
+	const rawBody = `<html><head><title>Raw</title></head><body><script>alert('xss')</script><style>.x{}</style><p>visible</p></body></html>`
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(rawBody))
+	}))
+	defer ts.Close()
+
+	ctx := context.Background()
+	deps := setupTestDeps()
+	deps.Scraper = scraper.NewPipeline(scraper.PipelineConfig{
+		MaxConcurrency:  2,
+		AllowPrivateIPs: true,
+	})
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "scrape_page",
+		Arguments: map[string]any{"url": ts.URL, "mode": "raw"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("unexpected error result: %v", res.Content)
+	}
+
+	text := res.Content[0].(*mcp.TextContent).Text
+	var output map[string]any
+	if err := json.Unmarshal([]byte(text), &output); err != nil {
+		t.Fatalf("failed to parse output: %v", err)
+	}
+
+	// Raw mode must NOT sanitize: active <script>/<style> stay verbatim.
+	contentStr, _ := output["content"].(string)
+	if contentStr != rawBody {
+		t.Fatalf("raw content should be byte-for-byte; got %q", contentStr)
+	}
+	if !strings.Contains(contentStr, "<script>") || !strings.Contains(contentStr, "<style>") {
+		t.Fatal("raw mode must preserve <script>/<style> tags unsanitized")
+	}
+	// Real MIME from Content-Type header, not the normalized "html" classifier.
+	if ct, _ := output["contentType"].(string); !strings.HasPrefix(ct, "text/html") {
+		t.Fatalf("expected real MIME contentType, got %v", output["contentType"])
+	}
+	if raw, _ := output["raw"].(bool); !raw {
+		t.Fatal("expected raw flag true")
+	}
+}
+
+func TestScrapePageRawVsFullDistinctCache(t *testing.T) {
+	const body = `<!DOCTYPE html><html><head><title>Cache Test</title></head><body><article>
+<h1>Heading</h1><p>This is the main article body with sufficient length to be extracted by the cleaning pipeline so that full mode returns sanitized readable text rather than the raw markup.</p>
+<p>A second paragraph adds more extractable prose for the content processor.</p></article></body></html>`
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(body))
+	}))
+	defer ts.Close()
+
+	ctx := context.Background()
+	deps := setupTestDeps()
+	deps.Scraper = scraper.NewPipeline(scraper.PipelineConfig{
+		MaxConcurrency:  2,
+		AllowPrivateIPs: true,
+	})
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	call := func(mode string) map[string]any {
+		res, err := session.CallTool(ctx, &mcp.CallToolParams{
+			Name:      "scrape_page",
+			Arguments: map[string]any{"url": ts.URL, "mode": mode},
+		})
+		if err != nil {
+			t.Fatalf("CallTool(%s) failed: %v", mode, err)
+		}
+		if res.IsError {
+			t.Fatalf("CallTool(%s) error: %v", mode, res.Content)
+		}
+		var out map[string]any
+		if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &out); err != nil {
+			t.Fatalf("parse(%s): %v", mode, err)
+		}
+		return out
+	}
+
+	full := call("full")
+	raw := call("raw")
+
+	// Distinct cache entries: full is sanitized (no <h1> markup), raw is verbatim.
+	fullContent, _ := full["content"].(string)
+	rawContent, _ := raw["content"].(string)
+	if fullContent == rawContent {
+		t.Fatal("raw and full must produce distinct content (separate cache keys)")
+	}
+	if strings.Contains(fullContent, "<h1>") {
+		t.Fatal("full mode should be sanitized, not contain raw <h1> markup")
+	}
+	if !strings.Contains(rawContent, "<h1>") {
+		t.Fatal("raw mode should contain verbatim <h1> markup")
+	}
+}
+
 func TestSearchAndScrapeTool(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -837,6 +947,128 @@ func TestToolError(t *testing.T) {
 		t.Fatalf("expected error text, got %q", tc.Text)
 	}
 }
+
+// capturingAuditor records every logged event and reports a configurable
+// IncludeRequestBody value, for asserting the query-gating + request-id wiring.
+type capturingAuditor struct {
+	mu             sync.Mutex
+	events         []audit.AuditEvent
+	includeReqBody bool
+}
+
+func (c *capturingAuditor) Log(ev audit.AuditEvent) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.events = append(c.events, ev)
+}
+func (c *capturingAuditor) IncludeRequestBody() bool { return c.includeReqBody }
+func (c *capturingAuditor) Close()                   {}
+func (c *capturingAuditor) last() audit.AuditEvent {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.events[len(c.events)-1]
+}
+
+func TestAuditQueryGatingOmitsRawQuery(t *testing.T) {
+	t.Parallel()
+	cap := &capturingAuditor{includeReqBody: false}
+	deps := setupTestDeps()
+	deps.Auditor = cap
+
+	auditToolCallQuery(context.Background(), deps, "web_search", time.Millisecond, nil, "", "secret research topic", nil)
+
+	ev := cap.last()
+	if _, ok := ev.Metadata["query"]; ok {
+		t.Error("raw query must NOT be present when IncludeRequestBody=false")
+	}
+	ql, ok := ev.Metadata["query_length"]
+	if !ok {
+		t.Fatal("expected query_length in metadata when IncludeRequestBody=false")
+	}
+	if ql.(int) != len("secret research topic") {
+		t.Errorf("query_length = %v, want %d", ql, len("secret research topic"))
+	}
+}
+
+func TestAuditQueryGatingIncludesRawQuery(t *testing.T) {
+	t.Parallel()
+	cap := &capturingAuditor{includeReqBody: true}
+	deps := setupTestDeps()
+	deps.Auditor = cap
+
+	auditToolCallQuery(context.Background(), deps, "web_search", time.Millisecond, nil, "", "open research topic", nil)
+
+	ev := cap.last()
+	q, ok := ev.Metadata["query"]
+	if !ok {
+		t.Fatal("expected raw query in metadata when IncludeRequestBody=true")
+	}
+	if q.(string) != "open research topic" {
+		t.Errorf("query = %v, want 'open research topic'", q)
+	}
+	if _, ok := ev.Metadata["query_length"]; ok {
+		t.Error("query_length must not be set when raw query is included")
+	}
+}
+
+func TestAuditMasksQueryAndError(t *testing.T) {
+	t.Parallel()
+	cap := &capturingAuditor{includeReqBody: true}
+	deps := setupTestDeps()
+	deps.Auditor = cap
+
+	// Synthetic key-shaped values assembled at runtime so no contiguous
+	// credential literal lands in source (keeps secret scanners quiet); the
+	// google-key and token= query-param rules still fire on the joined string.
+	googleKey := "AIza" + "0123456789abcdefghijklmnopqrstuv012"
+	tokenVal := "val-" + "0123456789abcdef"
+	secretQuery := "lookup key=" + googleKey
+	err := errorString("provider failed: token=" + tokenVal)
+	auditToolCallQuery(context.Background(), deps, "web_search", time.Millisecond, err, "upstream_error", secretQuery, nil)
+
+	ev := cap.last()
+	if q := ev.Metadata["query"].(string); strings.Contains(q, googleKey) {
+		t.Errorf("query metadata leaked a secret: %q", q)
+	}
+	if e := ev.Metadata["error"].(string); strings.Contains(e, tokenVal) {
+		t.Errorf("error metadata leaked a secret: %q", e)
+	}
+}
+
+func TestAuditSetsRequestIDFromContext(t *testing.T) {
+	t.Parallel()
+	cap := &capturingAuditor{}
+	deps := setupTestDeps()
+	deps.Auditor = cap
+
+	ctx := context.WithValue(context.Background(), auth.ContextKeyRequestID, "req-correlate-123")
+	auditToolCall(ctx, deps, "scrape_page", time.Millisecond, nil, "")
+
+	if got := cap.last().RequestID; got != "req-correlate-123" {
+		t.Errorf("RequestID = %q, want correlated value from context", got)
+	}
+}
+
+func TestAuditToolCallNoQueryHasNoQueryMeta(t *testing.T) {
+	t.Parallel()
+	cap := &capturingAuditor{includeReqBody: false}
+	deps := setupTestDeps()
+	deps.Auditor = cap
+
+	auditToolCall(context.Background(), deps, "image_search", time.Millisecond, nil, "")
+
+	ev := cap.last()
+	if _, ok := ev.Metadata["query"]; ok {
+		t.Error("no query metadata expected for query-less call")
+	}
+	if _, ok := ev.Metadata["query_length"]; ok {
+		t.Error("no query_length metadata expected for query-less call")
+	}
+}
+
+type errorString string
+
+func (e errorString) Error() string { return string(e) }
 
 func TestToolsWorkWithRouter(t *testing.T) {
 	// Verify that tools work correctly when the Provider is a Router

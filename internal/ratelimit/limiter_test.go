@@ -2,13 +2,17 @@ package ratelimit
 
 import (
 	"context"
+	"encoding/binary"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/auth"
 	"github.com/zoharbabin/web-researcher-mcp/internal/config"
+	"github.com/zoharbabin/web-researcher-mcp/internal/persist"
 )
 
 func TestAllow(t *testing.T) {
@@ -322,5 +326,315 @@ func TestWrapMiddlewareDailyQuotaErrorMessage(t *testing.T) {
 	}
 	if !strings.Contains(body, "midnight UTC") {
 		t.Errorf("daily quota error should mention reset time, got: %s", body)
+	}
+}
+
+// --- H7: persisted daily-quota counters (NewWithStore) ---
+
+// TestNewWithStoreNilEquivalentToNew verifies that passing a nil store yields a
+// pure-memory limiter identical to New(cfg): daily quota still enforced, no panic.
+func TestNewWithStoreNilEquivalentToNew(t *testing.T) {
+	t.Parallel()
+	l := NewWithStore(config.RateLimitConfig{
+		Global:     1000,
+		PerTenant:  1000,
+		DailyQuota: 2,
+	}, nil)
+
+	if !l.AllowDaily("t1") || !l.AllowDaily("t1") {
+		t.Fatal("first two daily calls should be allowed")
+	}
+	if l.AllowDaily("t1") {
+		t.Fatal("third call should be rejected by daily quota")
+	}
+}
+
+func TestPersistWriteThrough(t *testing.T) {
+	t.Parallel()
+	store := persist.NewMemoryStore()
+	cfg := config.RateLimitConfig{Global: 1000, PerTenant: 1000, DailyQuota: 10}
+	l := NewWithStore(cfg, store)
+
+	l.AllowDaily("tenant-x")
+	l.AllowDaily("tenant-x")
+	l.AllowDaily("tenant-x")
+
+	// Counter must have been written through to the store.
+	if _, ok := store.Get(context.Background(), quotaStorePrefix+"tenant-x"); !ok {
+		t.Fatal("expected daily counter to be persisted to the store")
+	}
+}
+
+func TestPersistHydrateAfterRestart(t *testing.T) {
+	t.Parallel()
+	store := persist.NewMemoryStore()
+	cfg := config.RateLimitConfig{Global: 1000, PerTenant: 1000, DailyQuota: 3}
+
+	// First "process": consume the full quota.
+	l1 := NewWithStore(cfg, store)
+	for i := 0; i < 3; i++ {
+		if !l1.AllowDaily("tenant-r") {
+			t.Fatalf("call %d should be allowed in first process", i+1)
+		}
+	}
+	if l1.AllowDaily("tenant-r") {
+		t.Fatal("quota should be exhausted in first process")
+	}
+
+	// Second "process" sharing the same store: must resume exhausted.
+	l2 := NewWithStore(cfg, store)
+	if l2.AllowDaily("tenant-r") {
+		t.Fatal("quota should remain exhausted after restart (hydrated from store)")
+	}
+
+	// Stats should reflect the persisted usage even before materialization.
+	l3 := NewWithStore(cfg, store)
+	stats := l3.Stats("tenant-r")
+	if stats.DailyUsed != 3 {
+		t.Fatalf("expected hydrated DailyUsed=3, got %d", stats.DailyUsed)
+	}
+	if stats.DailyRemaining != 0 {
+		t.Fatalf("expected DailyRemaining=0, got %d", stats.DailyRemaining)
+	}
+}
+
+func TestPersistIgnoresStaleWindow(t *testing.T) {
+	t.Parallel()
+	store := persist.NewMemoryStore()
+	cfg := config.RateLimitConfig{Global: 1000, PerTenant: 1000, DailyQuota: 5}
+
+	// Seed the store with a counter from a window that has already reset.
+	buf := make([]byte, 16)
+	binary.BigEndian.PutUint64(buf[0:8], 5)
+	binary.BigEndian.PutUint64(buf[8:16], uint64(time.Now().Add(-time.Hour).UnixNano()))
+	store.Set(context.Background(), quotaStorePrefix+"tenant-old", buf, time.Hour)
+
+	l := NewWithStore(cfg, store)
+	// Stale window must be ignored — fresh quota available.
+	if !l.AllowDaily("tenant-old") {
+		t.Fatal("stale persisted window should not block a fresh quota window")
+	}
+}
+
+// --- M6: per-IP pre-auth limiting ---
+
+func TestAllowIPDisabledPassthrough(t *testing.T) {
+	t.Parallel()
+	l := New(config.RateLimitConfig{Global: 1, PerTenant: 1, DailyQuota: 1, PerIP: 0})
+	for i := 0; i < 1000; i++ {
+		if !l.AllowIP("1.2.3.4") {
+			t.Fatal("PerIP=0 must allow every request (passthrough)")
+		}
+	}
+}
+
+func TestAllowIPIsolation(t *testing.T) {
+	t.Parallel()
+	l := New(config.RateLimitConfig{Global: 1000, PerTenant: 1000, DailyQuota: 1000, PerIP: 1})
+
+	// Exhaust IP-A's bucket.
+	allowedA := 0
+	for i := 0; i < 5; i++ {
+		if l.AllowIP("10.0.0.1") {
+			allowedA++
+		}
+	}
+	if allowedA >= 5 {
+		t.Fatalf("expected IP-A to be limited, but %d/5 allowed", allowedA)
+	}
+
+	// IP-B must have its own untouched bucket.
+	if !l.AllowIP("10.0.0.2") {
+		t.Fatal("IP-B should not be affected by IP-A's bucket")
+	}
+}
+
+func TestWrapIPPassthroughWhenDisabled(t *testing.T) {
+	t.Parallel()
+	l := New(config.RateLimitConfig{Global: 1, PerTenant: 1, DailyQuota: 1, PerIP: 0})
+	called := 0
+	handler := l.WrapIP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called++
+		w.WriteHeader(http.StatusOK)
+	}))
+	for i := 0; i < 50; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.RemoteAddr = "9.9.9.9:1234"
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("disabled per-IP limit must pass through, got %d", rec.Code)
+		}
+	}
+	if called != 50 {
+		t.Fatalf("expected all 50 requests to reach handler, got %d", called)
+	}
+}
+
+func TestWrapIPRejectsFlood(t *testing.T) {
+	t.Parallel()
+	l := New(config.RateLimitConfig{Global: 1000, PerTenant: 1000, DailyQuota: 1000, PerIP: 1})
+	handler := l.WrapIP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	got429 := false
+	for i := 0; i < 10; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.RemoteAddr = "8.8.8.8:5555"
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code == http.StatusTooManyRequests {
+			got429 = true
+			if !strings.Contains(rec.Body.String(), "RATE_LIMIT_PER_IP") {
+				t.Errorf("429 body should mention RATE_LIMIT_PER_IP, got: %s", rec.Body.String())
+			}
+		}
+	}
+	if !got429 {
+		t.Fatal("expected at least one request to be rejected with 429")
+	}
+}
+
+func TestClientIPTrustProxyOff(t *testing.T) {
+	t.Parallel()
+	l := New(config.RateLimitConfig{TrustProxy: false, PerIP: 1})
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "203.0.113.7:443"
+	req.Header.Set("X-Forwarded-For", "1.1.1.1, 2.2.2.2")
+	if got := l.clientIP(req); got != "203.0.113.7" {
+		t.Fatalf("TRUST_PROXY=false must use RemoteAddr host, got %q", got)
+	}
+}
+
+func TestClientIPTrustProxyOn(t *testing.T) {
+	t.Parallel()
+	l := New(config.RateLimitConfig{TrustProxy: true, PerIP: 1})
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "203.0.113.7:443"
+	req.Header.Set("X-Forwarded-For", " 1.1.1.1 , 2.2.2.2 ")
+	if got := l.clientIP(req); got != "1.1.1.1" {
+		t.Fatalf("TRUST_PROXY=true must use leftmost X-Forwarded-For, got %q", got)
+	}
+}
+
+func TestClientIPTrustProxyOnEmptyHeaderFallsBack(t *testing.T) {
+	t.Parallel()
+	l := New(config.RateLimitConfig{TrustProxy: true, PerIP: 1})
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "203.0.113.9:80"
+	// No X-Forwarded-For header set.
+	if got := l.clientIP(req); got != "203.0.113.9" {
+		t.Fatalf("empty XFF with TRUST_PROXY should fall back to RemoteAddr, got %q", got)
+	}
+}
+
+func TestClientIPMalformedRemoteAddr(t *testing.T) {
+	t.Parallel()
+	l := New(config.RateLimitConfig{TrustProxy: false, PerIP: 1})
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "not-an-addr-no-port" // no panic, used verbatim
+	if got := l.clientIP(req); got != "not-an-addr-no-port" {
+		t.Fatalf("malformed RemoteAddr should be used verbatim without panic, got %q", got)
+	}
+}
+
+func TestCleanupPrunesIPMap(t *testing.T) {
+	t.Parallel()
+	l := New(config.RateLimitConfig{Global: 1000, PerTenant: 1000, DailyQuota: 1000, PerIP: 5})
+
+	// Materialize a fully-idle IP limiter via getIPLimiter (full bucket, never
+	// drawn down) — the state a bucket reaches once it has refilled.
+	_ = l.getIPLimiter("172.16.0.1")
+	if _, ok := l.ips.Load("172.16.0.1"); !ok {
+		t.Fatal("expected IP limiter to be materialized")
+	}
+
+	l.Cleanup()
+
+	// A bucket at full capacity (idle) should be pruned.
+	if _, ok := l.ips.Load("172.16.0.1"); ok {
+		t.Fatal("expected idle (full-capacity) IP limiter to be pruned by Cleanup")
+	}
+}
+
+func TestCleanupKeepsActiveIPMap(t *testing.T) {
+	t.Parallel()
+	l := New(config.RateLimitConfig{Global: 1000, PerTenant: 1000, DailyQuota: 1000, PerIP: 2})
+
+	// Drain the bucket so it is below capacity → should be retained.
+	l.AllowIP("172.16.0.2")
+	l.AllowIP("172.16.0.2")
+	l.AllowIP("172.16.0.2")
+
+	l.Cleanup()
+
+	if _, ok := l.ips.Load("172.16.0.2"); !ok {
+		t.Fatal("expected an actively-used IP limiter to be retained by Cleanup")
+	}
+}
+
+// TestConcurrentAllowAcrossTenants exercises the limiter under true goroutine
+// contention: many tenants hammered in parallel. Its value is realized under
+// `go test -race` — it proves the sync.Map of tenant limiters and the per-tenant
+// mutex have no data race, not that any particular throughput is achieved. It is
+// bounded (finishes in well under a second) so it is safe to run on every CI run.
+func TestConcurrentAllowAcrossTenants(t *testing.T) {
+	t.Parallel()
+	l := New(config.RateLimitConfig{Global: 1_000_000, PerTenant: 1_000_000, DailyQuota: 1_000_000})
+
+	const goroutines = 16
+	const perG = 200
+	done := make(chan struct{})
+	for g := 0; g < goroutines; g++ {
+		go func(g int) {
+			defer func() { done <- struct{}{} }()
+			// Mix of shared and unique tenants to stress both the LoadOrStore
+			// race (new tenant) and the contended-counter race (shared tenant).
+			tenants := []string{"shared", "shared", fmt.Sprintf("t%d", g)}
+			for i := 0; i < perG; i++ {
+				tid := tenants[i%len(tenants)]
+				l.Allow(tid)
+				l.AllowDaily(tid)
+				_ = l.Stats(tid)
+			}
+		}(g)
+	}
+	for i := 0; i < goroutines; i++ {
+		<-done
+	}
+}
+
+// TestConcurrentAllowDailyWithStore drives AllowDaily concurrently while a
+// persist.Store is attached (the H7 write-through path). Under -race this proves
+// the hydrate + write-through + counter mutation are race-free when many
+// goroutines share one tenant's daily counter. Bounded; runs every CI run.
+func TestConcurrentAllowDailyWithStore(t *testing.T) {
+	t.Parallel()
+	store := persist.NewMemoryStore()
+	// Generous quota so we exercise the increment+write-through path, not the
+	// rejection path, on every call.
+	l := NewWithStore(config.RateLimitConfig{Global: 1_000_000, PerTenant: 1_000_000, DailyQuota: 1_000_000}, store)
+
+	const goroutines = 12
+	const perG = 150
+	done := make(chan struct{})
+	for g := 0; g < goroutines; g++ {
+		go func() {
+			defer func() { done <- struct{}{} }()
+			for i := 0; i < perG; i++ {
+				l.AllowDaily("shared-tenant")
+			}
+		}()
+	}
+	for i := 0; i < goroutines; i++ {
+		<-done
+	}
+
+	// Sanity: the in-memory counter reflects every increment exactly (no lost
+	// updates from the concurrent path). Total calls = goroutines*perG.
+	stats := l.Stats("shared-tenant")
+	if want := int64(goroutines * perG); stats.DailyUsed != want {
+		t.Fatalf("lost updates under concurrency: DailyUsed=%d, want %d", stats.DailyUsed, want)
 	}
 }

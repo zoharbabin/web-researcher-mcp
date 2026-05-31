@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/audit"
@@ -14,6 +15,7 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/config"
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 	"github.com/zoharbabin/web-researcher-mcp/internal/metrics"
+	"github.com/zoharbabin/web-researcher-mcp/internal/persist"
 	"github.com/zoharbabin/web-researcher-mcp/internal/ratelimit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/resources"
 	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
@@ -21,6 +23,8 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/server"
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
 	"github.com/zoharbabin/web-researcher-mcp/internal/tools"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 var version = "dev"
@@ -28,7 +32,14 @@ var version = "dev"
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
+		// Decision (g): config validation is fatal only in HTTP mode (Port>0),
+		// where a misconfiguration is operationally significant. In STDIO mode we
+		// log and continue so zero-config local use is never blocked by, e.g., a
+		// missing Google key when DuckDuckGo can still serve as a fallback.
 		slog.Error("configuration error", "err", err)
+		if cfg.Port > 0 {
+			os.Exit(1)
+		}
 	}
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
@@ -38,7 +49,7 @@ func main() {
 
 	hybridCache := cache.NewHybrid(cache.HybridConfig{
 		Memory:         cache.MemoryConfig{MaxSizeMB: cfg.CacheMaxMemoryMB},
-		Disk:           cache.DiskConfig{Dir: cfg.CacheDir, EncryptionKey: cfg.CacheEncryptionKey, Version: version},
+		Disk:           cache.DiskConfig{Dir: cfg.CacheDir, EncryptionKey: cfg.CacheEncryptionKey, EncryptionKeyPrev: cfg.CacheEncryptionKeyPrev, Version: version},
 		RedisURL:       cfg.RedisURL,
 		CacheIsolation: cfg.CacheIsolation,
 	})
@@ -50,8 +61,32 @@ func main() {
 		logger.Info("cache isolation enabled", "mode", "per-tenant")
 	}
 
+	// Construct the single persist.Store shared by auth token revocation (H2) and
+	// rate-limit daily-quota persistence (H7). When a CACHE_ENCRYPTION_KEY is set
+	// it is disk-backed (encrypted, survives restarts) under a sibling directory
+	// of the cache; otherwise it falls back to pure in-memory, preserving the
+	// zero-config behavior. A disk-store construction error degrades to memory
+	// rather than failing startup.
+	var persistStore persist.Store
+	if cfg.CacheEncryptionKey != "" {
+		ds, perr := persist.NewDiskStore(
+			filepath.Join(cfg.CacheDir, "persist"),
+			cfg.CacheEncryptionKey,
+			cfg.CacheEncryptionKeyPrev,
+		)
+		if perr != nil {
+			logger.Warn("persist disk store unavailable, using in-memory", "err", perr)
+			persistStore = persist.NewMemoryStore()
+		} else {
+			persistStore = ds
+			logger.Info("persist store initialized", "backend", "encrypted-disk")
+		}
+	} else {
+		persistStore = persist.NewMemoryStore()
+	}
+
 	metricsCollector := metrics.NewCollector()
-	rateLimiter := ratelimit.New(cfg.RateLimit)
+	rateLimiter := ratelimit.NewWithStore(cfg.RateLimit, persistStore)
 	searchBreaker := circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60})
 
 	if err := search.GetLensRegistry().LoadFromDir("lenses"); err != nil {
@@ -123,6 +158,7 @@ func main() {
 		SessionTTL:         cfg.SessionTTL,
 		DataDir:            cfg.SessionDataDir,
 		EncryptionKey:      cfg.CacheEncryptionKey,
+		EncryptionKeyPrev:  cfg.CacheEncryptionKeyPrev,
 		RedisURL:           cfg.RedisURL,
 	})
 	if err != nil {
@@ -188,15 +224,49 @@ func main() {
 	defer cancel()
 
 	if cfg.Port > 0 {
+		authMw := auth.NewMiddlewareWithStore(cfg.OAuth, persistStore)
+
+		// Scope gate (C4): a server-side receiving middleware that enforces OAuth
+		// scopes on tools/call. Registered ONLY in HTTP mode so the STDIO path is
+		// 100% unchanged. The policy lives in auth.EnforceScopes (permissive by
+		// default; fail-closed only on a present-but-insufficient scope claim).
+		// A denial is returned as a CallToolResult with IsError=true so the LLM
+		// can see and self-correct, not as a protocol-level error.
+		srv.MCP().AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+			return func(reqCtx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+				if method == "tools/call" {
+					if params, ok := req.GetParams().(*mcp.CallToolParamsRaw); ok {
+						scopes := auth.ScopesFromContext(reqCtx)
+						if err := authMw.EnforceScopes(scopes, params.Name); err != nil {
+							res := &mcp.CallToolResult{IsError: true}
+							res.Content = []mcp.Content{&mcp.TextContent{Text: "access denied: " + err.Error()}}
+							return res, nil
+						}
+					}
+				}
+				return next(reqCtx, method, req)
+			}
+		})
+
 		httpCfg := server.HTTPConfig{
-			Port:           cfg.Port,
-			Auth:           auth.NewMiddleware(cfg.OAuth),
-			RateLimiter:    rateLimiter,
-			AllowedOrigins: cfg.AllowedOrigins,
-			Metrics:        metricsCollector,
-			AdminKey:       cfg.CacheAdminKey,
-			Cache:          cacheStore,
-			Sessions:       sessionManager,
+			Port:              cfg.Port,
+			Auth:              authMw,
+			RateLimiter:       rateLimiter,
+			AllowedOrigins:    cfg.AllowedOrigins,
+			CORSStrict:        cfg.CORSStrict,
+			Metrics:           metricsCollector,
+			AdminKey:          cfg.CacheAdminKey,
+			Cache:             cacheStore,
+			Sessions:          sessionManager,
+			ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
+			ReadTimeout:       cfg.HTTP.ReadTimeout,
+			WriteTimeout:      cfg.HTTP.WriteTimeout,
+			IdleTimeout:       cfg.HTTP.IdleTimeout,
+			MaxHeaderBytes:    cfg.HTTP.MaxHeaderBytes,
+			MaxRequestBody:    cfg.HTTP.MaxRequestBody,
+			CSP:               cfg.HTTP.CSP,
+			ReferrerPolicy:    cfg.HTTP.ReferrerPolicy,
+			PermissionsPolicy: cfg.HTTP.PermissionsPolicy,
 		}
 		go func() {
 			if err := srv.ServeHTTP(ctx, httpCfg); err != nil {

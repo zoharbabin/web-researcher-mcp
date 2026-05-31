@@ -109,7 +109,7 @@ https://github.com/user-attachments/assets/17fa3484-e4c5-4099-982d-785f544b3a94
 | Tool | What it does |
 |------|-------------|
 | `web_search` | Search the web — optionally restricted to only the sources you trust via lenses |
-| `scrape_page` | Read any URL in full — web pages, PDFs, Word docs, slideshows, YouTube transcripts |
+| `scrape_page` | Read any URL in full — web pages, PDFs, Word docs, slideshows, YouTube transcripts; supports `mode: raw` for verbatim, unsanitized source (e.g. inspecting JSON or HTML) |
 | `search_and_scrape` | Search and then read the best results — with quality scoring to surface the most reliable sources |
 | `image_search` | Find images by size, type, color, or format |
 | `news_search` | Search recent news with date controls and source filtering |
@@ -214,9 +214,9 @@ Done. Your AI assistant now has access to all research tools.
 
 ## Configuration
 
-You need at least one search provider's API key. Pick whichever is easiest for you:
+**No API key required.** DuckDuckGo is the zero-config fallback — install and go. For higher quality, more results, and image/news search, add one of the optional providers below.
 
-### Option A: Google (default)
+### Option A: Google
 
 | Variable | What it is | Where to get it |
 |----------|-------------|-----------|
@@ -238,7 +238,7 @@ Set `SEARCH_PROVIDER=brave` and you're done. No Google keys needed.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SEARCH_PROVIDER` | Which engine to use: `google`, `brave`, `serper`, `searxng`, or `searchapi` | `google` |
+| `SEARCH_PROVIDER` | Which engine to use: `google`, `brave`, `serper`, `searxng`, `searchapi`, or `duckduckgo` | `google` (falls back to `duckduckgo` if no key is set) |
 | `BRAVE_API_KEY` | Brave Search API key | |
 | `SERPER_API_KEY` | Serper.dev API key (uses Google results) | |
 | `SEARCHAPI_API_KEY` | SearchAPI.io key | |
@@ -305,6 +305,7 @@ web-researcher-mcp/
 │   ├── metrics/                # Prometheus metrics + per-tool stats
 │   ├── ratelimit/              # Three-tier rate limiting
 │   ├── circuit/                # Circuit breaker for external APIs
+│   ├── persist/                # TTL key/value store (memory or encrypted disk) for token revocation + rate quotas
 │   └── resources/              # MCP Resources + Prompts
 ├── lenses/                     # Search lens JSON files
 └── docs/                       # Extended documentation
@@ -629,9 +630,10 @@ Searches come back in under a second. Previously-seen results are cached so repe
 ```bash
 go build -o web-researcher-mcp ./cmd/web-researcher-mcp   # Build
 go test -race ./...                                        # Test (with race detector)
-golangci-lint run                                          # Lint
-govulncheck ./...                                          # Security audit
+make verify                                                # Full gate: fmt, vet, lint, gosec, govulncheck, tests, E2E, build
 ```
+
+The lint, gosec, and govulncheck tools are pinned as `go.mod` tool directives, so `make verify` runs them at the exact versions CI uses (no global installs needed). Branch protection requires the Lint, Test, Security, and E2E checks to pass.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development workflow, code style guide, and PR process.
 
@@ -649,7 +651,7 @@ The server starts even with missing credentials (to allow MCP handshake). Set yo
 <details>
 <summary><strong>Some pages come back empty</strong></summary>
 
-For JavaScript-heavy sites, the tool uses a real browser (Chromium). It auto-downloads on first use (~200MB). If you already have Chrome installed, set `CHROME_PATH` to point to it, or use the Docker image which has everything included.
+For JavaScript-heavy sites, the tool uses a real browser (Chromium). With the binary install it auto-downloads on first use (~200MB). If you already have Chrome installed, set `CHROME_PATH` to point to it. The Docker image ships with Chromium bundled (`CHROME_PATH` preset), so JavaScript rendering works out of the box — no download.
 
 </details>
 

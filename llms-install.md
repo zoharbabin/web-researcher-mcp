@@ -23,7 +23,7 @@ One of:
 
 2. Extract and place the binary in your PATH (e.g., `~/.local/bin/` or `/usr/local/bin/`)
 
-3. Add to your MCP client configuration:
+3. Add to your MCP client configuration. The `env` block is optional — omit it entirely to run zero-config with the DuckDuckGo fallback, or add a provider key for better results:
 
 **Claude Code** (`~/.claude.json`):
 ```json
@@ -85,6 +85,8 @@ One of:
 }
 ```
 
+The Docker image bundles Chromium (with `CHROME_PATH` preset), so JavaScript-heavy pages render out of the box with no extra download.
+
 ## Option C: Go Install
 
 ```bash
@@ -95,7 +97,9 @@ Then configure as in Option A.
 
 ## Environment Variables
 
-**Required (at least one search provider):**
+**None required.** With no configuration, the server uses DuckDuckGo as a zero-config fallback search provider (no API key needed). The variables below are optional upgrades for higher quality and image/news search.
+
+**Recommended — Google (best quality whole-web + image + news):**
 
 | Variable | Description | Get it at |
 |----------|-------------|-----------|
@@ -115,7 +119,7 @@ Then configure as in Option A.
 
 | Variable | Description |
 |----------|-------------|
-| `SEARCH_PROVIDER` | Which provider to use: `google`, `brave`, `serper`, `searxng`, `searchapi` |
+| `SEARCH_PROVIDER` | Which provider to use: `google`, `brave`, `serper`, `searxng`, `searchapi`, `duckduckgo` (defaults to `google`, falling back to `duckduckgo` when no key is set) |
 | `SEARCH_ROUTING` | Multi-provider fallback list (e.g., `brave,google,serper`) |
 
 ## Available Tools
@@ -123,7 +127,7 @@ Then configure as in Option A.
 Once configured, the following tools become available:
 
 1. **web_search** — Search the web with optional lens filtering (medical, legal, academic, etc.)
-2. **scrape_page** — Read full text from any URL (web pages, PDFs, Word docs, YouTube transcripts)
+2. **scrape_page** — Read full text from any URL (web pages, PDFs, Word docs, YouTube transcripts); `mode: raw` returns verbatim, unsanitized source for inspecting JSON/HTML
 3. **search_and_scrape** — Search and read top results in one step, ranked by quality
 4. **image_search** — Search for images with size/type/color filters
 5. **news_search** — Search recent news articles with freshness controls
@@ -146,4 +150,4 @@ The assistant should invoke `news_search` and return results with real, clickabl
 - **"command not found"** — Ensure the binary is in your PATH or use the full path in the config
 - **"invalid API key"** — Verify your Google API key is enabled for Custom Search API
 - **No results** — Check that your Search Engine ID (cx) is configured to search the entire web
-- **Timeout errors** — The server has a 60-second timeout; for slow sites, this is normal
+- **Timeout errors** — Each scrape tier has its own bounded timeout (a few seconds up to ~30s for browser rendering); slow or JavaScript-heavy sites may hit these and fall through to the next tier

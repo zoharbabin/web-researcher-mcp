@@ -963,15 +963,15 @@ func TestSearchAPIProvider_PatentSearch(t *testing.T) {
 		resp := searchAPIPatentResponse{
 			OrganicResults: []searchAPIPatentResult{
 				{
-					Title:    "<b>Kaltura</b> Video Platform",
-					PatentID: "patent/US10165245B2/en",
-					Link:     "https://patents.google.com/patent/US10165245B2/en",
-					Snippet:  "A system for <b>pre-fetching</b> video content",
-					Assignee: "<b>Kaltura</b>, Inc.",
-					Inventor: "Christopher Hayes",
-					FilingDate:  "2013-07-03",
-					GrantDate:   "2018-12-25",
-					PDF:         "https://patentimages.storage.googleapis.com/US10165245.pdf",
+					Title:      "<b>Kaltura</b> Video Platform",
+					PatentID:   "patent/US10165245B2/en",
+					Link:       "https://patents.google.com/patent/US10165245B2/en",
+					Snippet:    "A system for <b>pre-fetching</b> video content",
+					Assignee:   "<b>Kaltura</b>, Inc.",
+					Inventor:   "Christopher Hayes",
+					FilingDate: "2013-07-03",
+					GrantDate:  "2018-12-25",
+					PDF:        "https://patentimages.storage.googleapis.com/US10165245.pdf",
 				},
 				{
 					Title:             "Image Compression",

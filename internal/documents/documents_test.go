@@ -264,7 +264,6 @@ func TestParse_RoutesToPPTX(t *testing.T) {
 // Test Helpers — Build Minimal Documents
 // =============================================================================
 
-
 func buildMinimalDOCX(text, title, author string) []byte {
 	documentXML := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -19,8 +20,17 @@ var (
 // fxTwitterBaseURL is the default FXTwitter API endpoint.
 const fxTwitterBaseURL = "https://api.fxtwitter.com"
 
-func isTwitterURL(url string) bool {
-	return strings.Contains(url, "x.com/") || strings.Contains(url, "twitter.com/")
+func isTwitterURL(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(strings.TrimPrefix(u.Hostname(), "www."))
+	switch host {
+	case "x.com", "twitter.com", "mobile.twitter.com", "mobile.x.com":
+		return true
+	}
+	return false
 }
 
 func (p *Pipeline) scrapeTwitter(ctx context.Context, url string, maxLength int) (*ScrapeResult, error) {
