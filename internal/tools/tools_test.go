@@ -309,6 +309,38 @@ func TestSequentialSearchTool(t *testing.T) {
 	}
 }
 
+// TestSequentialSearchMissingSessionOnStep2 verifies that a step > 1 with no
+// sessionId is rejected with guidance rather than silently forking a new,
+// orphaned session (which would abandon the real research trail after a caller
+// loses its sessionId mid-research).
+func TestSequentialSearchMissingSessionOnStep2(t *testing.T) {
+	ctx := context.Background()
+	deps := setupTestDeps()
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "sequential_search",
+		Arguments: map[string]any{
+			"searchStep":     "Step two with no session id",
+			"stepNumber":     float64(2),
+			"nextStepNeeded": true,
+			// sessionId deliberately omitted
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected IsError=true for step 2 without a sessionId")
+	}
+	text := res.Content[0].(*mcp.TextContent).Text
+	if !strings.Contains(text, "missing sessionId") {
+		t.Errorf("expected missing-sessionId guidance, got: %s", text)
+	}
+}
+
 func TestPatentSearchTool(t *testing.T) {
 	ctx := context.Background()
 	deps := setupTestDeps()

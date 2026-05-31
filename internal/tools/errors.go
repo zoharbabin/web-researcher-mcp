@@ -80,6 +80,8 @@ func mapScrapeErrorKind(k scraper.ErrorKind) ErrorKind {
 		return ErrKindAuth
 	case scraper.ErrRateLimit:
 		return ErrKindRateLimit
+	case scraper.ErrValidation:
+		return ErrKindValidation
 	default:
 		return ErrKindUpstream
 	}
@@ -91,6 +93,12 @@ func scrapeErrorToToolError(se *scraper.ScrapeError) ToolError {
 		Kind: mapScrapeErrorKind(se.Kind),
 	}
 	switch se.Kind {
+	case scraper.ErrValidation:
+		// Permanent client/security rejection (bad scheme, empty host, SSRF /
+		// private-IP / blocked-hostname denial). Never retryable; the caller
+		// must change the URL, not retry or file a bug.
+		te.Retryable = false
+		te.SuggestedAction = ActionInformUser
 	case scraper.ErrRateLimit:
 		te.Retryable = true
 		seconds := 60

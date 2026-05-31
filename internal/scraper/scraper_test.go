@@ -2199,8 +2199,8 @@ func TestScrape_RejectsInvalidScheme(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected *ScrapeError, got %T", err)
 	}
-	if se.Kind != ErrBlocked {
-		t.Errorf("expected ErrBlocked, got %v", se.Kind)
+	if se.Kind != ErrValidation {
+		t.Errorf("expected ErrValidation for an unsupported scheme, got %v", se.Kind)
 	}
 }
 
@@ -2322,6 +2322,33 @@ func TestScrapeRaw_EnforcesGuards(t *testing.T) {
 			t.Fatal("expected SSRF block for private IP")
 		}
 	})
+}
+
+// TestScrape_SSRFCompositeIsValidation verifies that an SSRF denial reached
+// through the tiered-fallback path (where each tier wraps it as a generic
+// network error) is classified as ErrValidation — a permanent security
+// rejection — not a retryable ErrNetwork.
+func TestScrape_SSRFCompositeIsValidation(t *testing.T) {
+	t.Parallel()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte("secret"))
+	}))
+	defer ts.Close()
+
+	// allowPrivate=false => the SSRF-safe client blocks the loopback test server
+	// at every tier; the composite must surface a validation denial.
+	p := NewPipeline(PipelineConfig{AllowPrivateIPs: false})
+	_, err := p.Scrape(context.Background(), ts.URL, 1000)
+	if err == nil {
+		t.Fatal("expected SSRF denial via the tiered path")
+	}
+	se, ok := err.(*ScrapeError)
+	if !ok {
+		t.Fatalf("expected *ScrapeError, got %T", err)
+	}
+	if se.Kind != ErrValidation {
+		t.Errorf("SSRF composite denial must be ErrValidation (permanent), got %v", se.Kind)
+	}
 }
 
 func TestScrapeRaw_HTTPError(t *testing.T) {

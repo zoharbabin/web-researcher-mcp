@@ -141,6 +141,13 @@ func (u *USPTOProvider) doSearch(ctx context.Context, params PatentSearchParams)
 		}
 		results = append(results, result)
 	}
+
+	// Defensive cap: the USPTO API can return more rows than requested (the
+	// `rows` param is not always honored), so enforce the caller's limit here
+	// to match every other provider's contract.
+	if n := clamp(params.NumResults, 1, 10); len(results) > n {
+		results = results[:n]
+	}
 	return results, nil
 }
 

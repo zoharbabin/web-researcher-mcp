@@ -44,6 +44,15 @@ func registerSequentialSearch(srv *mcp.Server, deps Dependencies) {
 			return toolError("searchStep is required"), nil, nil
 		}
 
+		// A new session is created only on step 1. Steps 2+ MUST carry the
+		// sessionId returned by step 1; a missing sessionId there is almost
+		// always a caller that lost its session mid-research (e.g. after context
+		// loss). Silently forking a fresh session would orphan the real research
+		// trail, so guide the caller to recover or restart instead.
+		if input.SessionID == "" && input.StepNumber > 1 {
+			return toolError("missing sessionId for stepNumber > 1. Pass the sessionId returned by step 1, recover it with get_research_session, or start a new session by setting stepNumber=1."), nil, nil
+		}
+
 		tenantID := auth.TenantIDFromContext(ctx)
 
 		var idx *session.SessionIndex

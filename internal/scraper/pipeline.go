@@ -52,7 +52,7 @@ func (p *Pipeline) Scrape(ctx context.Context, rawURL string, maxLength int) (*S
 	// search_and_scrape both flow through here). Rejects non-http(s) schemes
 	// and empty hosts before any network or semaphore work.
 	if err := validateScrapeURL(rawURL); err != nil {
-		return nil, blockedError(rawURL, "", err, err.Error())
+		return nil, validationError(rawURL, "", err, err.Error())
 	}
 
 	url := rawURL
@@ -66,7 +66,7 @@ func (p *Pipeline) Scrape(ctx context.Context, rawURL string, maxLength int) (*S
 	}
 
 	if !p.isDomainAllowed(url) {
-		return nil, blockedError(url, "", nil, "domain not in allowed list")
+		return nil, validationError(url, "", nil, "access blocked: domain not in allowed list")
 	}
 
 	var result *ScrapeResult
@@ -148,8 +148,16 @@ func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, max
 			parts = append(parts, fmt.Sprintf("%s: %v", o.name, o.err))
 			if se, ok := o.err.(*ScrapeError); ok {
 				switch se.Kind {
+				case ErrValidation:
+					// A security/validation denial is definitive: surface it as
+					// the kind regardless of any sibling tier's timeout, and never
+					// downgrade to network (which would imply a misleading retry).
+					highestKind = ErrValidation
+					allNetwork = false
 				case ErrBlocked, ErrAuth, ErrRateLimit, ErrBrowser:
-					highestKind = se.Kind
+					if highestKind != ErrValidation {
+						highestKind = se.Kind
+					}
 					allNetwork = false
 				case ErrNetwork:
 					// keep allNetwork true
@@ -173,6 +181,16 @@ func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, max
 
 	detail := strings.Join(parts, ", ")
 	msg := fmt.Sprintf("no content extracted from %s (%s)", url, detail)
+
+	// An SSRF / private-IP / blocked-hostname denial is a permanent security
+	// rejection even when the per-tier errors were wrapped as generic network
+	// errors (each tier's SSRF-safe client reports it inside its message). Such a
+	// denial must never be presented as a retryable network failure, so detect it
+	// in the composite detail and classify the whole result as validation.
+	if isSSRFDenial(detail) {
+		highestKind = ErrValidation
+	}
+
 	return nil, &ScrapeError{Kind: highestKind, Message: msg, URL: url}
 }
 
@@ -185,7 +203,7 @@ func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, max
 // (it may contain active <script>/HTML) — raw mode is opt-in for scrape_page only.
 func (p *Pipeline) ScrapeRaw(ctx context.Context, rawURL string, maxLength int) (*ScrapeResult, error) {
 	if err := validateScrapeURL(rawURL); err != nil {
-		return nil, blockedError(rawURL, "", err, err.Error())
+		return nil, validationError(rawURL, "", err, err.Error())
 	}
 
 	select {

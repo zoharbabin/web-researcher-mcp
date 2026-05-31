@@ -215,6 +215,10 @@ func indexOf(s, sub string) int {
 
 func negCacheTTL(kind scraper.ErrorKind) time.Duration {
 	switch kind {
+	case scraper.ErrValidation:
+		// Permanent rejection (bad scheme / SSRF / blocked host) — cache long;
+		// the same URL will be rejected identically every time.
+		return 4 * time.Hour
 	case scraper.ErrBlocked, scraper.ErrAuth:
 		return 30 * time.Minute
 	case scraper.ErrRateLimit:
@@ -240,6 +244,11 @@ func scrapeErrorResponse(err error, url string) *mcp.CallToolResult {
 	te := scrapeErrorToToolError(se)
 	var msg string
 	switch se.Kind {
+	case scraper.ErrValidation:
+		// Permanent rejection: unsupported scheme, empty host, or an SSRF /
+		// private-IP / blocked-hostname denial. Report the precise reason and
+		// do NOT suggest a retry or a bug report — the URL itself must change.
+		msg = fmt.Sprintf("URL rejected for %s: %s. Provide a valid public http(s) URL.", url, se.Message)
 	case scraper.ErrBrowser:
 		msg = fmt.Sprintf("Scrape failed: Chrome unavailable. Set CHROME_PATH or install Chrome. Report at %s", issueURL)
 	case scraper.ErrBlocked:

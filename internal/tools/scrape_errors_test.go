@@ -67,6 +67,49 @@ func TestScrapeErrorResponse_BlockedError(t *testing.T) {
 	}
 }
 
+// TestScrapeErrorResponse_ValidationError verifies that a permanent
+// client/security rejection (bad scheme, SSRF / blocked host) is surfaced as a
+// non-retryable validation error with inform_user guidance — NOT as retryable
+// "bot detection" with a report_bug suggestion.
+func TestScrapeErrorResponse_ValidationError(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		msg  string
+	}{
+		{"scheme", `unsupported URL scheme "file" (only http and https are allowed)`},
+		{"ssrf", "ssrf: request blocked (private IP or blocked hostname)"},
+		{"allowlist", "access blocked: domain not in allowed list"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := &scraper.ScrapeError{Kind: scraper.ErrValidation, Message: tc.msg, URL: "x://bad"}
+			result := scrapeErrorResponse(err, "x://bad")
+			text := result.Content[0].(*mcp.TextContent).Text
+
+			if !result.IsError {
+				t.Fatal("expected IsError=true")
+			}
+			if strings.Contains(text, "bot detection") {
+				t.Errorf("validation error must not claim bot detection: %s", text)
+			}
+			if strings.Contains(text, issueURL) {
+				t.Errorf("validation error must not suggest filing a bug: %s", text)
+			}
+			// Structured metadata must be non-retryable + inform_user.
+			if !strings.Contains(text, `"kind":"validation"`) {
+				t.Errorf("expected kind=validation, got: %s", text)
+			}
+			if !strings.Contains(text, `"retryable":false`) {
+				t.Errorf("expected retryable=false, got: %s", text)
+			}
+			if !strings.Contains(text, `"suggestedAction":"inform_user"`) {
+				t.Errorf("expected inform_user action, got: %s", text)
+			}
+		})
+	}
+}
+
 func TestScrapeErrorResponse_ContentError(t *testing.T) {
 	t.Parallel()
 	err := &scraper.ScrapeError{
