@@ -271,7 +271,7 @@ Per-PR cycle the maintainer follows:
 gh pr view <N> --json reviews \
   --jq '.reviews[] | select(.author.login=="copilot-pull-request-reviewer") | .body'
 gh api repos/zoharbabin/web-researcher-mcp/pulls/<N>/comments \
-  --jq '.[] | "\(.path):\(.line // .original_line)  \(.body)"'
+  --jq '.[] | select(.user.login=="copilot-pull-request-reviewer[bot]") | "\(.path):\(.line // .original_line)  \(.body)"'
 
 # After CI is green and every finding is addressed/resolved:
 gh pr merge <N> --squash --admin
