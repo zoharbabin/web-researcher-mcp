@@ -3,8 +3,19 @@ name: CodeQL
 on:
   push:
     branches: [main]
+    paths-ignore: &docs_paths
+      - "**/*.md"
+      - "docs/**"
+      - "assets/**"
+      - "LICENSE"
+      - ".gitignore"
+      - "mkdocs.yml"
+      - "overrides/**"
+      - ".github/**_TEMPLATE**"
+      - ".github/ISSUE_TEMPLATE/**"
   pull_request:
     branches: [main]
+    paths-ignore: *docs_paths
   schedule:
     - cron: "0 6 * * 1" # Every Monday at 06:00 UTC
 
