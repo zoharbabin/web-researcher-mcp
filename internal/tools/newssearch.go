@@ -46,7 +46,9 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 			sortBy = "relevance"
 		}
 
-		cacheKey := searchCacheKey("news", input.Query, numResults, freshness, sortBy, input.NewsSource)
+		// Include provider so different providers never collide on the same
+		// query (idempotency + consistency across calls).
+		cacheKey := searchCacheKey("news", input.Query, numResults, freshness, sortBy, input.NewsSource, input.Provider)
 		if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("news_search", time.Since(start), nil, "", true)
 			auditToolCall(ctx, deps, "news_search", time.Since(start), nil, "")

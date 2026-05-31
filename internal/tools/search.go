@@ -52,7 +52,11 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 			numResults = 5
 		}
 
-		cacheKey := searchCacheKey("web", input.Query, numResults, input.TimeRange, input.Safe, input.Language, input.Site, input.Lens)
+		// The cache key MUST include every result-affecting parameter — most
+		// importantly the provider, so two providers queried with the same terms
+		// do not collide and serve each other's cached results (idempotency +
+		// consistency across calls).
+		cacheKey := searchCacheKey("web", input.Query, numResults, input.TimeRange, input.Safe, input.Language, input.Site, input.Lens, input.Provider, input.ExactTerms, input.ExcludeTerms, input.Country)
 		if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("web_search", time.Since(start), nil, "", true)
 			auditToolCallQuery(ctx, deps, "web_search", time.Since(start), nil, "", input.Query, map[string]any{"cache_hit": true})
