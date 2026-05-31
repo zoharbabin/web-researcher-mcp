@@ -46,6 +46,7 @@ When you search, your query goes directly to whichever provider you configured. 
 | Serper.dev | Your query, your API key | [serper.dev/privacy](https://serper.dev/privacy) |
 | SearchAPI.io | Your query, your API key | [searchapi.io/privacy](https://www.searchapi.io/privacy-policy) |
 | SearXNG | Your query (self-hosted — no third party) | N/A (you control the server) |
+| DuckDuckGo | Your query (zero-config default when no provider is configured) | [duckduckgo.com/privacy](https://duckduckgo.com/privacy) |
 | OpenAlex | Your academic query | [openalex.org/legal](https://openalex.org/legal/privacy-policy) |
 | CrossRef | Your academic query | [crossref.org/privacy](https://www.crossref.org/privacy/) |
 
@@ -65,10 +66,10 @@ We confirm that this software:
 
 If you choose to deploy the software as an HTTP server (multi-tenant mode), additional data is processed **on your own infrastructure**:
 
-- **OAuth tokens** — validated for authentication, not stored beyond the session
+- **OAuth tokens** — validated for authentication, not stored. Revoked token IDs (JTIs) may be persisted locally to an encrypted store so a revocation survives a restart; the stored value is an opaque ID with an expiry, never the token contents or any claim.
 - **Tenant identifiers** — used to isolate rate limits and sessions between users
-- **Audit logs** — tool invocations are logged locally (no raw queries, only parameter hashes)
-- **Rate limit counters** — in-memory, cleared on restart
+- **Audit logs** — tool invocations are logged locally (no raw queries by default, only a length/hash). Audit files older than the configured retention window are deleted automatically.
+- **Rate limit counters** — in-memory by default and cleared on restart. With `RATE_LIMIT_PERSIST=true` the per-tenant daily-quota counters are written to a local encrypted store so quotas survive a restart — still on your own machine, never transmitted.
 
 This mode is entirely self-hosted. We still do not receive or have access to any of this data. You are the data controller for your deployment.
 

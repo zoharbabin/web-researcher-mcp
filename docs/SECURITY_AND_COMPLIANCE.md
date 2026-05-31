@@ -542,12 +542,18 @@ sha256sum -c checksums.txt
 
 | Tool | What it checks | When |
 |------|---------------|------|
-| `govulncheck` | Known Go vulnerabilities | Every CI run |
+| `govulncheck` | Known Go vulnerabilities | Every CI run (`make vuln`) |
+| `gosec` | Go security scanner (injection, weak crypto, SSRF sinks, unsafe file ops) | Every CI run (`make sec`) |
+| `golangci-lint` | Static analysis + lint rules | Every CI run (`make lint`) |
 | CodeQL | Semantic code analysis (security-extended) | Every PR + weekly |
 | Dependabot | Dependency version vulnerabilities | Continuous |
 | `go mod verify` | Dependency integrity (checksum match) | Every build |
 | cosign | Release artifact signatures | Every release |
 | Syft | SBOM generation | Every release |
+
+`govulncheck`, `gosec`, and `golangci-lint` are pinned as `tool` directives in
+`go.mod`, so CI and local runs (`make verify`) use identical versions. The Go
+toolchain version is pinned in `go.mod`.
 
 ### Dependency Policy
 

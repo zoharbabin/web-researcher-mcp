@@ -94,6 +94,8 @@ The project includes two Dockerfiles in the repo root:
 - `Dockerfile` — multi-stage build (builder + Alpine runtime), used for local builds
 - `Dockerfile.release` — slim Alpine image used by GoReleaser (expects pre-built binary)
 
+Both images bundle Chromium plus the fonts/libraries go-rod needs for full browser-tier rendering, run as a non-root UID (`65534`), and set `CHROME_PATH=/usr/bin/chromium-browser` so the browser scrape tier works out of the box — no extra layers required.
+
 ```bash
 # Build and run locally
 docker build -t web-researcher-mcp .
@@ -112,7 +114,7 @@ docker run -p 3000:3000 \
   web-researcher-mcp
 ```
 
-**For headless browser (go-rod):** Set `CHROME_PATH` to a Chromium binary inside the container, or extend the Dockerfile to include `chromedp/headless-shell`.
+**For headless browser (go-rod):** The bundled images already ship Chromium and set `CHROME_PATH`. Override `CHROME_PATH` only if you mount a different Chromium/Chrome binary.
 
 ---
 
@@ -150,8 +152,6 @@ spec:
             secretKeyRef:
               name: mcp-secrets
               key: google-api-key
-        - name: REDIS_URL
-          value: "redis://redis-svc:6379"
         resources:
           requests:
             cpu: 100m
@@ -205,10 +205,14 @@ spec:
 
 ### Required
 
+**None.** With no configuration at all, the server falls back to DuckDuckGo (zero-config, no API key). For higher-quality results configure a provider below. `.env.example` is the authoritative source for the full variable set.
+
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `GOOGLE_CUSTOM_SEARCH_API_KEY` | Google API key (required unless `SEARCH_ROUTING` is set) | `AIzaSy...` (39 chars) |
-| `GOOGLE_CUSTOM_SEARCH_ID` | Search engine ID (required unless `SEARCH_ROUTING` is set) | From [PSE console](https://programmablesearchengine.google.com/) |
+| `GOOGLE_CUSTOM_SEARCH_API_KEY` | Google API key (used when `SEARCH_PROVIDER` is unset/`google` and no routing) | `AIzaSy...` (39 chars) |
+| `GOOGLE_CUSTOM_SEARCH_ID` | Search engine ID (paired with the key above) | From [PSE console](https://programmablesearchengine.google.com/) |
+
+Note: when `PORT` is unset (STDIO mode), a config error is logged but the server still starts so zero-config local use works. When `PORT` is set (HTTP mode), config validation is fatal.
 
 ### Search Provider
 

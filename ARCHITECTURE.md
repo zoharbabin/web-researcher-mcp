@@ -106,6 +106,7 @@ web-researcher-mcp/
 │   ├── metrics/                  # Prometheus metrics
 │   ├── ratelimit/                # Three-tier rate limiting
 │   ├── circuit/                  # Circuit breaker
+│   ├── persist/                  # TTL key/value store (memory or AES-256-GCM disk) backing token revocation + rate quotas
 │   └── resources/                # MCP Resources + Prompts
 ├── lenses/                       # Search lens JSON files
 ├── tests/                        # E2E, integration tests + benchmarks
@@ -146,7 +147,7 @@ type Provider interface {
 }
 ```
 
-Five providers implement this interface: Google PSE, Brave, Serper, SearXNG, and SearchAPI.io. The `Router` also implements `Provider`, enabling transparent multi-provider fallback — tools don't need to know whether they're calling a single provider or a routing layer.
+Several providers implement this interface — Google PSE, Brave, Serper, SearXNG, SearchAPI.io, and DuckDuckGo (the zero-config, no-key fallback). The canonical list is `search.SupportedProviders` in `internal/search/provider.go`. The `Router` also implements `Provider`, enabling transparent multi-provider fallback — tools don't need to know whether they're calling a single provider or a routing layer.
 
 When `SEARCH_ROUTING` is configured, the Router wraps all available providers with per-provider circuit breakers and priority-ordered fallback. Search lenses inject `site:` operators and route through the configured provider. Lenses with a dedicated `cx` field route directly to that Google PSE engine.
 
@@ -176,6 +177,8 @@ func (p *Pipeline) Scrape(ctx context.Context, url string, maxLength int) (*Scra
 ```
 
 The pipeline routes specialized content (YouTube, PDF/DOCX/PPTX) via early-return detection, then falls back through tiers in order: markdown → stealth → HTML → browser (go-rod). Each tier is a private method with the same signature; the pipeline tries each in sequence and promotes the first result that meets a quality threshold.
+
+`Pipeline.ScrapeRaw()` is a separate, non-tiered path used by `scrape_page`'s `mode: raw`: it performs a single SSRF-checked fetch and returns the response body verbatim — no sanitization, no quality scoring, no tier fallback. Raw output is untrusted (it may contain injection payloads) and is cached under a distinct key so it never collides with the cleaned `full`/`preview` results.
 
 ### 4. Dependency Injection
 
@@ -249,7 +252,7 @@ Full specification: see `docs/ERROR_HANDLING.md`.
 
 ## Binary Output
 
-Single static binary with no runtime dependencies except optional Chromium for JS rendering (auto-downloaded by go-rod on first headless scrape).
+Single static binary with no runtime dependencies except optional Chromium for JS rendering (auto-downloaded by go-rod on first headless scrape). The published Docker image bundles Chromium with `CHROME_PATH` preset, so JavaScript rendering works out of the box with no download.
 
 ```bash
 go build -o web-researcher-mcp ./cmd/web-researcher-mcp   # Build

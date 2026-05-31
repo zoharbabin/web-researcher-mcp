@@ -216,11 +216,13 @@ Built on Phase 1's structured error foundation.
 2. **Error code enum** (in structured JSON) — enables programmatic branching
 3. **Full diagnostics via MCP Resource** (on demand) — `diagnostics://errors/recent`
 
-**Current state vs. proposed:**
-| | Current | Proposed |
-|---|---------|----------|
-| Rate limit | "The search service is temporarily busy: searxng error 429. Please wait about 60 seconds..." (118 chars) | "Rate limited (searxng). Retry in 60s or try different provider." (63 chars) + JSON |
-| Scrape blocked | "Scrape failed for https://x.com/...: access was blocked (HTTP 403). The site may use bot detection..." (200+ chars) | "Blocked: x.com (bot detection). Try alternative source." (55 chars) + JSON |
+**Message compaction (shipped) vs. on-demand diagnostics (planned):**
+The compact-message layer is implemented — error helpers now emit short, actionable text plus a JSON block (see `docs/ERROR_HANDLING.md`). The remaining work is the on-demand MCP Resource for full diagnostics.
+
+| | Compact form (shipped) |
+|---|---|
+| Rate limit | "Rate limited (searxng). Wait 60 seconds and retry, or try a different provider." + JSON |
+| Scrape blocked | "Blocked: <url> uses bot detection. Try alternative source or report at \<issue url\>" + JSON |
 
 **The Resource pattern:**
 ```

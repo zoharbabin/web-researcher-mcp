@@ -99,7 +99,7 @@ The new version supports multiple backends for unrestricted whole-web search:
 }
 ```
 
-Supported providers: `google` (default), `brave`, `serper`, `searxng`, `searchapi`.
+Supported providers: `google` (default), `brave`, `serper`, `searxng`, `searchapi`, `duckduckgo` (zero-config fallback, no API key). Canonical list: `search.SupportedProviders`.
 
 You can also enable multi-provider routing with automatic fallback:
 

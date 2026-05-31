@@ -103,10 +103,12 @@ Client → [Authorization: Bearer <token>] → MCP Server
 - Implementation: custom RS256 validation (no external JWT library dependency)
 
 **Token Requirements:**
-- Algorithm: RS256 or ES256 (reject HS256 from external issuers)
-- Required claims: `iss`, `aud`, `exp`, `sub`
-- Audience must match `OAUTH_AUDIENCE` env var
-- Issuer must match `OAUTH_ISSUER_URL` env var
+- Algorithm: **RS256 only** — any other `alg` (including `none`, `HS256`, `ES256`) is rejected, defeating algorithm-confusion attacks. JWKS keys advertising a non-RS256 `alg` are skipped.
+- Required claim: `exp` (missing `exp` is rejected; expired tokens rejected)
+- `iss` must match `OAUTH_ISSUER_URL`; `aud` must contain `OAUTH_AUDIENCE`
+- `nbf` and `iat` are honored when present (±60s clock-skew tolerance)
+- `jti` is checked against the revocation set when present
+- `sub`, `tenant_id`, `session_id` are optional; absent `sub` maps to `anonymous`, absent `tenant_id` maps to `default`
 
 **STDIO Transport:**
 - No authentication. Credentials come from environment.
@@ -221,7 +223,7 @@ Raw HTML/Content
 | Tier | Scope | Default | Purpose |
 |------|-------|---------|---------|
 | Global | Per-server | 1000 req/s | Infrastructure protection |
-| Per-Tenant | Per JWT `sub` | 120 req/min | Fair use |
+| Per-Tenant | Per JWT `tenant_id` claim (falls back to `default`) | 120 req/min | Fair use |
 | Per-Session | Per MCP session | 5 concurrent | Backpressure |
 
 **Implementation:**
@@ -230,9 +232,10 @@ Raw HTML/Content
 - Per-Session: Buffered channel as semaphore
 
 **Cost Quotas:**
-- Track Google API call count per tenant per day
-- Configurable daily limit (default: 5000 queries/day)
+- Track tool/API call count per tenant per day (`DAILY_QUOTA_PER_TENANT`)
+- Configurable daily limit (default: 5000 calls/day)
 - Reject with informative error when exceeded
+- Counters are in-memory by default; set `RATE_LIMIT_PERSIST=true` to write them through to the encrypted persist store so quotas survive a restart
 
 **Sub-Agent Handling:**
 When a single agent spawns many parallel tool calls:
@@ -259,7 +262,7 @@ Protects against cascading failures when upstream APIs are down.
 - Half-open attempts: 1
 
 **Per-Provider Breakers:**
-- Each search provider (Google, Brave, Serper, SearXNG, SearchAPI) gets an independent circuit breaker
+- Each configured search provider (Google, Brave, Serper, SearXNG, SearchAPI, DuckDuckGo) gets an independent circuit breaker
 - When using multi-provider routing (`SEARCH_ROUTING`), the router adds a second breaker layer with tighter thresholds for faster failover
 - Failures in one provider don't affect others
 - Scraping (per domain): optional, prevent hammering broken sites
@@ -318,9 +321,10 @@ See `internal/audit/logger.go` for the canonical `AuditEvent` struct. Key fields
 - Clear error messages on format violation (without echoing the value)
 
 **Startup Validation:**
-- Pattern-check all known env vars
-- Warn (don't exit) on format issues — allows MCP handshake even with bad credentials
-- Tools fail gracefully at call time with actionable error messages
+- Pattern-check all known env vars (key lengths, hex encoding, scope formats)
+- **STDIO mode** (`PORT` unset): config errors are logged and the server continues, so zero-config local use is never blocked (e.g., a missing Google key still lets DuckDuckGo serve as fallback). Tools fail gracefully at call time with actionable error messages.
+- **HTTP mode** (`PORT` set): config validation is **fatal** (`os.Exit(1)`) — a misconfiguration on a network-facing deployment is operationally significant and must fail loud.
+- Clear error messages on format violation, never echoing the offending value
 
 ---
 
@@ -401,7 +405,7 @@ How the server's controls counter the ATT&CK techniques most relevant to an inte
 
 | CSF 2.0 Function | Outcome | Implementation |
 |------------------|---------|----------------|
-| **GOVERN (GV)** | Roles, policy, supply chain | PSIRT process ([SECURITY.md](../SECURITY.md)), `govulncheck`/`go mod verify`/SBOM in CI, documented design rules |
+| **GOVERN (GV)** | Roles, policy, supply chain | PSIRT process ([SECURITY.md](../SECURITY.md)), pinned `go tool govulncheck`/`gosec`/`golangci-lint` (go.mod tool directives) + `go mod verify`/SBOM in CI, documented design rules |
 | **IDENTIFY (ID)** | Asset & risk awareness | This threat model, `DATA_REGION` residency labeling, per-tool audit inventory |
 | **PROTECT (PR)** | Access control & data security | OAuth 2.1 + scope gate, SSRF guard, AES-256-GCM at rest with key rotation, TLS in transit, security headers, CORS, rate limits |
 | **DETECT (DE)** | Continuous monitoring | Structured audit logs with request correlation IDs, Prometheus metrics, circuit-breaker state |
@@ -440,7 +444,7 @@ Data minimization (implemented): audit logs store parameter hashes (not raw quer
 | **SC-28** Protection at Rest | AES-256-GCM for disk cache |
 | **AC-3** Access Enforcement | OAuth middleware on all HTTP endpoints |
 | **AU-2** Audit Events | All tool calls, auth failures, config changes |
-| **SI-2** Flaw Remediation | Automated `govulncheck` in CI |
+| **SI-2** Flaw Remediation | Automated `go tool govulncheck` + `gosec` in CI (`make vuln`, `make sec`) |
 
 ```bash
 # FIPS-compliant build
@@ -464,10 +468,15 @@ GOEXPERIMENT=boringcrypto CGO_ENABLED=0 \
 
 ### Supply Chain Security
 
+The vulnerability scanner, linter, and security scanner are pinned in `go.mod` via `tool` directives and invoked through `go tool` (wrapped by `make`), so every contributor and CI run uses byte-identical versions with zero manual install:
+
 ```bash
-govulncheck ./...        # Audit for known vulnerabilities
+make vuln                # go tool govulncheck ./... — audit for known vulnerabilities
+make sec                 # go tool gosec — command/SQL injection, weak crypto, SSRF sinks
 go mod verify            # Pin dependency hashes
-cyclonedx-gomod mod -json -output sbom.json  # Generate SBOM
+cyclonedx-gomod mod -json -output sbom.json  # Generate SBOM (release pipeline)
 ```
+
+`make verify` runs the full gate (fmt-check, vet, lint, sec, vuln, race tests, e2e, build) — the same sequence CI runs.
 
 All dependencies: actively maintained, no unpatched CVEs, permissive licenses (MIT/Apache/BSD), >1000 stars or official/stdlib.

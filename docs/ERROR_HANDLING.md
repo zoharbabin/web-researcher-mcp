@@ -145,7 +145,9 @@ Rate limited (google). Wait 60 seconds and retry, or try a different provider.
 | `suggestedAction` | string | Recovery strategy for the LLM |
 | `provider` | string (optional) | Which provider failed |
 | `alternatives` | []string (optional) | Other available providers |
-| `detail` | string (optional) | Technical detail for debugging |
+| `detail` | string (optional) | Technical detail for debugging (secret-masked, see below) |
+
+> **Secret masking:** Before any error string reaches an LLM-facing result (or a downstream audit log), it is passed through `audit.MaskSecrets()`. Scrape errors can echo a target URL containing embedded credentials, and upstream provider errors occasionally reflect back an API key (e.g. `?key=AIza...`). `scrapeErrorToToolError()` masks `te.Detail`, `failureFromScrapeError()` masks the failure `reason`, and `upstreamErrorResponse()` masks the upstream detail. As a result, the `detail`/`reason` fields and the human-readable message never expose API keys, tokens, or credentials.
 
 ### Error Kind Enum (`ErrorKind`)
 

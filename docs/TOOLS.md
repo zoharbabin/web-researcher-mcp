@@ -89,24 +89,21 @@ Extract content from a URL, supporting web pages, documents, and YouTube videos.
 
 ```go
 type ScrapeOutput struct {
-    URL            string            `json:"url"`
-    Content        string            `json:"content"`
-    ContentType    string            `json:"contentType"`    // html, markdown, youtube, pdf, docx, pptx
-    ContentLength  int               `json:"contentLength"`
-    Truncated      bool              `json:"truncated"`
-    EstimatedTokens int              `json:"estimatedTokens"`
-    SizeCategory   string            `json:"sizeCategory"`  // small, medium, large, very_large
-    OriginalLength *int              `json:"originalLength,omitempty"`
-    Metadata       *DocumentMetadata `json:"metadata,omitempty"`
-    Citation       *Citation         `json:"citation,omitempty"`
+    URL             string    `json:"url"`
+    Content         string    `json:"content"`
+    ContentType     string    `json:"contentType"`    // html, markdown, youtube, pdf, docx, pptx (raw mode: the server's Content-Type header, may be "")
+    ContentLength   int       `json:"contentLength"`
+    Truncated       bool      `json:"truncated"`
+    EstimatedTokens int       `json:"estimatedTokens"`
+    SizeCategory    string    `json:"sizeCategory"`   // small, medium, large, very_large
+    Citation        *Citation `json:"citation"`       // always present
+    Raw             bool      `json:"raw,omitempty"`  // true only in raw mode; omitted otherwise
+    Metadata        *Metadata `json:"metadata,omitempty"` // present only when a title was extracted (full/preview only)
 }
 
-type DocumentMetadata struct {
-    Title     string `json:"title,omitempty"`
-    Author    string `json:"author,omitempty"`
-    PageCount int    `json:"pageCount,omitempty"`
-    CreatedAt string `json:"createdAt,omitempty"`
-    FileSize  int64  `json:"fileSize,omitempty"`
+type Metadata struct {
+    Title  string `json:"title"`
+    Author string `json:"author"`
 }
 
 type Citation struct {
@@ -116,11 +113,20 @@ type Citation struct {
     Formatted    CitationFormats  `json:"formatted"`
 }
 
+type CitationMetadata struct {
+    Title  string `json:"title"`
+    Author string `json:"author"`
+    Site   string `json:"site"`
+    Date   string `json:"date"`
+}
+
 type CitationFormats struct {
     APA string `json:"apa"`
     MLA string `json:"mla"`
 }
 ```
+
+On a **cache hit**, the result also carries a top-level `_meta` block with cache-freshness provenance (`cached: true`, `ageSeconds`, `maxAgeSeconds`, `freshness`) — see [Cache Freshness Provenance](#cache-freshness-provenance). Freshly fetched scrapes have no `_meta`.
 
 In `raw` mode the output additionally carries `"raw": true`, and `contentType` is the server's real `Content-Type` header (it may be empty). No `metadata` block is emitted.
 
@@ -258,10 +264,10 @@ type SourceResult struct {
 
 type FailureInfo struct {
     URL             string `json:"url"`
-    Kind            string `json:"kind"`            // error category (blocked, auth_required, etc.)
+    Kind            string `json:"kind,omitempty"`            // error category (blocked, auth_required, etc.)
     Reason          string `json:"reason"`
     Retryable       bool   `json:"retryable"`
-    SuggestedAction string `json:"suggestedAction"` // recovery hint
+    SuggestedAction string `json:"suggestedAction,omitempty"` // recovery hint
 }
 
 type QualityScore struct {
@@ -531,18 +537,38 @@ Multi-step research tracking with session persistence, branching, and knowledge 
 
 ```go
 type SequentialSearchOutput struct {
-    SessionID          string          `json:"sessionId"`
-    Question           string          `json:"question"`
-    CurrentStep        int             `json:"currentStep"`
-    TotalStepsEstimate int             `json:"totalStepsEstimate"`
-    IsComplete         bool            `json:"isComplete"`
-    Steps              []ResearchStep  `json:"steps"`
-    Sources            []ResearchSource `json:"sources"`
-    Gaps               []KnowledgeGap  `json:"gaps"`
-    StartedAt          string          `json:"startedAt"`
-    CompletedAt        string          `json:"completedAt,omitempty"`
+    SessionID          string           `json:"sessionId"`
+    ResponseMode       string           `json:"responseMode"`        // "full" or "summary"
+    ResearchGoal       string           `json:"researchGoal"`
+    CurrentStep        int              `json:"currentStep"`         // echoes the input stepNumber
+    TotalStepsEstimate int              `json:"totalStepsEstimate"`
+    IsComplete         bool             `json:"isComplete"`          // !nextStepNeeded
+    StartedAt          string           `json:"startedAt"`
+    CompletedAt        string           `json:"completedAt,omitempty"` // set only when complete
+    Warning            string           `json:"warning,omitempty"`     // e.g. max-steps reached
+
+    // "full" mode (default for <=8 steps):
+    Steps              []StepIndexEntry `json:"steps,omitempty"`     // one-liner index, full mode only
+
+    // "summary" mode (default for >8 steps):
+    Summary            string           `json:"summary,omitempty"`   // summary mode only
+    StepIndex          []StepIndexEntry `json:"stepIndex,omitempty"` // summary mode only
+
+    // Both modes:
+    LastSteps          []ResearchStep   `json:"lastSteps,omitempty"` // most recent full steps
+    Gaps               []KnowledgeGap   `json:"gaps,omitempty"`
+    Sources            []ResearchSource `json:"sources,omitempty"`
+}
+
+type StepIndexEntry struct {
+    StepNumber int    `json:"stepNumber"`
+    OneLiner   string `json:"oneLiner"`
+    BranchID   string `json:"branchId"`
+    Confidence string `json:"confidence"`
 }
 ```
+
+> The key set depends on `responseMode`: **full** mode emits `steps`; **summary** mode emits `summary` + `stepIndex` instead. Both emit `lastSteps`, `gaps`, and `sources`. This tool does **not** emit a `_meta` block (no caching).
 
 ### State Management
 - Two-tier: in-memory index (lightweight) + encrypted disk (full session JSON)
@@ -597,16 +623,43 @@ Recover a `sequential_search` session after context loss. Returns the session su
 | Total tool execution | 60s | 120s |
 
 ### Content Size Limits
-| Content | Max Size |
-|---------|----------|
-| Single page content | 50 KB |
-| Combined research content | 300 KB |
+| Content | Limit |
+|---------|-------|
+| `scrape_page` content — default `max_length` | 50 KB |
+| `scrape_page` content — hard cap (`maxScrapeLength`, all modes incl. `raw`) | 5 MB |
+| `search_and_scrape` per-source content — default | 50 KB |
+| `search_and_scrape` combined content — default `total_max_length` | 300 KB |
 | Document download | 10 MB |
 | YouTube transcript | 100 KB |
 
 ### Token Estimation
 - Formula: `len(content) / 4` (conservative, ~4 chars per token)
 - Size categories: small (<5K chars), medium (<20K), large (<50K), very_large (>=50K)
+
+### Cache Freshness Provenance
+
+Cacheable tools attach a top-level MCP `_meta` block so a client can tell whether a result was served from cache and how stale it is. The fields (set in `cachedResultWithMeta` / `freshResult`, `internal/tools/errors.go`) are:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `cached` | bool | `true` if served from cache, `false` if freshly fetched |
+| `ageSeconds` | int | Age of the cached entry in seconds (`0` for fresh) |
+| `maxAgeSeconds` | int | The entry's TTL in seconds |
+| `freshness` | string | Human-readable freshness label (e.g. `fresh`) |
+
+Which tools emit `_meta`:
+
+| Tool | Fresh result | Cache hit |
+|------|--------------|-----------|
+| `web_search` | yes (`cached: false`) | yes (`cached: true`) |
+| `image_search`, `news_search`, `academic_search`, `patent_search`, `scrape_page` | no | yes (`cached: true`) |
+| `search_and_scrape`, `sequential_search`, `get_research_session` | no (not cached as a unit) | n/a |
+
+### Audit & Tenant Scope
+
+Every tool call is logged through `deps.Auditor.Log()` as an `audit.AuditEvent` (`internal/audit/logger.go`) carrying `tenant_id`, `user_id`, `request_id`, `tool_name`, `duration_ms`, `success`, and an optional `error_code` (field names are the JSON tags on `AuditEvent`). Tenant and user identity are read from the request context (`auth.TenantIDFromContext` / `auth.UserIDFromContext`).
+
+Privacy: the raw query text is attached to `metadata.query` **only** when `AUDIT_INCLUDE_REQUEST_BODY` is enabled (`Auditor.IncludeRequestBody()`); otherwise just `metadata.query_length` is recorded. All metadata string values and error strings pass through `audit.MaskSecrets` so credentials never persist. Cache keys and session keys are tenant-scoped, so one tenant cannot read another's cached or session data.
 
 ### Unified Error Handling
 
