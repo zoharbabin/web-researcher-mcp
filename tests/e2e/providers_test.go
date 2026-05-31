@@ -292,6 +292,20 @@ func (h *providerHarness) callTool(t *testing.T, name string, args map[string]in
 	return resp.Result
 }
 
+// rpc sends an arbitrary JSON-RPC request with an auto-assigned id and returns
+// the response. Used for MCP surfaces beyond tools/call (resources, prompts).
+func (h *providerHarness) rpc(t *testing.T, method string, params interface{}) jsonRPCResponse {
+	t.Helper()
+	id := h.nextID
+	h.nextID++
+	h.send(jsonRPCRequest{JSONRPC: "2.0", ID: id, Method: method, Params: params})
+	resp := h.readResponse()
+	if resp.ID != float64(id) {
+		t.Fatalf("%s: expected ID %d, got %v", method, id, resp.ID)
+	}
+	return resp
+}
+
 func (h *providerHarness) shutdown() {
 	h.t.Helper()
 	h.stdin.Close()
