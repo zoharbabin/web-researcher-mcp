@@ -258,7 +258,7 @@ Please include:
 
 ## Code of Conduct
 
-This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to zohar.babin@gmail.com.
+This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. To report unacceptable behavior, see the confidential reporting instructions in [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md#reporting-concerns).
 
 ## Adding a New Tool
 
