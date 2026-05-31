@@ -267,11 +267,13 @@ Per-PR cycle the maintainer follows:
 5. Merge: `gh pr merge <N> --squash --admin`.
 
 ```bash
-# Inspect Copilot's findings on a PR
+# Inspect Copilot's findings on a PR. Note the two different bot logins:
+# the review summary is authored by `copilot-pull-request-reviewer`, but the
+# inline review comments are authored by `Copilot`.
 gh pr view <N> --json reviews \
   --jq '.reviews[] | select(.author.login=="copilot-pull-request-reviewer") | .body'
 gh api repos/zoharbabin/web-researcher-mcp/pulls/<N>/comments \
-  --jq '.[] | select(.user.login=="copilot-pull-request-reviewer[bot]") | "\(.path):\(.line // .original_line)  \(.body)"'
+  --jq '.[] | select(.user.login=="Copilot") | "\(.path):\(.line // .original_line)  \(.body)"'
 
 # After CI is green and every finding is addressed/resolved:
 gh pr merge <N> --squash --admin
