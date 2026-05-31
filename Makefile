@@ -1,5 +1,5 @@
 .PHONY: build build-fips test test-race test-cover test-e2e test-live test-concurrency test-bench \
-        lint fmt fmt-check vet vuln sec tools hooks precommit verify clean run dev docker release version-sync help all
+        lint fmt fmt-check vet vuln sec tools hooks precommit verify clean run dev docker docker-smoke release version-sync help all
 
 BINARY = web-researcher-mcp
 VERSION ?= $(shell cat VERSION 2>/dev/null || git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -121,6 +121,12 @@ dev:
 
 docker:
 	docker build -t $(BINARY):$(VERSION) .
+
+# Build the shipped image and validate it serves MCP over HTTP end-to-end
+# (initialize + web_search) with PORT set and no stdin — the regression guard
+# for the HTTP-lifecycle fix. No API keys (DuckDuckGo zero-config fallback).
+docker-smoke:
+	bash scripts/docker-smoke.sh $(BINARY):smoke
 
 release:
 	goreleaser release --snapshot --clean
