@@ -217,9 +217,11 @@ STDIO transport is unaffected.
    - New code has tests; documentation updated if behavior changes
 
    `main` is branch-protected: the **Lint**, **Test**, **Security** (govulncheck +
-   gosec), and **E2E** CI checks must all pass before a PR can merge, and the
-   branch must be up to date with `main`. Running `make verify` locally
-   reproduces these checks exactly (same pinned tool versions via `go tool`).
+   gosec), and **E2E** CI checks must all pass before a PR can merge, the branch
+   must be up to date with `main`, linear history is required, and all PR
+   conversations must be resolved. Running `make verify` locally reproduces the
+   CI checks exactly (same pinned tool versions via `go tool`). Human approval is
+   **not** required (the repo is maintainer-driven — see the merge policy below).
 
 4. **Write a clear PR description** — explain what changed and why. Include:
    - Summary of changes
@@ -237,6 +239,47 @@ STDIO transport is unaffected.
 - [ ] New functionality has tests
 - [ ] Documentation updated (if applicable)
 - [ ] Commit messages follow Conventional Commits
+
+### Maintainer Merge Policy
+
+`main` requires **zero human approvals** (this is a maintainer-driven repo, so a
+required-reviewer rule would just block the maintainer's own PRs). Quality is
+held by two gates instead: the CI checks above, and a mandatory **Copilot review
+as a second set of eyes**. Every PR is reviewed by Copilot and every finding is
+either fixed or rebutted before merge.
+
+**How Copilot review is triggered:** by the repo setting *Settings → Rules →
+Rulesets → "Request pull request review from Copilot"* (a one-time UI toggle).
+Copilot **cannot** be requested per-PR via the API or `gh` — it is not a
+collaborator, so `gh pr edit --add-reviewer` and the `requested_reviewers`
+REST/GraphQL endpoints all reject it. The automatic setting is the only
+mechanism; if a fast PR merges before Copilot posts, address its findings in a
+follow-up PR.
+
+Per-PR cycle the maintainer follows:
+
+1. Open the PR; CI runs and Copilot review is auto-requested.
+2. Wait for Copilot's review to post (`copilot-pull-request-reviewer[bot]`).
+3. For **each** Copilot finding: fix it, or reply in-thread explaining why it's
+   incorrect — then resolve the conversation. (Copilot only ever `COMMENTED`,
+   never `APPROVED`, so its review can't satisfy an approval gate by design.)
+4. Confirm all CI checks are green and every Copilot thread is resolved.
+5. Merge: `gh pr merge <N> --squash --admin`.
+
+```bash
+# Inspect Copilot's findings on a PR
+gh pr view <N> --json reviews \
+  --jq '.reviews[] | select(.author.login=="copilot-pull-request-reviewer") | .body'
+gh api repos/zoharbabin/web-researcher-mcp/pulls/<N>/comments \
+  --jq '.[] | "\(.path):\(.line // .original_line)  \(.body)"'
+
+# After CI is green and every finding is addressed/resolved:
+gh pr merge <N> --squash --admin
+```
+
+`--admin` clears the conversation-resolution/up-to-date formalities at merge
+time; it is **not** a substitute for steps 2–3 — never run it before Copilot's
+findings are genuinely addressed.
 
 ## Issue Guidelines
 
