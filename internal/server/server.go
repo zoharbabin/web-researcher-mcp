@@ -138,7 +138,7 @@ func (s *Server) ServeHTTP(ctx context.Context, cfg HTTPConfig) error {
 
 	go func() {
 		<-ctx.Done()
-		httpServer.Close()
+		_ = httpServer.Close()
 	}()
 
 	if err := httpServer.ListenAndServe(); err != http.ErrServerClosed {

@@ -221,13 +221,13 @@ func (l *Logger) Close() {
 
 	l.swapMu.Lock()
 	if l.swapFile != nil {
-		l.swapFile.Close()
+		_ = l.swapFile.Close()
 		l.swapFile = nil
 	}
 	l.swapMu.Unlock()
 
 	if l.file != nil {
-		l.file.Close()
+		_ = l.file.Close()
 	}
 }
 
@@ -382,7 +382,7 @@ func (l *Logger) replaySwap(enc *json.Encoder) *json.Encoder {
 	}
 	// Close the write handle and atomically rename so concurrent spillToSwap
 	// creates a fresh file rather than appending to the one we're about to read.
-	l.swapFile.Close()
+	_ = l.swapFile.Close()
 	l.swapFile = nil
 	l.swapSize = 0
 	replayPath := l.swapPath + ".replay"
@@ -392,6 +392,7 @@ func (l *Logger) replaySwap(enc *json.Encoder) *json.Encoder {
 	}
 	l.swapMu.Unlock()
 
+	// #nosec G304 -- internal path (hash/fixed name under our own dir), not user input
 	f, err := os.Open(replayPath)
 	if err != nil {
 		return enc
@@ -411,8 +412,8 @@ func (l *Logger) replaySwap(enc *json.Encoder) *json.Encoder {
 			}
 		}
 	}
-	f.Close()
-	os.Remove(replayPath)
+	_ = f.Close()
+	_ = os.Remove(replayPath)
 	return enc
 }
 

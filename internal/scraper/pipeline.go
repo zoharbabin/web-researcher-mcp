@@ -229,11 +229,8 @@ func (p *Pipeline) ScrapeRaw(ctx context.Context, rawURL string, maxLength int) 
 	}
 
 	contentType := resp.Header.Get("Content-Type")
-	truncated := false
-	// If we read exactly the limit, more data likely remained.
-	if len(body) >= limit {
-		truncated = true
-	}
+	// Reading up to the limit means more data likely remained on the wire.
+	truncated := len(body) >= limit
 
 	return &ScrapeResult{
 		URL:         rawURL,
@@ -390,6 +387,7 @@ func timeoutStat(path string) (any, error) {
 	}
 	ch := make(chan result, 1)
 	go func() {
+		// #nosec G111 -- path is from a fixed internal allowlist of chromium binary locations, not user input
 		_, err := http.Dir("/").Open(path)
 		ch <- result{err}
 	}()

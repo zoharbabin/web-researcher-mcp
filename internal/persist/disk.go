@@ -94,6 +94,8 @@ func (s *DiskStore) Get(_ context.Context, key string) ([]byte, bool) {
 
 func (s *DiskStore) getFromFile(key string, now time.Time) ([]byte, bool) {
 	fp := s.filePath(key)
+	// #nosec G304 -- fp is filePath(key): a SHA-256 hash of the key under the
+	// store's own directory, never attacker-controlled input.
 	data, err := os.ReadFile(fp)
 	if err != nil || len(data) < 8 {
 		return nil, false
@@ -102,6 +104,7 @@ func (s *DiskStore) getFromFile(key string, now time.Time) ([]byte, bool) {
 	expiresUnix := binary.BigEndian.Uint64(data[:8])
 	var expiresAt time.Time
 	if expiresUnix != 0 {
+		// #nosec G115 -- value is a Unix second count we wrote; no realistic overflow.
 		expiresAt = time.Unix(int64(expiresUnix), 0)
 		if now.After(expiresAt) {
 			_ = os.Remove(fp)
@@ -157,6 +160,7 @@ func (s *DiskStore) writeFile(key string, value []byte, expiresAt time.Time) {
 
 	buf := make([]byte, 8+len(data))
 	if !expiresAt.IsZero() {
+		// #nosec G115 -- Unix second count; no realistic overflow before year ~292e9.
 		binary.BigEndian.PutUint64(buf[:8], uint64(expiresAt.Unix()))
 	}
 	copy(buf[8:], data)
@@ -167,12 +171,12 @@ func (s *DiskStore) writeFile(key string, value []byte, expiresAt time.Time) {
 	}
 	tmpName := tmp.Name()
 	if _, err := tmp.Write(buf); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		_ = os.Remove(tmpName)
 		return
 	}
 	if err := tmp.Sync(); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		_ = os.Remove(tmpName)
 		return
 	}

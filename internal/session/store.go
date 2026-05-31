@@ -80,6 +80,7 @@ func (s *Store) Save(key string, sess *Session, ttl time.Duration) error {
 
 	expiry := time.Now().Add(ttl)
 	buf := make([]byte, 8+len(data))
+	// #nosec G115 -- Unix second count; no realistic overflow
 	binary.BigEndian.PutUint64(buf[:8], uint64(expiry.Unix()))
 	copy(buf[8:], data)
 
@@ -94,23 +95,23 @@ func (s *Store) Save(key string, sess *Session, ttl time.Duration) error {
 	// files; this Chmod is self-documenting and guards against a permissive
 	// umask on platforms that honor it differently.
 	if err := tmp.Chmod(0600); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
 		return err
 	}
 
 	if _, err := tmp.Write(buf); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
 		return err
 	}
 	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
 		return err
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName)
 		return err
 	}
 
@@ -119,6 +120,7 @@ func (s *Store) Save(key string, sess *Session, ttl time.Duration) error {
 
 func (s *Store) Load(key string) (*Session, error) {
 	fp := s.filePath(key)
+	// #nosec G304 -- path is an internal hash under the store's own directory, not user input
 	data, err := os.ReadFile(fp)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -145,6 +147,7 @@ func (s *Store) Load(key string) (*Session, error) {
 			// Lazy re-encrypt with the current key so the blob is upgraded on
 			// first read after rotation (M1). Best-effort: a write failure does
 			// not fail the read.
+			// #nosec G115 -- Unix second count; no realistic overflow
 			expiry := time.Unix(int64(binary.BigEndian.Uint64(data[:8])), 0)
 			_ = s.rewrite(key, payload, expiry)
 		}
@@ -182,6 +185,7 @@ func (s *Store) rewrite(key string, plaintext []byte, expiry time.Time) error {
 	}
 
 	buf := make([]byte, 8+len(data))
+	// #nosec G115 -- Unix second count; no realistic overflow
 	binary.BigEndian.PutUint64(buf[:8], uint64(expiry.Unix()))
 	copy(buf[8:], data)
 
@@ -192,22 +196,22 @@ func (s *Store) rewrite(key string, plaintext []byte, expiry time.Time) error {
 	}
 	tmpName := tmp.Name()
 	if err := tmp.Chmod(0600); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
 		return err
 	}
 	if _, err := tmp.Write(buf); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
 		return err
 	}
 	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
 		return err
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName)
 		return err
 	}
 	return os.Rename(tmpName, fp)
@@ -221,6 +225,7 @@ func (s *Store) rewrite(key string, plaintext []byte, expiry time.Time) error {
 // decoded plaintext (for lazy re-encrypt), the stored expiry, whether the
 // previous key was used (M1), and an error on corruption.
 func (s *Store) loadFile(fp, hash string) (sess *Session, plaintext []byte, expiry time.Time, usedPrev bool, err error) {
+	// #nosec G304 -- path is an internal hash under the store's own directory, not user input
 	data, err := os.ReadFile(fp)
 	if err != nil {
 		return nil, nil, time.Time{}, false, err
@@ -229,6 +234,7 @@ func (s *Store) loadFile(fp, hash string) (sess *Session, plaintext []byte, expi
 		return nil, nil, time.Time{}, false, ErrCorrupt
 	}
 
+	// #nosec G115 -- Unix second count; no realistic overflow
 	expiry = time.Unix(int64(binary.BigEndian.Uint64(data[:8])), 0)
 	payload := data[8:]
 
@@ -265,6 +271,7 @@ func (s *Store) ListValid(now time.Time) ([]string, error) {
 		}
 
 		fp := filepath.Join(s.dir, e.Name())
+		// #nosec G304 -- path is an internal hash under the store's own directory, not user input
 		f, err := os.Open(fp)
 		if err != nil {
 			continue
@@ -272,14 +279,15 @@ func (s *Store) ListValid(now time.Time) ([]string, error) {
 
 		var ts [8]byte
 		_, err = io.ReadFull(f, ts[:])
-		f.Close()
+		_ = f.Close()
 		if err != nil {
 			continue
 		}
 
+		// #nosec G115 -- Unix second count; no realistic overflow
 		expiry := int64(binary.BigEndian.Uint64(ts[:]))
 		if now.Unix() > expiry {
-			os.Remove(fp)
+			_ = os.Remove(fp)
 			continue
 		}
 
@@ -296,7 +304,7 @@ func (s *Store) CleanOrphans() error {
 	}
 	for _, e := range entries {
 		if strings.HasSuffix(e.Name(), ".tmp") {
-			os.Remove(filepath.Join(s.dir, e.Name()))
+			_ = os.Remove(filepath.Join(s.dir, e.Name()))
 		}
 	}
 	return nil

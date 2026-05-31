@@ -135,7 +135,9 @@ func (l *Limiter) persistCount(tenantID string, tl *tenantLimiter) {
 		return
 	}
 	buf := make([]byte, 16)
+	// #nosec G115 -- daily request counter is non-negative; no realistic overflow
 	binary.BigEndian.PutUint64(buf[0:8], uint64(tl.dailyCount))
+	// #nosec G115 -- Unix nanosecond count; no realistic overflow
 	binary.BigEndian.PutUint64(buf[8:16], uint64(tl.dailyReset.UnixNano()))
 	// TTL until the window resets (+1h slack) so stale windows self-evict.
 	ttl := time.Until(tl.dailyReset) + time.Hour
@@ -152,7 +154,9 @@ func (l *Limiter) loadCount(tenantID string) (count int64, reset time.Time, ok b
 	if !found || len(buf) != 16 {
 		return 0, time.Time{}, false
 	}
+	// #nosec G115 -- daily request counter round-trip; no realistic overflow
 	count = int64(binary.BigEndian.Uint64(buf[0:8]))
+	// #nosec G115 -- Unix nanosecond count round-trip; no realistic overflow
 	reset = time.Unix(0, int64(binary.BigEndian.Uint64(buf[8:16])))
 	return count, reset, true
 }

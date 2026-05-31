@@ -35,7 +35,7 @@ func parseDOCX(data []byte) (string, Metadata, error) {
 				continue
 			}
 			text = extractDOCXText(rc)
-			rc.Close()
+			_ = rc.Close()
 			break
 		}
 	}

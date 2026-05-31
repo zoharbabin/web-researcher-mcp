@@ -357,14 +357,14 @@ func (m *Manager) rebuildIndex() {
 		sess, plaintext, expiry, usedPrev, err := m.store.loadFile(fp, hash)
 		if err != nil {
 			slog.Warn("corrupt session file during rebuild, removing", "hash", hash, "err", err)
-			os.Remove(fp)
+			_ = os.Remove(fp)
 			continue
 		}
 
 		key := sess.TenantID + ":" + sess.ID
 		if fileHash(key) != hash {
 			slog.Warn("session file hash mismatch, removing", "hash", hash)
-			os.Remove(fp)
+			_ = os.Remove(fp)
 			continue
 		}
 

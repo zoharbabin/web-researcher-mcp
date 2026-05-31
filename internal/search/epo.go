@@ -25,6 +25,7 @@ type EPOProvider struct {
 }
 
 func NewEPOProvider(consumerKey, consumerSecret string, deps Deps) *EPOProvider {
+	// #nosec G101 -- assigned from constructor parameters; no hardcoded credential
 	return &EPOProvider{
 		consumerKey:    consumerKey,
 		consumerSecret: consumerSecret,

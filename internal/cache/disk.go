@@ -72,6 +72,7 @@ func NewDiskCache(cfg DiskConfig) *DiskCache {
 
 func (d *DiskCache) invalidateOnVersionChange(version string) {
 	versionFile := filepath.Join(d.dir, ".version")
+	// #nosec G304 -- internal path (hash/fixed name under our own dir), not user input
 	existing, err := os.ReadFile(versionFile)
 	if err != nil || string(existing) != version {
 		entries, _ := os.ReadDir(d.dir)
@@ -204,6 +205,7 @@ func (d *DiskCache) writeToFile(key string, entry diskEntry) {
 
 	// Prepend expiry timestamp
 	buf := make([]byte, 8+len(data))
+	// #nosec G115 -- Unix second count; no realistic overflow
 	binary.BigEndian.PutUint64(buf[:8], uint64(entry.expiresAt.Unix()))
 	copy(buf[8:], data)
 
@@ -213,6 +215,7 @@ func (d *DiskCache) writeToFile(key string, entry diskEntry) {
 
 func (d *DiskCache) getFromFile(key string) ([]byte, bool) {
 	fp := d.filePath(key)
+	// #nosec G304 -- internal path (hash/fixed name under our own dir), not user input
 	data, err := os.ReadFile(fp)
 	if err != nil {
 		return nil, false
@@ -223,6 +226,7 @@ func (d *DiskCache) getFromFile(key string) ([]byte, bool) {
 	}
 
 	expiresUnix := binary.BigEndian.Uint64(data[:8])
+	// #nosec G115 -- Unix second count; no realistic overflow
 	expiresAt := time.Unix(int64(expiresUnix), 0)
 	if time.Now().After(expiresAt) {
 		_ = os.Remove(fp)
