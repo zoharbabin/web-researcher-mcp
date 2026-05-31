@@ -57,11 +57,12 @@ This is the architecture reference for web-researcher-mcp — the tool that give
 │  ┌────▼────┐ ┌───▼─────────────────────────────┐               │
 │  │ Router  │ │ Scraper Implementations          │               │
 │  │(fallbk) │ │ ┌──────────┐ ┌───────┐ ┌──────┐│               │
-│  │ Brave   │ │ │ Markdown │ │goquery│ │go-rod││               │
-│  │ Google  │ │ │ Negotiat.│ │(HTML) │ │(CDP) ││               │
-│  │ Serper  │ │ └──────────┘ └───────┘ └──────┘│               │
-│  │ SearXNG │                                    │               │
-│  │SearchAPI│                                    │               │
+│  │ wraps   │ │ │ Markdown │ │goquery│ │go-rod││               │
+│  │  every  │ │ │ Negotiat.│ │(HTML) │ │(CDP) ││               │
+│  │provider │ │ └──────────┘ └───────┘ └──────┘│               │
+│  │  in     │ │                                  │               │
+│  │Supported│ │                                  │               │
+│  │Providers│ │                                  │               │
 │  └─────────┘ │                                  │               │
 │              │ ┌──────────┐ ┌───────┐ ┌──────┐│               │
 │              │ │   PDF    │ │ DOCX  │ │ PPTX ││               │
@@ -157,8 +158,9 @@ In addition to the general `Provider` interface, the system supports domain-spec
 
 ```go
 type PatentProvider interface {
-    DomainProvider
-    Patents(ctx context.Context, params PatentSearchParams) ([]PatentResult, error)
+    PatentSearcher // Patents(ctx, params) ([]PatentResult, error)
+    Name() string
+    Metadata() ProviderMeta
 }
 ```
 

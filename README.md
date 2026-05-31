@@ -173,7 +173,9 @@ claude mcp add --scope user web-researcher -- web-researcher-mcp
 
 **Docker:**
 ```bash
-docker run -e GOOGLE_CUSTOM_SEARCH_API_KEY=YOUR_KEY \
+# STDIO mode needs -i so the container's stdin stays attached for MCP JSON-RPC
+docker run -i --rm \
+           -e GOOGLE_CUSTOM_SEARCH_API_KEY=YOUR_KEY \
            -e GOOGLE_CUSTOM_SEARCH_ID=YOUR_CX \
            docker.io/zoharbabin/web-researcher-mcp:latest
 ```
@@ -264,7 +266,7 @@ Set `SEARCH_PROVIDER=brave` and you're done. No Google keys needed.
 
 | Variable | What to put | Why |
 |----------|-------------|-----|
-| `OPENALEX_EMAIL` | Your email address | Unlocks faster access to 250M+ scholarly works — no registration, just an email |
+| `OPENALEX_EMAIL` | Your email address | Unlocks faster access to OpenAlex's full catalog of scholarly works — no registration, just an email |
 | `CROSSREF_EMAIL` | Your email address | Same — faster access to DOI metadata for citations |
 
 > With these set, `academic_search` returns real papers with DOIs, authors, citation counts, and open-access PDF links. Without them, it still works but uses web search as a fallback.

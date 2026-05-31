@@ -9,9 +9,9 @@ go build -o web-researcher-mcp ./cmd/web-researcher-mcp    # Build
 go test ./...                                               # Unit + integration tests
 go test -race ./...                                         # Race detector
 go test -v ./tests/e2e/...                                  # E2E (needs API keys)
-golangci-lint run                                           # Lint
-govulncheck ./...                                           # Vulnerability scan
-make all                                                    # lint + vet + vuln + test + build
+go tool golangci-lint run                                   # Lint (pinned version)
+go tool govulncheck ./...                                    # Vulnerability scan (pinned version)
+make verify                                                  # fmt-check + vet + lint + gosec + vuln + test-race + test-e2e + build (CI gate; `make all` aliases it)
 ```
 
 ## Architecture
@@ -24,6 +24,7 @@ internal/
 ├── scraper/      # 4-tier pipeline: markdown → stealth → HTML → browser (go-rod)
 ├── documents/    # PDF, DOCX, PPTX extraction
 ├── cache/        # Cache interface + hybrid impl (memory + AES-encrypted disk)
+├── persist/      # Generic TTL key/value Store (memory or AES-256-GCM disk) — backs token revocation + rate-quota durability
 ├── content/      # Sanitize, dedup, truncate, quality score, citation extraction
 ├── config/       # Env-based config — all vars documented in .env.example
 ├── server/       # MCP server lifecycle (STDIO + Streamable HTTP)
@@ -151,7 +152,7 @@ Non-negotiable rules for all code changes (human or AI agent):
 6. **Respect tenant boundaries** — any new shared state must consider: "Can tenant A see tenant B's data?" Answer must be no.
 7. **Don't accumulate data** — new features should not store data beyond the request lifecycle without TTLs and explicit opt-in.
 8. **Constant-time comparison for secrets** — use `subtle.ConstantTimeCompare()`, never `==` for auth tokens/keys.
-9. **Encrypt sensitive persistent data** — use existing `cache.DiskCache` GCM infrastructure when storing to disk.
+9. **Encrypt sensitive persistent data** — reuse existing AES-256-GCM disk infrastructure when storing to disk: `cache.DiskCache` for cached responses, `persist.DiskStore` for TTL key/value state (token revocation, rate quotas), `session` store for research sessions.
 10. **Minimal dependencies** — prefer Go stdlib. Each new dependency is a supply chain risk. Justify in PR.
 11. **Annotate all tools** — every tool must declare `readOnlyAnnotations(idempotent, openWorld)`. CI test enforces this.
 

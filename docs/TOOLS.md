@@ -201,21 +201,22 @@ Raw responses use a distinct cache key (`url + "raw"`) so a raw result never col
 - medium.com, dev.to
 
 ### Cache
-- Key: SHA-256 of (url + mode)
+- Key: SHA-256 of (`url` + `mode` + `max_length`) — `max_length` is part of the key so a larger request never serves a shorter cached body
 - TTL: 1 hour
 
 ### Error Taxonomy (`internal/scraper/errors.go`)
 
 All scrape errors are typed as `ScrapeError{Kind, Message, Cause, URL, Tier}`. The `scrapeErrorResponse()` function in `internal/tools/scrape.go` maps each kind to an actionable LLM-facing message:
 
-| ErrorKind | Trigger | LLM Message Includes |
-|-----------|---------|---------------------|
-| `ErrNetwork` | DNS failure, timeout, connection refused | "network error — check connectivity or try again" |
-| `ErrBlocked` | HTTP 403, bot detection, SSRF, domain allowlist | "access was blocked" + GitHub issue link |
-| `ErrBrowser` | Chrome not found, launch failed, connect failed | "Chrome not available" + CHROME_PATH guidance |
-| `ErrContent` | Page loaded but <100 bytes extracted | "no readable content" + GitHub issue link |
-| `ErrAuth` | HTTP 401, login redirect | "authentication required" |
-| `ErrRateLimit` | HTTP 429 | "rate limited — try again in 60 seconds" |
+| ErrorKind | Retryable | Trigger | LLM Message (verbatim shape from `scrape.go`) |
+|-----------|-----------|---------|-----------------------------------------------|
+| `ErrValidation` | no (permanent) | Unsupported scheme, empty host, SSRF / private-IP / blocked-hostname denial, domain allowlist denial | "URL rejected for {url}: {detail}. Provide a valid public http(s) URL." |
+| `ErrNetwork` | yes | DNS failure, timeout, connection refused, TLS | "Network error on {url}: {detail}. Check connectivity." |
+| `ErrBlocked` | yes | HTTP 403, remote bot detection | "Blocked: {url} uses bot detection. Try alternative source or report at {issueURL}" |
+| `ErrBrowser` | yes | Chrome not found, launch failed, connect failed | "Scrape failed: Chrome unavailable. Set CHROME_PATH or install Chrome. Report at {issueURL}" |
+| `ErrContent` | yes | Page loaded but no usable content extracted | "No content extracted from {url}. May need browser rendering. Report at {issueURL}" |
+| `ErrAuth` | no | HTTP 401, login redirect | "Auth required: {url} is behind a login wall." |
+| `ErrRateLimit` | yes (after delay) | HTTP 429 | "Rate limited on {url}. Retry in 60 seconds." |
 
 When all tiers fail, the composite error message lists each tier's outcome (e.g., `markdown: empty, stealth: HTTP 403, html: 12 bytes, browser: chrome launch failed`).
 
@@ -290,7 +291,7 @@ type PipelineSummary struct {
 
 1. Execute search (via configured provider)
 2. Scrape all result URLs in parallel (bounded concurrency: 5)
-3. If `deduplicate`: paragraph-level hashing (djb2), remove >85% similar blocks
+3. If `deduplicate`: paragraph-level djb2 hashing, drop blocks whose hash exactly matches one already seen (exact-match dedup, not fuzzy similarity)
 4. Score and rank sources by quality (weighted: relevance 35%, freshness 20%, authority 25%, content 20%)
 5. If `filter_by_query`: extract keywords, remove sources below relevance threshold
 6. Combine content, truncate to `total_max_length`
@@ -412,6 +413,7 @@ type NewsArticle struct {
 | `sort_by` | string | no | `relevance` | relevance, date |
 | `open_access` | bool | no | false | Only return open-access papers |
 | `provider` | string | no | — | Force provider: openalex, crossref (academic APIs), or google, brave, serper, searxng, searchapi (web fallback) |
+| `sessionId` | string | no | — | Link results to a `sequential_search` session; sources are auto-recorded for recovery after context loss |
 
 ### Output Fields
 
@@ -467,6 +469,7 @@ arxiv.org, pubmed.ncbi.nlm.nih.gov, scholar.google.com, ieeexplore.ieee.org, dl.
 | `year_from` | int | no | — | Only patents filed in or after this year |
 | `year_to` | int | no | — | Only patents filed in or before this year |
 | `provider` | string | no | — | Force provider: searchapi, epo, lens, uspto, or web search providers |
+| `sessionId` | string | no | — | Link results to a `sequential_search` session; sources are auto-recorded for recovery after context loss |
 
 ### Output Fields
 
