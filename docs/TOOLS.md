@@ -339,6 +339,9 @@ type ImageResult struct {
 }
 ```
 
+### Provider notes
+- Filters (`type`, `color_type`, `dominant_color`, `file_type`) are passed to the provider's image API. The `size` bucket is a hint the provider applies loosely — returned dimensions may not strictly match the requested bucket. Use the `width`/`height` fields to filter precisely when exact sizing matters.
+
 ### Cache
 - Key: SHA-256 of (query + all filter params)
 - TTL: 30 minutes
@@ -382,8 +385,12 @@ type NewsArticle struct {
 1. Route to configured search provider's news endpoint.
 2. Apply `freshness` as date restriction.
 3. If `news_source` specified, add as domain filter.
-4. Sort by `sort_by` parameter.
+4. Sort by `sort_by`: `relevance` (default) uses the provider's native ranking; `date` requests newest-first ordering.
 5. Return deduplicated articles.
+
+### Provider notes
+- `publishedAt` is populated when the provider exposes a publish timestamp (Google CSE via page metadata; Brave/Serper/SearchAPI/SearXNG natively). It is omitted (not fabricated) when the provider does not supply one, so treat it as best-effort.
+- `sort_by=date` maps to each provider's date-sort control; exact ordering and `freshness=hour` granularity depend on the provider's index and may be approximate. News providers may also surface high-ranking forum/aggregator pages — `news_source` narrows to a trusted outlet when that matters.
 
 ### Cache
 - TTL: 15 minutes (news is time-sensitive)
@@ -429,6 +436,7 @@ Additional output fields: `query`, `totalResults`, `resultCount`, `source` (whic
 ### Behavior
 - 4-strategy fallback: explicit provider → router → academic providers → site-restricted web search
 - When academic providers (OpenAlex, CrossRef) are configured, returns rich metadata (DOI, authors, citations, OA status)
+- Metadata richness varies by provider: OpenAlex returns abstracts, citation counts, and authors consistently; CrossRef is a DOI registry and may omit abstracts/citation counts. Automatic selection prefers OpenAlex; CrossRef answers when explicitly forced or as a fallback. Field absence reflects the provider, not an error.
 - Without academic env vars, falls back to site-restricted web search (identical to previous behavior)
 - Academic providers require only an email address (no API key registration)
 - `source` filter: when set (e.g., "arxiv"), OpenAlex filters by source ID; web fallback restricts to that source's domain
@@ -489,6 +497,8 @@ Additional output fields: `query`, `searchType`, `resultCount`, `source` (which 
 - Post-filter results by patent number prefix when `patent_office` is specified
 - Does not cache empty results (only caches when patents are found)
 - USPTO uses simple full-text search (quoted phrases); Lens uses Elasticsearch bool queries with match_phrase
+- `num_results` is enforced for every provider, including a defensive cap on the USPTO path (its API may return more rows than requested)
+- Provider matching is token/substring-based: `inventor`/`assignee` matches share a surname or company token rather than disambiguating entities, and a nonsense query may still fuzzy-match loosely-related patents instead of returning zero. Verify results against the returned bibliographic fields rather than assuming exact-entity matching.
 
 ### Cache
 - TTL: 24 hours (only for non-empty results)
@@ -523,6 +533,7 @@ Multi-step research tracking with session persistence, branching, and knowledge 
 
 ### Session Management
 - Sessions created on first call (stepNumber=1)
+- A `stepNumber > 1` call with no `sessionId` is rejected with guidance (pass the sessionId, recover with `get_research_session`, or restart at step 1) — it does **not** silently start a new session, so a lost sessionId never orphans the in-flight research trail
 - Session ID: UUID v4, returned in output
 - TTL: 4 hours of inactivity (configurable via `SESSION_TTL`), resets on every access
 - Max concurrent sessions: 50 per tenant (oldest evicted when exceeded)

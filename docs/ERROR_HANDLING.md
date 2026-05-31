@@ -80,11 +80,14 @@ type ScrapeError struct {
 | Kind | Constant | Triggers | Tier Examples |
 |------|----------|----------|---------------|
 | Network | `ErrNetwork` | DNS failure, timeout, connection refused, TLS error | Any tier's HTTP client |
-| Blocked | `ErrBlocked` | SSRF protection, domain allowlist, HTTP 403, bot detection | stealth (403), pipeline (allowlist) |
+| Validation | `ErrValidation` | Unsupported scheme, empty host, SSRF / private-IP / blocked-hostname denial, domain allowlist | pipeline (validation chokepoint) |
+| Blocked | `ErrBlocked` | HTTP 403, remote bot detection (a real site refusing us) | stealth/html (403) |
 | Browser | `ErrBrowser` | Chrome not found, launch failed, connect failed | browser tier only |
 | Content | `ErrContent` | Page loaded but <100 bytes of useful text extracted | All tiers (composite failure) |
 | Auth | `ErrAuth` | HTTP 401, login redirect detected | stealth, html |
 | Rate Limit | `ErrRateLimit` | HTTP 429 | Any tier's HTTP client |
+
+`ErrValidation` is distinct from `ErrBlocked` on purpose: a validation/security rejection is a **permanent** client error (the URL itself is invalid or disallowed), so it is **never retryable** and must not be reported as transient bot-detection. `ErrBlocked` is reserved for a real remote site actively refusing the request (HTTP 403 / bot walls), which is retryable from a different source.
 
 ### Helper Constructors
 
@@ -93,7 +96,8 @@ Each tier uses these to create appropriately-typed errors:
 | Function | Creates | Used By |
 |----------|---------|---------|
 | `networkError(url, tier, cause)` | `ErrNetwork` | All tiers on HTTP failures |
-| `blockedError(url, tier, cause, detail)` | `ErrBlocked` | stealth/html on 403, pipeline on allowlist |
+| `validationError(url, tier, cause, detail)` | `ErrValidation` | Pipeline chokepoint on bad scheme/host, SSRF denial, allowlist |
+| `blockedError(url, tier, cause, detail)` | `ErrBlocked` | stealth/html on remote HTTP 403 |
 | `browserError(url, cause, detail)` | `ErrBrowser` | browser tier on init/launch failure |
 | `contentError(url, detail)` | `ErrContent` | Pipeline when all tiers extract nothing |
 | `authError(url, tier, statusCode)` | `ErrAuth` | stealth/html on 401 |
@@ -115,7 +119,8 @@ no content extracted from https://x.com/user/status/123 (markdown: empty, stealt
 ```
 
 The composite error's `Kind` is escalated:
-- If any tier returned `ErrBlocked`/`ErrAuth`/`ErrRateLimit`/`ErrBrowser` → use that kind
+- A validation/security denial (`ErrValidation`) is definitive — it wins over any sibling tier's outcome (a private-IP block must never be downgraded to a retryable network error just because another tier also timed out)
+- Otherwise, if any tier returned `ErrBlocked`/`ErrAuth`/`ErrRateLimit`/`ErrBrowser` → use that kind
 - If all tiers returned `ErrNetwork` → use `ErrNetwork`
 - Otherwise → use `ErrContent`
 
@@ -155,13 +160,13 @@ Rate limited (google). Wait 60 seconds and retry, or try a different provider.
 |------|------|-----------|-----------------|
 | `rate_limited` | HTTP 429, quota exceeded | true | `retry_after_delay` |
 | `auth_required` | HTTP 401, invalid API key | false | `check_api_key` |
-| `blocked` | HTTP 403, bot detection, SSRF | true | `report_bug` |
+| `blocked` | HTTP 403, remote bot detection | true | `report_bug` |
+| `validation` | Invalid input params, unsupported scheme, SSRF / private-IP / blocked-host / allowlist denial | false | `inform_user` |
 | `network` | DNS failure, timeout, connection refused | true | `retry_after_delay` |
 | `content_empty` | Page loaded but no text extracted | true | `report_bug` |
 | `browser_unavailable` | Chrome not found/failed | false | `report_bug` |
 | `config` | Unknown/unconfigured provider | false | `try_different_provider` or `check_api_key` |
 | `upstream_unavailable` | General provider failure | true | `try_different_provider` |
-| `validation` | Invalid input params | false | `broaden_query` |
 
 ### Suggested Action Vocabulary
 
