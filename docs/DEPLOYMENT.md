@@ -61,12 +61,17 @@ OAUTH_AUDIENCE=https://api.example.com \
 ./web-researcher-mcp
 ```
 
-When `PORT` is set, the server starts an HTTP listener in addition to STDIO.
+When `PORT` is set, the server runs the HTTP (Streamable) transport exclusively
+and does not read STDIO; when `PORT` is unset it runs STDIO exclusively. The two
+transports are mutually exclusive, so a container started with `PORT` set but no
+stdin attached (`docker run -p ... -e PORT=...`) stays up serving HTTP.
 
 **Endpoints:**
 - `/mcp/` — Streamable HTTP MCP endpoint (handles POST and streaming)
-- `GET /health/live` — Liveness probe (always 200)
-- `GET /health/ready` — Readiness probe (checks dependencies)
+- `GET /health/live` — Liveness probe (always 200, `ok`)
+- `GET /health/ready` — Readiness probe (always 200, `ready` — a static
+  process-up check, not a dependency health check; the server is fully
+  initialized before the listener binds)
 - `GET /metrics` — Prometheus metrics
 - `GET /.well-known/oauth-authorization-server` — OAuth metadata
 
@@ -76,7 +81,7 @@ When `PORT` is set, the server starts an HTTP listener in addition to STDIO.
 |----------|:---:|:---:|
 | Tool functionality | Identical | Identical |
 | Tool descriptions | Identical | Identical |
-| Auth required | No | Yes (OAuth 2.1) |
+| Auth | No | OAuth 2.1 when `OAUTH_ISSUER_URL` is set; open otherwise |
 | Rate limiting (server-side) | None | Per-tenant + global |
 | Rate limiting (upstream APIs) | Applies | Applies |
 | Session persistence | Local disk | Local disk (use sticky sessions for multi-instance) |
@@ -209,10 +214,10 @@ spec:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `GOOGLE_CUSTOM_SEARCH_API_KEY` | Google API key (used when `SEARCH_PROVIDER` is unset/`google` and no routing) | `AIzaSy...` (39 chars) |
+| `GOOGLE_CUSTOM_SEARCH_API_KEY` | Google API key. Required **only** when `SEARCH_PROVIDER=google` and routing is unset; otherwise optional | `AIzaSy...` (39 chars) |
 | `GOOGLE_CUSTOM_SEARCH_ID` | Search engine ID (paired with the key above) | From [PSE console](https://programmablesearchengine.google.com/) |
 
-Note: when `PORT` is unset (STDIO mode), a config error is logged but the server still starts so zero-config local use works. When `PORT` is set (HTTP mode), config validation is fatal.
+Note: Google keys are validated as required only when you explicitly select `SEARCH_PROVIDER=google` without multi-provider routing. With `SEARCH_PROVIDER` unset (or any other value), the server starts keyless and falls back to the zero-config DuckDuckGo provider — in both STDIO and HTTP mode. A genuine misconfiguration (e.g. `SEARCH_PROVIDER=google` with no key) is fatal in HTTP mode (`PORT` set) and logged-but-non-fatal in STDIO mode so local use is never blocked.
 
 ### Search Provider
 
@@ -576,18 +581,21 @@ This server is distributed via:
 
 | Endpoint | Method | Response | Use |
 |----------|--------|----------|-----|
-| `/health/live` | GET | `200 OK` always | K8s liveness probe |
-| `/health/ready` | GET | `200` if dependencies up, `503` otherwise | K8s readiness probe |
+| `/health/live` | GET | `200 OK` always (`ok`) | K8s liveness probe |
+| `/health/ready` | GET | `200 OK` always (`ready`) | K8s readiness probe |
 
-Readiness checks:
-- At least one search provider is configured with valid credentials
-- Disk cache directory is writable
+Both probes are static process-up checks: a `200` means the process is running
+and the HTTP listener is bound (the server completes all initialization —
+providers, cache, sessions, audit — before binding the port, so a successful
+connection already implies a fully-constructed server). They do not perform live
+dependency health checks; upstream provider availability is handled at call time
+via per-provider circuit breakers and graceful tool errors.
 
 ---
 
 ## Graceful Shutdown
 
-On SIGINT/SIGTERM or stdin EOF:
+On SIGINT/SIGTERM (HTTP mode), or SIGINT/SIGTERM/stdin EOF (STDIO mode):
 1. Stop accepting new connections
 2. Drain in-flight requests (30s timeout)
 3. Flush cache to disk
