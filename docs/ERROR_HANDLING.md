@@ -159,7 +159,7 @@ Rate limited (google). Wait 60 seconds and retry, or try a different provider.
 | Kind | When | Retryable | Suggested Action |
 |------|------|-----------|-----------------|
 | `rate_limited` | HTTP 429, quota exceeded | true | `retry_after_delay` |
-| `auth_required` | HTTP 401, invalid API key | false | `check_api_key` |
+| `auth_required` | Provider HTTP 401 / invalid API key → `check_api_key`; scrape login wall (`ErrAuth`) → `inform_user` | false | `check_api_key` (provider) or `inform_user` (scrape) |
 | `blocked` | HTTP 403, remote bot detection | true | `report_bug` |
 | `validation` | Invalid input params, unsupported scheme, SSRF / private-IP / blocked-host / allowlist denial | false | `inform_user` |
 | `network` | DNS failure, timeout, connection refused | true | `retry_after_delay` |
@@ -186,7 +186,6 @@ Rate limited (google). Wait 60 seconds and retry, or try a different provider.
 | `structuredError(msg, ToolError)` | errors.go | Builds dual-format error response |
 | `scrapeErrorResponse(err, url)` | scrape.go | Maps ScrapeError → structured response |
 | `upstreamErrorResponse(toolName, err)` | search.go | Maps provider errors → structured response |
-| `upstreamErrorWithAlternatives(toolName, err, deps)` | search.go | Same + lists healthy alternative providers |
 | `resolveProvider()` | search.go | Returns structured error for unknown providers |
 | `resolvePatentSearcher()` | search.go | Same for patent providers |
 | `resolveAcademicSearcher()` | academic.go | Same for academic providers |

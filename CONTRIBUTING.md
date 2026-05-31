@@ -34,7 +34,7 @@ machine").
 ### One-time setup
 
 ```bash
-make tools   # warms the pinned golangci-lint + govulncheck (go tool fetches on first use anyway)
+make tools   # warms the pinned golangci-lint + govulncheck + gosec (go tool fetches on first use anyway)
 make hooks   # installs the git pre-commit hook (fmt + vet + lint on staged files)
 ```
 
@@ -98,18 +98,23 @@ go tool cover -html=coverage.out
 
 ### Linting
 
+Tools are pinned in `go.mod` and invoked through `go tool` so every contributor and CI run uses byte-identical versions. Use the `make` targets, or the `go tool …` form if running directly — never the bare globally-installed binaries.
+
 ```bash
-# Run all linters
-golangci-lint run
+# Run all linters (Makefile target wraps `go tool golangci-lint run`)
+make lint
 
 # Auto-fix where possible
-golangci-lint run --fix
+go tool golangci-lint run --fix
 
 # Vet
 go vet ./...
 
-# Security vulnerability check
-govulncheck ./...
+# Static security analysis (gosec)
+make sec
+
+# Dependency vulnerability check
+make vuln
 ```
 
 ### Build
@@ -142,10 +147,10 @@ See `ARCHITECTURE.md` for package organization and `docs/TOOLS.md` for tool spec
 
 ### Before Submitting
 
-Run the full check suite:
+Run the full check suite — the same gate CI enforces:
 
 ```bash
-golangci-lint run && go test -race ./... && govulncheck ./...
+make verify   # fmt-check + vet + lint + gosec + vuln + test-race + test-e2e + build
 ```
 
 ## Commit Messages

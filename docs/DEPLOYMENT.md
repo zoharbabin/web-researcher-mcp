@@ -223,7 +223,7 @@ Note: Google keys are validated as required only when you explicitly select `SEA
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SEARCH_PROVIDER` | Primary provider: google, brave, serper, searxng, searchapi, duckduckgo | `duckduckgo` (if no API keys set) |
+| `SEARCH_PROVIDER` | Primary provider: google, brave, serper, searxng, searchapi, duckduckgo | `google` (variable default); at runtime, when `google` is selected but no Google key is set, the server falls back to the zero-config `duckduckgo` provider |
 | `SEARCH_FALLBACK_PROVIDER` | Fallback provider (simple fallback) | — |
 | `SEARCH_ROUTING` | Multi-provider routing (see below) | — |
 | `BRAVE_API_KEY` | Brave Search API key | — |
@@ -254,16 +254,16 @@ When `SEARCH_ROUTING` is set, the server uses all configured providers with inte
 SEARCH_ROUTING=brave,google,serper
 
 # Advanced: per-operation routing (JSON)
-SEARCH_ROUTING='{"web":"brave,google","news":"brave,serper","images":"google,brave","academic":"searchapi,google","patents":"epo,lens,searchapi,uspto","default":"brave,google,searchapi"}'
+SEARCH_ROUTING='{"web":"brave,google","news":"brave,serper","images":"google,brave","academic":"openalex,crossref","patents":"epo,lens,searchapi,uspto","default":"brave,google,searchapi"}'
 ```
 
 **How it works:**
 - Requests route to the first healthy provider in the priority list
 - If a provider fails (timeout, rate limit, 5xx), the next provider is tried automatically
-- Each provider has an independent circuit breaker (opens after 3 consecutive failures, resets after 30s)
+- Each provider gets an independent circuit breaker. Routing breakers open after 3 consecutive failures and reset after 30s; the domain (patent/academic) provider breakers use 5 failures / 60s (see `internal/search/router.go` and `internal/search/domain.go` for the authoritative values)
 - Lenses can override routing via the `"routing"` field in their JSON definition
 
-**Operation types:** `web`, `images`, `news`, `academic`, `patents`, `default`
+**Operation types:** `web`, `images`, `news`, `academic`, `patents`, `default`. The `academic` and `patents` lists are filtered to providers that implement the academic/patent interface — `academic` accepts only `openalex`, `crossref`; `patents` accepts only `searchapi`, `epo`, `lens`, `uspto`. Names that don't implement the interface are silently dropped, so use the example values above.
 
 When no explicit routing is configured for an operation, the `default` list is used. When `SEARCH_ROUTING` is not set at all, the server uses `SEARCH_PROVIDER` as a single provider (backward compatible).
 
@@ -304,7 +304,7 @@ These tune the embedded `http.Server` and response security headers. **All are i
 | `CACHE_ENCRYPTION_KEY` | 64 hex chars for AES-256-GCM | — (plaintext) |
 | `CACHE_ENCRYPTION_KEY_PREV` | Optional 64-hex previous key for zero-downtime key rotation. When set, the disk cache and session store decrypt-fallback to it and lazily re-encrypt with the current key on read. Empty = no fallback | — |
 | `REDIS_URL` | Reserved for a future `RedisStore` backend; currently a documented no-op. Setting it does not change behavior — see [persistence](#persistence) | — |
-| `SESSION_TTL` | Session idle timeout (resets on every step addition) | `4h` |
+| `SESSION_TTL` | Session idle timeout (the in-memory TTL resets on every read or write of the session) | `4h` |
 | `SESSION_DATA_DIR` | Directory for encrypted session files | `{CACHE_DIR}/sessions` |
 | `SESSION_MAX_STEPS` | Maximum steps per research session before auto-completion | `200` |
 
