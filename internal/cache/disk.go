@@ -203,11 +203,12 @@ func (d *DiskCache) writeToFile(key string, entry diskEntry) {
 		data = GCMEncrypt(d.gcm, data, d.aad(key))
 	}
 
-	// Prepend expiry timestamp
-	buf := make([]byte, 8+len(data))
-	// #nosec G115 -- Unix second count; no realistic overflow
-	binary.BigEndian.PutUint64(buf[:8], uint64(entry.expiresAt.Unix()))
-	copy(buf[8:], data)
+	// Bounds-checked expiry-prefixed buffer (CWE-190 guard). Best-effort cache
+	// write: an oversized value is simply not persisted to disk.
+	buf, err := PrependExpiryHeader(data, entry.expiresAt)
+	if err != nil {
+		return
+	}
 
 	fp := d.filePath(key)
 	_ = os.WriteFile(fp, buf, 0600)

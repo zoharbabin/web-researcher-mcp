@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"crypto/rand"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -811,4 +812,50 @@ func TestCacheInterfaceCompliance(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestPrependExpiryHeader covers the bounds-checked expiry-prefix helper that
+// replaced the `make([]byte, 8+len(data))` sites (CWE-190 guard).
+func TestPrependExpiryHeader(t *testing.T) {
+	t.Parallel()
+
+	t.Run("round-trips data with expiry header", func(t *testing.T) {
+		t.Parallel()
+		data := []byte("hello world")
+		exp := time.Unix(1893456000, 0) // 2030-01-01
+		buf, err := PrependExpiryHeader(data, exp)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(buf) != ExpiryHeaderSize+len(data) {
+			t.Fatalf("len = %d, want %d", len(buf), ExpiryHeaderSize+len(data))
+		}
+		if got := int64(binary.BigEndian.Uint64(buf[:ExpiryHeaderSize])); got != exp.Unix() {
+			t.Errorf("header = %d, want %d", got, exp.Unix())
+		}
+		if string(buf[ExpiryHeaderSize:]) != string(data) {
+			t.Errorf("payload not preserved")
+		}
+	})
+
+	t.Run("zero expiry writes zero header", func(t *testing.T) {
+		t.Parallel()
+		buf, err := PrependExpiryHeader([]byte("x"), time.Time{})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if binary.BigEndian.Uint64(buf[:ExpiryHeaderSize]) != 0 {
+			t.Errorf("expected zero header for zero expiry")
+		}
+	})
+
+	t.Run("rejects oversized value (CWE-190 guard)", func(t *testing.T) {
+		t.Parallel()
+		// Don't actually allocate >256MiB; fake the length check by exceeding it.
+		// A slice of MaxStoredValueBytes+1 zero bytes is large but bounded for CI.
+		big := make([]byte, MaxStoredValueBytes+1)
+		if _, err := PrependExpiryHeader(big, time.Now()); err == nil {
+			t.Fatal("expected error for value exceeding MaxStoredValueBytes")
+		}
+	})
 }

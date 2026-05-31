@@ -4,14 +4,45 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
+	"time"
 )
 
 // ErrShortCiphertext is returned by GCMDecrypt when the input is too short to
 // contain a nonce.
 var ErrShortCiphertext = errors.New("ciphertext shorter than nonce")
+
+// ExpiryHeaderSize is the fixed-width big-endian Unix-seconds prefix written
+// ahead of a stored value by PrependExpiryHeader.
+const ExpiryHeaderSize = 8
+
+// MaxStoredValueBytes bounds a single stored value (cache entry, session blob,
+// persisted record). It is far larger than any legitimate payload yet small
+// enough that the header + length computation cannot overflow a platform int,
+// closing CWE-190 on the `make([]byte, ExpiryHeaderSize+len(data))` pattern.
+const MaxStoredValueBytes = 256 << 20 // 256 MiB
+
+// PrependExpiryHeader returns an 8-byte big-endian Unix-seconds header followed
+// by data. A zero `expiry` writes a zero header (no expiry). It rejects values
+// larger than MaxStoredValueBytes so the size computation provably cannot
+// overflow — the single, shared, bounds-checked replacement for the
+// `make([]byte, 8+len(data))` sites in the cache, persist, and session stores.
+func PrependExpiryHeader(data []byte, expiry time.Time) ([]byte, error) {
+	if len(data) > MaxStoredValueBytes {
+		return nil, fmt.Errorf("stored value too large: %d bytes (max %d)", len(data), MaxStoredValueBytes)
+	}
+	buf := make([]byte, ExpiryHeaderSize+len(data))
+	if !expiry.IsZero() {
+		// Safe: a Unix second count is non-negative and far within uint64.
+		binary.BigEndian.PutUint64(buf[:ExpiryHeaderSize], uint64(expiry.Unix())) // #nosec G115
+	}
+	copy(buf[ExpiryHeaderSize:], data)
+	return buf, nil
+}
 
 // NewGCM builds an AES-256-GCM AEAD from a 64-hex-character key. It is the
 // single source of GCM construction shared by the disk cache, the persist

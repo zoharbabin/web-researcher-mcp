@@ -79,10 +79,10 @@ func (s *Store) Save(key string, sess *Session, ttl time.Duration) error {
 	}
 
 	expiry := time.Now().Add(ttl)
-	buf := make([]byte, 8+len(data))
-	// #nosec G115 -- Unix second count; no realistic overflow
-	binary.BigEndian.PutUint64(buf[:8], uint64(expiry.Unix()))
-	copy(buf[8:], data)
+	buf, err := cache.PrependExpiryHeader(data, expiry)
+	if err != nil {
+		return err
+	}
 
 	fp := s.filePath(key)
 	tmp, err := os.CreateTemp(s.dir, ".session-*.tmp")
@@ -184,10 +184,10 @@ func (s *Store) rewrite(key string, plaintext []byte, expiry time.Time) error {
 		data = cache.GCMEncrypt(s.gcm, data, aadForKey(key))
 	}
 
-	buf := make([]byte, 8+len(data))
-	// #nosec G115 -- Unix second count; no realistic overflow
-	binary.BigEndian.PutUint64(buf[:8], uint64(expiry.Unix()))
-	copy(buf[8:], data)
+	buf, err := cache.PrependExpiryHeader(data, expiry)
+	if err != nil {
+		return err
+	}
 
 	fp := s.filePath(key)
 	tmp, err := os.CreateTemp(s.dir, ".session-*.tmp")

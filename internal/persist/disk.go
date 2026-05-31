@@ -158,12 +158,13 @@ func (s *DiskStore) writeFile(key string, value []byte, expiresAt time.Time) {
 		data = cache.GCMEncrypt(s.gcm, data, s.aad(key))
 	}
 
-	buf := make([]byte, 8+len(data))
-	if !expiresAt.IsZero() {
-		// #nosec G115 -- Unix second count; no realistic overflow before year ~292e9.
-		binary.BigEndian.PutUint64(buf[:8], uint64(expiresAt.Unix()))
+	// Bounds-checked allocation (CWE-190 guard). Best-effort store: an
+	// oversized value is simply not persisted to disk (the in-memory hydrate
+	// still serves it for this process's lifetime).
+	buf, err := cache.PrependExpiryHeader(data, expiresAt)
+	if err != nil {
+		return
 	}
-	copy(buf[8:], data)
 
 	tmp, err := os.CreateTemp(s.dir, ".persist-*.tmp")
 	if err != nil {
