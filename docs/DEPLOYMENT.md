@@ -423,6 +423,18 @@ When `CACHE_ISOLATION=tenant`, all cache keys are prefixed with the authenticate
 
 **Note:** `REDIS_URL` is accepted in configuration but is a documented no-op (see [Persistence](#persistence)). It is not yet wired into cache, sessions, rate limiting, or revocation. Distributed state support is planned for a future release.
 
+### Production Readiness Checklist
+
+Before running multiple instances behind a load balancer, work through this checklist. Items marked **(in-memory state)** are the ones that behave differently across pods until distributed state (`REDIS_URL`) ships.
+
+- [ ] **Sticky sessions** — configure session affinity at the L7 load balancer so a client's follow-up `sequential_search` steps reach the pod holding its session. Without affinity, a step routed to another pod returns a typed `session_not_found` error with a `recoveryHint` (last known step) so the client can restart cleanly rather than silently forking. **(in-memory state)**
+- [ ] **Rate-limit math for N pods** — per-tenant and global limits are per-instance today. With N pods, the effective ceiling is N × the configured value. Set `RATE_LIMIT_PER_TENANT` and `RATE_LIMIT_GLOBAL` to `desired_total / N`, or enable `RATE_LIMIT_PERSIST=true` for restart-durable daily quotas. **(in-memory state)**
+- [ ] **Log aggregation** — ship each pod's structured JSON audit/log output (stderr or `AUDIT_OUTPUT_PATH`) to a central sink. Every audit event carries `pod_id` (from `HOSTNAME`/`os.Hostname()`) for cross-pod correlation — filter or group by it to trace a request or identify a pod dropping events under backpressure.
+- [ ] **Monitoring & dashboards** — scrape `/metrics` (Prometheus) from every pod; alert on error rate, upstream-provider failures (circuit-breaker trips), and latency percentiles. Liveness `/health/live` and readiness `/health/ready` are wired for orchestrator probes.
+- [ ] **Encryption key** — set `CACHE_ENCRYPTION_KEY` (and rotate per [Key Rotation](#key-rotation)) so disk-persisted sessions/cache/quota are encrypted at rest on every pod.
+- [ ] **Admin key** — set `ADMIN_API_KEY` if you use the `/admin/*` operational endpoints; it is required to enable them.
+- [ ] **CORS** — set `ALLOWED_ORIGINS` if a browser client connects directly; the default is fail-closed (see [Connecting browser-based clients](#connecting-browser-based-clients-cors)).
+
 ---
 
 ## Persistence

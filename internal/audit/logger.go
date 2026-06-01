@@ -23,6 +23,7 @@ type AuditEvent struct {
 	SessionID string         `json:"session_id,omitempty"`
 	ToolName  string         `json:"tool_name,omitempty"`
 	RequestID string         `json:"request_id"`
+	PodID     string         `json:"pod_id,omitempty"`
 	SourceIP  string         `json:"source_ip,omitempty"`
 	Duration  int64          `json:"duration_ms,omitempty"`
 	Success   bool           `json:"success"`
@@ -30,7 +31,25 @@ type AuditEvent struct {
 	Metadata  map[string]any `json:"metadata,omitempty"`
 }
 
-// NewEvent creates a new AuditEvent with timestamp and request ID pre-filled.
+// podID identifies the process/instance emitting audit events, enabling
+// cross-pod correlation in multi-instance HTTP deployments (e.g. which pod
+// dropped events under backpressure). Resolved once: HOSTNAME if set (the
+// convention in container orchestrators), else os.Hostname(). Empty when
+// neither is available, in which case the field is omitted from output.
+var podID = resolvePodID()
+
+func resolvePodID() string {
+	if h := os.Getenv("HOSTNAME"); h != "" {
+		return h
+	}
+	if h, err := os.Hostname(); err == nil {
+		return h
+	}
+	return ""
+}
+
+// NewEvent creates a new AuditEvent with timestamp, request ID, and pod ID
+// pre-filled.
 func NewEvent(eventType, tenantID, userID string) AuditEvent {
 	return AuditEvent{
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
@@ -38,6 +57,7 @@ func NewEvent(eventType, tenantID, userID string) AuditEvent {
 		TenantID:  tenantID,
 		UserID:    userID,
 		RequestID: uuid.New().String(),
+		PodID:     podID,
 		Success:   true,
 	}
 }

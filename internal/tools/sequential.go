@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -103,7 +104,18 @@ func registerSequentialSearch(srv *mcp.Server, deps Dependencies) {
 
 		idx, err = deps.Sessions.AppendStep(tenantID, sessionID, step, gap, input.SessionSummary)
 		if err != nil {
-			return toolError(fmt.Sprintf("This research session has expired or doesn't exist. Sessions expire after 4 hours of inactivity. Start a new session by setting stepNumber=1 without a sessionId. (error: %v)", err)), nil, nil
+			// Typed recovery: a not-found session (expired, evicted, or — in a
+			// multi-pod HTTP deployment — held by a different instance) returns a
+			// structured session_not_found error carrying the last known step, so
+			// the client can decide to resume or restart deterministically.
+			var notFound *session.SessionNotFoundError
+			if errors.As(err, &notFound) {
+				return sessionNotFoundError(notFound.LastKnownStep), nil, nil
+			}
+			if errors.Is(err, session.ErrSessionNotFound) || errors.Is(err, session.ErrSessionExpired) {
+				return sessionNotFoundError(input.StepNumber - 1), nil, nil
+			}
+			return toolError(fmt.Sprintf("Could not record this research step: %v. Start a new session by setting stepNumber=1 without a sessionId.", err)), nil, nil
 		}
 
 		output := buildSequentialResponse(idx, input)

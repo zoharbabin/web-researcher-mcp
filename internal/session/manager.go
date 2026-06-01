@@ -100,11 +100,11 @@ func (m *Manager) AppendStep(tenantID, sessionID string, step ResearchStep, gap 
 	key := tenantID + ":" + sessionID
 	idx, ok := m.index[key]
 	if !ok {
-		return nil, fmt.Errorf("session not found")
+		return nil, &SessionNotFoundError{TenantID: tenantID, SessionID: sessionID, LastKnownStep: step.StepNumber - 1}
 	}
 	if time.Since(idx.LastUsed) > m.config.SessionTTL {
 		m.deleteUnlocked(key)
-		return nil, fmt.Errorf("session expired")
+		return nil, ErrSessionExpired
 	}
 
 	if idx.StepCount >= m.config.MaxStepsPerSession {
@@ -115,7 +115,7 @@ func (m *Manager) AppendStep(tenantID, sessionID string, step ResearchStep, gap 
 	sess, err := m.store.Load(key)
 	if err != nil {
 		m.deleteUnlocked(key)
-		return nil, fmt.Errorf("session data corrupt")
+		return nil, ErrSessionCorrupt
 	}
 
 	sess.Steps = append(sess.Steps, step)
@@ -144,7 +144,7 @@ func (m *Manager) SetResearchGoal(tenantID, sessionID, goal string) error {
 	key := tenantID + ":" + sessionID
 	idx, ok := m.index[key]
 	if !ok {
-		return fmt.Errorf("session not found")
+		return ErrSessionNotFound
 	}
 
 	sess, err := m.store.Load(key)
@@ -170,7 +170,7 @@ func (m *Manager) AddSources(tenantID, sessionID string, sources []ResearchSourc
 	key := tenantID + ":" + sessionID
 	_, ok := m.index[key]
 	if !ok {
-		return fmt.Errorf("session not found")
+		return ErrSessionNotFound
 	}
 
 	sess, err := m.store.Load(key)
@@ -223,11 +223,11 @@ func (m *Manager) GetFull(tenantID, sessionID string) (*Session, error) {
 	key := tenantID + ":" + sessionID
 	idx, ok := m.index[key]
 	if !ok {
-		return nil, fmt.Errorf("session not found")
+		return nil, &SessionNotFoundError{TenantID: tenantID, SessionID: sessionID}
 	}
 	if time.Since(idx.LastUsed) > m.config.SessionTTL {
 		m.deleteUnlocked(key)
-		return nil, fmt.Errorf("session expired")
+		return nil, ErrSessionExpired
 	}
 
 	idx.LastUsed = time.Now()
@@ -235,7 +235,7 @@ func (m *Manager) GetFull(tenantID, sessionID string) (*Session, error) {
 	sess, err := m.store.Load(key)
 	if err != nil {
 		m.deleteUnlocked(key)
-		return nil, fmt.Errorf("session data corrupt")
+		return nil, ErrSessionCorrupt
 	}
 	return sess, nil
 }
@@ -247,11 +247,11 @@ func (m *Manager) GetStep(tenantID, sessionID string, stepNum int) (*ResearchSte
 	key := tenantID + ":" + sessionID
 	idx, ok := m.index[key]
 	if !ok {
-		return nil, fmt.Errorf("session not found")
+		return nil, &SessionNotFoundError{TenantID: tenantID, SessionID: sessionID}
 	}
 	if time.Since(idx.LastUsed) > m.config.SessionTTL {
 		m.deleteUnlocked(key)
-		return nil, fmt.Errorf("session expired")
+		return nil, ErrSessionExpired
 	}
 
 	idx.LastUsed = time.Now()
@@ -259,7 +259,7 @@ func (m *Manager) GetStep(tenantID, sessionID string, stepNum int) (*ResearchSte
 	sess, err := m.store.Load(key)
 	if err != nil {
 		m.deleteUnlocked(key)
-		return nil, fmt.Errorf("session data corrupt")
+		return nil, ErrSessionCorrupt
 	}
 
 	for i := range sess.Steps {
