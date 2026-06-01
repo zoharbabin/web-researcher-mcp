@@ -18,11 +18,14 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/cache"
 	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/config"
+	"github.com/zoharbabin/web-researcher-mcp/internal/consent"
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 	"github.com/zoharbabin/web-researcher-mcp/internal/metrics"
+	"github.com/zoharbabin/web-researcher-mcp/internal/persist"
 	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
+	"github.com/zoharbabin/web-researcher-mcp/internal/useranalytics"
 )
 
 type mockProvider struct{}
@@ -81,6 +84,12 @@ func setupTestDeps() Dependencies {
 		Metrics:  metrics.NewCollector(),
 		Auditor:  audit.NewNoop(),
 		Logger:   slog.Default(),
+		// Wire the full superset of optional regulated deps so every
+		// conditionally-registered tool is visible to the CI drift tests
+		// (TestToolsDocMatchesRegistry / TestAllToolsHaveAnnotations /
+		// TestOutputSchemaMatchesResponse). Production gates these by feature flag.
+		Consent:       consent.NewStoreManager(persist.NewMemoryStore()),
+		UserAnalytics: useranalytics.NewStoreRecorder(persist.NewMemoryStore()),
 	}
 }
 

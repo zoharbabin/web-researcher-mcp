@@ -24,6 +24,7 @@ var expectedTools = []string{
 	"search_and_scrape",
 	"sequential_search",
 	"get_research_session",
+	"get_my_analytics",
 }
 
 func listTools(t *testing.T) []*mcp.Tool {
@@ -86,6 +87,14 @@ func TestAllToolsHaveAnnotations(t *testing.T) {
 				}
 				if *tool.Annotations.OpenWorldHint {
 					t.Error("get_research_session should NOT be open-world")
+				}
+			case "get_my_analytics":
+				// Reads internal per-user state: idempotent, not open-world.
+				if !tool.Annotations.IdempotentHint {
+					t.Error("get_my_analytics should be idempotent")
+				}
+				if *tool.Annotations.OpenWorldHint {
+					t.Error("get_my_analytics should NOT be open-world")
 				}
 			default:
 				if !tool.Annotations.IdempotentHint {

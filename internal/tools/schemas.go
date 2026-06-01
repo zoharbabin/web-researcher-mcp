@@ -242,6 +242,26 @@ var searchAndScrapeOutputSchema = map[string]any{
 	},
 }
 
+var getMyAnalyticsOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"status": map[string]any{"type": "string"}, // ok | empty | no_consent | unavailable
+		"reason": map[string]any{"type": "string"},
+		"analytics": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"tenantId":    map[string]any{"type": "string"},
+				"userId":      map[string]any{"type": "string"},
+				"totalCalls":  map[string]any{"type": "integer"},
+				"toolCounts":  map[string]any{"type": "object"},
+				"firstSeen":   map[string]any{"type": "string"},
+				"lastSeen":    map[string]any{"type": "string"},
+				"recentTools": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			},
+		},
+	},
+}
+
 var sequentialSearchOutputSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{

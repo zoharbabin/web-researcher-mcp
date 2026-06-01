@@ -658,6 +658,50 @@ Recover a `sequential_search` session after context loss. Returns the session su
 
 ---
 
+## Tool 10: `get_my_analytics`
+
+**Opt-in, consent-gated (#92). Registered only when `USER_ANALYTICS_ENABLED=true`.** Read-only.
+
+### Purpose
+
+Return the **calling user's own** usage analytics (tools used, counts, first/last seen) for their tenant. This is per-user data under GDPR / Quebec Law 25, so it is off by default, collected only after recorded consent, isolated per user, encrypted at rest, and covered by the data-subject access/erasure endpoints (`/admin/data`).
+
+### Input Schema
+
+No inputs. The subject is always the authenticated caller — a user can never request another user's analytics.
+
+### Output Schema
+
+```go
+type GetMyAnalyticsOutput struct {
+    Status    string         `json:"status"`           // "ok" | "empty" | "no_consent" | "unavailable"
+    Reason    string         `json:"reason,omitempty"`
+    Analytics *UserAnalytics `json:"analytics,omitempty"`
+}
+
+type UserAnalytics struct {
+    TenantID    string           `json:"tenantId"`
+    UserID      string           `json:"userId"`
+    TotalCalls  int64            `json:"totalCalls"`
+    ToolCounts  map[string]int64 `json:"toolCounts"`
+    FirstSeen   string           `json:"firstSeen,omitempty"`
+    LastSeen    string           `json:"lastSeen,omitempty"`
+    RecentTools []string         `json:"recentTools,omitempty"`
+}
+```
+
+### Behavior
+
+1. Requires an authenticated user (`status: "unavailable"` for anonymous).
+2. Requires recorded consent for the `analytics` purpose (`status: "no_consent"` otherwise — nothing is collected without it).
+3. Returns the caller's own summary, or `status: "empty"` if none recorded yet.
+
+### Cache
+
+- No cache (reads per-user state directly).
+
+---
+
 ## Cross-Cutting Concerns
 
 ### Timeouts (all configurable via env)

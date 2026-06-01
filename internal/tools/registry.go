@@ -13,6 +13,7 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
+	"github.com/zoharbabin/web-researcher-mcp/internal/useranalytics"
 )
 
 type Dependencies struct {
@@ -32,6 +33,10 @@ type Dependencies struct {
 	// Defaults to a Noop (grants nothing) when unset, so guarded processing is a
 	// clean no-op until a regulated feature wires it in.
 	Consent consent.Manager
+	// UserAnalytics records consent-gated per-user usage (#92). Defaults to a
+	// Noop (collects nothing). The get_my_analytics tool is registered only when
+	// a non-Noop recorder is present.
+	UserAnalytics useranalytics.Recorder
 }
 
 // Features mirrors config.FeatureConfig for the tool layer (kept local so the
@@ -53,6 +58,12 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	registerPatentSearch(srv, deps)
 	registerSequentialSearch(srv, deps)
 	registerGetSession(srv, deps)
+
+	// Regulated, opt-in tools — registered only when their feature is wired in
+	// (a non-Noop dependency present), so the default tool surface is unchanged.
+	if _, isNoop := deps.UserAnalytics.(*useranalytics.Noop); deps.UserAnalytics != nil && !isNoop {
+		registerGetMyAnalytics(srv, deps)
+	}
 }
 
 func boolPtr(b bool) *bool { return &b }

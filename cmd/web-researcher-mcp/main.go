@@ -26,6 +26,7 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/server"
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
 	"github.com/zoharbabin/web-researcher-mcp/internal/tools"
+	"github.com/zoharbabin/web-researcher-mcp/internal/useranalytics"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -147,6 +148,17 @@ func main() {
 	// Sessions register unconditionally (tenant-scoped); regulated stores
 	// register when enabled.
 	dataSubjects := datasubject.NewRegistry()
+
+	// Per-user analytics (#92): consent-gated, off by default. A non-Noop
+	// recorder is wired only when USER_ANALYTICS_ENABLED; it registers into the
+	// data-subject registry so its data is exportable + erasable.
+	var userAnalytics useranalytics.Recorder = useranalytics.NewNoop()
+	if cfg.Features.UserAnalytics {
+		sr := useranalytics.NewStoreRecorder(persistStore)
+		userAnalytics = sr
+		dataSubjects.Register("user_analytics", useranalytics.AsDataSubject(sr), useranalytics.AsDataSubject(sr))
+		logger.Info("user-level analytics enabled", "consent", "required")
+	}
 
 	metricsCollector := metrics.NewCollector()
 	rateLimiter := ratelimit.NewWithStore(cfg.RateLimit, persistStore)
@@ -283,7 +295,8 @@ func main() {
 			SourceRecommendations: cfg.Features.SourceRecommendations,
 			GenerativeUI:          cfg.Features.GenerativeUI,
 		},
-		Consent: consentManager,
+		Consent:       consentManager,
+		UserAnalytics: userAnalytics,
 	}
 
 	srv := server.New(server.Config{
