@@ -34,7 +34,7 @@ type HTTPConfig struct {
 	Metrics        *metrics.Collector
 	AdminKey       string
 	Cache          cache.Cache
-	Sessions       *session.Manager
+	Sessions       session.Manager
 
 	// CORSStrict, when true (the default), makes an empty AllowedOrigins deny all
 	// cross-origin requests (fail-closed). When false, an empty AllowedOrigins
@@ -310,7 +310,7 @@ func handleAdminFlushCache(c cache.Cache) http.HandlerFunc {
 	}
 }
 
-func handleAdminFlushSessions(mgr *session.Manager) http.HandlerFunc {
+func handleAdminFlushSessions(mgr session.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		if mgr != nil {
 			mgr.DeleteAll()

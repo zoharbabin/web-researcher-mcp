@@ -17,12 +17,12 @@ type ProviderInfo struct {
 	Type string `json:"type"`
 }
 
-func RegisterAll(srv *mcp.Server, metricsCollector *metrics.Collector, sessionManager *session.Manager, rateLimiter *ratelimit.Limiter, providers []ProviderInfo) {
+func RegisterAll(srv *mcp.Server, metricsCollector *metrics.Collector, sessionManager session.Manager, rateLimiter *ratelimit.Limiter, providers []ProviderInfo) {
 	registerResources(srv, metricsCollector, sessionManager, rateLimiter, providers)
 	registerPrompts(srv)
 }
 
-func registerResources(srv *mcp.Server, metricsCollector *metrics.Collector, sessionManager *session.Manager, rateLimiter *ratelimit.Limiter, providers []ProviderInfo) {
+func registerResources(srv *mcp.Server, metricsCollector *metrics.Collector, sessionManager session.Manager, rateLimiter *ratelimit.Limiter, providers []ProviderInfo) {
 	srv.AddResource(&mcp.Resource{
 		URI:         "stats://tools",
 		Name:        "Tool Statistics",

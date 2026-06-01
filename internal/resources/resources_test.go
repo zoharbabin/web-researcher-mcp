@@ -16,7 +16,7 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
 )
 
-func createTestServer(m *metrics.Collector, s *session.Manager) *mcp.Server {
+func createTestServer(m *metrics.Collector, s session.Manager) *mcp.Server {
 	srv := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1.0.0"}, nil)
 	rl := ratelimit.New(config.RateLimitConfig{PerTenant: 120, Global: 1000, DailyQuota: 5000})
 	RegisterAll(srv, m, s, rl, []ProviderInfo{{Name: "google", Type: "web"}})

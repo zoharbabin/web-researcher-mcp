@@ -530,7 +530,7 @@ func TestServeHTTP_ContextCancellation(t *testing.T) {
 			Metrics:        metricsCollector,
 			AdminKey:       "key",
 			Cache:          cache.NewNoop(),
-			Sessions: func() *session.Manager {
+			Sessions: func() session.Manager {
 				m, _ := session.NewManager(session.Config{MaxSessions: 10, SessionTTL: time.Hour})
 				return m
 			}(),

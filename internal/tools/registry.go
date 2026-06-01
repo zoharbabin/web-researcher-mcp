@@ -22,7 +22,7 @@ type Dependencies struct {
 	AcademicProviders map[string]search.AcademicProvider
 	Scraper           *scraper.Pipeline
 	Content           *content.Processor
-	Sessions          *session.Manager
+	Sessions          session.Manager
 	Metrics           *metrics.Collector
 	Auditor           audit.Auditor
 	Logger            *slog.Logger

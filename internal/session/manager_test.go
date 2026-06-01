@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func newTestManager(ttl time.Duration, maxSessions int) *Manager {
+func newTestManager(ttl time.Duration, maxSessions int) *MemoryManager {
 	dir, _ := os.MkdirTemp("", "session-test-*")
 	m, _ := NewManager(Config{
 		MaxSessions:        maxSessions,
