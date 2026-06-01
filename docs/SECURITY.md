@@ -352,12 +352,12 @@ Applied to every HTTP response by the `securityHeaders` middleware. The three co
 
 ### CORS
 
-The `corsMiddleware` reflects an allowed `Origin`. With a non-empty `ALLOWED_ORIGINS` it reflects only listed origins (or any when `*` is listed). With an **empty** `ALLOWED_ORIGINS` the behavior is governed by `CORS_STRICT`:
+CORS is a **browser-only** control; backend-to-backend connectors (hosted MCP connectors, SDKs) and STDIO never apply it. The `corsMiddleware` reflects an allowed `Origin`. With a non-empty `ALLOWED_ORIGINS` it reflects only listed origins (or any when `*` is listed). With an **empty** `ALLOWED_ORIGINS` the behavior is governed by `CORS_STRICT`:
 
-- `CORS_STRICT=false` (current default) — permissive: reflect any `Origin`.
-- `CORS_STRICT=true` — fail-closed: deny all cross-origin requests.
+- `CORS_STRICT=true` (**default**) — fail-closed: deny all cross-origin requests.
+- `CORS_STRICT=false` — permissive: reflect any `Origin` (legacy escape hatch).
 
-It never reflects the literal `*` together with credentials. A future release will flip the default to fail-closed — see [MIGRATION.md](MIGRATION.md).
+It never reflects the literal `*` together with credentials. The default is secure-by-default (fail-closed); see [MIGRATION.md](MIGRATION.md) for the breaking change that flipped it.
 
 ### Pre-Auth Per-IP Rate Limit
 

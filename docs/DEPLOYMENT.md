@@ -274,10 +274,23 @@ When no explicit routing is configured for an operation, the `default` list is u
 | `PORT` | HTTP listen port (enables HTTP mode) | — (STDIO only) |
 | `OAUTH_ISSUER_URL` | JWT issuer URL | — |
 | `OAUTH_AUDIENCE` | Expected JWT audience | — |
-| `ALLOWED_ORIGINS` | CORS origins (comma-separated) | — (reflect any origin when `CORS_STRICT=false`) |
-| `CORS_STRICT` | When `false`, an empty `ALLOWED_ORIGINS` reflects any Origin (permissive). When `true`, an empty `ALLOWED_ORIGINS` denies all cross-origin (fail-closed). A future release will flip this default — see [MIGRATION.md](MIGRATION.md). | `false` |
+| `ALLOWED_ORIGINS` | CORS origins (comma-separated). Browser-only; backend connectors and STDIO are unaffected | — (deny cross-origin by default; see `CORS_STRICT`) |
+| `CORS_STRICT` | When `true` (default), an empty `ALLOWED_ORIGINS` denies all cross-origin browser requests (fail-closed). When `false`, an empty `ALLOWED_ORIGINS` reflects any Origin (legacy permissive escape hatch). See [MIGRATION.md](MIGRATION.md) for the breaking change. | `true` |
 | `ENFORCE_SCOPES` | When `true`, a token that carries a `scope`/`scp` claim must include `tool:*`, `tool:<name>`, or the coarse `research` scope to invoke a tool. Tokens with no scope claim are still allowed (permissive; fail-closed only on present-but-insufficient scopes). | `false` |
 | `REQUIRED_SCOPES` | Optional comma-separated scopes that every request must carry when `ENFORCE_SCOPES=true`. Only meaningful with `ENFORCE_SCOPES`. | — |
+
+### Connecting browser-based clients (CORS)
+
+CORS is a **browser-only** mechanism — it governs whether JavaScript running on one origin may read responses from your server. It is not an authentication layer (that is OAuth). Two cases:
+
+- **Hosted connectors (ChatGPT, Claude.ai, and most agent platforms).** When a user adds your remote server as a connector, the platform's **backend** opens the connection, not the user's browser tab. These requests carry no enforced `Origin`, so CORS never applies and the fail-closed default has no effect. You do **not** need to control the client app — just configure OAuth. This is the common case.
+- **A genuine in-browser MCP client** (JavaScript calling your server directly with `fetch`). Here CORS applies. The operator allow-lists the client's public origin — you don't need to own the app to do this:
+
+  ```bash
+  ALLOWED_ORIGINS=https://claude.ai,https://chatgpt.com
+  ```
+
+To restore the legacy permissive behavior wholesale, set `CORS_STRICT=false` (see [MIGRATION.md](MIGRATION.md)).
 
 ### HTTP Hardening
 
@@ -388,7 +401,8 @@ When `CACHE_ISOLATION=tenant`, all cache keys are prefixed with the authenticate
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `JWKS_REFRESH_INTERVAL` | How often to refresh JWKS keys | `1h` |
-| `CACHE_ADMIN_KEY` | Shared secret for admin endpoints (min 16 chars) | — |
+| `ADMIN_API_KEY` | Shared secret gating all `/admin/*` endpoints, sent as `X-Admin-Key` (min 16 chars). Generate with `openssl rand -hex 32` | — |
+| `CACHE_ADMIN_KEY` | **Deprecated** alias for `ADMIN_API_KEY` (still accepted; logs a startup warning). `ADMIN_API_KEY` wins if both are set | — |
 
 ---
 
@@ -609,7 +623,7 @@ No orphan processes. No watchdog needed.
 
 ## Admin Endpoints (HTTP Mode)
 
-All admin endpoints require the `X-Admin-Key` header matching `CACHE_ADMIN_KEY` env var. They are separate from OAuth — admin auth is a simple shared secret for operational use.
+All admin endpoints require the `X-Admin-Key` header matching the `ADMIN_API_KEY` env var (the deprecated `CACHE_ADMIN_KEY` is still accepted). The header is compared in constant time. They are separate from OAuth — admin auth is a simple shared secret for operational use.
 
 | Method | Path | Purpose |
 |--------|------|---------|
@@ -617,6 +631,34 @@ All admin endpoints require the `X-Admin-Key` header matching `CACHE_ADMIN_KEY` 
 | DELETE | `/admin/sessions` | Kill all active sessions |
 
 These are HTTP-only operational endpoints, not exposed via MCP tools.
+
+---
+
+## Key Rotation
+
+The server uses two independent secrets. Both rotate without downtime.
+
+### Admin key (`ADMIN_API_KEY`)
+
+The admin key is stateless — rotating it is a single env-var change:
+
+1. Generate a new key: `openssl rand -hex 32`.
+2. Update `ADMIN_API_KEY` in your deployment and restart (or rolling-restart) the pods.
+3. Update any operational scripts/dashboards that send `X-Admin-Key`.
+
+There is no stored state encrypted under the admin key, so no migration is needed. In a rolling deployment, in-flight admin calls against an old pod simply use that pod's old key until it cycles; admin endpoints are operational, not user-facing, so a brief overlap is harmless.
+
+### Encryption key (`CACHE_ENCRYPTION_KEY`) — zero-downtime re-encryption
+
+Disk-persisted data (cache, sessions, and any encrypted `persist.Store` namespace) is sealed with AES-256-GCM under `CACHE_ENCRYPTION_KEY`. Rotating it without stranding existing data uses the previous-key fallback:
+
+1. Move the current key to `CACHE_ENCRYPTION_KEY_PREV` and set a new 64-hex `CACHE_ENCRYPTION_KEY` (generate with `openssl rand -hex 32`).
+2. Restart. On every read, data sealed with the previous key is **decrypt-fall-back** decrypted and **lazily re-encrypted** with the new key — so hot data migrates automatically with no flush and no downtime.
+3. After at least one full data lifetime (e.g. `SESSION_TTL` for sessions, the cache TTL for cache) has elapsed, remove `CACHE_ENCRYPTION_KEY_PREV`. Any still-unread blobs from before the rotation simply expire.
+
+To force immediate re-encryption rather than waiting for natural reads, flush the affected store (`DELETE /admin/cache`, `DELETE /admin/sessions`) after step 2 — data repopulates under the new key on demand.
+
+> **Compliance note:** rotating `CACHE_ENCRYPTION_KEY` periodically (and immediately on suspected exposure) satisfies common key-lifecycle controls (e.g. NIST SP 800-57 crypto-period guidance). The previous-key window should be kept as short as your longest TTL; never keep more than one previous key.
 
 ---
 

@@ -36,9 +36,13 @@ type Config struct {
 	LogLevel               slog.Level
 	LogFormat              string
 	MetricsEnabled         bool
-	CacheAdminKey          string
+	AdminAPIKey            string
 	DataRegion             string
 	Audit                  AuditConfig
+
+	// Warnings holds non-fatal configuration notices (e.g. deprecated env vars)
+	// surfaced at startup. Load populates it; main.go logs each at WARN level.
+	Warnings []string
 }
 
 // HTTPConfig holds HTTP-transport hardening knobs. All fields are ignored when
@@ -161,9 +165,24 @@ func Load() (*Config, error) {
 		errs = append(errs, "CACHE_ENCRYPTION_KEY_PREV must be exactly 64 hex characters")
 	}
 
-	adminKey := os.Getenv("CACHE_ADMIN_KEY")
+	// ADMIN_API_KEY gates every /admin/* endpoint (cache flush, session flush,
+	// GDPR data-subject rights, tenant analytics, workspace membership). The
+	// legacy CACHE_ADMIN_KEY name is still accepted for backward compatibility
+	// but deprecated, since the key is no longer cache-specific.
+	var warnings []string
+	adminKey := os.Getenv("ADMIN_API_KEY")
+	adminKeyVar := "ADMIN_API_KEY"
+	if adminKey == "" {
+		if legacy := os.Getenv("CACHE_ADMIN_KEY"); legacy != "" {
+			adminKey = legacy
+			adminKeyVar = "CACHE_ADMIN_KEY"
+			warnings = append(warnings, "CACHE_ADMIN_KEY is deprecated; rename it to ADMIN_API_KEY (the key now gates all /admin/* endpoints, not just cache). CACHE_ADMIN_KEY still works for now.")
+		}
+	} else if os.Getenv("CACHE_ADMIN_KEY") != "" {
+		warnings = append(warnings, "Both ADMIN_API_KEY and CACHE_ADMIN_KEY are set; ADMIN_API_KEY takes precedence. Remove the deprecated CACHE_ADMIN_KEY.")
+	}
 	if adminKey != "" && len(adminKey) < 16 {
-		errs = append(errs, "CACHE_ADMIN_KEY must be at least 16 characters")
+		errs = append(errs, adminKeyVar+" must be at least 16 characters")
 	}
 
 	// AUDIT_RETENTION_DAYS: 0 disables cleanup; any other value is clamped to
@@ -209,7 +228,11 @@ func Load() (*Config, error) {
 			RequiredScopes:      splitCSV(os.Getenv("REQUIRED_SCOPES")),
 		},
 		AllowedOrigins: splitCSV(os.Getenv("ALLOWED_ORIGINS")),
-		CORSStrict:     envBool("CORS_STRICT", false),
+		// Fail-closed by default: an empty ALLOWED_ORIGINS denies all cross-origin
+		// browser requests. Operators set ALLOWED_ORIGINS to their client's origin,
+		// or CORS_STRICT=false to restore the legacy reflect-any-Origin behavior.
+		// HTTP/browser-only — STDIO and backend-to-backend clients are unaffected.
+		CORSStrict: envBool("CORS_STRICT", true),
 		HTTP: HTTPConfig{
 			ReadHeaderTimeout: envDuration("HTTP_READ_HEADER_TIMEOUT", 5*time.Second),
 			ReadTimeout:       envDuration("HTTP_READ_TIMEOUT", 30*time.Second),
@@ -245,7 +268,7 @@ func Load() (*Config, error) {
 		LogLevel:             logLevel,
 		LogFormat:            envOrDefault("LOG_FORMAT", "json"),
 		MetricsEnabled:       envBool("METRICS_ENABLED", true),
-		CacheAdminKey:        adminKey,
+		AdminAPIKey:          adminKey,
 		DataRegion:           os.Getenv("DATA_REGION"),
 		Audit: AuditConfig{
 			Enabled:            envBool("AUDIT_ENABLED", true),
@@ -255,6 +278,7 @@ func Load() (*Config, error) {
 			MaxBytes:           envInt("AUDIT_MAX_BYTES", 100<<20),
 			RetentionDays:      retentionDays,
 		},
+		Warnings: warnings,
 	}
 
 	if len(errs) > 0 {

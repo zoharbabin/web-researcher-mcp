@@ -47,6 +47,10 @@ func main() {
 	}))
 	slog.SetDefault(logger)
 
+	for _, w := range cfg.Warnings {
+		slog.Warn("configuration notice", "msg", w)
+	}
+
 	hybridCache := cache.NewHybrid(cache.HybridConfig{
 		Memory:         cache.MemoryConfig{MaxSizeMB: cfg.CacheMaxMemoryMB},
 		Disk:           cache.DiskConfig{Dir: cfg.CacheDir, EncryptionKey: cfg.CacheEncryptionKey, EncryptionKeyPrev: cfg.CacheEncryptionKeyPrev, Version: version},
@@ -255,7 +259,7 @@ func main() {
 			AllowedOrigins:    cfg.AllowedOrigins,
 			CORSStrict:        cfg.CORSStrict,
 			Metrics:           metricsCollector,
-			AdminKey:          cfg.CacheAdminKey,
+			AdminKey:          cfg.AdminAPIKey,
 			Cache:             cacheStore,
 			Sessions:          sessionManager,
 			ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
