@@ -137,6 +137,58 @@ func TestAdminFlushCache(t *testing.T) {
 	}
 }
 
+func TestAdminTenantAnalytics(t *testing.T) {
+	m := metrics.NewCollector()
+	m.RecordTenantCall("tenant-1", "google", 50*time.Millisecond, false, true)
+	m.RecordTenantCall("tenant-2", "brave", 80*time.Millisecond, true, false)
+
+	handler := handleAdminTenantAnalytics(m)
+
+	t.Run("all tenants", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/admin/analytics", nil)
+		rec := httptest.NewRecorder()
+		handler(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rec.Code)
+		}
+		if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+			t.Errorf("expected JSON content type, got %q", ct)
+		}
+		var body struct {
+			Tenants []metrics.TenantStatsSnapshot `json:"tenants"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if len(body.Tenants) != 2 {
+			t.Errorf("expected 2 tenants, got %d", len(body.Tenants))
+		}
+	})
+
+	t.Run("filtered by tenant_id", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/admin/analytics?tenant_id=tenant-1", nil)
+		rec := httptest.NewRecorder()
+		handler(rec, req)
+		var body struct {
+			Tenants []metrics.TenantStatsSnapshot `json:"tenants"`
+		}
+		_ = json.Unmarshal(rec.Body.Bytes(), &body)
+		if len(body.Tenants) != 1 || body.Tenants[0].TenantID != "tenant-1" {
+			t.Errorf("expected only tenant-1, got %+v", body.Tenants)
+		}
+	})
+}
+
+func TestAdminTenantAnalyticsNil(t *testing.T) {
+	handler := handleAdminTenantAnalytics(nil)
+	req := httptest.NewRequest(http.MethodGet, "/admin/analytics", nil)
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 with nil metrics, got %d", rec.Code)
+	}
+}
+
 func TestAdminFlushCacheNil(t *testing.T) {
 	handler := handleAdminFlushCache(nil)
 	req := httptest.NewRequest(http.MethodDelete, "/admin/cache", nil)

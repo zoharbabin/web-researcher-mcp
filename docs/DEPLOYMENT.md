@@ -641,6 +641,7 @@ All admin endpoints require the `X-Admin-Key` header matching the `ADMIN_API_KEY
 |--------|------|---------|
 | DELETE | `/admin/cache` | Flush all cache (memory + disk) |
 | DELETE | `/admin/sessions` | Kill all active sessions |
+| GET | `/admin/analytics` | Per-tenant **aggregate** usage (calls, error/cache-hit rates, provider breakdown, latency percentiles) for billing/capacity. Optional `?tenant_id=` filter. Aggregate-only — no per-query or per-user content |
 
 These are HTTP-only operational endpoints, not exposed via MCP tools.
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -35,9 +36,9 @@ type HTTPConfig struct {
 	Cache          cache.Cache
 	Sessions       *session.Manager
 
-	// CORSStrict, when true, makes an empty AllowedOrigins deny all cross-origin
-	// requests (fail-closed). When false (default) an empty AllowedOrigins keeps
-	// the permissive reflect-any-Origin behavior. See docs/MIGRATION.md.
+	// CORSStrict, when true (the default), makes an empty AllowedOrigins deny all
+	// cross-origin requests (fail-closed). When false, an empty AllowedOrigins
+	// keeps the legacy permissive reflect-any-Origin behavior. See docs/MIGRATION.md.
 	CORSStrict bool
 
 	// HTTP-server hardening knobs (C1/C2/H4). All ignored in STDIO mode since
@@ -106,6 +107,7 @@ func (s *Server) ServeHTTP(ctx context.Context, cfg HTTPConfig) error {
 	if cfg.AdminKey != "" {
 		mux.Handle("DELETE /admin/cache", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, handleAdminFlushCache(cfg.Cache))))
 		mux.Handle("DELETE /admin/sessions", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, handleAdminFlushSessions(cfg.Sessions))))
+		mux.Handle("GET /admin/analytics", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, handleAdminTenantAnalytics(cfg.Metrics))))
 	}
 
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server", func(w http.ResponseWriter, _ *http.Request) {
@@ -315,5 +317,22 @@ func handleAdminFlushSessions(mgr *session.Manager) http.HandlerFunc {
 		}
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, "sessions flushed")
+	}
+}
+
+// handleAdminTenantAnalytics serves per-tenant AGGREGATE usage metrics (#91)
+// for billing and capacity planning. Aggregate-only — counts, rates, and
+// latency keyed by tenant_id, never per-query or per-user content. Optional
+// ?tenant_id= filters to one tenant. Operator-gated by the admin key.
+func handleAdminTenantAnalytics(m *metrics.Collector) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if m == nil {
+			http.Error(w, "metrics disabled", http.StatusServiceUnavailable)
+			return
+		}
+		stats := m.GetTenantStats(r.URL.Query().Get("tenant_id"))
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		_ = json.NewEncoder(w).Encode(map[string]any{"tenants": stats})
 	}
 }

@@ -21,9 +21,24 @@ type Collector struct {
 	cacheMisses *prometheus.CounterVec
 	activeConns prometheus.Gauge
 
-	mu        sync.RWMutex
-	toolStats map[string]*ToolMetrics
-	registry  *prometheus.Registry
+	mu          sync.RWMutex
+	toolStats   map[string]*ToolMetrics
+	tenantStats map[string]*TenantMetrics
+	registry    *prometheus.Registry
+}
+
+// TenantMetrics holds per-tenant AGGREGATE counters for billing and capacity
+// planning (#91). It is aggregate-only by construction — counts and a bounded
+// latency window keyed by tenant_id, with NO per-query, per-user, or content
+// data. This sits in the "legitimate interest" zone and needs no consent.
+type TenantMetrics struct {
+	TotalCalls atomic.Int64
+	ErrorCalls atomic.Int64
+	CacheHits  atomic.Int64
+	providers  map[string]int64 // provider name -> call count
+	latencies  []float64
+	mu         sync.Mutex
+	LastCalled time.Time
 }
 
 type ToolMetrics struct {
@@ -76,8 +91,9 @@ func NewCollector() *Collector {
 			Name: "mcp_active_connections",
 			Help: "Active MCP connections",
 		}),
-		toolStats: make(map[string]*ToolMetrics),
-		registry:  registry,
+		toolStats:   make(map[string]*ToolMetrics),
+		tenantStats: make(map[string]*TenantMetrics),
+		registry:    registry,
 	}
 
 	registry.MustRegister(c.toolCalls, c.toolErrors, c.toolLatency, c.cacheHits, c.cacheMisses, c.activeConns)
@@ -157,6 +173,123 @@ func (c *Collector) GetToolStats() map[string]ToolStatsSnapshot {
 		result[name] = snap
 	}
 	return result
+}
+
+// TenantStatsSnapshot is an aggregate-only, per-tenant usage summary (#91).
+// No per-query or per-user identifiable data — counts, rates, and latency
+// percentiles derived from existing metrics.
+type TenantStatsSnapshot struct {
+	TenantID     string           `json:"tenantId"`
+	TotalCalls   int64            `json:"totalCalls"`
+	ErrorCalls   int64            `json:"errorCalls"`
+	ErrorRate    float64          `json:"errorRate"`
+	CacheHits    int64            `json:"cacheHits"`
+	CacheHitRate float64          `json:"cacheHitRate"`
+	TopProviders map[string]int64 `json:"topProviders,omitempty"`
+	AvgLatencyMs float64          `json:"avgLatencyMs"`
+	P95LatencyMs float64          `json:"p95LatencyMs"`
+	LastCalled   string           `json:"lastCalled,omitempty"`
+}
+
+// RecordTenantCall records one aggregate data point for a tenant. tenantID ""
+// (anonymous/STDIO) is ignored — tenant analytics is an HTTP/multi-tenant
+// concern. provider may be "" when no upstream provider applies. This is the
+// only per-tenant collection point and stores counts only, never content (#91).
+func (c *Collector) RecordTenantCall(tenantID, provider string, latency time.Duration, isError, cacheHit bool) {
+	if tenantID == "" {
+		return
+	}
+	t := c.getOrCreateTenant(tenantID)
+	t.TotalCalls.Add(1)
+	if isError {
+		t.ErrorCalls.Add(1)
+	}
+	if cacheHit {
+		t.CacheHits.Add(1)
+	}
+
+	t.mu.Lock()
+	t.LastCalled = time.Now()
+	if provider != "" {
+		t.providers[provider]++
+	}
+	t.latencies = append(t.latencies, float64(latency.Milliseconds()))
+	if len(t.latencies) > 1000 {
+		t.latencies = t.latencies[len(t.latencies)-1000:]
+	}
+	t.mu.Unlock()
+}
+
+// GetTenantStats returns aggregate snapshots for all tenants, or for a single
+// tenant when tenantID is non-empty (returns a one-entry slice, empty if the
+// tenant is unknown).
+func (c *Collector) GetTenantStats(tenantID string) []TenantStatsSnapshot {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	snap := func(id string, t *TenantMetrics) TenantStatsSnapshot {
+		total := t.TotalCalls.Load()
+		errs := t.ErrorCalls.Load()
+		hits := t.CacheHits.Load()
+		s := TenantStatsSnapshot{
+			TenantID:   id,
+			TotalCalls: total,
+			ErrorCalls: errs,
+			CacheHits:  hits,
+		}
+		if total > 0 {
+			s.ErrorRate = math.Round(float64(errs)/float64(total)*100) / 100
+			s.CacheHitRate = math.Round(float64(hits)/float64(total)*100) / 100
+		}
+		t.mu.Lock()
+		if len(t.providers) > 0 {
+			s.TopProviders = make(map[string]int64, len(t.providers))
+			for k, v := range t.providers {
+				s.TopProviders[k] = v
+			}
+		}
+		if len(t.latencies) > 0 {
+			s.AvgLatencyMs = avg(t.latencies)
+			s.P95LatencyMs = percentile(t.latencies, 95)
+		}
+		if !t.LastCalled.IsZero() {
+			s.LastCalled = t.LastCalled.Format(time.RFC3339)
+		}
+		t.mu.Unlock()
+		return s
+	}
+
+	if tenantID != "" {
+		if t, ok := c.tenantStats[tenantID]; ok {
+			return []TenantStatsSnapshot{snap(tenantID, t)}
+		}
+		return nil
+	}
+
+	result := make([]TenantStatsSnapshot, 0, len(c.tenantStats))
+	for id, t := range c.tenantStats {
+		result = append(result, snap(id, t))
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].TenantID < result[j].TenantID })
+	return result
+}
+
+func (c *Collector) getOrCreateTenant(tenantID string) *TenantMetrics {
+	c.mu.RLock()
+	if t, ok := c.tenantStats[tenantID]; ok {
+		c.mu.RUnlock()
+		return t
+	}
+	c.mu.RUnlock()
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if t, ok := c.tenantStats[tenantID]; ok {
+		return t
+	}
+	t := &TenantMetrics{providers: make(map[string]int64)}
+	c.tenantStats[tenantID] = t
+	return t
 }
 
 func (c *Collector) HTTPHandler() http.Handler {

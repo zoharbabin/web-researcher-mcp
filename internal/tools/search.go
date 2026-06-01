@@ -195,6 +195,14 @@ func auditToolCallQuery(ctx context.Context, deps Dependencies, toolName string,
 		event.Metadata = meta
 	}
 	deps.Auditor.Log(event)
+
+	// Aggregate per-tenant usage (#91) at the same chokepoint as audit/PodID.
+	// Aggregate-only: counts + latency keyed by tenant_id, no query/content.
+	// Anonymous (STDIO) tenant is ignored inside RecordTenantCall.
+	if deps.Metrics != nil {
+		provider, _ := extra["provider"].(string)
+		deps.Metrics.RecordTenantCall(auth.TenantIDFromContext(ctx), provider, duration, err != nil, false)
+	}
 }
 
 func toolError(msg string) *mcp.CallToolResult {
