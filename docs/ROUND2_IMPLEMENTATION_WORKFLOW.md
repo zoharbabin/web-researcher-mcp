@@ -165,10 +165,14 @@ This is the KISS core. Build each once, reuse many. Reject any PR that introduce
 
 ## 5. Per-Issue Cards
 
-> These cards are the **pre-build design**. Where a name was changed during
-> implementation, Section 0 (As-Built Status) is authoritative — e.g. the admin
-> key shipped as `ADMIN_API_KEY` (not `CacheAdminKey`), the user-analytics tool
-> as `get_my_analytics`, and the generative-UI label as `mcp-auto-formatted`.
+> These cards are the **pre-build design**; Section 0 (As-Built Status) is
+> authoritative for what actually shipped. In particular: the **#93 (scheduled
+> searches)** and **#94 (summarization)** cards were **closed as won't-do** —
+> their env vars (`SCHEDULING_ENABLED`, `SUMMARIZATION_ENABLED`, etc.) do **not**
+> exist; scheduling is the host's job and the server runs no LLM. Renamed items:
+> the admin key shipped as `ADMIN_API_KEY` (not `CacheAdminKey`), the
+> user-analytics tool as `get_my_analytics`, the generative-UI label as
+> `mcp-auto-formatted`.
 
 ### #84 — CORS fail-closed default (breaking) · Wave 0 · Effort S
 
