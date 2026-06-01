@@ -13,8 +13,11 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/zoharbabin/web-researcher-mcp/internal/audit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/auth"
 	"github.com/zoharbabin/web-researcher-mcp/internal/cache"
+	"github.com/zoharbabin/web-researcher-mcp/internal/consent"
+	"github.com/zoharbabin/web-researcher-mcp/internal/datasubject"
 	"github.com/zoharbabin/web-researcher-mcp/internal/metrics"
 	"github.com/zoharbabin/web-researcher-mcp/internal/ratelimit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
@@ -35,6 +38,15 @@ type HTTPConfig struct {
 	AdminKey       string
 	Cache          cache.Cache
 	Sessions       session.Manager
+	// DataSubjects fans GDPR access/erasure requests out to every registered
+	// per-user store (#85). Nil disables the /admin/data endpoints.
+	DataSubjects *datasubject.Registry
+	// Consent records/verifies/honors consent (#89); backs the consent admin
+	// endpoints. Nil (or a Noop) means consent management is inert.
+	Consent consent.Manager
+	// Auditor records data.export/data.erasure/consent.* events for the admin
+	// data-subject and consent endpoints.
+	Auditor audit.Auditor
 
 	// CORSStrict, when true (the default), makes an empty AllowedOrigins deny all
 	// cross-origin requests (fail-closed). When false, an empty AllowedOrigins
@@ -108,6 +120,14 @@ func (s *Server) ServeHTTP(ctx context.Context, cfg HTTPConfig) error {
 		mux.Handle("DELETE /admin/cache", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, handleAdminFlushCache(cfg.Cache))))
 		mux.Handle("DELETE /admin/sessions", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, handleAdminFlushSessions(cfg.Sessions))))
 		mux.Handle("GET /admin/analytics", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, handleAdminTenantAnalytics(cfg.Metrics))))
+		if cfg.DataSubjects != nil {
+			mux.Handle("GET /admin/data", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, handleAdminDataExport(cfg.DataSubjects, cfg.Auditor))))
+			mux.Handle("DELETE /admin/data", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, handleAdminDataErasure(cfg.DataSubjects, cfg.Consent, cfg.Auditor))))
+		}
+		if cfg.Consent != nil {
+			mux.Handle("POST /admin/consent", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, handleAdminConsentRecord(cfg.Consent, cfg.Auditor))))
+			mux.Handle("GET /admin/consent", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, handleAdminConsentQuery(cfg.Consent))))
+		}
 	}
 
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server", func(w http.ResponseWriter, _ *http.Request) {
@@ -334,5 +354,139 @@ func handleAdminTenantAnalytics(m *metrics.Collector) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
 		_ = json.NewEncoder(w).Encode(map[string]any{"tenants": stats})
+	}
+}
+
+// writeJSON writes v as JSON with no-store, used by the admin data endpoints.
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+// handleAdminDataExport implements GDPR Art. 15/20 (access + portability): a
+// JSON export of everything held for a (tenant_id, user_id) subject, fanned
+// across all registered namespaces (#85). tenant_id is required; user_id is
+// optional (tenant-only stores like sessions ignore it). Cross-tenant access is
+// impossible — the export targets exactly the requested tenant_id.
+func handleAdminDataExport(reg *datasubject.Registry, auditor audit.Auditor) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		tenantID := r.URL.Query().Get("tenant_id")
+		userID := r.URL.Query().Get("user_id")
+		if tenantID == "" {
+			http.Error(w, "tenant_id is required", http.StatusBadRequest)
+			return
+		}
+		result := reg.Export(r.Context(), datasubject.Subject{TenantID: tenantID, UserID: userID})
+		if auditor != nil {
+			ev := audit.NewEvent("data.export", tenantID, userID)
+			ev.Metadata = map[string]any{"namespaces": reg.Namespaces()}
+			auditor.Log(ev)
+		}
+		writeJSON(w, http.StatusOK, result)
+	}
+}
+
+// handleAdminDataErasure implements GDPR Art. 17 (erasure): purges everything
+// held for a (tenant_id, user_id) subject across all registered namespaces, and
+// withdraws any consent for that subject so processing cannot silently resume.
+// It records an erasure audit event of the action itself.
+func handleAdminDataErasure(reg *datasubject.Registry, consentMgr consent.Manager, auditor audit.Auditor) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		tenantID := r.URL.Query().Get("tenant_id")
+		userID := r.URL.Query().Get("user_id")
+		if tenantID == "" {
+			http.Error(w, "tenant_id is required", http.StatusBadRequest)
+			return
+		}
+		subject := datasubject.Subject{TenantID: tenantID, UserID: userID}
+		result := reg.Erase(r.Context(), subject)
+
+		// Withdraw consent for every purpose so a later request cannot resume
+		// processing against erased data (erasure implies consent revocation).
+		if consentMgr != nil && userID != "" && userID != "anonymous" {
+			now := time.Now().UTC().Format(time.RFC3339)
+			for _, p := range consent.AllPurposes {
+				_ = consentMgr.Withdraw(r.Context(), tenantID, userID, p, now)
+			}
+		}
+
+		if auditor != nil {
+			ev := audit.NewEvent("data.erasure", tenantID, userID)
+			ev.Metadata = map[string]any{"deleted": result.Deleted}
+			auditor.Log(ev)
+		}
+		writeJSON(w, http.StatusOK, result)
+	}
+}
+
+// consentRequest is the POST /admin/consent body: record a grant or withdrawal
+// asserted by the host on the user's behalf.
+type consentRequest struct {
+	TenantID     string `json:"tenant_id"`
+	UserID       string `json:"user_id"`
+	Purpose      string `json:"purpose"`
+	Granted      bool   `json:"granted"`
+	TermsVersion string `json:"terms_version,omitempty"`
+}
+
+// handleAdminConsentRecord records a host-asserted consent decision (#89). The
+// server verifies/records/honors; it does not collect consent UI-side.
+func handleAdminConsentRecord(mgr consent.Manager, auditor audit.Auditor) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req consentRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid JSON body", http.StatusBadRequest)
+			return
+		}
+		if req.TenantID == "" || req.UserID == "" || req.Purpose == "" {
+			http.Error(w, "tenant_id, user_id, and purpose are required", http.StatusBadRequest)
+			return
+		}
+		purpose := consent.Purpose(req.Purpose)
+		if !purpose.Valid() {
+			http.Error(w, "unknown purpose", http.StatusBadRequest)
+			return
+		}
+		now := time.Now().UTC().Format(time.RFC3339)
+		rec := consent.Record{
+			TenantID: req.TenantID, UserID: req.UserID, Purpose: purpose,
+			Granted: req.Granted, TermsVer: req.TermsVersion, DecidedAt: now,
+			DecidedFrom: "admin_api",
+		}
+		if err := mgr.Record(r.Context(), rec); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if auditor != nil {
+			evType := consent.EventGrant
+			if !req.Granted {
+				evType = consent.EventWithdraw
+			}
+			ev := audit.NewEvent(evType, req.TenantID, req.UserID)
+			ev.Metadata = map[string]any{"purpose": req.Purpose, "granted": req.Granted}
+			auditor.Log(ev)
+		}
+		writeJSON(w, http.StatusOK, rec)
+	}
+}
+
+// handleAdminConsentQuery returns the current consent decision for a subject +
+// purpose, or 404 if none recorded.
+func handleAdminConsentQuery(mgr consent.Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		tenantID, userID, purpose := q.Get("tenant_id"), q.Get("user_id"), consent.Purpose(q.Get("purpose"))
+		if tenantID == "" || userID == "" || !purpose.Valid() {
+			http.Error(w, "tenant_id, user_id, and a valid purpose are required", http.StatusBadRequest)
+			return
+		}
+		rec, ok := mgr.Query(r.Context(), tenantID, userID, purpose)
+		if !ok {
+			writeJSON(w, http.StatusNotFound, map[string]any{"found": false})
+			return
+		}
+		writeJSON(w, http.StatusOK, rec)
 	}
 }

@@ -442,7 +442,7 @@ standards — not through per-framework checkbox exercises.
 | **ISO 27001** | Foundation | Interface-driven architecture, access control, encryption, audit, supply chain |
 | **SOC 2 Type II** | Enterprise trust | Audit logging, rate limiting, tenant isolation, change management |
 | **NIST CSF 2.0** | US enterprise | Govern/Identify/Protect/Detect/Respond/Recover mapped to controls |
-| **GDPR / UK GDPR** | Privacy | Data minimization, purpose limitation, TTL caches, erasure capability |
+| **GDPR / UK GDPR** | Privacy | Data minimization, purpose limitation, TTL caches; data-subject access/portability/erasure endpoints (`/admin/data`); consent record-verify-honor for regulated features |
 | **OWASP MCP Cheat Sheet** | MCP-specific | SSRF protection, content sanitization, tool annotations, supply chain |
 | **OWASP Top 10 LLM (2025)** | AI security | Prompt injection defense, bounded agency, supply chain verification |
 | **OWASP Agentic Top 10 (2026)** | AI agent security | Read-only tools, privilege separation, content boundaries |

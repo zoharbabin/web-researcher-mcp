@@ -26,6 +26,13 @@ type Manager interface {
 	Delete(tenantID, sessionID string)
 	// DeleteAll removes every session (admin flush).
 	DeleteAll()
+	// ListByTenant returns the index entries for one tenant (data-subject
+	// access/portability export, #85). Tenant-scoped — sessions carry no
+	// per-user field.
+	ListByTenant(tenantID string) []*SessionIndex
+	// DeleteByTenant purges a tenant's sessions from memory and disk, returning
+	// the count removed (data-subject erasure, #85).
+	DeleteByTenant(tenantID string) int
 	// Close stops background goroutines and releases resources.
 	Close()
 	// ActiveCount returns the number of live sessions (for stats).

@@ -421,10 +421,12 @@ How the server's controls counter the ATT&CK techniques most relevant to an inte
 
 | Right | Status |
 |-------|--------|
-| **Access** (Art. 15) | Not yet implemented. Planned: `GET /users/{id}/data` endpoint |
-| **Erasure** (Art. 17) | Not yet implemented. Planned: `DELETE /users/{id}/data` endpoint |
-| **Portability** (Art. 20) | Not yet implemented. Planned: JSON export of user-associated data |
+| **Access** (Art. 15) | **Implemented.** `GET /admin/data?tenant_id=&user_id=` returns a JSON export of all data held for the subject, fanned across every registered namespace (sessions today; long-term memory / user analytics / workspace contributions when those features are enabled). Admin-gated (`ADMIN_API_KEY`). |
+| **Portability** (Art. 20) | **Implemented.** Same `GET /admin/data` endpoint returns machine-readable JSON. |
+| **Erasure** (Art. 17) | **Implemented.** `DELETE /admin/data?tenant_id=&user_id=` purges the subject's data across all namespaces (memory + encrypted disk) and withdraws their consent so processing cannot silently resume; the erasure itself is recorded as a `data.erasure` audit event. |
 | **Restriction** (Art. 18) | Set `CACHE_ISOLATION=tenant` to scope all cache keys by tenant ID — prevents cross-tenant cache access |
+
+Implementation notes: requests are tenant-scoped — a request targets exactly one `tenant_id`, so cross-tenant access is impossible. `user_id` is optional; stores with no per-user dimension (e.g. sessions) operate at tenant granularity and label the export scope accordingly. The fan-out is driven by a registry (`internal/datasubject`) into which every personal-data store registers an exporter/eraser, so coverage extends automatically as regulated features ship.
 
 Data minimization (implemented): audit logs store parameter hashes (not raw queries), no persistent PII storage beyond cache TTLs.
 

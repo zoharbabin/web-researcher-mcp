@@ -15,6 +15,7 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/config"
 	"github.com/zoharbabin/web-researcher-mcp/internal/consent"
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
+	"github.com/zoharbabin/web-researcher-mcp/internal/datasubject"
 	"github.com/zoharbabin/web-researcher-mcp/internal/metrics"
 	"github.com/zoharbabin/web-researcher-mcp/internal/persist"
 	"github.com/zoharbabin/web-researcher-mcp/internal/ratelimit"
@@ -99,6 +100,12 @@ func main() {
 		logger.Info("consent subsystem active", "reason", "regulated feature enabled")
 	}
 
+	// Data-subject rights registry (#85): every per-user/per-tenant store
+	// registers an Exporter/Eraser here so GDPR access/erasure reaches it.
+	// Sessions register unconditionally (tenant-scoped); regulated stores
+	// register when enabled.
+	dataSubjects := datasubject.NewRegistry()
+
 	metricsCollector := metrics.NewCollector()
 	rateLimiter := ratelimit.NewWithStore(cfg.RateLimit, persistStore)
 	searchBreaker := circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60})
@@ -180,6 +187,10 @@ func main() {
 		os.Exit(1)
 	}
 	defer sessionManager.Close()
+
+	// Sessions are tenant-scoped personal data → register them for data-subject
+	// access/erasure (#85). Regulated per-user stores register here too when on.
+	dataSubjects.Register("sessions", session.AsDataSubject(sessionManager), session.AsDataSubject(sessionManager))
 
 	var auditor audit.Auditor
 	if cfg.Audit.Enabled {
@@ -277,6 +288,9 @@ func main() {
 			AdminKey:          cfg.AdminAPIKey,
 			Cache:             cacheStore,
 			Sessions:          sessionManager,
+			DataSubjects:      dataSubjects,
+			Consent:           consentManager,
+			Auditor:           auditor,
 			ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
 			ReadTimeout:       cfg.HTTP.ReadTimeout,
 			WriteTimeout:      cfg.HTTP.WriteTimeout,

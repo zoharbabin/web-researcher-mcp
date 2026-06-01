@@ -286,6 +286,40 @@ func (m *MemoryManager) DeleteAll() {
 	m.keys = make(map[string]string)
 }
 
+// ListByTenant returns a copy of the index entries for one tenant. Used by the
+// data-subject access/portability export (#85). Sessions carry no per-user
+// field, so this is tenant-scoped (the finest granularity the session data
+// supports); the caller documents that scope to the subject.
+func (m *MemoryManager) ListByTenant(tenantID string) []*SessionIndex {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []*SessionIndex
+	for _, idx := range m.index {
+		if idx.TenantID == tenantID {
+			cp := *idx
+			out = append(out, &cp)
+		}
+	}
+	return out
+}
+
+// DeleteByTenant purges every session for a tenant from memory and disk,
+// returning the count removed. Used by the data-subject erasure path (#85).
+func (m *MemoryManager) DeleteByTenant(tenantID string) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var keys []string
+	for key, idx := range m.index {
+		if idx.TenantID == tenantID {
+			keys = append(keys, key)
+		}
+	}
+	for _, key := range keys {
+		m.deleteUnlocked(key)
+	}
+	return len(keys)
+}
+
 func (m *MemoryManager) Close() {
 	close(m.done)
 }

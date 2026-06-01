@@ -86,9 +86,16 @@ This mode is entirely self-hosted. We still do not receive or have access to any
 
 ### For EU/EEA residents (GDPR)
 
-This software runs entirely on your device. We do not act as a data controller or processor for any personal data you process using this software, as no personal data is transmitted to or accessible by us.
+This software runs entirely on your device (or your own server in HTTP mode). We do not act as a data controller or processor for any personal data you process using this software, as no personal data is transmitted to or accessible by us.
 
 When you use third-party search APIs through this software, those API providers act as independent data controllers. Please review their respective privacy policies (linked above) for information about how they handle your data.
+
+**HTTP-mode operators** are the data controller for their own deployment. To honor data-subject requests, the server provides admin-gated endpoints (see `docs/SECURITY.md` and `docs/DEPLOYMENT.md`):
+
+- **Access & portability (Art. 15/20):** `GET /admin/data?tenant_id=&user_id=` exports, as JSON, everything the server holds for a subject across all stores.
+- **Erasure (Art. 17):** `DELETE /admin/data?tenant_id=&user_id=` purges that data (memory + encrypted disk) and withdraws the subject's consent; the erasure is itself audited.
+
+Because the server is designed to minimize per-user data (sessions are TTL-bounded, the cache is content-addressed and non-personal), the data actually subject to these requests is the subject's sessions plus any opt-in regulated-feature data (long-term memory, user analytics, workspace contributions) the operator has enabled.
 
 ### For California residents (CCPA/CPRA)
 

@@ -11,10 +11,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zoharbabin/web-researcher-mcp/internal/audit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/auth"
 	"github.com/zoharbabin/web-researcher-mcp/internal/cache"
 	"github.com/zoharbabin/web-researcher-mcp/internal/config"
+	"github.com/zoharbabin/web-researcher-mcp/internal/consent"
+	"github.com/zoharbabin/web-researcher-mcp/internal/datasubject"
 	"github.com/zoharbabin/web-researcher-mcp/internal/metrics"
+	"github.com/zoharbabin/web-researcher-mcp/internal/persist"
 	"github.com/zoharbabin/web-researcher-mcp/internal/ratelimit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
 )
@@ -187,6 +191,129 @@ func TestAdminTenantAnalyticsNil(t *testing.T) {
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 with nil metrics, got %d", rec.Code)
 	}
+}
+
+func TestAdminDataExportAndErasure(t *testing.T) {
+	reg := datasubject.NewRegistry()
+	// A stub per-user store with data for tenant-1/user-1 only.
+	store := map[string]int{"tenant-1|user-1": 2}
+	reg.Register("stub",
+		datasubject.ExporterFunc(func(_ context.Context, s datasubject.Subject) (any, error) {
+			if n, ok := store[s.TenantID+"|"+s.UserID]; ok {
+				return map[string]any{"items": n}, nil
+			}
+			return nil, nil
+		}),
+		datasubject.EraserFunc(func(_ context.Context, s datasubject.Subject) (int, error) {
+			k := s.TenantID + "|" + s.UserID
+			n := store[k]
+			delete(store, k)
+			return n, nil
+		}),
+	)
+	consentMgr := consent.NewStoreManager(persist.NewMemoryStore())
+	auditor := audit.NewNoop()
+
+	t.Run("export requires tenant_id", func(t *testing.T) {
+		h := handleAdminDataExport(reg, auditor)
+		req := httptest.NewRequest(http.MethodGet, "/admin/data", nil)
+		rec := httptest.NewRecorder()
+		h(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400 without tenant_id, got %d", rec.Code)
+		}
+	})
+
+	t.Run("export returns subject data", func(t *testing.T) {
+		h := handleAdminDataExport(reg, auditor)
+		req := httptest.NewRequest(http.MethodGet, "/admin/data?tenant_id=tenant-1&user_id=user-1", nil)
+		rec := httptest.NewRecorder()
+		h(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rec.Code)
+		}
+		var res datasubject.ExportResult
+		_ = json.Unmarshal(rec.Body.Bytes(), &res)
+		if _, ok := res.Namespaces["stub"]; !ok {
+			t.Errorf("expected stub namespace data, got %+v", res)
+		}
+	})
+
+	t.Run("cross-tenant export is empty (boundary)", func(t *testing.T) {
+		h := handleAdminDataExport(reg, auditor)
+		req := httptest.NewRequest(http.MethodGet, "/admin/data?tenant_id=tenant-2&user_id=user-1", nil)
+		rec := httptest.NewRecorder()
+		h(rec, req)
+		var res datasubject.ExportResult
+		_ = json.Unmarshal(rec.Body.Bytes(), &res)
+		if len(res.Namespaces) != 0 {
+			t.Errorf("tenant-2 must not see tenant-1 data, got %+v", res.Namespaces)
+		}
+	})
+
+	t.Run("erasure removes and withdraws consent", func(t *testing.T) {
+		_ = consentMgr.Record(context.Background(), consent.Record{
+			TenantID: "tenant-1", UserID: "user-1", Purpose: consent.PurposeMemory, Granted: true,
+		})
+		h := handleAdminDataErasure(reg, consentMgr, auditor)
+		req := httptest.NewRequest(http.MethodDelete, "/admin/data?tenant_id=tenant-1&user_id=user-1", nil)
+		rec := httptest.NewRecorder()
+		h(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rec.Code)
+		}
+		var res datasubject.EraseResult
+		_ = json.Unmarshal(rec.Body.Bytes(), &res)
+		if res.Deleted["stub"] != 2 {
+			t.Errorf("expected 2 erased, got %+v", res.Deleted)
+		}
+		if _, ok := store["tenant-1|user-1"]; ok {
+			t.Error("expected store entry erased")
+		}
+		// Consent withdrawn so processing cannot silently resume.
+		if rec2, ok := consentMgr.Query(context.Background(), "tenant-1", "user-1", consent.PurposeMemory); !ok || rec2.Granted {
+			t.Errorf("expected consent withdrawn after erasure, got ok=%v granted=%v", ok, rec2.Granted)
+		}
+	})
+}
+
+func TestAdminConsentRecordAndQuery(t *testing.T) {
+	mgr := consent.NewStoreManager(persist.NewMemoryStore())
+	auditor := audit.NewNoop()
+
+	rec := handleAdminConsentRecord(mgr, auditor)
+	body := `{"tenant_id":"t1","user_id":"u1","purpose":"memory","granted":true}`
+	req := httptest.NewRequest(http.MethodPost, "/admin/consent", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	rec(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 recording consent, got %d (%s)", w.Code, w.Body.String())
+	}
+
+	q := handleAdminConsentQuery(mgr)
+	qreq := httptest.NewRequest(http.MethodGet, "/admin/consent?tenant_id=t1&user_id=u1&purpose=memory", nil)
+	qw := httptest.NewRecorder()
+	q(qw, qreq)
+	if qw.Code != http.StatusOK {
+		t.Fatalf("expected 200 querying consent, got %d", qw.Code)
+	}
+
+	t.Run("unknown purpose rejected", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		rec(w, httptest.NewRequest(http.MethodPost, "/admin/consent",
+			strings.NewReader(`{"tenant_id":"t1","user_id":"u1","purpose":"bogus","granted":true}`)))
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected 400 for unknown purpose, got %d", w.Code)
+		}
+	})
+
+	t.Run("query missing returns 404", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		q(w, httptest.NewRequest(http.MethodGet, "/admin/consent?tenant_id=t1&user_id=u1&purpose=analytics", nil))
+		if w.Code != http.StatusNotFound {
+			t.Errorf("expected 404 for no record, got %d", w.Code)
+		}
+	})
 }
 
 func TestAdminFlushCacheNil(t *testing.T) {

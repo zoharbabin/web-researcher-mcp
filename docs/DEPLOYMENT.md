@@ -642,8 +642,12 @@ All admin endpoints require the `X-Admin-Key` header matching the `ADMIN_API_KEY
 | DELETE | `/admin/cache` | Flush all cache (memory + disk) |
 | DELETE | `/admin/sessions` | Kill all active sessions |
 | GET | `/admin/analytics` | Per-tenant **aggregate** usage (calls, error/cache-hit rates, provider breakdown, latency percentiles) for billing/capacity. Optional `?tenant_id=` filter. Aggregate-only — no per-query or per-user content |
+| GET | `/admin/data?tenant_id=&user_id=` | **GDPR access/portability** (Art. 15/20): JSON export of all data held for a data subject across every registered store. `tenant_id` required; `user_id` optional |
+| DELETE | `/admin/data?tenant_id=&user_id=` | **GDPR erasure** (Art. 17): purge the subject's data across all stores and withdraw their consent; records a `data.erasure` audit event |
+| POST | `/admin/consent` | Record a host-asserted consent decision. Body: `{tenant_id, user_id, purpose, granted, terms_version?}`. Only present when a regulated feature is enabled |
+| GET | `/admin/consent?tenant_id=&user_id=&purpose=` | Query the current consent decision for a subject + purpose |
 
-These are HTTP-only operational endpoints, not exposed via MCP tools.
+These are HTTP-only operational endpoints, not exposed via MCP tools. The `/admin/data` endpoints exist only when a personal-data store is registered; `/admin/consent` only when a regulated feature is enabled.
 
 ---
 
