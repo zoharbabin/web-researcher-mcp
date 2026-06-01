@@ -7,6 +7,7 @@ import (
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/audit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/cache"
+	"github.com/zoharbabin/web-researcher-mcp/internal/consent"
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 	"github.com/zoharbabin/web-researcher-mcp/internal/metrics"
 	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
@@ -27,6 +28,10 @@ type Dependencies struct {
 	Auditor           audit.Auditor
 	Logger            *slog.Logger
 	Features          Features
+	// Consent records/verifies/honors consent for regulated features (#89).
+	// Defaults to a Noop (grants nothing) when unset, so guarded processing is a
+	// clean no-op until a regulated feature wires it in.
+	Consent consent.Manager
 }
 
 // Features mirrors config.FeatureConfig for the tool layer (kept local so the

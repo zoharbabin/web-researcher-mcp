@@ -13,6 +13,7 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/cache"
 	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/config"
+	"github.com/zoharbabin/web-researcher-mcp/internal/consent"
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 	"github.com/zoharbabin/web-researcher-mcp/internal/metrics"
 	"github.com/zoharbabin/web-researcher-mcp/internal/persist"
@@ -87,6 +88,15 @@ func main() {
 		}
 	} else {
 		persistStore = persist.NewMemoryStore()
+	}
+
+	// Consent subsystem (#89): record-verify-honor for regulated features. It is
+	// a no-op (grants nothing, stores nothing) unless at least one consent-gated
+	// feature (#88/#92/#96) is enabled — no standalone CONSENT_ENABLED knob.
+	var consentManager consent.Manager = consent.NewNoop()
+	if cfg.Features.RegulatedEnabled() {
+		consentManager = consent.NewStoreManager(persistStore)
+		logger.Info("consent subsystem active", "reason", "regulated feature enabled")
 	}
 
 	metricsCollector := metrics.NewCollector()
@@ -205,6 +215,7 @@ func main() {
 			SourceRecommendations: cfg.Features.SourceRecommendations,
 			GenerativeUI:          cfg.Features.GenerativeUI,
 		},
+		Consent: consentManager,
 	}
 
 	srv := server.New(server.Config{

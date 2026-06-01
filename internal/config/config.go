@@ -75,6 +75,20 @@ type FeatureConfig struct {
 	// tables) built deterministically from already-extracted data. Defaults
 	// OFF; when off, output is byte-for-byte unchanged.
 	GenerativeUI bool
+
+	// Regulated features (all default OFF). Each processes per-user personal
+	// data and is gated by recorded consent (#89) + data-subject rights (#85).
+	// The consent subsystem activates iff at least one of these is enabled —
+	// there is no standalone CONSENT_ENABLED knob to drift out of sync.
+	Memory        bool // #88 opt-in long-term cross-session memory
+	UserAnalytics bool // #92 opt-in per-user analytics
+	Workspaces    bool // #96 opt-in shared research workspaces
+}
+
+// RegulatedEnabled reports whether any consent-gated feature is on, which is
+// the sole trigger for activating the consent subsystem.
+func (f FeatureConfig) RegulatedEnabled() bool {
+	return f.Memory || f.UserAnalytics || f.Workspaces
 }
 
 type AuditConfig struct {
@@ -290,6 +304,9 @@ func Load() (*Config, error) {
 		Features: FeatureConfig{
 			SourceRecommendations: envBool("SOURCE_RECOMMENDATIONS", true),
 			GenerativeUI:          envBool("GENERATIVE_UI_ENABLED", false),
+			Memory:                envBool("MEMORY_ENABLED", false),
+			UserAnalytics:         envBool("USER_ANALYTICS_ENABLED", false),
+			Workspaces:            envBool("WORKSPACES_ENABLED", false),
 		},
 		Audit: AuditConfig{
 			Enabled:            envBool("AUDIT_ENABLED", true),
