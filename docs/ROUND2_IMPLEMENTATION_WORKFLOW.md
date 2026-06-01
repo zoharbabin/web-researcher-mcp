@@ -4,6 +4,31 @@ The single source of truth for implementing, verifying, testing, documenting, an
 
 This document reconciles three expert cross-cutting reviews (architecture, security/compliance, QA/packaging) into the per-issue specs. Where a review corrected a dependency edge, a KISS scope, or a must-fix-before-start item, the correction is applied below and is authoritative.
 
+## 0. As-Built Status
+
+All waves are implemented on branch `round2/implementation`. The plan below is the design rationale; this section records what actually shipped and the decisions applied.
+
+| Issue | Status | Notes |
+|---|---|---|
+| #84 CORS fail-closed | ✅ Shipped | Minor-release breaking change + escape hatch + browser-client doc |
+| #4 admin key rename | ✅ Shipped | `CACHE_ADMIN_KEY` → **`ADMIN_API_KEY`** (legacy accepted w/ deprecation warning) + key-rotation docs |
+| #43 scaling fixes | ✅ Shipped | Typed `session_not_found` + `PodID` + readiness checklist; Cache-Control stays `no-store` |
+| #95 recommendations | ✅ Shipped | Default on; content-only, no model |
+| #90 generative UI | ✅ Shipped | Default off; label renamed **`mcp-auto-formatted`** (no AI involved — deterministic) |
+| #91 tenant analytics | ✅ Shipped | `/admin/analytics`, aggregate-only |
+| session.Manager interface | ✅ Shipped | Pure refactor (`MemoryManager` + interface) |
+| #89 consent | ✅ Shipped | Record-verify-honor (host asserts, server verifies/records/honors); fail-closed; Noop default; activates from feature flags (no orphan `CONSENT_ENABLED`) |
+| #85 data-subject rights | ✅ Shipped | `(tenantID,userID)` Exporter/Eraser registry; `/admin/data` GET+DELETE; erasure withdraws consent |
+| #42 Redis | ✅ Shipped | Iron-clad isolation: `internal/redisbackend` is the sole go-redis importer; one gated construction; fail-fast; encryption-mandatory; miniredis tests |
+| #92 user analytics | ✅ Shipped | Consent-gated; `get_my_analytics`; registered in #85 |
+| #88 long-term memory | ✅ Shipped | Consent-gated; `memory_save`/`memory_recall`; retention TTL; forget via #85 erasure (no `memory_forget`) |
+| #96 shared workspaces | ✅ Shipped (reframed) | Host owns membership, server enforces data-plane + isolation; non-member-zero-bytes gate |
+| #93 scheduling | ❌ Closed (won't-do) | Scheduling is a host responsibility (MCP spec + Anthropic/OpenAI both schedule host-side) |
+| #94 summarization | ❌ Closed (won't-do) | No second LLM in the MCP; clients are already LLMs |
+| #71 SignPath | ⏳ External | Gate wiring verified; blocked only on Foundation cert assignment |
+
+**Decisions applied** (from Section 8 + research): `(tenantID,userID)` erasure from day one; **#89 hybrid** (host obtains consent per MCP spec, server records/verifies/honors — research-confirmed); typed purpose constants; single renamed `ADMIN_API_KEY` + rotation tooling/docs; miniredis test-only (Lua `INCR`+`EXPIRE` verified); require encryption for personal namespaces on Redis; fail-fast on Redis connect; CORS minor release; recall+save first (forget → #85). #93/#94 closed and #96 reframed per the MCP-standards research (see the round2-decision-research briefs).
+
 ## 1. Executive Summary
 
 The 14 issues split into **enablers** and **dependents**. The through-line is: do not ship personal data without rights + consent coverage, and do not invent a parallel storage/crypto/telemetry path when an interface seam already exists.

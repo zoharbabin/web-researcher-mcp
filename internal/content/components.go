@@ -1,5 +1,7 @@
 package content
 
+import "strconv"
+
 // Generative-UI components (#90): optional, additive, renderable structures
 // built deterministically from data already extracted — NO server-side LLM
 // call. Every component carries an "mcp-auto-formatted" marker and a reference
@@ -114,10 +116,12 @@ func clampSnippet(s string) string {
 }
 
 func formatScore(f float64) string {
-	// Two-decimal fixed format without importing fmt for one call site.
-	hundredths := int(f*100 + 0.5)
-	whole := hundredths / 100
-	frac := hundredths % 100
-	digits := []byte{byte('0' + whole), '.', byte('0' + frac/10), byte('0' + frac%10)}
-	return string(digits)
+	// Quality scores are bounded [0,1]; clamp defensively, then format to two
+	// decimals. strconv keeps this allocation-light and avoids manual byte math.
+	if f < 0 {
+		f = 0
+	} else if f > 1 {
+		f = 1
+	}
+	return strconv.FormatFloat(f, 'f', 2, 64)
 }
