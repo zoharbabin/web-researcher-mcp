@@ -28,6 +28,7 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
 	"github.com/zoharbabin/web-researcher-mcp/internal/tools"
 	"github.com/zoharbabin/web-researcher-mcp/internal/useranalytics"
+	"github.com/zoharbabin/web-researcher-mcp/internal/workspace"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -171,6 +172,17 @@ func main() {
 		logger.Info("long-term memory enabled", "consent", "required", "retention", cfg.Features.MemoryRetention)
 	}
 
+	// Shared workspaces (#96): host owns membership, server enforces the data
+	// plane + isolation. Off by default. A non-Noop store registers a
+	// per-contributor Exporter/Eraser into the data-subject registry.
+	var workspaceStore workspace.Store = workspace.NewNoop()
+	if cfg.Features.Workspaces {
+		ws := workspace.NewStore(persistStore, cfg.Features.WorkspaceTTL)
+		workspaceStore = ws
+		dataSubjects.Register("workspace_contributions", workspace.AsDataSubject(ws), workspace.AsDataSubject(ws))
+		logger.Info("shared workspaces enabled", "consent", "required", "membership", "host-managed")
+	}
+
 	metricsCollector := metrics.NewCollector()
 	rateLimiter := ratelimit.NewWithStore(cfg.RateLimit, persistStore)
 	if redisBackends != nil {
@@ -309,6 +321,7 @@ func main() {
 		Consent:       consentManager,
 		UserAnalytics: userAnalytics,
 		Memory:        memoryStore,
+		Workspaces:    workspaceStore,
 	}
 
 	srv := server.New(server.Config{
@@ -372,6 +385,7 @@ func main() {
 			Sessions:          sessionManager,
 			DataSubjects:      dataSubjects,
 			Consent:           consentManager,
+			Workspaces:        workspaceStore,
 			Auditor:           auditor,
 			ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
 			ReadTimeout:       cfg.HTTP.ReadTimeout,

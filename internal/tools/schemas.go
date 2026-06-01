@@ -297,6 +297,39 @@ var memoryRecallOutputSchema = map[string]any{
 	},
 }
 
+var workspaceContributeOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"status": map[string]any{"type": "string"}, // ok | not_member | no_consent | unavailable
+		"reason": map[string]any{"type": "string"},
+		"id":     map[string]any{"type": "string"},
+	},
+}
+
+var workspaceReadOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"status": map[string]any{"type": "string"},
+		"count":  map[string]any{"type": "integer"},
+		"contributions": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":                map[string]any{"type": "string"},
+					"workspaceId":       map[string]any{"type": "string"},
+					"contributorTenant": map[string]any{"type": "string"},
+					"contributorUser":   map[string]any{"type": "string"},
+					"note":              map[string]any{"type": "string"},
+					"url":               map[string]any{"type": "string"},
+					"tags":              map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"createdAt":         map[string]any{"type": "string"},
+				},
+			},
+		},
+	},
+}
+
 var sequentialSearchOutputSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{

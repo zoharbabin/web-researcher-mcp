@@ -27,6 +27,8 @@ var expectedTools = []string{
 	"get_my_analytics",
 	"memory_save",
 	"memory_recall",
+	"workspace_contribute",
+	"workspace_read",
 }
 
 func listTools(t *testing.T) []*mcp.Tool {
@@ -67,7 +69,7 @@ func TestAllToolsHaveAnnotations(t *testing.T) {
 			// memory_save is the one WRITE tool (it persists a memory). Every
 			// other tool is read-only. No tool is ever destructive — deletion is
 			// the separate #85 erasure endpoint, never a tool flag.
-			writeTools := map[string]bool{"memory_save": true}
+			writeTools := map[string]bool{"memory_save": true, "workspace_contribute": true}
 			if writeTools[tool.Name] {
 				if tool.Annotations.ReadOnlyHint {
 					t.Errorf("%s writes state; ReadOnlyHint should be false", tool.Name)
@@ -120,6 +122,21 @@ func TestAllToolsHaveAnnotations(t *testing.T) {
 				}
 				if *tool.Annotations.OpenWorldHint {
 					t.Error("memory_save should NOT be open-world")
+				}
+			case "workspace_contribute":
+				// A write; not idempotent (appends a contribution), not open-world.
+				if tool.Annotations.IdempotentHint {
+					t.Error("workspace_contribute should NOT be idempotent")
+				}
+				if *tool.Annotations.OpenWorldHint {
+					t.Error("workspace_contribute should NOT be open-world")
+				}
+			case "workspace_read":
+				if !tool.Annotations.IdempotentHint {
+					t.Error("workspace_read should be idempotent")
+				}
+				if *tool.Annotations.OpenWorldHint {
+					t.Error("workspace_read should NOT be open-world")
 				}
 			default:
 				if !tool.Annotations.IdempotentHint {

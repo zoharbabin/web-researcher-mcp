@@ -15,6 +15,7 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
 	"github.com/zoharbabin/web-researcher-mcp/internal/useranalytics"
+	"github.com/zoharbabin/web-researcher-mcp/internal/workspace"
 )
 
 type Dependencies struct {
@@ -42,6 +43,10 @@ type Dependencies struct {
 	// Defaults to a Noop. The memory_save/memory_recall tools are registered
 	// only when a non-Noop store is present.
 	Memory memory.Store
+	// Workspaces is the opt-in shared-workspace data plane (#96). Defaults to a
+	// Noop (no membership, no data). The workspace_contribute/workspace_read
+	// tools are registered only when a non-Noop store is present.
+	Workspaces workspace.Store
 }
 
 // Features mirrors config.FeatureConfig for the tool layer (kept local so the
@@ -72,6 +77,10 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	if _, isNoop := deps.Memory.(*memory.Noop); deps.Memory != nil && !isNoop {
 		registerMemorySave(srv, deps)
 		registerMemoryRecall(srv, deps)
+	}
+	if _, isNoop := deps.Workspaces.(*workspace.Noop); deps.Workspaces != nil && !isNoop {
+		registerWorkspaceContribute(srv, deps)
+		registerWorkspaceRead(srv, deps)
 	}
 }
 

@@ -21,6 +21,7 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/metrics"
 	"github.com/zoharbabin/web-researcher-mcp/internal/ratelimit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
+	"github.com/zoharbabin/web-researcher-mcp/internal/workspace"
 )
 
 type Config struct {
@@ -44,6 +45,9 @@ type HTTPConfig struct {
 	// Consent records/verifies/honors consent (#89); backs the consent admin
 	// endpoints. Nil (or a Noop) means consent management is inert.
 	Consent consent.Manager
+	// Workspaces backs the host-driven membership admin API (#96). Nil disables
+	// the /admin/workspace/members endpoints (the host's control-plane hook).
+	Workspaces workspace.Store
 	// Auditor records data.export/data.erasure/consent.* events for the admin
 	// data-subject and consent endpoints.
 	Auditor audit.Auditor
@@ -127,6 +131,10 @@ func (s *Server) ServeHTTP(ctx context.Context, cfg HTTPConfig) error {
 		if cfg.Consent != nil {
 			mux.Handle("POST /admin/consent", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, handleAdminConsentRecord(cfg.Consent, cfg.Auditor))))
 			mux.Handle("GET /admin/consent", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, handleAdminConsentQuery(cfg.Consent))))
+		}
+		if cfg.Workspaces != nil {
+			mux.Handle("POST /admin/workspace/members", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, handleAdminWorkspaceMember(cfg.Workspaces, cfg.Auditor, true))))
+			mux.Handle("DELETE /admin/workspace/members", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, handleAdminWorkspaceMember(cfg.Workspaces, cfg.Auditor, false))))
 		}
 	}
 
@@ -488,5 +496,49 @@ func handleAdminConsentQuery(mgr consent.Manager) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, rec)
+	}
+}
+
+// workspaceMemberRequest is the body for the host-driven membership API (#96):
+// the host owns WHO belongs to a workspace; the server enforces the check.
+type workspaceMemberRequest struct {
+	WorkspaceID string `json:"workspace_id"`
+	TenantID    string `json:"tenant_id"`
+	UserID      string `json:"user_id"`
+}
+
+// handleAdminWorkspaceMember adds (add=true) or removes a workspace member.
+// This is the thin control-plane hook the host's RBAC drives — the server does
+// not own membership policy, only enforces the resulting checks. Audited.
+func handleAdminWorkspaceMember(store workspace.Store, auditor audit.Auditor, add bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req workspaceMemberRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid JSON body", http.StatusBadRequest)
+			return
+		}
+		if req.WorkspaceID == "" || req.TenantID == "" || req.UserID == "" {
+			http.Error(w, "workspace_id, tenant_id, and user_id are required", http.StatusBadRequest)
+			return
+		}
+		m := workspace.Member{TenantID: req.TenantID, UserID: req.UserID}
+		var err error
+		evType := "workspace.member.add"
+		if add {
+			err = store.AddMember(r.Context(), req.WorkspaceID, m)
+		} else {
+			err = store.RemoveMember(r.Context(), req.WorkspaceID, m)
+			evType = "workspace.member.remove"
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if auditor != nil {
+			ev := audit.NewEvent(evType, req.TenantID, req.UserID)
+			ev.Metadata = map[string]any{"workspace_id": req.WorkspaceID}
+			auditor.Log(ev)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"status": "ok"})
 	}
 }

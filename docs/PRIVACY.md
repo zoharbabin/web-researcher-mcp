@@ -97,6 +97,8 @@ When you use third-party search APIs through this software, those API providers 
 
 Because the server is designed to minimize per-user data (sessions are TTL-bounded, the cache is content-addressed and non-personal), the data actually subject to these requests is the subject's sessions plus any opt-in regulated-feature data (long-term memory, user analytics, workspace contributions) the operator has enabled.
 
+**Shared workspaces** (opt-in, off by default) are the one place data deliberately crosses a per-user boundary, and only within a tenant: a contribution is a **copy** stamped with the contributor's identity, never a live link to their private data. Membership is managed by the host application (the server enforces the membership check on every access — a non-member receives nothing — but does not own the membership policy). Each contributor retains erasure rights over their own contributions across all workspaces, and workspace data is itself retention-bounded (`WORKSPACE_TTL`).
+
 ### For California residents (CCPA/CPRA)
 
 We do not collect, sell, or share personal information as defined by the California Consumer Privacy Act. Because this software operates locally on your device and we have no access to your data, there is no personal information held by us to request access to, deletion of, or correction of.

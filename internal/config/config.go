@@ -88,6 +88,10 @@ type FeatureConfig struct {
 	// (#88). 0 → the store's default (90 days). "Data doesn't exist after TTL"
 	// stays the safety property unless the operator extends it.
 	MemoryRetention time.Duration
+
+	// WorkspaceTTL bounds how long shared-workspace data lives (#96).
+	// 0 → the store's default (30 days).
+	WorkspaceTTL time.Duration
 }
 
 // RegulatedEnabled reports whether any consent-gated feature is on, which is
@@ -313,6 +317,7 @@ func Load() (*Config, error) {
 			UserAnalytics:         envBool("USER_ANALYTICS_ENABLED", false),
 			Workspaces:            envBool("WORKSPACES_ENABLED", false),
 			MemoryRetention:       envDuration("MEMORY_RETENTION", 90*24*time.Hour),
+			WorkspaceTTL:          envDuration("WORKSPACE_TTL", 30*24*time.Hour),
 		},
 		Audit: AuditConfig{
 			Enabled:            envBool("AUDIT_ENABLED", true),

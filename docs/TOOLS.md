@@ -783,6 +783,88 @@ type MemoryEntry struct {
 
 ---
 
+## Tool 13: `workspace_contribute`
+
+**Opt-in, consent-gated (#96). Registered only when `WORKSPACES_ENABLED=true`.** This is a **write** tool (`ReadOnlyHint: false`, `DestructiveHint: false`).
+
+### Purpose
+
+Share a research finding into a shared team workspace. The contribution is stored as a **copy** with immutable provenance (your tenant/user, timestamp) — never a live link to your private data, so per-tenant isolation is never silently voided. Membership is managed by your host app (the server enforces, the host owns the policy). Erasable by the contributor via the data-subject endpoint.
+
+### Input Schema
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `workspace_id` | string | yes | Workspace to contribute to (you must be a member) |
+| `note` | string | yes | The finding to share |
+| `url` | string | no | Source URL |
+| `tags` | string[] | no | Organizational tags |
+
+### Output Schema
+
+```go
+type WorkspaceContributeOutput struct {
+    Status string `json:"status"` // "ok" | "not_member" | "no_consent" | "unavailable"
+    Reason string `json:"reason,omitempty"`
+    ID     string `json:"id,omitempty"`
+}
+```
+
+### Behavior
+
+Requires an authenticated user, recorded consent for the `workspace` purpose, AND membership. The caller's identity is taken from the validated token — never from a parameter, and never from the `workspace_id`.
+
+### Cache
+
+- Not cached (a write).
+
+---
+
+## Tool 14: `workspace_read`
+
+**Opt-in, consent-gated (#96). Registered only when `WORKSPACES_ENABLED=true`.** Read-only.
+
+### Purpose
+
+Read the shared findings in a workspace you belong to (each with its contributor attribution). **Non-members receive zero contributions** — membership is re-verified on every read.
+
+### Input Schema
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `workspace_id` | string | yes | Workspace to read (you must be a member) |
+
+### Output Schema
+
+```go
+type WorkspaceReadOutput struct {
+    Status        string         `json:"status"` // "ok" | "not_member" | "no_consent" | "unavailable"
+    Count         int            `json:"count"`
+    Contributions []Contribution `json:"contributions"`
+}
+
+type Contribution struct {
+    ID                string   `json:"id"`
+    WorkspaceID       string   `json:"workspaceId"`
+    ContributorTenant string   `json:"contributorTenant"`
+    ContributorUser   string   `json:"contributorUser"`
+    Note              string   `json:"note"`
+    URL               string   `json:"url,omitempty"`
+    Tags              []string `json:"tags,omitempty"`
+    CreatedAt         string   `json:"createdAt"`
+}
+```
+
+### Membership management
+
+Membership is host-owned via admin endpoints (not MCP tools): `POST /admin/workspace/members` and `DELETE /admin/workspace/members` with `{workspace_id, tenant_id, user_id}`. The server enforces the resulting membership checks; it does not own the membership policy.
+
+### Cache
+
+- No cache (reads workspace state directly).
+
+---
+
 ## Cross-Cutting Concerns
 
 ### Timeouts (all configurable via env)

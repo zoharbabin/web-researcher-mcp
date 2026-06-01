@@ -21,6 +21,7 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/persist"
 	"github.com/zoharbabin/web-researcher-mcp/internal/ratelimit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
+	"github.com/zoharbabin/web-researcher-mcp/internal/workspace"
 )
 
 func TestNew(t *testing.T) {
@@ -312,6 +313,42 @@ func TestAdminConsentRecordAndQuery(t *testing.T) {
 		q(w, httptest.NewRequest(http.MethodGet, "/admin/consent?tenant_id=t1&user_id=u1&purpose=analytics", nil))
 		if w.Code != http.StatusNotFound {
 			t.Errorf("expected 404 for no record, got %d", w.Code)
+		}
+	})
+}
+
+func TestAdminWorkspaceMembership(t *testing.T) {
+	store := workspace.NewStore(persist.NewMemoryStore(), 0)
+	auditor := audit.NewNoop()
+	ctx := context.Background()
+	m := workspace.Member{TenantID: "t1", UserID: "u1"}
+
+	add := handleAdminWorkspaceMember(store, auditor, true)
+	body := `{"workspace_id":"ws1","tenant_id":"t1","user_id":"u1"}`
+	w := httptest.NewRecorder()
+	add(w, httptest.NewRequest(http.MethodPost, "/admin/workspace/members", strings.NewReader(body)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 adding member, got %d", w.Code)
+	}
+	if !store.IsMember(ctx, "ws1", m) {
+		t.Error("expected member after add endpoint")
+	}
+
+	del := handleAdminWorkspaceMember(store, auditor, false)
+	w = httptest.NewRecorder()
+	del(w, httptest.NewRequest(http.MethodDelete, "/admin/workspace/members", strings.NewReader(body)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 removing member, got %d", w.Code)
+	}
+	if store.IsMember(ctx, "ws1", m) {
+		t.Error("expected non-member after remove endpoint")
+	}
+
+	t.Run("missing fields rejected", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		add(w, httptest.NewRequest(http.MethodPost, "/admin/workspace/members", strings.NewReader(`{"workspace_id":"ws1"}`)))
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected 400 for missing fields, got %d", w.Code)
 		}
 	})
 }

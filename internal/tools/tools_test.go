@@ -27,6 +27,7 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
 	"github.com/zoharbabin/web-researcher-mcp/internal/useranalytics"
+	"github.com/zoharbabin/web-researcher-mcp/internal/workspace"
 )
 
 type mockProvider struct{}
@@ -92,6 +93,7 @@ func setupTestDeps() Dependencies {
 		Consent:       consent.NewStoreManager(persist.NewMemoryStore()),
 		UserAnalytics: useranalytics.NewStoreRecorder(persist.NewMemoryStore()),
 		Memory:        memory.NewStore(persist.NewMemoryStore(), 0),
+		Workspaces:    workspace.NewStore(persist.NewMemoryStore(), 0),
 	}
 }
 
