@@ -201,6 +201,10 @@ func main() {
 		Metrics:           metricsCollector,
 		Auditor:           auditor,
 		Logger:            logger,
+		Features: tools.Features{
+			SourceRecommendations: cfg.Features.SourceRecommendations,
+			GenerativeUI:          cfg.Features.GenerativeUI,
+		},
 	}
 
 	srv := server.New(server.Config{

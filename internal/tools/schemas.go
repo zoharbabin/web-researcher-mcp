@@ -210,6 +210,35 @@ var searchAndScrapeOutputSchema = map[string]any{
 				"sizeCategory":    map[string]any{"type": "string"},
 			},
 		},
+		// Additive, content-only enrichments (#95, #90). Both are omitted unless
+		// enabled and non-empty; neither alters `sources` ordering.
+		"recommendations": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"url":    map[string]any{"type": "string"},
+					"title":  map[string]any{"type": "string"},
+					"score":  map[string]any{"type": "number"},
+					"reason": map[string]any{"type": "string"},
+				},
+			},
+		},
+		"components": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"type":        map[string]any{"type": "string"},
+					"aiFormatted": map[string]any{"type": "boolean"},
+					"label":       map[string]any{"type": "string"},
+					"title":       map[string]any{"type": "string"},
+					"sourceRefs":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"card":        map[string]any{"type": "object"},
+					"table":       map[string]any{"type": "object"},
+				},
+			},
+		},
 	},
 }
 

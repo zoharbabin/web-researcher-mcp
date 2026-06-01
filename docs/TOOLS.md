@@ -253,6 +253,33 @@ type SearchAndScrapeOutput struct {
     Note            string          `json:"note,omitempty"`   // guidance when status="failed"
     Summary         PipelineSummary `json:"summary"`
     SizeMetadata    SizeMetadata    `json:"sizeMetadata"`
+    Recommendations []Recommendation `json:"recommendations,omitempty"` // advisory; see below
+    Components      []Component      `json:"components,omitempty"`      // AI-formatted; see below
+}
+
+// Recommendation is an advisory pointer to a higher-quality source already in
+// `sources`. Content-based and non-profiling; never re-ranks or hides results.
+// Present only when SOURCE_RECOMMENDATIONS=true (default) AND something clears
+// the quality bar. Omitted otherwise.
+type Recommendation struct {
+    URL    string  `json:"url"`
+    Title  string  `json:"title,omitempty"`
+    Score  float64 `json:"score"`
+    Reason string  `json:"reason"`  // transparent, content-derived
+}
+
+// Component is an optional, additive, AI-formatted renderable (card/table)
+// built deterministically from already-extracted data — no server-side LLM
+// call. Always carries aiFormatted=true and references to raw source data; it
+// never replaces `content`/`sources`. Present only when GENERATIVE_UI_ENABLED=true.
+type Component struct {
+    Type        string   `json:"type"`         // "card" | "table"
+    AIFormatted bool     `json:"aiFormatted"`  // always true (non-disableable label)
+    Label       string   `json:"label"`        // "AI-formatted"
+    Title       string   `json:"title,omitempty"`
+    SourceRefs  []string `json:"sourceRefs,omitempty"` // URLs of the underlying raw data
+    Card        *Card    `json:"card,omitempty"`
+    Table       *Table   `json:"table,omitempty"`
 }
 
 type SourceResult struct {
@@ -296,6 +323,12 @@ type PipelineSummary struct {
 5. If `filter_by_query`: extract keywords, remove sources below relevance threshold
 6. Combine content, truncate to `total_max_length`
 7. Return structured result with scores and metadata
+8. Optionally append `recommendations` (advisory, content-based; `SOURCE_RECOMMENDATIONS`, default on) and `components` (AI-formatted renderables; `GENERATIVE_UI_ENABLED`, default off) — both derived purely from the quality scores already computed, with no extra scoring pass and no model call
+
+### Recommendations & components (additive)
+
+- **`recommendations`** surface the highest-quality related sources from the *current* result set using the transparent quality signals (authority, relevance, freshness, content). They are **advisory only** — `sources` ordering is never changed and the caller can ignore them. Strictly content-based: no user-behavior inputs, no profiling. Toggle with `SOURCE_RECOMMENDATIONS` (default `true`). Behavior-based/personalized ranking is explicitly out of scope.
+- **`components`** are optional renderable structures (source cards, a quality-comparison table) assembled **deterministically** from data already extracted — there is no server-side LLM call. Every component is labelled `aiFormatted: true` and references the raw source URLs, so nothing is hidden or unverifiable. Off by default (`GENERATIVE_UI_ENABLED=false`); when off, output is byte-for-byte unchanged. The raw `content`/`sources` are always present regardless.
 
 ### Cache
 - NOT cached as a whole (composed of cached sub-operations)

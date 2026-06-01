@@ -38,6 +38,7 @@ type Config struct {
 	MetricsEnabled         bool
 	AdminAPIKey            string
 	DataRegion             string
+	Features               FeatureConfig
 	Audit                  AuditConfig
 
 	// Warnings holds non-fatal configuration notices (e.g. deprecated env vars)
@@ -58,6 +59,22 @@ type HTTPConfig struct {
 	CSP               string
 	ReferrerPolicy    string
 	PermissionsPolicy string
+}
+
+// FeatureConfig holds opt-in/opt-out toggles for additive output features that
+// are safe-by-construction (content-only, deterministic, no personal data).
+// Regulated features (memory, analytics, workspaces) live elsewhere and are
+// gated by their own flags plus consent.
+type FeatureConfig struct {
+	// SourceRecommendations surfaces advisory "related higher-quality sources"
+	// derived from the existing transparent quality signals. Content-based and
+	// non-profiling, so it defaults ON; the field is additive (omitted when
+	// nothing qualifies) and never re-ranks results.
+	SourceRecommendations bool
+	// GenerativeUI emits additive, AI-formatted renderable components (cards,
+	// tables) built deterministically from already-extracted data. Defaults
+	// OFF; when off, output is byte-for-byte unchanged.
+	GenerativeUI bool
 }
 
 type AuditConfig struct {
@@ -270,6 +287,10 @@ func Load() (*Config, error) {
 		MetricsEnabled:       envBool("METRICS_ENABLED", true),
 		AdminAPIKey:          adminKey,
 		DataRegion:           os.Getenv("DATA_REGION"),
+		Features: FeatureConfig{
+			SourceRecommendations: envBool("SOURCE_RECOMMENDATIONS", true),
+			GenerativeUI:          envBool("GENERATIVE_UI_ENABLED", false),
+		},
 		Audit: AuditConfig{
 			Enabled:            envBool("AUDIT_ENABLED", true),
 			OutputPath:         os.Getenv("AUDIT_OUTPUT_PATH"),

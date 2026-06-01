@@ -26,6 +26,16 @@ type Dependencies struct {
 	Metrics           *metrics.Collector
 	Auditor           audit.Auditor
 	Logger            *slog.Logger
+	Features          Features
+}
+
+// Features mirrors config.FeatureConfig for the tool layer (kept local so the
+// tools package does not import config). All zero values are safe defaults:
+// recommendations off, generative UI off — additive features that are
+// byte-for-byte no-ops when disabled. main.go populates this from config.
+type Features struct {
+	SourceRecommendations bool
+	GenerativeUI          bool
 }
 
 func RegisterAll(srv *mcp.Server, deps Dependencies) {
