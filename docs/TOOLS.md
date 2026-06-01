@@ -253,6 +253,35 @@ type SearchAndScrapeOutput struct {
     Note            string          `json:"note,omitempty"`   // guidance when status="failed"
     Summary         PipelineSummary `json:"summary"`
     SizeMetadata    SizeMetadata    `json:"sizeMetadata"`
+    Recommendations []Recommendation `json:"recommendations,omitempty"` // advisory; see below
+    Components      []Component      `json:"components,omitempty"`      // mcp-auto-formatted (deterministic, no LLM); see below
+}
+
+// Recommendation is an advisory pointer to a higher-quality source already in
+// `sources`. Content-based and non-profiling; never re-ranks or hides results.
+// Present only when SOURCE_RECOMMENDATIONS=true (default) AND something clears
+// the quality bar. Omitted otherwise.
+type Recommendation struct {
+    URL    string  `json:"url"`
+    Title  string  `json:"title,omitempty"`
+    Score  float64 `json:"score"`
+    Reason string  `json:"reason"`  // transparent, content-derived
+}
+
+// Component is an optional, additive, mcp-auto-formatted renderable (card/table)
+// built DETERMINISTICALLY from already-extracted data — NO server-side LLM call,
+// no model of any kind. The "mcp-auto-formatted" label states the MCP server
+// shaped this structure (not an LLM, not another component). Always carries
+// autoFormatted=true and references to raw source data; it never replaces
+// `content`/`sources`. Present only when GENERATIVE_UI_ENABLED=true.
+type Component struct {
+    Type          string   `json:"type"`          // "card" | "table"
+    AutoFormatted bool     `json:"autoFormatted"` // always true (non-disableable label)
+    Label         string   `json:"label"`         // "mcp-auto-formatted"
+    Title         string   `json:"title,omitempty"`
+    SourceRefs    []string `json:"sourceRefs,omitempty"` // URLs of the underlying raw data
+    Card          *Card    `json:"card,omitempty"`
+    Table         *Table   `json:"table,omitempty"`
 }
 
 type SourceResult struct {
@@ -296,6 +325,12 @@ type PipelineSummary struct {
 5. If `filter_by_query`: extract keywords, remove sources below relevance threshold
 6. Combine content, truncate to `total_max_length`
 7. Return structured result with scores and metadata
+8. Optionally append `recommendations` (advisory, content-based; `SOURCE_RECOMMENDATIONS`, default on) and `components` (`mcp-auto-formatted` renderables, deterministic — no LLM; `GENERATIVE_UI_ENABLED`, default off) — both derived purely from the quality scores already computed, with no extra scoring pass and no model call
+
+### Recommendations & components (additive)
+
+- **`recommendations`** surface the highest-quality related sources from the *current* result set using the transparent quality signals (authority, relevance, freshness, content). They are **advisory only** — `sources` ordering is never changed and the caller can ignore them. Strictly content-based: no user-behavior inputs, no profiling. Toggle with `SOURCE_RECOMMENDATIONS` (default `true`). Behavior-based/personalized ranking is explicitly out of scope.
+- **`components`** are optional renderable structures (source cards, a quality-comparison table) assembled **deterministically** from data already extracted — there is no server-side LLM call and no model of any kind. Every component is labelled `autoFormatted: true` / `"mcp-auto-formatted"` (stating the MCP server shaped it, not an LLM) and references the raw source URLs, so nothing is hidden or unverifiable. Off by default (`GENERATIVE_UI_ENABLED=false`); when off, output is byte-for-byte unchanged. The raw `content`/`sources` are always present regardless.
 
 ### Cache
 - NOT cached as a whole (composed of cached sub-operations)
@@ -433,7 +468,7 @@ Each paper in the `papers` array contains:
 | `openAccess` | bool | no | Whether the paper is freely available |
 | `pdfUrl` | string | no | Direct link to PDF |
 
-Additional output fields: `query`, `totalResults`, `resultCount`, `source` (which provider answered: openalex, crossref, router, web_search).
+Additional output fields: `query`, `totalResults`, `resultCount`, `source` (which provider answered: openalex, crossref, router, web_search), and `hints` (a `ZeroResultHints` object explaining why a query returned nothing and suggesting how to broaden it — present on zero-result responses).
 
 ### Behavior
 - 4-strategy fallback: explicit provider → router → academic providers → site-restricted web search
@@ -488,7 +523,7 @@ Each patent in the `patents` array contains:
 | `pdf` | string | no | Direct link to patent PDF |
 | `status` | string | no | Application status (e.g., "Patented Case") |
 
-Additional output fields: `query`, `searchType`, `resultCount`, `source` (which provider answered), `searchUrl`.
+Additional output fields: `query`, `searchType`, `resultCount`, `source` (which provider answered), `searchUrl`, and `hints` (a `ZeroResultHints` object explaining why a query returned nothing and suggesting how to broaden it — present on zero-result responses).
 
 ### Behavior
 - 4-strategy fallback: explicit provider → router → patent-only providers → web search discovery
@@ -623,6 +658,213 @@ Recover a `sequential_search` session after context loss. Returns the session su
 
 ---
 
+## Tool 10: `get_my_analytics`
+
+**Opt-in, consent-gated (#92). Registered only when `USER_ANALYTICS_ENABLED=true`.** Read-only.
+
+### Purpose
+
+Return the **calling user's own** usage analytics (tools used, counts, first/last seen) for their tenant. This is per-user data under GDPR / Quebec Law 25, so it is off by default, collected only after recorded consent, isolated per user, encrypted at rest, and covered by the data-subject access/erasure endpoints (`/admin/data`).
+
+### Input Schema
+
+No inputs. The subject is always the authenticated caller — a user can never request another user's analytics.
+
+### Output Schema
+
+```go
+type GetMyAnalyticsOutput struct {
+    Status    string         `json:"status"`           // "ok" | "empty" | "no_consent" | "unavailable"
+    Reason    string         `json:"reason,omitempty"`
+    Analytics *UserAnalytics `json:"analytics,omitempty"`
+}
+
+type UserAnalytics struct {
+    TenantID    string           `json:"tenantId"`
+    UserID      string           `json:"userId"`
+    TotalCalls  int64            `json:"totalCalls"`
+    ToolCounts  map[string]int64 `json:"toolCounts"`
+    FirstSeen   string           `json:"firstSeen,omitempty"`
+    LastSeen    string           `json:"lastSeen,omitempty"`
+    RecentTools []string         `json:"recentTools,omitempty"`
+}
+```
+
+### Behavior
+
+1. Requires an authenticated user (`status: "unavailable"` for anonymous).
+2. Requires recorded consent for the `analytics` purpose (`status: "no_consent"` otherwise — nothing is collected without it).
+3. Returns the caller's own summary, or `status: "empty"` if none recorded yet.
+
+### Cache
+
+- No cache (reads per-user state directly).
+
+---
+
+## Tool 11: `memory_save`
+
+**Opt-in, consent-gated (#88). Registered only when `MEMORY_ENABLED=true`.** This is a **write** tool (`ReadOnlyHint: false`, `DestructiveHint: false` — it appends, never deletes).
+
+### Purpose
+
+Persist a research finding to the calling user's long-term memory so it can be recalled in future sessions (unlike `sequential_search` sessions, which expire after 4 hours). Stored per-user, encrypted, retention-bounded (`MEMORY_RETENTION`, default 90 days), and erasable via the data-subject endpoint (`/admin/data`). There is no `memory_forget` tool — deletion flows through the GDPR erasure endpoint.
+
+### Input Schema
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `note` | string | yes | The finding/conclusion to remember |
+| `topic` | string | no | Group label for later recall |
+| `url` | string | no | Source URL this memory refers to |
+| `tags` | string[] | no | Organizational tags |
+
+### Output Schema
+
+```go
+type MemorySaveOutput struct {
+    Status    string `json:"status"`    // "ok" | "no_consent" | "unavailable"
+    Reason    string `json:"reason,omitempty"`
+    ID        string `json:"id,omitempty"`
+    CreatedAt string `json:"createdAt,omitempty"`
+}
+```
+
+### Behavior
+
+Requires an authenticated user and recorded consent for the `memory` purpose; otherwise returns `unavailable` / `no_consent` and persists nothing.
+
+### Cache
+
+- Not cached (a write).
+
+---
+
+## Tool 12: `memory_recall`
+
+**Opt-in, consent-gated (#88). Registered only when `MEMORY_ENABLED=true`.** Read-only.
+
+### Purpose
+
+Recall findings the calling user previously saved with `memory_save`, across sessions, optionally filtered by topic. Shows only the caller's own memories — never another user's.
+
+### Input Schema
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `topic` | string | no | Filter by topic; omit for most recent across all topics |
+| `limit` | int | no | Max memories to return (default 20) |
+
+### Output Schema
+
+```go
+type MemoryRecallOutput struct {
+    Status   string        `json:"status"`   // "ok" | "no_consent" | "unavailable"
+    Reason   string        `json:"reason,omitempty"`
+    Count    int           `json:"count"`
+    Memories []MemoryEntry `json:"memories"`
+}
+
+type MemoryEntry struct {
+    ID        string   `json:"id"`
+    TenantID  string   `json:"tenantId"`
+    UserID    string   `json:"userId"`
+    Topic     string   `json:"topic,omitempty"`
+    Note      string   `json:"note"`
+    URL       string   `json:"url,omitempty"`
+    Tags      []string `json:"tags,omitempty"`
+    CreatedAt string   `json:"createdAt"`
+}
+```
+
+### Cache
+
+- No cache (reads per-user state directly).
+
+---
+
+## Tool 13: `workspace_contribute`
+
+**Opt-in, consent-gated (#96). Registered only when `WORKSPACES_ENABLED=true`.** This is a **write** tool (`ReadOnlyHint: false`, `DestructiveHint: false`).
+
+### Purpose
+
+Share a research finding into a shared team workspace. The contribution is stored as a **copy** with immutable provenance (your tenant/user, timestamp) — never a live link to your private data, so per-tenant isolation is never silently voided. Membership is managed by your host app (the server enforces, the host owns the policy). Erasable by the contributor via the data-subject endpoint.
+
+### Input Schema
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `workspace_id` | string | yes | Workspace to contribute to (you must be a member) |
+| `note` | string | yes | The finding to share |
+| `url` | string | no | Source URL |
+| `tags` | string[] | no | Organizational tags |
+
+### Output Schema
+
+```go
+type WorkspaceContributeOutput struct {
+    Status string `json:"status"` // "ok" | "not_member" | "no_consent" | "unavailable"
+    Reason string `json:"reason,omitempty"`
+    ID     string `json:"id,omitempty"`
+}
+```
+
+### Behavior
+
+Requires an authenticated user, recorded consent for the `workspace` purpose, AND membership. The caller's identity is taken from the validated token — never from a parameter, and never from the `workspace_id`.
+
+### Cache
+
+- Not cached (a write).
+
+---
+
+## Tool 14: `workspace_read`
+
+**Opt-in, consent-gated (#96). Registered only when `WORKSPACES_ENABLED=true`.** Read-only.
+
+### Purpose
+
+Read the shared findings in a workspace you belong to (each with its contributor attribution). **Non-members receive zero contributions** — membership is re-verified on every read.
+
+### Input Schema
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `workspace_id` | string | yes | Workspace to read (you must be a member) |
+
+### Output Schema
+
+```go
+type WorkspaceReadOutput struct {
+    Status        string         `json:"status"` // "ok" | "not_member" | "no_consent" | "unavailable"
+    Count         int            `json:"count"`
+    Contributions []Contribution `json:"contributions"`
+}
+
+type Contribution struct {
+    ID                string   `json:"id"`
+    WorkspaceID       string   `json:"workspaceId"`
+    ContributorTenant string   `json:"contributorTenant"`
+    ContributorUser   string   `json:"contributorUser"`
+    Note              string   `json:"note"`
+    URL               string   `json:"url,omitempty"`
+    Tags              []string `json:"tags,omitempty"`
+    CreatedAt         string   `json:"createdAt"`
+}
+```
+
+### Membership management
+
+Membership is host-owned via admin endpoints (not MCP tools): `POST /admin/workspace/members` and `DELETE /admin/workspace/members` with `{workspace_id, tenant_id, user_id}`. The server enforces the resulting membership checks; it does not own the membership policy.
+
+### Cache
+
+- No cache (reads workspace state directly).
+
+---
+
 ## Cross-Cutting Concerns
 
 ### Timeouts (all configurable via env)
@@ -691,7 +933,7 @@ Full details: see `docs/ERROR_HANDLING.md` — covers the three-layer architectu
 
 ### Tool Annotations (MCP Protocol)
 
-All tools declare annotations for client consumption (enforced by `TestAllToolsHaveAnnotations`):
+All tools declare annotations for client consumption. CI enforces tool↔doc consistency via `TestAllToolsHaveAnnotations`, `TestToolsDocMatchesRegistry`, `TestOutputSchemaMatchesResponse`, and `TestToolDescriptionQuality` (`internal/tools/metadata_test.go`) — including on docs-only PRs via the standalone `docs-drift` CI job:
 
 | Tool | ReadOnly | Idempotent | OpenWorld | Destructive |
 |------|----------|------------|-----------|-------------|

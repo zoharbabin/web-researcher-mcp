@@ -151,6 +151,7 @@ Rate limited (google). Wait 60 seconds and retry, or try a different provider.
 | `provider` | string (optional) | Which provider failed |
 | `alternatives` | []string (optional) | Other available providers |
 | `detail` | string (optional) | Technical detail for debugging (secret-masked, see below) |
+| `recoveryHint` | object (optional) | Session-recovery guidance, set on `session_not_found`: `{lastKnownStep int, canResume bool}` — lets a client resume or restart deterministically when a follow-up step reaches a pod that doesn't hold the (in-memory) session |
 
 > **Secret masking:** Before any error string reaches an LLM-facing result (or a downstream audit log), it is passed through `audit.MaskSecrets()`. Scrape errors can echo a target URL containing embedded credentials, and upstream provider errors occasionally reflect back an API key (e.g. `?key=AIza...`). `scrapeErrorToToolError()` masks `te.Detail`, `failureFromScrapeError()` masks the failure `reason`, and `upstreamErrorResponse()` masks the upstream detail. As a result, the `detail`/`reason` fields and the human-readable message never expose API keys, tokens, or credentials.
 
@@ -167,6 +168,7 @@ Rate limited (google). Wait 60 seconds and retry, or try a different provider.
 | `browser_unavailable` | Chrome not found/failed | false | `report_bug` |
 | `config` | Unknown/unconfigured provider | false | `try_different_provider` or `check_api_key` |
 | `upstream_unavailable` | General provider failure | true | `try_different_provider` |
+| `session_not_found` | `sequential_search` follow-up step reached a pod that doesn't hold the (in-memory) session, or the session expired | false | `inform_user` (carries a `recoveryHint` with the last known step) |
 
 ### Suggested Action Vocabulary
 

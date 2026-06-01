@@ -41,4 +41,11 @@ assets/*.mp4
 docs/LAUNCH_PLAN.md
 docs/COMMUNITY_TARGETS.md
 docs/GO_TO_MARKET.md
+# Internal planning / marketing working docs — kept local, not published
+docs/ROUND2_IMPLEMENTATION_WORKFLOW.md
+docs/COMPLIANCE_DECK_PLAN.md
+docs/COMPLIANCE_ISSUE_PRIORITIZATION.md
+docs/compliance-deck.md
+docs/compliance-deck.html
+docs/compliance-deck.pdf
 .mcpregistry_*

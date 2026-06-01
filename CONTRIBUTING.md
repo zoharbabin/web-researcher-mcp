@@ -68,7 +68,7 @@ export GOOGLE_CUSTOM_SEARCH_API_KEY="your-key"
 export GOOGLE_CUSTOM_SEARCH_ID="your-cx"
 # Optional:
 export BRAVE_API_KEY="your-brave-key"
-export SEARCH_PROVIDER="google"  # or brave, serper, searxng, searchapi
+export SEARCH_PROVIDER="google"  # or brave, serper, searxng, searchapi, duckduckgo (see search.SupportedProviders)
 ```
 
 Unit and integration tests do not require API keys. Only E2E tests that hit live services need them.
@@ -347,7 +347,30 @@ Key conventions:
 - All tool inputs use typed structs with `jsonschema` tags (the SDK auto-generates JSON Schema from these)
 - Use `deps.Cache` for caching, `deps.Metrics` for telemetry, `deps.Auditor` for audit logging
 - Return validation errors via `toolError(msg)`, upstream errors via `upstreamErrorResponse(toolName, err)`, success via `structuredResult(jsonBytes)` (see `internal/tools/errors.go` and `docs/ERROR_HANDLING.md` for the full pattern)
-- Update `docs/TOOLS.md` with the parameter schema
+- Update `docs/TOOLS.md` with a `## Tool N: \`name\`` section — the drift test `TestToolsDocMatchesRegistry` (`internal/tools/metadata_test.go`) fails CI if a registered tool is undocumented or vice-versa
+
+### Write tools and consent-gated (regulated) tools
+
+Most tools are read-only. For the rare tool that mutates server-side state (e.g. `memory_save`, `workspace_contribute`):
+
+- Annotate with `writeAnnotations(idempotent)` instead of `readOnlyAnnotations(...)`. `ReadOnlyHint` becomes `false`; `DestructiveHint` stays `false` — **deletion is never a tool flag**, it is the GDPR erasure endpoint (`DELETE /admin/data`). Update the `writeTools` set and add a `case` in `TestAllToolsHaveAnnotations` (`internal/tools/metadata_test.go`).
+- If the tool processes per-user personal data, gate it on consent: `if deps.Consent == nil || !deps.Consent.HasConsent(ctx, consent.PurposeXxx) { return structuredResult(... "status":"no_consent" ...) }`. Take the subject from `auth.UserIDFromContext(ctx)` / `auth.TenantIDFromContext(ctx)` — never from a tool parameter. Refuse `anonymous`.
+- Register **conditionally** in `RegisterAll()` — only when the feature dependency is non-Noop (mirror the `if _, isNoop := deps.X.(*pkg.Noop); deps.X != nil && !isNoop` pattern), so the default tool surface is unchanged.
+- Register the store's `Exporter`/`Eraser` into the data-subject registry (`internal/datasubject`) in `main.go` so the data is covered by `/admin/data` export + erasure.
+- **Add the feature dependency to `setupTestDeps()`** (`internal/tools/tools_test.go`) so the conditionally-registered tool is visible to the drift tests, and add the tool name to `expectedTools` (`metadata_test.go`).
+
+> **Docs-only PRs skip the Go drift gates.** CI sets `code=false` and skips the `test` job when every changed file is docs/meta. A pure-doc edit to `docs/TOOLS.md` will NOT run the drift tests on that PR (the standalone `docs-drift` job covers this — see `.github/workflows/ci.yml`). When a doc edit pairs with a tool/schema change, keep the code file in the same PR so the gates fire.
+
+## Adding a Search Provider
+
+Web search providers implement the `search.Provider` interface (`Web`, `Images`, `News`, `Name`) — the core extension path.
+
+1. **Implement** `search.Provider` in `internal/search/<name>.go`.
+2. **Wire the factory** — add a `case` to both `NewProvider()` and `NewProviderByName()` in `internal/search/provider.go`.
+3. **Add the credential/config** env var to `internal/config/config.go` and document it in `.env.example`.
+4. **Make it discoverable** — add a credential check in `AvailableProviders()` (so the Router can find it) and add the name to `search.SupportedProviders`.
+
+Academic providers implement `search.AcademicProvider` and register via `NewAcademicProviderByName()` (`internal/search/domain.go`) + `AvailableAcademicProviders()`. See the existing `openalex.go` / `crossref.go` for the pattern.
 
 ## Adding a Patent Provider
 

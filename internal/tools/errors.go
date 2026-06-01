@@ -26,6 +26,7 @@ const (
 	ErrKindValidation         ErrorKind = "validation"
 	ErrKindUpstream           ErrorKind = "upstream_unavailable"
 	ErrKindConfig             ErrorKind = "config"
+	ErrKindSessionNotFound    ErrorKind = "session_not_found"
 )
 
 // SuggestedAction tells the LLM what recovery strategy to consider.
@@ -49,6 +50,37 @@ type ToolError struct {
 	Provider          string          `json:"provider,omitempty"`
 	Alternatives      []string        `json:"alternatives,omitempty"`
 	Detail            string          `json:"detail,omitempty"`
+	RecoveryHint      *RecoveryHint   `json:"recoveryHint,omitempty"`
+}
+
+// RecoveryHint carries machine-readable guidance for recovering from a
+// session_not_found error so the client can decide to resume or restart
+// without the server retaining the lost session's data. Emitted when a
+// multi-pod HTTP deployment routes a follow-up step to a pod that does not
+// hold the (in-memory) session.
+type RecoveryHint struct {
+	// LastKnownStep is the last step the caller believed it completed.
+	LastKnownStep int `json:"lastKnownStep"`
+	// CanResume is false when no session state survives (the client should
+	// restart at step 1); true would indicate resumable state is available.
+	CanResume bool `json:"canResume"`
+}
+
+// sessionNotFoundError builds the structured session_not_found result with a
+// recovery hint derived from the typed session.SessionNotFoundError.
+func sessionNotFoundError(lastKnownStep int) *mcp.CallToolResult {
+	return structuredError(
+		"This research session is not available on this instance. It may have expired (sessions last 4 hours), or in a multi-instance deployment your request reached a different server than the one holding it. Start a new session with stepNumber=1 (omit sessionId), or recover with get_research_session.",
+		ToolError{
+			Kind:            ErrKindSessionNotFound,
+			Retryable:       false,
+			SuggestedAction: ActionInformUser,
+			RecoveryHint: &RecoveryHint{
+				LastKnownStep: lastKnownStep,
+				CanResume:     false,
+			},
+		},
+	)
 }
 
 // structuredError returns an MCP error result with dual-format content:

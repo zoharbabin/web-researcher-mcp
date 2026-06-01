@@ -549,8 +549,22 @@ func TestLoadHTTPHardeningDefaults(t *testing.T) {
 	if cfg.HTTP.PermissionsPolicy != "geolocation=(), camera=(), microphone=()" {
 		t.Errorf("unexpected default PermissionsPolicy: %q", cfg.HTTP.PermissionsPolicy)
 	}
+	if !cfg.CORSStrict {
+		t.Error("expected default CORSStrict=true (fail-closed)")
+	}
+}
+
+// TestLoadCORSStrictOptOut verifies the documented escape hatch: setting
+// CORS_STRICT=false restores the legacy permissive reflect-any-Origin behavior.
+func TestLoadCORSStrictOptOut(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("CORS_STRICT", "false")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if cfg.CORSStrict {
-		t.Error("expected default CORSStrict=false")
+		t.Error("expected CORSStrict=false when CORS_STRICT=false is set explicitly")
 	}
 }
 
@@ -619,8 +633,8 @@ func TestLoadHTTPHardeningInvalidFallback(t *testing.T) {
 	if cfg.HTTP.MaxHeaderBytes != 1<<20 {
 		t.Errorf("expected fallback MaxHeaderBytes=1MB for invalid int, got %d", cfg.HTTP.MaxHeaderBytes)
 	}
-	if cfg.CORSStrict {
-		t.Error("expected fallback CORSStrict=false for invalid bool")
+	if !cfg.CORSStrict {
+		t.Error("expected fallback CORSStrict=true for invalid bool")
 	}
 }
 
@@ -801,43 +815,100 @@ func TestLoadAuditRetentionInvalidFallback(t *testing.T) {
 	}
 }
 
-func TestLoadCacheAdminKeyTooShort(t *testing.T) {
+func TestLoadAdminAPIKeyTooShort(t *testing.T) {
 	setRequiredEnv(t)
-	t.Setenv("CACHE_ADMIN_KEY", strings.Repeat("a", 15)) // 15 chars
+	t.Setenv("ADMIN_API_KEY", strings.Repeat("a", 15)) // 15 chars
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for ADMIN_API_KEY shorter than 16 chars")
+	}
+	if !strings.Contains(err.Error(), "ADMIN_API_KEY must be at least 16 characters") {
+		t.Errorf("expected error about admin key length, got: %v", err)
+	}
+}
+
+func TestLoadAdminAPIKeyAccepted(t *testing.T) {
+	setRequiredEnv(t)
+	key := strings.Repeat("a", 16) // 16 chars
+	t.Setenv("ADMIN_API_KEY", key)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error with 16-char admin key: %v", err)
+	}
+	if cfg.AdminAPIKey != key {
+		t.Errorf("expected AdminAPIKey to be set")
+	}
+	if len(cfg.Warnings) != 0 {
+		t.Errorf("expected no warnings when only ADMIN_API_KEY is set, got: %v", cfg.Warnings)
+	}
+}
+
+func TestLoadAdminAPIKeyEmptyAllowed(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("ADMIN_API_KEY", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error with empty admin key: %v", err)
+	}
+	if cfg.AdminAPIKey != "" {
+		t.Errorf("expected empty AdminAPIKey")
+	}
+}
+
+// TestLoadLegacyCacheAdminKeyAccepted verifies backward compatibility: the
+// deprecated CACHE_ADMIN_KEY still works and produces a deprecation warning.
+func TestLoadLegacyCacheAdminKeyAccepted(t *testing.T) {
+	setRequiredEnv(t)
+	key := strings.Repeat("b", 20)
+	t.Setenv("CACHE_ADMIN_KEY", key)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error with legacy admin key: %v", err)
+	}
+	if cfg.AdminAPIKey != key {
+		t.Errorf("expected legacy CACHE_ADMIN_KEY to populate AdminAPIKey")
+	}
+	if len(cfg.Warnings) == 0 {
+		t.Error("expected a deprecation warning for CACHE_ADMIN_KEY")
+	}
+}
+
+// TestLoadAdminKeyPrecedence verifies ADMIN_API_KEY wins when both are set and
+// a warning is emitted to remove the deprecated name.
+func TestLoadAdminKeyPrecedence(t *testing.T) {
+	setRequiredEnv(t)
+	newKey := strings.Repeat("c", 18)
+	t.Setenv("ADMIN_API_KEY", newKey)
+	t.Setenv("CACHE_ADMIN_KEY", strings.Repeat("d", 18))
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.AdminAPIKey != newKey {
+		t.Errorf("expected ADMIN_API_KEY to take precedence over CACHE_ADMIN_KEY")
+	}
+	if len(cfg.Warnings) == 0 {
+		t.Error("expected a warning when both admin key vars are set")
+	}
+}
+
+// TestLoadLegacyCacheAdminKeyTooShort verifies the length error message names
+// the legacy variable when only the legacy variable is set.
+func TestLoadLegacyCacheAdminKeyTooShort(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("CACHE_ADMIN_KEY", strings.Repeat("a", 15))
 
 	_, err := Load()
 	if err == nil {
 		t.Fatal("expected error for CACHE_ADMIN_KEY shorter than 16 chars")
 	}
 	if !strings.Contains(err.Error(), "CACHE_ADMIN_KEY must be at least 16 characters") {
-		t.Errorf("expected error about admin key length, got: %v", err)
-	}
-}
-
-func TestLoadCacheAdminKeyAccepted(t *testing.T) {
-	setRequiredEnv(t)
-	key := strings.Repeat("a", 16) // 16 chars
-	t.Setenv("CACHE_ADMIN_KEY", key)
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("unexpected error with 16-char admin key: %v", err)
-	}
-	if cfg.CacheAdminKey != key {
-		t.Errorf("expected CacheAdminKey to be set")
-	}
-}
-
-func TestLoadCacheAdminKeyEmptyAllowed(t *testing.T) {
-	setRequiredEnv(t)
-	t.Setenv("CACHE_ADMIN_KEY", "")
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("unexpected error with empty admin key: %v", err)
-	}
-	if cfg.CacheAdminKey != "" {
-		t.Errorf("expected empty CacheAdminKey")
+		t.Errorf("expected error to name the legacy var, got: %v", err)
 	}
 }
 

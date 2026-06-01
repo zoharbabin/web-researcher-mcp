@@ -218,18 +218,20 @@ Raw HTML/Content
 
 ### Layer 5: Rate Limiting
 
-**Three-Tier Architecture:**
+**Rate-limit tiers** (`internal/ratelimit`, HTTP mode):
 
 | Tier | Scope | Default | Purpose |
 |------|-------|---------|---------|
 | Global | Per-server | 1000 req/s | Infrastructure protection |
 | Per-Tenant | Per JWT `tenant_id` claim (falls back to `default`) | 120 req/min | Fair use |
-| Per-Session | Per MCP session | 5 concurrent | Backpressure |
+| Per-IP (pre-auth) | Per client IP, outermost middleware | `0` = disabled | Shed unauthenticated floods |
 
 **Implementation:**
 - Global: `golang.org/x/time/rate` token bucket
-- Per-Tenant: `sync.Map[tenantID]*rate.Limiter` with TTL cleanup
-- Per-Session: Buffered channel as semaphore
+- Per-Tenant: `sync.Map[tenantID]*rate.Limiter` with TTL cleanup; daily quota (`AllowDaily`) optionally atomic across pods via Redis (`internal/redisbackend`)
+- Per-IP: `RATE_LIMIT_PER_IP` / `TRUST_PROXY`
+
+**Scrape concurrency (separate from rate limiting):** the scraper pipeline (`internal/scraper`) bounds in-flight scrapes with a buffered-channel semaphore of `MAX_SCRAPE_CONCURRENCY` slots (default 5) — backpressure on outbound fetches, not a per-session request limit.
 
 **Cost Quotas:**
 - Track tool/API call count per tenant per day (`DAILY_QUOTA_PER_TENANT`)
@@ -352,12 +354,12 @@ Applied to every HTTP response by the `securityHeaders` middleware. The three co
 
 ### CORS
 
-The `corsMiddleware` reflects an allowed `Origin`. With a non-empty `ALLOWED_ORIGINS` it reflects only listed origins (or any when `*` is listed). With an **empty** `ALLOWED_ORIGINS` the behavior is governed by `CORS_STRICT`:
+CORS is a **browser-only** control; backend-to-backend connectors (hosted MCP connectors, SDKs) and STDIO never apply it. The `corsMiddleware` reflects an allowed `Origin`. With a non-empty `ALLOWED_ORIGINS` it reflects only listed origins (or any when `*` is listed). With an **empty** `ALLOWED_ORIGINS` the behavior is governed by `CORS_STRICT`:
 
-- `CORS_STRICT=false` (current default) — permissive: reflect any `Origin`.
-- `CORS_STRICT=true` — fail-closed: deny all cross-origin requests.
+- `CORS_STRICT=true` (**default**) — fail-closed: deny all cross-origin requests.
+- `CORS_STRICT=false` — permissive: reflect any `Origin` (legacy escape hatch).
 
-It never reflects the literal `*` together with credentials. A future release will flip the default to fail-closed — see [MIGRATION.md](MIGRATION.md).
+It never reflects the literal `*` together with credentials. The default is secure-by-default (fail-closed); see [MIGRATION.md](MIGRATION.md) for the breaking change that flipped it.
 
 ### Pre-Auth Per-IP Rate Limit
 
@@ -372,7 +374,7 @@ Two HTTP-mode subsystems durably persist state across restarts through a single 
 - **Token revocation (H2)** — revoked JTIs are written through to the store with a TTL matching natural token expiry, so a revoked token stays revoked across restarts. The in-memory set remains authoritative; the store is consulted as an additional source of truth (a JTI is revoked if present in **either** layer — fail-closed).
 - **Daily quota counters (H7)** — enabled by `RATE_LIMIT_PERSIST=true`, so per-tenant daily quotas survive restarts.
 
-The default implementation is the encrypted-disk pattern generalized from the session store: AES-256-GCM, atomic temp-file-and-rename writes, `0600` permissions, an 8-byte big-endian expiry prefix, SHA-256-hashed filenames, and key-bound GCM AAD. Local (memory) and disk backends behave identically — no drift between STDIO and HTTP. `REDIS_URL` is a documented **no-op** reserved for a future `RedisStore` that will satisfy this same interface; setting it changes no behavior today, and no `go-redis` dependency is in the build.
+The default implementation is the encrypted-disk pattern generalized from the session store: AES-256-GCM, atomic temp-file-and-rename writes, `0600` permissions, an 8-byte big-endian expiry prefix, SHA-256-hashed filenames, and key-bound GCM AAD. Local (memory) and disk backends behave identically — no drift between STDIO and HTTP. In HTTP mode, setting `REDIS_URL` swaps in a `RedisStore` that satisfies the same interface for cross-pod shared state; Redis-stored values are AES-256-GCM encrypted before write (so `REDIS_URL` requires `CACHE_ENCRYPTION_KEY`). All Redis code is confined to `internal/redisbackend` (the sole importer of the Redis client), constructed in one gated place in `main.go`; STDIO never reaches it.
 
 ---
 
@@ -421,10 +423,12 @@ How the server's controls counter the ATT&CK techniques most relevant to an inte
 
 | Right | Status |
 |-------|--------|
-| **Access** (Art. 15) | Not yet implemented. Planned: `GET /users/{id}/data` endpoint |
-| **Erasure** (Art. 17) | Not yet implemented. Planned: `DELETE /users/{id}/data` endpoint |
-| **Portability** (Art. 20) | Not yet implemented. Planned: JSON export of user-associated data |
+| **Access** (Art. 15) | **Implemented.** `GET /admin/data?tenant_id=&user_id=` returns a JSON export of all data held for the subject, fanned across every registered namespace (sessions today; long-term memory / user analytics / workspace contributions when those features are enabled). Admin-gated (`ADMIN_API_KEY`). |
+| **Portability** (Art. 20) | **Implemented.** Same `GET /admin/data` endpoint returns machine-readable JSON. |
+| **Erasure** (Art. 17) | **Implemented.** `DELETE /admin/data?tenant_id=&user_id=` purges the subject's data across all namespaces (memory + encrypted disk) and withdraws their consent so processing cannot silently resume; the erasure itself is recorded as a `data.erasure` audit event. |
 | **Restriction** (Art. 18) | Set `CACHE_ISOLATION=tenant` to scope all cache keys by tenant ID — prevents cross-tenant cache access |
+
+Implementation notes: requests are tenant-scoped — a request targets exactly one `tenant_id`, so cross-tenant access is impossible. `user_id` is optional; stores with no per-user dimension (e.g. sessions) operate at tenant granularity and label the export scope accordingly. The fan-out is driven by a registry (`internal/datasubject`) into which every personal-data store registers an exporter/eraser, so coverage extends automatically as regulated features ship.
 
 Data minimization (implemented): audit logs store parameter hashes (not raw queries), no persistent PII storage beyond cache TTLs.
 

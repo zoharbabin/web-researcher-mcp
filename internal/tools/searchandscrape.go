@@ -125,6 +125,22 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 			output["sources"] = sources
 		}
 
+		// Additive, content-only enrichments. Both derive purely from the
+		// already-computed quality scores (no extra pass, no model call, no user
+		// behavior). Recommendations are advisory and never re-rank `sources`;
+		// components are mcp-auto-formatted (deterministic, no LLM) renderables that never replace raw data.
+		scored := scoredSourcesFrom(sources)
+		if deps.Features.SourceRecommendations {
+			if recs := content.RecommendSources(scored, 3); recs != nil {
+				output["recommendations"] = recs
+			}
+		}
+		if deps.Features.GenerativeUI {
+			if comps := content.BuildComponents(scored, sourceSnippets(sources)); comps != nil {
+				output["components"] = comps
+			}
+		}
+
 		jsonBytes, _ := json.Marshal(output)
 		deps.Metrics.RecordToolCall("search_and_scrape", time.Since(start), nil, "", false)
 		auditToolCallQuery(ctx, deps, "search_and_scrape", time.Since(start), nil, "", input.Query, map[string]any{"urls_scraped": scraped})
@@ -151,6 +167,36 @@ type sourceOutput struct {
 	Content     string                `json:"content"`
 	ContentType string                `json:"contentType"`
 	Scores      *content.QualityScore `json:"scores,omitempty"`
+}
+
+// scoredSourcesFrom adapts the tool's sourceOutput slice to the content
+// package's ScoredSource, reusing the already-computed quality scores so
+// recommendations/components require no second scoring pass.
+func scoredSourcesFrom(sources []sourceOutput) []content.ScoredSource {
+	out := make([]content.ScoredSource, 0, len(sources))
+	for _, s := range sources {
+		var score content.QualityScore
+		if s.Scores != nil {
+			score = *s.Scores
+		}
+		out = append(out, content.ScoredSource{
+			URL:     s.URL,
+			Title:   s.Title,
+			Score:   score,
+			HasText: s.Content != "",
+		})
+	}
+	return out
+}
+
+// sourceSnippets maps each source URL to a short leading excerpt for card
+// components, drawn from the content already extracted.
+func sourceSnippets(sources []sourceOutput) map[string]string {
+	m := make(map[string]string, len(sources))
+	for _, s := range sources {
+		m[s.URL] = s.Content
+	}
+	return m
 }
 
 func parallelScrape(ctx context.Context, deps Dependencies, searchResults []search.SearchResult, maxLen int) []scrapeResult {

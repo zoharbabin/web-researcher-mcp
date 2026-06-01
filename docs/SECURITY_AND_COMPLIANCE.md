@@ -315,7 +315,7 @@ OAUTH_ISSUER_URL=https://your-idp.example.com
 OAUTH_AUDIENCE=https://your-api.example.com
 ALLOWED_ORIGINS=https://your-app.example.com
 CACHE_ENCRYPTION_KEY=$(openssl rand -hex 32)
-CACHE_ADMIN_KEY=$(openssl rand -hex 16)
+ADMIN_API_KEY=$(openssl rand -hex 32)
 AUDIT_ENABLED=true
 AUDIT_OUTPUT_PATH=/var/log/web-researcher-mcp/audit.jsonl
 ```
@@ -387,12 +387,13 @@ Deployment recommendations:
 | `CACHE_ENCRYPTION_KEY_PREV` | (unset) | 64-char hex previous key for zero-downtime rotation (decrypt fallback + lazy re-encrypt) |
 | `ALLOW_PRIVATE_IPS` | `false` | When `true`, allows scraping private/RFC1918 IPs |
 | `ALLOWED_DOMAINS` | (unset = all) | Comma-separated allowlist restricts scraping targets |
-| `ALLOWED_ORIGINS` | (unset) | CORS allowlist for HTTP mode. Empty behavior depends on `CORS_STRICT` |
-| `CORS_STRICT` | `false` | When `false`, empty `ALLOWED_ORIGINS` reflects any Origin; when `true`, denies all cross-origin (a future release flips this default — see `docs/MIGRATION.md`) |
+| `ALLOWED_ORIGINS` | (unset) | CORS allowlist for HTTP mode (browser-only). Empty behavior depends on `CORS_STRICT` |
+| `CORS_STRICT` | `true` | Default fail-closed: empty `ALLOWED_ORIGINS` denies all cross-origin browser requests. Set `false` to restore the legacy reflect-any-Origin behavior (see `docs/MIGRATION.md`) |
 | `ENFORCE_SCOPES` | `false` | When `true`, scoped tokens need `tool:*`/`tool:<name>`/`research` per tool (permissive for unscoped tokens) |
 | `REQUIRED_SCOPES` | (unset) | CSV of scopes every request must carry when `ENFORCE_SCOPES=true` |
 | `CACHE_ISOLATION` | `shared` | Set `tenant` for per-tenant cache isolation |
-| `CACHE_ADMIN_KEY` | (unset = no admin API) | Enables admin endpoints when set (min 16 chars) |
+| `ADMIN_API_KEY` | (unset = no admin API) | Enables all `/admin/*` endpoints when set (min 16 chars); sent as `X-Admin-Key`, constant-time compared |
+| `CACHE_ADMIN_KEY` | (unset) | **Deprecated** alias for `ADMIN_API_KEY` (still accepted; logs a startup warning) |
 | `RATE_LIMIT_PER_IP` | `0` (disabled) | Pre-auth per-IP request ceiling (req/min); `TRUST_PROXY` selects the client-IP source |
 
 ### Authentication (HTTP mode only)
@@ -441,7 +442,7 @@ standards — not through per-framework checkbox exercises.
 | **ISO 27001** | Foundation | Interface-driven architecture, access control, encryption, audit, supply chain |
 | **SOC 2 Type II** | Enterprise trust | Audit logging, rate limiting, tenant isolation, change management |
 | **NIST CSF 2.0** | US enterprise | Govern/Identify/Protect/Detect/Respond/Recover mapped to controls |
-| **GDPR / UK GDPR** | Privacy | Data minimization, purpose limitation, TTL caches, erasure capability |
+| **GDPR / UK GDPR** | Privacy | Data minimization, purpose limitation, TTL caches; data-subject access/portability/erasure endpoints (`/admin/data`); consent record-verify-honor for regulated features |
 | **OWASP MCP Cheat Sheet** | MCP-specific | SSRF protection, content sanitization, tool annotations, supply chain |
 | **OWASP Top 10 LLM (2025)** | AI security | Prompt injection defense, bounded agency, supply chain verification |
 | **OWASP Agentic Top 10 (2026)** | AI agent security | Read-only tools, privilege separation, content boundaries |
@@ -480,11 +481,18 @@ activation, user-owned data, tenant-scoped isolation, configurable retention,
 full deletion capability. Satisfies GDPR legitimate interest (user's own
 benefit) with transparency and control.
 
-**Tier 3 — Content generation and synthesis (when activated):**  
-AI-generated summaries, formatted bibliographies, generated UI components.
-Built with: content labeling (machine-readable `"generated": true` metadata),
-source attribution, accuracy verification hooks. Satisfies EU AI Act Art. 50,
-China GenAI labeling, South Korea AI Basic Act.
+**Tier 3 — Machine-formatted output (when activated):**  
+The server does **not** run any LLM or generate prose — synthesis is the client
+model's job (server-side summarization was deliberately not built; see #94).
+The only machine-shaped output is deterministic generative-UI components
+(`GENERATIVE_UI_ENABLED`): source cards and a quality-comparison table built by
+a deterministic transform of already-extracted data, plus consolidated
+bibliographies. Built with: a non-bypassable machine-readable marker
+(`"autoFormatted": true`, label `"mcp-auto-formatted"` — explicitly NOT
+"AI-generated", because no model is involved), source attribution back to the
+raw data, and raw content always present alongside. This transparency posture
+aligns with EU AI Act Art. 50 labeling expectations even though no AI content
+is produced.
 
 **Tier 4 — Personalization and recommendations (when activated):**  
 Cross-session intelligence, personalized ranking, smart suggestions. Built
@@ -768,8 +776,6 @@ These items shipped and are no longer roadmap candidates:
 - **Breach notification pipeline** — webhook alerting on security anomalies
 - **in-toto build attestations** — full supply chain provenance (SLSA Level 3)
 - **Seccomp profiles** — container syscall restriction for hardened deployments
-- **`RedisStore` backend** — distributed `persist.Store` for cache/sessions/
-  rate limits (`REDIS_URL` is reserved and currently a no-op)
 - **UK Cyber Essentials certification** — UK public sector market access
 - **Global CBPR certification** — cross-border data transfer for APAC markets
 

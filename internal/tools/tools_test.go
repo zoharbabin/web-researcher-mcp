@@ -18,11 +18,16 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/cache"
 	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/config"
+	"github.com/zoharbabin/web-researcher-mcp/internal/consent"
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
+	"github.com/zoharbabin/web-researcher-mcp/internal/memory"
 	"github.com/zoharbabin/web-researcher-mcp/internal/metrics"
+	"github.com/zoharbabin/web-researcher-mcp/internal/persist"
 	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
+	"github.com/zoharbabin/web-researcher-mcp/internal/useranalytics"
+	"github.com/zoharbabin/web-researcher-mcp/internal/workspace"
 )
 
 type mockProvider struct{}
@@ -77,10 +82,18 @@ func setupTestDeps() Dependencies {
 		Search:   &mockProvider{},
 		Scraper:  scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2}),
 		Content:  content.NewProcessor(),
-		Sessions: func() *session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
+		Sessions: func() session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
 		Metrics:  metrics.NewCollector(),
 		Auditor:  audit.NewNoop(),
 		Logger:   slog.Default(),
+		// Wire the full superset of optional regulated deps so every
+		// conditionally-registered tool is visible to the CI drift tests
+		// (TestToolsDocMatchesRegistry / TestAllToolsHaveAnnotations /
+		// TestOutputSchemaMatchesResponse). Production gates these by feature flag.
+		Consent:       consent.NewStoreManager(persist.NewMemoryStore()),
+		UserAnalytics: useranalytics.NewStoreRecorder(persist.NewMemoryStore()),
+		Memory:        memory.NewStore(persist.NewMemoryStore(), 0),
+		Workspaces:    workspace.NewStore(persist.NewMemoryStore(), 0),
 	}
 }
 
@@ -843,7 +856,7 @@ func TestWebSearchCaching(t *testing.T) {
 		Search:   &mockProvider{},
 		Scraper:  scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2}),
 		Content:  content.NewProcessor(),
-		Sessions: func() *session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
+		Sessions: func() session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
 		Metrics:  metricsCollector,
 		Auditor:  audit.NewNoop(),
 		Logger:   slog.Default(),
@@ -1143,7 +1156,7 @@ func TestToolsWorkWithRouter(t *testing.T) {
 		Search:   router,
 		Scraper:  scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2}),
 		Content:  content.NewProcessor(),
-		Sessions: func() *session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
+		Sessions: func() session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
 		Metrics:  metrics.NewCollector(),
 		Auditor:  audit.NewNoop(),
 		Logger:   slog.Default(),

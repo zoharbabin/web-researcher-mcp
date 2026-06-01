@@ -409,3 +409,40 @@ func TestHTTP_CORSReflection(t *testing.T) {
 		}
 	})
 }
+
+// TestHTTP_CORSDefaultDeny asserts the secure-by-default posture (#84): with no
+// ALLOWED_ORIGINS and no CORS_STRICT override, a cross-origin request is denied
+// (no Access-Control-Allow-Origin reflected). This is the fail-closed default.
+func TestHTTP_CORSDefaultDeny(t *testing.T) {
+	h := newHTTPHarness(t) // no ALLOWED_ORIGINS, no CORS_STRICT → default fail-closed
+
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, h.baseURL+"/health/ready", nil)
+	req.Header.Set("Origin", "https://anything.example.com")
+	resp, err := h.client.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("default config should deny cross-origin, but reflected %q", got)
+	}
+}
+
+// TestHTTP_CORSEscapeHatch asserts the documented opt-out: CORS_STRICT=false
+// with an empty ALLOWED_ORIGINS restores the legacy permissive reflect-any
+// behavior, so operators relying on the old default have a one-env-var path.
+func TestHTTP_CORSEscapeHatch(t *testing.T) {
+	h := newHTTPHarness(t, "CORS_STRICT=false")
+
+	const origin = "https://legacy.example.com"
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, h.baseURL+"/health/ready", nil)
+	req.Header.Set("Origin", origin)
+	resp, err := h.client.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != origin {
+		t.Errorf("CORS_STRICT=false should reflect any origin, got %q want %q", got, origin)
+	}
+}

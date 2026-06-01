@@ -228,7 +228,7 @@ func TestScrapeTool_403_ReturnsBlockedError(t *testing.T) {
 		Search:   &mockProvider{},
 		Scraper:  scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true}),
 		Content:  content.NewProcessor(),
-		Sessions: func() *session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
+		Sessions: func() session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
 		Metrics:  metrics.NewCollector(),
 		Auditor:  audit.NewNoop(),
 		Logger:   slog.Default(),
@@ -270,7 +270,7 @@ func TestScrapeTool_401_ReturnsAuthError(t *testing.T) {
 		Search:   &mockProvider{},
 		Scraper:  scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true}),
 		Content:  content.NewProcessor(),
-		Sessions: func() *session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
+		Sessions: func() session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
 		Metrics:  metrics.NewCollector(),
 		Auditor:  audit.NewNoop(),
 		Logger:   slog.Default(),
@@ -309,7 +309,7 @@ func TestScrapeTool_429_ReturnsRateLimitError(t *testing.T) {
 		Search:   &mockProvider{},
 		Scraper:  scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true}),
 		Content:  content.NewProcessor(),
-		Sessions: func() *session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
+		Sessions: func() session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
 		Metrics:  metrics.NewCollector(),
 		Auditor:  audit.NewNoop(),
 		Logger:   slog.Default(),
@@ -351,7 +351,7 @@ func TestScrapeTool_ThinContent_ReturnsContentError(t *testing.T) {
 		Search:   &mockProvider{},
 		Scraper:  scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true}),
 		Content:  content.NewProcessor(),
-		Sessions: func() *session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
+		Sessions: func() session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
 		Metrics:  metrics.NewCollector(),
 		Auditor:  audit.NewNoop(),
 		Logger:   slog.Default(),
@@ -394,7 +394,7 @@ func TestScrapeTool_Success_NotAffected(t *testing.T) {
 		Search:   &mockProvider{},
 		Scraper:  scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true}),
 		Content:  content.NewProcessor(),
-		Sessions: func() *session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
+		Sessions: func() session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
 		Metrics:  metrics.NewCollector(),
 		Auditor:  audit.NewNoop(),
 		Logger:   slog.Default(),
@@ -428,7 +428,7 @@ func TestScrapeTool_DNSFailure_ReturnsNetworkError(t *testing.T) {
 		Search:   &mockProvider{},
 		Scraper:  scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2}),
 		Content:  content.NewProcessor(),
-		Sessions: func() *session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
+		Sessions: func() session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
 		Metrics:  metrics.NewCollector(),
 		Auditor:  audit.NewNoop(),
 		Logger:   slog.Default(),
@@ -467,7 +467,7 @@ func TestSearchAndScrape_AllFail_SurfacesFailures(t *testing.T) {
 		Search:  &mockProviderWithURL{url: failServer.URL},
 		Scraper: scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true}),
 		Content: content.NewProcessor(),
-		Sessions: func() *session.Manager {
+		Sessions: func() session.Manager {
 			m, _ := session.NewManager(session.Config{MaxSessions: 100})
 			return m
 		}(),
@@ -554,7 +554,7 @@ func TestSearchAndScrape_PartialSuccess_NoNote(t *testing.T) {
 		Search:  &mockProviderWithURL{url: mixedServer.URL},
 		Scraper: scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true}),
 		Content: content.NewProcessor(),
-		Sessions: func() *session.Manager {
+		Sessions: func() session.Manager {
 			m, _ := session.NewManager(session.Config{MaxSessions: 100})
 			return m
 		}(),
@@ -602,7 +602,7 @@ func TestScrapeTool_SSRF_ReturnsBlockedError(t *testing.T) {
 		Search:   &mockProvider{},
 		Scraper:  scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: false}),
 		Content:  content.NewProcessor(),
-		Sessions: func() *session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
+		Sessions: func() session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
 		Metrics:  metrics.NewCollector(),
 		Auditor:  audit.NewNoop(),
 		Logger:   slog.Default(),

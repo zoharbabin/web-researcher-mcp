@@ -210,6 +210,123 @@ var searchAndScrapeOutputSchema = map[string]any{
 				"sizeCategory":    map[string]any{"type": "string"},
 			},
 		},
+		// Additive, content-only enrichments (#95, #90). Both are omitted unless
+		// enabled and non-empty; neither alters `sources` ordering.
+		"recommendations": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"url":    map[string]any{"type": "string"},
+					"title":  map[string]any{"type": "string"},
+					"score":  map[string]any{"type": "number"},
+					"reason": map[string]any{"type": "string"},
+				},
+			},
+		},
+		"components": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"type":          map[string]any{"type": "string"},
+					"autoFormatted": map[string]any{"type": "boolean"},
+					"label":         map[string]any{"type": "string"},
+					"title":         map[string]any{"type": "string"},
+					"sourceRefs":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"card":          map[string]any{"type": "object"},
+					"table":         map[string]any{"type": "object"},
+				},
+			},
+		},
+	},
+}
+
+var getMyAnalyticsOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"status": map[string]any{"type": "string"}, // ok | empty | no_consent | unavailable
+		"reason": map[string]any{"type": "string"},
+		"analytics": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"tenantId":    map[string]any{"type": "string"},
+				"userId":      map[string]any{"type": "string"},
+				"totalCalls":  map[string]any{"type": "integer"},
+				"toolCounts":  map[string]any{"type": "object"},
+				"firstSeen":   map[string]any{"type": "string"},
+				"lastSeen":    map[string]any{"type": "string"},
+				"recentTools": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			},
+		},
+	},
+}
+
+var memorySaveOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"status":    map[string]any{"type": "string"}, // ok | no_consent | unavailable
+		"reason":    map[string]any{"type": "string"},
+		"id":        map[string]any{"type": "string"},
+		"createdAt": map[string]any{"type": "string"},
+	},
+}
+
+var memoryRecallOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"status": map[string]any{"type": "string"},
+		"reason": map[string]any{"type": "string"},
+		"count":  map[string]any{"type": "integer"},
+		"memories": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":        map[string]any{"type": "string"},
+					"tenantId":  map[string]any{"type": "string"},
+					"userId":    map[string]any{"type": "string"},
+					"topic":     map[string]any{"type": "string"},
+					"note":      map[string]any{"type": "string"},
+					"url":       map[string]any{"type": "string"},
+					"tags":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"createdAt": map[string]any{"type": "string"},
+				},
+			},
+		},
+	},
+}
+
+var workspaceContributeOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"status": map[string]any{"type": "string"}, // ok | not_member | no_consent | unavailable
+		"reason": map[string]any{"type": "string"},
+		"id":     map[string]any{"type": "string"},
+	},
+}
+
+var workspaceReadOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"status": map[string]any{"type": "string"},
+		"count":  map[string]any{"type": "integer"},
+		"contributions": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":                map[string]any{"type": "string"},
+					"workspaceId":       map[string]any{"type": "string"},
+					"contributorTenant": map[string]any{"type": "string"},
+					"contributorUser":   map[string]any{"type": "string"},
+					"note":              map[string]any{"type": "string"},
+					"url":               map[string]any{"type": "string"},
+					"tags":              map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"createdAt":         map[string]any{"type": "string"},
+				},
+			},
+		},
 	},
 }
 

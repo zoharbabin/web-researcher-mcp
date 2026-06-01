@@ -70,6 +70,7 @@ If you choose to deploy the software as an HTTP server (multi-tenant mode), addi
 - **Tenant identifiers** — used to isolate rate limits and sessions between users
 - **Audit logs** — tool invocations are logged locally (no raw queries by default, only a length/hash). Audit files older than the configured retention window are deleted automatically.
 - **Rate limit counters** — in-memory by default and cleared on restart. With `RATE_LIMIT_PERSIST=true` the per-tenant daily-quota counters are written to a local encrypted store so quotas survive a restart — still on your own machine, never transmitted.
+- **Tenant aggregate analytics** — the server keeps **aggregate counts** per tenant (total calls, error rate, cache-hit rate, provider breakdown, latency percentiles) for billing and capacity planning, exposed only to the operator via the admin-gated `GET /admin/analytics` endpoint. This is **aggregate-only**: no per-query text, no per-user records, no content — just tallies keyed by tenant identifier. The lawful basis is the operator's **legitimate interest** in running and billing the service; because it is non-identifying at the individual level, it requires no separate consent. It is held in memory and is not transmitted off your infrastructure. (Per-*user* analytics is a distinct, consent-gated, off-by-default feature — see Your Rights.)
 
 This mode is entirely self-hosted. We still do not receive or have access to any of this data. You are the data controller for your deployment.
 
@@ -85,9 +86,18 @@ This mode is entirely self-hosted. We still do not receive or have access to any
 
 ### For EU/EEA residents (GDPR)
 
-This software runs entirely on your device. We do not act as a data controller or processor for any personal data you process using this software, as no personal data is transmitted to or accessible by us.
+This software runs entirely on your device (or your own server in HTTP mode). We do not act as a data controller or processor for any personal data you process using this software, as no personal data is transmitted to or accessible by us.
 
 When you use third-party search APIs through this software, those API providers act as independent data controllers. Please review their respective privacy policies (linked above) for information about how they handle your data.
+
+**HTTP-mode operators** are the data controller for their own deployment. To honor data-subject requests, the server provides admin-gated endpoints (see `docs/SECURITY.md` and `docs/DEPLOYMENT.md`):
+
+- **Access & portability (Art. 15/20):** `GET /admin/data?tenant_id=&user_id=` exports, as JSON, everything the server holds for a subject across all stores.
+- **Erasure (Art. 17):** `DELETE /admin/data?tenant_id=&user_id=` purges that data (memory + encrypted disk) and withdraws the subject's consent; the erasure is itself audited.
+
+Because the server is designed to minimize per-user data (sessions are TTL-bounded, the cache is content-addressed and non-personal), the data actually subject to these requests is the subject's sessions plus any opt-in regulated-feature data (long-term memory, user analytics, workspace contributions) the operator has enabled.
+
+**Shared workspaces** (opt-in, off by default) are the one place data deliberately crosses a per-user boundary, and only within a tenant: a contribution is a **copy** stamped with the contributor's identity, never a live link to their private data. Membership is managed by the host application (the server enforces the membership check on every access — a non-member receives nothing — but does not own the membership policy). Each contributor retains erasure rights over their own contributions across all workspaces, and workspace data is itself retention-bounded (`WORKSPACE_TTL`).
 
 ### For California residents (CCPA/CPRA)
 

@@ -124,17 +124,11 @@ Then configure as in Option A.
 
 ## Available Tools
 
-Once configured, the following tools become available:
+Once configured, the always-on core tools include web search, full-page/document scraping (`mode: raw` for verbatim source), combined search-and-scrape with quality ranking, image and news search, academic search (real DOIs), patent search (US/EP/WO/JP/CN/KR), and multi-step `sequential_search` with recoverable sessions.
 
-1. **web_search** — Search the web with optional lens filtering (medical, legal, academic, etc.)
-2. **scrape_page** — Read full text from any URL (web pages, PDFs, Word docs, YouTube transcripts); `mode: raw` returns verbatim, unsanitized source for inspecting JSON/HTML
-3. **search_and_scrape** — Search and read top results in one step, ranked by quality
-4. **image_search** — Search for images with size/type/color filters
-5. **news_search** — Search recent news articles with freshness controls
-6. **academic_search** — Find academic papers with real DOIs via OpenAlex and CrossRef
-7. **patent_search** — Search patents across US, EP, WO, JP, CN, KR offices
-8. **sequential_search** — Track multi-step research with persistent sessions (survives restarts)
-9. **get_research_session** — Recover a research session after context loss
+Operators can additionally enable opt-in, consent-gated tools (per-user analytics, long-term memory, shared workspaces) that register only when their feature is turned on.
+
+See [`docs/TOOLS.md`](docs/TOOLS.md) for the authoritative, CI-verified list with full parameter and output schemas (`internal/tools/registry.go` is the source of truth).
 
 ## Verification
 

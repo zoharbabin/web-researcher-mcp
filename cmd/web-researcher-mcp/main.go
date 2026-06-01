@@ -13,16 +13,22 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/cache"
 	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/config"
+	"github.com/zoharbabin/web-researcher-mcp/internal/consent"
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
+	"github.com/zoharbabin/web-researcher-mcp/internal/datasubject"
+	"github.com/zoharbabin/web-researcher-mcp/internal/memory"
 	"github.com/zoharbabin/web-researcher-mcp/internal/metrics"
 	"github.com/zoharbabin/web-researcher-mcp/internal/persist"
 	"github.com/zoharbabin/web-researcher-mcp/internal/ratelimit"
+	"github.com/zoharbabin/web-researcher-mcp/internal/redisbackend"
 	"github.com/zoharbabin/web-researcher-mcp/internal/resources"
 	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 	"github.com/zoharbabin/web-researcher-mcp/internal/server"
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
 	"github.com/zoharbabin/web-researcher-mcp/internal/tools"
+	"github.com/zoharbabin/web-researcher-mcp/internal/useranalytics"
+	"github.com/zoharbabin/web-researcher-mcp/internal/workspace"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -47,6 +53,40 @@ func main() {
 	}))
 	slog.SetDefault(logger)
 
+	for _, w := range cfg.Warnings {
+		slog.Warn("configuration notice", "msg", w)
+	}
+
+	// ── Redis gate (#42): the ONE place distributed state is decided ──────────
+	// Iron-clad two-path isolation: Redis is constructed if and ONLY if HTTP
+	// mode is active (Port>0) AND REDIS_URL is set. STDIO never reaches this
+	// code. Fail-fast: an operator who set REDIS_URL opted into cross-pod
+	// correctness, so an unreachable/misconfigured Redis is a fatal startup
+	// error — never a silent fallback to per-pod memory (which would reintroduce
+	// the N×-rate-limit bug). When redisBackends stays nil, every store below
+	// uses its in-memory/disk path, byte-for-byte unchanged.
+	var redisBackends *redisbackend.Backends
+	if cfg.Port > 0 && cfg.RedisURL != "" {
+		rb, rerr := redisbackend.Connect(context.Background(), redisbackend.Config{
+			URL:                  cfg.RedisURL,
+			EncryptionKey:        cfg.CacheEncryptionKey,
+			EncryptionKeyPrev:    cfg.CacheEncryptionKeyPrev,
+			SessionTTL:           cfg.SessionTTL,
+			MaxSessionsPerTenant: 50,
+		})
+		if rerr != nil {
+			logger.Error("REDIS_URL is set but Redis is unavailable; refusing to start in degraded per-pod mode", "err", rerr)
+			os.Exit(1)
+		}
+		defer rb.Close()
+		redisBackends = rb
+		logger.Info("distributed state enabled", "backend", "redis")
+	} else if cfg.RedisURL != "" {
+		// REDIS_URL set without HTTP mode: surface it loudly rather than silently
+		// ignoring — STDIO is single-process and has no use for distributed state.
+		logger.Warn("REDIS_URL is set but the server is in STDIO mode (no PORT); Redis is not used", "hint", "set PORT to enable HTTP + distributed state")
+	}
+
 	hybridCache := cache.NewHybrid(cache.HybridConfig{
 		Memory:         cache.MemoryConfig{MaxSizeMB: cfg.CacheMaxMemoryMB},
 		Disk:           cache.DiskConfig{Dir: cfg.CacheDir, EncryptionKey: cfg.CacheEncryptionKey, EncryptionKeyPrev: cfg.CacheEncryptionKeyPrev, Version: version},
@@ -54,6 +94,11 @@ func main() {
 		CacheIsolation: cfg.CacheIsolation,
 	})
 	defer hybridCache.Close()
+
+	// L2 shared cache tier: cross-pod cache fan-out when Redis is enabled.
+	if redisBackends != nil {
+		hybridCache.WithSharedLayer(redisBackends.SharedCache())
+	}
 
 	var cacheStore cache.Cache = hybridCache
 	if cfg.CacheIsolation == "tenant" {
@@ -68,7 +113,13 @@ func main() {
 	// zero-config behavior. A disk-store construction error degrades to memory
 	// rather than failing startup.
 	var persistStore persist.Store
-	if cfg.CacheEncryptionKey != "" {
+	switch {
+	case redisBackends != nil:
+		// Distributed: token revocation + daily quota shared across pods,
+		// encrypted at rest in Redis (parity with disk).
+		persistStore = redisBackends.PersistStore()
+		logger.Info("persist store initialized", "backend", "redis")
+	case cfg.CacheEncryptionKey != "":
 		ds, perr := persist.NewDiskStore(
 			filepath.Join(cfg.CacheDir, "persist"),
 			cfg.CacheEncryptionKey,
@@ -81,12 +132,63 @@ func main() {
 			persistStore = ds
 			logger.Info("persist store initialized", "backend", "encrypted-disk")
 		}
-	} else {
+	default:
 		persistStore = persist.NewMemoryStore()
+	}
+
+	// Consent subsystem (#89): record-verify-honor for regulated features. It is
+	// a no-op (grants nothing, stores nothing) unless at least one consent-gated
+	// feature (#88/#92/#96) is enabled — no standalone CONSENT_ENABLED knob.
+	var consentManager consent.Manager = consent.NewNoop()
+	if cfg.Features.RegulatedEnabled() {
+		consentManager = consent.NewStoreManager(persistStore)
+		logger.Info("consent subsystem active", "reason", "regulated feature enabled")
+	}
+
+	// Data-subject rights registry (#85): every per-user/per-tenant store
+	// registers an Exporter/Eraser here so GDPR access/erasure reaches it.
+	// Sessions register unconditionally (tenant-scoped); regulated stores
+	// register when enabled.
+	dataSubjects := datasubject.NewRegistry()
+
+	// Per-user analytics (#92): consent-gated, off by default. A non-Noop
+	// recorder is wired only when USER_ANALYTICS_ENABLED; it registers into the
+	// data-subject registry so its data is exportable + erasable.
+	var userAnalytics useranalytics.Recorder = useranalytics.NewNoop()
+	if cfg.Features.UserAnalytics {
+		sr := useranalytics.NewStoreRecorder(persistStore)
+		userAnalytics = sr
+		dataSubjects.Register("user_analytics", useranalytics.AsDataSubject(sr), useranalytics.AsDataSubject(sr))
+		logger.Info("user-level analytics enabled", "consent", "required")
+	}
+
+	// Long-term memory (#88): consent-gated, off by default, retention-bounded.
+	// A non-Noop store registers into the data-subject registry for export/erase.
+	var memoryStore memory.Store = memory.NewNoop()
+	if cfg.Features.Memory {
+		ms := memory.NewStore(persistStore, cfg.Features.MemoryRetention)
+		memoryStore = ms
+		dataSubjects.Register("memory", memory.AsDataSubject(ms), memory.AsDataSubject(ms))
+		logger.Info("long-term memory enabled", "consent", "required", "retention", cfg.Features.MemoryRetention)
+	}
+
+	// Shared workspaces (#96): host owns membership, server enforces the data
+	// plane + isolation. Off by default. A non-Noop store registers a
+	// per-contributor Exporter/Eraser into the data-subject registry.
+	var workspaceStore workspace.Store = workspace.NewNoop()
+	if cfg.Features.Workspaces {
+		ws := workspace.NewStore(persistStore, cfg.Features.WorkspaceTTL)
+		workspaceStore = ws
+		dataSubjects.Register("workspace_contributions", workspace.AsDataSubject(ws), workspace.AsDataSubject(ws))
+		logger.Info("shared workspaces enabled", "consent", "required", "membership", "host-managed")
 	}
 
 	metricsCollector := metrics.NewCollector()
 	rateLimiter := ratelimit.NewWithStore(cfg.RateLimit, persistStore)
+	if redisBackends != nil {
+		// Atomic cross-pod daily quota: N pods share one limit (#42).
+		rateLimiter = rateLimiter.WithDailyIncrementer(redisBackends.PersistStore())
+	}
 	searchBreaker := circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60})
 
 	if err := search.GetLensRegistry().LoadFromDir("lenses"); err != nil {
@@ -152,20 +254,35 @@ func main() {
 	defer scraperPipeline.Close()
 
 	contentProcessor := content.NewProcessor()
-	sessionManager, err := session.NewManager(session.Config{
-		MaxSessions:        50,
-		MaxStepsPerSession: cfg.SessionMaxSteps,
-		SessionTTL:         cfg.SessionTTL,
-		DataDir:            cfg.SessionDataDir,
-		EncryptionKey:      cfg.CacheEncryptionKey,
-		EncryptionKeyPrev:  cfg.CacheEncryptionKeyPrev,
-		RedisURL:           cfg.RedisURL,
-	})
-	if err != nil {
-		logger.Error("failed to create session manager", "err", err)
-		os.Exit(1)
+
+	// Session manager: Redis-backed (sessions survive pod restarts and are shared
+	// across pods) when distributed state is enabled, else the in-memory +
+	// encrypted-disk manager. Both satisfy session.Manager identically.
+	var sessionManager session.Manager
+	if redisBackends != nil {
+		sessionManager = redisBackends.SessionManager()
+		logger.Info("session manager initialized", "backend", "redis")
+	} else {
+		mm, err := session.NewManager(session.Config{
+			MaxSessions:        50,
+			MaxStepsPerSession: cfg.SessionMaxSteps,
+			SessionTTL:         cfg.SessionTTL,
+			DataDir:            cfg.SessionDataDir,
+			EncryptionKey:      cfg.CacheEncryptionKey,
+			EncryptionKeyPrev:  cfg.CacheEncryptionKeyPrev,
+			RedisURL:           cfg.RedisURL,
+		})
+		if err != nil {
+			logger.Error("failed to create session manager", "err", err)
+			os.Exit(1)
+		}
+		sessionManager = mm
 	}
 	defer sessionManager.Close()
+
+	// Sessions are tenant-scoped personal data → register them for data-subject
+	// access/erasure (#85). Regulated per-user stores register here too when on.
+	dataSubjects.Register("sessions", session.AsDataSubject(sessionManager), session.AsDataSubject(sessionManager))
 
 	var auditor audit.Auditor
 	if cfg.Audit.Enabled {
@@ -197,6 +314,14 @@ func main() {
 		Metrics:           metricsCollector,
 		Auditor:           auditor,
 		Logger:            logger,
+		Features: tools.Features{
+			SourceRecommendations: cfg.Features.SourceRecommendations,
+			GenerativeUI:          cfg.Features.GenerativeUI,
+		},
+		Consent:       consentManager,
+		UserAnalytics: userAnalytics,
+		Memory:        memoryStore,
+		Workspaces:    workspaceStore,
 	}
 
 	srv := server.New(server.Config{
@@ -255,9 +380,13 @@ func main() {
 			AllowedOrigins:    cfg.AllowedOrigins,
 			CORSStrict:        cfg.CORSStrict,
 			Metrics:           metricsCollector,
-			AdminKey:          cfg.CacheAdminKey,
+			AdminKey:          cfg.AdminAPIKey,
 			Cache:             cacheStore,
 			Sessions:          sessionManager,
+			DataSubjects:      dataSubjects,
+			Consent:           consentManager,
+			Workspaces:        workspaceStore,
+			Auditor:           auditor,
 			ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
 			ReadTimeout:       cfg.HTTP.ReadTimeout,
 			WriteTimeout:      cfg.HTTP.WriteTimeout,

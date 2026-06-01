@@ -13,6 +13,7 @@ import (
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/audit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/auth"
+	"github.com/zoharbabin/web-researcher-mcp/internal/consent"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
@@ -195,6 +196,24 @@ func auditToolCallQuery(ctx context.Context, deps Dependencies, toolName string,
 		event.Metadata = meta
 	}
 	deps.Auditor.Log(event)
+
+	// Aggregate per-tenant usage (#91) at the same chokepoint as audit/PodID.
+	// Aggregate-only: counts + latency keyed by tenant_id, no query/content.
+	// Anonymous (STDIO) tenant is ignored inside RecordTenantCall.
+	if deps.Metrics != nil {
+		provider, _ := extra["provider"].(string)
+		cacheHit, _ := extra["cache_hit"].(bool)
+		deps.Metrics.RecordTenantCall(auth.TenantIDFromContext(ctx), provider, duration, err != nil, cacheHit)
+	}
+
+	// Per-user analytics (#92): consent-gated profiling, distinct from the
+	// aggregate tenant metrics above. Recorded ONLY when the feature is enabled
+	// (non-Noop recorder) AND the user has consented to the "analytics" purpose.
+	// The Noop recorder makes this a no-op when the feature is off.
+	if deps.UserAnalytics != nil && deps.Consent != nil &&
+		deps.Consent.HasConsent(ctx, consent.PurposeAnalytics) {
+		deps.UserAnalytics.Record(ctx, auth.TenantIDFromContext(ctx), auth.UserIDFromContext(ctx), toolName)
+	}
 }
 
 func toolError(msg string) *mcp.CallToolResult {

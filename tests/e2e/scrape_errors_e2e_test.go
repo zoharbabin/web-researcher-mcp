@@ -11,7 +11,10 @@ import (
 )
 
 func TestScrapeErrors_E2E(t *testing.T) {
-	h := newMCPTestHarness(t)
+	// These subtests point the scraper at local httptest servers (127.0.0.1) to
+	// exercise per-status error handling. Allow private IPs so the SSRF guard
+	// doesn't block the loopback target before the scraper sees the response.
+	h := newMCPTestHarness(t, "ALLOW_PRIVATE_IPS=true")
 
 	// Initialize
 	h.send(jsonRPCRequest{

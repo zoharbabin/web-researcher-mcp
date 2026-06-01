@@ -22,7 +22,7 @@ type Config struct {
 	RedisURL           string
 }
 
-type Manager struct {
+type MemoryManager struct {
 	mu     sync.Mutex
 	index  map[string]*SessionIndex
 	keys   map[string]string // fileHash → compound key (for rebuild)
@@ -31,7 +31,7 @@ type Manager struct {
 	done   chan struct{}
 }
 
-func NewManager(cfg Config) (*Manager, error) {
+func NewManager(cfg Config) (*MemoryManager, error) {
 	if cfg.MaxSessions <= 0 {
 		cfg.MaxSessions = 50
 	}
@@ -47,7 +47,7 @@ func NewManager(cfg Config) (*Manager, error) {
 		return nil, fmt.Errorf("session store: %w", err)
 	}
 
-	m := &Manager{
+	m := &MemoryManager{
 		index:  make(map[string]*SessionIndex),
 		keys:   make(map[string]string),
 		store:  store,
@@ -61,7 +61,7 @@ func NewManager(cfg Config) (*Manager, error) {
 	return m, nil
 }
 
-func (m *Manager) Create(tenantID string) (*SessionIndex, error) {
+func (m *MemoryManager) Create(tenantID string) (*SessionIndex, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -93,18 +93,18 @@ func (m *Manager) Create(tenantID string) (*SessionIndex, error) {
 	return idx, nil
 }
 
-func (m *Manager) AppendStep(tenantID, sessionID string, step ResearchStep, gap *KnowledgeGap, summary string) (*SessionIndex, error) {
+func (m *MemoryManager) AppendStep(tenantID, sessionID string, step ResearchStep, gap *KnowledgeGap, summary string) (*SessionIndex, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	key := tenantID + ":" + sessionID
 	idx, ok := m.index[key]
 	if !ok {
-		return nil, fmt.Errorf("session not found")
+		return nil, &SessionNotFoundError{TenantID: tenantID, SessionID: sessionID, LastKnownStep: step.StepNumber - 1}
 	}
 	if time.Since(idx.LastUsed) > m.config.SessionTTL {
 		m.deleteUnlocked(key)
-		return nil, fmt.Errorf("session expired")
+		return nil, ErrSessionExpired
 	}
 
 	if idx.StepCount >= m.config.MaxStepsPerSession {
@@ -115,7 +115,7 @@ func (m *Manager) AppendStep(tenantID, sessionID string, step ResearchStep, gap 
 	sess, err := m.store.Load(key)
 	if err != nil {
 		m.deleteUnlocked(key)
-		return nil, fmt.Errorf("session data corrupt")
+		return nil, ErrSessionCorrupt
 	}
 
 	sess.Steps = append(sess.Steps, step)
@@ -137,14 +137,14 @@ func (m *Manager) AppendStep(tenantID, sessionID string, step ResearchStep, gap 
 	return idx, nil
 }
 
-func (m *Manager) SetResearchGoal(tenantID, sessionID, goal string) error {
+func (m *MemoryManager) SetResearchGoal(tenantID, sessionID, goal string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	key := tenantID + ":" + sessionID
 	idx, ok := m.index[key]
 	if !ok {
-		return fmt.Errorf("session not found")
+		return ErrSessionNotFound
 	}
 
 	sess, err := m.store.Load(key)
@@ -163,14 +163,14 @@ func (m *Manager) SetResearchGoal(tenantID, sessionID, goal string) error {
 	return nil
 }
 
-func (m *Manager) AddSources(tenantID, sessionID string, sources []ResearchSource) error {
+func (m *MemoryManager) AddSources(tenantID, sessionID string, sources []ResearchSource) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	key := tenantID + ":" + sessionID
 	_, ok := m.index[key]
 	if !ok {
-		return fmt.Errorf("session not found")
+		return ErrSessionNotFound
 	}
 
 	sess, err := m.store.Load(key)
@@ -199,7 +199,7 @@ func (m *Manager) AddSources(tenantID, sessionID string, sources []ResearchSourc
 	return nil
 }
 
-func (m *Manager) GetIndex(tenantID, sessionID string) (*SessionIndex, bool) {
+func (m *MemoryManager) GetIndex(tenantID, sessionID string) (*SessionIndex, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -216,18 +216,18 @@ func (m *Manager) GetIndex(tenantID, sessionID string) (*SessionIndex, bool) {
 	return idx, true
 }
 
-func (m *Manager) GetFull(tenantID, sessionID string) (*Session, error) {
+func (m *MemoryManager) GetFull(tenantID, sessionID string) (*Session, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	key := tenantID + ":" + sessionID
 	idx, ok := m.index[key]
 	if !ok {
-		return nil, fmt.Errorf("session not found")
+		return nil, &SessionNotFoundError{TenantID: tenantID, SessionID: sessionID}
 	}
 	if time.Since(idx.LastUsed) > m.config.SessionTTL {
 		m.deleteUnlocked(key)
-		return nil, fmt.Errorf("session expired")
+		return nil, ErrSessionExpired
 	}
 
 	idx.LastUsed = time.Now()
@@ -235,23 +235,23 @@ func (m *Manager) GetFull(tenantID, sessionID string) (*Session, error) {
 	sess, err := m.store.Load(key)
 	if err != nil {
 		m.deleteUnlocked(key)
-		return nil, fmt.Errorf("session data corrupt")
+		return nil, ErrSessionCorrupt
 	}
 	return sess, nil
 }
 
-func (m *Manager) GetStep(tenantID, sessionID string, stepNum int) (*ResearchStep, error) {
+func (m *MemoryManager) GetStep(tenantID, sessionID string, stepNum int) (*ResearchStep, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	key := tenantID + ":" + sessionID
 	idx, ok := m.index[key]
 	if !ok {
-		return nil, fmt.Errorf("session not found")
+		return nil, &SessionNotFoundError{TenantID: tenantID, SessionID: sessionID}
 	}
 	if time.Since(idx.LastUsed) > m.config.SessionTTL {
 		m.deleteUnlocked(key)
-		return nil, fmt.Errorf("session expired")
+		return nil, ErrSessionExpired
 	}
 
 	idx.LastUsed = time.Now()
@@ -259,7 +259,7 @@ func (m *Manager) GetStep(tenantID, sessionID string, stepNum int) (*ResearchSte
 	sess, err := m.store.Load(key)
 	if err != nil {
 		m.deleteUnlocked(key)
-		return nil, fmt.Errorf("session data corrupt")
+		return nil, ErrSessionCorrupt
 	}
 
 	for i := range sess.Steps {
@@ -270,13 +270,13 @@ func (m *Manager) GetStep(tenantID, sessionID string, stepNum int) (*ResearchSte
 	return nil, fmt.Errorf("step %d not found", stepNum)
 }
 
-func (m *Manager) Delete(tenantID, sessionID string) {
+func (m *MemoryManager) Delete(tenantID, sessionID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.deleteUnlocked(tenantID + ":" + sessionID)
 }
 
-func (m *Manager) DeleteAll() {
+func (m *MemoryManager) DeleteAll() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for key := range m.index {
@@ -286,23 +286,57 @@ func (m *Manager) DeleteAll() {
 	m.keys = make(map[string]string)
 }
 
-func (m *Manager) Close() {
+// ListByTenant returns a copy of the index entries for one tenant. Used by the
+// data-subject access/portability export (#85). Sessions carry no per-user
+// field, so this is tenant-scoped (the finest granularity the session data
+// supports); the caller documents that scope to the subject.
+func (m *MemoryManager) ListByTenant(tenantID string) []*SessionIndex {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []*SessionIndex
+	for _, idx := range m.index {
+		if idx.TenantID == tenantID {
+			cp := *idx
+			out = append(out, &cp)
+		}
+	}
+	return out
+}
+
+// DeleteByTenant purges every session for a tenant from memory and disk,
+// returning the count removed. Used by the data-subject erasure path (#85).
+func (m *MemoryManager) DeleteByTenant(tenantID string) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var keys []string
+	for key, idx := range m.index {
+		if idx.TenantID == tenantID {
+			keys = append(keys, key)
+		}
+	}
+	for _, key := range keys {
+		m.deleteUnlocked(key)
+	}
+	return len(keys)
+}
+
+func (m *MemoryManager) Close() {
 	close(m.done)
 }
 
-func (m *Manager) ActiveCount() int {
+func (m *MemoryManager) ActiveCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return len(m.index)
 }
 
-func (m *Manager) deleteUnlocked(key string) {
+func (m *MemoryManager) deleteUnlocked(key string) {
 	delete(m.index, key)
 	delete(m.keys, fileHash(key))
 	_ = m.store.Delete(key)
 }
 
-func (m *Manager) evictOldest(tenantID string) {
+func (m *MemoryManager) evictOldest(tenantID string) {
 	var oldestKey string
 	var oldestTime time.Time
 
@@ -320,7 +354,7 @@ func (m *Manager) evictOldest(tenantID string) {
 	}
 }
 
-func (m *Manager) cleanup() {
+func (m *MemoryManager) cleanup() {
 	ticker := time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
 
@@ -341,7 +375,7 @@ func (m *Manager) cleanup() {
 	}
 }
 
-func (m *Manager) rebuildIndex() {
+func (m *MemoryManager) rebuildIndex() {
 	hashes, err := m.store.ListValid(time.Now())
 	if err != nil {
 		slog.Warn("failed to list session files", "err", err)

@@ -221,6 +221,20 @@ func TestNewEventFields(t *testing.T) {
 	}
 }
 
+// TestNewEventPodID verifies every event carries a pod identifier for
+// cross-pod correlation in multi-instance HTTP deployments (#43). The value is
+// resolved once at package init from HOSTNAME or os.Hostname(); on any normal
+// host at least one of those is non-empty.
+func TestNewEventPodID(t *testing.T) {
+	event := NewEvent("tool_call", "t-1", "u-1")
+	if event.PodID != podID {
+		t.Errorf("expected PodID=%q (package value), got %q", podID, event.PodID)
+	}
+	if event.PodID == "" {
+		t.Skip("no hostname available in this environment; PodID legitimately empty")
+	}
+}
+
 func TestSwapFileSpill(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

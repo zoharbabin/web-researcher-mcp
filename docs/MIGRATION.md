@@ -161,17 +161,34 @@ These notes apply when upgrading between versions of `web-researcher-mcp` itself
 
 The on-disk cache format changed (encrypted blobs now bind their key as GCM additional authenticated data). The internal cache `Version` was bumped so the cache is **invalidated and cleared once** on the first run of this version. This is automatic and safe — there is nothing to do. Cached entries simply repopulate on demand; no configuration, keys, or data outside the cache are affected.
 
-### Planned change: CORS default will flip to fail-closed
+### Breaking change: CORS now defaults to fail-closed
 
-Today, in HTTP mode, an empty `ALLOWED_ORIGINS` reflects any `Origin` (permissive) when `CORS_STRICT=false` (the current default). A **future release will flip the default of `CORS_STRICT` to `true`**, so an empty `ALLOWED_ORIGINS` will deny all cross-origin requests (fail-closed). No date is set for this change.
+**This release flips the default of `CORS_STRICT` from `false` to `true`.** Previously, in HTTP mode, an empty `ALLOWED_ORIGINS` reflected any `Origin` (permissive). Now an empty `ALLOWED_ORIGINS` **denies all cross-origin requests by default** (fail-closed) — the secure-by-default posture for a server that can hold API keys and run in shared deployments.
 
-**What to do now to be unaffected by the flip:**
+**Who is affected:** only HTTP-mode deployments served to a **browser-based** client that relied on the old permissive empty-`ALLOWED_ORIGINS` default. Not affected:
 
-- If you rely on cross-origin browser access, set `ALLOWED_ORIGINS` to the explicit origins you trust (recommended), e.g. `ALLOWED_ORIGINS=https://app.example.com`.
-- Alternatively, to keep the current permissive behavior after the flip, set `CORS_STRICT=false` explicitly.
-- STDIO mode is unaffected — there is no HTTP server and no CORS handling.
+- **STDIO mode** — there is no HTTP server and no CORS handling.
+- **Backend-to-backend clients** (server-side MCP connectors such as ChatGPT/Claude.ai hosted connectors, scripts, SDKs) — CORS is a browser-only mechanism and never applied to them. Access there is governed by OAuth, unchanged.
 
-Setting `ALLOWED_ORIGINS` explicitly is the durable, recommended configuration: it behaves identically before and after the flip.
+| | Before (`CORS_STRICT=false` default) | After (`CORS_STRICT=true` default) |
+|---|---|---|
+| Empty `ALLOWED_ORIGINS`, browser cross-origin request | Reflected (any origin allowed) | **Denied** |
+| `ALLOWED_ORIGINS` lists the origin | Allowed | Allowed (unchanged) |
+| `CORS_STRICT=false` set explicitly | Reflected | Reflected (escape hatch) |
+
+**What to do:**
+
+- If you serve a browser client, set `ALLOWED_ORIGINS` to the origins you trust (recommended), e.g. `ALLOWED_ORIGINS=https://app.example.com`. This is the durable configuration — it behaved identically before and after the flip.
+- To restore the old permissive behavior wholesale, set `CORS_STRICT=false` explicitly (documented escape hatch).
+
+### Deprecation: `CACHE_ADMIN_KEY` renamed to `ADMIN_API_KEY`
+
+The admin key now gates **all** `/admin/*` endpoints (cache flush, session flush, GDPR data-subject rights, tenant analytics, workspace membership) — not just the cache — so it has been renamed to `ADMIN_API_KEY` for clarity.
+
+- **`CACHE_ADMIN_KEY` still works** but is deprecated; the server logs a one-line warning at startup when it is used.
+- To migrate: rename the env var to `ADMIN_API_KEY` (same value, same 16-character minimum). If both are set, `ADMIN_API_KEY` wins.
+
+This is **not** an encryption-key change — see "Key rotation" in `docs/DEPLOYMENT.md` for rotating either the admin key or the AES-256-GCM `CACHE_ENCRYPTION_KEY`.
 
 ---
 

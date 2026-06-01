@@ -1,12 +1,13 @@
 package session
 
 import (
+	"errors"
 	"os"
 	"testing"
 	"time"
 )
 
-func newTestManager(ttl time.Duration, maxSessions int) *Manager {
+func newTestManager(ttl time.Duration, maxSessions int) *MemoryManager {
 	dir, _ := os.MkdirTemp("", "session-test-*")
 	m, _ := NewManager(Config{
 		MaxSessions:        maxSessions,
@@ -101,6 +102,34 @@ func TestAppendStep(t *testing.T) {
 	}
 	if len(updated.LastSteps) != 1 {
 		t.Errorf("expected 1 lastStep, got %d", len(updated.LastSteps))
+	}
+}
+
+// TestAppendStepSessionNotFound verifies AppendStep returns a typed
+// SessionNotFoundError (carrying the last known step) that satisfies
+// errors.Is(err, ErrSessionNotFound), so clients in multi-pod deployments can
+// recover deterministically (#43).
+func TestAppendStepSessionNotFound(t *testing.T) {
+	m := newTestManager(5*time.Minute, 10)
+	defer m.Close()
+
+	step := ResearchStep{StepNumber: 4, Description: "step on a missing session"}
+	_, err := m.AppendStep("tenant-1", "does-not-exist", step, nil, "")
+	if err == nil {
+		t.Fatal("expected error for missing session")
+	}
+	if !errors.Is(err, ErrSessionNotFound) {
+		t.Errorf("expected errors.Is(err, ErrSessionNotFound), got %v", err)
+	}
+	var nf *SessionNotFoundError
+	if !errors.As(err, &nf) {
+		t.Fatalf("expected *SessionNotFoundError, got %T", err)
+	}
+	if nf.LastKnownStep != 3 {
+		t.Errorf("expected LastKnownStep=3 (stepNumber-1), got %d", nf.LastKnownStep)
+	}
+	if nf.SessionID != "does-not-exist" {
+		t.Errorf("expected SessionID preserved, got %q", nf.SessionID)
 	}
 }
 

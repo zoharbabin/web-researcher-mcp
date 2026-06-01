@@ -109,14 +109,16 @@ This follows the pattern established by MemGPT ([Packer et al., 2023](https://ar
 
 ### Why a two-tier architecture (memory + disk)?
 
-| Alternative | Why we didn't use it |
+| Alternative | Why we didn't use it as the default |
 |---|---|
 | Memory only | Lost on restart. Unacceptable for 4-hour sessions. |
 | Disk only | Too slow for reads — every `GetIndex` call would need I/O. |
-| Database (Redis/SQLite) | Adds deployment complexity for a tool that should be `go install && done`. |
+| Database (Redis/SQLite) as the *default* | Adds deployment complexity for a tool that should be `go install && done`. (Redis is available as an **opt-in** backend — see below.) |
 | Memory + lazy flush | Risk of data loss on crash. We chose correctness over throughput. |
 
 The two-tier approach gives us: instant reads (memory), durability (disk), crash safety (atomic writes), and zero external dependencies.
+
+**Opt-in distributed backend (multi-pod HTTP).** `session.Manager` is an interface (`internal/session/interface.go`). The default is the memory+disk `MemoryManager`; in HTTP mode, setting `REDIS_URL` swaps in a Redis-backed `session.Manager` (`internal/redisbackend/session.go`) so sessions survive pod restarts and are visible across pods — sticky sessions become optional. Redis values keep the same AES-256-GCM-at-rest guarantee. See [DEPLOYMENT.md → Horizontal Scaling](DEPLOYMENT.md#horizontal-scaling). When a follow-up step still misses (expired, or no Redis), the client gets a typed `session_not_found` error with a `recoveryHint` rather than a silently-forked session.
 
 ### Why AES-256-GCM encryption at rest?
 
@@ -276,9 +278,10 @@ A background goroutine runs every 15 minutes:
 |---|---|---|---|---|
 | **Rely on context window** | No | No | N/A | None |
 | **System prompt injection** | Partially (fixed budget) | No | N/A | None |
-| **External database (Redis/Postgres)** | Yes | Yes | Depends | High (requires infra) |
+| **External database (Postgres/etc.)** | Yes | Yes | Depends | High (requires infra) |
 | **Cloud-hosted session service** | Yes | Yes | Low (3rd party sees data) | Medium |
-| **web-researcher-mcp (this approach)** | Yes | Yes | High (local, encrypted) | None (built-in) |
+| **web-researcher-mcp default (memory + encrypted disk)** | Yes | Yes | High (local, encrypted) | None (built-in) |
+| **web-researcher-mcp + opt-in `REDIS_URL`** | Yes | Yes (+ across pods) | High (encrypted at rest) | Medium (operator runs Redis) |
 
 ---
 

@@ -72,7 +72,12 @@ type mcpTestHarness struct {
 	}
 }
 
-func newMCPTestHarness(t *testing.T) *mcpTestHarness {
+// newMCPTestHarness starts the server over STDIO for e2e tests. extraEnv is
+// appended after the baseline env, so a caller can enable, e.g.,
+// ALLOW_PRIVATE_IPS=true to let scrape tests reach a local httptest server
+// (otherwise the SSRF guard blocks 127.0.0.1 before the scraper sees the
+// response). TestMCPLifecycle passes none and is unaffected.
+func newMCPTestHarness(t *testing.T, extraEnv ...string) *mcpTestHarness {
 	t.Helper()
 	binPath := buildBinary(t)
 
@@ -81,6 +86,7 @@ func newMCPTestHarness(t *testing.T) *mcpTestHarness {
 		"GOOGLE_CUSTOM_SEARCH_API_KEY=test",
 		"GOOGLE_CUSTOM_SEARCH_ID=test",
 	)
+	cmd.Env = append(cmd.Env, extraEnv...)
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {

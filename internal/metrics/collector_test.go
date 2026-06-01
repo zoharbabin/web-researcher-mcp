@@ -28,6 +28,45 @@ func TestRecordToolCall(t *testing.T) {
 	}
 }
 
+func TestRecordTenantCall(t *testing.T) {
+	c := NewCollector()
+
+	c.RecordTenantCall("tenant-a", "google", 100*time.Millisecond, false, true)
+	c.RecordTenantCall("tenant-a", "google", 200*time.Millisecond, true, false)
+	c.RecordTenantCall("tenant-a", "brave", 50*time.Millisecond, false, false)
+	c.RecordTenantCall("tenant-b", "", 10*time.Millisecond, false, false)
+	c.RecordTenantCall("", "google", 10*time.Millisecond, false, false) // anonymous: ignored
+
+	all := c.GetTenantStats("")
+	if len(all) != 2 {
+		t.Fatalf("expected 2 tenants (anonymous ignored), got %d", len(all))
+	}
+
+	a := c.GetTenantStats("tenant-a")
+	if len(a) != 1 {
+		t.Fatalf("expected single-tenant result, got %d", len(a))
+	}
+	if a[0].TotalCalls != 3 {
+		t.Errorf("expected 3 calls for tenant-a, got %d", a[0].TotalCalls)
+	}
+	if a[0].ErrorCalls != 1 {
+		t.Errorf("expected 1 error for tenant-a, got %d", a[0].ErrorCalls)
+	}
+	if a[0].CacheHits != 1 {
+		t.Errorf("expected 1 cache hit for tenant-a, got %d", a[0].CacheHits)
+	}
+	if a[0].TopProviders["google"] != 2 || a[0].TopProviders["brave"] != 1 {
+		t.Errorf("unexpected provider breakdown: %+v", a[0].TopProviders)
+	}
+	if a[0].ErrorRate <= 0.32 || a[0].ErrorRate >= 0.34 {
+		t.Errorf("expected error rate ~0.33, got %v", a[0].ErrorRate)
+	}
+
+	if got := c.GetTenantStats("nonexistent"); got != nil {
+		t.Errorf("expected nil for unknown tenant, got %v", got)
+	}
+}
+
 func TestRecordCacheHit(t *testing.T) {
 	c := NewCollector()
 
