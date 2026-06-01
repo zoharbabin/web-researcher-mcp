@@ -16,6 +16,7 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/consent"
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 	"github.com/zoharbabin/web-researcher-mcp/internal/datasubject"
+	"github.com/zoharbabin/web-researcher-mcp/internal/memory"
 	"github.com/zoharbabin/web-researcher-mcp/internal/metrics"
 	"github.com/zoharbabin/web-researcher-mcp/internal/persist"
 	"github.com/zoharbabin/web-researcher-mcp/internal/ratelimit"
@@ -160,6 +161,16 @@ func main() {
 		logger.Info("user-level analytics enabled", "consent", "required")
 	}
 
+	// Long-term memory (#88): consent-gated, off by default, retention-bounded.
+	// A non-Noop store registers into the data-subject registry for export/erase.
+	var memoryStore memory.Store = memory.NewNoop()
+	if cfg.Features.Memory {
+		ms := memory.NewStore(persistStore, cfg.Features.MemoryRetention)
+		memoryStore = ms
+		dataSubjects.Register("memory", memory.AsDataSubject(ms), memory.AsDataSubject(ms))
+		logger.Info("long-term memory enabled", "consent", "required", "retention", cfg.Features.MemoryRetention)
+	}
+
 	metricsCollector := metrics.NewCollector()
 	rateLimiter := ratelimit.NewWithStore(cfg.RateLimit, persistStore)
 	if redisBackends != nil {
@@ -297,6 +308,7 @@ func main() {
 		},
 		Consent:       consentManager,
 		UserAnalytics: userAnalytics,
+		Memory:        memoryStore,
 	}
 
 	srv := server.New(server.Config{

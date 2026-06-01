@@ -9,6 +9,7 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/cache"
 	"github.com/zoharbabin/web-researcher-mcp/internal/consent"
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
+	"github.com/zoharbabin/web-researcher-mcp/internal/memory"
 	"github.com/zoharbabin/web-researcher-mcp/internal/metrics"
 	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
@@ -37,6 +38,10 @@ type Dependencies struct {
 	// Noop (collects nothing). The get_my_analytics tool is registered only when
 	// a non-Noop recorder is present.
 	UserAnalytics useranalytics.Recorder
+	// Memory is the consent-gated long-term cross-session memory store (#88).
+	// Defaults to a Noop. The memory_save/memory_recall tools are registered
+	// only when a non-Noop store is present.
+	Memory memory.Store
 }
 
 // Features mirrors config.FeatureConfig for the tool layer (kept local so the
@@ -64,9 +69,26 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	if _, isNoop := deps.UserAnalytics.(*useranalytics.Noop); deps.UserAnalytics != nil && !isNoop {
 		registerGetMyAnalytics(srv, deps)
 	}
+	if _, isNoop := deps.Memory.(*memory.Noop); deps.Memory != nil && !isNoop {
+		registerMemorySave(srv, deps)
+		registerMemoryRecall(srv, deps)
+	}
 }
 
 func boolPtr(b bool) *bool { return &b }
+
+// writeAnnotations is for the rare tool that MUTATES server-side state (e.g.
+// memory_save). ReadOnlyHint is false (it writes), but DestructiveHint is also
+// false: it appends/updates, never deletes (deletion is the separate #85
+// erasure endpoint, never a flag on a tool). Not open-world (local state).
+func writeAnnotations(idempotent bool) *mcp.ToolAnnotations {
+	return &mcp.ToolAnnotations{
+		ReadOnlyHint:    false,
+		DestructiveHint: boolPtr(false),
+		IdempotentHint:  idempotent,
+		OpenWorldHint:   boolPtr(false),
+	}
+}
 
 func readOnlyAnnotations(idempotent bool, openWorld bool) *mcp.ToolAnnotations {
 	return &mcp.ToolAnnotations{

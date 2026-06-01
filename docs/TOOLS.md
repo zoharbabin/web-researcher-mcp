@@ -702,6 +702,87 @@ type UserAnalytics struct {
 
 ---
 
+## Tool 11: `memory_save`
+
+**Opt-in, consent-gated (#88). Registered only when `MEMORY_ENABLED=true`.** This is a **write** tool (`ReadOnlyHint: false`, `DestructiveHint: false` — it appends, never deletes).
+
+### Purpose
+
+Persist a research finding to the calling user's long-term memory so it can be recalled in future sessions (unlike `sequential_search` sessions, which expire after 4 hours). Stored per-user, encrypted, retention-bounded (`MEMORY_RETENTION`, default 90 days), and erasable via the data-subject endpoint (`/admin/data`). There is no `memory_forget` tool — deletion flows through the GDPR erasure endpoint.
+
+### Input Schema
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `note` | string | yes | The finding/conclusion to remember |
+| `topic` | string | no | Group label for later recall |
+| `url` | string | no | Source URL this memory refers to |
+| `tags` | string[] | no | Organizational tags |
+
+### Output Schema
+
+```go
+type MemorySaveOutput struct {
+    Status    string `json:"status"`    // "ok" | "no_consent" | "unavailable"
+    Reason    string `json:"reason,omitempty"`
+    ID        string `json:"id,omitempty"`
+    CreatedAt string `json:"createdAt,omitempty"`
+}
+```
+
+### Behavior
+
+Requires an authenticated user and recorded consent for the `memory` purpose; otherwise returns `unavailable` / `no_consent` and persists nothing.
+
+### Cache
+
+- Not cached (a write).
+
+---
+
+## Tool 12: `memory_recall`
+
+**Opt-in, consent-gated (#88). Registered only when `MEMORY_ENABLED=true`.** Read-only.
+
+### Purpose
+
+Recall findings the calling user previously saved with `memory_save`, across sessions, optionally filtered by topic. Shows only the caller's own memories — never another user's.
+
+### Input Schema
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `topic` | string | no | Filter by topic; omit for most recent across all topics |
+| `limit` | int | no | Max memories to return (default 20) |
+
+### Output Schema
+
+```go
+type MemoryRecallOutput struct {
+    Status   string        `json:"status"`   // "ok" | "no_consent" | "unavailable"
+    Reason   string        `json:"reason,omitempty"`
+    Count    int           `json:"count"`
+    Memories []MemoryEntry `json:"memories"`
+}
+
+type MemoryEntry struct {
+    ID        string   `json:"id"`
+    TenantID  string   `json:"tenantId"`
+    UserID    string   `json:"userId"`
+    Topic     string   `json:"topic,omitempty"`
+    Note      string   `json:"note"`
+    URL       string   `json:"url,omitempty"`
+    Tags      []string `json:"tags,omitempty"`
+    CreatedAt string   `json:"createdAt"`
+}
+```
+
+### Cache
+
+- No cache (reads per-user state directly).
+
+---
+
 ## Cross-Cutting Concerns
 
 ### Timeouts (all configurable via env)

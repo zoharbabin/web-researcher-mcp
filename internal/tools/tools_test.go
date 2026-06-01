@@ -20,6 +20,7 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/config"
 	"github.com/zoharbabin/web-researcher-mcp/internal/consent"
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
+	"github.com/zoharbabin/web-researcher-mcp/internal/memory"
 	"github.com/zoharbabin/web-researcher-mcp/internal/metrics"
 	"github.com/zoharbabin/web-researcher-mcp/internal/persist"
 	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
@@ -90,6 +91,7 @@ func setupTestDeps() Dependencies {
 		// TestOutputSchemaMatchesResponse). Production gates these by feature flag.
 		Consent:       consent.NewStoreManager(persist.NewMemoryStore()),
 		UserAnalytics: useranalytics.NewStoreRecorder(persist.NewMemoryStore()),
+		Memory:        memory.NewStore(persist.NewMemoryStore(), 0),
 	}
 }
 

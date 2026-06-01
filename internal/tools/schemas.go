@@ -262,6 +262,41 @@ var getMyAnalyticsOutputSchema = map[string]any{
 	},
 }
 
+var memorySaveOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"status":    map[string]any{"type": "string"}, // ok | no_consent | unavailable
+		"reason":    map[string]any{"type": "string"},
+		"id":        map[string]any{"type": "string"},
+		"createdAt": map[string]any{"type": "string"},
+	},
+}
+
+var memoryRecallOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"status": map[string]any{"type": "string"},
+		"reason": map[string]any{"type": "string"},
+		"count":  map[string]any{"type": "integer"},
+		"memories": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":        map[string]any{"type": "string"},
+					"tenantId":  map[string]any{"type": "string"},
+					"userId":    map[string]any{"type": "string"},
+					"topic":     map[string]any{"type": "string"},
+					"note":      map[string]any{"type": "string"},
+					"url":       map[string]any{"type": "string"},
+					"tags":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"createdAt": map[string]any{"type": "string"},
+				},
+			},
+		},
+	},
+}
+
 var sequentialSearchOutputSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{

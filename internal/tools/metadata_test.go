@@ -25,6 +25,8 @@ var expectedTools = []string{
 	"sequential_search",
 	"get_research_session",
 	"get_my_analytics",
+	"memory_save",
+	"memory_recall",
 }
 
 func listTools(t *testing.T) []*mcp.Tool {
@@ -62,7 +64,15 @@ func TestAllToolsHaveAnnotations(t *testing.T) {
 			if tool.Annotations == nil {
 				t.Fatal("annotations is nil")
 			}
-			if !tool.Annotations.ReadOnlyHint {
+			// memory_save is the one WRITE tool (it persists a memory). Every
+			// other tool is read-only. No tool is ever destructive — deletion is
+			// the separate #85 erasure endpoint, never a tool flag.
+			writeTools := map[string]bool{"memory_save": true}
+			if writeTools[tool.Name] {
+				if tool.Annotations.ReadOnlyHint {
+					t.Errorf("%s writes state; ReadOnlyHint should be false", tool.Name)
+				}
+			} else if !tool.Annotations.ReadOnlyHint {
 				t.Error("ReadOnlyHint should be true")
 			}
 			if tool.Annotations.DestructiveHint == nil {
@@ -95,6 +105,21 @@ func TestAllToolsHaveAnnotations(t *testing.T) {
 				}
 				if *tool.Annotations.OpenWorldHint {
 					t.Error("get_my_analytics should NOT be open-world")
+				}
+			case "memory_recall":
+				if !tool.Annotations.IdempotentHint {
+					t.Error("memory_recall should be idempotent")
+				}
+				if *tool.Annotations.OpenWorldHint {
+					t.Error("memory_recall should NOT be open-world")
+				}
+			case "memory_save":
+				// A write; not idempotent (each save appends a new entry), not open-world.
+				if tool.Annotations.IdempotentHint {
+					t.Error("memory_save should NOT be idempotent")
+				}
+				if *tool.Annotations.OpenWorldHint {
+					t.Error("memory_save should NOT be open-world")
 				}
 			default:
 				if !tool.Annotations.IdempotentHint {
