@@ -366,6 +366,27 @@ DAILY_QUOTA_PER_TENANT=10000
 | `CHROME_PATH` | Custom Chrome/Chromium binary path | auto-detect |
 | `MAX_SCRAPE_CONCURRENCY` | Parallel scrape limit | `5` |
 
+### Features (Opt-In)
+
+Additive output features (content-only, no personal data, no model calls):
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SOURCE_RECOMMENDATIONS` | Surface advisory "related higher-quality sources" on `search_and_scrape`, derived from the existing transparent quality signals. Content-based; never re-ranks or hides results. Set `false` to omit the field | `true` |
+| `GENERATIVE_UI_ENABLED` | Emit additive, deterministic `mcp-auto-formatted` components (source cards, quality-comparison table) built from already-extracted data — no model call. Off → output byte-for-byte unchanged | `false` |
+
+Regulated features (HTTP mode; per-user personal data; each activates the consent subsystem and is covered by the data-subject rights endpoints). All default off:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MEMORY_ENABLED` | Opt-in long-term cross-session memory (`memory_save`/`memory_recall`). Consent-gated on the `memory` purpose | `false` |
+| `MEMORY_RETENTION` | Max lifetime of a saved memory before auto-expiry | `2160h` (90d) |
+| `USER_ANALYTICS_ENABLED` | Opt-in per-user usage analytics (`get_my_analytics`). Consent-gated on the `analytics` purpose | `false` |
+| `WORKSPACES_ENABLED` | Opt-in shared research workspaces (`workspace_contribute`/`workspace_read` + `/admin/workspace/members`). Consent-gated on the `workspace` purpose; membership host-managed | `false` |
+| `WORKSPACE_TTL` | Max lifetime of shared-workspace data | `720h` (30d) |
+
+> Enabling any regulated feature activates the consent subsystem automatically — there is no standalone `CONSENT_ENABLED` knob. Consent is asserted by the host (via `POST /admin/consent`) and recorded/verified/honored by the server. See `docs/SECURITY.md` and `docs/SECURITY_AND_COMPLIANCE.md`.
+
 ### Observability
 
 | Variable | Description | Default |

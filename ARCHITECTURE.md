@@ -99,15 +99,21 @@ web-researcher-mcp/
 │   ├── search/                   # Pluggable providers + router + lens routing
 │   ├── scraper/                  # 4-tier pipeline + SSRF protection
 │   ├── documents/                # PDF, DOCX, PPTX parsing
-│   ├── cache/                    # Hybrid cache (memory + disk)
+│   ├── cache/                    # Hybrid cache (memory L1 + optional Redis L2 + disk L3)
 │   ├── auth/                     # OAuth 2.1 middleware (JWT/JWKS)
-│   ├── audit/                    # Structured audit logging
-│   ├── session/                  # Per-tenant session persistence (memory index + encrypted disk)
-│   ├── content/                  # Sanitize, dedup, truncate, quality
-│   ├── metrics/                  # Prometheus metrics
-│   ├── ratelimit/                # Three-tier rate limiting
+│   ├── audit/                    # Structured audit logging (PodID for cross-pod correlation)
+│   ├── session/                  # Per-tenant session persistence — Manager interface (memory+disk or Redis)
+│   ├── content/                  # Sanitize, dedup, truncate, quality, recommendations + auto-formatted components
+│   ├── metrics/                  # Prometheus metrics + per-tenant aggregate analytics
+│   ├── ratelimit/                # Three-tier rate limiting + optional atomic cross-pod daily quota
 │   ├── circuit/                  # Circuit breaker
 │   ├── persist/                  # TTL key/value store (memory or AES-256-GCM disk) backing token revocation + rate quotas
+│   ├── redisbackend/             # Sole go-redis importer: Redis impls of cache/persist/session (opt-in, HTTP-only, encrypted)
+│   ├── consent/                  # Consent record-verify-honor for regulated features (Checker + Noop)
+│   ├── datasubject/              # GDPR access/erasure registry — (tenantID,userID) Exporter/Eraser fan-out
+│   ├── useranalytics/            # Opt-in consent-gated per-user analytics (Recorder + Noop)
+│   ├── memory/                   # Opt-in consent-gated long-term cross-session memory (Store + Noop)
+│   ├── workspace/                # Opt-in shared workspaces — server-enforced data-plane + isolation, host-owned membership
 │   └── resources/                # MCP Resources + Prompts
 ├── lenses/                       # Search lens JSON files
 ├── tests/                        # E2E, integration tests + benchmarks

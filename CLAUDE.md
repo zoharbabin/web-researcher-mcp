@@ -25,14 +25,20 @@ internal/
 ├── documents/    # PDF, DOCX, PPTX extraction
 ├── cache/        # Cache interface + hybrid impl (memory + AES-encrypted disk)
 ├── persist/      # Generic TTL key/value Store (memory or AES-256-GCM disk) — backs token revocation + rate-quota durability
-├── content/      # Sanitize, dedup, truncate, quality score, citation extraction
+├── redisbackend/ # SOLE go-redis importer: Redis impls of cache/persist/session for HTTP distributed state — gated, fail-fast, encrypted (opt-in via REDIS_URL)
+├── content/      # Sanitize, dedup, truncate, quality score, citation extraction, content recommendations + auto-formatted components
 ├── config/       # Env-based config — all vars documented in .env.example
-├── server/       # MCP server lifecycle (STDIO + Streamable HTTP)
+├── server/       # MCP server lifecycle (STDIO + Streamable HTTP) + admin endpoints (cache/session flush, /admin/data, /admin/consent, /admin/analytics, /admin/workspace/members)
 ├── auth/         # OAuth 2.1 middleware (JWKS, audience/issuer validation)
-├── audit/        # Auditor interface + structured JSON logging
-├── session/      # Per-tenant session persistence (memory index + encrypted disk)
-├── metrics/      # Prometheus counters/histograms per tool
-├── ratelimit/    # Token bucket (per-tenant + global)
+├── audit/        # Auditor interface + structured JSON logging (PodID for cross-pod correlation)
+├── session/      # Per-tenant session persistence — Manager interface (memory+disk default, or Redis impl)
+├── consent/      # Consent record-verify-honor for regulated features (Checker + typed purposes + Noop default)
+├── datasubject/  # GDPR access/erasure registry: (tenantID,userID) Exporter/Eraser fan-out across all personal-data stores
+├── useranalytics/# Opt-in consent-gated per-user usage analytics (Recorder + Noop)
+├── memory/       # Opt-in consent-gated long-term cross-session memory (Store + Noop, retention TTL)
+├── workspace/    # Opt-in shared research workspaces — server enforces data-plane + isolation, host owns membership (Store + Noop)
+├── metrics/      # Prometheus counters/histograms per tool + per-tenant aggregate analytics
+├── ratelimit/    # Token bucket (per-tenant + global) + optional atomic cross-pod daily quota (Redis)
 ├── circuit/      # Circuit breaker for external APIs
 └── resources/    # MCP Resources (stats) + Prompts (research templates)
 lenses/           # JSON files defining domain lists for site-restricted search
