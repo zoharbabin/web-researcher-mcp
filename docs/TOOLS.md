@@ -268,18 +268,20 @@ type Recommendation struct {
     Reason string  `json:"reason"`  // transparent, content-derived
 }
 
-// Component is an optional, additive, AI-formatted renderable (card/table)
-// built deterministically from already-extracted data — no server-side LLM
-// call. Always carries aiFormatted=true and references to raw source data; it
-// never replaces `content`/`sources`. Present only when GENERATIVE_UI_ENABLED=true.
+// Component is an optional, additive, mcp-auto-formatted renderable (card/table)
+// built DETERMINISTICALLY from already-extracted data — NO server-side LLM call,
+// no model of any kind. The "mcp-auto-formatted" label states the MCP server
+// shaped this structure (not an LLM, not another component). Always carries
+// autoFormatted=true and references to raw source data; it never replaces
+// `content`/`sources`. Present only when GENERATIVE_UI_ENABLED=true.
 type Component struct {
-    Type        string   `json:"type"`         // "card" | "table"
-    AIFormatted bool     `json:"aiFormatted"`  // always true (non-disableable label)
-    Label       string   `json:"label"`        // "AI-formatted"
-    Title       string   `json:"title,omitempty"`
-    SourceRefs  []string `json:"sourceRefs,omitempty"` // URLs of the underlying raw data
-    Card        *Card    `json:"card,omitempty"`
-    Table       *Table   `json:"table,omitempty"`
+    Type          string   `json:"type"`          // "card" | "table"
+    AutoFormatted bool     `json:"autoFormatted"` // always true (non-disableable label)
+    Label         string   `json:"label"`         // "mcp-auto-formatted"
+    Title         string   `json:"title,omitempty"`
+    SourceRefs    []string `json:"sourceRefs,omitempty"` // URLs of the underlying raw data
+    Card          *Card    `json:"card,omitempty"`
+    Table         *Table   `json:"table,omitempty"`
 }
 
 type SourceResult struct {
@@ -328,7 +330,7 @@ type PipelineSummary struct {
 ### Recommendations & components (additive)
 
 - **`recommendations`** surface the highest-quality related sources from the *current* result set using the transparent quality signals (authority, relevance, freshness, content). They are **advisory only** — `sources` ordering is never changed and the caller can ignore them. Strictly content-based: no user-behavior inputs, no profiling. Toggle with `SOURCE_RECOMMENDATIONS` (default `true`). Behavior-based/personalized ranking is explicitly out of scope.
-- **`components`** are optional renderable structures (source cards, a quality-comparison table) assembled **deterministically** from data already extracted — there is no server-side LLM call. Every component is labelled `aiFormatted: true` and references the raw source URLs, so nothing is hidden or unverifiable. Off by default (`GENERATIVE_UI_ENABLED=false`); when off, output is byte-for-byte unchanged. The raw `content`/`sources` are always present regardless.
+- **`components`** are optional renderable structures (source cards, a quality-comparison table) assembled **deterministically** from data already extracted — there is no server-side LLM call and no model of any kind. Every component is labelled `autoFormatted: true` / `"mcp-auto-formatted"` (stating the MCP server shaped it, not an LLM) and references the raw source URLs, so nothing is hidden or unverifiable. Off by default (`GENERATIVE_UI_ENABLED=false`); when off, output is byte-for-byte unchanged. The raw `content`/`sources` are always present regardless.
 
 ### Cache
 - NOT cached as a whole (composed of cached sub-operations)

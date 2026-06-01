@@ -57,8 +57,8 @@ func TestBuildComponentsLabelsAndStructure(t *testing.T) {
 	}
 	var cards, tables int
 	for _, c := range comps {
-		if !c.AIFormatted || c.Label != AIFormattedLabel {
-			t.Errorf("every component must carry the AI-formatted label, got %+v", c)
+		if !c.AutoFormatted || c.Label != AutoFormattedLabel {
+			t.Errorf("every component must carry the mcp-auto-formatted label, got %+v", c)
 		}
 		if len(c.SourceRefs) == 0 {
 			t.Errorf("every component must reference raw source data, got %+v", c)
