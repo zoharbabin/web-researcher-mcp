@@ -769,8 +769,6 @@ These items shipped and are no longer roadmap candidates:
 - **Breach notification pipeline** — webhook alerting on security anomalies
 - **in-toto build attestations** — full supply chain provenance (SLSA Level 3)
 - **Seccomp profiles** — container syscall restriction for hardened deployments
-- **`RedisStore` backend** — distributed `persist.Store` for cache/sessions/
-  rate limits (`REDIS_URL` is reserved and currently a no-op)
 - **UK Cyber Essentials certification** — UK public sector market access
 - **Global CBPR certification** — cross-border data transfer for APAC markets
 

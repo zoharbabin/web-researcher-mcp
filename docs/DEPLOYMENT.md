@@ -316,7 +316,7 @@ These tune the embedded `http.Server` and response security headers. **All are i
 | `CACHE_MAX_MEMORY_MB` | Max memory cache size | `64` |
 | `CACHE_ENCRYPTION_KEY` | 64 hex chars for AES-256-GCM | — (plaintext) |
 | `CACHE_ENCRYPTION_KEY_PREV` | Optional 64-hex previous key for zero-downtime key rotation. When set, the disk cache and session store decrypt-fallback to it and lazily re-encrypt with the current key on read. Empty = no fallback | — |
-| `REDIS_URL` | Reserved for a future `RedisStore` backend; currently a documented no-op. Setting it does not change behavior — see [persistence](#persistence) | — |
+| `REDIS_URL` | **HTTP mode only.** When set, enables distributed state across pods (shared cache L2, cross-pod sessions, atomic daily-quota). Requires `CACHE_ENCRYPTION_KEY` (personal data is encrypted at rest in Redis). Fail-fast: an unreachable Redis at startup is fatal. Unset = per-pod in-memory/disk (unchanged). Ignored in STDIO mode | — |
 | `SESSION_TTL` | Session idle timeout (the in-memory TTL resets on every read or write of the session) | `4h` |
 | `SESSION_DATA_DIR` | Directory for encrypted session files | `{CACHE_DIR}/sessions` |
 | `SESSION_MAX_STEPS` | Maximum steps per research session before auto-completion | `200` |
@@ -408,27 +408,35 @@ When `CACHE_ISOLATION=tenant`, all cache keys are prefixed with the authenticate
 
 ## Horizontal Scaling
 
-**Current state:** The server uses in-memory session state and per-instance rate limit counters. This means:
+**Two modes.** Without `REDIS_URL`, the server uses in-memory + encrypted-disk state, per-instance:
 
-- **Cache:** Each instance has its own memory + disk cache. Cache hits are local only. This is acceptable since search results are deterministic (same query = same results).
-- **Sessions:** Sequential search sessions persist to local encrypted disk with an in-memory index. Sessions survive server restarts within the TTL window (default 4 hours). If a client reconnects to a different instance, the session is not available on the new instance. Use session-affinity (sticky sessions) at your load balancer.
-- **Rate limits:** Per-instance, not distributed. A tenant hitting N instances gets N times the per-tenant limit.
-- **go-rod browser instances** are per-pod. No shared browser pool. Each pod manages its own headless Chrome.
+- **Cache:** Each instance has its own memory + disk cache. Cache hits are local only. Acceptable since search results are deterministic (same query = same results).
+- **Sessions:** Persist to local encrypted disk with an in-memory index; survive restarts within the TTL window (default 4h). If a client reconnects to a *different* instance, the session is not there — use sticky sessions (the typed `session_not_found` error lets clients recover cleanly otherwise).
+- **Rate limits:** Per-instance. A tenant hitting N instances gets up to N× the per-tenant limit.
+- **go-rod browser instances** are per-pod. No shared browser pool.
+
+**With `REDIS_URL` set (HTTP mode), distributed state is enabled (#42):**
+
+- **Cache** gains a shared Redis L2 tier (memory L1 → Redis L2 → disk L3), so a query warmed by one pod is served from Redis by the others — upstream quota is burned once, not once-per-pod.
+- **Sessions** live in Redis with a server-side `EXPIRE`, so they survive pod restarts and a client reaching any pod finds its research (sticky sessions become optional).
+- **Daily rate quota** is enforced fleet-wide via an atomic Redis counter (single `INCR` keyed to a midnight-UTC TTL), so N pods share one limit — no N× over-spend, no double-spend under concurrency.
+- **Token revocation** is shared across pods via the same Redis-backed persist store.
+- All personal-data namespaces (sessions, persist) are **AES-256-GCM encrypted before write** — Redis holds only ciphertext, identical at-rest protection to disk. `REDIS_URL` therefore **requires** `CACHE_ENCRYPTION_KEY`.
+- **Fail-fast:** if `REDIS_URL` is set but Redis is unreachable at startup, the server exits rather than silently degrading to per-pod mode.
 
 **Recommendations for multi-instance HTTP deployments:**
 
-1. Use sticky sessions at your L7 load balancer (route by `X-Session-ID` header or MCP session)
-2. Set rate limits conservatively (divide by expected instance count)
-3. Accept that cache miss rates will be higher than single-instance (each pod warms independently)
-
-**Note:** `REDIS_URL` is accepted in configuration but is a documented no-op (see [Persistence](#persistence)). It is not yet wired into cache, sessions, rate limiting, or revocation. Distributed state support is planned for a future release.
+1. **Preferred:** set `REDIS_URL` (+ `CACHE_ENCRYPTION_KEY`) for correct cross-pod sessions, cache, and rate limits.
+2. Without Redis: use sticky sessions at your L7 load balancer and divide rate limits by expected instance count.
+3. `go-rod` browser rendering remains per-pod regardless (stateless, no shared pool needed).
 
 ### Production Readiness Checklist
 
-Before running multiple instances behind a load balancer, work through this checklist. Items marked **(in-memory state)** are the ones that behave differently across pods until distributed state (`REDIS_URL`) ships.
+Before running multiple instances behind a load balancer, work through this checklist. Items marked **(per-pod without Redis)** behave differently across pods unless `REDIS_URL` is set (#42).
 
-- [ ] **Sticky sessions** — configure session affinity at the L7 load balancer so a client's follow-up `sequential_search` steps reach the pod holding its session. Without affinity, a step routed to another pod returns a typed `session_not_found` error with a `recoveryHint` (last known step) so the client can restart cleanly rather than silently forking. **(in-memory state)**
-- [ ] **Rate-limit math for N pods** — per-tenant and global limits are per-instance today. With N pods, the effective ceiling is N × the configured value. Set `RATE_LIMIT_PER_TENANT` and `RATE_LIMIT_GLOBAL` to `desired_total / N`, or enable `RATE_LIMIT_PERSIST=true` for restart-durable daily quotas. **(in-memory state)**
+- [ ] **Distributed state** — set `REDIS_URL` (+ `CACHE_ENCRYPTION_KEY`) to share sessions, cache, and rate limits across pods. This is the recommended multi-instance configuration; the items below are only concerns when Redis is *not* used.
+- [ ] **Sticky sessions** — without Redis, configure session affinity at the L7 load balancer so a client's follow-up `sequential_search` steps reach the pod holding its session. A step routed to another pod returns a typed `session_not_found` error with a `recoveryHint` (last known step) so the client can restart cleanly rather than silently forking. **(per-pod without Redis)**
+- [ ] **Rate-limit math for N pods** — without Redis, per-tenant and global limits are per-instance, so N pods allow up to N× the configured value. Set `RATE_LIMIT_PER_TENANT` / `RATE_LIMIT_GLOBAL` to `desired_total / N`, or use `REDIS_URL` for fleet-wide atomic enforcement. **(per-pod without Redis)**
 - [ ] **Log aggregation** — ship each pod's structured JSON audit/log output (stderr or `AUDIT_OUTPUT_PATH`) to a central sink. Every audit event carries `pod_id` (from `HOSTNAME`/`os.Hostname()`) for cross-pod correlation — filter or group by it to trace a request or identify a pod dropping events under backpressure.
 - [ ] **Monitoring & dashboards** — scrape `/metrics` (Prometheus) from every pod; alert on error rate, upstream-provider failures (circuit-breaker trips), and latency percentiles. Liveness `/health/live` and readiness `/health/ready` are wired for orchestrator probes.
 - [ ] **Encryption key** — set `CACHE_ENCRYPTION_KEY` (and rotate per [Key Rotation](#key-rotation)) so disk-persisted sessions/cache/quota are encrypted at rest on every pod.
@@ -446,7 +454,7 @@ Two HTTP-mode subsystems can durably persist state across restarts via a single 
 
 The default `persist.Store` implementation is the same proven encrypted-disk pattern as the session store: AES-256-GCM (using `CACHE_ENCRYPTION_KEY`, with `CACHE_ENCRYPTION_KEY_PREV` fallback), atomic temp-file-and-rename writes, `0600` file permissions, an 8-byte big-endian expiry prefix, and an in-memory index. Keys are SHA-256-hashed for the on-disk filename and bound as GCM additional authenticated data so a blob cannot be swapped to a different key's file. Local (memory) and disk implementations behave identically, so there is no behavioral drift between STDIO and HTTP deployments.
 
-`REDIS_URL` is **reserved** for a future `RedisStore` backend that will satisfy this same interface. Until that backend ships, setting `REDIS_URL` does not change any behavior — memory or disk is selected by the constructor, not by this variable. There is no `go-redis` dependency in the build today.
+When `REDIS_URL` is set (HTTP mode), a `RedisStore` satisfying this same interface backs token revocation and the daily quota, so both are shared across pods and survive restarts. Redis-stored values are AES-256-GCM encrypted (parity with disk). All Redis code is isolated in `internal/redisbackend` — the only package that imports the Redis client — and is constructed in exactly one gated place in `main.go`, so STDIO and the zero-config path never touch it.
 
 ---
 

@@ -31,6 +31,21 @@ type Limiter struct {
 	// store, when non-nil, persists daily-quota counters across restarts
 	// (H7, RATE_LIMIT_PERSIST=true). nil keeps pure-memory zero-config behavior.
 	store persist.Store
+
+	// incr, when non-nil, provides ATOMIC cross-pod daily-quota counting (#42,
+	// Redis). When set, AllowDaily enforces the quota fleet-wide via a single
+	// atomic increment, so N pods share one limit instead of N× the limit. nil
+	// keeps the per-pod in-memory counter (correct for single-pod / STDIO).
+	incr DailyIncrementer
+}
+
+// DailyIncrementer atomically increments a tenant's daily counter and returns
+// the new fleet-wide value. resetAt is when the window rolls over (used to set
+// the counter's TTL on first creation). ok=false signals the backend was
+// unavailable, so the caller falls back to the local counter rather than
+// failing the request. Implemented by the Redis persist store (#42).
+type DailyIncrementer interface {
+	IncrDaily(ctx context.Context, tenantID string, resetAt time.Time) (count int64, ok bool)
 }
 
 type tenantLimiter struct {
@@ -61,6 +76,14 @@ func NewWithStore(cfg config.RateLimitConfig, store persist.Store) *Limiter {
 	return l
 }
 
+// WithDailyIncrementer enables atomic cross-pod daily-quota enforcement (#42).
+// Pass the Redis persist store; a nil incrementer leaves per-pod behavior.
+// Called once at startup, before serving.
+func (l *Limiter) WithDailyIncrementer(incr DailyIncrementer) *Limiter {
+	l.incr = incr
+	return l
+}
+
 func (l *Limiter) Allow(tenantID string) bool {
 	if !l.global.Allow() {
 		return false
@@ -70,6 +93,17 @@ func (l *Limiter) Allow(tenantID string) bool {
 }
 
 func (l *Limiter) AllowDaily(tenantID string) bool {
+	// Atomic cross-pod path (#42): when a distributed incrementer is configured,
+	// the quota is enforced fleet-wide by a single atomic INCR keyed to a
+	// midnight-UTC TTL, so N pods share one limit. On any backend error we fall
+	// through to the local counter rather than failing the request.
+	if l.incr != nil {
+		resetAt := time.Now().UTC().Truncate(24 * time.Hour).Add(24 * time.Hour)
+		if count, ok := l.incr.IncrDaily(context.Background(), tenantID, resetAt); ok {
+			return count <= int64(l.config.DailyQuota)
+		}
+	}
+
 	tl := l.getTenantLimiter(tenantID)
 	tl.mu.Lock()
 	defer tl.mu.Unlock()

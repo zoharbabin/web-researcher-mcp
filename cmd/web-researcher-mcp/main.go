@@ -19,6 +19,7 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/metrics"
 	"github.com/zoharbabin/web-researcher-mcp/internal/persist"
 	"github.com/zoharbabin/web-researcher-mcp/internal/ratelimit"
+	"github.com/zoharbabin/web-researcher-mcp/internal/redisbackend"
 	"github.com/zoharbabin/web-researcher-mcp/internal/resources"
 	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
@@ -53,6 +54,36 @@ func main() {
 		slog.Warn("configuration notice", "msg", w)
 	}
 
+	// ── Redis gate (#42): the ONE place distributed state is decided ──────────
+	// Iron-clad two-path isolation: Redis is constructed if and ONLY if HTTP
+	// mode is active (Port>0) AND REDIS_URL is set. STDIO never reaches this
+	// code. Fail-fast: an operator who set REDIS_URL opted into cross-pod
+	// correctness, so an unreachable/misconfigured Redis is a fatal startup
+	// error — never a silent fallback to per-pod memory (which would reintroduce
+	// the N×-rate-limit bug). When redisBackends stays nil, every store below
+	// uses its in-memory/disk path, byte-for-byte unchanged.
+	var redisBackends *redisbackend.Backends
+	if cfg.Port > 0 && cfg.RedisURL != "" {
+		rb, rerr := redisbackend.Connect(context.Background(), redisbackend.Config{
+			URL:                  cfg.RedisURL,
+			EncryptionKey:        cfg.CacheEncryptionKey,
+			EncryptionKeyPrev:    cfg.CacheEncryptionKeyPrev,
+			SessionTTL:           cfg.SessionTTL,
+			MaxSessionsPerTenant: 50,
+		})
+		if rerr != nil {
+			logger.Error("REDIS_URL is set but Redis is unavailable; refusing to start in degraded per-pod mode", "err", rerr)
+			os.Exit(1)
+		}
+		defer rb.Close()
+		redisBackends = rb
+		logger.Info("distributed state enabled", "backend", "redis")
+	} else if cfg.RedisURL != "" {
+		// REDIS_URL set without HTTP mode: surface it loudly rather than silently
+		// ignoring — STDIO is single-process and has no use for distributed state.
+		logger.Warn("REDIS_URL is set but the server is in STDIO mode (no PORT); Redis is not used", "hint", "set PORT to enable HTTP + distributed state")
+	}
+
 	hybridCache := cache.NewHybrid(cache.HybridConfig{
 		Memory:         cache.MemoryConfig{MaxSizeMB: cfg.CacheMaxMemoryMB},
 		Disk:           cache.DiskConfig{Dir: cfg.CacheDir, EncryptionKey: cfg.CacheEncryptionKey, EncryptionKeyPrev: cfg.CacheEncryptionKeyPrev, Version: version},
@@ -60,6 +91,11 @@ func main() {
 		CacheIsolation: cfg.CacheIsolation,
 	})
 	defer hybridCache.Close()
+
+	// L2 shared cache tier: cross-pod cache fan-out when Redis is enabled.
+	if redisBackends != nil {
+		hybridCache.WithSharedLayer(redisBackends.SharedCache())
+	}
 
 	var cacheStore cache.Cache = hybridCache
 	if cfg.CacheIsolation == "tenant" {
@@ -74,7 +110,13 @@ func main() {
 	// zero-config behavior. A disk-store construction error degrades to memory
 	// rather than failing startup.
 	var persistStore persist.Store
-	if cfg.CacheEncryptionKey != "" {
+	switch {
+	case redisBackends != nil:
+		// Distributed: token revocation + daily quota shared across pods,
+		// encrypted at rest in Redis (parity with disk).
+		persistStore = redisBackends.PersistStore()
+		logger.Info("persist store initialized", "backend", "redis")
+	case cfg.CacheEncryptionKey != "":
 		ds, perr := persist.NewDiskStore(
 			filepath.Join(cfg.CacheDir, "persist"),
 			cfg.CacheEncryptionKey,
@@ -87,7 +129,7 @@ func main() {
 			persistStore = ds
 			logger.Info("persist store initialized", "backend", "encrypted-disk")
 		}
-	} else {
+	default:
 		persistStore = persist.NewMemoryStore()
 	}
 
@@ -108,6 +150,10 @@ func main() {
 
 	metricsCollector := metrics.NewCollector()
 	rateLimiter := ratelimit.NewWithStore(cfg.RateLimit, persistStore)
+	if redisBackends != nil {
+		// Atomic cross-pod daily quota: N pods share one limit (#42).
+		rateLimiter = rateLimiter.WithDailyIncrementer(redisBackends.PersistStore())
+	}
 	searchBreaker := circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60})
 
 	if err := search.GetLensRegistry().LoadFromDir("lenses"); err != nil {
@@ -173,18 +219,29 @@ func main() {
 	defer scraperPipeline.Close()
 
 	contentProcessor := content.NewProcessor()
-	sessionManager, err := session.NewManager(session.Config{
-		MaxSessions:        50,
-		MaxStepsPerSession: cfg.SessionMaxSteps,
-		SessionTTL:         cfg.SessionTTL,
-		DataDir:            cfg.SessionDataDir,
-		EncryptionKey:      cfg.CacheEncryptionKey,
-		EncryptionKeyPrev:  cfg.CacheEncryptionKeyPrev,
-		RedisURL:           cfg.RedisURL,
-	})
-	if err != nil {
-		logger.Error("failed to create session manager", "err", err)
-		os.Exit(1)
+
+	// Session manager: Redis-backed (sessions survive pod restarts and are shared
+	// across pods) when distributed state is enabled, else the in-memory +
+	// encrypted-disk manager. Both satisfy session.Manager identically.
+	var sessionManager session.Manager
+	if redisBackends != nil {
+		sessionManager = redisBackends.SessionManager()
+		logger.Info("session manager initialized", "backend", "redis")
+	} else {
+		mm, err := session.NewManager(session.Config{
+			MaxSessions:        50,
+			MaxStepsPerSession: cfg.SessionMaxSteps,
+			SessionTTL:         cfg.SessionTTL,
+			DataDir:            cfg.SessionDataDir,
+			EncryptionKey:      cfg.CacheEncryptionKey,
+			EncryptionKeyPrev:  cfg.CacheEncryptionKeyPrev,
+			RedisURL:           cfg.RedisURL,
+		})
+		if err != nil {
+			logger.Error("failed to create session manager", "err", err)
+			os.Exit(1)
+		}
+		sessionManager = mm
 	}
 	defer sessionManager.Close()
 

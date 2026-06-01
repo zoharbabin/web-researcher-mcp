@@ -41,3 +41,13 @@ type Manager interface {
 
 // Compile-time assertion that the in-memory implementation satisfies Manager.
 var _ Manager = (*MemoryManager)(nil)
+
+// BuildIndex derives the lightweight SessionIndex from a full Session. Exported
+// so alternative Manager implementations (e.g. the Redis-backed manager in
+// internal/redisbackend) reuse the exact same index-construction logic and
+// never drift from the in-memory manager.
+func BuildIndex(sess *Session) *SessionIndex { return buildIndexFromSession(sess) }
+
+// DefaultMaxSteps is the fallback per-session step cap, mirrored by alternative
+// managers so the "session_limit_reached" behavior is identical across backends.
+const DefaultMaxSteps = 200
