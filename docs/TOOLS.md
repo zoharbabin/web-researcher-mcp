@@ -254,7 +254,7 @@ type SearchAndScrapeOutput struct {
     Summary         PipelineSummary `json:"summary"`
     SizeMetadata    SizeMetadata    `json:"sizeMetadata"`
     Recommendations []Recommendation `json:"recommendations,omitempty"` // advisory; see below
-    Components      []Component      `json:"components,omitempty"`      // AI-formatted; see below
+    Components      []Component      `json:"components,omitempty"`      // mcp-auto-formatted (deterministic, no LLM); see below
 }
 
 // Recommendation is an advisory pointer to a higher-quality source already in
@@ -325,7 +325,7 @@ type PipelineSummary struct {
 5. If `filter_by_query`: extract keywords, remove sources below relevance threshold
 6. Combine content, truncate to `total_max_length`
 7. Return structured result with scores and metadata
-8. Optionally append `recommendations` (advisory, content-based; `SOURCE_RECOMMENDATIONS`, default on) and `components` (AI-formatted renderables; `GENERATIVE_UI_ENABLED`, default off) — both derived purely from the quality scores already computed, with no extra scoring pass and no model call
+8. Optionally append `recommendations` (advisory, content-based; `SOURCE_RECOMMENDATIONS`, default on) and `components` (`mcp-auto-formatted` renderables, deterministic — no LLM; `GENERATIVE_UI_ENABLED`, default off) — both derived purely from the quality scores already computed, with no extra scoring pass and no model call
 
 ### Recommendations & components (additive)
 
@@ -468,7 +468,7 @@ Each paper in the `papers` array contains:
 | `openAccess` | bool | no | Whether the paper is freely available |
 | `pdfUrl` | string | no | Direct link to PDF |
 
-Additional output fields: `query`, `totalResults`, `resultCount`, `source` (which provider answered: openalex, crossref, router, web_search).
+Additional output fields: `query`, `totalResults`, `resultCount`, `source` (which provider answered: openalex, crossref, router, web_search), and `hints` (a `ZeroResultHints` object explaining why a query returned nothing and suggesting how to broaden it — present on zero-result responses).
 
 ### Behavior
 - 4-strategy fallback: explicit provider → router → academic providers → site-restricted web search
@@ -523,7 +523,7 @@ Each patent in the `patents` array contains:
 | `pdf` | string | no | Direct link to patent PDF |
 | `status` | string | no | Application status (e.g., "Patented Case") |
 
-Additional output fields: `query`, `searchType`, `resultCount`, `source` (which provider answered), `searchUrl`.
+Additional output fields: `query`, `searchType`, `resultCount`, `source` (which provider answered), `searchUrl`, and `hints` (a `ZeroResultHints` object explaining why a query returned nothing and suggesting how to broaden it — present on zero-result responses).
 
 ### Behavior
 - 4-strategy fallback: explicit provider → router → patent-only providers → web search discovery
@@ -933,7 +933,7 @@ Full details: see `docs/ERROR_HANDLING.md` — covers the three-layer architectu
 
 ### Tool Annotations (MCP Protocol)
 
-All tools declare annotations for client consumption (enforced by `TestAllToolsHaveAnnotations`):
+All tools declare annotations for client consumption. CI enforces tool↔doc consistency via `TestAllToolsHaveAnnotations`, `TestToolsDocMatchesRegistry`, `TestOutputSchemaMatchesResponse`, and `TestToolDescriptionQuality` (`internal/tools/metadata_test.go`) — including on docs-only PRs via the standalone `docs-drift` CI job:
 
 | Tool | ReadOnly | Idempotent | OpenWorld | Destructive |
 |------|----------|------------|-----------|-------------|

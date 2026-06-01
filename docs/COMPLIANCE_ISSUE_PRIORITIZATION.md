@@ -1,7 +1,17 @@
 # Privacy / Regulatory / Compliance / Security — Issue Prioritization
 
-A prioritized view of the **open** GitHub issues that touch privacy, regulation,
-compliance, or security (PRCS), with the reasoning behind each rank.
+> ⚠️ **HISTORICAL — point-in-time snapshot (2026-05-31), BEFORE the Round 2
+> release shipped.** Every P0/P1 item below (#84 CORS fail-closed, #85 GDPR
+> data-subject rights, #42 Redis distributed state, #89 consent, #43 scaling
+> fixes) is now **implemented**; #93 and #94 were **closed by design**. Do not
+> read this as current state. For the as-built picture see
+> [`ROUND2_IMPLEMENTATION_WORKFLOW.md`](ROUND2_IMPLEMENTATION_WORKFLOW.md)
+> Section 0 and [`SECURITY_AND_COMPLIANCE.md`](SECURITY_AND_COMPLIANCE.md). This
+> file is retained only as a record of the prioritization reasoning.
+
+A prioritized view of the GitHub issues that touch privacy, regulation,
+compliance, or security (PRCS), with the reasoning behind each rank, **as of the
+snapshot date below**.
 
 > Snapshot date: 2026-05-31. Reviewed all 37 open issues; 14 are PRCS-relevant
 > (listed below), 4 are PRCS-adjacent (noted at the end), the rest are

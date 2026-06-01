@@ -315,11 +315,14 @@ holds **at every tier**:
 - **The operator is the data controller.** In HTTP/hosted mode, data stays on
   *their* infrastructure — and minimization means there's little to hold.
 
-> Less stored data → erasure is **tenant-scoped purge + TTL expiry today**;
-> formal per-user GDPR endpoints (Art. 15/17/20) are on the roadmap, tracked
-> honestly in the docs.
+> Less stored data → **less to erase**. Data-subject **access, portability, and
+> erasure** (GDPR Art. 15/17/20) ship as admin-gated `GET`/`DELETE /admin/data`,
+> backed by a pluggable `(tenantID, userID)` Exporter/Eraser registry that
+> enumerates every personal-data namespace; TTL expiry and minimization mean
+> there is little to hold in the first place.
 
-<!-- _footer: '↳ proof: docs/PRIVACY.md · docs/SECURITY_AND_COMPLIANCE.md "Privacy by Design" · issue #85' -->
+<!-- _footer: '↳ proof: internal/datasubject · internal/server/server.go (/admin/data) · docs/SECURITY.md GDPR table' -->
+<!-- Maintainer note: regenerate the derived compliance-deck.html / .pdf after editing this source. -->
 
 ---
 

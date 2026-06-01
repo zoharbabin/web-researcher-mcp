@@ -170,7 +170,7 @@ type PatentProvider interface {
 }
 ```
 
-Each patent provider carries metadata declaring its regional coverage and capabilities (`ProviderMeta`). The patent tool filters providers by region before calling them — e.g., if `patent_office=EP`, providers covering only US are skipped. Four patent providers are available: SearchAPI (via its native patent engine), EPO OPS (worldwide, OAuth2), The Lens (worldwide, token-based), and USPTO (US-only). Each gets an independent circuit breaker.
+Each patent provider carries metadata declaring its regional coverage and capabilities (`ProviderMeta`). The patent tool filters providers by region before calling them — e.g., if `patent_office=EP`, providers covering only US are skipped. The configured set is built by `AvailablePatentProviders()` and resolved by `NewPatentProviderByName()` (`internal/search/`) — currently SearchAPI (native patent engine), EPO OPS (worldwide, OAuth2), The Lens (worldwide, token-based), and USPTO (US-only). Each gets an independent circuit breaker.
 
 ### 3. Tiered Scraping Pipeline
 

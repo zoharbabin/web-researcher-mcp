@@ -64,10 +64,10 @@ tests/benchmark/  # Performance benchmarks
    - Write a `register<Name>(srv *mcp.Server, deps Dependencies)` function
    - Use `deps.Cache` for caching, `deps.Metrics` for telemetry, `deps.Auditor` for audit
    - Return validation errors via `toolError(msg)`, upstream errors via `upstreamErrorResponse(toolName, err)`, success via `structuredResult(jsonBytes)`
-   - Add `Annotations: readOnlyAnnotations(idempotent, openWorld)` to the tool definition
-2. Add `register<Name>(srv, deps)` to `RegisterAll()` in `internal/tools/registry.go`
-3. Add tests to `internal/tools/tools_test.go`
-4. Document the schema in `docs/TOOLS.md`
+   - Add `Annotations: readOnlyAnnotations(idempotent, openWorld)` to the tool definition. **Write tools** (mutate state, e.g. `memory_save`) use `writeAnnotations(idempotent)` instead — `ReadOnlyHint:false`, `DestructiveHint:false` (deletion is the `/admin/data` erasure endpoint, never a tool flag); add a `case` for the tool in `TestAllToolsHaveAnnotations`.
+2. Add `register<Name>(srv, deps)` to `RegisterAll()` in `internal/tools/registry.go`. **Regulated/opt-in tools** register conditionally (only when their feature dep is non-Noop) and gate every personal-data operation on `deps.Consent.HasConsent(ctx, consent.Purpose…)`; register the store's `Exporter`/`Eraser` into the `datasubject` registry in `main.go`.
+3. Add tests to `internal/tools/tools_test.go`; add the tool name to `expectedTools` (`metadata_test.go`). For a conditionally-registered tool, also wire its feature dep into `setupTestDeps()` so the drift gates exercise it.
+4. Document the schema in `docs/TOOLS.md` as a `## Tool N: \`name\`` section (the drift test parses these headers).
 
 ## How to Add a Search Provider
 
@@ -85,7 +85,10 @@ tests/benchmark/  # Performance benchmarks
 - **Audit**: every tool call logs `audit.AuditEvent{ToolName, Duration, Success, Metadata, ...}` via `deps.Auditor.Log()`
 - **SSRF protection**: `scraper.NewSSRFSafeClient()` validates all resolved IPs before connecting
 - **Content pipeline**: raw HTML → sanitize (bluemonday) → dedup (paragraph hashing) → truncate (sentence boundary) → quality score
-- **Tool annotations**: all tools use `readOnlyAnnotations(idempotent, openWorld)` — enforced by `TestAllToolsHaveAnnotations` in CI
+- **Tool annotations**: read tools use `readOnlyAnnotations(idempotent, openWorld)`; the rare write tool uses `writeAnnotations(idempotent)` (never destructive) — both enforced by `TestAllToolsHaveAnnotations` in CI
+- **Consent gate (regulated tools)**: `deps.Consent.HasConsent(ctx, consent.PurposeMemory|PurposeAnalytics|PurposeWorkspace)` is fail-closed; subject identity comes from `auth.UserIDFromContext`/`auth.TenantIDFromContext`, never a tool param
+- **Data-subject rights**: per-user stores register an `Exporter`/`Eraser` in `internal/datasubject` (keyed `(tenantID,userID)`) so `/admin/data` export+erasure reaches them
+- **Redis isolation**: `internal/redisbackend` is the ONLY package importing go-redis; constructed in one gated place in `main.go` (`Port>0 && REDIS_URL!=""`), fail-fast, encryption-mandatory
 
 ## Environment
 
@@ -124,7 +127,7 @@ Push a `v*` tag → CI runs GoReleaser → cross-platform binaries + Docker mult
 - Output schemas surface freshness/provenance where relevant (`source`, `citation`, cache `_meta`)
 - Destructive operations are **separate tools**, never a flag on a read tool
 - Auth/tenant scope is visible in the result or audit receipt (`tenant_id`, `user_id`)
-- `internal/tools/metadata_test.go` fails CI on drift: `TestToolsDocMatchesRegistry` (docs/TOOLS.md ↔ registry), `TestAllToolsHaveAnnotations`, `TestOutputSchemaMatchesResponse`, `TestToolDescriptionQuality`
+- `internal/tools/metadata_test.go` fails CI on drift: `TestToolsDocMatchesRegistry` (docs/TOOLS.md ↔ registry), `TestAllToolsHaveAnnotations`, `TestOutputSchemaMatchesResponse`, `TestToolDescriptionQuality`. These run in the full `test` job AND in a standalone always-run `docs-drift` job (`.github/workflows/ci.yml`) so they fire even on **docs-only** PRs — a `docs/TOOLS.md` edit that drifts from the registry fails CI even when no `.go` file changed.
 
 ### Deliberately EXCLUDE (these change → they drift):
 - No hardcoded counts (tool/provider count — `registry.go` / `search.SupportedProviders` are the truth)

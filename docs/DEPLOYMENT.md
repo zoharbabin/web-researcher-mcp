@@ -675,8 +675,10 @@ All admin endpoints require the `X-Admin-Key` header matching the `ADMIN_API_KEY
 | DELETE | `/admin/data?tenant_id=&user_id=` | **GDPR erasure** (Art. 17): purge the subject's data across all stores and withdraw their consent; records a `data.erasure` audit event |
 | POST | `/admin/consent` | Record a host-asserted consent decision. Body: `{tenant_id, user_id, purpose, granted, terms_version?}`. Only present when a regulated feature is enabled |
 | GET | `/admin/consent?tenant_id=&user_id=&purpose=` | Query the current consent decision for a subject + purpose |
+| POST | `/admin/workspace/members` | Add a member to a shared workspace (host's RBAC hook). Body: `{workspace_id, tenant_id, user_id}`. Only present when `WORKSPACES_ENABLED` |
+| DELETE | `/admin/workspace/members` | Remove a member from a shared workspace. Body: `{workspace_id, tenant_id, user_id}`. Only present when `WORKSPACES_ENABLED` |
 
-These are HTTP-only operational endpoints, not exposed via MCP tools. The `/admin/data` endpoints exist only when a personal-data store is registered; `/admin/consent` only when a regulated feature is enabled.
+These are HTTP-only operational endpoints, not exposed via MCP tools. The `/admin/data` endpoints exist only when a personal-data store is registered; `/admin/consent` and `/admin/workspace/members` only when the corresponding regulated feature is enabled.
 
 ---
 

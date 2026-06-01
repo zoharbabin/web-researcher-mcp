@@ -218,18 +218,20 @@ Raw HTML/Content
 
 ### Layer 5: Rate Limiting
 
-**Three-Tier Architecture:**
+**Rate-limit tiers** (`internal/ratelimit`, HTTP mode):
 
 | Tier | Scope | Default | Purpose |
 |------|-------|---------|---------|
 | Global | Per-server | 1000 req/s | Infrastructure protection |
 | Per-Tenant | Per JWT `tenant_id` claim (falls back to `default`) | 120 req/min | Fair use |
-| Per-Session | Per MCP session | 5 concurrent | Backpressure |
+| Per-IP (pre-auth) | Per client IP, outermost middleware | `0` = disabled | Shed unauthenticated floods |
 
 **Implementation:**
 - Global: `golang.org/x/time/rate` token bucket
-- Per-Tenant: `sync.Map[tenantID]*rate.Limiter` with TTL cleanup
-- Per-Session: Buffered channel as semaphore
+- Per-Tenant: `sync.Map[tenantID]*rate.Limiter` with TTL cleanup; daily quota (`AllowDaily`) optionally atomic across pods via Redis (`internal/redisbackend`)
+- Per-IP: `RATE_LIMIT_PER_IP` / `TRUST_PROXY`
+
+**Scrape concurrency (separate from rate limiting):** the scraper pipeline (`internal/scraper`) bounds in-flight scrapes with a buffered-channel semaphore of `MAX_SCRAPE_CONCURRENCY` slots (default 5) — backpressure on outbound fetches, not a per-session request limit.
 
 **Cost Quotas:**
 - Track tool/API call count per tenant per day (`DAILY_QUOTA_PER_TENANT`)

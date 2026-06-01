@@ -71,7 +71,7 @@ type FeatureConfig struct {
 	// non-profiling, so it defaults ON; the field is additive (omitted when
 	// nothing qualifies) and never re-ranks results.
 	SourceRecommendations bool
-	// GenerativeUI emits additive, AI-formatted renderable components (cards,
+	// GenerativeUI emits additive, mcp-auto-formatted renderable components (cards,
 	// tables) built deterministically from already-extracted data. Defaults
 	// OFF; when off, output is byte-for-byte unchanged.
 	GenerativeUI bool

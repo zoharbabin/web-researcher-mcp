@@ -127,6 +127,25 @@ jobs:
           path: coverage.out
           retention-days: 7
 
+  # Always-run doc/annotation drift gate. The full `test` job is skipped on
+  # docs-only PRs (code=false), which would let a docs/TOOLS.md edit drift from
+  # the registry undetected. This narrow, fast job runs on EVERY PR — including
+  # docs-only ones — so docs↔code drift always fails CI.
+  docs-drift:
+    name: Docs drift gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25"
+          cache: true
+      - name: Verify tool docs/annotations match the registry
+        run: |
+          go test -count=1 \
+            -run 'TestToolsDocMatchesRegistry|TestOutputSchemaMatchesResponse|TestToolDescriptionQuality|TestAllToolsHaveAnnotations|TestAllToolsRegistered|TestAllToolsHaveOutputSchema' \
+            ./internal/tools/...
+
   e2e:
     name: E2E (STDIO, network-free)
     needs: changes

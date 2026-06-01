@@ -62,7 +62,7 @@ Node.js process management is fundamentally fragile for long-lived servers launc
 
 **Takeaway**: If you're spending significant engineering effort working around your runtime's limitations, that's a signal to evaluate whether the runtime fits the problem.
 
-> Side note: looking for a better runtime I looked into both Go and Rust (isn't Rust aweoms!?). Go won primarily for its lightweight goroutines exceling at I/O-bound operations, and the mcp-go SDK is superbly maintained. 
+> Side note: looking for a better runtime I looked into both Go and Rust (isn't Rust awesome!?). Go won primarily for its lightweight goroutines excelling at I/O-bound operations, and the mcp-go SDK is superbly maintained.
 
 ### 2. Interface-Driven Design Enables Fearless Extension
 

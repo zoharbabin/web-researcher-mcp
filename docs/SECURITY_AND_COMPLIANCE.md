@@ -481,11 +481,18 @@ activation, user-owned data, tenant-scoped isolation, configurable retention,
 full deletion capability. Satisfies GDPR legitimate interest (user's own
 benefit) with transparency and control.
 
-**Tier 3 — Content generation and synthesis (when activated):**  
-AI-generated summaries, formatted bibliographies, generated UI components.
-Built with: content labeling (machine-readable `"generated": true` metadata),
-source attribution, accuracy verification hooks. Satisfies EU AI Act Art. 50,
-China GenAI labeling, South Korea AI Basic Act.
+**Tier 3 — Machine-formatted output (when activated):**  
+The server does **not** run any LLM or generate prose — synthesis is the client
+model's job (server-side summarization was deliberately not built; see #94).
+The only machine-shaped output is deterministic generative-UI components
+(`GENERATIVE_UI_ENABLED`): source cards and a quality-comparison table built by
+a deterministic transform of already-extracted data, plus consolidated
+bibliographies. Built with: a non-bypassable machine-readable marker
+(`"autoFormatted": true`, label `"mcp-auto-formatted"` — explicitly NOT
+"AI-generated", because no model is involved), source attribution back to the
+raw data, and raw content always present alongside. This transparency posture
+aligns with EU AI Act Art. 50 labeling expectations even though no AI content
+is produced.
 
 **Tier 4 — Personalization and recommendations (when activated):**  
 Cross-session intelligence, personalized ranking, smart suggestions. Built

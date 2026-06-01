@@ -128,7 +128,7 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 		// Additive, content-only enrichments. Both derive purely from the
 		// already-computed quality scores (no extra pass, no model call, no user
 		// behavior). Recommendations are advisory and never re-rank `sources`;
-		// components are AI-formatted renderables that never replace raw data.
+		// components are mcp-auto-formatted (deterministic, no LLM) renderables that never replace raw data.
 		scored := scoredSourcesFrom(sources)
 		if deps.Features.SourceRecommendations {
 			if recs := content.RecommendSources(scored, 3); recs != nil {
