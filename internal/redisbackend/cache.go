@@ -21,9 +21,7 @@ type SharedCache struct {
 
 // SharedCache returns a cross-pod cache layer for injection into cache.Hybrid.
 func (b *Backends) SharedCache() *SharedCache {
-	gcm, _ := cache.NewGCM(b.cfg.EncryptionKey)
-	gcmPrev, _ := cache.NewGCM(b.cfg.EncryptionKeyPrev)
-	return &SharedCache{b: b, gcm: gcm, gcmPrev: gcmPrev}
+	return &SharedCache{b: b, gcm: b.gcm, gcmPrev: b.gcmPrev}
 }
 
 func (c *SharedCache) redisKey(k string) string { return c.b.key("cache", k) }

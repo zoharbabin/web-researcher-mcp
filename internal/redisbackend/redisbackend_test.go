@@ -37,6 +37,17 @@ func TestConnectRequiresEncryptionKey(t *testing.T) {
 	}
 }
 
+func TestConnectRejectsMalformedKey(t *testing.T) {
+	mr := miniredis.RunT(t)
+	_, err := Connect(context.Background(), Config{
+		URL:           "redis://" + mr.Addr(),
+		EncryptionKey: "not-valid-hex", // wrong length / non-hex → must fail fast
+	})
+	if err == nil {
+		t.Fatal("expected fail-fast error for a malformed encryption key")
+	}
+}
+
 func TestConnectFailFast(t *testing.T) {
 	_, err := Connect(context.Background(), Config{
 		URL:           "redis://127.0.0.1:1", // nothing listening

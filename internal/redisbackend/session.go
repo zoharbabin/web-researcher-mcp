@@ -29,13 +29,11 @@ type SessionManager struct {
 
 // SessionManager builds a Redis-backed session manager.
 func (b *Backends) SessionManager() *SessionManager {
-	gcm, _ := cache.NewGCM(b.cfg.EncryptionKey)
-	gcmPrev, _ := cache.NewGCM(b.cfg.EncryptionKeyPrev)
 	ttl := b.cfg.SessionTTL
 	if ttl <= 0 {
 		ttl = 4 * time.Hour
 	}
-	return &SessionManager{b: b, gcm: gcm, gcmPrev: gcmPrev, ttl: ttl, maxPer: b.cfg.MaxSessionsPerTenant, ctx: context.Background()}
+	return &SessionManager{b: b, gcm: b.gcm, gcmPrev: b.gcmPrev, ttl: ttl, maxPer: b.cfg.MaxSessionsPerTenant, ctx: context.Background()}
 }
 
 func (m *SessionManager) blobKey(tenantID, sessionID string) string {

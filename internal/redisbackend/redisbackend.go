@@ -25,12 +25,15 @@ package redisbackend
 
 import (
 	"context"
+	"crypto/cipher"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/cache"
 )
 
 func newID() string     { return uuid.New().String() }
@@ -67,6 +70,12 @@ var ErrEncryptionRequired = errors.New("redisbackend: CACHE_ENCRYPTION_KEY is re
 type Backends struct {
 	client *redis.Client
 	cfg    Config
+	// gcm / gcmPrev are built and validated once in Connect (fail-fast on a
+	// malformed key), then shared by the cache/persist/session sub-stores so no
+	// constructor re-parses the key or risks a nil AEAD. gcmPrev may be nil
+	// (no previous key configured).
+	gcm     cipher.AEAD
+	gcmPrev cipher.AEAD
 }
 
 // Connect is the SOLE entry point. It validates config, opens the client, and
@@ -89,6 +98,19 @@ func Connect(ctx context.Context, cfg Config) (*Backends, error) {
 		cfg.DialTimeout = 5 * time.Second
 	}
 
+	// Build the AEADs ONCE here and fail fast on a malformed key, rather than
+	// letting each sub-store ignore cache.NewGCM's error and nil-panic later in
+	// encrypt/decrypt. EncryptionKey is required (checked above); EncryptionKeyPrev
+	// is optional (empty → nil AEAD, no fallback).
+	gcm, err := cache.NewGCM(cfg.EncryptionKey)
+	if err != nil || gcm == nil {
+		return nil, fmt.Errorf("redisbackend: invalid CACHE_ENCRYPTION_KEY: %w", err)
+	}
+	gcmPrev, err := cache.NewGCM(cfg.EncryptionKeyPrev)
+	if err != nil {
+		return nil, fmt.Errorf("redisbackend: invalid CACHE_ENCRYPTION_KEY_PREV: %w", err)
+	}
+
 	opts, err := redis.ParseURL(cfg.URL)
 	if err != nil {
 		return nil, fmt.Errorf("redisbackend: invalid REDIS_URL: %w", err)
@@ -105,7 +127,7 @@ func Connect(ctx context.Context, cfg Config) (*Backends, error) {
 		return nil, fmt.Errorf("redisbackend: cannot reach Redis at startup: %w", err)
 	}
 
-	return &Backends{client: client, cfg: cfg}, nil
+	return &Backends{client: client, cfg: cfg, gcm: gcm, gcmPrev: gcmPrev}, nil
 }
 
 // Close releases the Redis client.

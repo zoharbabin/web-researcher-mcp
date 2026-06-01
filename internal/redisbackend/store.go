@@ -21,11 +21,9 @@ type Store struct {
 }
 
 // PersistStore returns a persist.Store backed by Redis. Encryption is mandatory
-// (Connect already guaranteed a key), so this never stores plaintext.
+// (Connect built and validated the AEAD), so this never stores plaintext.
 func (b *Backends) PersistStore() *Store {
-	gcm, _ := cache.NewGCM(b.cfg.EncryptionKey)
-	gcmPrev, _ := cache.NewGCM(b.cfg.EncryptionKeyPrev)
-	return &Store{b: b, gcm: gcm, gcmPrev: gcmPrev}
+	return &Store{b: b, gcm: b.gcm, gcmPrev: b.gcmPrev}
 }
 
 func (s *Store) redisKey(k string) string { return s.b.key("persist", k) }

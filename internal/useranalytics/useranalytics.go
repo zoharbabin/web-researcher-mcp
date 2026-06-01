@@ -18,7 +18,6 @@ package useranalytics
 import (
 	"context"
 	"encoding/json"
-	"sort"
 	"time"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/persist"
@@ -114,8 +113,11 @@ func (r *StoreRecorder) Get(ctx context.Context, tenantID, userID string) (Summa
 	if err := json.Unmarshal(data, &s); err != nil {
 		return Summary{}, false
 	}
-	// Stable ordering for the recent-tools view.
-	sort.Strings(s.RecentTools)
+	// RecentTools is stored oldest→newest (append order in Record); return it
+	// most-recent-first so the "recent" semantics hold for the caller.
+	for i, j := 0, len(s.RecentTools)-1; i < j; i, j = i+1, j-1 {
+		s.RecentTools[i], s.RecentTools[j] = s.RecentTools[j], s.RecentTools[i]
+	}
 	return s, true
 }
 

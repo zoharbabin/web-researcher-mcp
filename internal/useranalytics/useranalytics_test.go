@@ -32,6 +32,21 @@ func TestRecordAndGet(t *testing.T) {
 	}
 }
 
+func TestRecentToolsMostRecentFirst(t *testing.T) {
+	r := newRec()
+	ctx := context.Background()
+	for _, tool := range []string{"web_search", "scrape_page", "news_search"} {
+		r.Record(ctx, "t1", "u1", tool)
+	}
+	s, ok := r.Get(ctx, "t1", "u1")
+	if !ok || len(s.RecentTools) != 3 {
+		t.Fatalf("expected 3 recent tools, got %+v", s.RecentTools)
+	}
+	if s.RecentTools[0] != "news_search" || s.RecentTools[2] != "web_search" {
+		t.Errorf("expected most-recent-first order, got %v", s.RecentTools)
+	}
+}
+
 func TestRecordIgnoresAnonymous(t *testing.T) {
 	r := newRec()
 	ctx := context.Background()

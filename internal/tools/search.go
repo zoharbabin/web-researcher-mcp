@@ -202,7 +202,8 @@ func auditToolCallQuery(ctx context.Context, deps Dependencies, toolName string,
 	// Anonymous (STDIO) tenant is ignored inside RecordTenantCall.
 	if deps.Metrics != nil {
 		provider, _ := extra["provider"].(string)
-		deps.Metrics.RecordTenantCall(auth.TenantIDFromContext(ctx), provider, duration, err != nil, false)
+		cacheHit, _ := extra["cache_hit"].(bool)
+		deps.Metrics.RecordTenantCall(auth.TenantIDFromContext(ctx), provider, duration, err != nil, cacheHit)
 	}
 
 	// Per-user analytics (#92): consent-gated profiling, distinct from the
