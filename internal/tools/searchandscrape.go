@@ -73,15 +73,26 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 		}
 
 		if len(searchResults) == 0 {
-			// Keep the success-path shape consistent so callers can always key
-			// off `status` and `trust` (even though there is no content here).
+			// Mirror the main success-path shape so callers can treat every
+			// search_and_scrape success uniformly — status/trust to key off,
+			// and the same summary/sizeMetadata blocks (all zero here).
 			output := map[string]any{
 				"query":           input.Query,
 				"status":          "complete",
 				"sources":         []any{},
 				"combinedContent": "",
 				"trust":           untrustedContentTrust,
-				"summary":         map[string]int{"urlsSearched": 0, "urlsScraped": 0, "processingTimeMs": 0},
+				"summary": map[string]any{
+					"urlsSearched":     0,
+					"urlsScraped":      0,
+					"urlsFailed":       0,
+					"processingTimeMs": int(time.Since(start).Milliseconds()),
+				},
+				"sizeMetadata": map[string]any{
+					"totalLength":     0,
+					"estimatedTokens": 0,
+					"sizeCategory":    content.SizeCategory(0),
+				},
 			}
 			jsonBytes, _ := json.Marshal(output)
 			return structuredResult(jsonBytes), nil, nil

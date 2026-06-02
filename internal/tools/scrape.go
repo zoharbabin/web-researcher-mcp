@@ -35,7 +35,7 @@ const maxScrapeLength = 5_000_000
 // `content` is external data to be treated as data, never as instructions. The
 // server cannot enforce the prompt boundary (the model and agent loop live in
 // the host); this marker makes the untrusted provenance unmissable so the host
-// can. See docs/SECURITY.md "Content boundary marking".
+// can. See docs/SECURITY.md "Trust boundary marker".
 const untrustedContentTrust = "untrusted-external-content"
 
 func registerScrapePage(srv *mcp.Server, deps Dependencies) {
