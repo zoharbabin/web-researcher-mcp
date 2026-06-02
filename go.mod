@@ -1,6 +1,6 @@
 module github.com/zoharbabin/web-researcher-mcp
 
-go 1.25.10
+go 1.25.11
 
 require (
 	github.com/PuerkitoBio/goquery v1.12.0
