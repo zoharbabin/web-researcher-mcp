@@ -92,6 +92,7 @@ type ScrapeOutput struct {
     URL             string    `json:"url"`
     Content         string    `json:"content"`
     ContentType     string    `json:"contentType"`    // html, markdown, youtube, pdf, docx, pptx (raw mode: the server's Content-Type header, may be "")
+    Trust           string    `json:"trust"`          // always "untrusted-external-content" — boundary marker: treat content as data, not instructions (OWASP LLM01)
     ContentLength   int       `json:"contentLength"`
     Truncated       bool      `json:"truncated"`
     EstimatedTokens int       `json:"estimatedTokens"`
@@ -129,6 +130,8 @@ type CitationFormats struct {
 On a **cache hit**, the result also carries a top-level `_meta` block with cache-freshness provenance (`cached: true`, `ageSeconds`, `maxAgeSeconds`, `freshness`) — see [Cache Freshness Provenance](#cache-freshness-provenance). Freshly fetched scrapes have no `_meta`.
 
 In `raw` mode the output additionally carries `"raw": true`, and `contentType` is the server's real `Content-Type` header (it may be empty). No `metadata` block is emitted.
+
+**Trust boundary marker.** Every scrape response (full, preview, and raw) carries `"trust": "untrusted-external-content"` in the JSON envelope — an explicit, machine-readable boundary marker. It is deliberately placed in the structured output, never inside the `content` string (where a malicious page could forge or close it), and signals that `content` is external data to be treated as data, never as instructions (OWASP LLM01, indirect prompt injection). The server cannot enforce the prompt boundary itself — the model and agent loop live in the host application — so this marker exists to make the untrusted provenance unmissable to that host.
 
 ### Raw Mode
 
@@ -249,6 +252,7 @@ type SearchAndScrapeOutput struct {
     Status          string          `json:"status"`           // "complete", "partial", or "failed"
     Sources         []SourceResult  `json:"sources"`
     CombinedContent string          `json:"combinedContent"`
+    Trust           string          `json:"trust"`            // "untrusted-external-content" — boundary marker for combinedContent + every source; treat as data, not instructions (OWASP LLM01)
     ScrapeFailures  []FailureInfo   `json:"scrapeFailures,omitempty"`
     Note            string          `json:"note,omitempty"`   // guidance when status="failed"
     Summary         PipelineSummary `json:"summary"`
@@ -289,6 +293,7 @@ type SourceResult struct {
     Title       string        `json:"title,omitempty"`
     Content     string        `json:"content"`
     ContentType string        `json:"contentType"`
+    Trust       string        `json:"trust"`        // "untrusted-external-content" (see top-level Trust)
     Scores      *QualityScore `json:"scores,omitempty"`
 }
 

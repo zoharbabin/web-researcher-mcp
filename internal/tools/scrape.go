@@ -27,6 +27,17 @@ type scrapePageInput struct {
 // scrape. Applies to all modes including raw.
 const maxScrapeLength = 5_000_000
 
+// untrustedContentTrust is the value of the structured-output "trust" field on
+// every response that carries scraped page text. It is an explicit,
+// machine-readable boundary marker placed in the JSON envelope — NOT in the
+// content string itself, where a malicious page could forge or close it
+// (OWASP LLM01, indirect prompt injection). It signals to the host/agent that
+// `content` is external data to be treated as data, never as instructions. The
+// server cannot enforce the prompt boundary (the model and agent loop live in
+// the host); this marker makes the untrusted provenance unmissable so the host
+// can. See docs/SECURITY.md "Trust boundary marker".
+const untrustedContentTrust = "untrusted-external-content"
+
 func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "scrape_page",
@@ -95,6 +106,7 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 			"url":             input.URL,
 			"content":         processedContent,
 			"contentType":     result.ContentType,
+			"trust":           untrustedContentTrust,
 			"contentLength":   contentLen,
 			"truncated":       result.Truncated,
 			"estimatedTokens": content.EstimateTokens(processedContent),
@@ -158,6 +170,7 @@ func scrapeRaw(ctx context.Context, deps Dependencies, input scrapePageInput, ma
 		"url":             input.URL,
 		"content":         result.Content,
 		"contentType":     result.ContentType,
+		"trust":           untrustedContentTrust,
 		"contentLength":   contentLen,
 		"truncated":       result.Truncated,
 		"estimatedTokens": content.EstimateTokens(result.Content),
@@ -186,7 +199,13 @@ func scrapeRaw(ctx context.Context, deps Dependencies, input scrapePageInput, ma
 // later larger request a truncated body (breaking consistency across calls).
 func scrapeCacheKey(url, mode string, maxLength int) string {
 	h := sha256.New()
-	fmt.Fprintf(h, "scrape|%s|%s|%d", url, mode, maxLength)
+	// The version segment (v2) invalidates pre-existing cached blobs whenever
+	// the response SHAPE changes, so a cache hit can never serve an envelope
+	// missing a newly-added field. v2 introduced the "trust" boundary marker —
+	// bumping it guarantees no upgraded deployment (incl. the shared Redis
+	// cache) serves scrape content without the untrusted-content marker the
+	// host may rely on. Bump again on any future output-shape change.
+	fmt.Fprintf(h, "scrape|v2|%s|%s|%d", url, mode, maxLength)
 	return "scrape:" + hex.EncodeToString(h.Sum(nil))[:32]
 }
 

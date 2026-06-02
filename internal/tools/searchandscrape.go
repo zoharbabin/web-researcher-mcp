@@ -73,13 +73,32 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 		}
 
 		if len(searchResults) == 0 {
+			// Mirror the main success-path shape so callers can treat every
+			// search_and_scrape success uniformly — status/trust to key off,
+			// and the same summary/sizeMetadata blocks (all zero here).
 			output := map[string]any{
 				"query":           input.Query,
+				"status":          "complete",
 				"sources":         []any{},
 				"combinedContent": "",
-				"summary":         map[string]int{"urlsSearched": 0, "urlsScraped": 0, "processingTimeMs": 0},
+				"trust":           untrustedContentTrust,
+				"summary": map[string]any{
+					"urlsSearched":     0,
+					"urlsScraped":      0,
+					"urlsFailed":       0,
+					"processingTimeMs": int(time.Since(start).Milliseconds()),
+				},
+				"sizeMetadata": map[string]any{
+					"totalLength":     0,
+					"estimatedTokens": 0,
+					"sizeCategory":    content.SizeCategory(0),
+				},
 			}
 			jsonBytes, _ := json.Marshal(output)
+			// Record metrics + audit like every other success path, so
+			// zero-result calls still appear in monitoring and audit trails.
+			deps.Metrics.RecordToolCall("search_and_scrape", time.Since(start), nil, "", false)
+			auditToolCallQuery(ctx, deps, "search_and_scrape", time.Since(start), nil, "", input.Query, map[string]any{"urls_scraped": 0})
 			return structuredResult(jsonBytes), nil, nil
 		}
 
@@ -99,6 +118,9 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 			"query":           input.Query,
 			"status":          status,
 			"combinedContent": combined,
+			// Boundary marker for combinedContent + every source: this is
+			// external page text, untrusted (treat as data, not instructions).
+			"trust": untrustedContentTrust,
 			"summary": map[string]any{
 				"urlsSearched":     len(searchResults),
 				"urlsScraped":      scraped,
@@ -166,6 +188,7 @@ type sourceOutput struct {
 	Title       string                `json:"title,omitempty"`
 	Content     string                `json:"content"`
 	ContentType string                `json:"contentType"`
+	Trust       string                `json:"trust"`
 	Scores      *content.QualityScore `json:"scores,omitempty"`
 }
 
@@ -256,6 +279,7 @@ func buildSourcesStructured(results []scrapeResult, query string, filterByQuery 
 			Title:       r.title,
 			Content:     r.content,
 			ContentType: r.cType,
+			Trust:       untrustedContentTrust,
 			Scores:      &score,
 		})
 		combinedParts = append(combinedParts, r.content)

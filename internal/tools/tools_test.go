@@ -52,6 +52,24 @@ func (m *mockProvider) News(_ context.Context, params search.NewsSearchParams) (
 
 func (m *mockProvider) Name() string { return "mock" }
 
+// emptyWebProvider returns no web results, to exercise the search_and_scrape
+// zero-results success branch.
+type emptyWebProvider struct{}
+
+func (m *emptyWebProvider) Web(_ context.Context, _ search.WebSearchParams) ([]search.SearchResult, error) {
+	return []search.SearchResult{}, nil
+}
+
+func (m *emptyWebProvider) Images(_ context.Context, _ search.ImageSearchParams) ([]search.ImageResult, error) {
+	return []search.ImageResult{}, nil
+}
+
+func (m *emptyWebProvider) News(_ context.Context, _ search.NewsSearchParams) ([]search.NewsResult, error) {
+	return []search.NewsResult{}, nil
+}
+
+func (m *emptyWebProvider) Name() string { return "empty" }
+
 type mockProviderWithURL struct {
 	url string
 }
@@ -618,6 +636,9 @@ func TestScrapePageTool(t *testing.T) {
 	if output["contentType"] != "html" {
 		t.Fatalf("expected contentType 'html', got %v", output["contentType"])
 	}
+	if output["trust"] != "untrusted-external-content" {
+		t.Fatalf("expected trust boundary marker 'untrusted-external-content', got %v", output["trust"])
+	}
 	contentStr, _ := output["content"].(string)
 	if !strings.Contains(contentStr, "Main Heading") {
 		t.Fatal("expected content to contain 'Main Heading'")
@@ -721,6 +742,11 @@ func TestScrapePageRawMode(t *testing.T) {
 	if raw, _ := output["raw"].(bool); !raw {
 		t.Fatal("expected raw flag true")
 	}
+	// Even (especially) in raw mode, unsanitized bytes must carry the untrusted
+	// boundary marker so the host treats them as data, not instructions.
+	if output["trust"] != "untrusted-external-content" {
+		t.Fatalf("raw mode must carry trust marker, got %v", output["trust"])
+	}
 }
 
 func TestScrapePageRawVsFullDistinctCache(t *testing.T) {
@@ -763,6 +789,14 @@ func TestScrapePageRawVsFullDistinctCache(t *testing.T) {
 
 	full := call("full")
 	raw := call("raw")
+	preview := call("preview")
+
+	// All three modes must carry the untrusted-content boundary marker.
+	for mode, out := range map[string]map[string]any{"full": full, "raw": raw, "preview": preview} {
+		if out["trust"] != "untrusted-external-content" {
+			t.Fatalf("mode %s missing trust marker, got %v", mode, out["trust"])
+		}
+	}
 
 	// Distinct cache entries: full is sanitized (no <h1> markup), raw is verbatim.
 	fullContent, _ := full["content"].(string)
@@ -824,8 +858,66 @@ func TestSearchAndScrapeTool(t *testing.T) {
 	if combined == "" {
 		t.Fatal("expected non-empty combinedContent")
 	}
+	if output["trust"] != "untrusted-external-content" {
+		t.Fatalf("expected trust boundary marker on combinedContent, got %v", output["trust"])
+	}
 	if !strings.Contains(combined, "Search Result Content") {
 		t.Fatal("expected combinedContent to include scraped content")
+	}
+	// Every source must also carry the per-source trust marker.
+	sources, _ := output["sources"].([]any)
+	if len(sources) == 0 {
+		t.Fatal("expected at least one source")
+	}
+	for i, s := range sources {
+		src, _ := s.(map[string]any)
+		if src["trust"] != "untrusted-external-content" {
+			t.Fatalf("source %d missing trust marker, got %v", i, src["trust"])
+		}
+	}
+}
+
+// TestSearchAndScrapeZeroResults exercises the len(searchResults)==0 success
+// branch: it must still carry the contract fields (status, trust) and mirror
+// the normal success shape (summary + sizeMetadata).
+func TestSearchAndScrapeZeroResults(t *testing.T) {
+	ctx := context.Background()
+	deps := setupTestDeps()
+	deps.Search = &emptyWebProvider{}
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "search_and_scrape",
+		Arguments: map[string]any{"query": "nothing matches this"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("unexpected error result: %v", res.Content)
+	}
+
+	var output map[string]any
+	if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &output); err != nil {
+		t.Fatalf("failed to parse output: %v", err)
+	}
+
+	if output["status"] != "complete" {
+		t.Fatalf("zero-results status should be 'complete', got %v", output["status"])
+	}
+	if output["trust"] != "untrusted-external-content" {
+		t.Fatalf("zero-results must carry trust marker, got %v", output["trust"])
+	}
+	if output["combinedContent"] != "" {
+		t.Fatalf("zero-results combinedContent should be empty, got %v", output["combinedContent"])
+	}
+	if _, ok := output["summary"].(map[string]any); !ok {
+		t.Fatalf("zero-results must include summary block, got %v", output["summary"])
+	}
+	if _, ok := output["sizeMetadata"].(map[string]any); !ok {
+		t.Fatalf("zero-results must include sizeMetadata block, got %v", output["sizeMetadata"])
 	}
 }
 

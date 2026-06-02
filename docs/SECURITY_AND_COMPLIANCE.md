@@ -59,8 +59,8 @@ This server operates in a unique threat environment:
 
 | Threat | Severity | Defense |
 |--------|----------|---------|
-| SSRF (Server-Side Request Forgery) | Critical | Custom `DialContext` validating all resolved IPs against 19 CIDR blocks + DNS rebinding prevention |
-| Prompt injection via scraped content | High | Content sanitization, size limits, boundary marking, `contentType` signaling |
+| SSRF (Server-Side Request Forgery) | Critical | Custom `DialContext` validating all resolved IPs against private/reserved CIDR blocks + cloud-metadata hostnames + DNS rebinding prevention |
+| Prompt injection via scraped content | High | Content sanitization, size limits, and a `"trust": "untrusted-external-content"` boundary marker in the JSON envelope (the host enforces the prompt boundary — the model lives there) |
 | Cost abuse via API key theft | High | Rate limiting (global + per-tenant + daily quota), circuit breakers |
 | Cross-tenant data leakage | High | Namespace isolation, per-tenant sessions, configurable cache isolation |
 | Denial of Service | High | HTTP timeouts, request size limits, bounded concurrency (semaphore) |
@@ -142,15 +142,23 @@ Scraped content passes through a configurable sanitization pipeline:
    decides how much content it needs based on context window and task.
    Defaults protect against context flooding; explicit overrides serve
    legitimate research needs (analyzing large codebases, full-page audits).
-4. **Structured output**: in sanitized modes the `contentType` field reflects
-   the extracted form (e.g. `text/markdown`); in raw mode it carries the
-   server's real `Content-Type` header (which may be empty) and the output sets
-   `"raw": true` — downstream consumers always know what they are handling.
+4. **Trust boundary marker**: every scrape response carries
+   `"trust": "untrusted-external-content"` in the JSON envelope (not inside the
+   `content` string, where a page could forge it) — an explicit signal to treat
+   `content` as data, never as instructions. Alongside it, `contentType` reports
+   the form: in sanitized modes the extracted type (e.g. `text/markdown`); in raw
+   mode the server's real `Content-Type` header (which may be empty) with
+   `"raw": true`. So downstream consumers always know both *what* they are
+   handling and *that it is untrusted*.
 
-The pipeline defends against prompt injection and context flooding by default,
+The pipeline reduces prompt-injection exposure and context flooding by default,
 while allowing full access to page source when the research task requires it.
-SSRF protection applies regardless of mode — the security boundary is what
-URLs you can reach, not what content you can read from them.
+One honest limit: the server **cannot** enforce the prompt boundary itself — the
+model and agent loop live in the host application, so neutralizing plain-text
+injection payloads is the host's job; the server's role is to sanitize, cap, and
+mark provenance so the host can. SSRF protection applies regardless of mode —
+the security boundary is what URLs you can reach, not what content you can read
+from them.
 
 ### Authentication (HTTP mode)
 
@@ -452,7 +460,7 @@ standards — not through per-framework checkbox exercises.
 | **GDPR / UK GDPR** | Privacy | Data minimization, purpose limitation, TTL caches; data-subject access/portability/erasure endpoints (`/admin/data`); consent record-verify-honor for regulated features |
 | **OWASP MCP Cheat Sheet** | MCP-specific | SSRF protection, content sanitization, tool annotations, supply chain |
 | **OWASP Top 10 LLM (2025)** | AI security | Prompt injection defense, bounded agency, supply chain verification |
-| **OWASP Agentic Top 10 (2026)** | AI agent security | Read-only tools, privilege separation, content boundaries |
+| **OWASP Agentic Top 10 (2026 draft)** | AI agent security — **tool-provider slice only** | What this server owns: read-only-default tool annotations (writes non-destructive; deletion is a separate endpoint), JWT scope authorization, consent-gated + tenant-isolated + erasable memory/workspace, SSRF + HTML sanitization + untrusted-content marker, rate limits + circuit breakers + size caps, per-call audit with request-ID correlation. **Host-owned (not us):** goal/intent manipulation, cascading hallucination, multi-agent trust, the agent permission model — those live in the client that drives the tools. |
 | **NIST AI RMF** | AI governance | Risk-aware design, transparency, continuous monitoring |
 | **EU AI Act** | EU regulation | Transparency, accuracy, robustness, tiered compliance model |
 | **EU Cyber Resilience Act** | Software supply chain | SBOM, signed releases, vulnerability handling, PSIRT, 5yr updates |
@@ -524,6 +532,54 @@ These apply regardless of which features are active:
    "we'll add consent management later."
 6. **Read the code, not the marketing.** Our compliance claims are verifiable
    in source code. Interfaces, tests, and architecture enforce what docs promise.
+
+---
+
+## Operator & Hosted-Service Responsibilities
+
+The tiered model and Compliance Principles above describe the technical controls
+this project **ships**. They are necessary but not sufficient: every framework on
+the Standards Alignment table also has an organizational, process half that a
+source repository cannot contain. **"Aligned with" means this project provides
+the technical controls a standard requires — never that an organization has been
+audited and certified against it.** A binary can't clear a hospital's HIPAA bar;
+it gives that review its technical-controls evidence.
+
+Responsibility splits three ways.
+
+### Shared-responsibility model
+
+| The project ships (in code) | The operator owns (process & controller role) | A hosted SaaS additionally owns (org program) |
+|-----------------------------|-----------------------------------------------|-----------------------------------------------|
+| SSRF-safe outbound client (`internal/scraper/ssrf.go`) | Being the **data controller** for data they persist | Staff trained on the controls (e.g. HIPAA workforce training) |
+| AES-256-GCM at rest (opt-in via `CACHE_ENCRYPTION_KEY`) + TLS in transit | Generating & rotating encryption / admin keys | Controls **audited operating over a period** (SOC 2 Type II: 3–12 mo + an auditor) |
+| Secrets-masked audit logging (`internal/audit`) | Monitoring & alerting on the audit stream; setting the retention **schedule** (the code gives TTL knobs, not policy) | 24/7 incident-response capability and on-call |
+| Tenant isolation, OAuth 2.1 / JWKS / revocation, rate limits | Access reviews; an incident-response runbook; **executing** breach notification | Signed customer DPAs / BAAs at scale; a named DPO |
+| Consent + erasure **primitives** (`internal/consent`, `internal/datasubject`, `/admin/data`) | Choosing lawful basis; running DPIAs; maintaining a Record of Processing Activities (GDPR Art. 30) | The actual SOC 2 Type II / HITRUST / ISO 27001 **audit engagement** |
+| SBOM + cosign signatures + CodeQL + `govulncheck` + a PSIRT process (root `SECURITY.md`) | Signing BAAs (HIPAA) / DPAs (GDPR) with covered entities and their own users | Management review, Statement of Applicability, continual improvement (ISO 27001 Clauses 4–10) |
+
+### To actually reach a given standard, the deploying entity must…
+
+- **SOC 2 Type II** — engage an auditor to observe the shipped controls operating
+  over a 3–12 month period, plus a management assertion. The code supplies the
+  control evidence (OAuth, audit logs, change history); it is not the audited program.
+- **HIPAA** — sign a **Business Associate Agreement** with each covered entity,
+  train its workforce, run a risk analysis, and operate a breach-notification
+  process. The project ships the Technical Safeguards (encryption, audit controls,
+  access controls); the Administrative Safeguards are the operator's.
+- **GDPR / UK GDPR** — name the **data controller**, choose and document a lawful
+  basis, run DPIAs where required, maintain a Record of Processing Activities
+  (Art. 30), and execute 72-hour breach reporting (Art. 33). The project ships the
+  data-subject-rights primitives (access/portability/erasure via `/admin/data`,
+  consent record-verify-honor) — the operator owns the controller obligations.
+- **ISO 27001** — operate an Information Security Management System: documented
+  scope, risk-treatment methodology, Statement of Applicability, internal-audit
+  program, and management review (Clauses 4–10). The project satisfies the
+  relevant Annex A technical controls only.
+
+This split is not a disclaimer — it is the honest shape of "compliance as
+architecture." The repository can make the technical half **provably** true; the
+operating organization owns the process half. Both are required.
 
 ---
 
