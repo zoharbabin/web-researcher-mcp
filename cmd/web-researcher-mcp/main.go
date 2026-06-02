@@ -372,8 +372,12 @@ func main() {
 			grant := func(p consent.Purpose) {
 				// consent.GrantIfAbsent enforces the cardinal rule: grant only
 				// when no record exists, so a prior withdrawal is never resurrected.
-				wrote, _ := consent.GrantIfAbsent(bg, consentManager, "default", cfg.StdioUserID, p,
+				wrote, err := consent.GrantIfAbsent(bg, consentManager, "default", cfg.StdioUserID, p,
 					"stdio_bootstrap", time.Now().UTC().Format(time.RFC3339))
+				if err != nil {
+					logger.Warn("stdio consent auto-grant failed", "user", cfg.StdioUserID, "purpose", string(p), "err", err)
+					return
+				}
 				if !wrote {
 					return
 				}

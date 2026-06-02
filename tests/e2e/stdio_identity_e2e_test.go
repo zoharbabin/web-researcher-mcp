@@ -7,12 +7,12 @@ import (
 	"testing"
 )
 
-// TestSTDIOUserIdentity_E2E proves the STDIO_USER_ID feature end-to-end over the
+// TestSecurity_STDIO_UserIdentity proves the STDIO_USER_ID feature end-to-end over the
 // real binary: with the var set (+ MEMORY_ENABLED) the per-user memory feature is
 // reachable in STDIO (consent auto-granted, so memory_save succeeds and
 // memory_recall returns the note); without the var the SAME build denies it
 // (anonymous → fail-closed consent), proving the default behavior is unchanged.
-func TestSTDIOUserIdentity_E2E(t *testing.T) {
+func TestSecurity_STDIO_UserIdentity(t *testing.T) {
 	parse := func(raw json.RawMessage) map[string]any {
 		t.Helper()
 		var res struct {

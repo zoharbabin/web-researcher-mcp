@@ -375,7 +375,7 @@ Additive output features (content-only, no personal data, no model calls):
 | `SOURCE_RECOMMENDATIONS` | Surface advisory "related higher-quality sources" on `search_and_scrape`, derived from the existing transparent quality signals. Content-based; never re-ranks or hides results. Set `false` to omit the field | `true` |
 | `GENERATIVE_UI_ENABLED` | Emit additive, deterministic `mcp-auto-formatted` components (source cards, quality-comparison table) built from already-extracted data — no model call. Off → output byte-for-byte unchanged | `false` |
 
-Regulated features (HTTP mode; per-user personal data; each activates the consent subsystem and is covered by the data-subject rights endpoints). All default off:
+Regulated features (per-user personal data; each activates the consent subsystem and is covered by the data-subject rights endpoints). All default off. Consent is normally host-asserted over HTTP via `POST /admin/consent`; in STDIO it is reachable only by setting `STDIO_USER_ID` (see that row). Per-variable rows note any mode-specific behavior:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
