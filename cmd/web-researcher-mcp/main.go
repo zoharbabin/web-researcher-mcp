@@ -349,7 +349,9 @@ func main() {
 	defer cancel()
 
 	if cfg.Port > 0 {
-		authMw := auth.NewMiddlewareWithStore(cfg.OAuth, persistStore)
+		// Attach the auditor so 401s emit auth.failure events (token spray /
+		// admin-key guessing become detectable). Nil-safe.
+		authMw := auth.NewMiddlewareWithStore(cfg.OAuth, persistStore).WithAuditor(auditor)
 
 		// Scope gate (C4): a server-side receiving middleware that enforces OAuth
 		// scopes on tools/call. Registered ONLY in HTTP mode so the STDIO path is
@@ -363,6 +365,17 @@ func main() {
 					if params, ok := req.GetParams().(*mcp.CallToolParamsRaw); ok {
 						scopes := auth.ScopesFromContext(reqCtx)
 						if err := authMw.EnforceScopes(scopes, params.Name); err != nil {
+							// Authorization denial (insufficient scope) — audit it
+							// for accountability, alongside the 401 authn failures.
+							ev := audit.NewEvent("auth.failure", auth.TenantIDFromContext(reqCtx), auth.UserIDFromContext(reqCtx))
+							ev.Success = false
+							ev.ErrorCode = "insufficient_scope"
+							ev.ToolName = params.Name
+							ev.SourceIP = auth.SourceIPFromContext(reqCtx)
+							if rid := auth.RequestIDFromContext(reqCtx); rid != "" {
+								ev.RequestID = rid
+							}
+							auditor.Log(ev)
 							res := &mcp.CallToolResult{IsError: true}
 							res.Content = []mcp.Content{&mcp.TextContent{Text: "access denied: " + err.Error()}}
 							return res, nil

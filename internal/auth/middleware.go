@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zoharbabin/web-researcher-mcp/internal/audit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/config"
 	"github.com/zoharbabin/web-researcher-mcp/internal/persist"
 )
@@ -28,6 +29,7 @@ const (
 	ContextKeySessionID contextKey = "sessionID"
 	ContextKeyScopes    contextKey = "scopes"
 	ContextKeyRequestID contextKey = "requestID"
+	ContextKeySourceIP  contextKey = "sourceIP"
 )
 
 // Middleware provides JWT-based authentication for HTTP handlers.
@@ -37,6 +39,34 @@ type Middleware struct {
 	revoked    *revocationStore
 	httpClient *http.Client
 	stopCh     chan struct{}
+	auditor    audit.Auditor // optional; nil-safe via auditFailure
+}
+
+// WithAuditor attaches an audit sink so authentication/authorization rejections
+// emit an "auth.failure" event (token spray / admin-key guessing become
+// detectable). Returns the receiver for fluent wiring. Passing nil (or never
+// calling this) keeps the zero-config behavior — no auditing. Never logs token
+// material; only the reason, SourceIP, and the request's correlation ID.
+func (m *Middleware) WithAuditor(a audit.Auditor) *Middleware {
+	m.auditor = a
+	return m
+}
+
+// auditFailure emits a single auth.failure event. Nil-safe: a no-op when no
+// auditor is wired. reason is a short, non-sensitive cause (never the token).
+func (m *Middleware) auditFailure(r *http.Request, reason string) {
+	if m.auditor == nil {
+		return
+	}
+	ctx := r.Context()
+	ev := audit.NewEvent("auth.failure", TenantIDFromContext(ctx), UserIDFromContext(ctx))
+	ev.Success = false
+	ev.ErrorCode = reason
+	ev.SourceIP = SourceIPFromContext(ctx)
+	if rid := RequestIDFromContext(ctx); rid != "" {
+		ev.RequestID = rid
+	}
+	m.auditor.Log(ev)
 }
 
 // NewMiddleware creates a new auth middleware. If the config has a non-empty
@@ -96,18 +126,21 @@ func (m *Middleware) Wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
+			m.auditFailure(r, "missing_authorization_header")
 			http.Error(w, "missing authorization header", http.StatusUnauthorized)
 			return
 		}
 
 		token := strings.TrimPrefix(authHeader, "Bearer ")
 		if token == authHeader {
+			m.auditFailure(r, "invalid_authorization_scheme")
 			http.Error(w, "invalid authorization scheme", http.StatusUnauthorized)
 			return
 		}
 
 		claims, err := m.validateToken(token)
 		if err != nil {
+			m.auditFailure(r, "invalid_token")
 			http.Error(w, "invalid token: "+err.Error(), http.StatusUnauthorized)
 			return
 		}
@@ -616,6 +649,18 @@ func RequestIDFromContext(ctx context.Context) string {
 	if v := ctx.Value(ContextKeyRequestID); v != nil {
 		if id, ok := v.(string); ok {
 			return id
+		}
+	}
+	return ""
+}
+
+// SourceIPFromContext returns the client IP attached by the HTTP ingress
+// middleware (proxy-aware), or "" if none is set (e.g. STDIO transport, where
+// there is no network peer). Empty-safe for nil values and unexpected types.
+func SourceIPFromContext(ctx context.Context) string {
+	if v := ctx.Value(ContextKeySourceIP); v != nil {
+		if ip, ok := v.(string); ok {
+			return ip
 		}
 	}
 	return ""
