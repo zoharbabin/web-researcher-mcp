@@ -1,7 +1,7 @@
 ---
 marp: true
 title: "Compliance as Architecture"
-description: "A solo-maintained open-source project aligned with 23 security & privacy standards — without writing 23 checklists. How architecture, not paperwork, keeps a small Go repo up to code; most slides link to the file that backs the claim, and a CI drift gate keeps the tool docs honest against the code."
+description: "A solo-maintained open-source project aligned with 23 security & privacy standards — without writing 23 checklists. How architecture, not paperwork, keeps a small Go repo up to code; most slides name the file that backs the claim, and a CI drift gate keeps the tool docs honest against the code."
 author: web-researcher-mcp
 paginate: true
 size: 16:9
@@ -177,7 +177,7 @@ style: |
 
 <span class="tagline">How good architecture — not a pile of paperwork — keeps a small open-source project audit-ready across the world's privacy and security rules, with no compliance team and no audit budget.</span>
 
-`↳ the claims link to the files that back them · a CI drift gate keeps the tool docs honest against the code`
+`↳ each technical claim names the file that backs it · a CI drift gate keeps the tool docs honest against the code`
 
 ---
 
@@ -419,8 +419,8 @@ data are opt-in, consent-gated, and erasable — not absent.*
 
 # Read the code, not the marketing.
 
-The claims here link to the files that back them — open any one and check. And a
-CI drift gate keeps the tool docs honest against the code.
+Each technical claim here names the file that backs it — open any one and check.
+And a CI drift gate keeps the tool docs honest against the code.
 
 <br>
 
