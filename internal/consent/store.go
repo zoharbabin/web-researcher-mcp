@@ -50,10 +50,11 @@ func (m *StoreManager) Record(ctx context.Context, rec Record) error {
 // withdrawn consent. GrantIfAbsent never touches an existing record — granted or
 // withdrawn — so a user's withdrawal sticks across restarts. decidedFrom labels
 // the provenance (e.g. "stdio_bootstrap"). It returns wrote=true ONLY when a
-// granted record is actually readable back afterward — so a pre-existing record,
-// an unknown purpose, or an inert manager (Noop, which persists nothing) all
-// return false. Callers can therefore gate a consent.grant audit event on
-// wrote==true without emitting a phantom grant.
+// granted record is actually readable back afterward — so a pre-existing record
+// or an inert manager (Noop, which persists nothing) return (false, nil). An
+// unknown purpose returns (false, ErrUnknownPurpose) — the error is propagated,
+// not silent. Callers can gate a consent.grant audit event on wrote==true
+// without emitting a phantom grant.
 func GrantIfAbsent(ctx context.Context, m Manager, tenantID, userID string, purpose Purpose, decidedFrom, decidedAt string) (bool, error) {
 	if _, ok := m.Query(ctx, tenantID, userID, purpose); ok {
 		return false, nil // a decision already exists (granted OR withdrawn) — leave it
