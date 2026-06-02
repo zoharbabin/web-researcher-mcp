@@ -200,3 +200,44 @@ func asSessionNotFound(err error, target **session.SessionNotFoundError) bool {
 	}
 	return false
 }
+
+// TestSessionPerUserCapEvictsWithinUser verifies the Redis backend enforces the
+// session cap PER (tenant,user) — parity with the in-memory manager — and never
+// evicts another user's sessions.
+func TestSessionPerUserCapEvictsWithinUser(t *testing.T) {
+	mr := miniredis.RunT(t)
+	b, err := Connect(context.Background(), Config{
+		URL:                  "redis://" + mr.Addr(),
+		EncryptionKey:        testKey,
+		SessionTTL:           time.Hour,
+		MaxSessionsPerTenant: 2,
+	})
+	if err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	t.Cleanup(func() { _ = b.Close() })
+	m := b.SessionManager()
+
+	// alice creates 3 sessions with a cap of 2 → oldest evicted, 2 remain.
+	a1, _ := m.Create("t1", "alice")
+	a2, _ := m.Create("t1", "alice")
+	a3, _ := m.Create("t1", "alice")
+
+	if _, ok := m.GetIndex("t1", "alice", a1.ID); ok {
+		t.Error("alice's oldest session should have been evicted")
+	}
+	if _, ok := m.GetIndex("t1", "alice", a3.ID); !ok {
+		t.Error("alice's newest session must survive")
+	}
+	_ = a2
+
+	// bob is a different user — his budget is independent and untouched.
+	b1, _ := m.Create("t1", "bob")
+	b2, _ := m.Create("t1", "bob")
+	if _, ok := m.GetIndex("t1", "bob", b1.ID); !ok {
+		t.Error("bob's sessions must not be evicted by alice's activity")
+	}
+	if _, ok := m.GetIndex("t1", "bob", b2.ID); !ok {
+		t.Error("bob's second session must survive (his own cap not yet hit)")
+	}
+}

@@ -360,6 +360,13 @@ func main() {
 						ev := audit.NewEvent("tool_call", auth.TenantIDFromContext(reqCtx), auth.UserIDFromContext(reqCtx))
 						ev.Success = false
 						ev.ErrorCode = "daily_call_limit"
+						ev.SourceIP = auth.SourceIPFromContext(reqCtx)
+						if rid := auth.RequestIDFromContext(reqCtx); rid != "" {
+							ev.RequestID = rid
+						}
+						if params, ok := req.GetParams().(*mcp.CallToolParamsRaw); ok {
+							ev.ToolName = params.Name
+						}
 						auditor.Log(ev)
 						res := &mcp.CallToolResult{IsError: true}
 						res.Content = []mcp.Content{&mcp.TextContent{Text: "daily call limit reached for this user; try again after the UTC day rolls over"}}

@@ -102,8 +102,11 @@ func (m *SessionManager) load(tenantID, userID, sessionID string) (*session.Sess
 
 func (m *SessionManager) Create(tenantID, userID string) (*session.SessionIndex, error) {
 	if m.maxPer > 0 {
-		if n, err := m.b.client.SCard(m.ctx, m.tenantSetKey(tenantID)).Result(); err == nil && int(n) >= m.maxPer {
-			m.evictOldest(tenantID)
+		// Per-(tenant,user) cap — parity with the in-memory manager. Count only
+		// this user's own sessions (members prefixed "userID:") and evict within
+		// the user, so one user can't evict another's sessions.
+		if m.userSessionCount(tenantID, normUser(userID)) >= m.maxPer {
+			m.evictOldestForUser(tenantID, normUser(userID))
 		}
 	}
 	sess := &session.Session{
@@ -207,7 +210,9 @@ func (m *SessionManager) Delete(tenantID, userID, sessionID string) {
 	// Also delete the pre-user-binding blob key (tenant:sessionID) so tenant
 	// erasure / admin flush removes legacy blobs too, not just TTL-expires them.
 	pipe.Del(m.ctx, m.b.key("session", tenantID+":"+sessionID))
-	pipe.SRem(m.ctx, m.tenantSetKey(tenantID), setMember(userID, sessionID))
+	// Remove both the new member form ("userID:sessionID") and the legacy bare
+	// "sessionID" member, so no stale index entry inflates SCard/eviction.
+	pipe.SRem(m.ctx, m.tenantSetKey(tenantID), setMember(userID, sessionID), sessionID)
 	_, _ = pipe.Exec(m.ctx)
 }
 
@@ -289,20 +294,37 @@ func (m *SessionManager) ActiveCount() int {
 
 func (m *SessionManager) Close() {} // client lifecycle owned by Backends.Close
 
-// evictOldest removes the least-recently-used session for a tenant when the cap
-// is hit, mirroring the in-memory manager's eviction.
-func (m *SessionManager) evictOldest(tenantID string) {
-	idxs := m.ListByTenant(tenantID)
-	if len(idxs) == 0 {
-		return
+// userSessionCount counts the sessions owned by (tenantID,userID) — members of
+// the tenant index whose owner matches.
+func (m *SessionManager) userSessionCount(tenantID, userID string) int {
+	members, err := m.b.client.SMembers(m.ctx, m.tenantSetKey(tenantID)).Result()
+	if err != nil {
+		return 0
 	}
-	oldest := idxs[0]
-	for _, idx := range idxs[1:] {
-		if idx.LastUsed.Before(oldest.LastUsed) {
+	n := 0
+	for _, member := range members {
+		if uid, _ := splitMember(member); uid == userID {
+			n++
+		}
+	}
+	return n
+}
+
+// evictOldestForUser removes the least-recently-used session belonging to the
+// given (tenant,user) when their cap is hit — never another user's session.
+func (m *SessionManager) evictOldestForUser(tenantID, userID string) {
+	var oldest *session.SessionIndex
+	for _, idx := range m.ListByTenant(tenantID) {
+		if idx.CreatedByUserID != userID {
+			continue
+		}
+		if oldest == nil || idx.LastUsed.Before(oldest.LastUsed) {
 			oldest = idx
 		}
 	}
-	m.Delete(tenantID, oldest.CreatedByUserID, oldest.ID)
+	if oldest != nil {
+		m.Delete(tenantID, oldest.CreatedByUserID, oldest.ID)
+	}
 }
 
 var _ session.Manager = (*SessionManager)(nil)
