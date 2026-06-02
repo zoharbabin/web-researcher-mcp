@@ -150,6 +150,13 @@ func TestGrantIfAbsent(t *testing.T) {
 		}
 	})
 
+	t.Run("Noop manager → no write, no phantom grant", func(t *testing.T) {
+		wrote, err := GrantIfAbsent(ctx, NewNoop(), "default", "alice", PurposeMemory, "stdio_bootstrap", now)
+		if err != nil || wrote {
+			t.Fatalf("Noop must report wrote=false (nothing persisted), got wrote=%v err=%v", wrote, err)
+		}
+	})
+
 	t.Run("CARDINAL: a prior withdrawal is NOT resurrected", func(t *testing.T) {
 		m := newManager()
 		// User explicitly withdrew memory consent.

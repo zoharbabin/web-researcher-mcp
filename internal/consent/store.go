@@ -49,17 +49,26 @@ func (m *StoreManager) Record(ctx context.Context, rec Record) error {
 // record, an unconditional re-grant on every startup would silently resurrect a
 // withdrawn consent. GrantIfAbsent never touches an existing record — granted or
 // withdrawn — so a user's withdrawal sticks across restarts. decidedFrom labels
-// the provenance (e.g. "stdio_bootstrap"). It returns false (no write) when a
-// record already exists, on an unknown purpose, or against a Noop manager.
+// the provenance (e.g. "stdio_bootstrap"). It returns wrote=true ONLY when a
+// granted record is actually readable back afterward — so a pre-existing record,
+// an unknown purpose, or an inert manager (Noop, which persists nothing) all
+// return false. Callers can therefore gate a consent.grant audit event on
+// wrote==true without emitting a phantom grant.
 func GrantIfAbsent(ctx context.Context, m Manager, tenantID, userID string, purpose Purpose, decidedFrom, decidedAt string) (bool, error) {
 	if _, ok := m.Query(ctx, tenantID, userID, purpose); ok {
 		return false, nil // a decision already exists (granted OR withdrawn) — leave it
 	}
-	err := m.Record(ctx, Record{
+	if err := m.Record(ctx, Record{
 		TenantID: tenantID, UserID: userID, Purpose: purpose,
 		Granted: true, DecidedAt: decidedAt, DecidedFrom: decidedFrom,
-	})
-	return err == nil, err
+	}); err != nil {
+		return false, err
+	}
+	// Confirm the write persisted before reporting it: a Noop manager (or any
+	// inert impl) accepts Record but stores nothing, so the re-read is what makes
+	// the "no phantom grant / no phantom audit event" contract true.
+	rec, ok := m.Query(ctx, tenantID, userID, purpose)
+	return ok && rec.Granted, nil
 }
 
 func (m *StoreManager) Query(ctx context.Context, tenantID, userID string, purpose Purpose) (Record, bool) {
