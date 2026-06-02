@@ -384,8 +384,11 @@ Regulated features (HTTP mode; per-user personal data; each activates the consen
 | `USER_ANALYTICS_ENABLED` | Opt-in per-user usage analytics (`get_my_analytics`). Consent-gated on the `analytics` purpose | `false` |
 | `WORKSPACES_ENABLED` | Opt-in shared research workspaces (`workspace_contribute`/`workspace_read` + `/admin/workspace/members`). Consent-gated on the `workspace` purpose; membership host-managed | `false` |
 | `WORKSPACE_TTL` | Max lifetime of shared-workspace data | `720h` (30d) |
+| `STDIO_USER_ID` | **STDIO-only.** Names the single local user so the per-user regulated features (memory, analytics) work without OAuth. When set (+ the feature flag), consent for `memory`/`analytics` (never `workspace`) is auto-granted at startup — grant-only-if-absent (a later withdrawal is never re-granted), audited via `consent.grant`. Data keyed `(tenant=default, user=<value>)`. Allowed: `A-Za-z0-9._@-`, len 1–128, not `anonymous`. Ignored in HTTP mode | _(unset → `anonymous`)_ |
 
 > Enabling any regulated feature activates the consent subsystem automatically — there is no standalone `CONSENT_ENABLED` knob. Consent is asserted by the host (via `POST /admin/consent`) and recorded/verified/honored by the server. See `docs/SECURITY.md` and `docs/SECURITY_AND_COMPLIANCE.md`.
+>
+> **STDIO single-user exception:** STDIO has no OAuth, so by default the user is `anonymous` and the per-user regulated features (memory, analytics) stay off (fail-closed). Setting `STDIO_USER_ID` is the operator asserting their own identity — in that single-user model the host, operator, and subject are the same person, so the server auto-grants consent for `memory`/`analytics` (never `workspace`) at startup. The grant is **grant-only-if-absent**: a consent decision the user later changes (e.g. a withdrawal recorded out-of-band) is never overwritten on restart, and each grant emits an audited `consent.grant` event.
 
 ### Observability
 

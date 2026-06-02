@@ -616,6 +616,15 @@ func base64URLDecode(s string) ([]byte, error) {
 
 // --- Context helpers ---
 
+// WithIdentity returns ctx with the tenant and user identity attached, using the
+// same context keys the HTTP Wrap path sets. Exported so non-HTTP transports
+// (e.g. the STDIO single-user identity injector in main.go) can establish an
+// identity without duplicating the unexported context-key constants.
+func WithIdentity(ctx context.Context, tenantID, userID string) context.Context {
+	ctx = context.WithValue(ctx, ContextKeyTenantID, tenantID)
+	return context.WithValue(ctx, ContextKeyUserID, userID)
+}
+
 func TenantIDFromContext(ctx context.Context) string {
 	if v := ctx.Value(ContextKeyTenantID); v != nil {
 		return v.(string)

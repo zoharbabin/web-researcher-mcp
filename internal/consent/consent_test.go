@@ -121,3 +121,53 @@ func TestPurposeValid(t *testing.T) {
 		t.Error("expected unknown purpose to be invalid")
 	}
 }
+
+// TestGrantIfAbsent covers the bootstrap auto-grant primitive. The cardinal case
+// is "withdrawal sticks": a prior withdrawal must NOT be resurrected by a later
+// GrantIfAbsent (the exact correctness rule the STDIO_USER_ID auto-grant relies on).
+func TestGrantIfAbsent(t *testing.T) {
+	ctx := context.Background()
+	now := "2026-06-02T00:00:00Z"
+
+	t.Run("grants when absent", func(t *testing.T) {
+		m := newManager()
+		wrote, err := GrantIfAbsent(ctx, m, "default", "alice", PurposeMemory, "stdio_bootstrap", now)
+		if err != nil || !wrote {
+			t.Fatalf("expected a write, got wrote=%v err=%v", wrote, err)
+		}
+		rec, ok := m.Query(ctx, "default", "alice", PurposeMemory)
+		if !ok || !rec.Granted || rec.DecidedFrom != "stdio_bootstrap" {
+			t.Errorf("expected granted bootstrap record, got %+v ok=%v", rec, ok)
+		}
+	})
+
+	t.Run("idempotent: no second write when already granted", func(t *testing.T) {
+		m := newManager()
+		_, _ = GrantIfAbsent(ctx, m, "default", "alice", PurposeMemory, "stdio_bootstrap", now)
+		wrote, _ := GrantIfAbsent(ctx, m, "default", "alice", PurposeMemory, "stdio_bootstrap", "2026-07-01T00:00:00Z")
+		if wrote {
+			t.Error("second GrantIfAbsent on an existing grant must not write")
+		}
+	})
+
+	t.Run("CARDINAL: a prior withdrawal is NOT resurrected", func(t *testing.T) {
+		m := newManager()
+		// User explicitly withdrew memory consent.
+		if err := m.Withdraw(ctx, "default", "alice", PurposeMemory, now); err != nil {
+			t.Fatalf("withdraw: %v", err)
+		}
+		// A later bootstrap auto-grant must leave the withdrawal intact.
+		wrote, _ := GrantIfAbsent(ctx, m, "default", "alice", PurposeMemory, "stdio_bootstrap", "2026-07-01T00:00:00Z")
+		if wrote {
+			t.Fatal("GrantIfAbsent must NOT write over a withdrawal")
+		}
+		rec, ok := m.Query(ctx, "default", "alice", PurposeMemory)
+		if !ok || rec.Granted {
+			t.Errorf("withdrawal must stick: got %+v ok=%v", rec, ok)
+		}
+		// And HasConsent stays false (fail-closed honored).
+		if m.HasConsent(ctxWith("default", "alice"), PurposeMemory) {
+			t.Error("HasConsent must remain false after withdrawal + bootstrap")
+		}
+	})
+}

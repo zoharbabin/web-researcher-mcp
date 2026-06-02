@@ -41,6 +41,15 @@ type Config struct {
 	Features               FeatureConfig
 	Audit                  AuditConfig
 
+	// StdioUserID names the single local user for STDIO transport, where there
+	// is no OAuth identity (the launching app owns the process, so it IS one
+	// trusted user). When set, the server injects tenant=default/user=<value>
+	// into STDIO request context, making the per-user regulated features
+	// (memory, analytics) reachable. Empty (default) keeps the "anonymous"
+	// behavior. Ignored in HTTP mode (identity comes from OAuth). Validated to a
+	// safe charset since it flows into cache/session/consent/data-subject keys.
+	StdioUserID string
+
 	// Warnings holds non-fatal configuration notices (e.g. deprecated env vars)
 	// surfaced at startup. Load populates it; main.go logs each at WARN level.
 	Warnings []string
@@ -237,6 +246,23 @@ func Load() (*Config, error) {
 		errs = append(errs, adminKeyVar+" must be at least 16 characters")
 	}
 
+	// STDIO single-user identity (opt-in). Validated, never fatal: a bad value
+	// degrades to unset + a warning, preserving zero-config startup. Only honored
+	// in STDIO (port==0); in HTTP mode identity comes from OAuth, so we leave it
+	// empty and warn that the var is ignored.
+	stdioUserID := ""
+	if raw := os.Getenv("STDIO_USER_ID"); raw != "" {
+		if v, ok := validateStdioUserID(raw); ok {
+			if port > 0 {
+				warnings = append(warnings, "STDIO_USER_ID is ignored in HTTP mode (PORT set) — identity comes from OAuth.")
+			} else {
+				stdioUserID = v
+			}
+		} else {
+			warnings = append(warnings, `STDIO_USER_ID is invalid (allowed: A-Za-z0-9._@-, length 1-128, not "anonymous"); ignoring it.`)
+		}
+	}
+
 	// AUDIT_RETENTION_DAYS: 0 disables cleanup; any other value is clamped to
 	// [180,3650] per NIS2/HGB retention floors.
 	retentionDays := envInt("AUDIT_RETENTION_DAYS", 180)
@@ -323,6 +349,7 @@ func Load() (*Config, error) {
 		MetricsEnabled:       envBool("METRICS_ENABLED", true),
 		AdminAPIKey:          adminKey,
 		DataRegion:           os.Getenv("DATA_REGION"),
+		StdioUserID:          stdioUserID,
 		Features: FeatureConfig{
 			SourceRecommendations: envBool("SOURCE_RECOMMENDATIONS", true),
 			GenerativeUI:          envBool("GENERATIVE_UI_ENABLED", false),
@@ -419,6 +446,27 @@ func splitCSV(s string) []string {
 		}
 	}
 	return result
+}
+
+// validateStdioUserID trims and validates STDIO_USER_ID. It returns the cleaned
+// value and ok=true only for a non-empty id of length 1-128 over [A-Za-z0-9._@-]
+// that is not the reserved literal "anonymous" (which would defeat the
+// fail-closed consent gate). The value flows into cache/session/consent/
+// data-subject keys, so the charset is deliberately conservative.
+func validateStdioUserID(raw string) (string, bool) {
+	s := strings.TrimSpace(raw)
+	if s == "" || len(s) > 128 || s == "anonymous" {
+		return "", false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		ok := (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+			c == '.' || c == '_' || c == '@' || c == '-'
+		if !ok {
+			return "", false
+		}
+	}
+	return s, true
 }
 
 func defaultCacheDir() string {
