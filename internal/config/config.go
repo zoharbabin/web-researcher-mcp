@@ -46,8 +46,10 @@ type Config struct {
 	// trusted user). When set, the server injects tenant=default/user=<value>
 	// into STDIO request context, making the per-user regulated features
 	// (memory, analytics) reachable. Empty (default) keeps the "anonymous"
-	// behavior. Ignored in HTTP mode (identity comes from OAuth). Validated to a
-	// safe charset since it flows into cache/session/consent/data-subject keys.
+	// behavior. Ignored whenever PORT is set (HTTP mode), where identity comes
+	// from OAuth if configured, or stays anonymous in the unauthenticated
+	// fallback. Validated to a safe charset since it flows into
+	// cache/session/consent/data-subject keys.
 	StdioUserID string
 
 	// Warnings holds non-fatal configuration notices (e.g. deprecated env vars)
@@ -248,7 +250,7 @@ func Load() (*Config, error) {
 
 	// STDIO single-user identity (opt-in). Validated, never fatal: a bad value
 	// degrades to unset + a warning, preserving zero-config startup. Only honored
-	// in STDIO (port==0); in HTTP mode identity comes from OAuth, so we leave it
+	// in STDIO (port==0); whenever PORT is set we leave it
 	// empty and warn that the var is ignored.
 	stdioUserID := ""
 	if raw := os.Getenv("STDIO_USER_ID"); raw != "" {
