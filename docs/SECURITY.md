@@ -268,12 +268,13 @@ Protects against cascading failures when upstream APIs are down.
 
 ### Layer 7: Audit Logging
 
-**Every tool call that reaches a handler produces an audit record** — on
-cache-hit, terminal success, upstream error, AND regulated-tool refusal
-(no_consent / not_member / unauthenticated). Authentication and authorization
-failures (missing/invalid token, insufficient scope, bad admin key) emit a
-separate `auth.failure` event. Input-validation rejections that never reach the
-handler (e.g. empty query) are not audited.
+**Tool calls that do real work are audited** — on cache-hit, terminal success,
+upstream error, AND regulated-tool refusal (no_consent / not_member /
+unauthenticated). Authentication and authorization failures (missing/invalid
+token, insufficient scope, bad admin key) emit a separate `auth.failure` event.
+**Not audited:** cheap input-validation rejections handled at the top of the
+handler before any work (e.g. empty query, missing URL, oversized note) — they
+return a `toolError` immediately and emit no event.
 
 See `internal/audit/logger.go` for the canonical `AuditEvent` struct. Key fields:
 timestamp, tenant/user/session IDs, tool name, request ID, source IP (HTTP only;

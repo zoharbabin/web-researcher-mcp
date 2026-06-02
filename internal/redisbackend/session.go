@@ -204,6 +204,9 @@ func (m *SessionManager) GetStep(tenantID, userID, sessionID string, stepNum int
 func (m *SessionManager) Delete(tenantID, userID, sessionID string) {
 	pipe := m.b.client.TxPipeline()
 	pipe.Del(m.ctx, m.blobKey(tenantID, userID, sessionID))
+	// Also delete the pre-user-binding blob key (tenant:sessionID) so tenant
+	// erasure / admin flush removes legacy blobs too, not just TTL-expires them.
+	pipe.Del(m.ctx, m.b.key("session", tenantID+":"+sessionID))
 	pipe.SRem(m.ctx, m.tenantSetKey(tenantID), setMember(userID, sessionID))
 	_, _ = pipe.Exec(m.ctx)
 }

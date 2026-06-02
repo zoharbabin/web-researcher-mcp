@@ -86,7 +86,7 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 
 		cacheKey := scrapeCacheKey(input.URL, mode, maxLength)
 		if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
-			deps.Metrics.RecordToolCall("scrape_page", time.Since(start), nil, "", true)
+			recordToolCall(deps, "scrape_page", time.Since(start), nil, "", true)
 			auditToolCall(ctx, deps, "scrape_page", time.Since(start), nil, "")
 			return cachedResultWithMeta(cached, meta), nil, nil
 		}
@@ -95,14 +95,14 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		// structured error without re-running the multi-tier scrape or holding a
 		// scrape slot (ASI06 resource-exhaustion defense).
 		if neg := negCacheLookup(ctx, deps, input.URL); neg != nil {
-			deps.Metrics.RecordToolCall("scrape_page", time.Since(start), neg, "upstream_error", true)
+			recordToolCall(deps, "scrape_page", time.Since(start), neg, "upstream_error", true)
 			auditToolCall(ctx, deps, "scrape_page", time.Since(start), neg, "upstream_error")
 			return scrapeErrorResponse(neg, input.URL), nil, nil
 		}
 
 		result, err := deps.Scraper.Scrape(ctx, input.URL, maxLength)
 		if err != nil {
-			deps.Metrics.RecordToolCall("scrape_page", time.Since(start), err, "upstream_error", false)
+			recordToolCall(deps, "scrape_page", time.Since(start), err, "upstream_error", false)
 			auditToolCall(ctx, deps, "scrape_page", time.Since(start), err, "upstream_error")
 			var se *scraper.ScrapeError
 			if errors.As(err, &se) {
@@ -140,7 +140,7 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 
 		jsonBytes, _ := json.Marshal(output)
 		deps.Cache.Set(ctx, cacheKey, jsonBytes, time.Hour)
-		deps.Metrics.RecordToolCall("scrape_page", time.Since(start), nil, "", false)
+		recordToolCall(deps, "scrape_page", time.Since(start), nil, "", false)
 		auditToolCall(ctx, deps, "scrape_page", time.Since(start), nil, "")
 
 		if input.SessionID != "" {
@@ -163,7 +163,7 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 func scrapeRaw(ctx context.Context, deps Dependencies, input scrapePageInput, maxLength int, start time.Time) (*mcp.CallToolResult, any, error) {
 	cacheKey := scrapeCacheKey(input.URL, "raw", maxLength)
 	if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
-		deps.Metrics.RecordToolCall("scrape_page", time.Since(start), nil, "", true)
+		recordToolCall(deps, "scrape_page", time.Since(start), nil, "", true)
 		auditToolCall(ctx, deps, "scrape_page", time.Since(start), nil, "")
 		return cachedResultWithMeta(cached, meta), nil, nil
 	}
@@ -174,14 +174,14 @@ func scrapeRaw(ctx context.Context, deps Dependencies, input scrapePageInput, ma
 	// nothing, but raw skips extraction and may still return bytes — so never let
 	// a cached ErrContent short-circuit raw mode.
 	if neg := negCacheLookup(ctx, deps, input.URL); neg != nil && neg.Kind != scraper.ErrContent {
-		deps.Metrics.RecordToolCall("scrape_page", time.Since(start), neg, "upstream_error", true)
+		recordToolCall(deps, "scrape_page", time.Since(start), neg, "upstream_error", true)
 		auditToolCall(ctx, deps, "scrape_page", time.Since(start), neg, "upstream_error")
 		return scrapeErrorResponse(neg, input.URL), nil, nil
 	}
 
 	result, err := deps.Scraper.ScrapeRaw(ctx, input.URL, maxLength)
 	if err != nil {
-		deps.Metrics.RecordToolCall("scrape_page", time.Since(start), err, "upstream_error", false)
+		recordToolCall(deps, "scrape_page", time.Since(start), err, "upstream_error", false)
 		auditToolCall(ctx, deps, "scrape_page", time.Since(start), err, "upstream_error")
 		var se *scraper.ScrapeError
 		if errors.As(err, &se) {
@@ -208,7 +208,7 @@ func scrapeRaw(ctx context.Context, deps Dependencies, input scrapePageInput, ma
 
 	jsonBytes, _ := json.Marshal(output)
 	deps.Cache.Set(ctx, cacheKey, jsonBytes, time.Hour)
-	deps.Metrics.RecordToolCall("scrape_page", time.Since(start), nil, "", false)
+	recordToolCall(deps, "scrape_page", time.Since(start), nil, "", false)
 	auditToolCall(ctx, deps, "scrape_page", time.Since(start), nil, "")
 
 	if input.SessionID != "" {
@@ -252,8 +252,10 @@ func negCacheKey(url string) string {
 
 // writeNegCache records that scraping url failed with se.Kind + its original
 // message, for negCacheTTL. The value is "kind\x00message" so a cache hit
-// reconstructs the SAME error text (preserving downstream secret-masking and
-// detail), not a generic placeholder.
+// reconstructs the SAME error text as a fresh failure, not a generic
+// placeholder. (Secret masking is applied later, by the audit sink, to whatever
+// error is recorded — the reconstructed message flows through that identical
+// path, so a cached failure is masked exactly like a live one.)
 func writeNegCache(ctx context.Context, deps Dependencies, url string, se *scraper.ScrapeError) {
 	val := strconv.Itoa(int(se.Kind)) + "\x00" + se.Message
 	deps.Cache.Set(ctx, negCacheKey(url), []byte(val), negCacheTTL(se.Kind))
@@ -261,8 +263,8 @@ func writeNegCache(ctx context.Context, deps Dependencies, url string, se *scrap
 
 // negCacheLookup returns a reconstructed ScrapeError if url is in the negative
 // cache, or nil. The cached value is "kind\x00message", so the reconstructed
-// error carries the SAME message as the original failure — preserving error
-// detail and any downstream secret-masking (the message may embed the URL).
+// error carries the SAME message as the original failure, preserving error
+// detail (the message may embed the URL; the audit sink masks it identically).
 func negCacheLookup(ctx context.Context, deps Dependencies, url string) *scraper.ScrapeError {
 	v, ok := deps.Cache.Get(ctx, negCacheKey(url))
 	if !ok {
