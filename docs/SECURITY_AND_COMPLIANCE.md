@@ -235,8 +235,9 @@ Every tool invocation produces a structured JSON event:
 Design: async channel-based (never blocks tool calls), swap-to-disk overflow
 (never drops events under normal load), configurable output (stderr or file).
 
-What is NOT logged by default: raw query text (a length/hash is recorded
-instead, unless `AUDIT_INCLUDE_REQUEST_BODY=true`), scraped content, and full
+What is NOT logged by default: raw query text (only the query length, an
+integer, is recorded — unless `AUDIT_INCLUDE_REQUEST_BODY=true`, when the raw
+query is recorded after `MaskSecrets` redaction), scraped content, and full
 request parameters (PII risk). Audit metadata and upstream error messages pass
 through `audit.MaskSecrets` so any credential echoed back by a provider is
 redacted before it reaches a sink. Audit files rotate at `AUDIT_MAX_BYTES` and
@@ -598,15 +599,23 @@ Every release includes:
 ### Verification
 
 ```bash
-# Verify binary signature
-cosign verify-blob --signature web-researcher-mcp.sig \
-  --certificate web-researcher-mcp.pem web-researcher-mcp
+# 1. Verify the cosign signature on checksums.txt (keyless / Fulcio cert).
+#    The release signs checksums.txt — not each binary — then the checksum
+#    file vouches for every artifact.
+cosign verify-blob \
+  --signature checksums.txt.sig \
+  --certificate checksums.txt.pem \
+  --certificate-identity-regexp 'https://github.com/zoharbabin/web-researcher-mcp' \
+  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+  checksums.txt
 
-# Verify container image
-cosign verify ghcr.io/zoharbabin/web-researcher-mcp:latest
-
-# Verify checksums
+# 2. Verify your downloaded artifacts against the (now-trusted) checksums.
 sha256sum -c checksums.txt
+
+# 3. Verify a container image signature directly.
+cosign verify ghcr.io/zoharbabin/web-researcher-mcp:latest \
+  --certificate-identity-regexp 'https://github.com/zoharbabin/web-researcher-mcp' \
+  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com'
 ```
 
 ### Continuous Security Scanning
@@ -810,7 +819,7 @@ Our security controls map to MITRE ATT&CK techniques:
 | Content sanitization | T1059.007 (JavaScript), prompt injection vectors |
 | Rate limiting | T1499 (Endpoint DoS) |
 | Auth/JWKS | T1078 (Valid Accounts), T1550 (Use Alternate Auth Material) |
-| Audit logging | T1070 (Indicator Removal) — tamper-evident logs prevent coverage |
+| Audit logging | T1070 (Indicator Removal) — structured, secret-redacted, request-ID-correlated events (incl. auth failures) aid detection & attribution. Note: logs are append-only JSON, not cryptographically tamper-evident; hash-chaining is a roadmap item (below). |
 
 ---
 

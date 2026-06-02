@@ -268,9 +268,17 @@ Protects against cascading failures when upstream APIs are down.
 
 ### Layer 7: Audit Logging
 
-**Every tool invocation produces an audit record.**
+**Every tool call that reaches a handler produces an audit record** — on
+cache-hit, terminal success, upstream error, AND regulated-tool refusal
+(no_consent / not_member / unauthenticated). Authentication and authorization
+failures (missing/invalid token, insufficient scope, bad admin key) emit a
+separate `auth.failure` event. Input-validation rejections that never reach the
+handler (e.g. empty query) are not audited.
 
-See `internal/audit/logger.go` for the canonical `AuditEvent` struct. Key fields include: timestamp, tenant/user/session IDs, tool name, request ID, duration, success/error status, and extensible metadata.
+See `internal/audit/logger.go` for the canonical `AuditEvent` struct. Key fields:
+timestamp, tenant/user/session IDs, tool name, request ID, source IP (HTTP only;
+proxy-aware, empty under STDIO), duration, success/error status, and extensible
+metadata.
 
 **Storage:**
 - Default: structured log to stderr (slog JSON)
@@ -279,7 +287,7 @@ See `internal/audit/logger.go` for the canonical `AuditEvent` struct. Key fields
 - Retention: rotated files older than `AUDIT_RETENTION_DAYS` are deleted on startup and hourly. The default is 180 days; any non-zero value is clamped to `[180, 3650]` per NIS2/HGB retention floors. `0` disables cleanup.
 
 **What is NOT logged (by default):**
-- **Raw query text** — omitted unless `AUDIT_INCLUDE_REQUEST_BODY=true`. When that flag is false (default), only a length/hash is recorded, never the literal query.
+- **Raw query text** — omitted unless `AUDIT_INCLUDE_REQUEST_BODY=true`. When that flag is false (default), only the query **length** (an integer) is recorded, never the literal query; when true, the raw query is recorded after `MaskSecrets` redaction.
 - Scraped content (too large, PII risk)
 - Full request parameters (may contain PII)
 
@@ -413,7 +421,7 @@ How the server's controls counter the ATT&CK techniques most relevant to an inte
 
 | Criterion | How We Satisfy |
 |-----------|----------------|
-| **CC6.1** Access Control | OAuth 2.1 middleware, per-tenant RBAC via JWT scopes |
+| **CC6.1** Access Control | OAuth 2.1 middleware; per-**tool** authorization via JWT scopes (`tool:*` / `tool:<name>` / `research`); tenant isolation enforced separately by tenant-scoped storage/cache keys |
 | **CC6.2** Logical Access | Session isolation, cache namespace per tenant |
 | **CC6.6** Threat Mitigation | SSRF protection, rate limiting, circuit breakers |
 | **CC7.1** Monitoring | Prometheus metrics, structured audit logs |
@@ -432,7 +440,7 @@ How the server's controls counter the ATT&CK techniques most relevant to an inte
 
 Implementation notes: requests are tenant-scoped — a request targets exactly one `tenant_id`, so cross-tenant access is impossible. `user_id` is optional; stores with no per-user dimension (e.g. sessions) operate at tenant granularity and label the export scope accordingly. The fan-out is driven by a registry (`internal/datasubject`) into which every personal-data store registers an exporter/eraser, so coverage extends automatically as regulated features ship.
 
-Data minimization (implemented): audit logs store parameter hashes (not raw queries), no persistent PII storage beyond cache TTLs.
+Data minimization (implemented): by default audit logs store only the query length (an integer), not raw queries; no persistent PII storage beyond cache TTLs.
 
 ### FedRAMP (Moderate Baseline)
 
