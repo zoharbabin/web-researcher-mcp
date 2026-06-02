@@ -32,41 +32,52 @@ jobs:
           mkdir -p site_src
           # Copy and rewrite internal links to flattened structure
           for f in README.md ARCHITECTURE.md CONTRIBUTING.md; do
-            sed -e 's|docs/TOOLS.md|tools.md|g' \
-                -e 's|docs/ERROR_HANDLING.md|error-handling.md|g' \
-                -e 's|docs/SECURITY_AND_COMPLIANCE.md|security-and-compliance.md|g' \
-                -e 's|docs/SECURITY.md|security.md|g' \
-                -e 's|docs/DEPLOYMENT.md|deployment.md|g' \
-                -e 's|docs/MIGRATION.md|migration.md|g' \
-                -e 's|docs/EXAMPLES.md|examples.md|g' \
-                -e 's|docs/API_SETUP.md|api-setup.md|g' \
-                -e 's|docs/LESSONS_LEARNED.md|lessons-learned.md|g' \
-                -e 's|docs/BRAND_GUIDELINES.md|brand-guidelines.md|g' \
-                -e 's|docs/PRIVACY.md|privacy.md|g' \
-                -e 's|docs/SESSION_PERSISTENCE.md|session-persistence.md|g' \
-                -e 's|ARCHITECTURE.md|architecture.md|g' \
-                -e 's|CONTRIBUTING.md|contributing.md|g' \
+            # Rewrites are anchored to the Markdown link prefix `](` so that
+            # only clickable links are flattened to the site's URL scheme.
+            # Inline code-span repo paths (e.g. `docs/SECURITY.md`) are left
+            # verbatim — they document on-disk paths, not site routes.
+            sed -e 's|](docs/TOOLS.md|](tools.md|g' \
+                -e 's|](docs/ERROR_HANDLING.md|](error-handling.md|g' \
+                -e 's|](docs/SECURITY_AND_COMPLIANCE.md|](security-and-compliance.md|g' \
+                -e 's|](docs/SECURITY.md|](security.md|g' \
+                -e 's|](docs/DEPLOYMENT.md|](deployment.md|g' \
+                -e 's|](docs/MIGRATION.md|](migration.md|g' \
+                -e 's|](docs/EXAMPLES.md|](examples.md|g' \
+                -e 's|](docs/API_SETUP.md|](api-setup.md|g' \
+                -e 's|](docs/LESSONS_LEARNED.md|](lessons-learned.md|g' \
+                -e 's|](docs/BRAND_GUIDELINES.md|](brand-guidelines.md|g' \
+                -e 's|](docs/PRIVACY.md|](privacy.md|g' \
+                -e 's|](docs/SESSION_PERSISTENCE.md|](session-persistence.md|g' \
+                -e 's|](ARCHITECTURE.md|](architecture.md|g' \
+                -e 's|](CONTRIBUTING.md|](contributing.md|g' \
                 -e 's|](SECURITY.md)|](https://github.com/zoharbabin/web-researcher-mcp/blob/main/SECURITY.md)|g' \
-                -e 's|assets/|https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/|g' \
+                -e 's|](CODE_OF_CONDUCT.md|](https://github.com/zoharbabin/web-researcher-mcp/blob/main/CODE_OF_CONDUCT.md|g' \
+                -e 's|](assets/|](https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/|g' \
+                -e 's|src="assets/|src="https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/|g' \
                 "$f" > "site_src/$(echo "$f" | tr '[:upper:]' '[:lower:]')"
           done
           mv site_src/readme.md site_src/index.md
           # Copy docs/ files with cross-link rewriting
           for f in docs/TOOLS.md docs/DEPLOYMENT.md docs/SECURITY.md docs/SECURITY_AND_COMPLIANCE.md docs/MIGRATION.md docs/EXAMPLES.md docs/API_SETUP.md docs/LESSONS_LEARNED.md docs/BRAND_GUIDELINES.md docs/PRIVACY.md docs/SESSION_PERSISTENCE.md docs/ERROR_HANDLING.md; do
-            sed -e 's|ARCHITECTURE.md|architecture.md|g' \
-                -e 's|CONTRIBUTING.md|contributing.md|g' \
-                -e 's|ERROR_HANDLING.md|error-handling.md|g' \
-                -e 's|SECURITY_AND_COMPLIANCE.md|security-and-compliance.md|g' \
+            # Anchored to `](` for the same reason as the root loop above:
+            # flatten only Markdown links, never inline code-span repo paths.
+            # `](../SECURITY.md` and the root-policy link resolve to GitHub
+            # because root SECURITY.md is not published to the site.
+            sed -e 's|](ARCHITECTURE.md|](architecture.md|g' \
+                -e 's|](CONTRIBUTING.md|](contributing.md|g' \
+                -e 's|](ERROR_HANDLING.md|](error-handling.md|g' \
+                -e 's|](SECURITY_AND_COMPLIANCE.md|](security-and-compliance.md|g' \
                 -e 's|](../SECURITY.md)|](https://github.com/zoharbabin/web-researcher-mcp/blob/main/SECURITY.md)|g' \
-                -e 's|TOOLS.md|tools.md|g' \
-                -e 's|DEPLOYMENT.md|deployment.md|g' \
-                -e 's|MIGRATION.md|migration.md|g' \
-                -e 's|EXAMPLES.md|examples.md|g' \
-                -e 's|API_SETUP.md|api-setup.md|g' \
-                -e 's|LESSONS_LEARNED.md|lessons-learned.md|g' \
-                -e 's|BRAND_GUIDELINES.md|brand-guidelines.md|g' \
-                -e 's|PRIVACY.md|privacy.md|g' \
-                -e 's|SESSION_PERSISTENCE.md|session-persistence.md|g' \
+                -e 's|](SECURITY.md|](security.md|g' \
+                -e 's|](TOOLS.md|](tools.md|g' \
+                -e 's|](DEPLOYMENT.md|](deployment.md|g' \
+                -e 's|](MIGRATION.md|](migration.md|g' \
+                -e 's|](EXAMPLES.md|](examples.md|g' \
+                -e 's|](API_SETUP.md|](api-setup.md|g' \
+                -e 's|](LESSONS_LEARNED.md|](lessons-learned.md|g' \
+                -e 's|](BRAND_GUIDELINES.md|](brand-guidelines.md|g' \
+                -e 's|](PRIVACY.md|](privacy.md|g' \
+                -e 's|](SESSION_PERSISTENCE.md|](session-persistence.md|g' \
                 "$f" > "site_src/$(basename "$f" | tr '[:upper:]' '[:lower:]')"
           done
           # Rename files with underscores to hyphens for clean URLs
