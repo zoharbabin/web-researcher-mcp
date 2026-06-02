@@ -1,6 +1,7 @@
 package scraper
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net/http"
@@ -9,6 +10,14 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 )
+
+// maxHTMLRead bounds the decompressed body fed into goquery's in-memory DOM in
+// the tier-3 HTML scraper, mirroring the caps the other tiers already enforce
+// (stealth.go 1MB, patents.go 3MB). Without it a large or decompression-bomb
+// page could exhaust memory (OWASP Agentic ASI06 resource exhaustion). 3MB is
+// generous for an article — this tier is only reached when markdown/stealth
+// yield too little, and content is truncated to maxLength afterward anyway.
+const maxHTMLRead = 3 * 1024 * 1024
 
 func (p *Pipeline) scrapeHTML(ctx context.Context, url string, maxLength int) (*ScrapeResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -41,7 +50,11 @@ func (p *Pipeline) scrapeHTML(ctx context.Context, url string, maxLength int) (*
 		defer closer.Close()
 	}
 
-	doc, err := goquery.NewDocumentFromReader(reader)
+	body, err := io.ReadAll(io.LimitReader(reader, maxHTMLRead))
+	if err != nil {
+		return nil, err
+	}
+	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}

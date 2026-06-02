@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/audit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/auth"
@@ -297,6 +298,9 @@ func main() {
 			os.Exit(1)
 		}
 		auditor = al
+		// Expose audit-pipeline loss (dropped/spilled/rotations) as Prometheus
+		// counters so backpressure loss is alertable (ASI07).
+		metricsCollector.RegisterAuditLoss(al)
 	} else {
 		auditor = audit.NewNoop()
 	}
@@ -344,12 +348,45 @@ func main() {
 	}
 	resources.RegisterAll(srv.MCP(), metricsCollector, sessionManager, rateLimiter, providerInfos)
 
+	// Denial-of-wallet backstop (ASI06): an OPTIONAL in-process per-(tenant,user)
+	// daily tool-call ceiling. Registered UNCONDITIONALLY (STDIO + HTTP) because
+	// the HTTP rate limiter doesn't run in STDIO. Off unless MAX_CALLS_PER_DAY>0,
+	// so the default zero-config path is unchanged.
+	if guard := tools.NewDailyCallGuard(cfg.RateLimit.MaxCallsPerDay); guard.Enabled() {
+		srv.MCP().AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+			return func(reqCtx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+				if method == "tools/call" {
+					if !guard.Allow(auth.TenantIDFromContext(reqCtx), auth.UserIDFromContext(reqCtx), time.Now().UTC()) {
+						ev := audit.NewEvent("tool_call", auth.TenantIDFromContext(reqCtx), auth.UserIDFromContext(reqCtx))
+						ev.Success = false
+						ev.ErrorCode = "daily_call_limit"
+						ev.SourceIP = auth.SourceIPFromContext(reqCtx)
+						if rid := auth.RequestIDFromContext(reqCtx); rid != "" {
+							ev.RequestID = rid
+						}
+						if params, ok := req.GetParams().(*mcp.CallToolParamsRaw); ok {
+							ev.ToolName = params.Name
+						}
+						auditor.Log(ev)
+						res := &mcp.CallToolResult{IsError: true}
+						res.Content = []mcp.Content{&mcp.TextContent{Text: "daily call limit reached for this user; try again after the UTC day rolls over"}}
+						return res, nil
+					}
+				}
+				return next(reqCtx, method, req)
+			}
+		})
+		logger.Info("daily call ceiling enabled", "max_calls_per_day", cfg.RateLimit.MaxCallsPerDay)
+	}
+
 	ctx, cancel := signal.NotifyContext(context.Background(),
 		syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
 	if cfg.Port > 0 {
-		authMw := auth.NewMiddlewareWithStore(cfg.OAuth, persistStore)
+		// Attach the auditor so 401s emit auth.failure events (token spray /
+		// admin-key guessing become detectable). Nil-safe.
+		authMw := auth.NewMiddlewareWithStore(cfg.OAuth, persistStore).WithAuditor(auditor)
 
 		// Scope gate (C4): a server-side receiving middleware that enforces OAuth
 		// scopes on tools/call. Registered ONLY in HTTP mode so the STDIO path is
@@ -363,6 +400,17 @@ func main() {
 					if params, ok := req.GetParams().(*mcp.CallToolParamsRaw); ok {
 						scopes := auth.ScopesFromContext(reqCtx)
 						if err := authMw.EnforceScopes(scopes, params.Name); err != nil {
+							// Authorization denial (insufficient scope) — audit it
+							// for accountability, alongside the 401 authn failures.
+							ev := audit.NewEvent("auth.failure", auth.TenantIDFromContext(reqCtx), auth.UserIDFromContext(reqCtx))
+							ev.Success = false
+							ev.ErrorCode = "insufficient_scope"
+							ev.ToolName = params.Name
+							ev.SourceIP = auth.SourceIPFromContext(reqCtx)
+							if rid := auth.RequestIDFromContext(reqCtx); rid != "" {
+								ev.RequestID = rid
+							}
+							auditor.Log(ev)
 							res := &mcp.CallToolResult{IsError: true}
 							res.Content = []mcp.Content{&mcp.TextContent{Text: "access denied: " + err.Error()}}
 							return res, nil

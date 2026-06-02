@@ -234,6 +234,13 @@ func (l *Logger) spillToSwap(event AuditEvent) {
 
 // Close signals the logger to drain remaining events and stop.
 // It blocks until all buffered events (channel + swap file) are written.
+// DroppedCount / SpilledCount / RotationCount expose the audit-loss atomics for
+// the metrics layer (metrics.AuditLossSource), so backpressure loss is
+// observable as Prometheus counters (ASI07). Read-only, lock-free.
+func (l *Logger) DroppedCount() int64  { return l.Dropped.Load() }
+func (l *Logger) SpilledCount() int64  { return l.Spilled.Load() }
+func (l *Logger) RotationCount() int64 { return l.Rotations.Load() }
+
 func (l *Logger) Close() {
 	close(l.eventCh)
 	l.wg.Wait()

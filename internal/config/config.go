@@ -147,6 +147,11 @@ type RateLimitConfig struct {
 	PerIP      int
 	TrustProxy bool
 	Persist    bool
+	// MaxCallsPerDay, when >0, caps total tool calls per (tenant,user) per UTC
+	// day IN-PROCESS — a transport-agnostic denial-of-wallet backstop that also
+	// applies in STDIO (where the HTTP rate limits / DailyQuota don't run).
+	// 0 (default) disables it. See MAX_CALLS_PER_DAY in .env.example.
+	MaxCallsPerDay int
 }
 
 func Load() (*Config, error) {
@@ -221,6 +226,13 @@ func Load() (*Config, error) {
 	} else if os.Getenv("CACHE_ADMIN_KEY") != "" {
 		warnings = append(warnings, "Both ADMIN_API_KEY and CACHE_ADMIN_KEY are set; ADMIN_API_KEY takes precedence. Remove the deprecated CACHE_ADMIN_KEY.")
 	}
+	// Insecure-default notice (ASI10): HTTP transport exposed without an OAuth
+	// issuer means every request runs unauthenticated as tenant=default/user=
+	// anonymous. The gate behavior is intentional (zero-config), but a silent
+	// start hides it — warn loudly so an operator never exposes it unknowingly.
+	if port > 0 && os.Getenv("OAUTH_ISSUER_URL") == "" {
+		warnings = append(warnings, "HTTP transport is enabled (PORT set) without OAUTH_ISSUER_URL — all requests run UNAUTHENTICATED as tenant=default/user=anonymous. Set OAUTH_ISSUER_URL for authenticated multi-tenant use.")
+	}
 	if adminKey != "" && len(adminKey) < 16 {
 		errs = append(errs, adminKeyVar+" must be at least 16 characters")
 	}
@@ -291,12 +303,13 @@ func Load() (*Config, error) {
 		CacheIsolation:         envOrDefault("CACHE_ISOLATION", "shared"),
 		RedisURL:               os.Getenv("REDIS_URL"),
 		RateLimit: RateLimitConfig{
-			PerTenant:  envInt("RATE_LIMIT_PER_TENANT", 120),
-			Global:     envInt("RATE_LIMIT_GLOBAL", 1000),
-			DailyQuota: envInt("DAILY_QUOTA_PER_TENANT", 5000),
-			PerIP:      envInt("RATE_LIMIT_PER_IP", 0),
-			TrustProxy: envBool("TRUST_PROXY", false),
-			Persist:    envBool("RATE_LIMIT_PERSIST", false),
+			PerTenant:      envInt("RATE_LIMIT_PER_TENANT", 120),
+			Global:         envInt("RATE_LIMIT_GLOBAL", 1000),
+			DailyQuota:     envInt("DAILY_QUOTA_PER_TENANT", 5000),
+			PerIP:          envInt("RATE_LIMIT_PER_IP", 0),
+			TrustProxy:     envBool("TRUST_PROXY", false),
+			Persist:        envBool("RATE_LIMIT_PERSIST", false),
+			MaxCallsPerDay: envInt("MAX_CALLS_PER_DAY", 0),
 		},
 		AllowPrivateIPs:      envBool("ALLOW_PRIVATE_IPS", false),
 		AllowedDomains:       splitCSV(os.Getenv("ALLOWED_DOMAINS")),

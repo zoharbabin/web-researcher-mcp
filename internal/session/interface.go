@@ -5,25 +5,31 @@ package session
 // multi-pod HTTP deployments, #42) can be swapped in at construction time in
 // main.go with no caller changes. The method set is the exact surface the
 // in-memory implementation already exposed.
+// Every per-session method is keyed by (tenantID, userID, sessionID): a session
+// is private to the (tenant,user) that created it, so a leaked sessionID is
+// honored only for that user — a co-tenant user (or an anonymous caller) cannot
+// read or mutate it. STDIO and unauthenticated HTTP use userID="anonymous",
+// preserving single-user behavior. Cross-user collaboration is the SEPARATE,
+// membership-scoped workspace feature (internal/workspace), not sessions.
 type Manager interface {
-	// Create starts a new session for the tenant and returns its index.
-	Create(tenantID string) (*SessionIndex, error)
+	// Create starts a new session owned by (tenantID, userID) and returns its index.
+	Create(tenantID, userID string) (*SessionIndex, error)
 	// AppendStep records a research step. Returns a typed *SessionNotFoundError
 	// (wrapping ErrSessionNotFound) when the session is absent, ErrSessionExpired
 	// when past TTL.
-	AppendStep(tenantID, sessionID string, step ResearchStep, gap *KnowledgeGap, summary string) (*SessionIndex, error)
+	AppendStep(tenantID, userID, sessionID string, step ResearchStep, gap *KnowledgeGap, summary string) (*SessionIndex, error)
 	// SetResearchGoal sets the goal on an existing session.
-	SetResearchGoal(tenantID, sessionID, goal string) error
+	SetResearchGoal(tenantID, userID, sessionID, goal string) error
 	// AddSources appends de-duplicated sources to a session.
-	AddSources(tenantID, sessionID string, sources []ResearchSource) error
+	AddSources(tenantID, userID, sessionID string, sources []ResearchSource) error
 	// GetIndex returns the lightweight index for a session, or ok=false.
-	GetIndex(tenantID, sessionID string) (*SessionIndex, bool)
+	GetIndex(tenantID, userID, sessionID string) (*SessionIndex, bool)
 	// GetFull loads the full session payload.
-	GetFull(tenantID, sessionID string) (*Session, error)
+	GetFull(tenantID, userID, sessionID string) (*Session, error)
 	// GetStep returns a single step by number.
-	GetStep(tenantID, sessionID string, stepNum int) (*ResearchStep, error)
+	GetStep(tenantID, userID, sessionID string, stepNum int) (*ResearchStep, error)
 	// Delete removes a single session.
-	Delete(tenantID, sessionID string)
+	Delete(tenantID, userID, sessionID string)
 	// DeleteAll removes every session (admin flush).
 	DeleteAll()
 	// ListByTenant returns the index entries for one tenant (data-subject

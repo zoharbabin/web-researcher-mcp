@@ -368,8 +368,8 @@ func TestAdminFlushSessions(t *testing.T) {
 	mgr, _ := session.NewManager(session.Config{MaxSessions: 10, SessionTTL: time.Hour})
 	defer mgr.Close()
 
-	_, _ = mgr.Create("tenant-1")
-	_, _ = mgr.Create("tenant-1")
+	_, _ = mgr.Create("tenant-1", "u1")
+	_, _ = mgr.Create("tenant-1", "u1")
 
 	if mgr.ActiveCount() != 2 {
 		t.Fatalf("expected 2 sessions, got %d", mgr.ActiveCount())
@@ -400,7 +400,7 @@ func TestAdminFlushSessionsNil(t *testing.T) {
 }
 
 func TestAdminAuth(t *testing.T) {
-	handler := adminAuth("secret-key", func(w http.ResponseWriter, r *http.Request) {
+	handler := adminAuth("secret-key", nil, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -463,8 +463,8 @@ func buildTestHTTPServer(t *testing.T) *httptest.Server {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"issuer":"web-researcher-mcp","token_endpoint":"n/a"}`)
 	})
-	mux.HandleFunc("DELETE /admin/cache", adminAuth("test-admin-key", handleAdminFlushCache(c)))
-	mux.HandleFunc("DELETE /admin/sessions", adminAuth("test-admin-key", handleAdminFlushSessions(mgr)))
+	mux.HandleFunc("DELETE /admin/cache", adminAuth("test-admin-key", nil, handleAdminFlushCache(c)))
+	mux.HandleFunc("DELETE /admin/sessions", adminAuth("test-admin-key", nil, handleAdminFlushSessions(mgr)))
 
 	handler := securityHeaders(securityHeadersConfig{}, corsMiddleware([]string{"https://allowed.example.com"}, false, mux))
 	return httptest.NewServer(handler)
@@ -906,7 +906,7 @@ func TestRequestIDMiddleware(t *testing.T) {
 	t.Run("generates and echoes when absent", func(t *testing.T) {
 		t.Parallel()
 		var seen string
-		handler := requestIDMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := requestIDMiddleware(nil, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			seen = auth.RequestIDFromContext(r.Context())
 			w.WriteHeader(http.StatusOK)
 		}))
@@ -927,7 +927,7 @@ func TestRequestIDMiddleware(t *testing.T) {
 	t.Run("adopts inbound X-Request-Id", func(t *testing.T) {
 		t.Parallel()
 		var seen string
-		handler := requestIDMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := requestIDMiddleware(nil, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			seen = auth.RequestIDFromContext(r.Context())
 		}))
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -942,7 +942,7 @@ func TestRequestIDMiddleware(t *testing.T) {
 	t.Run("strips CRLF from inbound ID", func(t *testing.T) {
 		t.Parallel()
 		var seen string
-		handler := requestIDMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := requestIDMiddleware(nil, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			seen = auth.RequestIDFromContext(r.Context())
 		}))
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -961,7 +961,7 @@ func TestRequestIDMiddleware(t *testing.T) {
 	t.Run("clamps over-long inbound ID", func(t *testing.T) {
 		t.Parallel()
 		var seen string
-		handler := requestIDMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := requestIDMiddleware(nil, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			seen = auth.RequestIDFromContext(r.Context())
 		}))
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -976,7 +976,7 @@ func TestRequestIDMiddleware(t *testing.T) {
 	t.Run("adopts traceparent trace-id when no X-Request-Id", func(t *testing.T) {
 		t.Parallel()
 		var seen string
-		handler := requestIDMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := requestIDMiddleware(nil, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			seen = auth.RequestIDFromContext(r.Context())
 		}))
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -985,6 +985,33 @@ func TestRequestIDMiddleware(t *testing.T) {
 		handler.ServeHTTP(rec, req)
 		if seen != "4bf92f3577b34da6a3ce929d0e0e4736" {
 			t.Fatalf("expected traceparent trace-id adopted, got %q", seen)
+		}
+	})
+
+	t.Run("sets SourceIP from limiter when present", func(t *testing.T) {
+		t.Parallel()
+		limiter := ratelimit.New(config.RateLimitConfig{PerIP: 100})
+		var seen string
+		handler := requestIDMiddleware(limiter, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			seen = auth.SourceIPFromContext(r.Context())
+		}))
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.RemoteAddr = "203.0.113.9:5555"
+		handler.ServeHTTP(httptest.NewRecorder(), req)
+		if seen != "203.0.113.9" {
+			t.Fatalf("SourceIP = %q, want 203.0.113.9", seen)
+		}
+	})
+
+	t.Run("SourceIP empty without a limiter (STDIO-like)", func(t *testing.T) {
+		t.Parallel()
+		var seen = "sentinel"
+		handler := requestIDMiddleware(nil, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			seen = auth.SourceIPFromContext(r.Context())
+		}))
+		handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+		if seen != "" {
+			t.Fatalf("SourceIP should be empty with no limiter, got %q", seen)
 		}
 	})
 }
@@ -1028,7 +1055,7 @@ func TestWrapIPOutermost(t *testing.T) {
 	})
 
 	// Mirror ServeHTTP ordering: WrapIP is the outermost wrapper.
-	root := limiter.WrapIP(requestIDMiddleware(inner))
+	root := limiter.WrapIP(requestIDMiddleware(limiter, inner))
 
 	const fixedIP = "203.0.113.7:5555"
 	rejected := false

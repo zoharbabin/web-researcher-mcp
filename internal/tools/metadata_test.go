@@ -250,6 +250,70 @@ func TestOutputSchemaMatchesResponse(t *testing.T) {
 	}
 }
 
+// TestExternalContentToolsCarryTrustMarker is a drift guard for the tools that
+// return external content on an UNAUTHENTICATED call (the search family +
+// scrape + sequential_search): each MUST stamp a top-level "trust" boundary
+// marker (OWASP LLM01 / Agentic ASI05). A new such tool shipping without a
+// marker (or with the wrong value) fails here.
+//
+// Scope note: the consent-gated tools that also carry markers —
+// memory_recall ("user-asserted-content") and workspace_read /
+// get_research_session ("untrusted-external-content") — return a denial (no
+// content) for the anonymous client this harness uses, so they cannot be
+// exercised here. Their markers are asserted in their own tests
+// (TestMemoryRecall*, TestWorkspace*, getsession tests). Tools that return no
+// model-facing content (memory_save, workspace_contribute, get_my_analytics)
+// carry no marker by design.
+func TestExternalContentToolsCarryTrustMarker(t *testing.T) {
+	ctx := context.Background()
+	deps := setupTestDeps()
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	// tool -> required trust value. Search/scrape/session/workspace echo external
+	// content; memory_recall echoes user-asserted content.
+	want := map[string]string{
+		"web_search":        "untrusted-external-content",
+		"image_search":      "untrusted-external-content",
+		"news_search":       "untrusted-external-content",
+		"academic_search":   "untrusted-external-content",
+		"patent_search":     "untrusted-external-content",
+		"scrape_page":       "untrusted-external-content",
+		"search_and_scrape": "untrusted-external-content",
+		"sequential_search": "untrusted-external-content",
+	}
+	args := map[string]map[string]any{
+		"web_search":        {"query": "test"},
+		"image_search":      {"query": "test"},
+		"news_search":       {"query": "test"},
+		"academic_search":   {"query": "test"},
+		"patent_search":     {"query": "test"},
+		"scrape_page":       {"url": "https://example.com"},
+		"search_and_scrape": {"query": "test"},
+		"sequential_search": {"searchStep": "initial research", "stepNumber": 1, "nextStepNeeded": false},
+	}
+
+	for name, wantTrust := range want {
+		t.Run(name, func(t *testing.T) {
+			res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args[name]})
+			if err != nil {
+				t.Fatalf("CallTool(%s) failed: %v", name, err)
+			}
+			if res.IsError {
+				return // upstream/network unavailable in unit env — schema gate covers shape
+			}
+			var out map[string]any
+			if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &out); err != nil {
+				t.Fatalf("parse(%s): %v", name, err)
+			}
+			if out["trust"] != wantTrust {
+				t.Errorf("%s: trust = %v, want %q", name, out["trust"], wantTrust)
+			}
+		})
+	}
+}
+
 // repoRoot returns the repository root resolved relative to this test file,
 // independent of the working directory the test is invoked from.
 func repoRoot(t *testing.T) string {

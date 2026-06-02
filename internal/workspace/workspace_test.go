@@ -52,6 +52,36 @@ func TestNonMemberGetsZeroBytes(t *testing.T) {
 	}
 }
 
+// TestMembersReadEachOthersContributions is the core SHARED-workspace guarantee
+// (and a regression guard against the per-user session-isolation change leaking
+// into workspaces): a workspace is shared across its members, so member B must
+// see member A's contribution. Workspace isolation is by MEMBERSHIP, never by
+// individual user — unlike sessions, which are user-private.
+func TestMembersReadEachOthersContributions(t *testing.T) {
+	s := newStore()
+	ctx := context.Background()
+	alice := Member{TenantID: "t1", UserID: "alice"}
+	bob := Member{TenantID: "t1", UserID: "bob"}
+	_ = s.AddMember(ctx, "ws1", alice)
+	_ = s.AddMember(ctx, "ws1", bob)
+
+	if _, err := s.Contribute(ctx, "ws1", alice, Contribution{Note: "alice's finding"}); err != nil {
+		t.Fatalf("alice contribute: %v", err)
+	}
+
+	// Bob, a DIFFERENT user in the same workspace, must see Alice's contribution.
+	got, err := s.Read(ctx, "ws1", bob)
+	if err != nil {
+		t.Fatalf("bob read: %v", err)
+	}
+	if len(got) != 1 || got[0].Note != "alice's finding" {
+		t.Fatalf("workspace must be shared across members: bob saw %d contributions %+v", len(got), got)
+	}
+	if got[0].ContributorUser != "alice" {
+		t.Errorf("attribution must stay alice, got %q", got[0].ContributorUser)
+	}
+}
+
 func TestProvenanceNotCallerControlled(t *testing.T) {
 	s := newStore()
 	ctx := context.Background()
@@ -142,5 +172,34 @@ func TestDataSubjectRoundTrip(t *testing.T) {
 	deleted, err := a.EraseSubject(ctx, datasubject.Subject{TenantID: "t1", UserID: "u1"})
 	if err != nil || deleted != 1 {
 		t.Fatalf("expected 1 erased, got %d err=%v", deleted, err)
+	}
+}
+
+// TestMaxContribEvictsOldest verifies the per-workspace contribution cap evicts
+// the oldest contributions while membership/sharing semantics are unaffected.
+func TestMaxContribEvictsOldest(t *testing.T) {
+	ctx := context.Background()
+	s := NewStore(persist.NewMemoryStore(), time.Hour).WithMaxContrib(3)
+	m := Member{TenantID: "t1", UserID: "u1"}
+	_ = s.AddMember(ctx, "ws1", m)
+
+	for _, n := range []string{"a", "b", "c", "d", "e"} {
+		if _, err := s.Contribute(ctx, "ws1", m, Contribution{Note: n}); err != nil {
+			t.Fatalf("contribute %s: %v", n, err)
+		}
+	}
+	got, err := s.Read(ctx, "ws1", m)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("expected cap of 3 contributions, got %d", len(got))
+	}
+	notes := map[string]bool{}
+	for _, c := range got {
+		notes[c.Note] = true
+	}
+	if notes["a"] || notes["b"] {
+		t.Errorf("oldest contributions should be evicted, got %v", notes)
 	}
 }

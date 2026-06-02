@@ -3,14 +3,15 @@ package session
 import "time"
 
 type Session struct {
-	ID           string           `json:"id"`
-	TenantID     string           `json:"tenantId"`
-	ResearchGoal string           `json:"researchGoal,omitempty"`
-	CreatedAt    time.Time        `json:"createdAt"`
-	LastUsed     time.Time        `json:"lastUsed"`
-	Steps        []ResearchStep   `json:"steps"`
-	Sources      []ResearchSource `json:"sources"`
-	Gaps         []KnowledgeGap   `json:"gaps"`
+	ID              string           `json:"id"`
+	TenantID        string           `json:"tenantId"`
+	CreatedByUserID string           `json:"createdByUserId,omitempty"`
+	ResearchGoal    string           `json:"researchGoal,omitempty"`
+	CreatedAt       time.Time        `json:"createdAt"`
+	LastUsed        time.Time        `json:"lastUsed"`
+	Steps           []ResearchStep   `json:"steps"`
+	Sources         []ResearchSource `json:"sources"`
+	Gaps            []KnowledgeGap   `json:"gaps"`
 }
 
 type ResearchStep struct {
@@ -38,18 +39,19 @@ type KnowledgeGap struct {
 }
 
 type SessionIndex struct {
-	ID           string           `json:"id"`
-	TenantID     string           `json:"tenantId"`
-	ResearchGoal string           `json:"researchGoal"`
-	CreatedAt    time.Time        `json:"createdAt"`
-	LastUsed     time.Time        `json:"lastUsed"`
-	StepCount    int              `json:"stepCount"`
-	Summary      string           `json:"summary"`
-	StepIndex    []StepIndexEntry `json:"stepIndex"`
-	LastSteps    []ResearchStep   `json:"lastSteps"`
-	ActiveGaps   []KnowledgeGap   `json:"activeGaps"`
-	Sources      []ResearchSource `json:"sources"`
-	Warning      string           `json:"warning,omitempty"`
+	ID              string           `json:"id"`
+	TenantID        string           `json:"tenantId"`
+	CreatedByUserID string           `json:"createdByUserId,omitempty"`
+	ResearchGoal    string           `json:"researchGoal"`
+	CreatedAt       time.Time        `json:"createdAt"`
+	LastUsed        time.Time        `json:"lastUsed"`
+	StepCount       int              `json:"stepCount"`
+	Summary         string           `json:"summary"`
+	StepIndex       []StepIndexEntry `json:"stepIndex"`
+	LastSteps       []ResearchStep   `json:"lastSteps"`
+	ActiveGaps      []KnowledgeGap   `json:"activeGaps"`
+	Sources         []ResearchSource `json:"sources"`
+	Warning         string           `json:"warning,omitempty"`
 }
 
 type StepIndexEntry struct {

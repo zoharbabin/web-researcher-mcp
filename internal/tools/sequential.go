@@ -55,12 +55,13 @@ func registerSequentialSearch(srv *mcp.Server, deps Dependencies) {
 		}
 
 		tenantID := auth.TenantIDFromContext(ctx)
+		userID := auth.UserIDFromContext(ctx)
 
 		var idx *session.SessionIndex
 		var err error
 
 		if input.SessionID == "" || input.StepNumber == 1 {
-			idx, err = deps.Sessions.Create(tenantID)
+			idx, err = deps.Sessions.Create(tenantID, userID)
 			if err != nil {
 				return toolError(fmt.Sprintf("failed to create session: %v", err)), nil, nil
 			}
@@ -73,7 +74,7 @@ func registerSequentialSearch(srv *mcp.Server, deps Dependencies) {
 				}
 			}
 			if goal != "" {
-				_ = deps.Sessions.SetResearchGoal(tenantID, idx.ID, goal)
+				_ = deps.Sessions.SetResearchGoal(tenantID, userID, idx.ID, goal)
 			}
 		}
 
@@ -102,7 +103,7 @@ func registerSequentialSearch(srv *mcp.Server, deps Dependencies) {
 			}
 		}
 
-		idx, err = deps.Sessions.AppendStep(tenantID, sessionID, step, gap, input.SessionSummary)
+		idx, err = deps.Sessions.AppendStep(tenantID, userID, sessionID, step, gap, input.SessionSummary)
 		if err != nil {
 			// Typed recovery: a not-found session (expired, evicted, or — in a
 			// multi-pod HTTP deployment — held by a different instance) returns a
@@ -146,6 +147,10 @@ func buildSequentialResponse(idx *session.SessionIndex, input sequentialSearchIn
 		"totalStepsEstimate": input.TotalStepsEstimate,
 		"isComplete":         !input.NextStepNeeded,
 		"startedAt":          idx.CreatedAt.Format(time.RFC3339),
+		// The echoed `sources` carry external-origin titles/URLs; mark the
+		// envelope untrusted so replayed source metadata isn't treated as
+		// trusted. (Model-authored reasoning text is the host's own output.)
+		"trust": untrustedContentTrust,
 	}
 
 	if idx.Warning != "" {

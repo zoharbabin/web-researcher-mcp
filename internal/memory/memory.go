@@ -68,18 +68,32 @@ func (Noop) EraseUser(context.Context, string, string) (int, error)             
 // entry under its own key with the retention TTL so the store can expire it,
 // and prunes expired IDs from the index lazily on read.
 type StoreImpl struct {
-	store     persist.Store
-	retention time.Duration
-	clock     func() time.Time
-	newID     func() string
+	store      persist.Store
+	retention  time.Duration
+	maxEntries int // per-(tenant,user) cap; oldest-evicted on Save. 0 → defaultMaxEntries.
+	clock      func() time.Time
+	newID      func() string
 }
+
+// defaultMaxEntries bounds how many memories one (tenant,user) may accumulate,
+// so a consented user or a looping agent cannot grow the encrypted store without
+// limit (OWASP Agentic ASI06). Generous; oldest entries are evicted past it.
+const defaultMaxEntries = 5000
 
 // NewStore builds a memory store with the given retention window (0 → 90 days).
 func NewStore(store persist.Store, retention time.Duration) *StoreImpl {
 	if retention <= 0 {
 		retention = 90 * 24 * time.Hour
 	}
-	return &StoreImpl{store: store, retention: retention, clock: time.Now, newID: func() string { return uuid.New().String() }}
+	return &StoreImpl{store: store, retention: retention, maxEntries: defaultMaxEntries, clock: time.Now, newID: func() string { return uuid.New().String() }}
+}
+
+// WithMaxEntries overrides the per-(tenant,user) entry cap (≤0 keeps the default).
+func (s *StoreImpl) WithMaxEntries(n int) *StoreImpl {
+	if n > 0 {
+		s.maxEntries = n
+	}
+	return s
 }
 
 func indexKey(tenantID, userID string) string { return "memory:index:" + tenantID + ":" + userID }
@@ -124,6 +138,13 @@ func (s *StoreImpl) Save(ctx context.Context, e Entry) (Entry, error) {
 
 	ids := s.loadIndex(ctx, e.TenantID, e.UserID)
 	ids = append(ids, e.ID)
+	// Bound per-(tenant,user) growth: evict the oldest entries (index is in
+	// append order, so the front is oldest) until within the cap. Only this
+	// principal's own entries are touched.
+	for len(ids) > s.maxEntries {
+		s.store.Delete(ctx, entryKey(e.TenantID, e.UserID, ids[0]))
+		ids = ids[1:]
+	}
 	s.saveIndex(ctx, e.TenantID, e.UserID, ids)
 	return e, nil
 }

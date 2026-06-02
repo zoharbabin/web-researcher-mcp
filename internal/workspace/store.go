@@ -33,18 +33,32 @@ func (Noop) ExportContributor(context.Context, string, string) ([]Contribution, 
 // Keys: membership set, contribution index, per-contribution blobs, and a
 // per-contributor index (for cross-workspace export/erasure).
 type StoreImpl struct {
-	store persist.Store
-	ttl   time.Duration
-	clock func() time.Time
-	newID func() string
+	store      persist.Store
+	ttl        time.Duration
+	maxContrib int // per-workspace contribution cap; oldest-evicted. 0 → defaultMaxContrib.
+	clock      func() time.Time
+	newID      func() string
 }
+
+// defaultMaxContrib bounds contributions per workspace so a looping agent or
+// busy team cannot grow the encrypted store without limit (OWASP Agentic ASI06).
+// Generous; oldest contributions are evicted past it.
+const defaultMaxContrib = 5000
 
 // NewStore builds a workspace store with the given workspace TTL (0 → 30 days).
 func NewStore(store persist.Store, ttl time.Duration) *StoreImpl {
 	if ttl <= 0 {
 		ttl = 30 * 24 * time.Hour
 	}
-	return &StoreImpl{store: store, ttl: ttl, clock: time.Now, newID: func() string { return uuid.New().String() }}
+	return &StoreImpl{store: store, ttl: ttl, maxContrib: defaultMaxContrib, clock: time.Now, newID: func() string { return uuid.New().String() }}
+}
+
+// WithMaxContrib overrides the per-workspace contribution cap (≤0 keeps default).
+func (s *StoreImpl) WithMaxContrib(n int) *StoreImpl {
+	if n > 0 {
+		s.maxContrib = n
+	}
+	return s
 }
 
 func memberKey(workspaceID string, m Member) string {
@@ -109,7 +123,16 @@ func (s *StoreImpl) Contribute(ctx context.Context, workspaceID string, caller M
 	s.store.Set(ctx, contribKey(workspaceID, c.ID), data, s.ttl)
 
 	idx := s.loadStrings(ctx, contribIndexKey(workspaceID))
-	s.saveStrings(ctx, contribIndexKey(workspaceID), append(idx, c.ID))
+	idx = append(idx, c.ID)
+	// Bound per-workspace growth: evict the oldest contributions (index is in
+	// append order, front = oldest) until within the cap. Each eviction also
+	// prunes the evicted ref from its contributor index so that index can't grow
+	// unbounded behind the cap (keeps export/erasure proportional to retained set).
+	for len(idx) > s.maxContrib {
+		s.evictContribution(ctx, workspaceID, idx[0])
+		idx = idx[1:]
+	}
+	s.saveStrings(ctx, contribIndexKey(workspaceID), idx)
 
 	// Per-contributor index for cross-workspace export/erasure (#85). Entry is
 	// "workspaceID/contribID".
@@ -117,6 +140,29 @@ func (s *StoreImpl) Contribute(ctx context.Context, workspaceID string, caller M
 	cidx := s.loadStrings(ctx, ck)
 	s.saveStrings(ctx, ck, append(cidx, workspaceID+"/"+c.ID))
 	return c, nil
+}
+
+// evictContribution deletes a contribution blob AND prunes its ref from the
+// owning contributor's cross-workspace index, so that index stays proportional
+// to the retained set (not the all-time total). Best-effort: it reads the blob
+// for provenance before deleting; if the blob is already gone it just deletes.
+func (s *StoreImpl) evictContribution(ctx context.Context, workspaceID, contribID string) {
+	if data, ok := s.store.Get(ctx, contribKey(workspaceID, contribID)); ok {
+		var c Contribution
+		if json.Unmarshal(data, &c) == nil && c.ContributorTenant != "" {
+			ck := contributorIndexKey(c.ContributorTenant, c.ContributorUser)
+			ref := workspaceID + "/" + contribID
+			cur := s.loadStrings(ctx, ck)
+			pruned := cur[:0]
+			for _, r := range cur {
+				if r != ref {
+					pruned = append(pruned, r)
+				}
+			}
+			s.saveStrings(ctx, ck, pruned)
+		}
+	}
+	s.store.Delete(ctx, contribKey(workspaceID, contribID))
 }
 
 func (s *StoreImpl) Read(ctx context.Context, workspaceID string, caller Member) ([]Contribution, error) {

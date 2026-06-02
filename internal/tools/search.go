@@ -17,6 +17,12 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
+// maxNumResults is the documented (jsonschema 1-10) upper bound on result count,
+// enforced server-side at the tool boundary so a request can't drive unbounded
+// goroutine fan-out or upstream-provider billing regardless of provider behavior
+// (defense-in-depth; OWASP Agentic ASI06).
+const maxNumResults = 10
+
 type webSearchInput struct {
 	Query        string `json:"query" jsonschema:"The search query text (1-500 chars). Be specific with key terms and qualifiers for better results.,required"`
 	NumResults   int    `json:"num_results,omitempty" jsonschema:"Number of results to return (1-10). Default: 5. Higher values increase latency."`
@@ -51,6 +57,9 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 		numResults := input.NumResults
 		if numResults <= 0 {
 			numResults = 5
+		}
+		if numResults > maxNumResults {
+			numResults = maxNumResults // clamp to the documented ceiling (defense-in-depth, ASI06)
 		}
 
 		// The cache key MUST include every result-affecting parameter — most
@@ -117,6 +126,7 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 			"query":       input.Query,
 			"resultCount": len(results),
 			"results":     results,
+			"trust":       untrustedContentTrust,
 		}
 
 		const webSearchTTL = 30 * time.Minute
@@ -136,6 +146,10 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 func searchCacheKey(toolName string, parts ...any) string {
 	h := sha256.New()
 	h.Write([]byte(toolName))
+	// Version segment: bump whenever the cached response SHAPE changes so a
+	// post-upgrade cache hit can never serve a blob missing a new field. v2
+	// added the "trust" untrusted-content marker to every search-family output.
+	h.Write([]byte("|v2"))
 	for _, p := range parts {
 		fmt.Fprintf(h, "|%v", p)
 	}
@@ -150,6 +164,47 @@ func searchCacheKey(toolName string, parts ...any) string {
 // query-bearing variant auditToolCallQuery layers privacy-gated metadata on top.
 func auditToolCall(ctx context.Context, deps Dependencies, toolName string, duration time.Duration, err error, errCode string) {
 	auditToolCallQuery(ctx, deps, toolName, duration, err, errCode, "", nil)
+}
+
+// auditToolDenial records a refused tool call (no_consent / not_member /
+// unauthenticated) on the highest-sensitivity tools so refusals are visible in
+// both the audit trail and Prometheus, with metrics PARITY against successes.
+// It emits Success=false + the errCode WITHOUT a synthetic error message (the
+// reason is the errCode), then records the tool-call metric. No PII: only the
+// identity-from-context and the errCode are recorded, never tool input.
+func auditToolDenial(ctx context.Context, deps Dependencies, toolName string, duration time.Duration, errCode string) {
+	if deps.Auditor != nil {
+		event := audit.NewEvent("tool_call", auth.TenantIDFromContext(ctx), auth.UserIDFromContext(ctx))
+		event.ToolName = toolName
+		if rid := auth.RequestIDFromContext(ctx); rid != "" {
+			event.RequestID = rid
+		}
+		event.Duration = duration.Milliseconds()
+		event.Success = false
+		event.ErrorCode = errCode
+		event.SourceIP = auth.SourceIPFromContext(ctx)
+		deps.Auditor.Log(event)
+	}
+	if deps.Metrics != nil {
+		// errCode marks it as an error in the per-tool metrics; nil error keeps
+		// the message out (the code is the reason). cacheHit=false.
+		deps.Metrics.RecordToolCall(toolName, duration, errSentinel(errCode), errCode, false)
+	}
+}
+
+// errSentinel wraps an errCode as a minimal error so RecordToolCall classifies
+// the call as a failure in mcp_tool_calls_errors_total without leaking detail.
+type errSentinel string
+
+func (e errSentinel) Error() string { return string(e) }
+
+// recordToolCall is a nil-safe wrapper over deps.Metrics.RecordToolCall.
+// deps.Metrics is optional in this package (minimal embeddings/tests may leave
+// it unset), so callers route through here to avoid a nil-pointer panic.
+func recordToolCall(deps Dependencies, tool string, dur time.Duration, err error, errCode string, cacheHit bool) {
+	if deps.Metrics != nil {
+		deps.Metrics.RecordToolCall(tool, dur, err, errCode, cacheHit)
+	}
 }
 
 // auditToolCallQuery is the metadata-aware variant for query tools.

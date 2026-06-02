@@ -143,7 +143,7 @@ jobs:
       - name: Verify tool docs/annotations match the registry
         run: |
           go test -count=1 \
-            -run 'TestToolsDocMatchesRegistry|TestOutputSchemaMatchesResponse|TestToolDescriptionQuality|TestAllToolsHaveAnnotations|TestAllToolsRegistered|TestAllToolsHaveOutputSchema' \
+            -run 'TestToolsDocMatchesRegistry|TestOutputSchemaMatchesResponse|TestToolDescriptionQuality|TestAllToolsHaveAnnotations|TestAllToolsRegistered|TestAllToolsHaveOutputSchema|TestExternalContentToolsCarryTrustMarker' \
             ./internal/tools/...
 
   e2e:

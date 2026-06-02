@@ -267,6 +267,12 @@ func (l *Limiter) WrapIP(next http.Handler) http.Handler {
 	})
 }
 
+// ClientIP exposes the same proxy-aware client-IP resolution used for per-IP
+// rate limiting, so other middleware (e.g. audit SourceIP tagging) attributes
+// requests to the identical address — one source of truth for "who is calling",
+// honoring TRUST_PROXY consistently.
+func (l *Limiter) ClientIP(r *http.Request) string { return l.clientIP(r) }
+
 // clientIP extracts the client address for per-IP limiting. With TRUST_PROXY it
 // honors the leftmost X-Forwarded-For hop; otherwise it uses RemoteAddr. A
 // malformed RemoteAddr (no port) is used verbatim rather than panicking.

@@ -1279,3 +1279,105 @@ func TestToolsWorkWithRouter(t *testing.T) {
 		t.Fatalf("expected 1 result, got %v", output["resultCount"])
 	}
 }
+
+// TestRegulatedToolDenialsAreAuditedAndMetered verifies metrics+audit PARITY on
+// the regulated tools' refusal paths: an unauthenticated (anonymous/STDIO)
+// caller is denied, and each denial emits exactly one audit event (Success=false,
+// errCode=unauthenticated, no tool input) AND increments the per-tool metric.
+func TestRegulatedToolDenialsAreAuditedAndMetered(t *testing.T) {
+	for _, tool := range []string{"memory_save", "memory_recall", "workspace_contribute", "workspace_read", "get_my_analytics"} {
+		t.Run(tool, func(t *testing.T) {
+			cap := &capturingAuditor{}
+			mc := metrics.NewCollector()
+			deps := setupTestDeps()
+			deps.Auditor = cap
+			deps.Metrics = mc
+
+			ctx := context.Background()
+			srv := createTestServer(deps)
+			sess := connectTestClient(ctx, t, srv)
+			defer sess.Close()
+
+			args := map[string]any{}
+			switch tool {
+			case "memory_save":
+				args["note"] = "x"
+			case "workspace_contribute":
+				args["workspace_id"] = "w1"
+				args["note"] = "x"
+			case "workspace_read":
+				args["workspace_id"] = "w1"
+			}
+			if _, err := sess.CallTool(ctx, &mcp.CallToolParams{Name: tool, Arguments: args}); err != nil {
+				t.Fatalf("CallTool(%s) failed: %v", tool, err)
+			}
+
+			// Exactly one audit event for this denied call, Success=false, no PII.
+			evs := cap.events
+			if len(evs) != 1 {
+				t.Fatalf("%s: expected 1 audit event on denial, got %d", tool, len(evs))
+			}
+			ev := evs[0]
+			if ev.Success {
+				t.Errorf("%s: denial event must have Success=false", tool)
+			}
+			if ev.ErrorCode != "unauthenticated" {
+				t.Errorf("%s: errCode = %q, want unauthenticated", tool, ev.ErrorCode)
+			}
+			if ev.ToolName != tool {
+				t.Errorf("%s: tool name = %q", tool, ev.ToolName)
+			}
+			// Metric parity: the denied call is counted for this tool.
+			if got := mc.GetToolStats()[tool].TotalCalls; got != 1 {
+				t.Errorf("%s: metric TotalCalls = %d, want 1", tool, got)
+			}
+		})
+	}
+}
+
+// numCapturingProvider records the NumResults it was asked for, to assert the
+// tool-boundary clamp.
+type numCapturingProvider struct {
+	mu   sync.Mutex
+	seen int
+}
+
+func (p *numCapturingProvider) Web(_ context.Context, params search.WebSearchParams) ([]search.SearchResult, error) {
+	p.mu.Lock()
+	p.seen = params.NumResults
+	p.mu.Unlock()
+	return []search.SearchResult{{Title: "t", URL: "https://e.com", Snippet: "s"}}, nil
+}
+func (p *numCapturingProvider) Images(_ context.Context, _ search.ImageSearchParams) ([]search.ImageResult, error) {
+	return nil, nil
+}
+func (p *numCapturingProvider) News(_ context.Context, _ search.NewsSearchParams) ([]search.NewsResult, error) {
+	return nil, nil
+}
+func (p *numCapturingProvider) Name() string { return "numcap" }
+
+// TestNumResultsClampedAtBoundary verifies web_search clamps an over-limit
+// num_results to the documented ceiling before it reaches the provider (ASI06
+// fan-out / billing bound, defense-in-depth).
+func TestNumResultsClampedAtBoundary(t *testing.T) {
+	cap := &numCapturingProvider{}
+	deps := setupTestDeps()
+	deps.Search = cap
+	ctx := context.Background()
+	srv := createTestServer(deps)
+	sess := connectTestClient(ctx, t, srv)
+	defer sess.Close()
+
+	if _, err := sess.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "web_search",
+		Arguments: map[string]any{"query": "x", "num_results": 50},
+	}); err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	cap.mu.Lock()
+	got := cap.seen
+	cap.mu.Unlock()
+	if got != maxNumResults {
+		t.Errorf("num_results=50 should clamp to %d at the boundary, provider saw %d", maxNumResults, got)
+	}
+}

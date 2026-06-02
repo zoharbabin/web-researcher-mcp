@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zoharbabin/web-researcher-mcp/internal/audit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/config"
 	"github.com/zoharbabin/web-researcher-mcp/internal/persist"
 )
@@ -936,4 +937,88 @@ func TestMiddlewareUnsupportedAlgorithm(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "unsupported algorithm") {
 		t.Fatalf("expected 'unsupported algorithm' error, got: %s", rec.Body.String())
 	}
+}
+
+// captureAuditor is a test Auditor that records every event it receives.
+type captureAuditor struct {
+	mu     sync.Mutex
+	events []audit.AuditEvent
+}
+
+func (c *captureAuditor) Log(e audit.AuditEvent) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.events = append(c.events, e)
+}
+func (c *captureAuditor) IncludeRequestBody() bool { return false }
+func (c *captureAuditor) Close()                   {}
+func (c *captureAuditor) all() []audit.AuditEvent {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]audit.AuditEvent(nil), c.events...)
+}
+
+func TestWrapAuditsAuthFailures(t *testing.T) {
+	key := testKey(t)
+	kid := "key-1"
+	m, jwksSrv := setupMiddleware(t, key, kid)
+	aud := &captureAuditor{}
+	m.WithAuditor(aud)
+
+	handler := m.Wrap(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	cases := []struct {
+		name       string
+		setup      func(*http.Request)
+		wantReason string
+	}{
+		{"missing header", func(r *http.Request) {}, "missing_authorization_header"},
+		{"bad scheme", func(r *http.Request) { r.Header.Set("Authorization", "Basic xyz") }, "invalid_authorization_scheme"},
+		{"invalid token", func(r *http.Request) { r.Header.Set("Authorization", "Bearer not.a.jwt") }, "invalid_token"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			aud.events = nil
+			req := httptest.NewRequest(http.MethodPost, "/mcp/", nil)
+			tc.setup(req)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("expected 401, got %d", rec.Code)
+			}
+			evs := aud.all()
+			if len(evs) != 1 {
+				t.Fatalf("expected exactly 1 auth.failure event, got %d", len(evs))
+			}
+			ev := evs[0]
+			if ev.EventType != "auth.failure" {
+				t.Errorf("event type = %q, want auth.failure", ev.EventType)
+			}
+			if ev.Success {
+				t.Error("auth.failure event must have Success=false")
+			}
+			if ev.ErrorCode != tc.wantReason {
+				t.Errorf("reason = %q, want %q", ev.ErrorCode, tc.wantReason)
+			}
+		})
+	}
+
+	// A SUCCESSFUL auth must emit NO auth.failure event.
+	t.Run("success emits nothing", func(t *testing.T) {
+		aud.events = nil
+		token := signJWT(t, key, kid, validPayload(jwksSrv.URL))
+		req := httptest.NewRequest(http.MethodPost, "/mcp/", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rec.Code)
+		}
+		if n := len(aud.all()); n != 0 {
+			t.Errorf("successful auth emitted %d events, want 0", n)
+		}
+	})
 }

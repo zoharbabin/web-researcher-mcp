@@ -121,20 +121,20 @@ func (s *Server) ServeHTTP(ctx context.Context, cfg HTTPConfig) error {
 	mux.Handle("GET /metrics", cfg.Metrics.HTTPHandler())
 
 	if cfg.AdminKey != "" {
-		mux.Handle("DELETE /admin/cache", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, handleAdminFlushCache(cfg.Cache))))
-		mux.Handle("DELETE /admin/sessions", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, handleAdminFlushSessions(cfg.Sessions))))
-		mux.Handle("GET /admin/analytics", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, handleAdminTenantAnalytics(cfg.Metrics))))
+		mux.Handle("DELETE /admin/cache", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.Auditor, handleAdminFlushCache(cfg.Cache))))
+		mux.Handle("DELETE /admin/sessions", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.Auditor, handleAdminFlushSessions(cfg.Sessions))))
+		mux.Handle("GET /admin/analytics", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.Auditor, handleAdminTenantAnalytics(cfg.Metrics))))
 		if cfg.DataSubjects != nil {
-			mux.Handle("GET /admin/data", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, handleAdminDataExport(cfg.DataSubjects, cfg.Auditor))))
-			mux.Handle("DELETE /admin/data", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, handleAdminDataErasure(cfg.DataSubjects, cfg.Consent, cfg.Auditor))))
+			mux.Handle("GET /admin/data", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.Auditor, handleAdminDataExport(cfg.DataSubjects, cfg.Auditor))))
+			mux.Handle("DELETE /admin/data", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.Auditor, handleAdminDataErasure(cfg.DataSubjects, cfg.Consent, cfg.Auditor))))
 		}
 		if cfg.Consent != nil {
-			mux.Handle("POST /admin/consent", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, handleAdminConsentRecord(cfg.Consent, cfg.Auditor))))
-			mux.Handle("GET /admin/consent", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, handleAdminConsentQuery(cfg.Consent))))
+			mux.Handle("POST /admin/consent", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.Auditor, handleAdminConsentRecord(cfg.Consent, cfg.Auditor))))
+			mux.Handle("GET /admin/consent", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.Auditor, handleAdminConsentQuery(cfg.Consent))))
 		}
 		if cfg.Workspaces != nil {
-			mux.Handle("POST /admin/workspace/members", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, handleAdminWorkspaceMember(cfg.Workspaces, cfg.Auditor, true))))
-			mux.Handle("DELETE /admin/workspace/members", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, handleAdminWorkspaceMember(cfg.Workspaces, cfg.Auditor, false))))
+			mux.Handle("POST /admin/workspace/members", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.Auditor, handleAdminWorkspaceMember(cfg.Workspaces, cfg.Auditor, true))))
+			mux.Handle("DELETE /admin/workspace/members", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.Auditor, handleAdminWorkspaceMember(cfg.Workspaces, cfg.Auditor, false))))
 		}
 	}
 
@@ -153,7 +153,7 @@ func (s *Server) ServeHTTP(ctx context.Context, cfg HTTPConfig) error {
 		referrerPolicy:    cfg.ReferrerPolicy,
 		permissionsPolicy: cfg.PermissionsPolicy,
 	}, corsMiddleware(cfg.AllowedOrigins, cfg.CORSStrict, root))
-	root = requestIDMiddleware(root)
+	root = requestIDMiddleware(cfg.RateLimiter, root)
 	root = cfg.RateLimiter.WrapIP(root)
 
 	httpServer := &http.Server{
@@ -203,7 +203,7 @@ const maxRequestIDLen = 200
 // response headers or bloat logs. The chosen ID is stored on the context via
 // auth.ContextKeyRequestID (for audit correlation) and echoed back on the
 // response as X-Request-Id.
-func requestIDMiddleware(next http.Handler) http.Handler {
+func requestIDMiddleware(rl *ratelimit.Limiter, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := sanitizeRequestID(r.Header.Get("X-Request-Id"))
 		if id == "" {
@@ -214,6 +214,11 @@ func requestIDMiddleware(next http.Handler) http.Handler {
 		}
 		w.Header().Set("X-Request-Id", id)
 		ctx := context.WithValue(r.Context(), auth.ContextKeyRequestID, id)
+		// Attach the proxy-aware client IP (one source of truth with the rate
+		// limiter) so audit events are attributable beyond the request ID.
+		if rl != nil {
+			ctx = context.WithValue(ctx, auth.ContextKeySourceIP, rl.ClientIP(r))
+		}
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -317,10 +322,22 @@ func corsMiddleware(allowedOrigins []string, strict bool, next http.Handler) htt
 	})
 }
 
-func adminAuth(key string, handler http.HandlerFunc) http.HandlerFunc {
+func adminAuth(key string, auditor audit.Auditor, handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		provided := r.Header.Get("X-Admin-Key")
 		if subtle.ConstantTimeCompare([]byte(provided), []byte(key)) != 1 {
+			// Admin-key guessing is a high-value attack — make it detectable.
+			if auditor != nil {
+				ev := audit.NewEvent("auth.failure", auth.TenantIDFromContext(r.Context()), auth.UserIDFromContext(r.Context()))
+				ev.Success = false
+				ev.ErrorCode = "admin_key_invalid"
+				ev.SourceIP = auth.SourceIPFromContext(r.Context())
+				if rid := auth.RequestIDFromContext(r.Context()); rid != "" {
+					ev.RequestID = rid
+				}
+				ev.Metadata = map[string]any{"path": r.URL.Path}
+				auditor.Log(ev)
+			}
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}

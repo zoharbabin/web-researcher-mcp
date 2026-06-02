@@ -34,6 +34,9 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 		}
 
 		numResults := input.NumResults
+		if numResults > maxNumResults {
+			numResults = maxNumResults
+		}
 		if numResults <= 0 {
 			numResults = 5
 		}
@@ -81,6 +84,7 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 			"articles":    results,
 			"query":       input.Query,
 			"resultCount": len(results),
+			"trust":       untrustedContentTrust,
 		}
 
 		jsonBytes, _ := json.Marshal(output)

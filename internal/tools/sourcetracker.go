@@ -15,7 +15,8 @@ func trackSources(ctx context.Context, deps Dependencies, sessionID string, sour
 		return
 	}
 	tenantID := auth.TenantIDFromContext(ctx)
-	if err := deps.Sessions.AddSources(tenantID, sessionID, sources); err != nil {
+	userID := auth.UserIDFromContext(ctx)
+	if err := deps.Sessions.AddSources(tenantID, userID, sessionID, sources); err != nil {
 		slog.Debug("session source tracking skipped", "sessionId", sessionID, "err", err)
 	}
 }

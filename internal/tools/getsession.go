@@ -29,11 +29,12 @@ func registerGetSession(srv *mcp.Server, deps Dependencies) {
 		}
 
 		tenantID := auth.TenantIDFromContext(ctx)
+		userID := auth.UserIDFromContext(ctx)
 
 		if input.StepID > 0 {
-			step, err := deps.Sessions.GetStep(tenantID, input.SessionID, input.StepID)
+			step, err := deps.Sessions.GetStep(tenantID, userID, input.SessionID, input.StepID)
 			if err != nil {
-				deps.Metrics.RecordToolCall("get_research_session", time.Since(start), err, "upstream_error", false)
+				recordToolCall(deps, "get_research_session", time.Since(start), err, "upstream_error", false)
 				auditToolCall(ctx, deps, "get_research_session", time.Since(start), err, "upstream_error")
 				return toolError("Session not found or expired. Sessions last 4 hours from last activity."), nil, nil
 			}
@@ -42,16 +43,17 @@ func registerGetSession(srv *mcp.Server, deps Dependencies) {
 				"sessionId":    input.SessionID,
 				"responseMode": "step",
 				"step":         step,
+				"trust":        untrustedContentTrust,
 			}
 			jsonBytes, _ := json.Marshal(output)
-			deps.Metrics.RecordToolCall("get_research_session", time.Since(start), nil, "", false)
+			recordToolCall(deps, "get_research_session", time.Since(start), nil, "", false)
 			auditToolCall(ctx, deps, "get_research_session", time.Since(start), nil, "")
 			return structuredResult(jsonBytes), nil, nil
 		}
 
-		idx, ok := deps.Sessions.GetIndex(tenantID, input.SessionID)
+		idx, ok := deps.Sessions.GetIndex(tenantID, userID, input.SessionID)
 		if !ok {
-			deps.Metrics.RecordToolCall("get_research_session", time.Since(start), nil, "upstream_error", false)
+			recordToolCall(deps, "get_research_session", time.Since(start), nil, "upstream_error", false)
 			auditToolCall(ctx, deps, "get_research_session", time.Since(start), nil, "upstream_error")
 			return toolError("Session not found or expired. Sessions last 4 hours from last activity."), nil, nil
 		}
@@ -67,10 +69,11 @@ func registerGetSession(srv *mcp.Server, deps Dependencies) {
 			"gaps":         idx.ActiveGaps,
 			"sources":      idx.Sources,
 			"startedAt":    idx.CreatedAt.Format(time.RFC3339),
+			"trust":        untrustedContentTrust,
 		}
 
 		jsonBytes, _ := json.Marshal(output)
-		deps.Metrics.RecordToolCall("get_research_session", time.Since(start), nil, "", false)
+		recordToolCall(deps, "get_research_session", time.Since(start), nil, "", false)
 		auditToolCall(ctx, deps, "get_research_session", time.Since(start), nil, "")
 		return structuredResult(jsonBytes), nil, nil
 	})

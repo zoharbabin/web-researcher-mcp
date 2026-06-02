@@ -113,8 +113,8 @@ func TestSessionsResource(t *testing.T) {
 	defer cs.Close()
 
 	// Create some sessions
-	_, _ = s.Create("tenant-1")
-	_, _ = s.Create("tenant-2")
+	_, _ = s.Create("tenant-1", "u1")
+	_, _ = s.Create("tenant-2", "u1")
 
 	result, err := cs.ReadResource(ctx, &mcp.ReadResourceParams{URI: "stats://sessions"})
 	if err != nil {

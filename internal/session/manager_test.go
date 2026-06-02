@@ -22,7 +22,7 @@ func TestCreateAndGet(t *testing.T) {
 	m := newTestManager(5*time.Minute, 10)
 	defer m.Close()
 
-	idx, err := m.Create("tenant-1")
+	idx, err := m.Create("tenant-1", "u1")
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
@@ -33,7 +33,7 @@ func TestCreateAndGet(t *testing.T) {
 		t.Errorf("expected TenantID=tenant-1, got %s", idx.TenantID)
 	}
 
-	got, ok := m.GetIndex("tenant-1", idx.ID)
+	got, ok := m.GetIndex("tenant-1", "u1", idx.ID)
 	if !ok {
 		t.Fatal("GetIndex returned not-found for existing session")
 	}
@@ -46,7 +46,7 @@ func TestGetNonExistent(t *testing.T) {
 	m := newTestManager(5*time.Minute, 10)
 	defer m.Close()
 
-	_, ok := m.GetIndex("tenant-1", "nonexistent-id")
+	_, ok := m.GetIndex("tenant-1", "u1", "nonexistent-id")
 	if ok {
 		t.Error("expected not-found for nonexistent session")
 	}
@@ -56,26 +56,62 @@ func TestTenantIsolation(t *testing.T) {
 	m := newTestManager(5*time.Minute, 10)
 	defer m.Close()
 
-	idxA, _ := m.Create("tenant-A")
-	idxB, _ := m.Create("tenant-B")
+	idxA, _ := m.Create("tenant-A", "u1")
+	idxB, _ := m.Create("tenant-B", "u1")
 
-	_, ok := m.GetIndex("tenant-A", idxB.ID)
+	_, ok := m.GetIndex("tenant-A", "u1", idxB.ID)
 	if ok {
 		t.Error("tenant-A should not be able to access tenant-B's session")
 	}
 
-	_, ok = m.GetIndex("tenant-B", idxA.ID)
+	_, ok = m.GetIndex("tenant-B", "u1", idxA.ID)
 	if ok {
 		t.Error("tenant-B should not be able to access tenant-A's session")
 	}
 
-	_, ok = m.GetIndex("tenant-A", idxA.ID)
+	_, ok = m.GetIndex("tenant-A", "u1", idxA.ID)
 	if !ok {
 		t.Error("tenant-A should be able to access their own session")
 	}
-	_, ok = m.GetIndex("tenant-B", idxB.ID)
+	_, ok = m.GetIndex("tenant-B", "u1", idxB.ID)
 	if !ok {
 		t.Error("tenant-B should be able to access their own session")
+	}
+}
+
+// TestUserIsolationWithinTenant verifies sessions are user-private: a co-tenant
+// user cannot read or mutate another user's session even with its ID, while the
+// owner (and STDIO/anonymous) round-trips normally.
+func TestUserIsolationWithinTenant(t *testing.T) {
+	m := newTestManager(5*time.Minute, 10)
+	defer m.Close()
+
+	idxAlice, _ := m.Create("tenant-1", "alice")
+
+	// Bob, a different user in the SAME tenant, must not see Alice's session.
+	if _, ok := m.GetIndex("tenant-1", "bob", idxAlice.ID); ok {
+		t.Error("a co-tenant user must not read another user's session by ID")
+	}
+	if _, err := m.GetFull("tenant-1", "bob", idxAlice.ID); err == nil {
+		t.Error("GetFull must fail for a non-owner")
+	}
+	if _, err := m.AppendStep("tenant-1", "bob", idxAlice.ID, ResearchStep{StepNumber: 2, Description: "x"}, nil, ""); err == nil {
+		t.Error("AppendStep must fail for a non-owner")
+	}
+
+	// Alice (owner) reads her own session.
+	if _, ok := m.GetIndex("tenant-1", "alice", idxAlice.ID); !ok {
+		t.Error("owner must read their own session")
+	}
+
+	// Anonymous (STDIO) round-trips with the normalized empty userID.
+	idxAnon, _ := m.Create("tenant-1", "")
+	if _, ok := m.GetIndex("tenant-1", "", idxAnon.ID); !ok {
+		t.Error("anonymous/STDIO session must round-trip")
+	}
+	// ...and an authenticated user can't reach the anonymous session.
+	if _, ok := m.GetIndex("tenant-1", "alice", idxAnon.ID); ok {
+		t.Error("authenticated user must not read the anonymous session")
 	}
 }
 
@@ -83,7 +119,7 @@ func TestAppendStep(t *testing.T) {
 	m := newTestManager(5*time.Minute, 10)
 	defer m.Close()
 
-	idx, _ := m.Create("tenant-1")
+	idx, _ := m.Create("tenant-1", "u1")
 
 	step := ResearchStep{
 		StepNumber:  1,
@@ -93,7 +129,7 @@ func TestAppendStep(t *testing.T) {
 		Timestamp:   time.Now().Format(time.RFC3339),
 	}
 
-	updated, err := m.AppendStep("tenant-1", idx.ID, step, nil, "")
+	updated, err := m.AppendStep("tenant-1", "u1", idx.ID, step, nil, "")
 	if err != nil {
 		t.Fatalf("AppendStep failed: %v", err)
 	}
@@ -114,7 +150,7 @@ func TestAppendStepSessionNotFound(t *testing.T) {
 	defer m.Close()
 
 	step := ResearchStep{StepNumber: 4, Description: "step on a missing session"}
-	_, err := m.AppendStep("tenant-1", "does-not-exist", step, nil, "")
+	_, err := m.AppendStep("tenant-1", "u1", "does-not-exist", step, nil, "")
 	if err == nil {
 		t.Fatal("expected error for missing session")
 	}
@@ -137,7 +173,7 @@ func TestAppendStepWithGap(t *testing.T) {
 	m := newTestManager(5*time.Minute, 10)
 	defer m.Close()
 
-	idx, _ := m.Create("tenant-1")
+	idx, _ := m.Create("tenant-1", "u1")
 
 	step := ResearchStep{
 		StepNumber:  1,
@@ -149,7 +185,7 @@ func TestAppendStepWithGap(t *testing.T) {
 		FoundInStep: 1,
 	}
 
-	updated, err := m.AppendStep("tenant-1", idx.ID, step, gap, "")
+	updated, err := m.AppendStep("tenant-1", "u1", idx.ID, step, gap, "")
 	if err != nil {
 		t.Fatalf("AppendStep failed: %v", err)
 	}
@@ -162,10 +198,10 @@ func TestDelete(t *testing.T) {
 	m := newTestManager(5*time.Minute, 10)
 	defer m.Close()
 
-	idx, _ := m.Create("tenant-1")
-	m.Delete("tenant-1", idx.ID)
+	idx, _ := m.Create("tenant-1", "u1")
+	m.Delete("tenant-1", "u1", idx.ID)
 
-	_, ok := m.GetIndex("tenant-1", idx.ID)
+	_, ok := m.GetIndex("tenant-1", "u1", idx.ID)
 	if ok {
 		t.Error("session should not exist after delete")
 	}
@@ -175,9 +211,9 @@ func TestDeleteAll(t *testing.T) {
 	m := newTestManager(5*time.Minute, 10)
 	defer m.Close()
 
-	m.Create("tenant-1")
-	m.Create("tenant-2")
-	m.Create("tenant-3")
+	m.Create("tenant-1", "u1")
+	m.Create("tenant-2", "u1")
+	m.Create("tenant-3", "u1")
 
 	if m.ActiveCount() != 3 {
 		t.Fatalf("expected 3 sessions, got %d", m.ActiveCount())
@@ -194,16 +230,16 @@ func TestTTLExpiry(t *testing.T) {
 	m := newTestManager(50*time.Millisecond, 10)
 	defer m.Close()
 
-	idx, _ := m.Create("tenant-1")
+	idx, _ := m.Create("tenant-1", "u1")
 
-	_, ok := m.GetIndex("tenant-1", idx.ID)
+	_, ok := m.GetIndex("tenant-1", "u1", idx.ID)
 	if !ok {
 		t.Fatal("session should be accessible immediately after creation")
 	}
 
 	time.Sleep(100 * time.Millisecond)
 
-	_, ok = m.GetIndex("tenant-1", idx.ID)
+	_, ok = m.GetIndex("tenant-1", "u1", idx.ID)
 	if ok {
 		t.Error("session should not be accessible after TTL expiry")
 	}
@@ -213,18 +249,18 @@ func TestMaxSessionsEviction(t *testing.T) {
 	m := newTestManager(5*time.Minute, 2)
 	defer m.Close()
 
-	idx1, _ := m.Create("tenant-1")
+	idx1, _ := m.Create("tenant-1", "u1")
 	time.Sleep(10 * time.Millisecond)
-	_, _ = m.Create("tenant-1")
+	_, _ = m.Create("tenant-1", "u1")
 
-	idx3, _ := m.Create("tenant-1")
+	idx3, _ := m.Create("tenant-1", "u1")
 
-	_, ok := m.GetIndex("tenant-1", idx1.ID)
+	_, ok := m.GetIndex("tenant-1", "u1", idx1.ID)
 	if ok {
 		t.Error("oldest session should have been evicted")
 	}
 
-	_, ok = m.GetIndex("tenant-1", idx3.ID)
+	_, ok = m.GetIndex("tenant-1", "u1", idx3.ID)
 	if !ok {
 		t.Error("newest session should still exist")
 	}
@@ -234,11 +270,11 @@ func TestMaxSessionsPerTenant(t *testing.T) {
 	m := newTestManager(5*time.Minute, 2)
 	defer m.Close()
 
-	m.Create("tenant-A")
-	m.Create("tenant-A")
+	m.Create("tenant-A", "u1")
+	m.Create("tenant-A", "u1")
 
-	idxB, _ := m.Create("tenant-B")
-	_, ok := m.GetIndex("tenant-B", idxB.ID)
+	idxB, _ := m.Create("tenant-B", "u1")
+	_, ok := m.GetIndex("tenant-B", "u1", idxB.ID)
 	if !ok {
 		t.Error("tenant-B session should exist regardless of tenant-A being at max")
 	}
@@ -252,8 +288,8 @@ func TestActiveCount(t *testing.T) {
 		t.Errorf("expected 0, got %d", m.ActiveCount())
 	}
 
-	m.Create("tenant-1")
-	m.Create("tenant-2")
+	m.Create("tenant-1", "u1")
+	m.Create("tenant-2", "u1")
 
 	if m.ActiveCount() != 2 {
 		t.Errorf("expected 2, got %d", m.ActiveCount())
@@ -266,7 +302,7 @@ func TestSessionIDsAreUnique(t *testing.T) {
 
 	ids := make(map[string]bool)
 	for i := 0; i < 20; i++ {
-		idx, _ := m.Create("tenant-1")
+		idx, _ := m.Create("tenant-1", "u1")
 		if ids[idx.ID] {
 			t.Fatalf("duplicate session ID: %s", idx.ID)
 		}
@@ -278,8 +314,8 @@ func TestGetFull(t *testing.T) {
 	m := newTestManager(5*time.Minute, 10)
 	defer m.Close()
 
-	idx, _ := m.Create("tenant-1")
-	m.SetResearchGoal("tenant-1", idx.ID, "Find quantum computing benchmarks")
+	idx, _ := m.Create("tenant-1", "u1")
+	m.SetResearchGoal("tenant-1", "u1", idx.ID, "Find quantum computing benchmarks")
 
 	step := ResearchStep{
 		StepNumber:  1,
@@ -287,9 +323,9 @@ func TestGetFull(t *testing.T) {
 		Confidence:  "high",
 		Timestamp:   time.Now().Format(time.RFC3339),
 	}
-	m.AppendStep("tenant-1", idx.ID, step, nil, "")
+	m.AppendStep("tenant-1", "u1", idx.ID, step, nil, "")
 
-	sess, err := m.GetFull("tenant-1", idx.ID)
+	sess, err := m.GetFull("tenant-1", "u1", idx.ID)
 	if err != nil {
 		t.Fatalf("GetFull failed: %v", err)
 	}
@@ -305,7 +341,7 @@ func TestGetStep(t *testing.T) {
 	m := newTestManager(5*time.Minute, 10)
 	defer m.Close()
 
-	idx, _ := m.Create("tenant-1")
+	idx, _ := m.Create("tenant-1", "u1")
 
 	for i := 1; i <= 3; i++ {
 		step := ResearchStep{
@@ -313,10 +349,10 @@ func TestGetStep(t *testing.T) {
 			Description: "Step " + string(rune('0'+i)),
 			Timestamp:   time.Now().Format(time.RFC3339),
 		}
-		m.AppendStep("tenant-1", idx.ID, step, nil, "")
+		m.AppendStep("tenant-1", "u1", idx.ID, step, nil, "")
 	}
 
-	step, err := m.GetStep("tenant-1", idx.ID, 2)
+	step, err := m.GetStep("tenant-1", "u1", idx.ID, 2)
 	if err != nil {
 		t.Fatalf("GetStep failed: %v", err)
 	}
@@ -324,7 +360,7 @@ func TestGetStep(t *testing.T) {
 		t.Errorf("expected step 2, got %d", step.StepNumber)
 	}
 
-	_, err = m.GetStep("tenant-1", idx.ID, 99)
+	_, err = m.GetStep("tenant-1", "u1", idx.ID, 99)
 	if err == nil {
 		t.Error("expected error for nonexistent step")
 	}
@@ -340,15 +376,15 @@ func TestMaxStepsEnforcement(t *testing.T) {
 	})
 	defer m.Close()
 
-	idx, _ := m.Create("tenant-1")
+	idx, _ := m.Create("tenant-1", "u1")
 
 	for i := 1; i <= 3; i++ {
 		step := ResearchStep{StepNumber: i, Description: "step", Timestamp: time.Now().Format(time.RFC3339)}
-		m.AppendStep("tenant-1", idx.ID, step, nil, "")
+		m.AppendStep("tenant-1", "u1", idx.ID, step, nil, "")
 	}
 
 	step := ResearchStep{StepNumber: 4, Description: "one too many", Timestamp: time.Now().Format(time.RFC3339)}
-	result, err := m.AppendStep("tenant-1", idx.ID, step, nil, "")
+	result, err := m.AppendStep("tenant-1", "u1", idx.ID, step, nil, "")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -369,10 +405,10 @@ func TestDiskPersistence(t *testing.T) {
 		SessionTTL:  5 * time.Minute,
 		DataDir:     dir,
 	})
-	idx, _ := m1.Create("tenant-1")
-	m1.SetResearchGoal("tenant-1", idx.ID, "test persistence")
+	idx, _ := m1.Create("tenant-1", "u1")
+	m1.SetResearchGoal("tenant-1", "u1", idx.ID, "test persistence")
 	step := ResearchStep{StepNumber: 1, Description: "persisted step", Timestamp: time.Now().Format(time.RFC3339)}
-	m1.AppendStep("tenant-1", idx.ID, step, nil, "")
+	m1.AppendStep("tenant-1", "u1", idx.ID, step, nil, "")
 	m1.Close()
 
 	// Create new manager from same dir — should rebuild from disk
@@ -383,7 +419,7 @@ func TestDiskPersistence(t *testing.T) {
 	})
 	defer m2.Close()
 
-	got, ok := m2.GetIndex("tenant-1", idx.ID)
+	got, ok := m2.GetIndex("tenant-1", "u1", idx.ID)
 	if !ok {
 		t.Fatal("session should survive manager restart")
 	}
@@ -405,9 +441,9 @@ func TestDiskPersistenceWithEncryption(t *testing.T) {
 		DataDir:       dir,
 		EncryptionKey: key,
 	})
-	idx, _ := m1.Create("tenant-1")
+	idx, _ := m1.Create("tenant-1", "u1")
 	step := ResearchStep{StepNumber: 1, Description: "encrypted step", Timestamp: time.Now().Format(time.RFC3339)}
-	m1.AppendStep("tenant-1", idx.ID, step, nil, "")
+	m1.AppendStep("tenant-1", "u1", idx.ID, step, nil, "")
 	m1.Close()
 
 	m2, _ := NewManager(Config{
@@ -418,7 +454,7 @@ func TestDiskPersistenceWithEncryption(t *testing.T) {
 	})
 	defer m2.Close()
 
-	got, ok := m2.GetIndex("tenant-1", idx.ID)
+	got, ok := m2.GetIndex("tenant-1", "u1", idx.ID)
 	if !ok {
 		t.Fatal("encrypted session should survive restart")
 	}
@@ -431,10 +467,10 @@ func TestResearchGoal(t *testing.T) {
 	m := newTestManager(5*time.Minute, 10)
 	defer m.Close()
 
-	idx, _ := m.Create("tenant-1")
-	m.SetResearchGoal("tenant-1", idx.ID, "Understand LLM context management")
+	idx, _ := m.Create("tenant-1", "u1")
+	m.SetResearchGoal("tenant-1", "u1", idx.ID, "Understand LLM context management")
 
-	got, _ := m.GetIndex("tenant-1", idx.ID)
+	got, _ := m.GetIndex("tenant-1", "u1", idx.ID)
 	if got.ResearchGoal != "Understand LLM context management" {
 		t.Errorf("expected research goal, got %q", got.ResearchGoal)
 	}
@@ -444,11 +480,11 @@ func TestSummaryGeneration(t *testing.T) {
 	m := newTestManager(5*time.Minute, 10)
 	defer m.Close()
 
-	idx, _ := m.Create("tenant-1")
-	m.SetResearchGoal("tenant-1", idx.ID, "Find best practices")
+	idx, _ := m.Create("tenant-1", "u1")
+	m.SetResearchGoal("tenant-1", "u1", idx.ID, "Find best practices")
 
 	step := ResearchStep{StepNumber: 1, Description: "Searched for patterns", Timestamp: time.Now().Format(time.RFC3339)}
-	updated, _ := m.AppendStep("tenant-1", idx.ID, step, nil, "")
+	updated, _ := m.AppendStep("tenant-1", "u1", idx.ID, step, nil, "")
 
 	if updated.Summary == "" {
 		t.Error("expected auto-generated summary")
@@ -459,10 +495,10 @@ func TestCustomSummary(t *testing.T) {
 	m := newTestManager(5*time.Minute, 10)
 	defer m.Close()
 
-	idx, _ := m.Create("tenant-1")
+	idx, _ := m.Create("tenant-1", "u1")
 
 	step := ResearchStep{StepNumber: 1, Description: "First step", Timestamp: time.Now().Format(time.RFC3339)}
-	updated, _ := m.AppendStep("tenant-1", idx.ID, step, nil, "Custom summary provided by LLM")
+	updated, _ := m.AppendStep("tenant-1", "u1", idx.ID, step, nil, "Custom summary provided by LLM")
 
 	if updated.Summary != "Custom summary provided by LLM" {
 		t.Errorf("expected custom summary, got %q", updated.Summary)

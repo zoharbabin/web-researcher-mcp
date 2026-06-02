@@ -61,28 +61,45 @@ func NewManager(cfg Config) (*MemoryManager, error) {
 	return m, nil
 }
 
-func (m *MemoryManager) Create(tenantID string) (*SessionIndex, error) {
+// sessionKey namespaces a session by (tenant, user, id) so a session is private
+// to the user that created it. userID is normalized to "anonymous" when empty
+// (STDIO / unauthenticated HTTP), keeping single-user behavior intact.
+func sessionKey(tenantID, userID, sessionID string) string {
+	if userID == "" {
+		userID = "anonymous"
+	}
+	return tenantID + ":" + userID + ":" + sessionID
+}
+
+func (m *MemoryManager) Create(tenantID, userID string) (*SessionIndex, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if userID == "" {
+		userID = "anonymous"
+	}
+
+	// Per-(tenant,user) session cap: count and evict within the owner's own
+	// sessions so one user cannot evict another's.
 	count := 0
 	for _, idx := range m.index {
-		if idx.TenantID == tenantID {
+		if idx.TenantID == tenantID && idx.CreatedByUserID == userID {
 			count++
 		}
 	}
 	if count >= m.config.MaxSessions {
-		m.evictOldest(tenantID)
+		m.evictOldest(tenantID, userID)
 	}
 
 	sess := &Session{
-		ID:        uuid.New().String(),
-		TenantID:  tenantID,
-		CreatedAt: time.Now(),
-		LastUsed:  time.Now(),
+		ID:              uuid.New().String(),
+		TenantID:        tenantID,
+		CreatedByUserID: userID,
+		CreatedAt:       time.Now(),
+		LastUsed:        time.Now(),
 	}
 
-	key := tenantID + ":" + sess.ID
+	key := sessionKey(tenantID, userID, sess.ID)
 	if err := m.store.Save(key, sess, m.config.SessionTTL); err != nil {
 		return nil, err
 	}
@@ -93,11 +110,11 @@ func (m *MemoryManager) Create(tenantID string) (*SessionIndex, error) {
 	return idx, nil
 }
 
-func (m *MemoryManager) AppendStep(tenantID, sessionID string, step ResearchStep, gap *KnowledgeGap, summary string) (*SessionIndex, error) {
+func (m *MemoryManager) AppendStep(tenantID, userID, sessionID string, step ResearchStep, gap *KnowledgeGap, summary string) (*SessionIndex, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	key := tenantID + ":" + sessionID
+	key := sessionKey(tenantID, userID, sessionID)
 	idx, ok := m.index[key]
 	if !ok {
 		return nil, &SessionNotFoundError{TenantID: tenantID, SessionID: sessionID, LastKnownStep: step.StepNumber - 1}
@@ -137,11 +154,11 @@ func (m *MemoryManager) AppendStep(tenantID, sessionID string, step ResearchStep
 	return idx, nil
 }
 
-func (m *MemoryManager) SetResearchGoal(tenantID, sessionID, goal string) error {
+func (m *MemoryManager) SetResearchGoal(tenantID, userID, sessionID, goal string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	key := tenantID + ":" + sessionID
+	key := sessionKey(tenantID, userID, sessionID)
 	idx, ok := m.index[key]
 	if !ok {
 		return ErrSessionNotFound
@@ -163,11 +180,11 @@ func (m *MemoryManager) SetResearchGoal(tenantID, sessionID, goal string) error 
 	return nil
 }
 
-func (m *MemoryManager) AddSources(tenantID, sessionID string, sources []ResearchSource) error {
+func (m *MemoryManager) AddSources(tenantID, userID, sessionID string, sources []ResearchSource) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	key := tenantID + ":" + sessionID
+	key := sessionKey(tenantID, userID, sessionID)
 	_, ok := m.index[key]
 	if !ok {
 		return ErrSessionNotFound
@@ -199,11 +216,11 @@ func (m *MemoryManager) AddSources(tenantID, sessionID string, sources []Researc
 	return nil
 }
 
-func (m *MemoryManager) GetIndex(tenantID, sessionID string) (*SessionIndex, bool) {
+func (m *MemoryManager) GetIndex(tenantID, userID, sessionID string) (*SessionIndex, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	key := tenantID + ":" + sessionID
+	key := sessionKey(tenantID, userID, sessionID)
 	idx, ok := m.index[key]
 	if !ok {
 		return nil, false
@@ -216,11 +233,11 @@ func (m *MemoryManager) GetIndex(tenantID, sessionID string) (*SessionIndex, boo
 	return idx, true
 }
 
-func (m *MemoryManager) GetFull(tenantID, sessionID string) (*Session, error) {
+func (m *MemoryManager) GetFull(tenantID, userID, sessionID string) (*Session, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	key := tenantID + ":" + sessionID
+	key := sessionKey(tenantID, userID, sessionID)
 	idx, ok := m.index[key]
 	if !ok {
 		return nil, &SessionNotFoundError{TenantID: tenantID, SessionID: sessionID}
@@ -240,11 +257,11 @@ func (m *MemoryManager) GetFull(tenantID, sessionID string) (*Session, error) {
 	return sess, nil
 }
 
-func (m *MemoryManager) GetStep(tenantID, sessionID string, stepNum int) (*ResearchStep, error) {
+func (m *MemoryManager) GetStep(tenantID, userID, sessionID string, stepNum int) (*ResearchStep, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	key := tenantID + ":" + sessionID
+	key := sessionKey(tenantID, userID, sessionID)
 	idx, ok := m.index[key]
 	if !ok {
 		return nil, &SessionNotFoundError{TenantID: tenantID, SessionID: sessionID}
@@ -270,10 +287,10 @@ func (m *MemoryManager) GetStep(tenantID, sessionID string, stepNum int) (*Resea
 	return nil, fmt.Errorf("step %d not found", stepNum)
 }
 
-func (m *MemoryManager) Delete(tenantID, sessionID string) {
+func (m *MemoryManager) Delete(tenantID, userID, sessionID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.deleteUnlocked(tenantID + ":" + sessionID)
+	m.deleteUnlocked(sessionKey(tenantID, userID, sessionID))
 }
 
 func (m *MemoryManager) DeleteAll() {
@@ -336,12 +353,14 @@ func (m *MemoryManager) deleteUnlocked(key string) {
 	_ = m.store.Delete(key)
 }
 
-func (m *MemoryManager) evictOldest(tenantID string) {
+// evictOldest removes the least-recently-used session belonging to the given
+// (tenant, user) — never another principal's session.
+func (m *MemoryManager) evictOldest(tenantID, userID string) {
 	var oldestKey string
 	var oldestTime time.Time
 
 	for key, idx := range m.index {
-		if idx.TenantID != tenantID {
+		if idx.TenantID != tenantID || idx.CreatedByUserID != userID {
 			continue
 		}
 		if oldestKey == "" || idx.LastUsed.Before(oldestTime) {
@@ -395,7 +414,7 @@ func (m *MemoryManager) rebuildIndex() {
 			continue
 		}
 
-		key := sess.TenantID + ":" + sess.ID
+		key := sessionKey(sess.TenantID, sess.CreatedByUserID, sess.ID)
 		if fileHash(key) != hash {
 			slog.Warn("session file hash mismatch, removing", "hash", hash)
 			_ = os.Remove(fp)
@@ -421,15 +440,24 @@ func (m *MemoryManager) rebuildIndex() {
 }
 
 func buildIndexFromSession(sess *Session) *SessionIndex {
+	// Normalize empty owner to "anonymous" so the index field matches the key
+	// (sessionKey normalizes the same way). Sessions persisted before user-
+	// binding have an empty CreatedByUserID; without this they'd escape the
+	// per-(tenant,user) cap/eviction, which filter by CreatedByUserID.
+	owner := sess.CreatedByUserID
+	if owner == "" {
+		owner = "anonymous"
+	}
 	idx := &SessionIndex{
-		ID:           sess.ID,
-		TenantID:     sess.TenantID,
-		ResearchGoal: sess.ResearchGoal,
-		CreatedAt:    sess.CreatedAt,
-		LastUsed:     sess.LastUsed,
-		StepCount:    len(sess.Steps),
-		ActiveGaps:   sess.Gaps,
-		Sources:      sess.Sources,
+		ID:              sess.ID,
+		TenantID:        sess.TenantID,
+		CreatedByUserID: owner,
+		ResearchGoal:    sess.ResearchGoal,
+		CreatedAt:       sess.CreatedAt,
+		LastUsed:        sess.LastUsed,
+		StepCount:       len(sess.Steps),
+		ActiveGaps:      sess.Gaps,
+		Sources:         sess.Sources,
 	}
 
 	for _, step := range sess.Steps {

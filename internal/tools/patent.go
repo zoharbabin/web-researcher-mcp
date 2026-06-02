@@ -196,6 +196,7 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 			"resultCount": len(patents),
 			"source":      source,
 			"searchUrl":   scraper.BuildGooglePatentsURL(params),
+			"trust":       untrustedContentTrust,
 		}
 
 		if len(patents) == 0 {

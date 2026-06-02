@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -624,5 +625,84 @@ func TestScrapeTool_SSRF_ReturnsBlockedError(t *testing.T) {
 	text := res.Content[0].(*mcp.TextContent).Text
 	if !strings.Contains(text, "error") && !strings.Contains(text, "Network") && !strings.Contains(text, "Blocked") {
 		t.Errorf("expected error message, got: %s", text)
+	}
+}
+
+// TestNegCacheRoundTrip unit-tests the negative-cache helpers: a written kind
+// reads back as a reconstructed ScrapeError, a miss returns nil.
+func TestNegCacheRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	deps := Dependencies{Cache: cache.NewMemory(cache.MemoryConfig{MaxSizeMB: 1})}
+
+	if got := negCacheLookup(ctx, deps, "https://miss.example.com/x"); got != nil {
+		t.Fatalf("expected nil on cache miss, got %+v", got)
+	}
+
+	url := "https://blocked.example.com/page"
+	writeNegCache(ctx, deps, url, &scraper.ScrapeError{Kind: scraper.ErrBlocked, Message: "orig"})
+	got := negCacheLookup(ctx, deps, url)
+	if got == nil {
+		t.Fatal("expected a cached error after write")
+	}
+	if got.Kind != scraper.ErrBlocked {
+		t.Errorf("kind = %v, want ErrBlocked", got.Kind)
+	}
+	// The original message is preserved (so detail + secret-masking survive a hit).
+	if got.Message != "orig" {
+		t.Errorf("message = %q, want %q (original must be preserved)", got.Message, "orig")
+	}
+	// Keyed by FULL URL: a different path on the same host is a DISTINCT entry
+	// (no collision), so an unrelated path is a cache miss.
+	if other := negCacheLookup(ctx, deps, "https://blocked.example.com/other"); other != nil {
+		t.Error("negative cache must key by full URL — a different path must not collide")
+	}
+}
+
+// TestNegCacheShortCircuitsSecondScrape verifies that a URL that failed once is
+// served from the negative cache on the next call (no second multi-tier walk),
+// and that a successful scrape is NOT negatively cached.
+func TestNegCacheShortCircuitsSecondScrape(t *testing.T) {
+	var hits int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.WriteHeader(http.StatusForbidden) // 403 → ErrBlocked, which is negatively cached
+		w.Write([]byte("Access Denied"))
+	}))
+	defer ts.Close()
+
+	ctx := context.Background()
+	deps := Dependencies{
+		Cache:    cache.NewMemory(cache.MemoryConfig{MaxSizeMB: 1}),
+		Search:   &mockProvider{},
+		Scraper:  scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true}),
+		Content:  content.NewProcessor(),
+		Sessions: func() session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
+		Metrics:  metrics.NewCollector(),
+		Auditor:  audit.NewNoop(),
+		Logger:   slog.Default(),
+	}
+	srv := createTestServer(deps)
+	client := connectTestClient(ctx, t, srv)
+	defer client.Close()
+
+	call := func() {
+		res, err := client.CallTool(ctx, &mcp.CallToolParams{Name: "scrape_page", Arguments: map[string]any{"url": ts.URL}})
+		if err != nil {
+			t.Fatalf("CallTool error: %v", err)
+		}
+		if !res.IsError {
+			t.Fatal("expected error result for 403 site")
+		}
+	}
+
+	call()
+	first := atomic.LoadInt32(&hits)
+	if first == 0 {
+		t.Fatal("first scrape should have hit the origin")
+	}
+	call()
+	second := atomic.LoadInt32(&hits)
+	if second != first {
+		t.Errorf("second call should be served from negative cache (no new origin hits): first=%d second=%d", first, second)
 	}
 }

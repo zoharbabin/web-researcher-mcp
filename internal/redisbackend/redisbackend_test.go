@@ -141,16 +141,16 @@ func TestSessionManagerSurvivesAcrossClients(t *testing.T) {
 	pod1 := b.SessionManager()
 	pod2 := b.SessionManager()
 
-	idx, err := pod1.Create("tenant-1")
+	idx, err := pod1.Create("tenant-1", "u1")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if _, err := pod1.AppendStep("tenant-1", idx.ID, session.ResearchStep{StepNumber: 1, Description: "from pod1"}, nil, ""); err != nil {
+	if _, err := pod1.AppendStep("tenant-1", "u1", idx.ID, session.ResearchStep{StepNumber: 1, Description: "from pod1"}, nil, ""); err != nil {
 		t.Fatalf("append: %v", err)
 	}
 
 	// pod2 (a "different pod") sees the session created on pod1.
-	full, err := pod2.GetFull("tenant-1", idx.ID)
+	full, err := pod2.GetFull("tenant-1", "u1", idx.ID)
 	if err != nil {
 		t.Fatalf("pod2 GetFull: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestSessionManagerSurvivesAcrossClients(t *testing.T) {
 func TestSessionManagerNotFoundTyped(t *testing.T) {
 	b := newTestBackend(t)
 	m := b.SessionManager()
-	_, err := m.AppendStep("t1", "missing", session.ResearchStep{StepNumber: 5}, nil, "")
+	_, err := m.AppendStep("t1", "u1", "missing", session.ResearchStep{StepNumber: 5}, nil, "")
 	var nf *session.SessionNotFoundError
 	if !asSessionNotFound(err, &nf) || nf.LastKnownStep != 4 {
 		t.Fatalf("expected typed SessionNotFoundError with LastKnownStep=4, got %v", err)
@@ -172,9 +172,9 @@ func TestSessionManagerNotFoundTyped(t *testing.T) {
 func TestSessionListAndDeleteByTenant(t *testing.T) {
 	b := newTestBackend(t)
 	m := b.SessionManager()
-	a, _ := m.Create("tenant-1")
-	_, _ = m.Create("tenant-1")
-	_, _ = m.Create("tenant-2")
+	a, _ := m.Create("tenant-1", "u1")
+	_, _ = m.Create("tenant-1", "u1")
+	_, _ = m.Create("tenant-2", "u1")
 
 	if got := m.ListByTenant("tenant-1"); len(got) != 2 {
 		t.Errorf("expected 2 sessions for tenant-1, got %d", len(got))
@@ -199,4 +199,62 @@ func asSessionNotFound(err error, target **session.SessionNotFoundError) bool {
 		return true
 	}
 	return false
+}
+
+// TestSessionPerUserCapEvictsWithinUser verifies the Redis backend enforces the
+// session cap PER (tenant,user) — parity with the in-memory manager — and never
+// evicts another user's sessions.
+func TestSessionPerUserCapEvictsWithinUser(t *testing.T) {
+	mr := miniredis.RunT(t)
+	b, err := Connect(context.Background(), Config{
+		URL:                  "redis://" + mr.Addr(),
+		EncryptionKey:        testKey,
+		SessionTTL:           time.Hour,
+		MaxSessionsPerTenant: 2,
+	})
+	if err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	t.Cleanup(func() { _ = b.Close() })
+	m := b.SessionManager()
+
+	// alice creates 3 sessions with a cap of 2 → oldest evicted, 2 remain.
+	a1, _ := m.Create("t1", "alice")
+	a2, _ := m.Create("t1", "alice")
+	a3, _ := m.Create("t1", "alice")
+
+	if _, ok := m.GetIndex("t1", "alice", a1.ID); ok {
+		t.Error("alice's oldest session should have been evicted")
+	}
+	if _, ok := m.GetIndex("t1", "alice", a3.ID); !ok {
+		t.Error("alice's newest session must survive")
+	}
+	_ = a2
+
+	// bob is a different user — his budget is independent and untouched.
+	b1, _ := m.Create("t1", "bob")
+	b2, _ := m.Create("t1", "bob")
+	if _, ok := m.GetIndex("t1", "bob", b1.ID); !ok {
+		t.Error("bob's sessions must not be evicted by alice's activity")
+	}
+	if _, ok := m.GetIndex("t1", "bob", b2.ID); !ok {
+		t.Error("bob's second session must survive (his own cap not yet hit)")
+	}
+}
+
+// TestSplitMemberHandlesColonInUserID guards the tenant-index member parse: a
+// userID containing ':' (valid OAuth subject) must round-trip, since the split
+// is on the LAST colon (sessionIDs are colon-free UUIDs).
+func TestSplitMemberHandlesColonInUserID(t *testing.T) {
+	cases := []struct{ member, wantUser, wantSess string }{
+		{"alice:abc-123", "alice", "abc-123"},
+		{"auth0|sub:ns:user:42:abc-123", "auth0|sub:ns:user:42", "abc-123"},
+		{"bare-session-id", "anonymous", "bare-session-id"},
+	}
+	for _, c := range cases {
+		u, s := splitMember(c.member)
+		if u != c.wantUser || s != c.wantSess {
+			t.Errorf("splitMember(%q) = (%q,%q), want (%q,%q)", c.member, u, s, c.wantUser, c.wantSess)
+		}
+	}
 }
