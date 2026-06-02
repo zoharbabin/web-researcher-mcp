@@ -222,8 +222,13 @@ func (m *SessionManager) DeleteAll() {
 }
 
 // splitMember parses a tenant-set member "userID:sessionID" back into its parts.
-// Members written before user-binding (bare sessionID, no colon) are treated as
-// owned by "anonymous" so legacy entries remain loadable/erasable.
+// A bare colon-less member maps to "anonymous" so DeleteByTenant can still SREM
+// it from the index. NOTE: blobs written by a pre-user-binding release used a
+// different key and GCM AAD and are NOT decryptable here — they simply fail to
+// load and expire via their TTL (≤4h). Session continuity across that one
+// upgrade is intentionally not preserved (documented in the PR); there is no
+// security or data-subject impact because erasure is tenant-scoped and the
+// blobs self-expire.
 func splitMember(member string) (userID, sessionID string) {
 	if i := indexByte(member, ':'); i >= 0 {
 		return member[:i], member[i+1:]

@@ -61,10 +61,10 @@ func registerMemorySave(srv *mcp.Server, deps Dependencies) {
 			Topic: input.Topic, Note: input.Note, URL: input.URL, Tags: input.Tags,
 		})
 		if err != nil {
-			deps.Metrics.RecordToolCall("memory_save", time.Since(start), err, "upstream_error", false)
+			recordToolCall(deps, "memory_save", time.Since(start), err, "upstream_error", false)
 			return upstreamErrorResponse("memory_save", err), nil, nil
 		}
-		deps.Metrics.RecordToolCall("memory_save", time.Since(start), nil, "", false)
+		recordToolCall(deps, "memory_save", time.Since(start), nil, "", false)
 		auditToolCall(ctx, deps, "memory_save", time.Since(start), nil, "")
 		return structuredResult(mustJSON(map[string]any{"status": "ok", "id": saved.ID, "createdAt": saved.CreatedAt})), nil, nil
 	})
@@ -91,10 +91,10 @@ func registerMemoryRecall(srv *mcp.Server, deps Dependencies) {
 		}
 		entries, err := deps.Memory.Recall(ctx, auth.TenantIDFromContext(ctx), userID, input.Topic, input.Limit)
 		if err != nil {
-			deps.Metrics.RecordToolCall("memory_recall", time.Since(start), err, "upstream_error", false)
+			recordToolCall(deps, "memory_recall", time.Since(start), err, "upstream_error", false)
 			return upstreamErrorResponse("memory_recall", err), nil, nil
 		}
-		deps.Metrics.RecordToolCall("memory_recall", time.Since(start), nil, "", false)
+		recordToolCall(deps, "memory_recall", time.Since(start), nil, "", false)
 		auditToolCall(ctx, deps, "memory_recall", time.Since(start), nil, "")
 		return structuredResult(mustJSON(map[string]any{"status": "ok", "count": len(entries), "memories": entries, "trust": userAssertedContentTrust})), nil, nil
 	})

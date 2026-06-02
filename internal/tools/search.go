@@ -198,6 +198,15 @@ type errSentinel string
 
 func (e errSentinel) Error() string { return string(e) }
 
+// recordToolCall is a nil-safe wrapper over deps.Metrics.RecordToolCall.
+// deps.Metrics is optional in this package (minimal embeddings/tests may leave
+// it unset), so callers route through here to avoid a nil-pointer panic.
+func recordToolCall(deps Dependencies, tool string, dur time.Duration, err error, errCode string, cacheHit bool) {
+	if deps.Metrics != nil {
+		deps.Metrics.RecordToolCall(tool, dur, err, errCode, cacheHit)
+	}
+}
+
 // auditToolCallQuery is the metadata-aware variant for query tools.
 //
 // Privacy (decision f / DOC-VERIFY): the raw query is attached to metadata

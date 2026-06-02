@@ -250,14 +250,20 @@ func TestOutputSchemaMatchesResponse(t *testing.T) {
 	}
 }
 
-// TestExternalContentToolsCarryTrustMarker is a drift guard: every tool that
-// returns external or user-asserted content into the model's context MUST stamp
-// a top-level "trust" boundary marker (OWASP LLM01 / Agentic ASI05). The map
-// below is the authoritative set; a NEW content-bearing tool that ships without
-// a marker (or with the wrong value) fails here — mirroring how
-// TestAllToolsHaveAnnotations prevents un-annotated tools. Tools that return no
+// TestExternalContentToolsCarryTrustMarker is a drift guard for the tools that
+// return external content on an UNAUTHENTICATED call (the search family +
+// scrape + sequential_search): each MUST stamp a top-level "trust" boundary
+// marker (OWASP LLM01 / Agentic ASI05). A new such tool shipping without a
+// marker (or with the wrong value) fails here.
+//
+// Scope note: the consent-gated tools that also carry markers —
+// memory_recall ("user-asserted-content") and workspace_read /
+// get_research_session ("untrusted-external-content") — return a denial (no
+// content) for the anonymous client this harness uses, so they cannot be
+// exercised here. Their markers are asserted in their own tests
+// (TestMemoryRecall*, TestWorkspace*, getsession tests). Tools that return no
 // model-facing content (memory_save, workspace_contribute, get_my_analytics)
-// are intentionally absent.
+// carry no marker by design.
 func TestExternalContentToolsCarryTrustMarker(t *testing.T) {
 	ctx := context.Background()
 	deps := setupTestDeps()

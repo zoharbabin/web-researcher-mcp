@@ -440,10 +440,18 @@ func (m *MemoryManager) rebuildIndex() {
 }
 
 func buildIndexFromSession(sess *Session) *SessionIndex {
+	// Normalize empty owner to "anonymous" so the index field matches the key
+	// (sessionKey normalizes the same way). Sessions persisted before user-
+	// binding have an empty CreatedByUserID; without this they'd escape the
+	// per-(tenant,user) cap/eviction, which filter by CreatedByUserID.
+	owner := sess.CreatedByUserID
+	if owner == "" {
+		owner = "anonymous"
+	}
 	idx := &SessionIndex{
 		ID:              sess.ID,
 		TenantID:        sess.TenantID,
-		CreatedByUserID: sess.CreatedByUserID,
+		CreatedByUserID: owner,
 		ResearchGoal:    sess.ResearchGoal,
 		CreatedAt:       sess.CreatedAt,
 		LastUsed:        sess.LastUsed,

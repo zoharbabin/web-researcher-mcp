@@ -49,12 +49,12 @@ func registerGetMyAnalytics(srv *mcp.Server, deps Dependencies) {
 
 		summary, ok := deps.UserAnalytics.Get(ctx, tenantID, userID)
 		if !ok {
-			deps.Metrics.RecordToolCall("get_my_analytics", time.Since(start), nil, "", false)
+			recordToolCall(deps, "get_my_analytics", time.Since(start), nil, "", false)
 			auditToolCall(ctx, deps, "get_my_analytics", time.Since(start), nil, "")
 			return structuredResult(mustJSON(map[string]any{"status": "empty"})), nil, nil
 		}
 		out := map[string]any{"status": "ok", "analytics": summary}
-		deps.Metrics.RecordToolCall("get_my_analytics", time.Since(start), nil, "", false)
+		recordToolCall(deps, "get_my_analytics", time.Since(start), nil, "", false)
 		auditToolCall(ctx, deps, "get_my_analytics", time.Since(start), nil, "")
 		return structuredResult(mustJSON(out)), nil, nil
 	})

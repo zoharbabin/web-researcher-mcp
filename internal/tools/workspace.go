@@ -65,10 +65,10 @@ func registerWorkspaceContribute(srv *mcp.Server, deps Dependencies) {
 			return structuredResult(mustJSON(map[string]any{"status": "not_member", "reason": "you are not a member of this workspace"})), nil, nil
 		}
 		if err != nil {
-			deps.Metrics.RecordToolCall("workspace_contribute", time.Since(start), err, "upstream_error", false)
+			recordToolCall(deps, "workspace_contribute", time.Since(start), err, "upstream_error", false)
 			return upstreamErrorResponse("workspace_contribute", err), nil, nil
 		}
-		deps.Metrics.RecordToolCall("workspace_contribute", time.Since(start), nil, "", false)
+		recordToolCall(deps, "workspace_contribute", time.Since(start), nil, "", false)
 		auditToolCallQuery(ctx, deps, "workspace_contribute", time.Since(start), nil, "", "", map[string]any{"event": "workspace.contribute", "workspace_id": input.WorkspaceID})
 		return structuredResult(mustJSON(map[string]any{"status": "ok", "id": saved.ID})), nil, nil
 	})
@@ -103,10 +103,10 @@ func registerWorkspaceRead(srv *mcp.Server, deps Dependencies) {
 			return structuredResult(mustJSON(map[string]any{"status": "not_member", "contributions": []any{}})), nil, nil
 		}
 		if err != nil {
-			deps.Metrics.RecordToolCall("workspace_read", time.Since(start), err, "upstream_error", false)
+			recordToolCall(deps, "workspace_read", time.Since(start), err, "upstream_error", false)
 			return upstreamErrorResponse("workspace_read", err), nil, nil
 		}
-		deps.Metrics.RecordToolCall("workspace_read", time.Since(start), nil, "", false)
+		recordToolCall(deps, "workspace_read", time.Since(start), nil, "", false)
 		auditToolCallQuery(ctx, deps, "workspace_read", time.Since(start), nil, "", "", map[string]any{"event": "workspace.read", "workspace_id": input.WorkspaceID})
 		// Contributions may come from OTHER members (the highest-risk poisoning
 		// vector: cross-principal, persisted). Mark the payload untrusted so the
