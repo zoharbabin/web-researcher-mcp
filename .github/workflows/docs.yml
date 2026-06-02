@@ -46,7 +46,7 @@ jobs:
                 -e 's|docs/SESSION_PERSISTENCE.md|session-persistence.md|g' \
                 -e 's|ARCHITECTURE.md|architecture.md|g' \
                 -e 's|CONTRIBUTING.md|contributing.md|g' \
-                -e 's|SECURITY.md|security.md|g' \
+                -e 's|](SECURITY.md)|](https://github.com/zoharbabin/web-researcher-mcp/blob/main/SECURITY.md)|g' \
                 -e 's|assets/|https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/|g' \
                 "$f" > "site_src/$(echo "$f" | tr '[:upper:]' '[:lower:]')"
           done
@@ -57,7 +57,7 @@ jobs:
                 -e 's|CONTRIBUTING.md|contributing.md|g' \
                 -e 's|ERROR_HANDLING.md|error-handling.md|g' \
                 -e 's|SECURITY_AND_COMPLIANCE.md|security-and-compliance.md|g' \
-                -e 's|SECURITY.md|security.md|g' \
+                -e 's|](../SECURITY.md)|](https://github.com/zoharbabin/web-researcher-mcp/blob/main/SECURITY.md)|g' \
                 -e 's|TOOLS.md|tools.md|g' \
                 -e 's|DEPLOYMENT.md|deployment.md|g' \
                 -e 's|MIGRATION.md|migration.md|g' \
