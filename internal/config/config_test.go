@@ -1055,3 +1055,77 @@ func TestNoInsecureWarningInSTDIO(t *testing.T) {
 		}
 	}
 }
+
+func TestStdioUserID(t *testing.T) {
+	t.Run("unset → empty, no warning", func(t *testing.T) {
+		t.Setenv("STDIO_USER_ID", "")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.StdioUserID != "" {
+			t.Errorf("expected empty, got %q", cfg.StdioUserID)
+		}
+		for _, w := range cfg.Warnings {
+			if strings.Contains(w, "STDIO_USER_ID") {
+				t.Errorf("unexpected STDIO_USER_ID warning when unset: %q", w)
+			}
+		}
+	})
+
+	t.Run("valid email-like id (STDIO) → set", func(t *testing.T) {
+		t.Setenv("PORT", "0")
+		t.Setenv("STDIO_USER_ID", "alice.smith@corp-1")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.StdioUserID != "alice.smith@corp-1" {
+			t.Errorf("expected the id to be set, got %q", cfg.StdioUserID)
+		}
+	})
+
+	t.Run("invalid values → unset + warning", func(t *testing.T) {
+		for _, bad := range []string{"a:b", "a b", "anonymous", "has\tctrl", strings.Repeat("x", 129)} {
+			t.Setenv("PORT", "0")
+			t.Setenv("STDIO_USER_ID", bad)
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load(%q): %v", bad, err)
+			}
+			if cfg.StdioUserID != "" {
+				t.Errorf("%q should be rejected, got %q", bad, cfg.StdioUserID)
+			}
+			found := false
+			for _, w := range cfg.Warnings {
+				if strings.Contains(w, "STDIO_USER_ID is invalid") {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("expected invalid warning for %q", bad)
+			}
+		}
+	})
+
+	t.Run("HTTP mode → ignored + warning", func(t *testing.T) {
+		t.Setenv("PORT", "8080")
+		t.Setenv("STDIO_USER_ID", "alice")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.StdioUserID != "" {
+			t.Errorf("STDIO_USER_ID must be empty in HTTP mode, got %q", cfg.StdioUserID)
+		}
+		found := false
+		for _, w := range cfg.Warnings {
+			if strings.Contains(w, "ignored whenever PORT is set") {
+				found = true
+			}
+		}
+		if !found {
+			t.Error("expected HTTP-mode ignored warning")
+		}
+	})
+}

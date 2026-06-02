@@ -616,6 +616,17 @@ func base64URLDecode(s string) ([]byte, error) {
 
 // --- Context helpers ---
 
+// WithIdentity returns ctx with the tenant and user identity attached, using the
+// same context keys the HTTP Wrap path sets. It is a convenience/consistency
+// helper — a single typed entry point so non-HTTP transports (e.g. the STDIO
+// single-user identity injector in main.go) set identity the same way Wrap does,
+// rather than each caller open-coding two context.WithValue calls. (It is not an
+// access-control boundary: the ContextKey* constants are exported.)
+func WithIdentity(ctx context.Context, tenantID, userID string) context.Context {
+	ctx = context.WithValue(ctx, ContextKeyTenantID, tenantID)
+	return context.WithValue(ctx, ContextKeyUserID, userID)
+}
+
 func TenantIDFromContext(ctx context.Context) string {
 	if v := ctx.Value(ContextKeyTenantID); v != nil {
 		return v.(string)

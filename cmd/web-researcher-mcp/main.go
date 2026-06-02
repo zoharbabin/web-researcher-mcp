@@ -348,6 +348,67 @@ func main() {
 	}
 	resources.RegisterAll(srv.MCP(), metricsCollector, sessionManager, rateLimiter, providerInfos)
 
+	// STDIO single-user identity (opt-in). When STDIO_USER_ID is set (only ever
+	// populated in STDIO mode — see config.Load), two things happen:
+	//
+	//  (a) Startup consent auto-grant — grant-only-if-absent. STDIO has no OAuth,
+	//      so the operator setting STDIO_USER_ID IS the subject asserting their
+	//      own identity; we pre-grant consent for the per-user regulated features
+	//      that are enabled (memory, analytics — NEVER workspace, which is
+	//      membership-scoped and host-owned). The Query-before-Record guard is
+	//      mandatory: consent.Record OVERWRITES, and a withdrawal is stored as a
+	//      Granted=false record — so re-granting unconditionally on every restart
+	//      would silently resurrect a withdrawn consent. We therefore grant ONLY
+	//      when NO record of any kind exists, leaving granted/withdrawn records
+	//      untouched. Each grant emits an audited consent.grant event.
+	//
+	//  (b) Identity injection middleware (registered just below) — fills
+	//      tenant=default/user=<STDIO_USER_ID> into request context, but only
+	//      when identity is absent (set-if-anonymous), so HTTP (where Wrap sets a
+	//      real user first) is byte-identical and unaffected.
+	if cfg.StdioUserID != "" {
+		if cfg.Features.RegulatedEnabled() {
+			bg := context.Background()
+			grant := func(p consent.Purpose) {
+				// consent.GrantIfAbsent enforces the cardinal rule: grant only
+				// when no record exists, so a prior withdrawal is never resurrected.
+				wrote, err := consent.GrantIfAbsent(bg, consentManager, "default", cfg.StdioUserID, p,
+					"stdio_bootstrap", time.Now().UTC().Format(time.RFC3339))
+				if err != nil {
+					logger.Warn("stdio consent auto-grant failed", "user", cfg.StdioUserID, "purpose", string(p), "err", err)
+					return
+				}
+				if !wrote {
+					return
+				}
+				ev := audit.NewEvent(consent.EventGrant, "default", cfg.StdioUserID)
+				ev.Metadata = map[string]any{"purpose": string(p), "granted": true, "source": "stdio_bootstrap"}
+				auditor.Log(ev)
+				logger.Info("stdio consent auto-granted", "user", cfg.StdioUserID, "purpose", string(p))
+			}
+			if cfg.Features.Memory {
+				grant(consent.PurposeMemory)
+			}
+			if cfg.Features.UserAnalytics {
+				grant(consent.PurposeAnalytics)
+			}
+			// PurposeWorkspace is intentionally never auto-granted.
+		}
+
+		uid := cfg.StdioUserID
+		srv.MCP().AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+			return func(reqCtx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+				// Set-if-absent: only fill identity when none is present (STDIO).
+				// On HTTP, Wrap has already set a concrete user, so this is a no-op.
+				if auth.UserIDFromContext(reqCtx) == "anonymous" {
+					reqCtx = auth.WithIdentity(reqCtx, "default", uid)
+				}
+				return next(reqCtx, method, req)
+			}
+		})
+		logger.Info("stdio identity active", "user", uid, "tenant", "default")
+	}
+
 	// Denial-of-wallet backstop (ASI06): an OPTIONAL in-process per-(tenant,user)
 	// daily tool-call ceiling. Registered UNCONDITIONALLY (STDIO + HTTP) because
 	// the HTTP rate limiter doesn't run in STDIO. Off unless MAX_CALLS_PER_DAY>0,

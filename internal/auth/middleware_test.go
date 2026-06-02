@@ -1022,3 +1022,23 @@ func TestWrapAuditsAuthFailures(t *testing.T) {
 		}
 	})
 }
+
+func TestWithIdentity(t *testing.T) {
+	base := context.WithValue(context.Background(), ContextKeyScopes, []string{"research"})
+	ctx := WithIdentity(base, "tenant-7", "carol")
+
+	if got := TenantIDFromContext(ctx); got != "tenant-7" {
+		t.Errorf("tenant = %q, want tenant-7", got)
+	}
+	if got := UserIDFromContext(ctx); got != "carol" {
+		t.Errorf("user = %q, want carol", got)
+	}
+	// Unrelated keys are preserved.
+	if got := ScopesFromContext(ctx); len(got) != 1 || got[0] != "research" {
+		t.Errorf("scopes not preserved: %v", got)
+	}
+	// A fresh empty context defaults remain when nothing set.
+	if got := UserIDFromContext(context.Background()); got != "anonymous" {
+		t.Errorf("empty ctx user = %q, want anonymous", got)
+	}
+}
