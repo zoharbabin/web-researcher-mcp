@@ -25,8 +25,8 @@ decks/<name>/
   `data:image/svg+xml;base64` URI, so the HTML works on GitHub Pages with no
   external fetch and the PDF needs no local files.
 - **Accuracy rule (same as docs):** every factual claim must match the current
-  code, and each slide cites the file that proves it. Re-verify against the
-  codebase before re-rendering.
+  code, and slides making a technical claim cite the file that backs it (in a
+  `_footer`). Re-verify against the codebase before re-rendering.
 
 ## Re-rendering
 
