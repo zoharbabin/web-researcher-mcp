@@ -199,7 +199,13 @@ func scrapeRaw(ctx context.Context, deps Dependencies, input scrapePageInput, ma
 // later larger request a truncated body (breaking consistency across calls).
 func scrapeCacheKey(url, mode string, maxLength int) string {
 	h := sha256.New()
-	fmt.Fprintf(h, "scrape|%s|%s|%d", url, mode, maxLength)
+	// The version segment (v2) invalidates pre-existing cached blobs whenever
+	// the response SHAPE changes, so a cache hit can never serve an envelope
+	// missing a newly-added field. v2 introduced the "trust" boundary marker —
+	// bumping it guarantees no upgraded deployment (incl. the shared Redis
+	// cache) serves scrape content without the untrusted-content marker the
+	// host may rely on. Bump again on any future output-shape change.
+	fmt.Fprintf(h, "scrape|v2|%s|%s|%d", url, mode, maxLength)
 	return "scrape:" + hex.EncodeToString(h.Sum(nil))[:32]
 }
 
