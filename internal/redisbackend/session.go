@@ -230,22 +230,23 @@ func (m *SessionManager) DeleteAll() {
 }
 
 // splitMember parses a tenant-set member "userID:sessionID" back into its parts.
-// A bare colon-less member maps to "anonymous" so DeleteByTenant can still SREM
-// it from the index. NOTE: blobs written by a pre-user-binding release used a
-// different key and GCM AAD and are NOT decryptable here — they simply fail to
-// load and expire via their TTL (≤4h). Session continuity across that one
-// upgrade is intentionally not preserved (documented in the PR); there is no
-// security or data-subject impact because erasure is tenant-scoped and the
-// blobs self-expire.
+// It splits on the LAST ':' because a sessionID is a colon-free UUID while a
+// userID (an OAuth subject) may itself contain ':' — splitting on the first
+// colon would mis-parse such owners and orphan their sessions. A bare colon-less
+// member maps to "anonymous" so DeleteByTenant can still SREM it. NOTE: blobs
+// written by a pre-user-binding release used a different key and GCM AAD and are
+// NOT decryptable here — they fail to load and TTL-expire (≤4h). Session
+// continuity across that one upgrade is intentionally not preserved (documented
+// in the PR); no security or data-subject impact (erasure is tenant-scoped).
 func splitMember(member string) (userID, sessionID string) {
-	if i := indexByte(member, ':'); i >= 0 {
+	if i := lastIndexByte(member, ':'); i >= 0 {
 		return member[:i], member[i+1:]
 	}
 	return "anonymous", member
 }
 
-func indexByte(s string, b byte) int {
-	for i := 0; i < len(s); i++ {
+func lastIndexByte(s string, b byte) int {
+	for i := len(s) - 1; i >= 0; i-- {
 		if s[i] == b {
 			return i
 		}

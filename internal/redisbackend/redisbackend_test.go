@@ -241,3 +241,20 @@ func TestSessionPerUserCapEvictsWithinUser(t *testing.T) {
 		t.Error("bob's second session must survive (his own cap not yet hit)")
 	}
 }
+
+// TestSplitMemberHandlesColonInUserID guards the tenant-index member parse: a
+// userID containing ':' (valid OAuth subject) must round-trip, since the split
+// is on the LAST colon (sessionIDs are colon-free UUIDs).
+func TestSplitMemberHandlesColonInUserID(t *testing.T) {
+	cases := []struct{ member, wantUser, wantSess string }{
+		{"alice:abc-123", "alice", "abc-123"},
+		{"auth0|sub:ns:user:42:abc-123", "auth0|sub:ns:user:42", "abc-123"},
+		{"bare-session-id", "anonymous", "bare-session-id"},
+	}
+	for _, c := range cases {
+		u, s := splitMember(c.member)
+		if u != c.wantUser || s != c.wantSess {
+			t.Errorf("splitMember(%q) = (%q,%q), want (%q,%q)", c.member, u, s, c.wantUser, c.wantSess)
+		}
+	}
+}
