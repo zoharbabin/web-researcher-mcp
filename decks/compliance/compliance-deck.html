@@ -2340,22 +2340,20 @@ section.wm::before {
 .titlelogo { width: 96px; height: 96px; margin-bottom: 20px; display: block; }
 ;" data-marpit-pagination-total="13" data-size="16:9">
 <h1 id="agency-sharpens-one-old-threat--and-adds-a-new-one">Agency sharpens one old threat — and adds a new one</h1>
-<p>Give an AI a tool that fetches any page, and the AI now <em>chooses the URLs</em>. That<br />
-doesn't invent vulnerabilities from thin air — it <strong>amplifies an old one</strong> and<br />
-<strong>surfaces a new one</strong>:</p>
-<p><strong>An old web vuln, now automated — SSRF.</strong> Server-side request forgery is a<br />
-classic (OWASP Web A10). What's new is that a hijacked link can steer an<br />
+<p>Give an AI a tool that fetches any page, and it now <em>chooses the URLs</em>. That<br />
+<strong>amplifies an old vuln</strong> and <strong>surfaces a new one</strong>:</p>
+<p><strong>Old vuln, now automated — SSRF (OWASP Web A10).</strong> A hijacked link can steer an<br />
 <em>autonomous</em> fetch at your internal network. So before any fetch the server<br />
-rejects private/reserved IPs and cloud-metadata hosts, connects only to that<br />
+rejects private/reserved IPs and cloud-metadata hosts, connects only to the<br />
 exact resolved address (DNS-rebind defense), and re-checks on every redirect.</p>
 <p><strong>A genuinely new class — indirect prompt injection.</strong> A booby-trapped page can<br />
-try to hijack the AI reading it. The server strips active markup and hidden<br />
-content, caps size, and tags every result with an explicit <code>untrusted-external-content</code><br />
-marker. It does <strong>not</strong> enforce the prompt boundary — that's the <em>host's</em> job,<br />
-because the model and the agent loop live there.</p>
-<p><em>Why now:</em> prompt injection is the <strong>#1 risk</strong> on OWASP's LLM list, and the<br />
-agentic-AI rules are still being written (OWASP's Agentic Top 10 is a 2026 draft).<br />
-This tool sits squarely in that gap.</p>
+try to hijack the AI reading it. The server strips active markup, caps size, and<br />
+tags every result <code>untrusted-external-content</code>. It does <strong>not</strong> enforce the<br />
+prompt boundary — that's the <em>host's</em> job, where the model and agent loop live.</p>
+<blockquote>
+<p>Prompt injection is <strong>#1</strong> on OWASP's LLM list, and the agentic rules are still<br />
+being drafted. This tool sits squarely in that gap.</p>
+</blockquote>
 <footer>↳ proof: internal/scraper/ssrf.go · internal/tools/scrape.go (&quot;trust&quot; marker) · internal/content/sanitize.go · OWASP Web A10 · LLM01</footer>
 </section>
 </foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="8" data-paginate="true" data-class="wm" data-footer="↳ proof: internal/datasubject/registry.go · internal/session/datasubject_test.go (&quot;the #85 release gate&quot;)" data-style="/* ── Design tokens — matched to assets/social-preview.svg ───────────────── */
@@ -3327,8 +3325,8 @@ section.wm::before {
 .titlelogo { width: 96px; height: 96px; margin-bottom: 20px; display: block; }
 ;" data-marpit-pagination-total="13" data-size="16:9">
 <h1 id="the-docs-are-tested-not-trusted">The docs are tested, not trusted</h1>
-<p>&quot;Keep the docs accurate&quot; isn't a good intention here — it's enforced by a stack<br />
-of small mechanisms, so drift is hard to write and impossible to merge quietly:</p>
+<p>&quot;Keep the docs accurate&quot; isn't a good intention here — a stack of small<br />
+mechanisms makes drift hard to write and impossible to merge quietly:</p>
 <table>
 <thead>
 <tr>
@@ -3339,26 +3337,25 @@ of small mechanisms, so drift is hard to write and impossible to merge quietly:<
 <tbody>
 <tr>
 <td><strong>Mechanical facts are machine-checked</strong></td>
-<td>The <em>enumerable</em> facts — tool lists, output shapes, read/write flags — never get hardcoded; they point at the file that defines them, so there's nothing to fall out of sync</td>
+<td>Tool lists, output shapes, read/write flags are never hardcoded — they point at the file that defines them</td>
 </tr>
 <tr>
 <td><strong>Rules the AI writes by</strong></td>
-<td>The agent guide (<code>CLAUDE.md</code>) makes &quot;every claim links to its file&quot; and &quot;no duplicated facts&quot; mechanical rules for Claude / Copilot / Cursor — the way most code now lands</td>
+<td><code>CLAUDE.md</code> makes &quot;every claim links to its file&quot; a mechanical rule for Claude / Copilot / Cursor</td>
 </tr>
 <tr>
 <td><strong>A test reads the docs</strong></td>
-<td>At build time it parses <code>docs/TOOLS.md</code>, starts a real server, and fails the build if the documented tools, output shapes, or read/write flags don't match reality</td>
+<td>At build time it parses <code>docs/TOOLS.md</code>, starts a real server, and fails if the documented tools or shapes don't match reality</td>
 </tr>
 <tr>
 <td><strong>Gates that can't be skipped</strong></td>
-<td>A pre-commit hook runs fmt/lint/vet locally on staged Go files; the doc-drift check runs in CI on <strong>every</strong> PR — even docs-only ones, so a doc edit alone can't slip past</td>
+<td>The doc-drift check runs in CI on <strong>every</strong> PR — even docs-only ones</td>
 </tr>
 </tbody>
 </table>
 <blockquote>
-<p>The mechanical facts are machine-checked; the <em>judgment</em> — threat models, the<br />
-standards crosswalks — lives in prose and gets human review. <em>Read the code, not<br />
-the marketing</em>: where a claim is enumerable, the build enforces it.</p>
+<p>The <em>judgment</em> — threat models, standards crosswalks — lives in prose and gets<br />
+human review. Where a claim is enumerable, the build enforces it.</p>
 </blockquote>
 <footer>↳ proof: CLAUDE.md &quot;Documentation Guidelines&quot; · internal/tools/metadata_test.go · .githooks · .github/workflows/ci.yml (docs-drift)</footer>
 </section>

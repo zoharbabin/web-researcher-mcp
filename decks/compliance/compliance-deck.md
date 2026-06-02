@@ -312,25 +312,21 @@ organization* a certificate requires — so here's the split:
 
 # Agency sharpens one old threat — and adds a new one
 
-Give an AI a tool that fetches any page, and the AI now *chooses the URLs*. That
-doesn't invent vulnerabilities from thin air — it **amplifies an old one** and
-**surfaces a new one**:
+Give an AI a tool that fetches any page, and it now *chooses the URLs*. That
+**amplifies an old vuln** and **surfaces a new one**:
 
-**An old web vuln, now automated — SSRF.** Server-side request forgery is a
-classic (OWASP Web A10). What's new is that a hijacked link can steer an
+**Old vuln, now automated — SSRF (OWASP Web A10).** A hijacked link can steer an
 *autonomous* fetch at your internal network. So before any fetch the server
-rejects private/reserved IPs and cloud-metadata hosts, connects only to that
+rejects private/reserved IPs and cloud-metadata hosts, connects only to the
 exact resolved address (DNS-rebind defense), and re-checks on every redirect.
 
 **A genuinely new class — indirect prompt injection.** A booby-trapped page can
-try to hijack the AI reading it. The server strips active markup and hidden
-content, caps size, and tags every result with an explicit `untrusted-external-content`
-marker. It does **not** enforce the prompt boundary — that's the *host's* job,
-because the model and the agent loop live there.
+try to hijack the AI reading it. The server strips active markup, caps size, and
+tags every result `untrusted-external-content`. It does **not** enforce the
+prompt boundary — that's the *host's* job, where the model and agent loop live.
 
-*Why now:* prompt injection is the **#1 risk** on OWASP's LLM list, and the
-agentic-AI rules are still being written (OWASP's Agentic Top 10 is a 2026 draft).
-This tool sits squarely in that gap.
+> Prompt injection is **#1** on OWASP's LLM list, and the agentic rules are still
+> being drafted. This tool sits squarely in that gap.
 
 <!-- _footer: '↳ proof: internal/scraper/ssrf.go · internal/tools/scrape.go ("trust" marker) · internal/content/sanitize.go · OWASP Web A10 · LLM01' -->
 
@@ -383,19 +379,18 @@ So the server treats consent as three things it actually does:
 
 # The docs are tested, not trusted
 
-"Keep the docs accurate" isn't a good intention here — it's enforced by a stack
-of small mechanisms, so drift is hard to write and impossible to merge quietly:
+"Keep the docs accurate" isn't a good intention here — a stack of small
+mechanisms makes drift hard to write and impossible to merge quietly:
 
 | Layer | What keeps it honest |
 |-------|----------------------|
-| **Mechanical facts are machine-checked** | The *enumerable* facts — tool lists, output shapes, read/write flags — never get hardcoded; they point at the file that defines them, so there's nothing to fall out of sync |
-| **Rules the AI writes by** | The agent guide (`CLAUDE.md`) makes "every claim links to its file" and "no duplicated facts" mechanical rules for Claude / Copilot / Cursor — the way most code now lands |
-| **A test reads the docs** | At build time it parses `docs/TOOLS.md`, starts a real server, and fails the build if the documented tools, output shapes, or read/write flags don't match reality |
-| **Gates that can't be skipped** | A pre-commit hook runs fmt/lint/vet locally on staged Go files; the doc-drift check runs in CI on **every** PR — even docs-only ones, so a doc edit alone can't slip past |
+| **Mechanical facts are machine-checked** | Tool lists, output shapes, read/write flags are never hardcoded — they point at the file that defines them |
+| **Rules the AI writes by** | `CLAUDE.md` makes "every claim links to its file" a mechanical rule for Claude / Copilot / Cursor |
+| **A test reads the docs** | At build time it parses `docs/TOOLS.md`, starts a real server, and fails if the documented tools or shapes don't match reality |
+| **Gates that can't be skipped** | The doc-drift check runs in CI on **every** PR — even docs-only ones |
 
-> The mechanical facts are machine-checked; the *judgment* — threat models, the
-> standards crosswalks — lives in prose and gets human review. *Read the code, not
-> the marketing*: where a claim is enumerable, the build enforces it.
+> The *judgment* — threat models, standards crosswalks — lives in prose and gets
+> human review. Where a claim is enumerable, the build enforces it.
 
 <!-- _footer: '↳ proof: CLAUDE.md "Documentation Guidelines" · internal/tools/metadata_test.go · .githooks · .github/workflows/ci.yml (docs-drift)' -->
 
