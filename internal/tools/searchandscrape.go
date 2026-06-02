@@ -95,6 +95,10 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 				},
 			}
 			jsonBytes, _ := json.Marshal(output)
+			// Record metrics + audit like every other success path, so
+			// zero-result calls still appear in monitoring and audit trails.
+			deps.Metrics.RecordToolCall("search_and_scrape", time.Since(start), nil, "", false)
+			auditToolCallQuery(ctx, deps, "search_and_scrape", time.Since(start), nil, "", input.Query, map[string]any{"urls_scraped": 0})
 			return structuredResult(jsonBytes), nil, nil
 		}
 
