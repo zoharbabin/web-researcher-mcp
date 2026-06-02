@@ -392,7 +392,7 @@ mechanisms makes drift hard to write and impossible to merge quietly:
 > The *judgment* — threat models, standards crosswalks — lives in prose and gets
 > human review. Where a claim is enumerable, the build enforces it.
 
-<!-- _footer: '↳ proof: CLAUDE.md "Documentation Guidelines" · internal/tools/metadata_test.go · .githooks · .github/workflows/ci.yml (docs-drift)' -->
+<!-- _footer: '↳ proof: CLAUDE.md "Documentation Guidelines" · internal/tools/metadata_test.go · .github/workflows/ci.yml (docs-drift)' -->
 
 ---
 
