@@ -298,6 +298,9 @@ func main() {
 			os.Exit(1)
 		}
 		auditor = al
+		// Expose audit-pipeline loss (dropped/spilled/rotations) as Prometheus
+		// counters so backpressure loss is alertable (ASI07).
+		metricsCollector.RegisterAuditLoss(al)
 	} else {
 		auditor = audit.NewNoop()
 	}

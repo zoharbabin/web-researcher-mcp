@@ -226,6 +226,13 @@ func Load() (*Config, error) {
 	} else if os.Getenv("CACHE_ADMIN_KEY") != "" {
 		warnings = append(warnings, "Both ADMIN_API_KEY and CACHE_ADMIN_KEY are set; ADMIN_API_KEY takes precedence. Remove the deprecated CACHE_ADMIN_KEY.")
 	}
+	// Insecure-default notice (ASI10): HTTP transport exposed without an OAuth
+	// issuer means every request runs unauthenticated as tenant=default/user=
+	// anonymous. The gate behavior is intentional (zero-config), but a silent
+	// start hides it — warn loudly so an operator never exposes it unknowingly.
+	if port > 0 && os.Getenv("OAUTH_ISSUER_URL") == "" {
+		warnings = append(warnings, "HTTP transport is enabled (PORT set) without OAUTH_ISSUER_URL — all requests run UNAUTHENTICATED as tenant=default/user=anonymous. Set OAUTH_ISSUER_URL for authenticated multi-tenant use.")
+	}
 	if adminKey != "" && len(adminKey) < 16 {
 		errs = append(errs, adminKeyVar+" must be at least 16 characters")
 	}

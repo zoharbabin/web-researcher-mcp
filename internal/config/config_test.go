@@ -1009,3 +1009,49 @@ func TestConfigStillReturnedOnError(t *testing.T) {
 		t.Fatal("expected non-nil config even on error")
 	}
 }
+
+func TestInsecureDefaultWarningWhenHTTPWithoutIssuer(t *testing.T) {
+	t.Setenv("PORT", "8080")
+	t.Setenv("OAUTH_ISSUER_URL", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	found := false
+	for _, w := range cfg.Warnings {
+		if strings.Contains(w, "UNAUTHENTICATED") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected an insecure-default warning when PORT set without OAUTH_ISSUER_URL; warnings=%v", cfg.Warnings)
+	}
+}
+
+func TestNoInsecureWarningWhenIssuerSet(t *testing.T) {
+	t.Setenv("PORT", "8080")
+	t.Setenv("OAUTH_ISSUER_URL", "https://issuer.example.com")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	for _, w := range cfg.Warnings {
+		if strings.Contains(w, "UNAUTHENTICATED") {
+			t.Errorf("did not expect insecure-default warning when issuer is set; got %q", w)
+		}
+	}
+}
+
+func TestNoInsecureWarningInSTDIO(t *testing.T) {
+	t.Setenv("PORT", "0")
+	t.Setenv("OAUTH_ISSUER_URL", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	for _, w := range cfg.Warnings {
+		if strings.Contains(w, "UNAUTHENTICATED") {
+			t.Errorf("STDIO (PORT=0) must not warn about HTTP exposure; got %q", w)
+		}
+	}
+}
