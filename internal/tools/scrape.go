@@ -239,64 +239,45 @@ func scrapeCacheKey(url, mode string, maxLength int) string {
 const issueURL = "https://github.com/zoharbabin/web-researcher-mcp/issues"
 
 // negCacheKey builds the negative-cache key for a URL. The kind is NOT part of
-// the key (it is unknown before scraping); it is stored as the VALUE so a
-// later request can read it back and short-circuit without re-running the full
-// multi-tier scrape (OWASP Agentic ASI06: a recently-failed URL must not be
-// allowed to tie up a scrape slot on every retry). One key per domain.
+// the key (it is unknown before scraping); it is stored as the VALUE so a later
+// request can read it back and short-circuit without re-running the full
+// multi-tier scrape (OWASP Agentic ASI06: a recently-failed URL must not tie up
+// a scrape slot on every retry). Keyed by the FULL URL — keying by domain would
+// collide distinct paths on the same host and mask their specific errors.
 func negCacheKey(url string) string {
-	return "neg:" + extractDomain(url)
+	h := sha256.New()
+	fmt.Fprintf(h, "negv2|%s", url)
+	return "neg:" + hex.EncodeToString(h.Sum(nil))[:32]
 }
 
-// writeNegCache records that scraping url failed with se.Kind, for negCacheTTL.
+// writeNegCache records that scraping url failed with se.Kind + its original
+// message, for negCacheTTL. The value is "kind\x00message" so a cache hit
+// reconstructs the SAME error text (preserving downstream secret-masking and
+// detail), not a generic placeholder.
 func writeNegCache(ctx context.Context, deps Dependencies, url string, se *scraper.ScrapeError) {
-	deps.Cache.Set(ctx, negCacheKey(url), []byte(strconv.Itoa(int(se.Kind))), negCacheTTL(se.Kind))
+	val := strconv.Itoa(int(se.Kind)) + "\x00" + se.Message
+	deps.Cache.Set(ctx, negCacheKey(url), []byte(val), negCacheTTL(se.Kind))
 }
 
 // negCacheLookup returns a reconstructed ScrapeError if url is in the negative
-// cache, or nil. The cached value is the ErrorKind; the message is generic
-// (the original is not stored) but scrapeErrorResponse renders a correct,
-// kind-appropriate message and retry hint from the Kind alone.
+// cache, or nil. The cached value is "kind\x00message", so the reconstructed
+// error carries the SAME message as the original failure — preserving error
+// detail and any downstream secret-masking (the message may embed the URL).
 func negCacheLookup(ctx context.Context, deps Dependencies, url string) *scraper.ScrapeError {
 	v, ok := deps.Cache.Get(ctx, negCacheKey(url))
 	if !ok {
 		return nil
 	}
-	n, err := strconv.Atoi(string(v))
+	s := string(v)
+	kindStr, msg := s, ""
+	if i := indexOf(s, "\x00"); i >= 0 {
+		kindStr, msg = s[:i], s[i+1:]
+	}
+	n, err := strconv.Atoi(kindStr)
 	if err != nil {
 		return nil
 	}
-	kind := scraper.ErrorKind(n)
-	return &scraper.ScrapeError{Kind: kind, Message: negCacheMessage(kind), URL: url}
-}
-
-// negCacheMessage gives a stable reason string for a cache-reconstructed error.
-func negCacheMessage(kind scraper.ErrorKind) string {
-	switch kind {
-	case scraper.ErrValidation:
-		return "URL rejected (cached): invalid or disallowed URL"
-	case scraper.ErrBlocked:
-		return "blocked by bot detection (cached)"
-	case scraper.ErrAuth:
-		return "authentication required (cached)"
-	case scraper.ErrRateLimit:
-		return "rate limited (cached)"
-	case scraper.ErrBrowser:
-		return "browser unavailable (cached)"
-	case scraper.ErrContent:
-		return "no usable content (cached)"
-	default:
-		return "scrape failed (cached)"
-	}
-}
-
-func extractDomain(rawURL string) string {
-	if idx := indexOf(rawURL, "://"); idx >= 0 {
-		rawURL = rawURL[idx+3:]
-	}
-	if idx := indexOf(rawURL, "/"); idx >= 0 {
-		rawURL = rawURL[:idx]
-	}
-	return rawURL
+	return &scraper.ScrapeError{Kind: scraper.ErrorKind(n), Message: msg, URL: url}
 }
 
 func indexOf(s, sub string) int {

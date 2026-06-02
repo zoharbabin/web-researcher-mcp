@@ -647,9 +647,14 @@ func TestNegCacheRoundTrip(t *testing.T) {
 	if got.Kind != scraper.ErrBlocked {
 		t.Errorf("kind = %v, want ErrBlocked", got.Kind)
 	}
-	// Same domain, different path → same negative key (domain-scoped).
-	if other := negCacheLookup(ctx, deps, "https://blocked.example.com/other"); other == nil {
-		t.Error("negative cache should be domain-scoped (any path on the domain)")
+	// The original message is preserved (so detail + secret-masking survive a hit).
+	if got.Message != "orig" {
+		t.Errorf("message = %q, want %q (original must be preserved)", got.Message, "orig")
+	}
+	// Keyed by FULL URL: a different path on the same host is a DISTINCT entry
+	// (no collision), so an unrelated path is a cache miss.
+	if other := negCacheLookup(ctx, deps, "https://blocked.example.com/other"); other != nil {
+		t.Error("negative cache must key by full URL — a different path must not collide")
 	}
 }
 
