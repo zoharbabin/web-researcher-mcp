@@ -1334,3 +1334,50 @@ func TestRegulatedToolDenialsAreAuditedAndMetered(t *testing.T) {
 		})
 	}
 }
+
+// numCapturingProvider records the NumResults it was asked for, to assert the
+// tool-boundary clamp.
+type numCapturingProvider struct {
+	mu   sync.Mutex
+	seen int
+}
+
+func (p *numCapturingProvider) Web(_ context.Context, params search.WebSearchParams) ([]search.SearchResult, error) {
+	p.mu.Lock()
+	p.seen = params.NumResults
+	p.mu.Unlock()
+	return []search.SearchResult{{Title: "t", URL: "https://e.com", Snippet: "s"}}, nil
+}
+func (p *numCapturingProvider) Images(_ context.Context, _ search.ImageSearchParams) ([]search.ImageResult, error) {
+	return nil, nil
+}
+func (p *numCapturingProvider) News(_ context.Context, _ search.NewsSearchParams) ([]search.NewsResult, error) {
+	return nil, nil
+}
+func (p *numCapturingProvider) Name() string { return "numcap" }
+
+// TestNumResultsClampedAtBoundary verifies web_search clamps an over-limit
+// num_results to the documented ceiling before it reaches the provider (ASI06
+// fan-out / billing bound, defense-in-depth).
+func TestNumResultsClampedAtBoundary(t *testing.T) {
+	cap := &numCapturingProvider{}
+	deps := setupTestDeps()
+	deps.Search = cap
+	ctx := context.Background()
+	srv := createTestServer(deps)
+	sess := connectTestClient(ctx, t, srv)
+	defer sess.Close()
+
+	if _, err := sess.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "web_search",
+		Arguments: map[string]any{"query": "x", "num_results": 50},
+	}); err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	cap.mu.Lock()
+	got := cap.seen
+	cap.mu.Unlock()
+	if got != maxNumResults {
+		t.Errorf("num_results=50 should clamp to %d at the boundary, provider saw %d", maxNumResults, got)
+	}
+}

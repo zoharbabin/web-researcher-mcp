@@ -17,6 +17,12 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
+// maxNumResults is the documented (jsonschema 1-10) upper bound on result count,
+// enforced server-side at the tool boundary so a request can't drive unbounded
+// goroutine fan-out or upstream-provider billing regardless of provider behavior
+// (defense-in-depth; OWASP Agentic ASI06).
+const maxNumResults = 10
+
 type webSearchInput struct {
 	Query        string `json:"query" jsonschema:"The search query text (1-500 chars). Be specific with key terms and qualifiers for better results.,required"`
 	NumResults   int    `json:"num_results,omitempty" jsonschema:"Number of results to return (1-10). Default: 5. Higher values increase latency."`
@@ -51,6 +57,9 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 		numResults := input.NumResults
 		if numResults <= 0 {
 			numResults = 5
+		}
+		if numResults > maxNumResults {
+			numResults = maxNumResults // clamp to the documented ceiling (defense-in-depth, ASI06)
 		}
 
 		// The cache key MUST include every result-affecting parameter — most

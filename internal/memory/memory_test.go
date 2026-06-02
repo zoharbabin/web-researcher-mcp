@@ -112,3 +112,38 @@ func TestDataSubjectRoundTrip(t *testing.T) {
 		t.Fatalf("expected 1 erased, got %d err=%v", deleted, err)
 	}
 }
+
+// TestMaxEntriesEvictsOldest verifies the per-(tenant,user) cap evicts the
+// oldest entries and never touches another principal's entries.
+func TestMaxEntriesEvictsOldest(t *testing.T) {
+	ctx := context.Background()
+	s := NewStore(persist.NewMemoryStore(), time.Hour).WithMaxEntries(3)
+
+	for _, n := range []string{"a", "b", "c", "d", "e"} {
+		if _, err := s.Save(ctx, Entry{TenantID: "t1", UserID: "u1", Note: n}); err != nil {
+			t.Fatalf("save %s: %v", n, err)
+		}
+	}
+	got, _ := s.Recall(ctx, "t1", "u1", "", 100)
+	if len(got) != 3 {
+		t.Fatalf("expected cap of 3 entries, got %d", len(got))
+	}
+	// Oldest ("a","b") evicted; newest ("c","d","e") kept.
+	notes := map[string]bool{}
+	for _, e := range got {
+		notes[e.Note] = true
+	}
+	if notes["a"] || notes["b"] {
+		t.Errorf("oldest entries should be evicted, got %v", notes)
+	}
+	if !notes["c"] || !notes["d"] || !notes["e"] {
+		t.Errorf("newest entries should survive, got %v", notes)
+	}
+
+	// A different user is unaffected by u1's eviction.
+	_, _ = s.Save(ctx, Entry{TenantID: "t1", UserID: "u2", Note: "z"})
+	other, _ := s.Recall(ctx, "t1", "u2", "", 100)
+	if len(other) != 1 || other[0].Note != "z" {
+		t.Errorf("another user's entries must be untouched, got %+v", other)
+	}
+}

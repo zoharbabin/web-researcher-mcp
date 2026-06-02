@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/audit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/auth"
@@ -343,6 +344,30 @@ func main() {
 		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "academic"})
 	}
 	resources.RegisterAll(srv.MCP(), metricsCollector, sessionManager, rateLimiter, providerInfos)
+
+	// Denial-of-wallet backstop (ASI06): an OPTIONAL in-process per-(tenant,user)
+	// daily tool-call ceiling. Registered UNCONDITIONALLY (STDIO + HTTP) because
+	// the HTTP rate limiter doesn't run in STDIO. Off unless MAX_CALLS_PER_DAY>0,
+	// so the default zero-config path is unchanged.
+	if guard := tools.NewDailyCallGuard(cfg.RateLimit.MaxCallsPerDay); guard.Enabled() {
+		srv.MCP().AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+			return func(reqCtx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+				if method == "tools/call" {
+					if !guard.Allow(auth.TenantIDFromContext(reqCtx), auth.UserIDFromContext(reqCtx), time.Now().UTC()) {
+						ev := audit.NewEvent("tool_call", auth.TenantIDFromContext(reqCtx), auth.UserIDFromContext(reqCtx))
+						ev.Success = false
+						ev.ErrorCode = "daily_call_limit"
+						auditor.Log(ev)
+						res := &mcp.CallToolResult{IsError: true}
+						res.Content = []mcp.Content{&mcp.TextContent{Text: "daily call limit reached for this user; try again after the UTC day rolls over"}}
+						return res, nil
+					}
+				}
+				return next(reqCtx, method, req)
+			}
+		})
+		logger.Info("daily call ceiling enabled", "max_calls_per_day", cfg.RateLimit.MaxCallsPerDay)
+	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(),
 		syscall.SIGINT, syscall.SIGTERM)

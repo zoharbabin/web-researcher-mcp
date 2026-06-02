@@ -36,6 +36,9 @@ func registerImageSearch(srv *mcp.Server, deps Dependencies) {
 		}
 
 		numResults := input.NumResults
+		if numResults > maxNumResults {
+			numResults = maxNumResults
+		}
 		if numResults <= 0 {
 			numResults = 5
 		}

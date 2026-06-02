@@ -42,6 +42,9 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 		if numResults <= 0 {
 			numResults = 3
 		}
+		if numResults > maxNumResults {
+			numResults = maxNumResults // clamp fan-out to the documented ceiling (ASI06)
+		}
 		includeSources := input.IncludeSources == nil || *input.IncludeSources
 		deduplicate := input.Deduplicate == nil || *input.Deduplicate
 		maxLenPerSource := input.MaxLengthPerSource

@@ -174,3 +174,32 @@ func TestDataSubjectRoundTrip(t *testing.T) {
 		t.Fatalf("expected 1 erased, got %d err=%v", deleted, err)
 	}
 }
+
+// TestMaxContribEvictsOldest verifies the per-workspace contribution cap evicts
+// the oldest contributions while membership/sharing semantics are unaffected.
+func TestMaxContribEvictsOldest(t *testing.T) {
+	ctx := context.Background()
+	s := NewStore(persist.NewMemoryStore(), time.Hour).WithMaxContrib(3)
+	m := Member{TenantID: "t1", UserID: "u1"}
+	_ = s.AddMember(ctx, "ws1", m)
+
+	for _, n := range []string{"a", "b", "c", "d", "e"} {
+		if _, err := s.Contribute(ctx, "ws1", m, Contribution{Note: n}); err != nil {
+			t.Fatalf("contribute %s: %v", n, err)
+		}
+	}
+	got, err := s.Read(ctx, "ws1", m)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("expected cap of 3 contributions, got %d", len(got))
+	}
+	notes := map[string]bool{}
+	for _, c := range got {
+		notes[c.Note] = true
+	}
+	if notes["a"] || notes["b"] {
+		t.Errorf("oldest contributions should be evicted, got %v", notes)
+	}
+}

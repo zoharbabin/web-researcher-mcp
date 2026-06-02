@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -10,6 +11,11 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/consent"
 	"github.com/zoharbabin/web-researcher-mcp/internal/memory"
 )
+
+// maxNoteBytes bounds a single saved/contributed note so one oversized payload
+// can't bloat the encrypted store (OWASP Agentic ASI06). Generous for findings;
+// shared by memory_save and workspace_contribute.
+const maxNoteBytes = 64 * 1024
 
 type memorySaveInput struct {
 	Note  string   `json:"note" jsonschema:"The finding or conclusion to remember for future sessions.,required"`
@@ -36,6 +42,9 @@ func registerMemorySave(srv *mcp.Server, deps Dependencies) {
 		start := time.Now()
 		if input.Note == "" {
 			return toolError("note is required"), nil, nil
+		}
+		if len(input.Note) > maxNoteBytes {
+			return toolError(fmt.Sprintf("note too large (%d bytes); max %d", len(input.Note), maxNoteBytes)), nil, nil
 		}
 		userID := auth.UserIDFromContext(ctx)
 		if userID == "" || userID == "anonymous" {

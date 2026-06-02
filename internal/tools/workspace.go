@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -43,6 +44,9 @@ func registerWorkspaceContribute(srv *mcp.Server, deps Dependencies) {
 		start := time.Now()
 		if input.WorkspaceID == "" || input.Note == "" {
 			return toolError("workspace_id and note are required"), nil, nil
+		}
+		if len(input.Note) > maxNoteBytes {
+			return toolError(fmt.Sprintf("note too large (%d bytes); max %d", len(input.Note), maxNoteBytes)), nil, nil
 		}
 		caller := callerMember(ctx)
 		if caller.UserID == "" || caller.UserID == "anonymous" {
