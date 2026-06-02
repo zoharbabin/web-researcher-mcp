@@ -42,6 +42,7 @@ func registerGetSession(srv *mcp.Server, deps Dependencies) {
 				"sessionId":    input.SessionID,
 				"responseMode": "step",
 				"step":         step,
+				"trust":        untrustedContentTrust,
 			}
 			jsonBytes, _ := json.Marshal(output)
 			deps.Metrics.RecordToolCall("get_research_session", time.Since(start), nil, "", false)
@@ -67,6 +68,7 @@ func registerGetSession(srv *mcp.Server, deps Dependencies) {
 			"gaps":         idx.ActiveGaps,
 			"sources":      idx.Sources,
 			"startedAt":    idx.CreatedAt.Format(time.RFC3339),
+			"trust":        untrustedContentTrust,
 		}
 
 		jsonBytes, _ := json.Marshal(output)

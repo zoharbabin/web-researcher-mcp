@@ -81,6 +81,7 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 			"articles":    results,
 			"query":       input.Query,
 			"resultCount": len(results),
+			"trust":       untrustedContentTrust,
 		}
 
 		jsonBytes, _ := json.Marshal(output)

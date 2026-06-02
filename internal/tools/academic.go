@@ -227,6 +227,7 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 			"totalResults": len(papers),
 			"resultCount":  len(papers),
 			"source":       providerSource,
+			"trust":        untrustedContentTrust,
 		}
 
 		if len(papers) == 0 {

@@ -2519,3 +2519,40 @@ func TestBrowserEnabled(t *testing.T) {
 		})
 	}
 }
+
+// TestScrapeHTML_BoundsOversizeBody verifies the tier-3 HTML scraper caps the
+// decompressed body it loads into goquery (maxHTMLRead), so a very large or
+// decompression-bomb page cannot exhaust memory (OWASP Agentic ASI06). The
+// server must still return a bounded, successful result rather than OOM/erroring.
+func TestScrapeHTML_BoundsOversizeBody(t *testing.T) {
+	// Build a body well over maxHTMLRead (3MB): a valid <article> followed by a
+	// huge filler tail. goquery should parse only up to the cap.
+	var sb strings.Builder
+	sb.WriteString("<html><head><title>Big</title></head><body><article><h1>Heading</h1><p>")
+	sb.WriteString(strings.Repeat("the quick brown fox jumps over the lazy dog. ", 200))
+	sb.WriteString("</p></article>")
+	filler := strings.Repeat("x", maxHTMLRead+2*1024*1024) // pushes total past the cap
+	sb.WriteString(filler)
+	sb.WriteString("</body></html>")
+	full := sb.String()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		io.WriteString(w, full)
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	res, err := p.scrapeHTML(context.Background(), ts.URL, 5_000_000)
+	if err != nil {
+		t.Fatalf("scrapeHTML errored on oversize body: %v", err)
+	}
+	// The parsed+extracted content must be bounded by the read cap, proving we
+	// did not load the multi-MB filler into the DOM.
+	if len(res.Content) > maxHTMLRead {
+		t.Errorf("extracted content %d bytes exceeds maxHTMLRead %d — body was not bounded", len(res.Content), maxHTMLRead)
+	}
+	if !strings.Contains(res.Content, "quick brown fox") {
+		t.Error("expected the leading article text to survive the cap")
+	}
+}

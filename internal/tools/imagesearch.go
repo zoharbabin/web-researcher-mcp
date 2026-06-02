@@ -78,6 +78,7 @@ func registerImageSearch(srv *mcp.Server, deps Dependencies) {
 			"images":      results,
 			"query":       input.Query,
 			"resultCount": len(results),
+			"trust":       untrustedContentTrust,
 		}
 
 		jsonBytes, _ := json.Marshal(output)

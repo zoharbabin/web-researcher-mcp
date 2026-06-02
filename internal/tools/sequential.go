@@ -146,6 +146,10 @@ func buildSequentialResponse(idx *session.SessionIndex, input sequentialSearchIn
 		"totalStepsEstimate": input.TotalStepsEstimate,
 		"isComplete":         !input.NextStepNeeded,
 		"startedAt":          idx.CreatedAt.Format(time.RFC3339),
+		// The echoed `sources` carry external-origin titles/URLs; mark the
+		// envelope untrusted so replayed source metadata isn't treated as
+		// trusted. (Model-authored reasoning text is the host's own output.)
+		"trust": untrustedContentTrust,
 	}
 
 	if idx.Warning != "" {

@@ -117,6 +117,7 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 			"query":       input.Query,
 			"resultCount": len(results),
 			"results":     results,
+			"trust":       untrustedContentTrust,
 		}
 
 		const webSearchTTL = 30 * time.Minute
@@ -136,6 +137,10 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 func searchCacheKey(toolName string, parts ...any) string {
 	h := sha256.New()
 	h.Write([]byte(toolName))
+	// Version segment: bump whenever the cached response SHAPE changes so a
+	// post-upgrade cache hit can never serve a blob missing a new field. v2
+	// added the "trust" untrusted-content marker to every search-family output.
+	h.Write([]byte("|v2"))
 	for _, p := range parts {
 		fmt.Fprintf(h, "|%v", p)
 	}

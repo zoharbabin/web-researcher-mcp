@@ -94,6 +94,10 @@ func registerWorkspaceRead(srv *mcp.Server, deps Dependencies) {
 			return upstreamErrorResponse("workspace_read", err), nil, nil
 		}
 		auditToolCallQuery(ctx, deps, "workspace_read", time.Since(start), nil, "", "", map[string]any{"event": "workspace.read", "workspace_id": input.WorkspaceID})
-		return structuredResult(mustJSON(map[string]any{"status": "ok", "count": len(items), "contributions": items})), nil, nil
+		// Contributions may come from OTHER members (the highest-risk poisoning
+		// vector: cross-principal, persisted). Mark the payload untrusted so the
+		// host treats it as data — this does NOT restrict who may read it
+		// (membership-gated above; every member still sees all contributions).
+		return structuredResult(mustJSON(map[string]any{"status": "ok", "count": len(items), "contributions": items, "trust": untrustedContentTrust})), nil, nil
 	})
 }

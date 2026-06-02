@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -37,6 +38,14 @@ const maxScrapeLength = 5_000_000
 // the host); this marker makes the untrusted provenance unmissable so the host
 // can. See docs/SECURITY.md "Trust boundary marker".
 const untrustedContentTrust = "untrusted-external-content"
+
+// userAssertedContentTrust marks content the user themselves supplied and the
+// server merely stored verbatim (memory_recall notes). It is a DISTINCT, honest
+// value from untrustedContentTrust: the server cannot know whether a saved note
+// originated from a scraped page or the user's own words, so it does not claim
+// "external" — only that the host should treat recalled text as data, not
+// instructions. Same envelope-level boundary marker, different provenance.
+const userAssertedContentTrust = "user-asserted-content"
 
 func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
@@ -82,14 +91,22 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 			return cachedResultWithMeta(cached, meta), nil, nil
 		}
 
+		// Negative-cache short-circuit: a recently-failed URL returns its cached
+		// structured error without re-running the multi-tier scrape or holding a
+		// scrape slot (ASI06 resource-exhaustion defense).
+		if neg := negCacheLookup(ctx, deps, input.URL); neg != nil {
+			deps.Metrics.RecordToolCall("scrape_page", time.Since(start), neg, "upstream_error", true)
+			auditToolCall(ctx, deps, "scrape_page", time.Since(start), neg, "upstream_error")
+			return scrapeErrorResponse(neg, input.URL), nil, nil
+		}
+
 		result, err := deps.Scraper.Scrape(ctx, input.URL, maxLength)
 		if err != nil {
 			deps.Metrics.RecordToolCall("scrape_page", time.Since(start), err, "upstream_error", false)
 			auditToolCall(ctx, deps, "scrape_page", time.Since(start), err, "upstream_error")
 			var se *scraper.ScrapeError
 			if errors.As(err, &se) {
-				key := negCacheKey(input.URL, se.Kind)
-				deps.Cache.Set(ctx, key, []byte("1"), negCacheTTL(se.Kind))
+				writeNegCache(ctx, deps, input.URL, se)
 			}
 			return scrapeErrorResponse(err, input.URL), nil, nil
 		}
@@ -151,14 +168,24 @@ func scrapeRaw(ctx context.Context, deps Dependencies, input scrapePageInput, ma
 		return cachedResultWithMeta(cached, meta), nil, nil
 	}
 
+	// Negative-cache short-circuit. URL-level failures (SSRF/blocked/auth/browser/
+	// network/rate-limit) are mode-independent, so a cached full-mode failure
+	// applies to raw too. ErrContent is the exception: it means extraction found
+	// nothing, but raw skips extraction and may still return bytes — so never let
+	// a cached ErrContent short-circuit raw mode.
+	if neg := negCacheLookup(ctx, deps, input.URL); neg != nil && neg.Kind != scraper.ErrContent {
+		deps.Metrics.RecordToolCall("scrape_page", time.Since(start), neg, "upstream_error", true)
+		auditToolCall(ctx, deps, "scrape_page", time.Since(start), neg, "upstream_error")
+		return scrapeErrorResponse(neg, input.URL), nil, nil
+	}
+
 	result, err := deps.Scraper.ScrapeRaw(ctx, input.URL, maxLength)
 	if err != nil {
 		deps.Metrics.RecordToolCall("scrape_page", time.Since(start), err, "upstream_error", false)
 		auditToolCall(ctx, deps, "scrape_page", time.Since(start), err, "upstream_error")
 		var se *scraper.ScrapeError
 		if errors.As(err, &se) {
-			key := negCacheKey(input.URL, se.Kind)
-			deps.Cache.Set(ctx, key, []byte("1"), negCacheTTL(se.Kind))
+			writeNegCache(ctx, deps, input.URL, se)
 		}
 		return scrapeErrorResponse(err, input.URL), nil, nil
 	}
@@ -211,10 +238,55 @@ func scrapeCacheKey(url, mode string, maxLength int) string {
 
 const issueURL = "https://github.com/zoharbabin/web-researcher-mcp/issues"
 
-// negCacheKey builds a cache key for negative caching of scrape errors.
-func negCacheKey(url string, kind scraper.ErrorKind) string {
-	domain := extractDomain(url)
-	return "neg:" + domain + ":" + string(mapScrapeErrorKind(kind))
+// negCacheKey builds the negative-cache key for a URL. The kind is NOT part of
+// the key (it is unknown before scraping); it is stored as the VALUE so a
+// later request can read it back and short-circuit without re-running the full
+// multi-tier scrape (OWASP Agentic ASI06: a recently-failed URL must not be
+// allowed to tie up a scrape slot on every retry). One key per domain.
+func negCacheKey(url string) string {
+	return "neg:" + extractDomain(url)
+}
+
+// writeNegCache records that scraping url failed with se.Kind, for negCacheTTL.
+func writeNegCache(ctx context.Context, deps Dependencies, url string, se *scraper.ScrapeError) {
+	deps.Cache.Set(ctx, negCacheKey(url), []byte(strconv.Itoa(int(se.Kind))), negCacheTTL(se.Kind))
+}
+
+// negCacheLookup returns a reconstructed ScrapeError if url is in the negative
+// cache, or nil. The cached value is the ErrorKind; the message is generic
+// (the original is not stored) but scrapeErrorResponse renders a correct,
+// kind-appropriate message and retry hint from the Kind alone.
+func negCacheLookup(ctx context.Context, deps Dependencies, url string) *scraper.ScrapeError {
+	v, ok := deps.Cache.Get(ctx, negCacheKey(url))
+	if !ok {
+		return nil
+	}
+	n, err := strconv.Atoi(string(v))
+	if err != nil {
+		return nil
+	}
+	kind := scraper.ErrorKind(n)
+	return &scraper.ScrapeError{Kind: kind, Message: negCacheMessage(kind), URL: url}
+}
+
+// negCacheMessage gives a stable reason string for a cache-reconstructed error.
+func negCacheMessage(kind scraper.ErrorKind) string {
+	switch kind {
+	case scraper.ErrValidation:
+		return "URL rejected (cached): invalid or disallowed URL"
+	case scraper.ErrBlocked:
+		return "blocked by bot detection (cached)"
+	case scraper.ErrAuth:
+		return "authentication required (cached)"
+	case scraper.ErrRateLimit:
+		return "rate limited (cached)"
+	case scraper.ErrBrowser:
+		return "browser unavailable (cached)"
+	case scraper.ErrContent:
+		return "no usable content (cached)"
+	default:
+		return "scrape failed (cached)"
+	}
 }
 
 func extractDomain(rawURL string) string {

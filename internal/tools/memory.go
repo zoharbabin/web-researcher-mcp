@@ -79,6 +79,6 @@ func registerMemoryRecall(srv *mcp.Server, deps Dependencies) {
 			return upstreamErrorResponse("memory_recall", err), nil, nil
 		}
 		auditToolCall(ctx, deps, "memory_recall", time.Since(start), nil, "")
-		return structuredResult(mustJSON(map[string]any{"status": "ok", "count": len(entries), "memories": entries})), nil, nil
+		return structuredResult(mustJSON(map[string]any{"status": "ok", "count": len(entries), "memories": entries, "trust": userAssertedContentTrust})), nil, nil
 	})
 }
