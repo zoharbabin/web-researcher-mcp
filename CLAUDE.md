@@ -50,7 +50,7 @@ Non-obvious top-level dirs (so they're not mistaken for clutter or duplicates):
 
 ```
 docs/             # Published docs (mkdocs site); docs/internal/ = local-only working docs (gitignored, never published)
-decks/            # Marp presentation decks (source + self-contained html/pdf), one folder per deck — published to the site under /<deck>/ by docs.yml (see decks/README.md)
+decks/            # Marp presentation decks (source + self-contained html/pdf), one folder per deck — published to the site under /decks/<name>/ by docs.yml (see decks/README.md)
 assets/           # Logos, social-preview, favicon, ProductHunt gallery — consumed by README, the docs site, and registries
 scripts/          # Build/release helpers (build-mcpb, docker-smoke, sync-version) — wired into Makefile/CI
 .githooks/        # Git pre-commit hook (enabled via `make hooks`) — fmt/lint/vet on staged Go files

@@ -1,7 +1,7 @@
 # decks/
 
 Presentation decks about this project — source + rendered outputs, one folder
-per deck. Published to the docs site under `/<deck>/` via `.github/workflows/docs.yml`.
+per deck. Published to the docs site under `/decks/<name>/` via `.github/workflows/docs.yml`.
 
 | Deck | What it covers |
 |------|----------------|
