@@ -322,7 +322,7 @@ exact resolved address (DNS-rebind defense), and re-checks on every redirect.
 
 **A genuinely new class — indirect prompt injection.** A booby-trapped page can
 try to hijack the AI reading it. The server strips active markup, caps size, and
-tags every result `untrusted-external-content`. It does **not** enforce the
+tags every result as `untrusted-external-content`. It does **not** enforce the
 prompt boundary — that's the *host's* job, where the model and agent loop live.
 
 > Prompt injection is **#1** on OWASP's LLM list, and the agentic rules are still

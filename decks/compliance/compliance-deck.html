@@ -2348,7 +2348,7 @@ rejects private/reserved IPs and cloud-metadata hosts, connects only to the<br /
 exact resolved address (DNS-rebind defense), and re-checks on every redirect.</p>
 <p><strong>A genuinely new class — indirect prompt injection.</strong> A booby-trapped page can<br />
 try to hijack the AI reading it. The server strips active markup, caps size, and<br />
-tags every result <code>untrusted-external-content</code>. It does <strong>not</strong> enforce the<br />
+tags every result as <code>untrusted-external-content</code>. It does <strong>not</strong> enforce the<br />
 prompt boundary — that's the <em>host's</em> job, where the model and agent loop live.</p>
 <blockquote>
 <p>Prompt injection is <strong>#1</strong> on OWASP's LLM list, and the agentic rules are still<br />
