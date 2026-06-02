@@ -39,9 +39,11 @@ func registerMemorySave(srv *mcp.Server, deps Dependencies) {
 		}
 		userID := auth.UserIDFromContext(ctx)
 		if userID == "" || userID == "anonymous" {
+			auditToolDenial(ctx, deps, "memory_save", time.Since(start), "unauthenticated")
 			return structuredResult(mustJSON(map[string]any{"status": "unavailable", "reason": "long-term memory requires an authenticated user"})), nil, nil
 		}
 		if deps.Consent == nil || !deps.Consent.HasConsent(ctx, consent.PurposeMemory) {
+			auditToolDenial(ctx, deps, "memory_save", time.Since(start), "no_consent")
 			return structuredResult(mustJSON(map[string]any{"status": "no_consent", "reason": "no recorded consent for the 'memory' purpose; nothing is stored"})), nil, nil
 		}
 		tenantID := auth.TenantIDFromContext(ctx)
@@ -50,8 +52,10 @@ func registerMemorySave(srv *mcp.Server, deps Dependencies) {
 			Topic: input.Topic, Note: input.Note, URL: input.URL, Tags: input.Tags,
 		})
 		if err != nil {
+			deps.Metrics.RecordToolCall("memory_save", time.Since(start), err, "upstream_error", false)
 			return upstreamErrorResponse("memory_save", err), nil, nil
 		}
+		deps.Metrics.RecordToolCall("memory_save", time.Since(start), nil, "", false)
 		auditToolCall(ctx, deps, "memory_save", time.Since(start), nil, "")
 		return structuredResult(mustJSON(map[string]any{"status": "ok", "id": saved.ID, "createdAt": saved.CreatedAt})), nil, nil
 	})
@@ -69,15 +73,19 @@ func registerMemoryRecall(srv *mcp.Server, deps Dependencies) {
 		start := time.Now()
 		userID := auth.UserIDFromContext(ctx)
 		if userID == "" || userID == "anonymous" {
+			auditToolDenial(ctx, deps, "memory_recall", time.Since(start), "unauthenticated")
 			return structuredResult(mustJSON(map[string]any{"status": "unavailable", "reason": "long-term memory requires an authenticated user"})), nil, nil
 		}
 		if deps.Consent == nil || !deps.Consent.HasConsent(ctx, consent.PurposeMemory) {
+			auditToolDenial(ctx, deps, "memory_recall", time.Since(start), "no_consent")
 			return structuredResult(mustJSON(map[string]any{"status": "no_consent", "reason": "no recorded consent for the 'memory' purpose"})), nil, nil
 		}
 		entries, err := deps.Memory.Recall(ctx, auth.TenantIDFromContext(ctx), userID, input.Topic, input.Limit)
 		if err != nil {
+			deps.Metrics.RecordToolCall("memory_recall", time.Since(start), err, "upstream_error", false)
 			return upstreamErrorResponse("memory_recall", err), nil, nil
 		}
+		deps.Metrics.RecordToolCall("memory_recall", time.Since(start), nil, "", false)
 		auditToolCall(ctx, deps, "memory_recall", time.Since(start), nil, "")
 		return structuredResult(mustJSON(map[string]any{"status": "ok", "count": len(entries), "memories": entries, "trust": userAssertedContentTrust})), nil, nil
 	})

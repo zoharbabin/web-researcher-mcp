@@ -1279,3 +1279,58 @@ func TestToolsWorkWithRouter(t *testing.T) {
 		t.Fatalf("expected 1 result, got %v", output["resultCount"])
 	}
 }
+
+// TestRegulatedToolDenialsAreAuditedAndMetered verifies metrics+audit PARITY on
+// the regulated tools' refusal paths: an unauthenticated (anonymous/STDIO)
+// caller is denied, and each denial emits exactly one audit event (Success=false,
+// errCode=unauthenticated, no tool input) AND increments the per-tool metric.
+func TestRegulatedToolDenialsAreAuditedAndMetered(t *testing.T) {
+	for _, tool := range []string{"memory_save", "memory_recall", "workspace_contribute", "workspace_read", "get_my_analytics"} {
+		t.Run(tool, func(t *testing.T) {
+			cap := &capturingAuditor{}
+			mc := metrics.NewCollector()
+			deps := setupTestDeps()
+			deps.Auditor = cap
+			deps.Metrics = mc
+
+			ctx := context.Background()
+			srv := createTestServer(deps)
+			sess := connectTestClient(ctx, t, srv)
+			defer sess.Close()
+
+			args := map[string]any{}
+			switch tool {
+			case "memory_save":
+				args["note"] = "x"
+			case "workspace_contribute":
+				args["workspace_id"] = "w1"
+				args["note"] = "x"
+			case "workspace_read":
+				args["workspace_id"] = "w1"
+			}
+			if _, err := sess.CallTool(ctx, &mcp.CallToolParams{Name: tool, Arguments: args}); err != nil {
+				t.Fatalf("CallTool(%s) failed: %v", tool, err)
+			}
+
+			// Exactly one audit event for this denied call, Success=false, no PII.
+			evs := cap.events
+			if len(evs) != 1 {
+				t.Fatalf("%s: expected 1 audit event on denial, got %d", tool, len(evs))
+			}
+			ev := evs[0]
+			if ev.Success {
+				t.Errorf("%s: denial event must have Success=false", tool)
+			}
+			if ev.ErrorCode != "unauthenticated" {
+				t.Errorf("%s: errCode = %q, want unauthenticated", tool, ev.ErrorCode)
+			}
+			if ev.ToolName != tool {
+				t.Errorf("%s: tool name = %q", tool, ev.ToolName)
+			}
+			// Metric parity: the denied call is counted for this tool.
+			if got := mc.GetToolStats()[tool].TotalCalls; got != 1 {
+				t.Errorf("%s: metric TotalCalls = %d, want 1", tool, got)
+			}
+		})
+	}
+}

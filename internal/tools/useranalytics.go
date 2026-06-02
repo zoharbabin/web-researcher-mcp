@@ -33,12 +33,14 @@ func registerGetMyAnalytics(srv *mcp.Server, deps Dependencies) {
 		userID := auth.UserIDFromContext(ctx)
 
 		if userID == "" || userID == "anonymous" {
+			auditToolDenial(ctx, deps, "get_my_analytics", time.Since(start), "unauthenticated")
 			return structuredResult(mustJSON(map[string]any{
 				"status": "unavailable",
 				"reason": "user-level analytics requires an authenticated user",
 			})), nil, nil
 		}
 		if deps.Consent == nil || !deps.Consent.HasConsent(ctx, consent.PurposeAnalytics) {
+			auditToolDenial(ctx, deps, "get_my_analytics", time.Since(start), "no_consent")
 			return structuredResult(mustJSON(map[string]any{
 				"status": "no_consent",
 				"reason": "no recorded consent for the 'analytics' purpose; nothing is collected",
@@ -47,9 +49,12 @@ func registerGetMyAnalytics(srv *mcp.Server, deps Dependencies) {
 
 		summary, ok := deps.UserAnalytics.Get(ctx, tenantID, userID)
 		if !ok {
+			deps.Metrics.RecordToolCall("get_my_analytics", time.Since(start), nil, "", false)
+			auditToolCall(ctx, deps, "get_my_analytics", time.Since(start), nil, "")
 			return structuredResult(mustJSON(map[string]any{"status": "empty"})), nil, nil
 		}
 		out := map[string]any{"status": "ok", "analytics": summary}
+		deps.Metrics.RecordToolCall("get_my_analytics", time.Since(start), nil, "", false)
 		auditToolCall(ctx, deps, "get_my_analytics", time.Since(start), nil, "")
 		return structuredResult(mustJSON(out)), nil, nil
 	})

@@ -157,6 +157,38 @@ func auditToolCall(ctx context.Context, deps Dependencies, toolName string, dura
 	auditToolCallQuery(ctx, deps, toolName, duration, err, errCode, "", nil)
 }
 
+// auditToolDenial records a refused tool call (no_consent / not_member /
+// unauthenticated) on the highest-sensitivity tools so refusals are visible in
+// both the audit trail and Prometheus, with metrics PARITY against successes.
+// It emits Success=false + the errCode WITHOUT a synthetic error message (the
+// reason is the errCode), then records the tool-call metric. No PII: only the
+// identity-from-context and the errCode are recorded, never tool input.
+func auditToolDenial(ctx context.Context, deps Dependencies, toolName string, duration time.Duration, errCode string) {
+	if deps.Auditor != nil {
+		event := audit.NewEvent("tool_call", auth.TenantIDFromContext(ctx), auth.UserIDFromContext(ctx))
+		event.ToolName = toolName
+		if rid := auth.RequestIDFromContext(ctx); rid != "" {
+			event.RequestID = rid
+		}
+		event.Duration = duration.Milliseconds()
+		event.Success = false
+		event.ErrorCode = errCode
+		event.SourceIP = auth.SourceIPFromContext(ctx)
+		deps.Auditor.Log(event)
+	}
+	if deps.Metrics != nil {
+		// errCode marks it as an error in the per-tool metrics; nil error keeps
+		// the message out (the code is the reason). cacheHit=false.
+		deps.Metrics.RecordToolCall(toolName, duration, errSentinel(errCode), errCode, false)
+	}
+}
+
+// errSentinel wraps an errCode as a minimal error so RecordToolCall classifies
+// the call as a failure in mcp_tool_calls_errors_total without leaking detail.
+type errSentinel string
+
+func (e errSentinel) Error() string { return string(e) }
+
 // auditToolCallQuery is the metadata-aware variant for query tools.
 //
 // Privacy (decision f / DOC-VERIFY): the raw query is attached to metadata
