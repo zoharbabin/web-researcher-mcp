@@ -771,6 +771,14 @@ func TestScrapePageRawVsFullDistinctCache(t *testing.T) {
 
 	full := call("full")
 	raw := call("raw")
+	preview := call("preview")
+
+	// All three modes must carry the untrusted-content boundary marker.
+	for mode, out := range map[string]map[string]any{"full": full, "raw": raw, "preview": preview} {
+		if out["trust"] != "untrusted-external-content" {
+			t.Fatalf("mode %s missing trust marker, got %v", mode, out["trust"])
+		}
+	}
 
 	// Distinct cache entries: full is sanitized (no <h1> markup), raw is verbatim.
 	fullContent, _ := full["content"].(string)
@@ -837,6 +845,17 @@ func TestSearchAndScrapeTool(t *testing.T) {
 	}
 	if !strings.Contains(combined, "Search Result Content") {
 		t.Fatal("expected combinedContent to include scraped content")
+	}
+	// Every source must also carry the per-source trust marker.
+	sources, _ := output["sources"].([]any)
+	if len(sources) == 0 {
+		t.Fatal("expected at least one source")
+	}
+	for i, s := range sources {
+		src, _ := s.(map[string]any)
+		if src["trust"] != "untrusted-external-content" {
+			t.Fatalf("source %d missing trust marker, got %v", i, src["trust"])
+		}
 	}
 }
 
