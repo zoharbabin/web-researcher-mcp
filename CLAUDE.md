@@ -46,6 +46,22 @@ tests/e2e/        # Full process E2E tests
 tests/benchmark/  # Performance benchmarks
 ```
 
+Non-obvious top-level dirs (so they're not mistaken for clutter or duplicates):
+
+```
+docs/             # Published docs (mkdocs site); docs/internal/ = local-only working docs (gitignored, never published)
+assets/           # Logos, social-preview, favicon, ProductHunt gallery — consumed by README, the docs site, and registries
+scripts/          # Build/release helpers (build-mcpb, docker-smoke, sync-version) — wired into Makefile/CI
+.githooks/        # Git pre-commit hook (enabled via `make hooks`) — fmt/lint/vet on staged Go files
+hooks/            # Claude Code PLUGIN hook manifest (hooks.json) — NOT a git hook; runs bin/install.sh on session start
+bin/              # Claude Code plugin installer (bin/install.sh) — distinct from the root curl installer install.sh
+.claude-plugin/   # Claude Code plugin manifest
+mcpb/             # .mcpb bundle manifest template (consumed by scripts/build-mcpb.sh at release)
+overrides/        # mkdocs-material theme overrides (main.html — OG/Twitter card meta)
+```
+
+Registry/manifest files (root, each read by a different external tool): `server.json` (MCP registry), `smithery.yaml` (Smithery), `glama.json` (Glama), `.mcp.json` (local MCP client config), `VERSION` (source of truth, synced by `scripts/sync-version.sh` into server.json + .claude-plugin). Two Dockerfiles are intentional: `Dockerfile` (local/Makefile) and `Dockerfile.release` (GoReleaser). Two installers are intentional: root `install.sh`/`install.ps1` (curl installers) and `bin/install.sh` (plugin hook).
+
 ## Design Rules
 
 1. **Zero global state** — all deps flow through `tools.Dependencies` struct (constructed in `main.go`)

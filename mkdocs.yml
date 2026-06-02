@@ -49,8 +49,10 @@ nav:
   - API Setup: api-setup.md
   - Deployment: deployment.md
   - Security: security.md
+  - Security & Compliance: security-and-compliance.md
   - Architecture: architecture.md
   - Contributing: contributing.md
+  - Error Handling: error-handling.md
   - Privacy Policy: privacy.md
   - Brand Guidelines: brand-guidelines.md
   - Our Story: lessons-learned.md
