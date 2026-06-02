@@ -8,6 +8,7 @@ on:
       - "ARCHITECTURE.md"
       - "CONTRIBUTING.md"
       - "docs/**"
+      - "decks/**"
       - "overrides/**"
       - "mkdocs.yml"
       - ".github/workflows/docs.yml"
@@ -87,5 +88,11 @@ jobs:
           [ -f site_src/session_persistence.md ] && mv site_src/session_persistence.md site_src/session-persistence.md
           [ -f site_src/error_handling.md ] && mv site_src/error_handling.md site_src/error-handling.md
           [ -f site_src/security_and_compliance.md ] && mv site_src/security_and_compliance.md site_src/security-and-compliance.md
+          # Publish pre-rendered decks as static assets (served verbatim, not
+          # built as mkdocs pages). The rendered HTML/PDF are self-contained
+          # (logo inlined as a data URI), so no asset rewriting is needed.
+          mkdir -p site_src/decks/compliance
+          cp decks/compliance/compliance-deck.html site_src/decks/compliance/index.html
+          cp decks/compliance/compliance-deck.pdf  site_src/decks/compliance/compliance-deck.pdf
 
       - run: mkdocs gh-deploy --force

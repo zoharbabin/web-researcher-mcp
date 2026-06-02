@@ -54,7 +54,7 @@ jobs:
           while IFS= read -r f; do
             [ -z "$f" ] && continue
             case "$f" in
-              *.md|docs/*|assets/*|LICENSE|.gitignore|mkdocs.yml|overrides/*|.github/*_TEMPLATE*|.github/ISSUE_TEMPLATE/*)
+              *.md|docs/*|decks/*|assets/*|LICENSE|.gitignore|mkdocs.yml|overrides/*|.github/*_TEMPLATE*|.github/ISSUE_TEMPLATE/*)
                 : ;;                       # harmless — keep checking
               *)
                 code=true; break ;;        # anything else → full CI
