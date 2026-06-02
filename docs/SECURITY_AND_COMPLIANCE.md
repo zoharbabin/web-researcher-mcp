@@ -433,7 +433,7 @@ Full configuration reference: see `.env.example`.
 > **[Compliance as Architecture](https://zoharbabin.github.io/web-researcher-mcp/decks/compliance/)**
 > ([PDF](https://zoharbabin.github.io/web-researcher-mcp/decks/compliance/compliance-deck.pdf) ·
 > [source](https://github.com/zoharbabin/web-researcher-mcp/blob/main/decks/compliance/compliance-deck.md)).
-> Every slide cites the file that proves its claim.
+> The claims link to the files that back them — open any one and check.
 
 ### What We Target
 
