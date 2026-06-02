@@ -99,6 +99,9 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 			"query":           input.Query,
 			"status":          status,
 			"combinedContent": combined,
+			// Boundary marker for combinedContent + every source: this is
+			// external page text, untrusted (treat as data, not instructions).
+			"trust": untrustedContentTrust,
 			"summary": map[string]any{
 				"urlsSearched":     len(searchResults),
 				"urlsScraped":      scraped,
@@ -166,6 +169,7 @@ type sourceOutput struct {
 	Title       string                `json:"title,omitempty"`
 	Content     string                `json:"content"`
 	ContentType string                `json:"contentType"`
+	Trust       string                `json:"trust"`
 	Scores      *content.QualityScore `json:"scores,omitempty"`
 }
 
@@ -256,6 +260,7 @@ func buildSourcesStructured(results []scrapeResult, query string, filterByQuery 
 			Title:       r.title,
 			Content:     r.content,
 			ContentType: r.cType,
+			Trust:       untrustedContentTrust,
 			Scores:      &score,
 		})
 		combinedParts = append(combinedParts, r.content)

@@ -201,18 +201,20 @@ Raw HTML/Content
                  │
     ▼
 ┌────────────────────────────────────┐
-│ 4. Content boundary marking        │
-│    [BEGIN EXTERNAL CONTENT]        │
-│    ...content...                   │
-│    [END EXTERNAL CONTENT]          │
+│ 4. Trust boundary marker           │
+│    "trust":                        │
+│      "untrusted-external-content"  │
+│    (in the JSON envelope, never    │
+│     inside the content string)     │
 └────────────────────────────────────┘
 ```
 
 **Prompt Injection Mitigations:**
-- Content boundary markers in structured output (not in content itself — that would be easily bypassed)
-- The `contentType` field signals to the client that content is untrusted external data
-- Response metadata (tool name, schema) is never derived from scraped content
-- Size limits prevent context flooding attacks
+- A `"trust": "untrusted-external-content"` boundary marker on every scrape response (`scrape_page` full/preview/raw, and `search_and_scrape` top-level + per-source). It lives in the structured JSON envelope, **not** inside the `content` string — where a malicious page could forge or close it. It signals that `content` is external data to be treated as data, never as instructions.
+- **The server cannot enforce the prompt boundary** — the model and the agent loop live in the host application. The marker exists to make the untrusted provenance unmissable so the host can enforce it. Neutralizing plain-text injection payloads is the host's responsibility.
+- The `contentType` field reports the MIME/format of the content (it is not itself a trust signal — that is the `trust` field's job).
+- Response metadata (tool name, schema) is never derived from scraped content.
+- Size limits prevent context flooding attacks.
 
 ---
 
@@ -393,7 +395,7 @@ How the server's controls counter the ATT&CK techniques most relevant to an inte
 | Defense Evasion | DNS rebinding / redirect to internal host | T1090 | Resolve-once-connect-to-IP, re-validation on every redirect hop (max 5) |
 | Impact | Endpoint/Network Denial of Service | T1499 / T1498 | Slowloris-guarding timeouts, per-IP and per-tenant rate limits, circuit breakers, body/header caps |
 | Impact | Resource Hijacking (cost abuse) | T1496 | Per-tenant daily quota (optionally persisted), global rate limit |
-| Collection / Exfiltration | Indirect prompt injection via scraped content | T1059 (analog) | Content sanitization pipeline, boundary markers, `contentType` untrusted-data signal; raw mode is opt-in and clearly flagged |
+| Collection / Exfiltration | Indirect prompt injection via scraped content | T1059 (analog) | Content sanitization pipeline, a `"trust": "untrusted-external-content"` boundary marker in the JSON envelope, size caps; raw mode is opt-in and clearly flagged. Enforcing the prompt boundary itself is the host's job (the model lives there). |
 | Defense Evasion | Credential leakage in logs/errors | T1552 (analog) | `audit.MaskSecrets` redacts keys/tokens before any sink |
 
 ### NIST Cybersecurity Framework 2.0 Crosswalk

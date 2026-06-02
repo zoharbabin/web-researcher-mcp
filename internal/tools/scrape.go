@@ -27,6 +27,17 @@ type scrapePageInput struct {
 // scrape. Applies to all modes including raw.
 const maxScrapeLength = 5_000_000
 
+// untrustedContentTrust is the value of the structured-output "trust" field on
+// every response that carries scraped page text. It is an explicit,
+// machine-readable boundary marker placed in the JSON envelope — NOT in the
+// content string itself, where a malicious page could forge or close it
+// (OWASP LLM01, indirect prompt injection). It signals to the host/agent that
+// `content` is external data to be treated as data, never as instructions. The
+// server cannot enforce the prompt boundary (the model and agent loop live in
+// the host); this marker makes the untrusted provenance unmissable so the host
+// can. See docs/SECURITY.md "Content boundary marking".
+const untrustedContentTrust = "untrusted-external-content"
+
 func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "scrape_page",
@@ -95,6 +106,7 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 			"url":             input.URL,
 			"content":         processedContent,
 			"contentType":     result.ContentType,
+			"trust":           untrustedContentTrust,
 			"contentLength":   contentLen,
 			"truncated":       result.Truncated,
 			"estimatedTokens": content.EstimateTokens(processedContent),
@@ -158,6 +170,7 @@ func scrapeRaw(ctx context.Context, deps Dependencies, input scrapePageInput, ma
 		"url":             input.URL,
 		"content":         result.Content,
 		"contentType":     result.ContentType,
+		"trust":           untrustedContentTrust,
 		"contentLength":   contentLen,
 		"truncated":       result.Truncated,
 		"estimatedTokens": content.EstimateTokens(result.Content),

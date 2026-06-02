@@ -618,6 +618,9 @@ func TestScrapePageTool(t *testing.T) {
 	if output["contentType"] != "html" {
 		t.Fatalf("expected contentType 'html', got %v", output["contentType"])
 	}
+	if output["trust"] != "untrusted-external-content" {
+		t.Fatalf("expected trust boundary marker 'untrusted-external-content', got %v", output["trust"])
+	}
 	contentStr, _ := output["content"].(string)
 	if !strings.Contains(contentStr, "Main Heading") {
 		t.Fatal("expected content to contain 'Main Heading'")
@@ -721,6 +724,11 @@ func TestScrapePageRawMode(t *testing.T) {
 	if raw, _ := output["raw"].(bool); !raw {
 		t.Fatal("expected raw flag true")
 	}
+	// Even (especially) in raw mode, unsanitized bytes must carry the untrusted
+	// boundary marker so the host treats them as data, not instructions.
+	if output["trust"] != "untrusted-external-content" {
+		t.Fatalf("raw mode must carry trust marker, got %v", output["trust"])
+	}
 }
 
 func TestScrapePageRawVsFullDistinctCache(t *testing.T) {
@@ -823,6 +831,9 @@ func TestSearchAndScrapeTool(t *testing.T) {
 	combined, _ := output["combinedContent"].(string)
 	if combined == "" {
 		t.Fatal("expected non-empty combinedContent")
+	}
+	if output["trust"] != "untrusted-external-content" {
+		t.Fatalf("expected trust boundary marker on combinedContent, got %v", output["trust"])
 	}
 	if !strings.Contains(combined, "Search Result Content") {
 		t.Fatal("expected combinedContent to include scraped content")

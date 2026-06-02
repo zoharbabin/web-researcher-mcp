@@ -192,7 +192,7 @@ style: |
 | **Information security** | Global · US · UK | ISO 27001 · SOC 2 Type II · NIST CSF 2.0 · FedRAMP · BSIMM · UK Cyber Essentials · NCSC CAF |
 | **Privacy & data rights** | EU · UK · US · APAC | GDPR / UK GDPR · Global CBPR |
 | **Healthcare data** | US | HIPAA · HITRUST CSF |
-| **AI & agentic systems** | EU · US · Global | EU AI Act · NIST AI RMF · OWASP LLM Top 10 · OWASP Agentic Top 10 |
+| **AI & agentic systems** | EU · US · Global | EU AI Act · NIST AI RMF · OWASP LLM Top 10 · OWASP Agentic Top 10 *(2026 draft)* |
 | **AI-tool (MCP) security** | Global · US | OWASP MCP · CSA MCP · NSA MCP Guidance |
 | **Supply chain & protocol** | EU · Global | EU CRA · NIS2 · FIRST PSIRT · MITRE ATT&CK · RFC 9700/9449 |
 
@@ -257,7 +257,7 @@ not just where someone remembered to add them:
 
 - **One way in for every dependency** — nothing reaches in through a back door, so there's one place to audit
 - **Swappable parts behind clean seams** — the cache, search, and audit layers can change without rewriting callers
-- **One encryption routine** — AES-256 everywhere data is stored, never re-implemented per feature
+- **One encryption routine** — a single AES-256-GCM helper for all at-rest encryption (opt-in via a key), never re-implemented per feature
 - **One safe web-fetch client** — *every* outbound request goes through the same SSRF-checked path
 - **An audit log on every tool call** — structured, secrets stripped out, and it never slows the request
 
@@ -289,25 +289,50 @@ deliberately runs it as a network server.
 
 <!-- _class: wm -->
 
-# AI tools have brand-new threat classes
+# Controls, not certificates: the honest line
 
-Give an AI a tool that fetches any web page for it, and you've created two attack
-surfaces ordinary web-security checklists miss:
+"Compliance as architecture" ships the *controls*. It can't ship the *operating
+organization* a certificate requires — so here's the split:
 
-**It can be tricked into attacking your own network** (*SSRF*). So before any
-fetch we check every resolved address against 19 blocked ranges + cloud
-credential endpoints, connect only to that exact address, and re-check on every
-redirect — a hijacked link can't reach inside.
+| Layer | Who owns it |
+|-------|-------------|
+| **The project ships the controls** | SSRF-safe fetch, AES-256-GCM at rest + TLS, secrets-masked audit logs, tenant isolation, OAuth 2.1, consent + erasure *primitives*, SBOM + signed releases + a PSIRT process |
+| **The operator owns the process** | They're the **data controller** — sign BAAs/DPAs, set the retention *schedule* (code gives TTL knobs, not policy), run access reviews + incident response, choose lawful basis, run DPIAs |
+| **A hosted SaaS adds the program** | Trained staff, controls *audited over time*, 24/7 IR, signed customer DPAs, and the actual **SOC 2 / HITRUST / ISO 27001 audit** — none of which a repo can contain |
 
-**The pages it reads are untrusted input** — a booby-trapped page can try to
-hijack the AI (*prompt injection*). So scraped text is cleaned, size-capped, and
-clearly flagged to the model as "data, not instructions."
+> So "aligned with 23 standards" means *we provide the technical controls each one
+> requires* — not that an organization has been audited against them. A binary
+> can't clear a hospital's HIPAA bar; it hands that review its evidence.
 
-*Why now:* prompt injection is the **#1 risk** on OWASP's LLM list, and the major
-AI standards don't yet cover *agentic* tools like this one — making it a live
-case study for a gap regulators are still writing.
+<!-- _footer: '↳ proof: docs/SECURITY_AND_COMPLIANCE.md "Operator & Hosted-Service Responsibilities"' -->
 
-<!-- _footer: '↳ proof: internal/scraper/ssrf.go · docs/SECURITY_AND_COMPLIANCE.md "SSRF" & "Content Security"' -->
+---
+
+<!-- _class: wm -->
+
+# Agency sharpens one old threat — and adds a new one
+
+Give an AI a tool that fetches any page, and the AI now *chooses the URLs*. That
+doesn't invent vulnerabilities from thin air — it **amplifies an old one** and
+**surfaces a new one**:
+
+**An old web vuln, now automated — SSRF.** Server-side request forgery is a
+classic (OWASP Web A10). What's new is that a hijacked link can steer an
+*autonomous* fetch at your internal network. So before any fetch the server
+rejects private/reserved IPs and cloud-metadata hosts, connects only to that
+exact resolved address (DNS-rebind defense), and re-checks on every redirect.
+
+**A genuinely new class — indirect prompt injection.** A booby-trapped page can
+try to hijack the AI reading it. The server strips active markup and hidden
+content, caps size, and tags every result with an explicit `untrusted-external-content`
+marker. It does **not** enforce the prompt boundary — that's the *host's* job,
+because the model and the agent loop live there.
+
+*Why now:* prompt injection is the **#1 risk** on OWASP's LLM list, and the
+agentic-AI rules are still being written (OWASP's Agentic Top 10 is a 2026 draft).
+This tool sits squarely in that gap.
+
+<!-- _footer: '↳ proof: internal/scraper/ssrf.go · internal/tools/scrape.go ("trust" marker) · internal/content/sanitize.go · OWASP Web A10 · LLM01' -->
 
 ---
 
@@ -363,13 +388,14 @@ of small mechanisms, so drift is hard to write and impossible to merge quietly:
 
 | Layer | What keeps it honest |
 |-------|----------------------|
-| **Code is the source of truth** | Docs never hardcode tool lists, counts, versions, or env tables — they point at the file that defines them, so there's nothing to fall out of sync |
+| **Mechanical facts are machine-checked** | The *enumerable* facts — tool lists, output shapes, read/write flags — never get hardcoded; they point at the file that defines them, so there's nothing to fall out of sync |
 | **Rules the AI writes by** | The agent guide (`CLAUDE.md`) makes "every claim links to its file" and "no duplicated facts" mechanical rules for Claude / Copilot / Cursor — the way most code now lands |
 | **A test reads the docs** | At build time it parses `docs/TOOLS.md`, starts a real server, and fails the build if the documented tools, output shapes, or read/write flags don't match reality |
-| **Gates that can't be skipped** | A pre-commit hook catches it locally; CI re-runs the drift check on **every** PR — even docs-only ones, so a doc edit alone can't slip past |
+| **Gates that can't be skipped** | A pre-commit hook runs fmt/lint/vet locally on staged Go files; the doc-drift check runs in CI on **every** PR — even docs-only ones, so a doc edit alone can't slip past |
 
-> The result: the claims in these docs can't quietly stop being true. *Read the
-> code, not the marketing* — because here, the docs answer to the code.
+> The mechanical facts are machine-checked; the *judgment* — threat models, the
+> standards crosswalks — lives in prose and gets human review. *Read the code, not
+> the marketing*: where a claim is enumerable, the build enforces it.
 
 <!-- _footer: '↳ proof: CLAUDE.md "Documentation Guidelines" · internal/tools/metadata_test.go · .githooks · .github/workflows/ci.yml (docs-drift)' -->
 
