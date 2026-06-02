@@ -52,6 +52,36 @@ func TestNonMemberGetsZeroBytes(t *testing.T) {
 	}
 }
 
+// TestMembersReadEachOthersContributions is the core SHARED-workspace guarantee
+// (and a regression guard against the per-user session-isolation change leaking
+// into workspaces): a workspace is shared across its members, so member B must
+// see member A's contribution. Workspace isolation is by MEMBERSHIP, never by
+// individual user — unlike sessions, which are user-private.
+func TestMembersReadEachOthersContributions(t *testing.T) {
+	s := newStore()
+	ctx := context.Background()
+	alice := Member{TenantID: "t1", UserID: "alice"}
+	bob := Member{TenantID: "t1", UserID: "bob"}
+	_ = s.AddMember(ctx, "ws1", alice)
+	_ = s.AddMember(ctx, "ws1", bob)
+
+	if _, err := s.Contribute(ctx, "ws1", alice, Contribution{Note: "alice's finding"}); err != nil {
+		t.Fatalf("alice contribute: %v", err)
+	}
+
+	// Bob, a DIFFERENT user in the same workspace, must see Alice's contribution.
+	got, err := s.Read(ctx, "ws1", bob)
+	if err != nil {
+		t.Fatalf("bob read: %v", err)
+	}
+	if len(got) != 1 || got[0].Note != "alice's finding" {
+		t.Fatalf("workspace must be shared across members: bob saw %d contributions %+v", len(got), got)
+	}
+	if got[0].ContributorUser != "alice" {
+		t.Errorf("attribution must stay alice, got %q", got[0].ContributorUser)
+	}
+}
+
 func TestProvenanceNotCallerControlled(t *testing.T) {
 	s := newStore()
 	ctx := context.Background()

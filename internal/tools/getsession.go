@@ -29,9 +29,10 @@ func registerGetSession(srv *mcp.Server, deps Dependencies) {
 		}
 
 		tenantID := auth.TenantIDFromContext(ctx)
+		userID := auth.UserIDFromContext(ctx)
 
 		if input.StepID > 0 {
-			step, err := deps.Sessions.GetStep(tenantID, input.SessionID, input.StepID)
+			step, err := deps.Sessions.GetStep(tenantID, userID, input.SessionID, input.StepID)
 			if err != nil {
 				deps.Metrics.RecordToolCall("get_research_session", time.Since(start), err, "upstream_error", false)
 				auditToolCall(ctx, deps, "get_research_session", time.Since(start), err, "upstream_error")
@@ -50,7 +51,7 @@ func registerGetSession(srv *mcp.Server, deps Dependencies) {
 			return structuredResult(jsonBytes), nil, nil
 		}
 
-		idx, ok := deps.Sessions.GetIndex(tenantID, input.SessionID)
+		idx, ok := deps.Sessions.GetIndex(tenantID, userID, input.SessionID)
 		if !ok {
 			deps.Metrics.RecordToolCall("get_research_session", time.Since(start), nil, "upstream_error", false)
 			auditToolCall(ctx, deps, "get_research_session", time.Since(start), nil, "upstream_error")

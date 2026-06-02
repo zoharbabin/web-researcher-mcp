@@ -14,9 +14,9 @@ func TestSubjectAdapterRoundTrip(t *testing.T) {
 	m := newTestManager(time.Hour, 50)
 	defer m.Close()
 
-	idx, _ := m.Create("tenant-1")
-	_, _ = m.AppendStep("tenant-1", idx.ID, ResearchStep{StepNumber: 1, Description: "step"}, nil, "")
-	_, _ = m.Create("tenant-2") // a different tenant's data must be untouched
+	idx, _ := m.Create("tenant-1", "u1")
+	_, _ = m.AppendStep("tenant-1", "u1", idx.ID, ResearchStep{StepNumber: 1, Description: "step"}, nil, "")
+	_, _ = m.Create("tenant-2", "u1") // a different tenant's data must be untouched
 
 	adapter := AsDataSubject(m)
 	ctx := context.Background()

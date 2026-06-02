@@ -36,38 +36,56 @@ func (b *Backends) SessionManager() *SessionManager {
 	return &SessionManager{b: b, gcm: b.gcm, gcmPrev: b.gcmPrev, ttl: ttl, maxPer: b.cfg.MaxSessionsPerTenant, ctx: context.Background()}
 }
 
-func (m *SessionManager) blobKey(tenantID, sessionID string) string {
-	return m.b.key("session", tenantID+":"+sessionID)
+// normUser normalizes an empty userID to "anonymous" so STDIO / unauthenticated
+// callers map to a single stable owner (parity with the in-memory manager).
+func normUser(userID string) string {
+	if userID == "" {
+		return "anonymous"
+	}
+	return userID
 }
 
+// blobKey namespaces the session blob by (tenant, user, id) so a session is
+// private to its owning user — a co-tenant user cannot read another's session.
+func (m *SessionManager) blobKey(tenantID, userID, sessionID string) string {
+	return m.b.key("session", tenantID+":"+normUser(userID)+":"+sessionID)
+}
+
+// tenantSetKey indexes every session in a tenant (across users) so the
+// data-subject erasure (DeleteByTenant) still covers the whole tenant. Members
+// are "userID:sessionID" so per-session keys can be reconstructed.
 func (m *SessionManager) tenantSetKey(tenantID string) string {
 	return m.b.key("session:index", tenantID)
 }
+
+func setMember(userID, sessionID string) string { return normUser(userID) + ":" + sessionID }
 
 func (m *SessionManager) save(sess *session.Session) error {
 	data, err := json.Marshal(sess)
 	if err != nil {
 		return err
 	}
-	ct := cache.GCMEncrypt(m.gcm, data, []byte(sess.ID))
+	// AAD binds the ciphertext to user+id so a blob can't be decrypted under a
+	// different owner's key path.
+	ct := cache.GCMEncrypt(m.gcm, data, []byte(normUser(sess.CreatedByUserID)+":"+sess.ID))
 	pipe := m.b.client.TxPipeline()
-	bk := m.blobKey(sess.TenantID, sess.ID)
+	bk := m.blobKey(sess.TenantID, sess.CreatedByUserID, sess.ID)
 	pipe.Set(m.ctx, bk, ct, m.ttl)
-	pipe.SAdd(m.ctx, m.tenantSetKey(sess.TenantID), sess.ID)
+	pipe.SAdd(m.ctx, m.tenantSetKey(sess.TenantID), setMember(sess.CreatedByUserID, sess.ID))
 	pipe.Expire(m.ctx, m.tenantSetKey(sess.TenantID), m.ttl)
 	_, err = pipe.Exec(m.ctx)
 	return err
 }
 
-func (m *SessionManager) load(tenantID, sessionID string) (*session.Session, error) {
-	data, err := m.b.client.Get(m.ctx, m.blobKey(tenantID, sessionID)).Bytes()
+func (m *SessionManager) load(tenantID, userID, sessionID string) (*session.Session, error) {
+	data, err := m.b.client.Get(m.ctx, m.blobKey(tenantID, userID, sessionID)).Bytes()
 	if err != nil {
 		if err == redis.Nil {
 			return nil, &session.SessionNotFoundError{TenantID: tenantID, SessionID: sessionID}
 		}
 		return nil, err
 	}
-	aad := []byte(sessionID)
+	aad := []byte(normUser(userID) + ":" + sessionID)
 	pt, derr := cache.GCMDecrypt(m.gcm, data, aad)
 	if derr != nil && m.gcmPrev != nil {
 		pt, derr = cache.GCMDecrypt(m.gcmPrev, data, aad)
@@ -82,17 +100,18 @@ func (m *SessionManager) load(tenantID, sessionID string) (*session.Session, err
 	return &sess, nil
 }
 
-func (m *SessionManager) Create(tenantID string) (*session.SessionIndex, error) {
+func (m *SessionManager) Create(tenantID, userID string) (*session.SessionIndex, error) {
 	if m.maxPer > 0 {
 		if n, err := m.b.client.SCard(m.ctx, m.tenantSetKey(tenantID)).Result(); err == nil && int(n) >= m.maxPer {
 			m.evictOldest(tenantID)
 		}
 	}
 	sess := &session.Session{
-		ID:        newID(),
-		TenantID:  tenantID,
-		CreatedAt: nowUTC(),
-		LastUsed:  nowUTC(),
+		ID:              newID(),
+		TenantID:        tenantID,
+		CreatedByUserID: normUser(userID),
+		CreatedAt:       nowUTC(),
+		LastUsed:        nowUTC(),
 	}
 	if err := m.save(sess); err != nil {
 		return nil, err
@@ -100,8 +119,8 @@ func (m *SessionManager) Create(tenantID string) (*session.SessionIndex, error) 
 	return session.BuildIndex(sess), nil
 }
 
-func (m *SessionManager) AppendStep(tenantID, sessionID string, step session.ResearchStep, gap *session.KnowledgeGap, summary string) (*session.SessionIndex, error) {
-	sess, err := m.load(tenantID, sessionID)
+func (m *SessionManager) AppendStep(tenantID, userID, sessionID string, step session.ResearchStep, gap *session.KnowledgeGap, summary string) (*session.SessionIndex, error) {
+	sess, err := m.load(tenantID, userID, sessionID)
 	if err != nil {
 		if _, ok := err.(*session.SessionNotFoundError); ok {
 			return nil, &session.SessionNotFoundError{TenantID: tenantID, SessionID: sessionID, LastKnownStep: step.StepNumber - 1}
@@ -128,8 +147,8 @@ func (m *SessionManager) AppendStep(tenantID, sessionID string, step session.Res
 	return idx, nil
 }
 
-func (m *SessionManager) SetResearchGoal(tenantID, sessionID, goal string) error {
-	sess, err := m.load(tenantID, sessionID)
+func (m *SessionManager) SetResearchGoal(tenantID, userID, sessionID, goal string) error {
+	sess, err := m.load(tenantID, userID, sessionID)
 	if err != nil {
 		return err
 	}
@@ -138,8 +157,8 @@ func (m *SessionManager) SetResearchGoal(tenantID, sessionID, goal string) error
 	return m.save(sess)
 }
 
-func (m *SessionManager) AddSources(tenantID, sessionID string, sources []session.ResearchSource) error {
-	sess, err := m.load(tenantID, sessionID)
+func (m *SessionManager) AddSources(tenantID, userID, sessionID string, sources []session.ResearchSource) error {
+	sess, err := m.load(tenantID, userID, sessionID)
 	if err != nil {
 		return err
 	}
@@ -157,20 +176,20 @@ func (m *SessionManager) AddSources(tenantID, sessionID string, sources []sessio
 	return m.save(sess)
 }
 
-func (m *SessionManager) GetIndex(tenantID, sessionID string) (*session.SessionIndex, bool) {
-	sess, err := m.load(tenantID, sessionID)
+func (m *SessionManager) GetIndex(tenantID, userID, sessionID string) (*session.SessionIndex, bool) {
+	sess, err := m.load(tenantID, userID, sessionID)
 	if err != nil {
 		return nil, false
 	}
 	return session.BuildIndex(sess), true
 }
 
-func (m *SessionManager) GetFull(tenantID, sessionID string) (*session.Session, error) {
-	return m.load(tenantID, sessionID)
+func (m *SessionManager) GetFull(tenantID, userID, sessionID string) (*session.Session, error) {
+	return m.load(tenantID, userID, sessionID)
 }
 
-func (m *SessionManager) GetStep(tenantID, sessionID string, stepNum int) (*session.ResearchStep, error) {
-	sess, err := m.load(tenantID, sessionID)
+func (m *SessionManager) GetStep(tenantID, userID, sessionID string, stepNum int) (*session.ResearchStep, error) {
+	sess, err := m.load(tenantID, userID, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -182,10 +201,10 @@ func (m *SessionManager) GetStep(tenantID, sessionID string, stepNum int) (*sess
 	return nil, session.ErrSessionNotFound
 }
 
-func (m *SessionManager) Delete(tenantID, sessionID string) {
+func (m *SessionManager) Delete(tenantID, userID, sessionID string) {
 	pipe := m.b.client.TxPipeline()
-	pipe.Del(m.ctx, m.blobKey(tenantID, sessionID))
-	pipe.SRem(m.ctx, m.tenantSetKey(tenantID), sessionID)
+	pipe.Del(m.ctx, m.blobKey(tenantID, userID, sessionID))
+	pipe.SRem(m.ctx, m.tenantSetKey(tenantID), setMember(userID, sessionID))
 	_, _ = pipe.Exec(m.ctx)
 }
 
@@ -202,14 +221,34 @@ func (m *SessionManager) DeleteAll() {
 	}
 }
 
+// splitMember parses a tenant-set member "userID:sessionID" back into its parts.
+// Members written before user-binding (bare sessionID, no colon) are treated as
+// owned by "anonymous" so legacy entries remain loadable/erasable.
+func splitMember(member string) (userID, sessionID string) {
+	if i := indexByte(member, ':'); i >= 0 {
+		return member[:i], member[i+1:]
+	}
+	return "anonymous", member
+}
+
+func indexByte(s string, b byte) int {
+	for i := 0; i < len(s); i++ {
+		if s[i] == b {
+			return i
+		}
+	}
+	return -1
+}
+
 func (m *SessionManager) ListByTenant(tenantID string) []*session.SessionIndex {
-	ids, err := m.b.client.SMembers(m.ctx, m.tenantSetKey(tenantID)).Result()
+	members, err := m.b.client.SMembers(m.ctx, m.tenantSetKey(tenantID)).Result()
 	if err != nil {
 		return nil
 	}
 	var out []*session.SessionIndex
-	for _, id := range ids {
-		if sess, err := m.load(tenantID, id); err == nil {
+	for _, member := range members {
+		uid, sid := splitMember(member)
+		if sess, err := m.load(tenantID, uid, sid); err == nil {
 			out = append(out, session.BuildIndex(sess))
 		}
 	}
@@ -217,15 +256,16 @@ func (m *SessionManager) ListByTenant(tenantID string) []*session.SessionIndex {
 }
 
 func (m *SessionManager) DeleteByTenant(tenantID string) int {
-	ids, err := m.b.client.SMembers(m.ctx, m.tenantSetKey(tenantID)).Result()
+	members, err := m.b.client.SMembers(m.ctx, m.tenantSetKey(tenantID)).Result()
 	if err != nil {
 		return 0
 	}
-	for _, id := range ids {
-		m.Delete(tenantID, id)
+	for _, member := range members {
+		uid, sid := splitMember(member)
+		m.Delete(tenantID, uid, sid)
 	}
 	_ = m.b.client.Del(m.ctx, m.tenantSetKey(tenantID)).Err()
-	return len(ids)
+	return len(members)
 }
 
 func (m *SessionManager) ActiveCount() int {
@@ -254,7 +294,7 @@ func (m *SessionManager) evictOldest(tenantID string) {
 			oldest = idx
 		}
 	}
-	m.Delete(tenantID, oldest.ID)
+	m.Delete(tenantID, oldest.CreatedByUserID, oldest.ID)
 }
 
 var _ session.Manager = (*SessionManager)(nil)

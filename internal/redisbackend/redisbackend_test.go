@@ -141,16 +141,16 @@ func TestSessionManagerSurvivesAcrossClients(t *testing.T) {
 	pod1 := b.SessionManager()
 	pod2 := b.SessionManager()
 
-	idx, err := pod1.Create("tenant-1")
+	idx, err := pod1.Create("tenant-1", "u1")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if _, err := pod1.AppendStep("tenant-1", idx.ID, session.ResearchStep{StepNumber: 1, Description: "from pod1"}, nil, ""); err != nil {
+	if _, err := pod1.AppendStep("tenant-1", "u1", idx.ID, session.ResearchStep{StepNumber: 1, Description: "from pod1"}, nil, ""); err != nil {
 		t.Fatalf("append: %v", err)
 	}
 
 	// pod2 (a "different pod") sees the session created on pod1.
-	full, err := pod2.GetFull("tenant-1", idx.ID)
+	full, err := pod2.GetFull("tenant-1", "u1", idx.ID)
 	if err != nil {
 		t.Fatalf("pod2 GetFull: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestSessionManagerSurvivesAcrossClients(t *testing.T) {
 func TestSessionManagerNotFoundTyped(t *testing.T) {
 	b := newTestBackend(t)
 	m := b.SessionManager()
-	_, err := m.AppendStep("t1", "missing", session.ResearchStep{StepNumber: 5}, nil, "")
+	_, err := m.AppendStep("t1", "u1", "missing", session.ResearchStep{StepNumber: 5}, nil, "")
 	var nf *session.SessionNotFoundError
 	if !asSessionNotFound(err, &nf) || nf.LastKnownStep != 4 {
 		t.Fatalf("expected typed SessionNotFoundError with LastKnownStep=4, got %v", err)
@@ -172,9 +172,9 @@ func TestSessionManagerNotFoundTyped(t *testing.T) {
 func TestSessionListAndDeleteByTenant(t *testing.T) {
 	b := newTestBackend(t)
 	m := b.SessionManager()
-	a, _ := m.Create("tenant-1")
-	_, _ = m.Create("tenant-1")
-	_, _ = m.Create("tenant-2")
+	a, _ := m.Create("tenant-1", "u1")
+	_, _ = m.Create("tenant-1", "u1")
+	_, _ = m.Create("tenant-2", "u1")
 
 	if got := m.ListByTenant("tenant-1"); len(got) != 2 {
 		t.Errorf("expected 2 sessions for tenant-1, got %d", len(got))

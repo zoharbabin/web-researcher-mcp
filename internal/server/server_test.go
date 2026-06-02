@@ -368,8 +368,8 @@ func TestAdminFlushSessions(t *testing.T) {
 	mgr, _ := session.NewManager(session.Config{MaxSessions: 10, SessionTTL: time.Hour})
 	defer mgr.Close()
 
-	_, _ = mgr.Create("tenant-1")
-	_, _ = mgr.Create("tenant-1")
+	_, _ = mgr.Create("tenant-1", "u1")
+	_, _ = mgr.Create("tenant-1", "u1")
 
 	if mgr.ActiveCount() != 2 {
 		t.Fatalf("expected 2 sessions, got %d", mgr.ActiveCount())

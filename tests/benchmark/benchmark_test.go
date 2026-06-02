@@ -114,7 +114,7 @@ func BenchmarkSessionCreate(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		mgr.Create(fmt.Sprintf("tenant-%d", i%100))
+		mgr.Create(fmt.Sprintf("tenant-%d", i%100), "u1")
 	}
 }
 
@@ -133,13 +133,13 @@ func BenchmarkSessionGet(b *testing.B) {
 	entries := make([]entry, 100)
 	for i := range entries {
 		tenantID := fmt.Sprintf("tenant-%d", i)
-		sess, _ := mgr.Create(tenantID)
+		sess, _ := mgr.Create(tenantID, "u1")
 		entries[i] = entry{tenantID: tenantID, sessionID: sess.ID}
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		e := entries[i%len(entries)]
-		mgr.GetIndex(e.tenantID, e.sessionID)
+		mgr.GetIndex(e.tenantID, "u1", e.sessionID)
 	}
 }
