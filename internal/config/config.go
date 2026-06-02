@@ -254,7 +254,7 @@ func Load() (*Config, error) {
 	if raw := os.Getenv("STDIO_USER_ID"); raw != "" {
 		if v, ok := validateStdioUserID(raw); ok {
 			if port > 0 {
-				warnings = append(warnings, "STDIO_USER_ID is ignored in HTTP mode (PORT set) — identity comes from OAuth.")
+				warnings = append(warnings, "STDIO_USER_ID is ignored whenever PORT is set (HTTP mode) — HTTP identity comes from OAuth when configured, or is anonymous in the unauthenticated fallback.")
 			} else {
 				stdioUserID = v
 			}

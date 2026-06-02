@@ -1120,7 +1120,7 @@ func TestStdioUserID(t *testing.T) {
 		}
 		found := false
 		for _, w := range cfg.Warnings {
-			if strings.Contains(w, "ignored in HTTP mode") {
+			if strings.Contains(w, "ignored whenever PORT is set") {
 				found = true
 			}
 		}

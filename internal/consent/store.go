@@ -56,6 +56,11 @@ func (m *StoreManager) Record(ctx context.Context, rec Record) error {
 // not silent. Callers can gate a consent.grant audit event on wrote==true
 // without emitting a phantom grant.
 func GrantIfAbsent(ctx context.Context, m Manager, tenantID, userID string, purpose Purpose, decidedFrom, decidedAt string) (bool, error) {
+	// Validate up front so the unknown-purpose contract holds for EVERY Manager,
+	// not just StoreManager (Noop.Record returns nil and would otherwise mask it).
+	if !purpose.Valid() {
+		return false, ErrUnknownPurpose
+	}
 	if _, ok := m.Query(ctx, tenantID, userID, purpose); ok {
 		return false, nil // a decision already exists (granted OR withdrawn) — leave it
 	}

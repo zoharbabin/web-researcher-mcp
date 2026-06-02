@@ -158,9 +158,11 @@ func TestGrantIfAbsent(t *testing.T) {
 	})
 
 	t.Run("unknown purpose → (false, error), not silent", func(t *testing.T) {
-		wrote, err := GrantIfAbsent(ctx, newManager(), "default", "alice", Purpose("bogus"), "stdio_bootstrap", now)
-		if wrote || err == nil {
-			t.Fatalf("unknown purpose must return (false, error), got wrote=%v err=%v", wrote, err)
+		for _, m := range []Manager{newManager(), NewNoop()} {
+			wrote, err := GrantIfAbsent(ctx, m, "default", "alice", Purpose("bogus"), "stdio_bootstrap", now)
+			if wrote || err == nil {
+				t.Fatalf("unknown purpose must return (false, error) for %T, got wrote=%v err=%v", m, wrote, err)
+			}
 		}
 	})
 
