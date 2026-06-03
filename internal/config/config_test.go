@@ -1173,7 +1173,8 @@ func TestParseSearXNGHeaders(t *testing.T) {
 		if len(errs) != 0 {
 			t.Fatalf("unexpected errors: %v", errs)
 		}
-		if m["X-Api-Key"] != "abc" || m["CF-Access-Client-Id"] != "xyz" {
+		// Names are canonicalized: "CF-Access-Client-Id" => "Cf-Access-Client-Id".
+		if m["X-Api-Key"] != "abc" || m["Cf-Access-Client-Id"] != "xyz" {
 			t.Errorf("unexpected map: %v", m)
 		}
 	})
@@ -1202,6 +1203,35 @@ func TestParseSearXNGHeaders(t *testing.T) {
 		m, _ := parseSearXNGHeaders("X-A: 1, X-A: 2")
 		if m["X-A"] != "2" {
 			t.Errorf("expected last-wins '2', got %q", m["X-A"])
+		}
+	})
+
+	t.Run("case-variant names canonicalize and dedup deterministically", func(t *testing.T) {
+		m, errs := parseSearXNGHeaders("x-api-key: 1, X-API-KEY: 2")
+		if len(errs) != 0 {
+			t.Fatalf("unexpected errors: %v", errs)
+		}
+		if len(m) != 1 || m["X-Api-Key"] != "2" {
+			t.Errorf("expected single canonical key X-Api-Key=2, got %v", m)
+		}
+	})
+
+	t.Run("empty value allowed (RFC 7230)", func(t *testing.T) {
+		m, errs := parseSearXNGHeaders("X-Flag:")
+		if len(errs) != 0 {
+			t.Fatalf("unexpected errors: %v", errs)
+		}
+		if v, ok := m["X-Flag"]; !ok || v != "" {
+			t.Errorf("expected X-Flag set to empty string, got %v (ok=%v)", m, ok)
+		}
+	})
+
+	t.Run("comma in value splits into a malformed second entry", func(t *testing.T) {
+		// Documented limitation: commas delimit pairs, so "a, b" splits and the
+		// "b" fragment has no colon => fail-closed error (never silently mangled).
+		_, errs := parseSearXNGHeaders("X-List: a, b")
+		if len(errs) != 1 || !strings.Contains(errs[0], "missing a ':'") {
+			t.Errorf("expected the post-comma fragment to error, got %v", errs)
 		}
 	})
 
@@ -1272,7 +1302,7 @@ func TestLoadSearXNGHeadersValid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.Search.SearXNGHeaders["X-Api-Key"] != "abc" || cfg.Search.SearXNGHeaders["CF-Access-Client-Id"] != "xyz" {
+	if cfg.Search.SearXNGHeaders["X-Api-Key"] != "abc" || cfg.Search.SearXNGHeaders["Cf-Access-Client-Id"] != "xyz" {
 		t.Errorf("unexpected headers map: %v", cfg.Search.SearXNGHeaders)
 	}
 }

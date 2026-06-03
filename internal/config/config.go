@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"net/textproto"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -507,8 +508,10 @@ func splitSearXNGBasicAuth(raw string) (user, pass string, ok bool) {
 // validates each name as an RFC 7230 token and each value as free of CR/LF/NUL
 // — closing CRLF header-injection at the boundary. It returns the map plus
 // redacted error strings (header NAME or shape only, never the value). Empty
-// input => (nil, nil), the zero-config path identical to today. Duplicate
-// names: last wins, deterministic across restarts.
+// input => (nil, nil), the zero-config path identical to today. Names are
+// canonicalized (textproto.CanonicalMIMEHeaderKey), so case-variant duplicates
+// collapse to one entry; duplicate names: last wins, deterministic across
+// restarts. An empty value is allowed (RFC 7230 permits empty header values).
 func parseSearXNGHeaders(raw string) (map[string]string, []string) {
 	if strings.TrimSpace(raw) == "" {
 		return nil, nil
@@ -534,7 +537,10 @@ func parseSearXNGHeaders(raw string) (map[string]string, []string) {
 			errsOut = append(errsOut, fmt.Sprintf("SEARXNG_HEADERS value for header %q contains a forbidden control character", name))
 			continue
 		}
-		out[name] = value
+		// Canonicalize the name (e.g. "x-api-key" -> "X-Api-Key") so dedup matches
+		// the on-the-wire key http.Header.Set uses; otherwise case-variant
+		// duplicates would collide nondeterministically via random map order.
+		out[textproto.CanonicalMIMEHeaderKey(name)] = value
 	}
 	if len(out) == 0 {
 		return nil, errsOut
