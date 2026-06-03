@@ -638,6 +638,21 @@ Google's free tier allows 100 searches/day. If you're hitting that:
 
 </details>
 
+<details>
+<summary><strong>macOS: "Failed to reconnect" / error -32000 after a manual update</strong></summary>
+
+This happens only if you replaced the binary by copying new bytes *over* the existing file in place (`cp new /path/to/web-researcher-mcp`). On Apple Silicon, macOS caches the binary's ad-hoc code signature against the file, and overwriting it in place can make the next launch get killed before it starts. The official installers (Homebrew, the one-command `install.sh`, and the Claude Code plugin) avoid this by installing to a fresh file. To fix a manual install, replace it cleanly and re-sign:
+
+```bash
+rm -f /path/to/web-researcher-mcp
+cp /path/to/new-build /path/to/web-researcher-mcp
+codesign --force -s - /path/to/web-researcher-mcp   # ad-hoc re-sign
+```
+
+Then reconnect your client. (Re-running `install.sh` does this correctly for you.)
+
+</details>
+
 ---
 
 ## Contributing

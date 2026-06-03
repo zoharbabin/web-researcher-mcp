@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -160,6 +161,39 @@ func (h *mcpTestHarness) shutdown() {
 	case <-time.After(10 * time.Second):
 		h.cmd.Process.Kill()
 		h.t.Fatal("server did not shut down within 10 seconds")
+	}
+}
+
+// TestMCPLifecycle_VersionFlag pins the `--version` contract that the installers
+// (install.sh, bin/install.sh) depend on: the binary must print the bare build
+// version to stdout and exit 0, WITHOUT starting the server. If this regresses,
+// the plugin hook's "skip if already at this version" guard never matches and it
+// reinstalls every session — which, combined with an in-place overwrite, is what
+// triggered the macOS code-signing SIGKILL (-32000). Named with the
+// TestMCPLifecycle prefix so it runs under the CI -run filter.
+func TestMCPLifecycle_VersionFlag(t *testing.T) {
+	binPath := filepath.Join(t.TempDir(), "web-researcher-mcp")
+	if runtime.GOOS == "windows" {
+		binPath += ".exe"
+	}
+	const wantVersion = "9.9.9-e2e"
+	build := exec.Command("go", "build", "-ldflags", "-X main.version="+wantVersion, "-o", binPath, "./cmd/web-researcher-mcp")
+	build.Dir = projectRoot(t)
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build with version ldflag failed: %v\n%s", err, out)
+	}
+
+	for _, flag := range []string{"--version", "-v", "version"} {
+		t.Run(flag, func(t *testing.T) {
+			cmd := exec.Command(binPath, flag)
+			out, err := cmd.Output()
+			if err != nil {
+				t.Fatalf("%s exited non-zero: %v", flag, err)
+			}
+			if got := strings.TrimSpace(string(out)); got != wantVersion {
+				t.Fatalf("%s printed %q, want %q (installers parse this exact value)", flag, got, wantVersion)
+			}
+		})
 	}
 }
 

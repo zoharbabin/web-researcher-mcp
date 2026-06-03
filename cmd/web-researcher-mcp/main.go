@@ -37,6 +37,20 @@ import (
 var version = "dev"
 
 func main() {
+	// --version/-v prints the build version and exits, before any config load or
+	// server startup. Installers (install.sh, bin/install.sh) rely on this to
+	// skip re-downloading when the on-disk binary already matches the target
+	// version; without it the version guard never matches and the plugin hook
+	// reinstalls every session. Output is the bare version (no "v" prefix) on
+	// stdout so a script can compare it directly.
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "--version", "-v", "version":
+			os.Stdout.WriteString(version + "\n")
+			return
+		}
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		// Decision (g): config validation is fatal only in HTTP mode (Port>0),
