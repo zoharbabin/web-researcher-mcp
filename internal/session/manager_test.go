@@ -227,7 +227,13 @@ func TestDeleteAll(t *testing.T) {
 }
 
 func TestTTLExpiry(t *testing.T) {
-	m := newTestManager(50*time.Millisecond, 10)
+	// Use a generous TTL so the "accessible immediately" assertion cannot lose a
+	// race against expiry on a loaded CI runner (a GC pause or scheduler delay
+	// between Create and the first GetIndex must stay under the TTL). The sleep is
+	// scaled well past the TTL so expiry stays deterministic. A previous 50ms TTL
+	// made the first assertion flaky in CI.
+	const ttl = 250 * time.Millisecond
+	m := newTestManager(ttl, 10)
 	defer m.Close()
 
 	idx, _ := m.Create("tenant-1", "u1")
@@ -237,7 +243,7 @@ func TestTTLExpiry(t *testing.T) {
 		t.Fatal("session should be accessible immediately after creation")
 	}
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(ttl * 3)
 
 	_, ok = m.GetIndex("tenant-1", "u1", idx.ID)
 	if ok {
