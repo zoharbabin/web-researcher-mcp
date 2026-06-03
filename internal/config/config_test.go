@@ -1129,3 +1129,179 @@ func TestStdioUserID(t *testing.T) {
 		}
 	})
 }
+
+// =============================================================================
+// SearXNG auth (issue #109)
+// =============================================================================
+
+func TestSplitSearXNGBasicAuth(t *testing.T) {
+	tests := []struct {
+		name, in, user, pass string
+		ok                   bool
+	}{
+		{"valid", "alice:secret", "alice", "secret", true},
+		{"colon in password", "u:a:b:c", "u", "a:b:c", true},
+		{"no colon", "nocolon", "", "", false},
+		{"empty user", ":pass", "", "", false},
+		{"empty pass", "user:", "", "", false},
+		{"empty", "", "", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			u, p, ok := splitSearXNGBasicAuth(tt.in)
+			if ok != tt.ok || u != tt.user || p != tt.pass {
+				t.Errorf("splitSearXNGBasicAuth(%q) = (%q,%q,%v), want (%q,%q,%v)", tt.in, u, p, ok, tt.user, tt.pass, tt.ok)
+			}
+		})
+	}
+}
+
+func TestParseSearXNGHeaders(t *testing.T) {
+	t.Run("empty => nil, no errors", func(t *testing.T) {
+		m, errs := parseSearXNGHeaders("")
+		if m != nil || len(errs) != 0 {
+			t.Errorf("expected (nil, nil), got (%v, %v)", m, errs)
+		}
+		m, errs = parseSearXNGHeaders("   ")
+		if m != nil || len(errs) != 0 {
+			t.Errorf("whitespace-only: expected (nil, nil), got (%v, %v)", m, errs)
+		}
+	})
+
+	t.Run("valid pairs with trimming", func(t *testing.T) {
+		m, errs := parseSearXNGHeaders("  X-Api-Key :  abc , CF-Access-Client-Id: xyz ")
+		if len(errs) != 0 {
+			t.Fatalf("unexpected errors: %v", errs)
+		}
+		if m["X-Api-Key"] != "abc" || m["CF-Access-Client-Id"] != "xyz" {
+			t.Errorf("unexpected map: %v", m)
+		}
+	})
+
+	t.Run("value may contain colons", func(t *testing.T) {
+		m, errs := parseSearXNGHeaders("Authorization: Bearer abc:def")
+		if len(errs) != 0 {
+			t.Fatalf("unexpected errors: %v", errs)
+		}
+		if m["Authorization"] != "Bearer abc:def" {
+			t.Errorf("got %q", m["Authorization"])
+		}
+	})
+
+	t.Run("blank/doubled/trailing commas skipped", func(t *testing.T) {
+		m, errs := parseSearXNGHeaders("X-A: 1,,X-B: 2, ")
+		if len(errs) != 0 {
+			t.Fatalf("unexpected errors: %v", errs)
+		}
+		if len(m) != 2 || m["X-A"] != "1" || m["X-B"] != "2" {
+			t.Errorf("unexpected map: %v", m)
+		}
+	})
+
+	t.Run("duplicate name last wins", func(t *testing.T) {
+		m, _ := parseSearXNGHeaders("X-A: 1, X-A: 2")
+		if m["X-A"] != "2" {
+			t.Errorf("expected last-wins '2', got %q", m["X-A"])
+		}
+	})
+
+	t.Run("missing colon => generic error, no value leak", func(t *testing.T) {
+		_, errs := parseSearXNGHeaders("BadEntryWithoutColon")
+		if len(errs) != 1 || !strings.Contains(errs[0], "missing a ':'") {
+			t.Fatalf("expected missing-colon error, got %v", errs)
+		}
+		if strings.Contains(errs[0], "BadEntryWithoutColon") {
+			t.Errorf("error must not echo the raw entry: %q", errs[0])
+		}
+	})
+
+	t.Run("invalid token name", func(t *testing.T) {
+		_, errs := parseSearXNGHeaders("X Bad: v")
+		if len(errs) != 1 || !strings.Contains(errs[0], "not a valid HTTP token") {
+			t.Errorf("expected token error, got %v", errs)
+		}
+	})
+
+	t.Run("CRLF/NUL in value rejected without leaking value", func(t *testing.T) {
+		for _, bad := range []string{"X-Inject: a\r\nEvil: 1", "X-Inject: a\nb", "X-Inject: a\x00b"} {
+			_, errs := parseSearXNGHeaders(bad)
+			if len(errs) != 1 || !strings.Contains(errs[0], "forbidden control character") {
+				t.Fatalf("expected control-char rejection for %q, got %v", bad, errs)
+			}
+			if strings.Contains(errs[0], "Evil") || strings.Contains(errs[0], "\n") || strings.Contains(errs[0], "\x00") {
+				t.Errorf("error leaked the value: %q", errs[0])
+			}
+		}
+	})
+}
+
+func TestLoadSearXNGBasicAuthValid(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("SEARCH_PROVIDER", "searxng")
+	t.Setenv("SEARXNG_URL", "http://localhost:8080")
+	t.Setenv("SEARXNG_BASIC_AUTH", "svc:a:b:c") // colon-in-password, valid shape
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Search.SearXNGBasicAuth != "svc:a:b:c" {
+		t.Errorf("basic auth stored verbatim, got %q", cfg.Search.SearXNGBasicAuth)
+	}
+}
+
+func TestLoadSearXNGBasicAuthMalformedFailsClosedRedacted(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("SEARCH_PROVIDER", "searxng")
+	t.Setenv("SEARXNG_URL", "http://localhost:8080")
+	t.Setenv("SEARXNG_BASIC_AUTH", "topsecretpassword") // no colon
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected fail-closed error for malformed SEARXNG_BASIC_AUTH")
+	}
+	if strings.Contains(err.Error(), "topsecretpassword") {
+		t.Errorf("error leaked the credential: %v", err)
+	}
+}
+
+func TestLoadSearXNGHeadersValid(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("SEARCH_PROVIDER", "searxng")
+	t.Setenv("SEARXNG_URL", "http://localhost:8080")
+	t.Setenv("SEARXNG_HEADERS", "X-Api-Key: abc, CF-Access-Client-Id: xyz")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Search.SearXNGHeaders["X-Api-Key"] != "abc" || cfg.Search.SearXNGHeaders["CF-Access-Client-Id"] != "xyz" {
+		t.Errorf("unexpected headers map: %v", cfg.Search.SearXNGHeaders)
+	}
+}
+
+func TestLoadSearXNGHeadersInjectionFailsClosedRedacted(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("SEARCH_PROVIDER", "searxng")
+	t.Setenv("SEARXNG_URL", "http://localhost:8080")
+	t.Setenv("SEARXNG_HEADERS", "X-Token: secretval\r\nEvil-Injected: 1")
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected fail-closed error for CRLF in SEARXNG_HEADERS")
+	}
+	if strings.Contains(err.Error(), "secretval") || strings.Contains(err.Error(), "Evil-Injected") {
+		t.Errorf("error leaked header value/injected name: %v", err)
+	}
+}
+
+func TestLoadSearXNGAuthUnsetZeroConfig(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("SEARCH_PROVIDER", "searxng")
+	t.Setenv("SEARXNG_URL", "http://localhost:8080")
+	t.Setenv("SEARXNG_BASIC_AUTH", "")
+	t.Setenv("SEARXNG_HEADERS", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Search.SearXNGBasicAuth != "" || cfg.Search.SearXNGHeaders != nil {
+		t.Errorf("expected zero-config (empty/nil), got auth=%q headers=%v", cfg.Search.SearXNGBasicAuth, cfg.Search.SearXNGHeaders)
+	}
+}

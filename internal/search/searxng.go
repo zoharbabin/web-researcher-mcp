@@ -7,15 +7,18 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 type SearXNGProvider struct {
-	baseURL string
-	deps    Deps
+	baseURL   string
+	basicAuth string            // "user:password"; "" => no Basic auth
+	headers   map[string]string // validated static headers; nil/empty => none
+	deps      Deps
 }
 
-func NewSearXNGProvider(baseURL string, deps Deps) *SearXNGProvider {
-	return &SearXNGProvider{baseURL: baseURL, deps: deps}
+func NewSearXNGProvider(baseURL, basicAuth string, headers map[string]string, deps Deps) *SearXNGProvider {
+	return &SearXNGProvider{baseURL: baseURL, basicAuth: basicAuth, headers: headers, deps: deps}
 }
 
 func (s *SearXNGProvider) Name() string { return "searxng" }
@@ -135,6 +138,21 @@ func (s *SearXNGProvider) doRequest(ctx context.Context, apiURL string) ([]byte,
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 	if err != nil {
 		return nil, err
+	}
+
+	// Auth injection (operator infrastructure credentials, validated at config
+	// load). Basic auth first; custom headers after, so a custom Authorization
+	// header in SEARXNG_HEADERS deterministically overrides Basic (last wins).
+	// The user/pass non-empty guard mirrors config.splitSearXNGBasicAuth so a
+	// half-formed credential (e.g. "user:") is never put on the wire even in
+	// STDIO mode, where config errors are logged-but-not-fatal. s.headers only
+	// ever holds entries that passed config validation, so the loop cannot
+	// inject a malformed header.
+	if user, pass, found := strings.Cut(s.basicAuth, ":"); found && user != "" && pass != "" {
+		req.SetBasicAuth(user, pass)
+	}
+	for k, v := range s.headers {
+		req.Header.Set(k, v)
 	}
 
 	resp, err := s.deps.HTTPClient.Do(req)

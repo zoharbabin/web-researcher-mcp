@@ -130,6 +130,8 @@ type SearchConfig struct {
 	SerperAPIKey     string
 	SearchAPIKey     string
 	SearXNGURL       string
+	SearXNGBasicAuth string            // raw "user:password" for a SearXNG behind HTTP Basic auth; "" => none (never logged)
+	SearXNGHeaders   map[string]string // validated static request headers for SearXNG; nil/empty => none
 	CustomLensesPath string
 
 	// Patent-specific providers (optional, enables structured patent search)
@@ -204,6 +206,20 @@ func Load() (*Config, error) {
 	if provider == "searxng" && searxngURL == "" {
 		errs = append(errs, "SEARXNG_URL is required when SEARCH_PROVIDER=searxng")
 	}
+
+	// SearXNG auth (optional). Parsed unconditionally — not gated on
+	// SEARCH_PROVIDER=searxng — because SearXNG can also be a SEARCH_ROUTING or
+	// fallback target. Malformed values are fail-closed (append to errs so the
+	// server refuses to start) with redacted messages that never echo the
+	// credential or a header value.
+	searxngBasicAuth := os.Getenv("SEARXNG_BASIC_AUTH")
+	if searxngBasicAuth != "" {
+		if _, _, ok := splitSearXNGBasicAuth(searxngBasicAuth); !ok {
+			errs = append(errs, "SEARXNG_BASIC_AUTH must be in 'user:password' form (non-empty username and password, single ':' delimiter)")
+		}
+	}
+	searxngHeaders, hdrErrs := parseSearXNGHeaders(os.Getenv("SEARXNG_HEADERS"))
+	errs = append(errs, hdrErrs...)
 
 	searchAPIKey := os.Getenv("SEARCHAPI_API_KEY")
 	if provider == "searchapi" && searchAPIKey == "" {
@@ -291,6 +307,8 @@ func Load() (*Config, error) {
 			SerperAPIKey:      serperKey,
 			SearchAPIKey:      searchAPIKey,
 			SearXNGURL:        searxngURL,
+			SearXNGBasicAuth:  searxngBasicAuth,
+			SearXNGHeaders:    searxngHeaders,
 			CustomLensesPath:  os.Getenv("CUSTOM_LENSES_PATH"),
 			USPTOAPIKey:       os.Getenv("USPTO_API_KEY"),
 			EPOConsumerKey:    os.Getenv("EPO_OPS_CONSUMER_KEY"),
@@ -469,6 +487,76 @@ func validateStdioUserID(raw string) (string, bool) {
 		}
 	}
 	return s, true
+}
+
+// splitSearXNGBasicAuth splits "user:password" on the FIRST colon. ok is true
+// only when a colon is present and both halves are non-empty. The password
+// (everything after the first colon) is preserved verbatim, so passwords may
+// contain colons.
+func splitSearXNGBasicAuth(raw string) (user, pass string, ok bool) {
+	user, pass, found := strings.Cut(raw, ":")
+	if !found || user == "" || pass == "" {
+		return "", "", false
+	}
+	return user, pass, true
+}
+
+// parseSearXNGHeaders parses "Name1: V1, Name2: V2" into a map. It splits on
+// commas, each segment on its FIRST colon, trims ASCII space/tab around name
+// and value, skips blank segments (tolerating trailing/doubled commas), and
+// validates each name as an RFC 7230 token and each value as free of CR/LF/NUL
+// — closing CRLF header-injection at the boundary. It returns the map plus
+// redacted error strings (header NAME or shape only, never the value). Empty
+// input => (nil, nil), the zero-config path identical to today. Duplicate
+// names: last wins, deterministic across restarts.
+func parseSearXNGHeaders(raw string) (map[string]string, []string) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil
+	}
+	out := make(map[string]string)
+	var errsOut []string
+	for _, seg := range strings.Split(raw, ",") {
+		if strings.TrimSpace(seg) == "" {
+			continue // tolerate trailing/doubled commas
+		}
+		name, value, found := strings.Cut(seg, ":")
+		name = strings.TrimSpace(name)
+		value = strings.TrimSpace(value)
+		if !found {
+			errsOut = append(errsOut, "SEARXNG_HEADERS entry is missing a ':' delimiter")
+			continue
+		}
+		if !isHTTPToken(name) {
+			errsOut = append(errsOut, fmt.Sprintf("SEARXNG_HEADERS header name %q is not a valid HTTP token", name))
+			continue
+		}
+		if strings.ContainsAny(value, "\r\n\x00") {
+			errsOut = append(errsOut, fmt.Sprintf("SEARXNG_HEADERS value for header %q contains a forbidden control character", name))
+			continue
+		}
+		out[name] = value
+	}
+	if len(out) == 0 {
+		return nil, errsOut
+	}
+	return out, errsOut
+}
+
+// isHTTPToken reports whether s is a non-empty RFC 7230 header-name token.
+func isHTTPToken(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		case strings.IndexByte("!#$%&'*+-.^_`|~", c) >= 0:
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func defaultCacheDir() string {

@@ -116,7 +116,7 @@ func NewProvider(cfg config.SearchConfig, deps Deps) Provider {
 	case "serper":
 		return NewSerperProvider(cfg.SerperAPIKey, deps)
 	case "searxng":
-		return NewSearXNGProvider(cfg.SearXNGURL, deps)
+		return NewSearXNGProvider(cfg.SearXNGURL, cfg.SearXNGBasicAuth, cfg.SearXNGHeaders, deps)
 	case "searchapi":
 		return NewSearchAPIProvider(cfg.SearchAPIKey, deps)
 	case "duckduckgo":
@@ -147,7 +147,7 @@ func NewProviderByName(name string, cfg config.SearchConfig, deps Deps) Provider
 		}
 	case "searxng":
 		if cfg.SearXNGURL != "" {
-			return NewSearXNGProvider(cfg.SearXNGURL, deps)
+			return NewSearXNGProvider(cfg.SearXNGURL, cfg.SearXNGBasicAuth, cfg.SearXNGHeaders, deps)
 		}
 	case "searchapi":
 		if cfg.SearchAPIKey != "" {

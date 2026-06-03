@@ -182,6 +182,28 @@ export SEARCH_PROVIDER=searxng
 export SEARXNG_URL=http://localhost:8080
 ```
 
+### Step 4: Authenticating to a protected SearXNG (optional)
+
+If your instance is behind HTTP Basic auth or a reverse proxy that requires a token, supply the credential at deploy time. Both variables are optional — unset, the server talks to SearXNG exactly as before.
+
+```bash
+# HTTP Basic auth (the most common case):
+export SEARXNG_BASIC_AUTH=user:password   # everything after the first ':' is the password, so colons in the password are fine
+
+# Non-Basic schemes (bearer token, Cloudflare Access service token, API-gateway shared secret) —
+# comma-separated "Name: Value" pairs:
+export SEARXNG_HEADERS="X-Proxy-Token: abc123, CF-Access-Client-Id: client.id"
+```
+
+Notes:
+
+- **Never logged.** The credential and header values never appear in logs, errors, or audit records — messages name only the variable or the header name.
+- **Fail-closed & validated.** A malformed value — Basic auth without a `user:password` shape, a header missing its `:`, an invalid header name, or a newline/control character in a value — is rejected at startup and never sent on the wire. In HTTP mode (`PORT` set) the server refuses to start; in STDIO mode it logs the error and drops the bad value (matching the existing zero-config startup behavior). Either way the malformed credential is never used.
+- **No commas or newlines inside a header value** — commas delimit the pairs, and newlines are rejected to prevent header injection.
+- **Precedence.** A custom `Authorization` header in `SEARXNG_HEADERS` overrides `SEARXNG_BASIC_AUTH` (last writer wins), which lets a bearer-token proxy take priority.
+- Auth applies whenever `SEARXNG_URL` is set — including when SearXNG is only a `SEARCH_ROUTING` or fallback target, not just when `SEARCH_PROVIDER=searxng`.
+- Never commit real credentials; set these as deployment secrets.
+
 ---
 
 ## SearchAPI.io
