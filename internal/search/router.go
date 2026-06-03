@@ -500,6 +500,14 @@ func (r *Router) provider(name string) (Provider, bool) {
 	return p, ok
 }
 
+// IsHealthy reports whether a registered provider's circuit breaker is not open
+// (i.e. it is currently usable). Unknown providers report false. Exported so the
+// tools layer can filter zero-result provider suggestions to healthy providers
+// only (issue #100), without reaching into breaker internals.
+func (r *Router) IsHealthy(name string) bool {
+	return r.isHealthy(name)
+}
+
 func (r *Router) isHealthy(name string) bool {
 	r.mu.RLock()
 	breaker, ok := r.breakers[name]

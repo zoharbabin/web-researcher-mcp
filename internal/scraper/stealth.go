@@ -57,6 +57,11 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int)
 		return nil, err
 	}
 
+	// Capture structured data (#46) BEFORE extractArticleContent strips <script>
+	// (JSON-LD lives in a stripped <script>). The stealth tier wins for most
+	// real pages, so structuredData is populated here too, not only the HTML tier.
+	sd := extractStructuredData(doc)
+
 	content := extractArticleContent(doc)
 	if len(content) < 100 {
 		return nil, nil
@@ -71,13 +76,17 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int)
 		truncated = true
 	}
 
-	return &ScrapeResult{
+	res := &ScrapeResult{
 		URL:         url,
 		Content:     content,
 		ContentType: "html",
 		Title:       title,
 		Truncated:   truncated,
-	}, nil
+	}
+	if !sd.IsEmpty() {
+		res.StructuredData = sd
+	}
+	return res, nil
 }
 
 func newStealthClient(allowPrivateIPs bool) *http.Client {
@@ -151,16 +160,30 @@ func extractArticleContent(doc *goquery.Document) string {
 	for _, sel := range selectors {
 		el := doc.Find(sel).First()
 		if el.Length() > 0 {
-			text := cleanText(el.Text())
-			if len(text) > 200 {
+			if text := bestText(el); len(text) > 200 {
 				return text
 			}
 		}
 	}
 
-	// Fall back to body
-	text := cleanText(doc.Find("body").Text())
-	return text
+	// Fall back to body with the same structured-vs-flat reconciliation.
+	return bestText(doc.Find("body"))
+}
+
+// bestText renders a selection's content, preferring extractText (which emits
+// GFM tables #48, headings, and lists) but falling back to flat .Text() when the
+// flat rendering captures materially more — i.e. the prose lives in bare
+// div/span/section containers that extractText does not walk. extractText adds
+// markup characters, so for ordinary p/list/table content it is at least as long
+// as flat and is kept; flat only wins on genuine div-soup pages, restoring the
+// stealth tier's pre-#48 completeness (this tier wins for most pages, so this
+// prevents silent body-text loss).
+func bestText(sel *goquery.Selection) string {
+	structured := cleanText(extractText(sel))
+	if flat := cleanText(sel.Text()); len(flat) > len(structured)*3/2 {
+		return flat
+	}
+	return structured
 }
 
 func newSSRFSafeDialer() *net.Dialer {

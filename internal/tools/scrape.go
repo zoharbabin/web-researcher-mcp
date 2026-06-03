@@ -138,6 +138,13 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 			}
 		}
 
+		// Structured data (#46) is additive and present only when the HTML tier
+		// captured JSON-LD/OG/citation markup; IsEmpty() is nil-safe, so the key
+		// is simply omitted for raw/PDF/markdown-tier results and plain pages.
+		if !result.StructuredData.IsEmpty() {
+			output["structuredData"] = result.StructuredData
+		}
+
 		jsonBytes, _ := json.Marshal(output)
 		deps.Cache.Set(ctx, cacheKey, jsonBytes, time.Hour)
 		recordToolCall(deps, "scrape_page", time.Since(start), nil, "", false)
@@ -226,13 +233,14 @@ func scrapeRaw(ctx context.Context, deps Dependencies, input scrapePageInput, ma
 // later larger request a truncated body (breaking consistency across calls).
 func scrapeCacheKey(url, mode string, maxLength int) string {
 	h := sha256.New()
-	// The version segment (v2) invalidates pre-existing cached blobs whenever
-	// the response SHAPE changes, so a cache hit can never serve an envelope
-	// missing a newly-added field. v2 introduced the "trust" boundary marker —
-	// bumping it guarantees no upgraded deployment (incl. the shared Redis
-	// cache) serves scrape content without the untrusted-content marker the
-	// host may rely on. Bump again on any future output-shape change.
-	fmt.Fprintf(h, "scrape|v2|%s|%s|%d", url, mode, maxLength)
+	// The version segment invalidates pre-existing cached blobs whenever the
+	// response SHAPE changes, so a cache hit can never serve an envelope missing
+	// a newly-added field. v2 introduced the "trust" boundary marker; v3 adds
+	// GFM markdown-table content (#48) and the optional structuredData field
+	// (#46) — both change the full-mode response shape, so a v2 blob would serve
+	// table-less/garbled content and omit structuredData after an upgrade
+	// (incl. via the shared Redis cache). Bump again on any future shape change.
+	fmt.Fprintf(h, "scrape|v3|%s|%s|%d", url, mode, maxLength)
 	return "scrape:" + hex.EncodeToString(h.Sum(nil))[:32]
 }
 

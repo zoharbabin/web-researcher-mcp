@@ -3,10 +3,13 @@ package scraper
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -18,6 +21,21 @@ import (
 // generous for an article — this tier is only reached when markdown/stealth
 // yield too little, and content is truncated to maxLength afterward anyway.
 const maxHTMLRead = 3 * 1024 * 1024
+
+// Structured-data extraction caps (#46). structuredData is UNTRUSTED external
+// data that content.Process never sanitizes/truncates, so extractStructuredData
+// self-bounds before returning to protect the response budget (mirroring the
+// maxHTMLRead input cap). Worst-case added response size is deterministically
+// <= maxStructuredDataBytes (~64KB), a small fraction of the 50KB default
+// content budget and bounded regardless of the 3MB input. Hitting a cap stops
+// collection silently — partial enrichment is fine, it is never an error.
+const (
+	maxJSONLDBlocks        = 16        // keep at most 16 valid ld+json blocks (real pages carry 2-4)
+	maxJSONLDBlockBytes    = 32 * 1024 // skip any single ld+json block larger than 32KB before parsing
+	maxStructuredDataBytes = 64 * 1024 // running total across all stored jsonLd + og + citation bytes
+	maxMetaProps           = 64        // cap entry count per meta map (og/article and citation independently)
+	maxMetaValueBytes      = 2 * 1024  // truncate any single meta content value beyond 2KB
+)
 
 func (p *Pipeline) scrapeHTML(ctx context.Context, url string, maxLength int) (*ScrapeResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -59,6 +77,10 @@ func (p *Pipeline) scrapeHTML(ctx context.Context, url string, maxLength int) (*
 		return nil, err
 	}
 
+	// MUST precede the script Remove() below (#46): JSON-LD lives in <script
+	// type="application/ld+json">, which the Remove() call strips. Capture first.
+	sd := extractStructuredData(doc)
+
 	doc.Find("script, style, nav, footer, aside, header, noscript, iframe, form").Remove()
 	doc.Find("[role='navigation'], [role='banner'], [role='complementary']").Remove()
 	doc.Find(".ad, .ads, .advertisement, .sidebar, .nav, .footer, .header, .menu").Remove()
@@ -73,7 +95,7 @@ func (p *Pipeline) scrapeHTML(ctx context.Context, url string, maxLength int) (*
 		truncated = true
 	}
 
-	return &ScrapeResult{
+	res := &ScrapeResult{
 		URL:         url,
 		Content:     content,
 		ContentType: "html",
@@ -82,7 +104,13 @@ func (p *Pipeline) scrapeHTML(ctx context.Context, url string, maxLength int) (*
 		SiteName:    meta.siteName,
 		PublishDate: meta.publishDate,
 		Truncated:   truncated,
-	}, nil
+	}
+	// Attach structured data only when something was captured, so ordinary pages
+	// leave the pointer nil (the clean "absent" signal).
+	if !sd.IsEmpty() {
+		res.StructuredData = sd
+	}
+	return res, nil
 }
 
 type htmlMetadata struct {
@@ -135,10 +163,35 @@ func extractMainContent(doc *goquery.Document) string {
 
 func extractText(sel *goquery.Selection) string {
 	var parts []string
-	sel.Find("p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, td, th").Each(func(_ int, s *goquery.Selection) {
+	// "table" is walked here and "td, th" are deliberately NOT — table cells are
+	// emitted ONLY through their owning <table> (as a GFM pipe table), which
+	// eliminates the old bug where a data table became disconnected cell
+	// fragments (#48).
+	sel.Find("p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, table").Each(func(_ int, s *goquery.Selection) {
+		tag := goquery.NodeName(s)
+		if tag == "table" {
+			// Only the OUTERMOST table emits: a table nested inside another is
+			// skipped here (its text surfaces via the outer table's fallback),
+			// so nested tables never double-emit.
+			if s.ParentsFiltered("table").Length() > 0 {
+				return
+			}
+			if md, ok := extractTable(s); ok {
+				parts = append(parts, md)
+			} else if t := strings.TrimSpace(s.Text()); t != "" {
+				// Layout/malformed table: degrade to plain text (today's behavior).
+				parts = append(parts, t)
+			}
+			return
+		}
+		// A block element living inside a <table> cell is already rendered as
+		// part of that table's GFM grid, so skip it here to avoid emitting its
+		// text a second time as a standalone paragraph/list item.
+		if s.ParentsFiltered("table").Length() > 0 {
+			return
+		}
 		text := strings.TrimSpace(s.Text())
 		if text != "" {
-			tag := goquery.NodeName(s)
 			switch {
 			case strings.HasPrefix(tag, "h"):
 				parts = append(parts, "\n## "+text+"\n")
@@ -154,6 +207,199 @@ func extractText(sel *goquery.Selection) string {
 		}
 	})
 	return strings.Join(parts, "\n\n")
+}
+
+// extractTable renders an HTML <table> as a GitHub-flavored markdown pipe table
+// (#48). It returns (markdown, true) for a data table, or ("", false) for a
+// layout/empty/nested table so the caller can fall back to plain text. Pure and
+// reentrant; never panics (goquery yields empty selections, not nil derefs).
+func extractTable(table *goquery.Selection) (string, bool) {
+	// Nested/layout table: a table containing a descendant <table> is rejected
+	// so it degrades to plain text rather than producing a garbled grid.
+	if table.Find("table").Length() > 0 {
+		return "", false
+	}
+
+	var grid [][]string
+	firstRowAllTh := false
+	table.Find("tr").Each(func(ri int, tr *goquery.Selection) {
+		var cells []string
+		allTh := true
+		// Children().Filter (not Find) so we never descend into nested structures.
+		tr.Children().Filter("td, th").Each(func(_ int, cell *goquery.Selection) {
+			cells = append(cells, escapeCell(strings.TrimSpace(cell.Text())))
+			if goquery.NodeName(cell) != "th" {
+				allTh = false
+			}
+		})
+		if len(cells) == 0 {
+			return // skip a row that produced no cells
+		}
+		if len(grid) == 0 {
+			firstRowAllTh = allTh
+		}
+		grid = append(grid, cells)
+	})
+
+	if len(grid) == 0 {
+		return "", false
+	}
+
+	maxCols := 0
+	allEmpty := true
+	for _, row := range grid {
+		if len(row) > maxCols {
+			maxCols = len(row)
+		}
+		for _, c := range row {
+			if c != "" {
+				allEmpty = false
+			}
+		}
+	}
+	if maxCols <= 1 || allEmpty {
+		return "", false // single-column or content-free => treat as layout
+	}
+
+	// Header detection: an all-<th> first row, or a <thead>, is the header;
+	// otherwise synthesize "Column N" headers and treat every row as data.
+	var header []string
+	var bodyRows [][]string
+	switch {
+	case firstRowAllTh:
+		header, bodyRows = grid[0], grid[1:]
+	case table.Find("thead th, thead td").Length() > 0:
+		header, bodyRows = grid[0], grid[1:]
+	default:
+		header = make([]string, maxCols)
+		for i := range header {
+			header[i] = fmt.Sprintf("Column %d", i+1)
+		}
+		bodyRows = grid
+	}
+
+	norm := func(row []string) []string {
+		out := make([]string, maxCols)
+		for i := 0; i < maxCols; i++ {
+			if i < len(row) {
+				out[i] = row[i]
+			}
+		}
+		return out
+	}
+
+	sep := make([]string, maxCols)
+	for i := range sep {
+		sep[i] = "---"
+	}
+
+	var lines []string
+	lines = append(lines, "| "+strings.Join(norm(header), " | ")+" |")
+	lines = append(lines, "| "+strings.Join(sep, " | ")+" |")
+	for _, row := range bodyRows {
+		lines = append(lines, "| "+strings.Join(norm(row), " | ")+" |")
+	}
+	return strings.Join(lines, "\n"), true
+}
+
+// escapeCell makes a table cell safe for a single GFM table row: it flattens all
+// internal whitespace to single spaces (so a multi-line cell stays on one row)
+// and escapes backslashes (first) then pipes (so a literal | never breaks the
+// column layout).
+func escapeCell(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, "|", `\|`)
+	return s
+}
+
+// extractStructuredData lifts JSON-LD, Open Graph/article, and Highwire
+// citation_* metadata from the parsed document (#46). It MUST be called BEFORE
+// the <script> Remove() in scrapeHTML (JSON-LD lives in a stripped <script>).
+// Pure, reentrant, never panics. Self-bounds to the size caps above so the
+// response budget is protected (content.Process never sees this data). Always
+// returns a non-nil pointer; callers use IsEmpty() to decide whether to surface it.
+func extractStructuredData(doc *goquery.Document) *StructuredData {
+	sd := &StructuredData{}
+	total := 0
+
+	doc.Find(`script[type="application/ld+json"]`).Each(func(_ int, s *goquery.Selection) {
+		if len(sd.JSONLD) >= maxJSONLDBlocks {
+			return
+		}
+		raw := strings.TrimSpace(s.Text())
+		if raw == "" || len(raw) > maxJSONLDBlockBytes {
+			return
+		}
+		if total+len(raw) > maxStructuredDataBytes {
+			return
+		}
+		if !json.Valid([]byte(raw)) {
+			return // skip invalid JSON-LD without failing the scrape
+		}
+		sd.JSONLD = append(sd.JSONLD, json.RawMessage(raw))
+		total += len(raw)
+	})
+
+	doc.Find("meta[property]").Each(func(_ int, s *goquery.Selection) {
+		prop, _ := s.Attr("property")
+		if !strings.HasPrefix(prop, "og:") && !strings.HasPrefix(prop, "article:") {
+			return
+		}
+		if len(sd.OpenGraph) >= maxMetaProps {
+			return
+		}
+		v := truncateBytes(strings.TrimSpace(mustAttr(s, "content")), maxMetaValueBytes)
+		if v == "" || total+len(v) > maxStructuredDataBytes {
+			return
+		}
+		if sd.OpenGraph == nil {
+			sd.OpenGraph = map[string]string{}
+		}
+		sd.OpenGraph[prop] = v
+		total += len(v)
+	})
+
+	doc.Find("meta[name]").Each(func(_ int, s *goquery.Selection) {
+		name, _ := s.Attr("name")
+		if !strings.HasPrefix(name, "citation_") {
+			return
+		}
+		if len(sd.Citation) >= maxMetaProps {
+			return
+		}
+		v := truncateBytes(strings.TrimSpace(mustAttr(s, "content")), maxMetaValueBytes)
+		if v == "" || total+len(v) > maxStructuredDataBytes {
+			return
+		}
+		if sd.Citation == nil {
+			sd.Citation = map[string]string{}
+		}
+		sd.Citation[name] = v
+		total += len(v)
+	})
+
+	return sd
+}
+
+// mustAttr returns the attribute value or "" when absent (goquery returns
+// ("", false) on a missing attr; this keeps call sites terse).
+func mustAttr(s *goquery.Selection, attr string) string {
+	v, _ := s.Attr(attr)
+	return v
+}
+
+// truncateBytes caps a string to at most n bytes, trimming back to a UTF-8 rune
+// boundary so a multibyte character is never split (which would yield invalid
+// UTF-8 in the JSON output).
+func truncateBytes(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }
 
 func cleanText(s string) string {
