@@ -57,7 +57,12 @@ DOWNLOAD_URL="https://github.com/$REPO/releases/download/v${VERSION}/${ARCHIVE}"
 mkdir -p "$INSTALL_DIR"
 
 TMPDIR=$(mktemp -d)
-trap 'rm -rf "$TMPDIR"' EXIT
+# STAGED is the in-INSTALL_DIR temp the new binary is copied to before the atomic
+# rename below; initialized empty so the trap is safe under `set -u` even if we
+# exit before it is assigned, and cleaned on any exit so a failed/interrupted run
+# never orphans a .web-researcher-mcp.tmp.<pid> in the user's bin dir.
+STAGED=""
+trap 'rm -rf "$TMPDIR"; [ -n "$STAGED" ] && rm -f "$STAGED"' EXIT
 
 echo "Installing web-researcher-mcp v${VERSION} (${OS}/${ARCH})..."
 curl -fsSL "$DOWNLOAD_URL" -o "$TMPDIR/$ARCHIVE"
