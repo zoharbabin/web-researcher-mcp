@@ -2026,7 +2026,7 @@ can't clear a hospital's HIPAA bar; it hands that review its evidence.</p>
 </blockquote>
 <footer>↳ proof: docs/SECURITY_AND_COMPLIANCE.md &quot;Operator &amp; Hosted-Service Responsibilities&quot;</footer>
 </section>
-</foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="7" data-paginate="true" data-class="wm" data-footer="↳ proof: internal/scraper/ssrf.go · internal/tools/scrape.go (&quot;trust&quot; marker) · internal/content/sanitize.go · OWASP Web A10 · LLM01" data-style="/* ── Design tokens — matched to assets/social-preview.svg ───────────────── */
+</foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="7" data-paginate="true" data-class="wm" data-footer="↳ proof: internal/scraper/ssrf.go · internal/tools/scrape.go (envelope &quot;trust&quot; marker) · internal/tools/metadata_test.go (cross-tool gate) · internal/content/sanitize.go · OWASP Web A10 · LLM01" data-style="/* ── Design tokens — matched to assets/social-preview.svg ───────────────── */
 :root {
   --bg: #F9FDFC;          /* off-white surface (social-preview) */
   --ink: #0F172A;         /* headings */
@@ -2182,7 +2182,7 @@ section.wm::before {
 
 /* title lockup */
 .titlelogo { width: 96px; height: 96px; margin-bottom: 20px; display: block; }
-" lang="en-US" class="wm" data-marpit-pagination="7" style="--paginate:true;--class:wm;--footer:↳ proof: internal/scraper/ssrf.go · internal/tools/scrape.go (&quot;trust&quot; marker) · internal/content/sanitize.go · OWASP Web A10 · LLM01;--style:/* ── Design tokens — matched to assets/social-preview.svg ───────────────── */
+" lang="en-US" class="wm" data-marpit-pagination="7" style="--paginate:true;--class:wm;--footer:↳ proof: internal/scraper/ssrf.go · internal/tools/scrape.go (envelope &quot;trust&quot; marker) · internal/tools/metadata_test.go (cross-tool gate) · internal/content/sanitize.go · OWASP Web A10 · LLM01;--style:/* ── Design tokens — matched to assets/social-preview.svg ───────────────── */
 :root {
   --bg: #F9FDFC;          /* off-white surface (social-preview) */
   --ink: #0F172A;         /* headings */
@@ -2348,13 +2348,16 @@ rejects private/reserved IPs and cloud-metadata hosts, connects only to the<br /
 exact resolved address (DNS-rebind defense), and re-checks on every redirect.</p>
 <p><strong>A genuinely new class — indirect prompt injection.</strong> A booby-trapped page can<br />
 try to hijack the AI reading it. The server strips active markup, caps size, and<br />
-tags every result as <code>untrusted-external-content</code>. It does <strong>not</strong> enforce the<br />
-prompt boundary — that's the <em>host's</em> job, where the model and agent loop live.</p>
+stamps every result that carries external text with an <code>untrusted-external-content</code><br />
+marker — in the JSON <em>envelope</em>, never inside the content where a page could forge<br />
+it, and <strong>enforced by a cross-tool drift test</strong> so a new tool can't ship unmarked.<br />
+It does <strong>not</strong> enforce the prompt boundary — that's the <em>host's</em> job, where the<br />
+model and agent loop live.</p>
 <blockquote>
 <p>Prompt injection is <strong>#1</strong> on OWASP's LLM list, and the agentic rules are still<br />
 being drafted. This tool sits squarely in that gap.</p>
 </blockquote>
-<footer>↳ proof: internal/scraper/ssrf.go · internal/tools/scrape.go (&quot;trust&quot; marker) · internal/content/sanitize.go · OWASP Web A10 · LLM01</footer>
+<footer>↳ proof: internal/scraper/ssrf.go · internal/tools/scrape.go (envelope &quot;trust&quot; marker) · internal/tools/metadata_test.go (cross-tool gate) · internal/content/sanitize.go · OWASP Web A10 · LLM01</footer>
 </section>
 </foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="8" data-paginate="true" data-class="wm" data-footer="↳ proof: internal/datasubject/registry.go · internal/session/datasubject_test.go (&quot;the #85 release gate&quot;)" data-style="/* ── Design tokens — matched to assets/social-preview.svg ───────────────── */
 :root {
@@ -4350,7 +4353,8 @@ section.wm::before {
 And a CI drift gate keeps the tool docs honest against the code.</p>
 <br />
 <p><strong>The receipts:</strong> <code>v1.10</code> tenant isolation → <code>v1.11</code> zero-config fallback →<br />
-<code>v1.12</code> HTTP hardening → <code>v1.13</code> consent + GDPR erasure.</p>
+<code>v1.12</code> HTTP hardening → <code>v1.13</code> consent + GDPR erasure →<br />
+<code>v1.14</code> OWASP Agentic Top 10 hardening (audit-driven).</p>
 <br />
 <p><em>Solo maintainer · MIT licensed · <strong>contributors welcome.</strong> Spot a claim that<br />
 doesn't match the code? Open an issue or a PR — that's the whole point. Come help<br />

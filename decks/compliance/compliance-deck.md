@@ -322,13 +322,16 @@ exact resolved address (DNS-rebind defense), and re-checks on every redirect.
 
 **A genuinely new class — indirect prompt injection.** A booby-trapped page can
 try to hijack the AI reading it. The server strips active markup, caps size, and
-tags every result as `untrusted-external-content`. It does **not** enforce the
-prompt boundary — that's the *host's* job, where the model and agent loop live.
+stamps every result that carries external text with an `untrusted-external-content`
+marker — in the JSON *envelope*, never inside the content where a page could forge
+it, and **enforced by a cross-tool drift test** so a new tool can't ship unmarked.
+It does **not** enforce the prompt boundary — that's the *host's* job, where the
+model and agent loop live.
 
 > Prompt injection is **#1** on OWASP's LLM list, and the agentic rules are still
 > being drafted. This tool sits squarely in that gap.
 
-<!-- _footer: '↳ proof: internal/scraper/ssrf.go · internal/tools/scrape.go ("trust" marker) · internal/content/sanitize.go · OWASP Web A10 · LLM01' -->
+<!-- _footer: '↳ proof: internal/scraper/ssrf.go · internal/tools/scrape.go (envelope "trust" marker) · internal/tools/metadata_test.go (cross-tool gate) · internal/content/sanitize.go · OWASP Web A10 · LLM01' -->
 
 ---
 
@@ -446,7 +449,8 @@ And a CI drift gate keeps the tool docs honest against the code.
 <br>
 
 **The receipts:** `v1.10` tenant isolation → `v1.11` zero-config fallback →
-`v1.12` HTTP hardening → `v1.13` consent + GDPR erasure.
+`v1.12` HTTP hardening → `v1.13` consent + GDPR erasure →
+`v1.14` OWASP Agentic Top 10 hardening (audit-driven).
 
 <br>
 
