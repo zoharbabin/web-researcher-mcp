@@ -468,7 +468,7 @@ func TestSearXNGProvider_WebSearch(t *testing.T) {
 	defer ts.Close()
 
 	deps := Deps{HTTPClient: ts.Client(), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
-	s := NewSearXNGProvider(ts.URL, deps)
+	s := NewSearXNGProvider(ts.URL, "", nil, deps)
 
 	results, err := s.Web(context.Background(), WebSearchParams{Query: "test", NumResults: 5})
 	if err != nil {
@@ -503,7 +503,7 @@ func TestSearXNGProvider_NewsSearch(t *testing.T) {
 	defer ts.Close()
 
 	deps := Deps{HTTPClient: ts.Client(), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
-	s := NewSearXNGProvider(ts.URL, deps)
+	s := NewSearXNGProvider(ts.URL, "", nil, deps)
 
 	results, err := s.News(context.Background(), NewsSearchParams{Query: "tech", NumResults: 5, Freshness: "week"})
 	if err != nil {
@@ -535,7 +535,7 @@ func TestSearXNGProvider_LimitsResults(t *testing.T) {
 	defer ts.Close()
 
 	deps := Deps{HTTPClient: ts.Client(), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
-	s := NewSearXNGProvider(ts.URL, deps)
+	s := NewSearXNGProvider(ts.URL, "", nil, deps)
 
 	results, err := s.Web(context.Background(), WebSearchParams{Query: "test", NumResults: 3})
 	if err != nil {
@@ -543,6 +543,146 @@ func TestSearXNGProvider_LimitsResults(t *testing.T) {
 	}
 	if len(results) != 3 {
 		t.Errorf("expected 3 results (capped), got %d", len(results))
+	}
+}
+
+func TestSearXNGProvider_NoAuthWhenUnset(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "" {
+			t.Errorf("expected no Authorization header, got %q", got)
+		}
+		if got := r.Header.Get("X-Api-Key"); got != "" {
+			t.Errorf("expected no custom header, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(searxngResponse{Results: []searxngResult{{Title: "R", URL: "http://x"}}})
+	}))
+	defer ts.Close()
+
+	deps := Deps{HTTPClient: ts.Client(), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	s := NewSearXNGProvider(ts.URL, "", nil, deps)
+	if _, err := s.Web(context.Background(), WebSearchParams{Query: "q", NumResults: 1}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSearXNGProvider_BasicAuth(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u, p, ok := r.BasicAuth()
+		if !ok || u != "alice" || p != "secret" {
+			t.Errorf("expected basic auth alice/secret, got user=%q pass=%q ok=%v", u, p, ok)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(searxngResponse{Results: []searxngResult{{Title: "R", URL: "http://x"}}})
+	}))
+	defer ts.Close()
+
+	deps := Deps{HTTPClient: ts.Client(), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	s := NewSearXNGProvider(ts.URL, "alice:secret", nil, deps)
+	if _, err := s.Web(context.Background(), WebSearchParams{Query: "q", NumResults: 1}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSearXNGProvider_BasicAuthColonInPassword(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u, p, _ := r.BasicAuth()
+		if u != "u" || p != "a:b:c" {
+			t.Errorf("expected user=u pass=a:b:c, got user=%q pass=%q", u, p)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(searxngResponse{Results: []searxngResult{{Title: "R", URL: "http://x"}}})
+	}))
+	defer ts.Close()
+
+	deps := Deps{HTTPClient: ts.Client(), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	s := NewSearXNGProvider(ts.URL, "u:a:b:c", nil, deps)
+	if _, err := s.Web(context.Background(), WebSearchParams{Query: "q", NumResults: 1}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestSearXNGProvider_CustomHeadersAllPaths proves the headers map is injected
+// on Web, Images, AND News — i.e. that all three share the doRequest choke point.
+func TestSearXNGProvider_CustomHeadersAllPaths(t *testing.T) {
+	headers := map[string]string{"X-Proxy-Token": "abc123", "CF-Access-Client-Id": "client.id"}
+	check := func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Proxy-Token") != "abc123" || r.Header.Get("CF-Access-Client-Id") != "client.id" {
+			t.Errorf("missing custom headers on %s: %v", r.URL.Query().Get("categories"), r.Header)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(searxngResponse{Results: []searxngResult{{Title: "R", URL: "http://x", ImgSrc: "http://img"}}})
+	}
+	ts := httptest.NewServer(http.HandlerFunc(check))
+	defer ts.Close()
+
+	deps := Deps{HTTPClient: ts.Client(), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	s := NewSearXNGProvider(ts.URL, "", headers, deps)
+	if _, err := s.Web(context.Background(), WebSearchParams{Query: "q", NumResults: 1}); err != nil {
+		t.Fatalf("Web error: %v", err)
+	}
+	if _, err := s.Images(context.Background(), ImageSearchParams{Query: "q", NumResults: 1}); err != nil {
+		t.Fatalf("Images error: %v", err)
+	}
+	if _, err := s.News(context.Background(), NewsSearchParams{Query: "q", NumResults: 1}); err != nil {
+		t.Fatalf("News error: %v", err)
+	}
+}
+
+// TestSearXNGProvider_HeadersOverrideBasicAuth documents last-writer-wins: a
+// custom Authorization header in SEARXNG_HEADERS overrides Basic auth.
+func TestSearXNGProvider_HeadersOverrideBasicAuth(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer t0ken" {
+			t.Errorf("expected custom bearer to win, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(searxngResponse{Results: []searxngResult{{Title: "R", URL: "http://x"}}})
+	}))
+	defer ts.Close()
+
+	deps := Deps{HTTPClient: ts.Client(), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	s := NewSearXNGProvider(ts.URL, "alice:secret", map[string]string{"Authorization": "Bearer t0ken"}, deps)
+	if _, err := s.Web(context.Background(), WebSearchParams{Query: "q", NumResults: 1}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestSearXNGProvider_HalfFormedBasicAuthNotSent guards the wire-safety
+// invariant: a half-formed credential that config flagged but (in STDIO mode)
+// did not abort startup must still never reach the server.
+func TestSearXNGProvider_HalfFormedBasicAuthNotSent(t *testing.T) {
+	for _, bad := range []string{"user:", ":pass", "nocolon"} {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if got := r.Header.Get("Authorization"); got != "" {
+				t.Errorf("half-formed basicAuth %q must not be sent, got %q", bad, got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(searxngResponse{Results: []searxngResult{{Title: "R", URL: "http://x"}}})
+		}))
+		deps := Deps{HTTPClient: ts.Client(), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+		s := NewSearXNGProvider(ts.URL, bad, nil, deps)
+		if _, err := s.Web(context.Background(), WebSearchParams{Query: "q", NumResults: 1}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		ts.Close()
+	}
+}
+
+func TestNewProvider_SearXNGThreadsAuth(t *testing.T) {
+	cfg := config.SearchConfig{
+		Provider:         "searxng",
+		SearXNGURL:       "http://localhost:8080",
+		SearXNGBasicAuth: "alice:secret",
+		SearXNGHeaders:   map[string]string{"X-Api-Key": "abc"},
+	}
+	p := NewProvider(cfg, Deps{Breaker: circuit.New(circuit.Config{FailureThreshold: 5})})
+	sx, ok := p.(*SearXNGProvider)
+	if !ok {
+		t.Fatalf("expected *SearXNGProvider, got %T", p)
+	}
+	if sx.basicAuth != "alice:secret" || sx.headers["X-Api-Key"] != "abc" {
+		t.Errorf("auth not threaded to provider: basicAuth=%q headers=%v", sx.basicAuth, sx.headers)
 	}
 }
 
