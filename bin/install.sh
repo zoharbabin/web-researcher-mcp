@@ -69,8 +69,22 @@ else
   tar -xzf "$TMPDIR/$ARCHIVE" -C "$TMPDIR/extracted"
 fi
 
-cp "$TMPDIR/extracted/$BINARY" "$INSTALL_DIR/$BINARY"
-chmod +x "$INSTALL_DIR/$BINARY"
+chmod +x "$TMPDIR/extracted/$BINARY"
+# Install via atomic rename, NOT an in-place cp/overwrite. On macOS/Apple Silicon
+# the kernel ad-hoc-signs an unsigned binary on first exec and caches the CDHash
+# against the file's inode; overwriting that inode's bytes (cp over the existing
+# file) leaves the cached hash mismatched, so the next launch is SIGKILL'd before
+# any code runs (an MCP client sees a -32000 connect failure). A fresh inode +
+# rename sidesteps that, and rename is atomic so a half-written binary is never
+# observed. The temp file must be on the same filesystem as INSTALL_DIR for mv to
+# be a pure rename. Strip the quarantine bit so Gatekeeper doesn't block it.
+STAGED="$INSTALL_DIR/.$BINARY.tmp.$$"
+cp "$TMPDIR/extracted/$BINARY" "$STAGED"
+chmod +x "$STAGED"
+if [ "$OS" = "darwin" ] && command -v xattr >/dev/null 2>&1; then
+  xattr -d com.apple.quarantine "$STAGED" 2>/dev/null || true
+fi
+mv -f "$STAGED" "$INSTALL_DIR/$BINARY"
 
 # Ensure install dir is on PATH
 case ":$PATH:" in

@@ -132,6 +132,11 @@ main() {
   download "$URL" "$TMP/$ARCHIVE"
   verify_checksum "$TMP/$ARCHIVE" "$ARCHIVE" "$CHECKSUMS_URL"
   tar -xzf "$TMP/$ARCHIVE" -C "$TMP"
+  # Use `install` (allocates a NEW inode), never an in-place `cp` over the
+  # existing file. On macOS/Apple Silicon the kernel caches an unsigned binary's
+  # ad-hoc CDHash against its inode; rewriting that inode's bytes makes the next
+  # launch SIGKILL before any code runs (clients see a -32000 connect failure).
+  # A fresh inode avoids it. Keep this as `install`/`mv`, do not "simplify" to cp.
   install -m 755 "$TMP/$BINARY" "$INSTALL_DIR/$BINARY"
 
   # macOS: remove quarantine attribute so Gatekeeper doesn't block it
