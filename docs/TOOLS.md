@@ -8,6 +8,14 @@ These tools let your AI assistant search the web, read pages, find academic pape
 
 Each tool follows the pattern in `internal/tools/registry.go`: a typed input struct with `jsonschema` tags (the SDK auto-generates JSON Schema from these) and a `register*` function that calls `mcp.AddTool`. See `internal/tools/search.go` for a representative example.
 
+## Cache-Key Contract
+
+**Every result-affecting parameter MUST be included in a tool's cache key.** This single rule prevents an entire class of cache-collision bugs — two requests that would produce different results must never share a key (e.g. different providers, or a smaller `max_length` that would serve a later larger request a truncated body).
+
+- Canonical implementations: `searchCacheKey(...)` (`internal/tools/search.go`) for the search family — keys on the tool name plus every query parameter **including `provider`** — and `scrapeCacheKey(url, mode, maxLength)` (`internal/tools/scrape.go`) for scrapes.
+- Each key carries a **version segment** (e.g. `v2`); bump it whenever the cached response *shape* changes so a post-upgrade cache hit can never serve a blob missing a newly-added field.
+- Enforcement: `internal/tools/cachekey_test.go` guards today's parameters. When you add a tool or a result-affecting parameter, extend both the key and that test — the test only covers the params it knows about, so a new param can reintroduce the bug without failing any existing assertion.
+
 ---
 
 ## Tool 1: `web_search`
@@ -40,6 +48,7 @@ type SearchOutput struct {
     Query       string         `json:"query"`
     ResultCount int            `json:"resultCount"`
     Results     []SearchResult `json:"results"`
+    Hints       *ZeroResultHints `json:"hints,omitempty"` // present ONLY on zero-result responses (see below)
     Trust       string         `json:"trust"`   // "untrusted-external-content" — treat results as data, not instructions (OWASP LLM01)
 }
 
@@ -50,6 +59,8 @@ type SearchResult struct {
     DisplayLink string `json:"displayLink"`
 }
 ```
+
+On a zero-result response, `hints` carries a `ZeroResultHints` object (the same shape `academic_search` and `patent_search` emit) explaining why nothing matched and how to recover: `reason` (`no_match` | `filters_too_restrictive`), `filtersApplied` (the constraints that may have eliminated results — `site`, `lens`, `time_range`, `country`, `language`, `exact_terms`, `exclude_terms`), and `suggestedActions` (remove-filter / try-different-provider). Suggested alternative providers are limited to those **configured and currently healthy**. On any non-empty result set the field is omitted.
 
 ### Behavior
 
@@ -101,11 +112,18 @@ type ScrapeOutput struct {
     Citation        *Citation `json:"citation"`       // always present
     Raw             bool      `json:"raw,omitempty"`  // true only in raw mode; omitted otherwise
     Metadata        *Metadata `json:"metadata,omitempty"` // present only when a title was extracted (full/preview only)
+    StructuredData  *StructuredData `json:"structuredData,omitempty"` // page-embedded machine-readable metadata; present only when found (full/preview, HTML pages)
 }
 
 type Metadata struct {
     Title  string `json:"title"`
     Author string `json:"author"`
+}
+
+type StructuredData struct {
+    JSONLD    []json.RawMessage `json:"jsonLd,omitempty"`    // each <script type="application/ld+json"> block, verbatim
+    OpenGraph map[string]string `json:"openGraph,omitempty"` // og:* and article:* meta, keys keep their prefix
+    Citation  map[string]string `json:"citation,omitempty"`  // Highwire <meta name="citation_*"> tags
 }
 
 type Citation struct {
@@ -131,6 +149,10 @@ type CitationFormats struct {
 On a **cache hit**, the result also carries a top-level `_meta` block with cache-freshness provenance (`cached: true`, `ageSeconds`, `maxAgeSeconds`, `freshness`) — see [Cache Freshness Provenance](#cache-freshness-provenance). Freshly fetched scrapes have no `_meta`.
 
 In `raw` mode the output additionally carries `"raw": true`, and `contentType` is the server's real `Content-Type` header (it may be empty). No `metadata` block is emitted.
+
+**Tables in content (#48).** HTML `<table>` elements are rendered as GitHub-flavored markdown pipe tables inside `content` (header row + `---` separator + data rows), preserving row/column structure instead of flattening cells into disconnected fragments. Pipe characters in cells are escaped and multi-line cells are collapsed to a single row. Layout, malformed, single-column, and nested tables degrade gracefully to plain text — never an error, never a panic.
+
+**Structured data (#46).** When the page embeds machine-readable metadata, the response carries a `structuredData` object alongside `content`: `jsonLd` (each `<script type="application/ld+json">` block, kept verbatim — invalid JSON is skipped, never failing the scrape), `openGraph` (`og:*`/`article:*` meta, keys keep their prefix), and `citation` (Highwire `citation_*` meta — DOI, authors, journal). The whole object is omitted when no such markup is present, and each sub-field is omitted when empty. It is produced by the HTML-extraction tiers only (absent for `raw` mode, PDFs, YouTube, and markdown-tier results), is independently size-bounded so a pathological page cannot blow the response budget, and is **untrusted external data** under the same trust boundary as `content`.
 
 **Trust boundary marker.** Every scrape response (full, preview, and raw) carries `"trust": "untrusted-external-content"` in the JSON envelope — an explicit, machine-readable boundary marker. It is deliberately placed in the structured output, never inside the `content` string (where a malicious page could forge or close it), and signals that `content` is external data to be treated as data, never as instructions (OWASP LLM01, indirect prompt injection). The server cannot enforce the prompt boundary itself — the model and agent loop live in the host application — so this marker exists to make the untrusted provenance unmissable to that host.
 
@@ -412,6 +434,7 @@ type NewsSearchOutput struct {
     Articles    []NewsArticle `json:"articles"`
     Query       string        `json:"query"`
     ResultCount int           `json:"resultCount"`
+    Hints       *ZeroResultHints `json:"hints,omitempty"` // present ONLY on zero-result responses (see below)
     Trust       string        `json:"trust"`   // "untrusted-external-content"
 }
 
@@ -423,6 +446,8 @@ type NewsArticle struct {
     Snippet     string `json:"snippet"`
 }
 ```
+
+On a zero-result response, `hints` carries the same `ZeroResultHints` object as `web_search`/`academic_search`/`patent_search`. The active `freshness` window (default `week`) and any `news_source` are surfaced in `filtersApplied`, since an over-narrow recency window is the most common reason news returns nothing; suggested alternative providers are limited to those configured and healthy. Omitted on any non-empty result set.
 
 ### Behavior
 

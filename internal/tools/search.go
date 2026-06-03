@@ -129,6 +129,14 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 			"trust":       untrustedContentTrust,
 		}
 
+		// Zero-result recovery hints (issue #100): reuse the shared
+		// ZeroResultHints machinery (parity with academic_search/patent_search).
+		// Only configured + healthy alternative providers are suggested.
+		if len(results) == 0 {
+			used := hintProviderName(provider)
+			output["hints"] = buildWebHints(input, used, healthyAlternatives(deps, used))
+		}
+
 		const webSearchTTL = 30 * time.Minute
 		jsonBytes, _ := json.Marshal(output)
 		deps.Cache.Set(ctx, cacheKey, jsonBytes, webSearchTTL)
@@ -148,8 +156,11 @@ func searchCacheKey(toolName string, parts ...any) string {
 	h.Write([]byte(toolName))
 	// Version segment: bump whenever the cached response SHAPE changes so a
 	// post-upgrade cache hit can never serve a blob missing a new field. v2
-	// added the "trust" untrusted-content marker to every search-family output.
-	h.Write([]byte("|v2"))
+	// added the "trust" untrusted-content marker to every search-family output;
+	// v3 added the optional zero-result "hints" object to web_search/news_search
+	// (#100) — bumping ensures a zero-result blob cached by an older binary is
+	// not served back without the recovery hints.
+	h.Write([]byte("|v3"))
 	for _, p := range parts {
 		fmt.Fprintf(h, "|%v", p)
 	}

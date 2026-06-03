@@ -3,6 +3,7 @@ package tools
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/audit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/cache"
 	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
+	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
 // ErrorKind classifies tool errors for programmatic handling by LLM clients.
@@ -250,6 +252,93 @@ func buildZeroResultHints(provider string, params map[string]string, alternative
 	}
 
 	return hints
+}
+
+// hintProviderName maps a resolved provider's Name() to the value used in
+// zero-result hints. The multi-provider Router reports the literal "router",
+// which a caller cannot select as a provider; surface "" for it so hints omit
+// ProvidersAttempted rather than leaking an unusable internal name. A concrete
+// single provider passes through unchanged.
+func hintProviderName(p search.Provider) string {
+	if p == nil || p.Name() == "router" {
+		return ""
+	}
+	return p.Name()
+}
+
+// healthyAlternatives returns up to a few configured, healthy provider names to
+// suggest when a search returns nothing — EXCLUDING the provider that was just
+// used. It honors the roadmap rule "do NOT suggest providers that aren't
+// configured or healthy": only providers present in deps.SearchProviders are
+// considered, and when the default provider is the Router its open-circuit
+// providers are filtered out. Returns nil when there is no better alternative.
+func healthyAlternatives(deps Dependencies, used string) []string {
+	if len(deps.SearchProviders) == 0 {
+		return nil
+	}
+	router, hasRouter := deps.Search.(*search.Router)
+	alts := make([]string, 0, len(deps.SearchProviders))
+	for name := range deps.SearchProviders {
+		if name == used {
+			continue
+		}
+		if hasRouter && !router.IsHealthy(name) {
+			continue
+		}
+		alts = append(alts, name)
+	}
+	if len(alts) == 0 {
+		return nil
+	}
+	// Deterministic order (map iteration is randomized) so hints are stable
+	// across identical calls — consistency/idempotency.
+	sort.Strings(alts)
+	return alts
+}
+
+// buildWebHints constructs zero-result hints for web_search, reusing the shared
+// buildZeroResultHints machinery (issue #100). Filters (site, lens, time_range,
+// country, language, exact/exclude terms) populate filtersApplied so the LLM
+// can see which constraints may have eliminated all results; alternatives are
+// configured + healthy providers only.
+func buildWebHints(input webSearchInput, provider string, alternatives []string) *ZeroResultHints {
+	filters := map[string]string{}
+	if input.Site != "" {
+		filters["site"] = input.Site
+	}
+	if input.Lens != "" {
+		filters["lens"] = input.Lens
+	}
+	if input.TimeRange != "" {
+		filters["time_range"] = input.TimeRange
+	}
+	if input.Country != "" {
+		filters["country"] = input.Country
+	}
+	if input.Language != "" {
+		filters["language"] = input.Language
+	}
+	if input.ExactTerms != "" {
+		filters["exact_terms"] = input.ExactTerms
+	}
+	if input.ExcludeTerms != "" {
+		filters["exclude_terms"] = input.ExcludeTerms
+	}
+	return buildZeroResultHints(provider, filters, alternatives)
+}
+
+// buildNewsHints constructs zero-result hints for news_search (issue #100),
+// reusing buildZeroResultHints. The default freshness window (week) is the most
+// common reason news returns nothing, so it is always surfaced as a filter.
+func buildNewsHints(input newsSearchInput, freshness, provider string, alternatives []string) *ZeroResultHints {
+	filters := map[string]string{}
+	if freshness != "" {
+		filters["freshness"] = freshness
+	}
+	if input.NewsSource != "" {
+		filters["news_source"] = input.NewsSource
+	}
+	return buildZeroResultHints(provider, filters, alternatives)
 }
 
 // cachedResultWithMeta returns a structured result with cache freshness metadata in _meta.

@@ -87,6 +87,13 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 			"trust":       untrustedContentTrust,
 		}
 
+		// Zero-result recovery hints (issue #100): same ZeroResultHints shape as
+		// web/academic/patent. Only configured + healthy alternatives suggested.
+		if len(results) == 0 {
+			used := hintProviderName(provider)
+			output["hints"] = buildNewsHints(input, freshness, used, healthyAlternatives(deps, used))
+		}
+
 		jsonBytes, _ := json.Marshal(output)
 		deps.Cache.Set(ctx, cacheKey, jsonBytes, 15*time.Minute)
 		deps.Metrics.RecordToolCall("news_search", time.Since(start), nil, "", false)

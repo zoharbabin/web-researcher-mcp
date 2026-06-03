@@ -2,6 +2,7 @@ package scraper
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -27,6 +28,37 @@ type ScrapeResult struct {
 	SiteName    string
 	PublishDate string
 	Truncated   bool
+	// StructuredData holds machine-readable page metadata (JSON-LD, Open Graph,
+	// citation_* tags) extracted by the HTML-extraction tiers (#46) — scrapeStealth
+	// and scrapeHTML, the only tiers that parse a goquery.Document. The remaining
+	// tiers (markdown, browser, raw, youtube, twitter, document) leave it nil.
+	// Best-effort enrichment — a nil pointer means "absent" (no markup found, or
+	// a non-HTML tier produced the result), never an error.
+	StructuredData *StructuredData
+}
+
+// StructuredData is page-embedded, machine-readable metadata lifted verbatim
+// from the HTML (#46). It is UNTRUSTED external data, subject to the same trust
+// boundary as scraped content. All fields are size-bounded at extraction time
+// (see extractStructuredData in html.go) because content.Process never sees it.
+type StructuredData struct {
+	// JSONLD holds each valid <script type="application/ld+json"> block verbatim
+	// (validated with json.Valid; invalid blocks skipped). RawMessage preserves
+	// arbitrary schema.org shapes (object/array/@graph) losslessly.
+	JSONLD []json.RawMessage `json:"jsonLd,omitempty"`
+	// OpenGraph maps og:* and article:* meta[property] to content, keys kept
+	// with their prefix (e.g. "og:title", "article:published_time").
+	OpenGraph map[string]string `json:"openGraph,omitempty"`
+	// Citation maps Highwire <meta name="citation_*"> to content, verbatim keys
+	// (e.g. "citation_title", "citation_doi").
+	Citation map[string]string `json:"citation,omitempty"`
+}
+
+// IsEmpty reports whether no structured data was captured. Nil-safe receiver so
+// callers can use it on a possibly-nil pointer. Exported because the tools
+// package reads it to decide whether to surface the field.
+func (s *StructuredData) IsEmpty() bool {
+	return s == nil || (len(s.JSONLD) == 0 && len(s.OpenGraph) == 0 && len(s.Citation) == 0)
 }
 
 type Pipeline struct {
