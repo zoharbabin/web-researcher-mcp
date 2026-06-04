@@ -60,6 +60,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          # macOS Developer ID signing + notarization (see .goreleaser.yml
+          # notarize.macos). The notarize block self-gates on MACOS_SIGN_P12
+          # being set, so until these secrets exist GoReleaser skips signing and
+          # ships unsigned darwin binaries exactly as before.
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
 
       # ── Windows Authenticode signing via Azure Trusted/Artifact Signing ──────
       # Signs the GoReleaser-built .exe IN PLACE on this Linux runner using jsign
