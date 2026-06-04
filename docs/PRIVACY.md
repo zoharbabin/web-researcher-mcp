@@ -30,7 +30,7 @@ When you ask your AI assistant to search or read a page, here is exactly what ha
 | Your search query | Directly to the search provider you configured (Google, Brave, etc.) | The search provider — not us |
 | Your API keys | Stored locally on your machine, sent only to the respective provider | Only the provider — never us |
 | Search results | Returned to your machine and cached locally | Only you |
-| Scraped page content | Fetched directly from the website to your machine | Only you |
+| Scraped page content | Fetched directly from the website to your machine (if you enable the optional paid Exa fallback, pages the local tiers cannot read are extracted via Exa instead) | Only you (and Exa, only for pages routed through that optional fallback) |
 | Local cache | Stored on your device, optionally encrypted (AES-256) | Only you |
 
 The key point: **your search queries travel directly from your machine to the search provider.** We are not in the middle. We never see what you search for.
@@ -46,6 +46,7 @@ When you search, your query goes directly to whichever provider you configured. 
 | Serper.dev | Your query, your API key | [serper.dev/privacy](https://serper.dev/privacy) |
 | SearchAPI.io | Your query, your API key | [searchapi.io/privacy](https://www.searchapi.io/privacy-policy) |
 | Tavily | Your query, your API key | [tavily.com/privacy](https://www.tavily.com/privacy) |
+| Exa | Your query, your API key — and, only if you enable the optional paid scrape fallback, the page URL being read | [exa.ai/privacy-policy](https://exa.ai/privacy-policy) |
 | SearXNG | Your query (self-hosted — no third party) | N/A (you control the server) |
 | DuckDuckGo | Your query (zero-config default when no provider is configured) | [duckduckgo.com/privacy](https://duckduckgo.com/privacy) |
 | OpenAlex | Your academic query | [openalex.org/legal](https://openalex.org/legal/privacy-policy) |

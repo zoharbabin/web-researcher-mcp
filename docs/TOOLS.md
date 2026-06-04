@@ -111,6 +111,7 @@ type ScrapeOutput struct {
     SizeCategory    string    `json:"sizeCategory"`   // small, medium, large, very_large
     Citation        *Citation `json:"citation"`       // always present
     Raw             bool      `json:"raw,omitempty"`  // true only in raw mode; omitted otherwise
+    ExtractedBy     string    `json:"extractedBy,omitempty"` // extraction tier: markdown|stealth|html|browser|exa:cached|exa:crawled; omitted when unknown
     Metadata        *Metadata `json:"metadata,omitempty"` // present only when a title was extracted (full/preview only)
     StructuredData  *StructuredData `json:"structuredData,omitempty"` // page-embedded machine-readable metadata; present only when found (full/preview, HTML pages)
 }
@@ -154,6 +155,8 @@ In `raw` mode the output additionally carries `"raw": true`, and `contentType` i
 
 **Structured data (#46).** When the page embeds machine-readable metadata, the response carries a `structuredData` object alongside `content`: `jsonLd` (each `<script type="application/ld+json">` block, kept verbatim — invalid JSON is skipped, never failing the scrape), `openGraph` (`og:*`/`article:*` meta, keys keep their prefix), and `citation` (Highwire `citation_*` meta — DOI, authors, journal). The whole object is omitted when no such markup is present, and each sub-field is omitted when empty. It is produced by the HTML-extraction tiers only (absent for `raw` mode, PDFs, YouTube, and markdown-tier results), is independently size-bounded so a pathological page cannot blow the response budget, and is **untrusted external data** under the same trust boundary as `content`.
 
+**Extraction provenance (`extractedBy`).** When known, the response names the tier that produced the content: `markdown`, `stealth`, `html`, `browser`, or — for the paid Exa fallback — `exa:cached` / `exa:crawled`. It lets a caller see whether content came from a free local tier or the metered Exa `/contents` API (Tier 5, present only when `EXA_API_KEY` is set). Omitted when unknown (e.g. document/YouTube routes).
+
 **Trust boundary marker.** Every scrape response (full, preview, and raw) carries `"trust": "untrusted-external-content"` in the JSON envelope — an explicit, machine-readable boundary marker. It is deliberately placed in the structured output, never inside the `content` string (where a malicious page could forge or close it), and signals that `content` is external data to be treated as data, never as instructions (OWASP LLM01, indirect prompt injection). The server cannot enforce the prompt boundary itself — the model and agent loop live in the host application — so this marker exists to make the untrusted provenance unmissable to that host.
 
 ### Raw Mode
@@ -182,7 +185,7 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
    ├─ .docx / application/vnd.openxmlformats* → DOCX parser
    └─ .pptx / application/vnd.ms-powerpoint → PPTX parser
 
-3. WEB PAGE EXTRACTION (4-tier, ordered by speed)
+3. WEB PAGE EXTRACTION (4 free tiers, ordered by speed; + optional paid Exa tier last)
    a) Tier 1: MARKDOWN NEGOTIATION (fastest, ~200ms)
       ├─ Send GET with Accept: text/markdown
       ├─ 5-second timeout
@@ -212,6 +215,14 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
       ├─ Wait for: page stability (2s for SPA domains, 500ms otherwise) OR 30s timeout
       ├─ Extract: rendered DOM via JavaScript evaluation
       └─ Graceful cleanup via Pipeline.Close()
+
+   e) Tier 5: EXA /contents (PAID, opt-in, last resort) — only when EXA_API_KEY is set
+      ├─ Neural extractor: POST https://api.exa.ai/contents (x-api-key auth)
+      ├─ Runs ONLY after every free tier above failed to extract >100 bytes,
+      │  so the common path never incurs Exa cost
+      ├─ Recovers bot-blocked / JS-heavy pages the local tiers cannot
+      └─ Records provenance into extractedBy: "exa:cached" (served from Exa's
+         cache) or "exa:crawled" (freshly fetched by Exa)
 
 4. CONTENT PROCESSING
    ├─ Sanitize: strip hidden text, zero-width chars, dangerous patterns
@@ -480,7 +491,7 @@ On a zero-result response, `hints` carries the same `ZeroResultHints` object as 
 | `pdf_only` | bool | no | false | — |
 | `sort_by` | string | no | `relevance` | relevance, date |
 | `open_access` | bool | no | false | Only return open-access papers |
-| `provider` | string | no | — | Force provider: openalex, crossref (academic APIs), or google, brave, serper, searxng, searchapi, duckduckgo, tavily (web fallback) |
+| `provider` | string | no | — | Force provider: openalex, crossref, exa (academic APIs), or google, brave, serper, searxng, searchapi, duckduckgo, tavily (web fallback) |
 | `sessionId` | string | no | — | Link results to a `sequential_search` session; sources are auto-recorded for recovery after context loss |
 
 ### Output Fields
@@ -900,6 +911,109 @@ Membership is host-owned via admin endpoints (not MCP tools): `POST /admin/works
 ### Cache
 
 - No cache (reads workspace state directly).
+
+---
+
+## Tool 15: `answer`
+
+**Provider-independent.** Registered only when at least one answer provider is configured (currently Exa via `EXA_API_KEY`; future providers register the same way). Read-only, open-world, idempotent.
+
+### Purpose
+
+Ask a factual question and get one grounded, synthesized answer with source citations. Unlike `web_search` (a list of links) or `search_and_scrape` (raw page text), this returns a direct written answer plus the URLs it relied on. The backing provider is pluggable — set `provider` to choose one when several are configured. The result names the answering provider, and `costUsd` reports the per-call estimate for metered providers (0 for free ones).
+
+### Input Schema
+
+| Field | Type | Required | Default | Constraints |
+|-------|------|----------|---------|-------------|
+| `query` | string | yes | — | The question to answer |
+| `provider` | string | no | — | Force a provider (e.g. `exa`); required only when more than one is configured |
+
+### Output Schema
+
+```go
+type AnswerOutput struct {
+    Answer    string     `json:"answer"`
+    Citations []Citation `json:"citations"`
+    Provider  string     `json:"provider"`         // which provider answered
+    CostUsd   float64    `json:"costUsd,omitempty"` // per-call estimate for metered providers (not an invoice)
+    Trust     string     `json:"trust"`            // "untrusted-external-content"
+}
+
+type Citation struct {
+    Title         string `json:"title,omitempty"`
+    URL           string `json:"url"`
+    PublishedDate string `json:"publishedDate,omitempty"`
+}
+```
+
+### Behavior
+
+1. Resolve the `search.AnswerSearcher` for the requested `provider` (or the sole configured one).
+2. Call the provider; map its grounded answer + citations + cost into the output.
+3. `costUsd` and the resolved provider are surfaced into audit metadata (`cost_usd`, `provider`).
+4. The answer is external content — `trust` is always `"untrusted-external-content"`.
+
+### Cache
+- TTL: 1 hour (keyed by query + provider)
+
+---
+
+## Tool 16: `structured_search`
+
+**Provider-independent.** Registered only when at least one structured-search provider is configured (currently Exa via `EXA_API_KEY`). Read-only, open-world, idempotent.
+
+### Purpose
+
+Search the web and extract structured data from each result. Supply a JSON `schema` to pull specific fields back as JSON per result, and/or a `category` to focus the search. The backing provider is pluggable (`provider` field). Valid `category` values and any `schema` limits are provider-specific and validated by the chosen provider — an unsupported value returns an error listing the valid options. The result names the provider, and `costUsd` reports the per-call estimate for metered providers.
+
+### Input Schema
+
+| Field | Type | Required | Default | Constraints |
+|-------|------|----------|---------|-------------|
+| `query` | string | yes | — | What to search for (entity name for entity lookups) |
+| `category` | string | no | — | Provider-specific result category (validated by the provider) |
+| `num_results` | int | no | 5 | 1-10 |
+| `schema` | object | no | — | JSON Schema for per-result field extraction; provider-specific limits apply |
+| `provider` | string | no | — | Force a provider (e.g. `exa`); required only when more than one is configured |
+
+### Output Schema
+
+```go
+type StructuredOutput struct {
+    Query       string           `json:"query"`
+    Category    string           `json:"category"`
+    ResultCount int              `json:"resultCount"`
+    Results     []StructuredItem `json:"results"`
+    Provider    string           `json:"provider"`         // which provider answered
+    CostUsd     float64          `json:"costUsd,omitempty"` // per-call estimate for metered providers
+    Trust       string           `json:"trust"`            // "untrusted-external-content"
+}
+
+type StructuredItem struct {
+    Title         string          `json:"title,omitempty"`
+    URL           string          `json:"url"`
+    PublishedDate string          `json:"publishedDate,omitempty"`
+    Author        string          `json:"author,omitempty"`
+    Summary       json.RawMessage `json:"summary,omitempty"`    // schema-conforming JSON, or plain text summary
+    Highlights    []string        `json:"highlights,omitempty"`
+    Entities      json.RawMessage `json:"entities,omitempty"`   // provider-specific structured entities, when available
+}
+```
+
+### Behavior
+
+1. Resolve the `search.StructuredSearcher` for the requested `provider` (or the sole configured one).
+2. The provider validates its own constraints (category vocabulary, schema limits) **before** any paid call; a violation returns a validation tool-error, never a wasted upstream request.
+3. When `schema` is set, each result's `summary` is JSON conforming to it; otherwise it is a plain text summary. Providers may populate per-result `entities` for entity categories (e.g. Exa's `company`).
+4. `costUsd` and the resolved provider are surfaced into audit metadata. Results are external content — `trust` is always `"untrusted-external-content"`.
+
+### Provider notes
+
+- **Exa**: `category` ∈ company, people, research paper, news, pdf, github, financial report, personal site; `schema` must be a flat object (root `object`, ≤10 properties, nesting depth ≤2, primitive array items); `category:"company"` returns structured company entities.
+
+### Cache
+- TTL: 1 hour (keyed by query + category + num_results + schema + provider)
 
 ---
 

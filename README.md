@@ -255,10 +255,12 @@ Set `SEARCH_PROVIDER=brave` and you're done. No Google keys needed.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SEARCH_PROVIDER` | Which engine to use: `google`, `brave`, `serper`, `searxng`, `searchapi`, `duckduckgo`, or `tavily` | `google` (falls back to `duckduckgo` if no key is set) |
+| `SEARCH_PROVIDER` | Which engine to use: `google`, `brave`, `serper`, `searxng`, `searchapi`, `duckduckgo`, `tavily`, or `exa` | `google` (falls back to `duckduckgo` if no key is set) |
 | `BRAVE_API_KEY` | Brave Search API key | |
 | `SERPER_API_KEY` | Serper.dev API key (uses Google results) | |
 | `SEARCHAPI_API_KEY` | SearchAPI.io key | |
+| `TAVILY_API_KEY` | Tavily API key (AI-agent search; clean LLM-ready content) | |
+| `EXA_API_KEY` | Exa API key (neural/semantic search; also backs the `answer` & `structured_search` tools) | |
 | `SEARXNG_URL` | Your own SearXNG instance (fully private, no third-party API needed) | |
 | `SEARCH_ROUTING` | Use multiple providers with automatic backup (see [docs](docs/DEPLOYMENT.md#multi-provider-routing)) | |
 
@@ -362,6 +364,8 @@ You choose which search engine powers your research. All of them work with lense
 | **Serper.dev** | Yes | Yes | Yes | Google-identical results |
 | **SearXNG** | Yes | Yes | Yes | Self-hosted, privacy-first, air-gapped deployments |
 | **SearchAPI.io** | Yes | Yes | Yes | Unified API with multiple engine backends |
+| **Tavily** | Yes | — | Yes | AI-agent search; clean, LLM-ready content |
+| **Exa** | Yes | — | Yes | Neural/semantic search; also backs `answer` & `structured_search` and the optional paid scrape tier |
 
 ### Multiple Providers (recommended)
 

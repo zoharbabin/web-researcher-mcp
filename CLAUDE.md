@@ -66,13 +66,13 @@ Registry/manifest files (root, each read by a different external tool): `server.
 ## Design Rules
 
 1. **Zero global state** — all deps flow through `tools.Dependencies` struct (constructed in `main.go`)
-2. **Interface-driven** — `cache.Cache`, `search.Provider`, `audit.Auditor` are interfaces; swap implementations without touching callers. Specialized interfaces: `search.PatentSearcher`, `search.AcademicSearcher`, `search.PatentProvider`, `search.AcademicProvider`
+2. **Interface-driven** — `cache.Cache`, `search.Provider`, `audit.Auditor` are interfaces; swap implementations without touching callers. Specialized capability interfaces (each a `…Searcher` + `…Provider` pair): `search.PatentSearcher`/`PatentProvider`, `search.AcademicSearcher`/`AcademicProvider`, `search.AnswerSearcher`/`AnswerProvider`, `search.StructuredSearcher`/`StructuredProvider`
 3. **Errors are values** — tool handlers return `toolError("message")` which sets `IsError: true` on the MCP result; never panic. Upstream errors use `upstreamErrorResponse()`. Scrape errors use typed `ScrapeError{Kind}`. Full error architecture: see `docs/ERROR_HANDLING.md`
 4. **Bounded concurrency** — scraping semaphore (5 slots), mutex-serialized browser, per-tenant rate limits
 5. **Lens routing** — if `lens` is set, `site:` operators are injected and routed to the configured provider; lenses with a dedicated `cx` route directly to that Google PSE engine
 6. **Multi-provider routing** — when `SEARCH_ROUTING` is set, the Router wraps all available providers with per-provider circuit breakers and priority-ordered fallback; transparent to tools via the `search.Provider` interface
 7. **Explicit provider honoring** — when a user explicitly requests a provider via the `provider` field, that provider is used exclusively; if it returns empty results (e.g., USPTO for non-US patents), the tool returns empty — no silent fallback
-8. **Provider maps** — `deps.SearchProviders`, `deps.PatentProviders`, `deps.AcademicProviders` hold all configured providers by name; built at startup via `AvailableProviders()`, independent of routing config
+8. **Provider maps** — `deps.SearchProviders`, `deps.PatentProviders`, `deps.AcademicProviders`, `deps.AnswerProviders`, `deps.StructuredProviders` hold all configured providers by name; built at startup via `Available…Providers()`, independent of routing config
 
 ## How to Add a Tool
 
@@ -88,16 +88,16 @@ Registry/manifest files (root, each read by a different external tool): `server.
 
 ## How to Add a Search Provider
 
-1. Create `internal/search/<name>.go` implementing `search.Provider` interface (Web, Images, News, Name methods)
-2. Add a case to the switch in `search.NewProvider()` and `NewProviderByName()` in `internal/search/provider.go`
-3. Add the env var to `internal/config/config.go` and `.env.example`
-4. Add a credential check in `AvailableProviders()` so the Router can discover it
+1. Create `internal/search/<name>.go` implementing `search.Provider` interface (Web, Images, News, Name methods); add a `var _ Provider = (*XProvider)(nil)` assertion. Return `(nil, nil)` from any unsupported sub-capability (e.g. Images) — never an error (that would trip the breaker).
+2. Add the name to `search.SupportedProviders` and a case to `NewProvider()`/`NewProviderByName()` in `internal/search/provider.go`. `AvailableProviders()` ranges over `SupportedProviders`, so no edit there.
+3. Add the env var to `internal/config/config.go` (field + required-when-selected check) and `.env.example`.
+4. To also offer a specialized capability (academic / answer / structured), implement the matching `…Provider` interface and register the name in its `Supported…Providers` list + `New…ProviderByName` switch (`internal/search/domain.go` for academic, `synthesis.go` for answer/structured). The `answer`/`structured_search`/`academic_search` tools then pick it up with no tool-layer change.
 
 ## Key Patterns
 
 - **Tool handler signature**: `func(ctx context.Context, req *mcp.CallToolRequest, input T) (*mcp.CallToolResult, any, error)`
 - **Error responses**: `structuredError(msg, ToolError{})` for dual-format errors (text + JSON); `toolError(msg)` for validation-only; `upstreamErrorResponse(toolName, err)` for provider failures; `scrapeErrorResponse(err, url)` for scrape failures. All defined in `internal/tools/errors.go`
-- **Provider resolution**: `resolveProvider()` for web search; `resolvePatentSearcher()` for patents; `resolveAcademicSearcher()` for academic — all return `*mcp.CallToolResult` errors with full provider list on unknown provider
+- **Provider resolution**: `resolveProvider()` for web search; `resolvePatentSearcher()` for patents; `resolveAcademicSearcher()` for academic; `resolveAnswerSearcher()`/`resolveStructuredSearcher()` for the synthesis tools — all return `*mcp.CallToolResult` errors with full provider list on unknown provider
 - **Cache key**: SHA-256 of deterministic params → `deps.Cache.Get/Set`
 - **Audit**: every tool call logs `audit.AuditEvent{ToolName, Duration, Success, Metadata, ...}` via `deps.Auditor.Log()`
 - **SSRF protection**: `scraper.NewSSRFSafeClient()` validates all resolved IPs before connecting
