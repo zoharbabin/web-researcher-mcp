@@ -28,7 +28,7 @@ gh variable set AZURE_SIGNING_ENABLED --body false    # disable
 
 | Input | Value |
 |-------|-------|
-| Endpoint (region: East US) | `https://eus.codesigning.azure.net/` |
+| Endpoint (region: East US) | `https://eus.codesigning.azure.net` (no trailing slash — jsign appends the API path, so a trailing slash 404s) |
 | Signing account | `web-researcher-signing` |
 | Certificate profile | `web-researcher-public` |
 | jsign alias (`<account>/<profile>`) | `web-researcher-signing/web-researcher-public` |
