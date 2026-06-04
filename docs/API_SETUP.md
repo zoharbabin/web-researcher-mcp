@@ -166,6 +166,12 @@ export TAVILY_API_KEY=tvly-your-key
 
 The key is sent as an `Authorization: Bearer` header (never in the request body), and queries are capped at Tavily's 400-character limit automatically.
 
+### Good to know
+
+- **No image search.** `image_search` with Tavily returns empty (no error). Keep an image-capable provider (Google, Brave, SearchAPI) in `SEARCH_ROUTING` if you need images — the Router falls through automatically. Best used as a routing member rather than the sole provider: `SEARCH_ROUTING=tavily,brave,google`.
+- **Web `time_range` is strict.** Tavily's web recency filter is aggressive — a `time_range=week` web search may return nothing for terms that have older results. For recent *news* use `news_search` (its `freshness` window works well); for recent *web* content, widen `time_range` or omit it.
+- **Some filters don't apply.** Tavily honors `site`, `lens`, `num_results`, `time_range`/`freshness`, but ignores `country`, `language`, `safe`, and exact/exclude-term filters (it has no API field for them). Use Google if you need hard country/language/exact-phrase control.
+
 ---
 
 ## SearXNG (Self-Hosted)
