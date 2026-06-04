@@ -65,6 +65,13 @@ type NewsResult struct {
 	Snippet     string `json:"snippet"`
 }
 
+// Provider is the core web-search capability: Web, Images, and News.
+//
+// Capability sentinel: a provider that lacks a sub-capability (e.g. no image
+// search) MUST return (nil, nil) from that method — never an error. Returning an
+// error for a missing capability would trip the per-provider circuit breaker and
+// break Router fallback for that operation. See ExaProvider.Images /
+// TavilyProvider.Images for the canonical no-op implementation.
 type Provider interface {
 	Web(ctx context.Context, params WebSearchParams) ([]SearchResult, error)
 	Images(ctx context.Context, params ImageSearchParams) ([]ImageResult, error)
@@ -107,7 +114,7 @@ type Deps struct {
 }
 
 // SupportedProviders lists all provider names that can be configured.
-var SupportedProviders = []string{"google", "brave", "serper", "searxng", "searchapi", "duckduckgo", "tavily"}
+var SupportedProviders = []string{"google", "brave", "serper", "searxng", "searchapi", "duckduckgo", "tavily", "exa"}
 
 func NewProvider(cfg config.SearchConfig, deps Deps) Provider {
 	switch cfg.Provider {
@@ -121,6 +128,8 @@ func NewProvider(cfg config.SearchConfig, deps Deps) Provider {
 		return NewSearchAPIProvider(cfg.SearchAPIKey, deps)
 	case "tavily":
 		return NewTavilyProvider(cfg.TavilyAPIKey, deps)
+	case "exa":
+		return NewExaProvider(cfg.ExaAPIKey, deps)
 	case "duckduckgo":
 		return NewDuckDuckGoProvider(deps)
 	default:
@@ -159,6 +168,10 @@ func NewProviderByName(name string, cfg config.SearchConfig, deps Deps) Provider
 		if cfg.TavilyAPIKey != "" {
 			return NewTavilyProvider(cfg.TavilyAPIKey, deps)
 		}
+	case "exa":
+		if cfg.ExaAPIKey != "" {
+			return NewExaProvider(cfg.ExaAPIKey, deps)
+		}
 	case "duckduckgo":
 		return NewDuckDuckGoProvider(deps)
 	}
@@ -170,8 +183,7 @@ func NewProviderByName(name string, cfg config.SearchConfig, deps Deps) Provider
 // circuit breaker for isolation — failures in one provider don't affect others.
 func AvailableProviders(cfg config.SearchConfig, deps Deps) map[string]Provider {
 	providers := make(map[string]Provider)
-	names := []string{"google", "brave", "serper", "searxng", "searchapi", "duckduckgo", "tavily"}
-	for _, name := range names {
+	for _, name := range SupportedProviders {
 		providerDeps := Deps{
 			HTTPClient: deps.HTTPClient,
 			Breaker:    circuit.New(circuit.Config{FailureThreshold: 3, ResetTimeout: 120}),

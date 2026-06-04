@@ -94,16 +94,49 @@ func newTestBreaker() *circuit.Breaker {
 	return circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60})
 }
 
+// mockSynthProvider implements the provider-independent AnswerProvider and
+// StructuredProvider interfaces, so wiring it into AnswerProviders/
+// StructuredProviders makes the conditionally-registered `answer` and
+// `structured_search` tools visible to the CI drift tests. It is vendor-neutral
+// (Name "mocksynth") — the tools must work for any provider, not just Exa.
+type mockSynthProvider struct{}
+
+func (m *mockSynthProvider) Name() string { return "mocksynth" }
+
+func (m *mockSynthProvider) Metadata() search.ProviderMeta {
+	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "free", Description: "mock synthesis provider"}
+}
+
+func (m *mockSynthProvider) Answer(_ context.Context, _ search.AnswerParams) (*search.AnswerResult, error) {
+	return &search.AnswerResult{
+		Answer:    "A test answer.",
+		Citations: []search.Citation{{Title: "Source", URL: "https://example.com", PublishedDate: "2026-01-01"}},
+		Provider:  "mocksynth",
+		CostUSD:   0.005,
+	}, nil
+}
+
+func (m *mockSynthProvider) StructuredSearch(_ context.Context, p search.StructuredParams) (*search.StructuredResult, error) {
+	return &search.StructuredResult{
+		Results:  []search.StructuredItem{{Title: "Item", URL: "https://example.com"}},
+		Provider: "mocksynth",
+		CostUSD:  0.007,
+	}, nil
+}
+
 func setupTestDeps() Dependencies {
+	synth := &mockSynthProvider{}
 	return Dependencies{
-		Cache:    cache.NewNoop(),
-		Search:   &mockProvider{},
-		Scraper:  scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2}),
-		Content:  content.NewProcessor(),
-		Sessions: func() session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
-		Metrics:  metrics.NewCollector(),
-		Auditor:  audit.NewNoop(),
-		Logger:   slog.Default(),
+		Cache:               cache.NewNoop(),
+		Search:              &mockProvider{},
+		AnswerProviders:     map[string]search.AnswerProvider{synth.Name(): synth},
+		StructuredProviders: map[string]search.StructuredProvider{synth.Name(): synth},
+		Scraper:             scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2}),
+		Content:             content.NewProcessor(),
+		Sessions:            func() session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
+		Metrics:             metrics.NewCollector(),
+		Auditor:             audit.NewNoop(),
+		Logger:              slog.Default(),
 		// Wire the full superset of optional regulated deps so every
 		// conditionally-registered tool is visible to the CI drift tests
 		// (TestToolsDocMatchesRegistry / TestAllToolsHaveAnnotations /

@@ -17,6 +17,12 @@ type PipelineConfig struct {
 	AllowPrivateIPs bool
 	AllowedDomains  []string
 	ChromePath      string
+	// ExaAPIKey, when set, enables the Exa /contents extraction tier as a final
+	// fallback (after markdown→stealth→html→browser all fail). Exa is a paid API,
+	// so it is deliberately last: the free tiers win the overwhelming majority of
+	// pages, and Exa only spends a request on the hard pages they cannot extract.
+	// Empty (default) ⇒ the tier is absent and no Exa request is ever made.
+	ExaAPIKey string
 }
 
 type ScrapeResult struct {
@@ -28,6 +34,12 @@ type ScrapeResult struct {
 	SiteName    string
 	PublishDate string
 	Truncated   bool
+	// Tier names the extraction tier that produced this result ("markdown",
+	// "stealth", "html", "browser", "exa:cached"/"exa:crawled", "youtube",
+	// "twitter", "document", "raw"). Provenance for the tool layer — surfaced so a
+	// caller can see whether content came from a free tier or the paid Exa
+	// fallback. Empty for results from tiers that predate this field.
+	Tier string
 	// StructuredData holds machine-readable page metadata (JSON-LD, Open Graph,
 	// citation_* tags) extracted by the HTML-extraction tiers (#46) — scrapeStealth
 	// and scrapeHTML, the only tiers that parse a goquery.Document. The remaining
@@ -59,6 +71,16 @@ type StructuredData struct {
 // package reads it to decide whether to surface the field.
 func (s *StructuredData) IsEmpty() bool {
 	return s == nil || (len(s.JSONLD) == 0 && len(s.OpenGraph) == 0 && len(s.Citation) == 0)
+}
+
+// stampTier records which extraction tier produced a result, unless the tier
+// already set it (e.g. the Exa tier records "exa:cached" vs "exa:crawled"
+// provenance and must not be overwritten). Nil-safe passthrough.
+func stampTier(r *ScrapeResult, tier string) *ScrapeResult {
+	if r != nil && r.Tier == "" {
+		r.Tier = tier
+	}
+	return r
 }
 
 type Pipeline struct {
@@ -132,7 +154,7 @@ func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, max
 	// For known SPA domains, prefer the browser scraper first
 	if hasBrowser && isSPADomain(url) {
 		if result, err := p.scrapeBrowser(ctx, url, maxLength); err == nil && result != nil && len(result.Content) > 100 {
-			return result, nil
+			return stampTier(result, "browser"), nil
 		}
 	}
 
@@ -144,6 +166,14 @@ func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, max
 
 	if hasBrowser {
 		tiers = append(tiers, namedTier{"browser", p.scrapeBrowser})
+	}
+
+	// Exa /contents is the LAST tier: a paid neural extractor that recovers the
+	// hard pages the free tiers cannot. It runs only when configured and only
+	// after every free tier has failed to extract >100 bytes — so the common
+	// path never incurs Exa cost.
+	if p.config.ExaAPIKey != "" {
+		tiers = append(tiers, namedTier{"exa", p.scrapeExa})
 	}
 
 	type tierOutcome struct {
@@ -158,11 +188,11 @@ func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, max
 	for _, tier := range tiers {
 		result, err := tier.fn(ctx, url, maxLength)
 		if err == nil && result != nil && len(result.Content) > 100 {
-			return result, nil
+			return stampTier(result, tier.name), nil
 		}
 		outcomes = append(outcomes, tierOutcome{tier.name, result, err})
 		if result != nil && len(result.Content) > 0 {
-			lastResult = result
+			lastResult = stampTier(result, tier.name)
 		}
 	}
 

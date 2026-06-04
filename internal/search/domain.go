@@ -145,10 +145,14 @@ type AcademicResult struct {
 type AcademicProviderConfig struct {
 	OpenAlexEmail string
 	CrossRefEmail string
+	ExaAPIKey     string // Exa (neural) — academic via the research-paper category
 }
 
-// SupportedAcademicProviders lists all academic provider names.
-var SupportedAcademicProviders = []string{"openalex", "crossref"}
+// SupportedAcademicProviders lists all academic provider names. openalex and
+// crossref are authoritative bibliographic databases; exa is a neural-web
+// alternate (research-paper category) — listed last so it sorts after them when
+// no explicit routing is configured.
+var SupportedAcademicProviders = []string{"openalex", "crossref", "exa"}
 
 // NewAcademicProviderByName creates an academic provider by name if configured.
 func NewAcademicProviderByName(name string, cfg AcademicProviderConfig, deps Deps) AcademicProvider {
@@ -160,6 +164,10 @@ func NewAcademicProviderByName(name string, cfg AcademicProviderConfig, deps Dep
 	case "crossref":
 		if cfg.CrossRefEmail != "" {
 			return NewCrossRefProvider(cfg.CrossRefEmail, deps)
+		}
+	case "exa":
+		if cfg.ExaAPIKey != "" {
+			return NewExaProvider(cfg.ExaAPIKey, deps)
 		}
 	}
 	return nil
@@ -185,7 +193,7 @@ func AvailableAcademicProviders(cfg AcademicProviderConfig, deps Deps) map[strin
 // does not block fallback to another.
 func AvailablePatentProviders(cfg PatentProviderConfig, deps Deps) map[string]PatentProvider {
 	providers := make(map[string]PatentProvider)
-	for _, name := range []string{"searchapi", "epo", "lens", "uspto"} {
+	for _, name := range SupportedPatentProviders {
 		provDeps := Deps{
 			HTTPClient: deps.HTTPClient,
 			Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),

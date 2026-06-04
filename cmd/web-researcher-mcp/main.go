@@ -227,8 +227,15 @@ func main() {
 	academicCfg := search.AcademicProviderConfig{
 		OpenAlexEmail: cfg.Search.OpenAlexEmail,
 		CrossRefEmail: cfg.Search.CrossRefEmail,
+		ExaAPIKey:     cfg.Search.ExaAPIKey,
 	}
 	academicProviders := search.AvailableAcademicProviders(academicCfg, searchDeps)
+
+	// Synthesis capabilities (provider-independent): grounded answers and
+	// structured extraction. Discovered from config like every other provider
+	// family — a new implementer appears automatically.
+	answerProviders := search.AvailableAnswerProviders(cfg.Search, searchDeps)
+	structuredProviders := search.AvailableStructuredProviders(cfg.Search, searchDeps)
 
 	allProviders := search.AvailableProviders(cfg.Search, searchDeps)
 
@@ -265,6 +272,7 @@ func main() {
 		AllowPrivateIPs: cfg.AllowPrivateIPs,
 		AllowedDomains:  cfg.AllowedDomains,
 		ChromePath:      cfg.ChromePath,
+		ExaAPIKey:       cfg.Search.ExaAPIKey, // enables the paid Exa /contents fallback tier
 	})
 	defer scraperPipeline.Close()
 
@@ -321,17 +329,19 @@ func main() {
 	defer auditor.Close()
 
 	toolDeps := tools.Dependencies{
-		Cache:             cacheStore,
-		Search:            searchProvider,
-		SearchProviders:   allProviders,
-		PatentProviders:   patentProviders,
-		AcademicProviders: academicProviders,
-		Scraper:           scraperPipeline,
-		Content:           contentProcessor,
-		Sessions:          sessionManager,
-		Metrics:           metricsCollector,
-		Auditor:           auditor,
-		Logger:            logger,
+		Cache:               cacheStore,
+		Search:              searchProvider,
+		SearchProviders:     allProviders,
+		PatentProviders:     patentProviders,
+		AcademicProviders:   academicProviders,
+		AnswerProviders:     answerProviders,
+		StructuredProviders: structuredProviders,
+		Scraper:             scraperPipeline,
+		Content:             contentProcessor,
+		Sessions:            sessionManager,
+		Metrics:             metricsCollector,
+		Auditor:             auditor,
+		Logger:              logger,
 		Features: tools.Features{
 			SourceRecommendations: cfg.Features.SourceRecommendations,
 			GenerativeUI:          cfg.Features.GenerativeUI,

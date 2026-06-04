@@ -138,6 +138,13 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 			}
 		}
 
+		// Extraction provenance: which tier produced the content. Surfaced so a
+		// caller can see when content came from the paid Exa fallback ("exa:cached"
+		// /"exa:crawled") rather than a free local tier. Omitted when unknown.
+		if result.Tier != "" {
+			output["extractedBy"] = result.Tier
+		}
+
 		// Structured data (#46) is additive and present only when the HTML tier
 		// captured JSON-LD/OG/citation markup; IsEmpty() is nil-safe, so the key
 		// is simply omitted for raw/PDF/markdown-tier results and plain pages.
