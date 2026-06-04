@@ -30,6 +30,31 @@ builds:
       - -X main.date={{.Date}}
     mod_timestamp: "{{ .CommitTimestamp }}"
 
+# macOS Developer ID signing + Apple notarization (cross-platform, OSS — runs on
+# the Linux release runner via GoReleaser's bundled quill; no macOS runner, no
+# Pro license). Clears Gatekeeper's "developer cannot be verified" warning for
+# users who download the darwin tarballs via a browser (the quarantine path;
+# Homebrew/curl/Docker installs are unaffected either way). Signs the darwin
+# binaries BEFORE the archives block tars them. Self-gated on the signing
+# secret, so local/snapshot builds and any run without the cert skip cleanly
+# (zero regression) — mirrors the AZURE_SIGNING_ENABLED gate for Windows.
+# Stapling is intentionally absent: a bare Mach-O can't be stapled, and
+# Gatekeeper verifies notarization online on first launch. See docs/RELEASE_SIGNING.md.
+notarize:
+  macos:
+    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+      ids:
+        - web-researcher-mcp
+      sign:
+        certificate: "{{.Env.MACOS_SIGN_P12}}"
+        password: "{{.Env.MACOS_SIGN_PASSWORD}}"
+      notarize:
+        issuer_id: "{{.Env.MACOS_NOTARY_ISSUER_ID}}"
+        key_id: "{{.Env.MACOS_NOTARY_KEY_ID}}"
+        key: "{{.Env.MACOS_NOTARY_KEY}}"
+        wait: true
+        timeout: 20m
+
 archives:
   - id: default
     format: tar.gz

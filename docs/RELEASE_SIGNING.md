@@ -6,7 +6,11 @@ How the Windows `.exe` in each release is Authenticode-signed, and how to operat
 
 Windows binaries are signed with **Azure Trusted Signing** (a.k.a. Azure Artifact Signing) from the release job in `.github/workflows/release.yml`. Signing happens **in place on the Linux runner** via [`jsign`](https://ebourg.github.io/jsign/) — which calls the Azure signing REST endpoint directly, so there is no separate Windows job and no Wine. The job then re-packages the Windows zip and rewrites its `checksums.txt` entry so the published artifact and checksum cover the **signed** binary.
 
-macOS/Linux binaries are not Authenticode-signed (not applicable); release integrity for all platforms is additionally covered by the cosign signatures + SBOM produced by GoReleaser.
+**macOS** binaries are signed with a **Developer ID Application** certificate and **notarized** by Apple via GoReleaser's cross-platform `notarize.macos` block (bundled `quill`) — on the same Linux runner, no macOS runner or GoReleaser Pro needed. This clears Gatekeeper's "developer cannot be verified" warning for users who download the darwin tarballs through a browser (the `com.apple.quarantine` path). Homebrew, the `curl | sh` installer, and Docker do not set quarantine, so they were never blocked. The signing+notarize step **self-gates on `MACOS_SIGN_P12` being set**, so absent the cert it ships unsigned darwin binaries exactly as before (zero regression).
+
+> Stapling note: a bare Mach-O binary cannot be stapled, and it doesn't need to be — Gatekeeper verifies the notarization **online** on first launch. (The only gap is a fully offline first launch, irrelevant for a normally-networked CLI.) Shipping a stapled ticket would require a `.dmg`/`.pkg` + GoReleaser Pro.
+
+**Linux** binaries need no OS-level code signing (Linux has no Gatekeeper/Authenticode equivalent for standalone binaries). Integrity for every platform is additionally covered by the **cosign signatures + SBOM** GoReleaser produces, plus cosign-signed Docker images.
 
 ## Toggle (mechanical)
 
@@ -61,6 +65,25 @@ The client secret expires (set when created). Rotate before expiry, or any time 
    security add-generic-password -a "$USER" -s AZURE_CLIENT_SECRET -w -U   # prompts for value
    ```
 4. Delete the old secret in the Azure portal.
+
+## macOS notarization setup (one-time)
+
+Requires the Apple Developer Program ($99/yr). Produces two credentials → five GitHub secrets; once set, the next release auto-signs + notarizes the darwin binaries.
+
+1. **Developer ID Application certificate (`.p12`):** at developer.apple.com → Certificates, create a CSR (Keychain Access) → certificate type **Developer ID Application** (not "Installer", not "Apple Development") → download `.cer` → import to Keychain → export with private key as `.p12` with a password.
+   - `base64 -i cert.p12 | pbcopy` → `gh secret set MACOS_SIGN_P12` (paste); password → `gh secret set MACOS_SIGN_PASSWORD`.
+2. **App Store Connect API key (`.p8`) for notarization:** appstoreconnect.apple.com → Users and Access → Integrations/Keys → generate a key with **Developer** access. Note the **Issuer ID** (UUID) and **Key ID**; download the `.p8` (once only).
+   - `base64 -i AuthKey_XXXX.p8 | pbcopy` → `gh secret set MACOS_NOTARY_KEY` (paste); `gh secret set MACOS_NOTARY_KEY_ID` (the key id); `gh secret set MACOS_NOTARY_ISSUER_ID` (the issuer UUID).
+
+| Secret | Contents |
+|--------|----------|
+| `MACOS_SIGN_P12` | base64 of the Developer ID Application `.p12` |
+| `MACOS_SIGN_PASSWORD` | the `.p12` export password |
+| `MACOS_NOTARY_KEY` | base64 of the App Store Connect `.p8` |
+| `MACOS_NOTARY_KEY_ID` | App Store Connect key ID |
+| `MACOS_NOTARY_ISSUER_ID` | App Store Connect issuer UUID |
+
+Config lives in `.goreleaser.yml` (`notarize.macos`); secrets are threaded into the GoReleaser step in `.github/workflows/release.yml`. Notarization adds a few minutes to the release (`wait: true`).
 
 ## Verifying a signed release
 
