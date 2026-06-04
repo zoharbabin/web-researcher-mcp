@@ -19,7 +19,7 @@ type imageSearchInput struct {
 	DominantColor string `json:"dominant_color,omitempty" jsonschema:"Filter by dominant color: black, blue, brown, gray, green, orange, pink, purple, red, teal, white, yellow."`
 	FileType      string `json:"file_type,omitempty" jsonschema:"Filter by file format: jpg, gif, png, bmp, svg, webp."`
 	Safe          string `json:"safe,omitempty" jsonschema:"SafeSearch level: off, medium (default), high."`
-	Provider      string `json:"provider,omitempty" jsonschema:"Force a specific search provider: google, brave, serper, searxng, searchapi, duckduckgo. Omit to use configured default."`
+	Provider      string `json:"provider,omitempty" jsonschema:"Force a specific search provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily. Omit to use configured default."`
 }
 
 func registerImageSearch(srv *mcp.Server, deps Dependencies) {

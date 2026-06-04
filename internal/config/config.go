@@ -130,6 +130,7 @@ type SearchConfig struct {
 	BraveAPIKey      string
 	SerperAPIKey     string
 	SearchAPIKey     string
+	TavilyAPIKey     string
 	SearXNGURL       string
 	SearXNGBasicAuth string            // raw "user:password" for a SearXNG behind HTTP Basic auth; "" => none (never logged)
 	SearXNGHeaders   map[string]string // validated static request headers for SearXNG; nil/empty => none
@@ -227,6 +228,11 @@ func Load() (*Config, error) {
 		errs = append(errs, "SEARCHAPI_API_KEY is required when SEARCH_PROVIDER=searchapi")
 	}
 
+	tavilyKey := os.Getenv("TAVILY_API_KEY")
+	if provider == "tavily" && tavilyKey == "" {
+		errs = append(errs, "TAVILY_API_KEY is required when SEARCH_PROVIDER=tavily")
+	}
+
 	port := envInt("PORT", 0)
 	encKey := os.Getenv("CACHE_ENCRYPTION_KEY")
 	if encKey != "" && len(encKey) != 64 {
@@ -307,6 +313,7 @@ func Load() (*Config, error) {
 			BraveAPIKey:       braveKey,
 			SerperAPIKey:      serperKey,
 			SearchAPIKey:      searchAPIKey,
+			TavilyAPIKey:      tavilyKey,
 			SearXNGURL:        searxngURL,
 			SearXNGBasicAuth:  searxngBasicAuth,
 			SearXNGHeaders:    searxngHeaders,

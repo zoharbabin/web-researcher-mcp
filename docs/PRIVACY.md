@@ -45,6 +45,7 @@ When you search, your query goes directly to whichever provider you configured. 
 | Brave Search | Your query, your API key | [brave.com/privacy](https://brave.com/privacy/browser/) |
 | Serper.dev | Your query, your API key | [serper.dev/privacy](https://serper.dev/privacy) |
 | SearchAPI.io | Your query, your API key | [searchapi.io/privacy](https://www.searchapi.io/privacy-policy) |
+| Tavily | Your query, your API key | [tavily.com/privacy](https://www.tavily.com/privacy) |
 | SearXNG | Your query (self-hosted — no third party) | N/A (you control the server) |
 | DuckDuckGo | Your query (zero-config default when no provider is configured) | [duckduckgo.com/privacy](https://duckduckgo.com/privacy) |
 | OpenAlex | Your academic query | [openalex.org/legal](https://openalex.org/legal/privacy-policy) |

@@ -34,7 +34,7 @@ type webSearchInput struct {
 	ExcludeTerms string `json:"exclude_terms,omitempty" jsonschema:"Terms to exclude from results (space-separated)."`
 	Country      string `json:"country,omitempty" jsonschema:"Restrict to a country using ISO 3166-1 alpha-2 code (e.g. US, GB)."`
 	Lens         string `json:"lens,omitempty" jsonschema:"Focus your search on trusted sites in a specific field: docs, academic, clinical, security, journalism, programming, news, tech, legal, medical, finance, science, government. Only one lens can be active at a time (overrides the site parameter)."`
-	Provider     string `json:"provider,omitempty" jsonschema:"Choose which search engine to use for this query: google, brave, serper, searxng, searchapi, duckduckgo. Leave empty to use the default. Returns an error if the chosen provider isn't set up."`
+	Provider     string `json:"provider,omitempty" jsonschema:"Choose which search engine to use for this query: google, brave, serper, searxng, searchapi, duckduckgo, tavily. Leave empty to use the default. Returns an error if the chosen provider isn't set up."`
 	SessionID    string `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. Sources are automatically recorded in the session for recovery after context loss."`
 }
 
