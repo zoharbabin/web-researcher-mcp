@@ -107,7 +107,7 @@ type Deps struct {
 }
 
 // SupportedProviders lists all provider names that can be configured.
-var SupportedProviders = []string{"google", "brave", "serper", "searxng", "searchapi", "duckduckgo"}
+var SupportedProviders = []string{"google", "brave", "serper", "searxng", "searchapi", "duckduckgo", "tavily"}
 
 func NewProvider(cfg config.SearchConfig, deps Deps) Provider {
 	switch cfg.Provider {
@@ -119,6 +119,8 @@ func NewProvider(cfg config.SearchConfig, deps Deps) Provider {
 		return NewSearXNGProvider(cfg.SearXNGURL, cfg.SearXNGBasicAuth, cfg.SearXNGHeaders, deps)
 	case "searchapi":
 		return NewSearchAPIProvider(cfg.SearchAPIKey, deps)
+	case "tavily":
+		return NewTavilyProvider(cfg.TavilyAPIKey, deps)
 	case "duckduckgo":
 		return NewDuckDuckGoProvider(deps)
 	default:
@@ -153,6 +155,10 @@ func NewProviderByName(name string, cfg config.SearchConfig, deps Deps) Provider
 		if cfg.SearchAPIKey != "" {
 			return NewSearchAPIProvider(cfg.SearchAPIKey, deps)
 		}
+	case "tavily":
+		if cfg.TavilyAPIKey != "" {
+			return NewTavilyProvider(cfg.TavilyAPIKey, deps)
+		}
 	case "duckduckgo":
 		return NewDuckDuckGoProvider(deps)
 	}
@@ -164,7 +170,7 @@ func NewProviderByName(name string, cfg config.SearchConfig, deps Deps) Provider
 // circuit breaker for isolation — failures in one provider don't affect others.
 func AvailableProviders(cfg config.SearchConfig, deps Deps) map[string]Provider {
 	providers := make(map[string]Provider)
-	names := []string{"google", "brave", "serper", "searxng", "searchapi", "duckduckgo"}
+	names := []string{"google", "brave", "serper", "searxng", "searchapi", "duckduckgo", "tavily"}
 	for _, name := range names {
 		providerDeps := Deps{
 			HTTPClient: deps.HTTPClient,

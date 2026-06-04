@@ -48,7 +48,7 @@ type academicSearchInput struct {
 	Source     string `json:"source,omitempty" jsonschema:"Restrict to an academic source: all (default), arxiv, pubmed, ieee, nature, springer."`
 	PDFOnly    bool   `json:"pdf_only,omitempty" jsonschema:"Only return papers with direct PDF links (default: false). Useful when you plan to scrape the full paper."`
 	SortBy     string `json:"sort_by,omitempty" jsonschema:"Sort order: relevance (default) or date (newest first)."`
-	Provider   string `json:"provider,omitempty" jsonschema:"Force a specific provider. Academic: openalex, crossref. Web fallback: google, brave, serper, searxng, searchapi, duckduckgo. Omit to use automatic selection (recommended)."`
+	Provider   string `json:"provider,omitempty" jsonschema:"Force a specific provider. Academic: openalex, crossref. Web fallback: google, brave, serper, searxng, searchapi, duckduckgo, tavily. Omit to use automatic selection (recommended)."`
 	OpenAccess bool   `json:"open_access,omitempty" jsonschema:"Only return open-access papers with free full-text (default: false)."`
 	SessionID  string `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. Sources are automatically recorded for recovery after context loss."`
 }

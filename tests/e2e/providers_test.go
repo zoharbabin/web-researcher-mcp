@@ -93,6 +93,48 @@ func TestProviders_Live(t *testing.T) {
 	}
 }
 
+// TestProviders_Tavily_Live exercises the Tavily provider end-to-end through the
+// real MCP server. Gated only on TAVILY_API_KEY (independent of the Google/Brave/
+// Serper quartet TestProviders_Live needs), so it runs whenever a Tavily key is
+// available. image_search is expected to succeed but return no images (Tavily has
+// no image endpoint — #54), so it is not asserted to have results.
+func TestProviders_Tavily_Live(t *testing.T) {
+	if os.Getenv("TAVILY_API_KEY") == "" {
+		t.Skip("skipping: TAVILY_API_KEY not set")
+	}
+
+	h := newProviderHarness(t, []string{"SEARCH_PROVIDER=tavily"})
+	defer h.shutdown()
+	h.initialize(t)
+
+	t.Run("web_search", func(t *testing.T) {
+		result := h.callTool(t, "web_search", map[string]interface{}{
+			"query":       "Model Context Protocol specification",
+			"num_results": 3,
+		})
+		assertToolSuccess(t, result)
+		assertHasURLs(t, result)
+	})
+
+	t.Run("news_search", func(t *testing.T) {
+		result := h.callTool(t, "news_search", map[string]interface{}{
+			"query":       "artificial intelligence regulation",
+			"num_results": 3,
+		})
+		assertToolSuccess(t, result)
+	})
+
+	// image_search: Tavily returns empty images without error; the tool call
+	// still succeeds (the server handles an empty image set gracefully).
+	t.Run("image_search_empty_no_error", func(t *testing.T) {
+		result := h.callTool(t, "image_search", map[string]interface{}{
+			"query":       "golden gate bridge",
+			"num_results": 3,
+		})
+		assertToolSuccess(t, result)
+	})
+}
+
 // TestProviders_WebSearchWithLens verifies lens routing works with site operators.
 func TestProviders_WebSearchWithLens(t *testing.T) {
 	if os.Getenv("GOOGLE_CUSTOM_SEARCH_API_KEY") == "" {

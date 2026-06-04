@@ -480,7 +480,7 @@ On a zero-result response, `hints` carries the same `ZeroResultHints` object as 
 | `pdf_only` | bool | no | false | — |
 | `sort_by` | string | no | `relevance` | relevance, date |
 | `open_access` | bool | no | false | Only return open-access papers |
-| `provider` | string | no | — | Force provider: openalex, crossref (academic APIs), or google, brave, serper, searxng, searchapi (web fallback) |
+| `provider` | string | no | — | Force provider: openalex, crossref (academic APIs), or google, brave, serper, searxng, searchapi, duckduckgo, tavily (web fallback) |
 | `sessionId` | string | no | — | Link results to a `sequential_search` session; sources are auto-recorded for recovery after context loss |
 
 ### Output Fields

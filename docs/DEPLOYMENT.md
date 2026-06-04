@@ -223,12 +223,13 @@ Note: Google keys are validated as required only when you explicitly select `SEA
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SEARCH_PROVIDER` | Primary provider: google, brave, serper, searxng, searchapi, duckduckgo | `google` (variable default); at runtime, when `google` is selected but no Google key is set, the server falls back to the zero-config `duckduckgo` provider |
+| `SEARCH_PROVIDER` | Primary provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily | `google` (variable default); at runtime, when `google` is selected but no Google key is set, the server falls back to the zero-config `duckduckgo` provider |
 | `SEARCH_FALLBACK_PROVIDER` | Fallback provider (simple fallback) | — |
 | `SEARCH_ROUTING` | Multi-provider routing (see below) | — |
 | `BRAVE_API_KEY` | Brave Search API key | — |
 | `SERPER_API_KEY` | Serper.dev API key | — |
 | `SEARCHAPI_API_KEY` | SearchAPI.io API key | — |
+| `TAVILY_API_KEY` | Tavily API key (AI-agent search; sent as a Bearer token) | — |
 | `SEARXNG_URL` | SearXNG instance URL | — |
 | `SEARXNG_BASIC_AUTH` | HTTP Basic credential `user:password` for a SearXNG behind Basic auth (malformed value fails startup; never logged) | — |
 | `SEARXNG_HEADERS` | Static request headers for SearXNG as comma-separated `Name: Value` pairs (no commas/newlines in a value; a custom `Authorization` overrides `SEARXNG_BASIC_AUTH`) | — |

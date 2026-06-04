@@ -255,7 +255,7 @@ Set `SEARCH_PROVIDER=brave` and you're done. No Google keys needed.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SEARCH_PROVIDER` | Which engine to use: `google`, `brave`, `serper`, `searxng`, `searchapi`, or `duckduckgo` | `google` (falls back to `duckduckgo` if no key is set) |
+| `SEARCH_PROVIDER` | Which engine to use: `google`, `brave`, `serper`, `searxng`, `searchapi`, `duckduckgo`, or `tavily` | `google` (falls back to `duckduckgo` if no key is set) |
 | `BRAVE_API_KEY` | Brave Search API key | |
 | `SERPER_API_KEY` | Serper.dev API key (uses Google results) | |
 | `SEARCHAPI_API_KEY` | SearchAPI.io key | |

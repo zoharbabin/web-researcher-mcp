@@ -145,6 +145,29 @@ export SERPER_API_KEY=your-serper-key
 
 ---
 
+## Tavily
+
+**Free tier**: monthly credits for development; paid plans for higher volume
+
+Tavily is a search API purpose-built for AI agents — it returns clean, extracted, LLM-ready content rather than raw result pages. It supports web and news search (no native image search; image queries fall through to another provider when routing is enabled).
+
+### Step 1: Get an API Key
+
+1. Go to [app.tavily.com](https://app.tavily.com/)
+2. Sign up for an account
+3. Copy the `tvly-...` API key from your dashboard
+
+### Step 2: Configure
+
+```bash
+export SEARCH_PROVIDER=tavily
+export TAVILY_API_KEY=tvly-your-key
+```
+
+The key is sent as an `Authorization: Bearer` header (never in the request body), and queries are capped at Tavily's 400-character limit automatically.
+
+---
+
 ## SearXNG (Self-Hosted)
 
 **Free**: Open source, self-hosted — no API key needed, no query limits
@@ -269,6 +292,7 @@ See [docs/DEPLOYMENT.md](DEPLOYMENT.md) for advanced routing configuration.
 | **Serper** | Google-identical results without PSE setup | One-time free credit only |
 | **SearXNG** | Air-gapped/private deployments, no vendor lock-in | Requires self-hosting |
 | **SearchAPI.io** | Multiple engine backends via unified API | Smaller free tier |
+| **Tavily** | AI-agent search; clean LLM-ready extracted content | Paid after free credits; no native image search |
 
 **Recommendation**: Start with Brave (generous free tier, fast) and add Google as a fallback. Use `SEARCH_ROUTING=brave,google` for the best balance of speed and coverage.
 

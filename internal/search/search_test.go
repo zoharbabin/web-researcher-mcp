@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/config"
@@ -1853,6 +1855,7 @@ func TestAvailableProviders(t *testing.T) {
 		GoogleCX:     "gcx",
 		BraveAPIKey:  "bkey",
 		SearchAPIKey: "skey",
+		TavilyAPIKey: "tkey",
 	}
 	deps := newTestDeps(http.DefaultClient)
 	providers := AvailableProviders(cfg, deps)
@@ -1865,6 +1868,9 @@ func TestAvailableProviders(t *testing.T) {
 	}
 	if _, ok := providers["searchapi"]; !ok {
 		t.Error("expected searchapi provider")
+	}
+	if _, ok := providers["tavily"]; !ok {
+		t.Error("expected tavily provider")
 	}
 	if _, ok := providers["serper"]; ok {
 		t.Error("did not expect serper provider (no key)")
@@ -1892,6 +1898,12 @@ func TestNewProviderByName_MissingCredentials(t *testing.T) {
 	}
 	if p := NewProviderByName("google", cfg, deps); p != nil {
 		t.Error("expected nil for google without both key and cx")
+	}
+	if p := NewProviderByName("tavily", cfg, deps); p != nil {
+		t.Error("expected nil for tavily without key")
+	}
+	if p := NewProviderByName("tavily", config.SearchConfig{TavilyAPIKey: "k"}, deps); p == nil || p.Name() != "tavily" {
+		t.Error("expected tavily provider when key is set")
 	}
 }
 
@@ -1937,6 +1949,273 @@ func TestMapSearchAPIImageSize(t *testing.T) {
 		got := mapSearchAPIImageSize(tt.input)
 		if got != tt.expected {
 			t.Errorf("mapSearchAPIImageSize(%q) = %q, want %q", tt.input, got, tt.expected)
+		}
+	}
+}
+
+// =============================================================================
+// Tavily Provider Tests
+// =============================================================================
+
+func TestNewProvider_Tavily(t *testing.T) {
+	cfg := config.SearchConfig{Provider: "tavily", TavilyAPIKey: "tkey"}
+	p := NewProvider(cfg, newTestDeps(http.DefaultClient))
+	if p.Name() != "tavily" {
+		t.Errorf("expected provider name 'tavily', got %q", p.Name())
+	}
+}
+
+// tavilyTestClient builds an http.Client that redirects Tavily's fixed POST URL
+// to the given httptest server (Tavily has no base-URL override).
+func tavilyTestClient(ts *httptest.Server) *http.Client {
+	return &http.Client{Transport: &rewriteTransport{baseURL: ts.URL, inner: http.DefaultTransport}}
+}
+
+// decodeTavilyBody reads the JSON request body in a test handler.
+func decodeTavilyBody(t *testing.T, r *http.Request) map[string]any {
+	t.Helper()
+	raw, _ := io.ReadAll(r.Body)
+	var body map[string]any
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatalf("failed to decode request body: %v", err)
+	}
+	return body
+}
+
+func TestTavilyProvider_WebSearch(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer tavily-key" {
+			t.Errorf("expected 'Bearer tavily-key', got %q", got)
+		}
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("expected content-type application/json, got %q", r.Header.Get("Content-Type"))
+		}
+		body := decodeTavilyBody(t, r)
+		if body["topic"] != "general" {
+			t.Errorf("expected topic 'general', got %v", body["topic"])
+		}
+		if body["query"] != "test" {
+			t.Errorf("expected query 'test', got %v", body["query"])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"results":[{"title":"Tavily Result","url":"https://example.com/t","content":"From Tavily","score":0.9}]}`)
+	}))
+	defer ts.Close()
+
+	deps := Deps{HTTPClient: tavilyTestClient(ts), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	tv := NewTavilyProvider("tavily-key", deps)
+
+	results, err := tv.Web(context.Background(), WebSearchParams{Query: "test", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Title != "Tavily Result" || results[0].Snippet != "From Tavily" {
+		t.Errorf("unexpected result mapping: %+v", results[0])
+	}
+	if results[0].URL != "https://example.com/t" || results[0].DisplayLink != "https://example.com/t" {
+		t.Errorf("expected URL == DisplayLink == https://example.com/t, got %+v", results[0])
+	}
+}
+
+func TestTavilyProvider_WebSearch_WithSiteOperator(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := decodeTavilyBody(t, r)
+		q, _ := body["query"].(string)
+		if !strings.Contains(q, "site:example.com") {
+			t.Errorf("expected query to include injected site operator, got %q", q)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"results":[]}`)
+	}))
+	defer ts.Close()
+
+	deps := Deps{HTTPClient: tavilyTestClient(ts), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	tv := NewTavilyProvider("k", deps)
+	if _, err := tv.Web(context.Background(), WebSearchParams{Query: "test", Site: "example.com", NumResults: 5}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestTavilyProvider_LongQueryWithSiteOperatorSurvives is the regression guard
+// for the audit finding: when a long query plus a site: operator together exceed
+// the 400-char cap, the cap must trim the user-query portion and keep the
+// site: operator intact (never slice through it).
+func TestTavilyProvider_LongQueryWithSiteOperatorSurvives(t *testing.T) {
+	var sent string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sent, _ = decodeTavilyBody(t, r)["query"].(string)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"results":[]}`)
+	}))
+	defer ts.Close()
+
+	deps := Deps{HTTPClient: tavilyTestClient(ts), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	tv := NewTavilyProvider("k", deps)
+
+	// 390-char query + " site:example.com" would overflow 400 if capped naively.
+	longQ := strings.Repeat("a", 390)
+	if _, err := tv.Web(context.Background(), WebSearchParams{Query: longQ, Site: "example.com", NumResults: 5}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if utf8.RuneCountInString(sent) > tavilyMaxQueryLen {
+		t.Errorf("query exceeds %d-char cap: %d", tavilyMaxQueryLen, utf8.RuneCountInString(sent))
+	}
+	if !strings.HasSuffix(sent, " site:example.com") {
+		t.Errorf("site: operator was truncated — must survive intact; got tail %q", sent[max(0, len(sent)-30):])
+	}
+}
+
+func TestTavilyProvider_NewsSearch(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := decodeTavilyBody(t, r)
+		if body["topic"] != "news" {
+			t.Errorf("expected topic 'news', got %v", body["topic"])
+		}
+		if body["time_range"] != "week" {
+			t.Errorf("expected time_range 'week', got %v", body["time_range"])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"results":[{"title":"News Item","url":"https://www.wired.com/x","content":"Breaking","published_date":"Fri, 29 May 2026 12:00:00 GMT"}]}`)
+	}))
+	defer ts.Close()
+
+	deps := Deps{HTTPClient: tavilyTestClient(ts), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	tv := NewTavilyProvider("k", deps)
+
+	results, err := tv.News(context.Background(), NewsSearchParams{Query: "ai", NumResults: 3, Freshness: "week"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Source != "www.wired.com" {
+		t.Errorf("expected source 'www.wired.com' (host extracted), got %q", results[0].Source)
+	}
+	if results[0].PublishedAt != "Fri, 29 May 2026 12:00:00 GMT" {
+		t.Errorf("expected RFC1123 published date passthrough, got %q", results[0].PublishedAt)
+	}
+}
+
+func TestTavilyProvider_EmptyResults(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"results":[]}`)
+	}))
+	defer ts.Close()
+
+	deps := Deps{HTTPClient: tavilyTestClient(ts), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	tv := NewTavilyProvider("k", deps)
+	results, err := tv.Web(context.Background(), WebSearchParams{Query: "nothing", NumResults: 5})
+	if err != nil {
+		t.Fatalf("zero results must not be an error, got: %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("expected 0 results, got %d", len(results))
+	}
+}
+
+func TestTavilyProvider_RateLimited(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer ts.Close()
+
+	deps := Deps{HTTPClient: tavilyTestClient(ts), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	tv := NewTavilyProvider("k", deps)
+	_, err := tv.Web(context.Background(), WebSearchParams{Query: "test", NumResults: 5})
+	if err == nil {
+		t.Fatal("expected error for 429")
+	}
+	if !strings.Contains(err.Error(), "rate limited") {
+		t.Errorf("error must contain 'rate limited' for isRateLimitError classification, got: %v", err)
+	}
+}
+
+func TestTavilyProvider_APIError(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, `{"detail":{"error":"Query is missing."}}`)
+	}))
+	defer ts.Close()
+
+	deps := Deps{HTTPClient: tavilyTestClient(ts), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	tv := NewTavilyProvider("k", deps)
+	_, err := tv.Web(context.Background(), WebSearchParams{Query: "x", NumResults: 5})
+	if err == nil || !strings.Contains(err.Error(), "tavily API error 400") {
+		t.Errorf("expected 'tavily API error 400', got: %v", err)
+	}
+}
+
+// TestTavilyProvider_ImagesEmpty locks the #54 convention: Images returns empty
+// without error and makes NO HTTP call (server fails the test if hit).
+func TestTavilyProvider_ImagesEmpty(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		t.Error("Images must not make an HTTP request")
+	}))
+	defer ts.Close()
+
+	deps := Deps{HTTPClient: tavilyTestClient(ts), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	tv := NewTavilyProvider("k", deps)
+	results, err := tv.Images(context.Background(), ImageSearchParams{Query: "cats"})
+	if err != nil {
+		t.Errorf("Images must return nil error (no breaker trip), got: %v", err)
+	}
+	if results != nil {
+		t.Errorf("Images must return nil slice, got: %v", results)
+	}
+}
+
+func TestTavilyProvider_QueryTruncation(t *testing.T) {
+	var sent string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := decodeTavilyBody(t, r)
+		sent, _ = body["query"].(string)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"results":[]}`)
+	}))
+	defer ts.Close()
+
+	deps := Deps{HTTPClient: tavilyTestClient(ts), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	tv := NewTavilyProvider("k", deps)
+
+	// ASCII: 500 chars must be capped to exactly 400, with no "..." suffix.
+	if _, err := tv.Web(context.Background(), WebSearchParams{Query: strings.Repeat("a", 500), NumResults: 5}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n := utf8.RuneCountInString(sent); n != tavilyMaxQueryLen {
+		t.Errorf("expected query capped to %d runes, got %d", tavilyMaxQueryLen, n)
+	}
+	if strings.HasSuffix(sent, "...") {
+		t.Errorf("query cap must not add an ellipsis suffix")
+	}
+
+	// Multibyte: 500 'é' runes must cap to 400 runes (rune-safe, valid UTF-8).
+	if _, err := tv.Web(context.Background(), WebSearchParams{Query: strings.Repeat("é", 500), NumResults: 5}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n := utf8.RuneCountInString(sent); n != tavilyMaxQueryLen {
+		t.Errorf("expected multibyte query capped to %d runes, got %d", tavilyMaxQueryLen, n)
+	}
+	if !utf8.ValidString(sent) {
+		t.Errorf("truncation produced invalid UTF-8")
+	}
+}
+
+func TestMapTavilyTimeRange(t *testing.T) {
+	cases := map[string]string{
+		"hour": "day", "day": "day", "week": "week",
+		"month": "month", "year": "year", "": "", "bogus": "",
+	}
+	for in, want := range cases {
+		if got := mapTavilyTimeRange(in); got != want {
+			t.Errorf("mapTavilyTimeRange(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
