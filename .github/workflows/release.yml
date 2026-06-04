@@ -77,8 +77,10 @@ jobs:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          # Endpoint host for the signing account's region (East US).
-          SIGN_ENDPOINT: https://eus.codesigning.azure.net/
+          # Endpoint host for the signing account's region (East US). NO trailing
+          # slash — jsign concatenates the API path directly, so a trailing slash
+          # produces a double-slash URL and a 404 from the signing endpoint.
+          SIGN_ENDPOINT: https://eus.codesigning.azure.net
           # jsign alias = "<account>/<certificate-profile>".
           SIGN_ALIAS: web-researcher-signing/web-researcher-public
         run: |
