@@ -24,6 +24,14 @@ var (
 	// apikey=..., secret=..., password=..., access_token=..., consumer_secret=...
 	// Captures the param name so it can be preserved while the value is redacted.
 	reQueryParam = regexp.MustCompile(`(?i)\b(api[_-]?key|access[_-]?token|consumer[_-]?secret|token|secret|password|passwd|pwd|key)=[^&\s"']+`)
+	// Sensitive HTTP header values rendered in "Name: value" / "Name=[value]"
+	// form, e.g. if an http.Header map is ever logged. Covers the provider auth
+	// headers whose VALUES carry no fixed prefix (so the prefix patterns above
+	// can't catch them): x-api-key (Exa — a bare UUID), x-subscription-token
+	// (Brave). The name is preserved; only the value is redacted. This is
+	// deliberately label-scoped so bare UUIDs (e.g. an Exa requestId) stay
+	// readable for diagnostics.
+	reAuthHeader = regexp.MustCompile(`(?i)\b(x-api-key|x-subscription-token|authorization)["'\]]?\s*[:=]\s*\[?[0-9A-Za-z\-._~+/]+=*`)
 	// Bare 64-character hex strings (e.g. CACHE_ENCRYPTION_KEY material).
 	reHex64 = regexp.MustCompile(`\b[0-9a-fA-F]{64}\b`)
 )
@@ -46,8 +54,9 @@ func MaskSecrets(s string) string {
 	s = reSKKey.ReplaceAllString(s, redacted)
 	s = reBSAKey.ReplaceAllString(s, redacted)
 	s = reBearer.ReplaceAllString(s, "Bearer "+redacted)
-	// Preserve the param name; redact only the value so logs stay diagnosable.
+	// Preserve the param/header name; redact only the value so logs stay diagnosable.
 	s = reQueryParam.ReplaceAllString(s, "${1}="+redacted)
+	s = reAuthHeader.ReplaceAllString(s, "${1}: "+redacted)
 	s = reHex64.ReplaceAllString(s, redacted)
 	return s
 }
