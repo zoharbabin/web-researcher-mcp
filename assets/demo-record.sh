@@ -30,42 +30,49 @@ sleep 3
 clear
 sleep 0.3
 
-# Scene 1: Medical lens — trust & source control
+# Scene 1: Grounded answer — the anti-fabrication hook (lead with the strongest)
+"$DIR/demo-sim.sh" answer
+sleep 2.5
+
+clear
+sleep 0.3
+
+# Scene 2: Medical lens — trust & source control
 "$DIR/demo-sim.sh" lenses
 sleep 2.5
 
 clear
 sleep 0.3
 
-# Scene 2: Academic search — real DOIs, no fabrication
+# Scene 3: Academic search — real DOIs, no fabrication
 "$DIR/demo-sim.sh" academic
 sleep 2.5
 
 clear
 sleep 0.3
 
-# Scene 3: Deep research — full articles, cited
+# Scene 4: Deep research — full articles, cited
 "$DIR/demo-sim.sh" research
 sleep 2.5
 
 clear
 sleep 0.3
 
-# Scene 4: News — current events from real journalists
+# Scene 5: News — current events from real journalists
 "$DIR/demo-sim.sh" news
 sleep 2.5
 
 clear
 sleep 0.3
 
-# Scene 5: Patent search — professional use case
+# Scene 6: Patent search — professional use case
 "$DIR/demo-sim.sh" patents
 sleep 2.5
 
 clear
 sleep 0.3
 
-# Scene 6: Multi-step investigation
+# Scene 7: Multi-step investigation
 "$DIR/demo-sim.sh" sequential
 sleep 2.5
 

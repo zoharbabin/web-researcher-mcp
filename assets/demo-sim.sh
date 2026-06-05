@@ -44,6 +44,50 @@ header() {
   echo
 }
 
+# --- Scene: grounded answer (lead with the anti-fabrication hook) ------------
+
+scene_answer() {
+  header "Grounded Answer — One Answer, Real Citations"
+  type_prompt "How effective are GLP-1 agonists at reducing cardiovascular events? Cite sources."
+
+  echo -e "${CYAN}⠋${RESET} ${DIM}Calling${RESET} answer${DIM}...${RESET}"
+  sleep 0.3
+  echo -e "${CYAN}⠙${RESET} ${DIM}Searching the live web, grounding every claim in a real source${RESET}"
+  sleep 0.5
+  echo -e "${GREEN}✓${RESET} ${DIM}Answer synthesized from 6 cited sources${RESET}"
+  echo
+  sleep 0.4
+
+  stream_text "GLP-1 receptor agonists significantly reduce major adverse"
+  echo
+  stream_text "cardiovascular events (MACE) in patients with type 2 diabetes:"
+  echo
+  echo
+  sleep 0.2
+  stream_text "  • The SELECT trial found a 20% reduction in MACE with"
+  echo
+  stream_text "    semaglutide in overweight/obese patients without diabetes [1]"
+  echo
+  stream_text "  • Meta-analysis across 8 trials: 14% relative risk reduction"
+  echo
+  stream_text "    in cardiovascular death, MI, and stroke [2][3]"
+  echo
+  stream_text "  • Benefit is consistent across the GLP-1 class, strongest"
+  echo
+  stream_text "    for semaglutide and dulaglutide [4]"
+  echo
+  echo
+  sleep 0.2
+  echo -e "${DIM}Citations:${RESET}"
+  echo -e "${DIM}  [1] nejm.org/doi/10.1056/NEJMoa2307563 — SELECT trial${RESET}"
+  echo -e "${DIM}  [2] thelancet.com/journals/landia — class meta-analysis${RESET}"
+  echo -e "${DIM}  [3] pubmed.ncbi.nlm.nih.gov/37622663${RESET}"
+  echo -e "${DIM}  [4] diabetes.org/standards — ADA Standards of Care${RESET}"
+  echo
+  echo -e "${YELLOW}↑ A synthesized answer — with citations that actually exist.${RESET}"
+  echo -e "${DIM}Not generated from memory. Every [n] links to a real document.${RESET}"
+}
+
 # --- Scene: search lenses (lead with trust story) ----------------------------
 
 scene_lenses() {
@@ -99,7 +143,7 @@ scene_academic() {
 
   echo -e "${CYAN}⠋${RESET} ${DIM}Calling${RESET} academic_search${DIM}...${RESET}"
   sleep 0.3
-  echo -e "${CYAN}⠙${RESET} ${DIM}Searching OpenAlex + CrossRef for peer-reviewed papers${RESET}"
+  echo -e "${CYAN}⠙${RESET} ${DIM}Searching OpenAlex + CrossRef + Exa for peer-reviewed papers${RESET}"
   sleep 0.5
   echo -e "${CYAN}⠹${RESET} ${DIM}Filtering: year >= 2024, open access preferred${RESET}"
   sleep 0.3
@@ -136,7 +180,7 @@ scene_academic() {
 # --- Scene: search_and_scrape — full article reading --------------------------
 
 scene_research() {
-  header "Deep Research — Full Articles, Not Just Snippets"
+  header "Deep Research — Full Articles, Not Snippets"
   type_prompt "What are the key differences between Go's iter package and Python generators? Show me the full picture with sources I can verify."
 
   echo -e "${CYAN}⠋${RESET} ${DIM}Calling${RESET} search_and_scrape${DIM}...${RESET}"
@@ -331,11 +375,12 @@ scene_sequential() {
 }
 
 case "$1" in
+  answer) scene_answer ;;
   news) scene_news ;;
   research) scene_research ;;
   lenses) scene_lenses ;;
   academic) scene_academic ;;
   patents) scene_patents ;;
   sequential) scene_sequential ;;
-  *) echo "Usage: $0 {news|research|lenses|academic|patents|sequential}" ;;
+  *) echo "Usage: $0 {answer|news|research|lenses|academic|patents|sequential}" ;;
 esac
