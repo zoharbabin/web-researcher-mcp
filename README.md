@@ -29,6 +29,7 @@
 **macOS (Homebrew):**
 ```bash
 brew install zoharbabin/tap/web-researcher-mcp
+claude mcp add --scope user web-researcher -- web-researcher-mcp
 ```
 
 **macOS / Linux (no package manager):**
@@ -41,7 +42,9 @@ curl -fsSL https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/
 powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/install.ps1 | iex"
 ```
 
-That's it — no dev tools needed. Downloads the binary, verifies its checksum, puts it on your PATH, and registers it with Claude Code automatically.
+No dev tools needed — each method downloads the binary, verifies its checksum, and puts it on your PATH. The `curl`/PowerShell installers also register it with Claude Code automatically when the `claude` CLI is present; Homebrew installs the binary, so run the `claude mcp add` line above (shown) to connect it.
+
+**Using a different MCP client** (Claude Desktop, Cursor, …) or want to pass API keys? See [Connect to Your AI Assistant](#connect-to-your-ai-assistant) for the per-app config, and [Configuration](#configuration) to pick a search provider.
 
 Your AI can now search the web, read full articles, find academic papers, look up patents, and run multi-step research — only from sources you pick.
 
