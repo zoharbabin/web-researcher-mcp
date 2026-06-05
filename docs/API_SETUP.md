@@ -174,6 +174,42 @@ The key is sent as an `Authorization: Bearer` header (never in the request body)
 
 ---
 
+## Exa
+
+**Free tier**: 1,000 requests/month; paid per call beyond that
+
+Exa is a neural/semantic search API. Beyond ordinary web and news search, an Exa key unlocks several capabilities no other provider offers here:
+
+- **Grounded answers** — backs the provider-independent `answer` tool (one synthesized answer with citations).
+- **Structured extraction** — backs the provider-independent `structured_search` tool (schema-defined fields and company/people entities, as JSON per result).
+- **Academic search** — `academic_search` can route to Exa via the research-paper category.
+- **A paid scrape fallback** — Exa's `/contents` API becomes the last-resort extraction tier for `scrape_page`, recovering hard pages the free tiers can't (only when the local tiers all fail).
+
+### Step 1: Get an API Key
+
+1. Go to [dashboard.exa.ai](https://dashboard.exa.ai/)
+2. Sign up for an account
+3. Copy your API key from the dashboard
+
+### Step 2: Configure
+
+```bash
+export SEARCH_PROVIDER=exa
+export EXA_API_KEY=your-exa-key
+```
+
+The key is sent as the `x-api-key` header (never in the request body or logs).
+
+### Good to know
+
+- **Paid per call.** Exa charges per request (free tier: 1,000/month). Each `answer` / `structured_search` response (when served by Exa) reports the estimated `costUsd` of that call, and the cost is recorded in the audit trail as `cost_usd`. The estimate is not an invoice.
+- **No image search.** `image_search` with Exa returns empty (no error) — keep an image-capable provider (Google, Brave, SearchAPI) in `SEARCH_ROUTING` if you need images.
+- **Search type is fixed to `auto`.** The expensive deep/deep-reasoning tiers are deliberately not exposed; `auto` is the balanced, predictable-cost default.
+- **The scrape fallback is opt-in by cost.** The Exa `/contents` tier runs only when the four free scrape tiers all fail to extract content — the common path never spends an Exa credit on scraping.
+- **Best used as a routing member** when you also want a free default: `SEARCH_ROUTING=brave,exa`.
+
+---
+
 ## SearXNG (Self-Hosted)
 
 **Free**: Open source, self-hosted — no API key needed, no query limits
@@ -299,6 +335,7 @@ See [docs/DEPLOYMENT.md](DEPLOYMENT.md) for advanced routing configuration.
 | **SearXNG** | Air-gapped/private deployments, no vendor lock-in | Requires self-hosting |
 | **SearchAPI.io** | Multiple engine backends via unified API | Smaller free tier |
 | **Tavily** | AI-agent search; clean LLM-ready extracted content | Paid after free credits; no native image search |
+| **Exa** | Neural/semantic search; grounded answers, structured extraction, company entities | Paid per call; no native image search |
 
 **Recommendation**: Start with Brave (generous free tier, fast) and add Google as a fallback. Use `SEARCH_ROUTING=brave,google` for the best balance of speed and coverage.
 

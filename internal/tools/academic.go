@@ -48,7 +48,7 @@ type academicSearchInput struct {
 	Source     string `json:"source,omitempty" jsonschema:"Restrict to an academic source: all (default), arxiv, pubmed, ieee, nature, springer."`
 	PDFOnly    bool   `json:"pdf_only,omitempty" jsonschema:"Only return papers with direct PDF links (default: false). Useful when you plan to scrape the full paper."`
 	SortBy     string `json:"sort_by,omitempty" jsonschema:"Sort order: relevance (default) or date (newest first)."`
-	Provider   string `json:"provider,omitempty" jsonschema:"Force a specific provider. Academic: openalex, crossref. Web fallback: google, brave, serper, searxng, searchapi, duckduckgo, tavily. Omit to use automatic selection (recommended)."`
+	Provider   string `json:"provider,omitempty" jsonschema:"Force a specific provider. Academic: openalex, crossref, exa. Web fallback: google, brave, serper, searxng, searchapi, duckduckgo, tavily. Omit to use automatic selection (recommended)."`
 	OpenAccess bool   `json:"open_access,omitempty" jsonschema:"Only return open-access papers with free full-text (default: false)."`
 	SessionID  string `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. Sources are automatically recorded for recovery after context loss."`
 }
@@ -326,6 +326,10 @@ func academicWebFallback(ctx context.Context, deps Dependencies, input academicS
 }
 
 // resolveAcademicSearcher returns an AcademicSearcher for a given provider name.
+// Return contract: (searcher, nil) on success; (nil, errorResult) when a known
+// academic provider is unconfigured; and (nil, nil) as a fall-through sentinel
+// meaning "this is not an academic-specific provider — use the web-search
+// fallback" (so the caller routes the query to a web provider instead).
 func resolveAcademicSearcher(deps Dependencies, providerName string) (search.AcademicSearcher, *mcp.CallToolResult) {
 	if providerName == "" {
 		if as, ok := deps.Search.(search.AcademicSearcher); ok {
@@ -370,6 +374,8 @@ func academicProviderEnvHint(name string) string {
 		return "Set OPENALEX_EMAIL to your contact email."
 	case "crossref":
 		return "Set CROSSREF_EMAIL to your contact email."
+	case "exa":
+		return "Set EXA_API_KEY to your Exa API key."
 	default:
 		return ""
 	}

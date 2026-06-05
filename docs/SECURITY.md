@@ -257,7 +257,7 @@ Protects against cascading failures when upstream APIs are down.
 
 | Layer | Wraps | Threshold | Reset |
 |-------|-------|-----------|-------|
-| Web provider breaker (`AvailableProviders`) | Each web provider (Google, Brave, Serper, SearXNG, SearchAPI, DuckDuckGo) | 3 failures | 120s |
+| Web provider breaker (`AvailableProviders`) | Each web provider in `search.SupportedProviders` | 3 failures | 120s |
 | Domain provider breaker (`Available{Patent,Academic}Providers`) | Each patent/academic provider's own upstream HTTP calls | 5 failures | 60s |
 | Routing breaker (`SEARCH_ROUTING`) | Fallback decision across the priority list (web, patent, academic) | 3 failures | 30s |
 
@@ -292,7 +292,7 @@ metadata.
 - Scraped content (too large, PII risk)
 - Full request parameters (may contain PII)
 
-**Secret redaction:** audit metadata and upstream error messages pass through `audit.MaskSecrets` (`internal/audit/mask.go`) before they are written. It redacts Google (`AIza…`), OpenAI/Anthropic (`sk-…`), Brave (`BSA…`) keys, `Bearer` tokens, sensitive query-string params (`api_key=`, `token=`, `secret=`, `password=`, `key=`, …), and bare 64-hex key material. This is defense-in-depth so a credential echoed back by an upstream provider never reaches a sink or an LLM-facing error.
+**Secret redaction:** audit metadata and upstream error messages pass through `audit.MaskSecrets` (`internal/audit/mask.go`) before they are written. It redacts Google (`AIza…`), OpenAI/Anthropic (`sk-…`), Brave (`BSA…`) keys, `Bearer` tokens, prefix-less provider auth headers (`x-api-key`, `x-subscription-token`, `authorization` in `Name: value` form), sensitive query-string params (`api_key=`, `token=`, `secret=`, `password=`, `key=`, …), and bare 64-hex key material. This is defense-in-depth so a credential echoed back by an upstream provider never reaches a sink or an LLM-facing error.
 
 **Request correlation:** every HTTP request is assigned a correlation ID by the transport ingress middleware (adopting a sanitized inbound `X-Request-Id`, else the W3C `traceparent` trace-id, else a fresh UUIDv4). All audit events for one tool call share that `RequestID`, and it is echoed back on the response `X-Request-Id` header.
 

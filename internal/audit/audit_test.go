@@ -347,6 +347,9 @@ func TestMaskSecrets(t *testing.T) {
 	bearerTok := "tok-" + filler[:20]
 	tokenVal := "val-" + filler[:16]
 	accessTok := "at-" + filler[:20]
+	// Exa key: UUID-shaped, no fixed prefix — only the x-api-key header rule can
+	// catch it. Assembled from filler so no literal UUID appears in source.
+	exaKey := filler[:8] + "-" + filler[8:12] + "-" + filler[12:16] + "-" + filler[16:20] + "-" + filler[20:32]
 
 	tests := []struct {
 		name         string
@@ -397,6 +400,23 @@ func TestMaskSecrets(t *testing.T) {
 			in:           "callback?access_token=" + accessTok + "&state=xyz",
 			wantRedacted: true,
 			wantAbsent:   accessTok,
+		},
+		{
+			name:         "exa x-api-key header",
+			in:           "x-api-key: " + exaKey,
+			wantRedacted: true,
+			wantAbsent:   exaKey,
+		},
+		{
+			name:         "exa key in header map dump",
+			in:           `map[X-Api-Key:[` + exaKey + `] Accept:[application/json]]`,
+			wantRedacted: true,
+			wantAbsent:   exaKey,
+		},
+		{
+			name:      "bare uuid (e.g. requestId) stays readable",
+			in:        "exa requestId " + exaKey + " completed",
+			wantExact: "exa requestId " + exaKey + " completed",
 		},
 		{
 			name:      "normal text untouched",

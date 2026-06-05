@@ -34,7 +34,7 @@ type webSearchInput struct {
 	ExcludeTerms string `json:"exclude_terms,omitempty" jsonschema:"Terms to exclude from results (space-separated)."`
 	Country      string `json:"country,omitempty" jsonschema:"Restrict to a country using ISO 3166-1 alpha-2 code (e.g. US, GB)."`
 	Lens         string `json:"lens,omitempty" jsonschema:"Focus your search on trusted sites in a specific field: docs, academic, clinical, security, journalism, programming, news, tech, legal, medical, finance, science, government. Only one lens can be active at a time (overrides the site parameter)."`
-	Provider     string `json:"provider,omitempty" jsonschema:"Choose which search engine to use for this query: google, brave, serper, searxng, searchapi, duckduckgo, tavily. Leave empty to use the default. Returns an error if the chosen provider isn't set up."`
+	Provider     string `json:"provider,omitempty" jsonschema:"Choose which search engine to use for this query: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa. Leave empty to use the default. Returns an error if the chosen provider isn't set up."`
 	SessionID    string `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. Sources are automatically recorded in the session for recovery after context loss."`
 }
 
@@ -432,7 +432,11 @@ func resolveProvider(deps Dependencies, providerName string) (search.Provider, *
 
 // resolvePatentSearcher returns a PatentSearcher for a given provider name.
 // Checks the main provider, router, patent-only providers, and full providers
-// that implement PatentSearcher (e.g. SearchAPI).
+// that implement PatentSearcher (e.g. SearchAPI). Return contract mirrors
+// resolveAcademicSearcher: (searcher, nil) on success; (nil, errorResult) for a
+// known-but-unconfigured patent provider or a wholly unknown name; and
+// (nil, nil) as a fall-through sentinel when the name is a valid *web* provider,
+// signaling the caller to use web-search fallback instead.
 func resolvePatentSearcher(deps Dependencies, providerName string) (search.PatentSearcher, *mcp.CallToolResult) {
 	if providerName == "" {
 		// Check if the main provider implements PatentSearcher
@@ -503,6 +507,8 @@ func allSupportedProviders() []string {
 		search.SupportedProviders,
 		search.SupportedPatentProviders,
 		search.SupportedAcademicProviders,
+		search.SupportedAnswerProviders,
+		search.SupportedStructuredProviders,
 	} {
 		for _, name := range lists {
 			if !seen[name] {

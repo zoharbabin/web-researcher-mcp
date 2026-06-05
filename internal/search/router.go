@@ -40,6 +40,15 @@ type FallbackNotifier func(op Operation, from, to, reason string)
 // Router implements the Provider interface with multi-provider fallback.
 // It holds multiple configured providers and routes requests based on
 // operation type, provider health (circuit breakers), and priority ordering.
+//
+// Capability coverage: the Router routes Web/Images/News (Provider),
+// Patents (PatentSearcher), and Scholarly (AcademicSearcher) with per-provider
+// breaker fallback. It deliberately does NOT route the synthesis capabilities
+// (AnswerSearcher/StructuredSearcher) — those are resolved directly from the
+// Dependencies maps in the tool layer (resolveAnswerSearcher /
+// resolveStructuredSearcher), since a single synthesis provider needs no
+// fallback ladder. Add Answer/StructuredSearch methods here if/when multiple
+// synthesis providers warrant routed fallback.
 type Router struct {
 	mu                sync.RWMutex
 	providers         map[string]Provider
@@ -52,6 +61,15 @@ type Router struct {
 	notifier          FallbackNotifier
 	logger            *slog.Logger
 }
+
+// Compile-time proof the Router satisfies every capability it routes. These
+// also document, at the type, exactly which capabilities the Router covers (and
+// visibly exclude AnswerSearcher/StructuredSearcher — see the Router doc above).
+var (
+	_ Provider         = (*Router)(nil)
+	_ PatentSearcher   = (*Router)(nil)
+	_ AcademicSearcher = (*Router)(nil)
+)
 
 // RouterConfig configures the Router.
 type RouterConfig struct {

@@ -71,7 +71,7 @@ type ScrapeError struct {
     Message string     // Human-readable description
     Cause   error      // Underlying error (for Unwrap)
     URL     string     // The URL that was being scraped
-    Tier    string     // Which pipeline tier produced this ("markdown", "stealth", "html", "browser")
+    Tier    string     // Which pipeline tier produced this ("markdown", "stealth", "html", "browser", and the optional paid "exa:cached"/"exa:crawled")
 }
 ```
 
@@ -162,7 +162,7 @@ Rate limited (google). Wait 60 seconds and retry, or try a different provider.
 | `rate_limited` | HTTP 429, quota exceeded | true | `retry_after_delay` |
 | `auth_required` | Provider HTTP 401 / invalid API key → `check_api_key`; scrape login wall (`ErrAuth`) → `inform_user` | false | `check_api_key` (provider) or `inform_user` (scrape) |
 | `blocked` | HTTP 403, remote bot detection | true | `report_bug` |
-| `validation` | Invalid input params, unsupported scheme, SSRF / private-IP / blocked-host / allowlist denial | false | `inform_user` |
+| `validation` | Invalid input params, unsupported scheme, SSRF / private-IP / blocked-host / allowlist denial, or a provider-side rejection (`search.InvalidParamsError` — bad `category` / out-of-spec `schema` in `structured_search`) | false | `inform_user` |
 | `network` | DNS failure, timeout, connection refused | true | `retry_after_delay` |
 | `content_empty` | Page loaded but no text extracted | true | `report_bug` |
 | `browser_unavailable` | Chrome not found/failed | false | `report_bug` |

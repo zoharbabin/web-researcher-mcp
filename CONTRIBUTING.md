@@ -68,7 +68,7 @@ export GOOGLE_CUSTOM_SEARCH_API_KEY="your-key"
 export GOOGLE_CUSTOM_SEARCH_ID="your-cx"
 # Optional:
 export BRAVE_API_KEY="your-brave-key"
-export SEARCH_PROVIDER="google"  # or brave, serper, searxng, searchapi, duckduckgo (see search.SupportedProviders)
+export SEARCH_PROVIDER="google"  # or brave, serper, searxng, searchapi, duckduckgo, tavily, exa (see search.SupportedProviders)
 ```
 
 Unit and integration tests do not require API keys. Only E2E tests that hit live services need them.
@@ -365,10 +365,10 @@ Most tools are read-only. For the rare tool that mutates server-side state (e.g.
 
 Web search providers implement the `search.Provider` interface (`Web`, `Images`, `News`, `Name`) — the core extension path.
 
-1. **Implement** `search.Provider` in `internal/search/<name>.go`.
-2. **Wire the factory** — add a `case` to both `NewProvider()` and `NewProviderByName()` in `internal/search/provider.go`.
+1. **Implement** `search.Provider` in `internal/search/<name>.go` (add a `var _ Provider = (*XProvider)(nil)` assertion; return `(nil, nil)` from any unsupported sub-capability such as `Images` — never an error, which would trip the breaker).
+2. **Wire the factory** — add a `case` to both `NewProvider()` and `NewProviderByName()` in `internal/search/provider.go`. The credential check lives in the `NewProviderByName()` case (return the provider only when its key is set).
 3. **Add the credential/config** env var to `internal/config/config.go` and document it in `.env.example`.
-4. **Make it discoverable** — add a credential check in `AvailableProviders()` (so the Router can find it) and add the name to `search.SupportedProviders`.
+4. **Make it discoverable** — add the name to `search.SupportedProviders`. `AvailableProviders()` ranges over that list (constructing each via `NewProviderByName()`), so no edit there — the Router picks it up automatically.
 
 Academic providers implement `search.AcademicProvider` and register via `NewAcademicProviderByName()` (`internal/search/domain.go`) + `AvailableAcademicProviders()`. See the existing `openalex.go` / `crossref.go` for the pattern.
 

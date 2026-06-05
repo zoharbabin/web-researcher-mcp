@@ -75,6 +75,52 @@ func TestLoadMissingBothRequired(t *testing.T) {
 	}
 }
 
+// TestLoadMissingExaAPIKey pins that selecting the Exa provider without a key
+// fails fast at startup (parity with the brave/serper/tavily required-key gates).
+func TestLoadMissingExaAPIKey(t *testing.T) {
+	t.Setenv("SEARCH_PROVIDER", "exa")
+	t.Setenv("EXA_API_KEY", "")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error when EXA_API_KEY is missing under SEARCH_PROVIDER=exa")
+	}
+	if !strings.Contains(err.Error(), "EXA_API_KEY is required") {
+		t.Errorf("expected error about EXA_API_KEY, got: %v", err)
+	}
+}
+
+// TestLoadExaAPIKeyThreaded confirms a present EXA_API_KEY flows into the parsed
+// SearchConfig (so the provider, academic-provider, and scrape-tier wiring can
+// see it).
+func TestLoadExaAPIKeyThreaded(t *testing.T) {
+	t.Setenv("SEARCH_PROVIDER", "exa")
+	t.Setenv("EXA_API_KEY", "test-exa-key")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Search.ExaAPIKey != "test-exa-key" {
+		t.Errorf("EXA_API_KEY should be threaded into Search.ExaAPIKey, got %q", cfg.Search.ExaAPIKey)
+	}
+}
+
+// TestLoadMissingTavilyAPIKey closes the pre-existing coverage gap for the
+// tavily required-key gate (parity with the exa/brave/serper gates).
+func TestLoadMissingTavilyAPIKey(t *testing.T) {
+	t.Setenv("SEARCH_PROVIDER", "tavily")
+	t.Setenv("TAVILY_API_KEY", "")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error when TAVILY_API_KEY is missing under SEARCH_PROVIDER=tavily")
+	}
+	if !strings.Contains(err.Error(), "TAVILY_API_KEY is required") {
+		t.Errorf("expected error about TAVILY_API_KEY, got: %v", err)
+	}
+}
+
 // TestLoadZeroConfigDuckDuckGo pins the documented contract: with no provider
 // selected and no Google keys, the server loads cleanly (it falls back to the
 // zero-config DuckDuckGo provider at runtime). This is the keyless startup path

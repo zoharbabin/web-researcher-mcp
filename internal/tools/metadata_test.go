@@ -24,6 +24,8 @@ var expectedTools = []string{
 	"search_and_scrape",
 	"sequential_search",
 	"get_research_session",
+	"answer",
+	"structured_search",
 	"get_my_analytics",
 	"memory_save",
 	"memory_recall",
@@ -208,6 +210,8 @@ func TestOutputSchemaMatchesResponse(t *testing.T) {
 		"academic_search":   {"query": "test"},
 		"patent_search":     {"query": "test"},
 		"sequential_search": {"searchStep": "initial research", "stepNumber": 1, "nextStepNeeded": false},
+		"answer":            {"query": "test"},
+		"structured_search": {"query": "test"},
 	}
 
 	tools := listTools(t)
@@ -282,6 +286,8 @@ func TestExternalContentToolsCarryTrustMarker(t *testing.T) {
 		"scrape_page":       "untrusted-external-content",
 		"search_and_scrape": "untrusted-external-content",
 		"sequential_search": "untrusted-external-content",
+		"answer":            "untrusted-external-content",
+		"structured_search": "untrusted-external-content",
 	}
 	args := map[string]map[string]any{
 		"web_search":        {"query": "test"},
@@ -292,6 +298,8 @@ func TestExternalContentToolsCarryTrustMarker(t *testing.T) {
 		"scrape_page":       {"url": "https://example.com"},
 		"search_and_scrape": {"query": "test"},
 		"sequential_search": {"searchStep": "initial research", "stepNumber": 1, "nextStepNeeded": false},
+		"answer":            {"query": "test"},
+		"structured_search": {"query": "test"},
 	}
 
 	for name, wantTrust := range want {

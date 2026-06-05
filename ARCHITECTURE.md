@@ -154,23 +154,19 @@ type Provider interface {
 }
 ```
 
-Several providers implement this interface — Google PSE, Brave, Serper, SearXNG, SearchAPI.io, and DuckDuckGo (the zero-config, no-key fallback). The canonical list is `search.SupportedProviders` in `internal/search/provider.go`. The `Router` also implements `Provider`, enabling transparent multi-provider fallback — tools don't need to know whether they're calling a single provider or a routing layer.
+Several providers implement this interface — Google PSE, Brave, Serper, SearXNG, SearchAPI.io, Tavily, Exa, and DuckDuckGo (the zero-config, no-key fallback). The canonical list is `search.SupportedProviders` in `internal/search/provider.go`. The `Router` also implements `Provider`, enabling transparent multi-provider fallback — tools don't need to know whether they're calling a single provider or a routing layer.
 
 When `SEARCH_ROUTING` is configured, the Router wraps all available providers with per-provider circuit breakers and priority-ordered fallback. Search lenses inject `site:` operators and route through the configured provider. Lenses with a dedicated `cx` field route directly to that Google PSE engine.
 
-#### Domain-Specific Providers (Patents)
+#### Capability Interfaces (Patents, Academic, Synthesis)
 
-In addition to the general `Provider` interface, the system supports domain-specific providers via a `PatentProvider` interface (see `internal/search/domain.go`):
+Beyond the general `Provider`, the system layers **opt-in capability interfaces** so a provider implements only what it supports. Each capability follows the same shape — a `…Searcher` (the method) plus a `…Provider` (Searcher + `Name()` + `Metadata()`) — with a parallel `Supported…Providers` list, `New…ProviderByName` factory, and `Available…Providers` constructor (all in `internal/search/`):
 
-```go
-type PatentProvider interface {
-    PatentSearcher // Patents(ctx, params) ([]PatentResult, error)
-    Name() string
-    Metadata() ProviderMeta
-}
-```
+- **`PatentProvider`** (`Patents`) — `internal/search/domain.go`. Carries `ProviderMeta` for regional filtering (e.g. `patent_office=EP` skips US-only providers): SearchAPI, EPO OPS, The Lens, USPTO.
+- **`AcademicProvider`** (`Scholarly`) — `internal/search/domain.go`. OpenAlex, CrossRef, and Exa (via its research-paper category).
+- **`AnswerSearcher` / `StructuredSearcher`** — `internal/search/synthesis.go`. The provider-independent capabilities behind the `answer` and `structured_search` tools (grounded Q&A and per-result structured extraction). Currently Exa; a new provider (e.g. Perplexity) is added with one factory case + one list entry and the tools pick it up with no tool-layer change.
 
-Each patent provider carries metadata declaring its regional coverage and capabilities (`ProviderMeta`). The patent tool filters providers by region before calling them — e.g., if `patent_office=EP`, providers covering only US are skipped. The configured set is built by `AvailablePatentProviders()` and resolved by `NewPatentProviderByName()` (`internal/search/`) — currently SearchAPI (native patent engine), EPO OPS (worldwide, OAuth2), The Lens (worldwide, token-based), and USPTO (US-only). Each gets an independent circuit breaker.
+A provider can satisfy several at once — `ExaProvider` implements `Provider`, `AcademicProvider`, `AnswerProvider`, and `StructuredProvider` simultaneously. The `Router` routes the `Provider`, `PatentSearcher`, and `AcademicSearcher` capabilities with per-provider breaker fallback; the synthesis capabilities are resolved directly from the `Dependencies` maps in the tool layer (no fallback ladder needed for a single synthesis provider). Each configured provider gets an independent circuit breaker.
 
 ### 3. Tiered Scraping Pipeline
 
@@ -184,7 +180,7 @@ type Pipeline struct {
 func (p *Pipeline) Scrape(ctx context.Context, url string, maxLength int) (*ScrapeResult, error)
 ```
 
-The pipeline routes specialized content (YouTube, PDF/DOCX/PPTX) via early-return detection, then falls back through tiers in order: markdown → stealth → HTML → browser (go-rod). Each tier is a private method with the same signature; the pipeline tries each in sequence and promotes the first result that meets a quality threshold.
+The pipeline routes specialized content (YouTube, PDF/DOCX/PPTX) via early-return detection, then falls back through tiers in order: markdown → stealth → HTML → browser (go-rod). Each tier is a private method with the same signature; the pipeline tries each in sequence and promotes the first result that meets a quality threshold. When `EXA_API_KEY` is set, a fifth, **paid** tier (Exa `/contents`) is appended as the last resort — it runs only after every free tier fails, so the common path never incurs cost. The winning tier is surfaced to the caller as `extractedBy` (e.g. `stealth`, `exa:cached`).
 
 `Pipeline.ScrapeRaw()` is a separate, non-tiered path used by `scrape_page`'s `mode: raw`: it performs a single SSRF-checked fetch and returns the response body verbatim — no sanitization, no quality scoring, no tier fallback. Raw output is untrusted (it may contain injection payloads) and is cached under a distinct key so it never collides with the cleaned `full`/`preview` results.
 

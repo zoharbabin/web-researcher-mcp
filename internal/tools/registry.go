@@ -24,13 +24,18 @@ type Dependencies struct {
 	SearchProviders   map[string]search.Provider
 	PatentProviders   map[string]search.PatentProvider
 	AcademicProviders map[string]search.AcademicProvider
-	Scraper           *scraper.Pipeline
-	Content           *content.Processor
-	Sessions          session.Manager
-	Metrics           *metrics.Collector
-	Auditor           audit.Auditor
-	Logger            *slog.Logger
-	Features          Features
+	// AnswerProviders / StructuredProviders back the provider-independent
+	// `answer` and `structured_search` tools. Any provider implementing the
+	// capability appears here (Exa today). Empty ⇒ the tool is not registered.
+	AnswerProviders     map[string]search.AnswerProvider
+	StructuredProviders map[string]search.StructuredProvider
+	Scraper             *scraper.Pipeline
+	Content             *content.Processor
+	Sessions            session.Manager
+	Metrics             *metrics.Collector
+	Auditor             audit.Auditor
+	Logger              *slog.Logger
+	Features            Features
 	// Consent records/verifies/honors consent for regulated features (#89).
 	// Defaults to a Noop (grants nothing) when unset, so guarded processing is a
 	// clean no-op until a regulated feature wires it in.
@@ -68,6 +73,16 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	registerPatentSearch(srv, deps)
 	registerSequentialSearch(srv, deps)
 	registerGetSession(srv, deps)
+
+	// Synthesis tools — provider-independent (like academic/patent search).
+	// Each registers only when at least one provider offers the capability, so
+	// the default tool surface is unchanged until such a provider is configured.
+	if len(deps.AnswerProviders) > 0 {
+		registerAnswer(srv, deps)
+	}
+	if len(deps.StructuredProviders) > 0 {
+		registerStructuredSearch(srv, deps)
+	}
 
 	// Regulated, opt-in tools — registered only when their feature is wired in
 	// (a non-Noop dependency present), so the default tool surface is unchanged.

@@ -158,6 +158,7 @@ var scrapePageOutputSchema = map[string]any{
 		"estimatedTokens": map[string]any{"type": "integer"},
 		"sizeCategory":    map[string]any{"type": "string"},
 		"raw":             map[string]any{"type": "boolean"},
+		"extractedBy":     map[string]any{"type": "string", "description": "Which extraction tier produced the content (markdown, stealth, html, browser, or exa:cached/exa:crawled for the paid Exa fallback). Provenance only; omitted when unknown."},
 		"citation": map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -517,6 +518,57 @@ var getSessionOutputSchema = map[string]any{
 				"revisesStep":        map[string]any{"type": "integer"},
 				"branchId":           map[string]any{"type": "string"},
 				"timestamp":          map[string]any{"type": "string"},
+			},
+		},
+	},
+}
+
+var answerOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"answer":   map[string]any{"type": "string", "description": "The synthesized natural-language answer."},
+		"provider": map[string]any{"type": "string", "description": "Which provider produced the answer."},
+		"costUsd":  map[string]any{"type": "number", "description": "Estimated cost of this call in USD for metered providers (an estimate, not an invoice); 0 for free providers."},
+		"trust":    trustUntrustedExternal,
+		"citations": map[string]any{
+			"type":        "array",
+			"description": "Sources the answer is grounded in.",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"title":         map[string]any{"type": "string"},
+					"url":           map[string]any{"type": "string"},
+					"publishedDate": map[string]any{"type": "string"},
+				},
+			},
+		},
+	},
+}
+
+var structuredSearchOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"query":       map[string]any{"type": "string"},
+		"category":    map[string]any{"type": "string"},
+		"resultCount": map[string]any{"type": "integer"},
+		"provider":    map[string]any{"type": "string", "description": "Which provider produced the results."},
+		"costUsd":     map[string]any{"type": "number", "description": "Estimated cost of this call in USD for metered providers (an estimate, not an invoice); 0 for free providers."},
+		"trust":       trustUntrustedExternal,
+		"results": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"title":         map[string]any{"type": "string"},
+					"url":           map[string]any{"type": "string"},
+					"publishedDate": map[string]any{"type": "string"},
+					"author":        map[string]any{"type": "string"},
+					// summary is JSON conforming to the caller's schema when one was
+					// supplied, else a plain text summary; type left unconstrained.
+					"summary":    map[string]any{"description": "Extracted JSON (matching the supplied schema) or a plain text summary."},
+					"highlights": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"entities":   map[string]any{"type": "array", "description": "Structured entities (company/person), present only for category 'company'."},
+				},
 			},
 		},
 	},
