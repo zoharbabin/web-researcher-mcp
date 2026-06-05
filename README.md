@@ -58,7 +58,7 @@ If your work gets cited, published, submitted to a court, or shown to a client �
 | What you get | What that means for you |
 |---|---|
 | **Search lenses** — choose your sources by field | Your AI only sees the sites you trust (PubMed, SEC.gov, arXiv — not random blogs) |
-| **Research tools for every source type** | Papers, patents, news, web pages, images, full-text reading, and multi-step deep research |
+| **Research tools for every source type** | Papers, patents, news, web pages, images, full-text reading, grounded answers with citations, structured extraction, and multi-step deep research |
 | **Always has a backup** | Multiple search engines working together — if one has issues, the others pick up automatically |
 | **Reads full articles** | Doesn't just give you snippets — extracts and reads entire pages, PDFs, Word docs, even YouTube transcripts |
 | **Real citations, formatted** | Every source comes with a proper APA/MLA citation and a link that actually works |
@@ -115,10 +115,12 @@ https://github.com/user-attachments/assets/17fa3484-e4c5-4099-982d-785f544b3a94
 | `news_search` | Search recent news with date controls and source filtering |
 | `academic_search` | Find real papers with real DOIs — authors, citation counts, open-access links |
 | `patent_search` | Search patent offices (US, Europe, international) with classification codes |
+| `answer` | Ask a factual question and get one synthesized answer **with citations** — the direct answer, not a reading list |
+| `structured_search` | Search and extract structured JSON per result (supply a schema), or pull entities by category (company, people, …) |
 | `sequential_search` | Multi-step deep research — your AI remembers what it already found and builds on it |
 | `get_research_session` | Recover a research session after context loss — picks up right where you left off |
 
-These are the always-on core tools. Operators can also enable opt-in, consent-gated tools (per-user analytics, long-term memory, shared workspaces) that appear only when their feature is turned on — see [`docs/TOOLS.md`](docs/TOOLS.md) for the authoritative, CI-verified tool list and full schemas.
+These are the always-on core tools. `answer` and `structured_search` are provider-independent — they activate when a capable provider (e.g. Exa) is configured. Operators can also enable opt-in, consent-gated tools (per-user analytics, long-term memory, shared workspaces) that appear only when their feature is turned on — see [`docs/TOOLS.md`](docs/TOOLS.md) for the authoritative, CI-verified tool list and full schemas.
 
 ### Ready-made research templates
 
@@ -209,7 +211,7 @@ The install script registers with Claude Code automatically. For other apps, add
 }
 ```
 
-Or with Brave Search (no Google keys needed):
+Any provider works — pick one and set its key. For example, Brave (no Google keys needed):
 
 ```json
 {
@@ -217,7 +219,7 @@ Or with Brave Search (no Google keys needed):
     "web-researcher": {
       "command": "web-researcher-mcp",
       "env": {
-        "SEARCH_ROUTING": "brave",
+        "SEARCH_PROVIDER": "brave",
         "BRAVE_API_KEY": "YOUR_BRAVE_API_KEY"
       }
     }
@@ -225,46 +227,32 @@ Or with Brave Search (no Google keys needed):
 }
 ```
 
-Done. Your AI assistant now has access to all research tools.
+Swap in any provider from the [Configuration](#configuration) table by setting `SEARCH_PROVIDER` and that provider's key. Done — your AI assistant now has access to all research tools.
 
 ---
 
 ## Configuration
 
-**No API key required.** DuckDuckGo is the zero-config fallback — install and go. For higher quality, more results, and image/news search, add one of the optional providers below.
+**No API key required.** DuckDuckGo is the built-in zero-config fallback — install and go. To raise result quality and unlock image/news search, add **any one** of the providers below. They're all optional and interchangeable — pick whichever you already use or prefer; the server treats them equally.
 
-### Option A: Google
+### Search providers
 
-| Variable | What it is | Where to get it |
-|----------|-------------|-----------|
-| `GOOGLE_CUSTOM_SEARCH_API_KEY` | Your Google API key | [Get one here](https://developers.google.com/custom-search/v1/introduction) (free, 100 searches/day) |
-| `GOOGLE_CUSTOM_SEARCH_ID` | Your search engine ID | [Create one here](https://programmablesearchengine.google.com/) |
+Set `SEARCH_PROVIDER=<name>` and supply that provider's key. Every provider works with [search lenses](#search-lenses), and any of them can be combined for automatic failover (see [Search Providers](#search-providers)).
 
-### Option B: Brave Search (simpler signup)
+| Provider | `SEARCH_PROVIDER` | Key variable(s) | Get a key |
+|----------|-------------------|-----------------|-----------|
+| DuckDuckGo | `duckduckgo` | none | Built in — zero config |
+| Google PSE | `google` | `GOOGLE_CUSTOM_SEARCH_API_KEY` + `GOOGLE_CUSTOM_SEARCH_ID` | [cloud console](https://console.cloud.google.com/) + [engine](https://programmablesearchengine.google.com/) |
+| Brave | `brave` | `BRAVE_API_KEY` | [brave.com/search/api](https://brave.com/search/api/) |
+| Serper | `serper` | `SERPER_API_KEY` | [serper.dev](https://serper.dev/) |
+| SearchAPI.io | `searchapi` | `SEARCHAPI_API_KEY` | [searchapi.io](https://www.searchapi.io/) |
+| SearXNG | `searxng` | `SEARXNG_URL` | [self-hosted](https://docs.searxng.org/) |
+| Tavily | `tavily` | `TAVILY_API_KEY` | [app.tavily.com](https://app.tavily.com/) |
+| Exa | `exa` | `EXA_API_KEY` | [dashboard.exa.ai](https://dashboard.exa.ai/) |
 
-| Variable | What it is | Where to get it |
-|----------|-------------|-----------|
-| `BRAVE_API_KEY` | Your Brave API key | [Get one here](https://brave.com/search/api/) (free tier available) |
+> Each provider has its own free tier, signup flow, and capability mix (images, news, freshness). See **[docs/API_SETUP.md](docs/API_SETUP.md)** for step-by-step setup of every provider and a capability comparison. Set up more than one and the server fails over automatically — see [Search Providers](#search-providers).
 
-Set `SEARCH_PROVIDER=brave` and you're done. No Google keys needed.
-
-> **Tip:** You can set up multiple providers for automatic backup — see [Search Providers](#search-providers) below.
-
-<details>
-<summary><strong>All Search Provider Options</strong></summary>
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `SEARCH_PROVIDER` | Which engine to use: `google`, `brave`, `serper`, `searxng`, `searchapi`, `duckduckgo`, `tavily`, or `exa` | `google` (falls back to `duckduckgo` if no key is set) |
-| `BRAVE_API_KEY` | Brave Search API key | |
-| `SERPER_API_KEY` | Serper.dev API key (uses Google results) | |
-| `SEARCHAPI_API_KEY` | SearchAPI.io key | |
-| `TAVILY_API_KEY` | Tavily API key (AI-agent search; clean LLM-ready content) | |
-| `EXA_API_KEY` | Exa API key (neural/semantic search; also backs the `answer` & `structured_search` tools) | |
-| `SEARXNG_URL` | Your own SearXNG instance (fully private, no third-party API needed) | |
-| `SEARCH_ROUTING` | Use multiple providers with automatic backup (see [docs](docs/DEPLOYMENT.md#multi-provider-routing)) | |
-
-</details>
+When `SEARCH_PROVIDER` is unset, the server uses Google if its keys are present and otherwise falls back to the zero-config DuckDuckGo provider — so it always works out of the box, with or without keys.
 
 ### Academic Search (Optional — no signup needed)
 
@@ -314,7 +302,7 @@ web-researcher-mcp/
 │   ├── server/                 # MCP server lifecycle + signal handling
 │   ├── tools/                  # Tool handlers (one file per tool)
 │   ├── search/                 # Pluggable search providers + router + lens routing
-│   ├── scraper/                # 4-tier scraping pipeline (markdown → stealth → HTML → browser)
+│   ├── scraper/                # Tiered scraping pipeline (markdown → stealth → HTML → browser; + optional paid Exa tier)
 │   ├── documents/              # PDF, DOCX, PPTX parsing
 │   ├── cache/                  # Hybrid cache (memory + AES-encrypted disk)
 │   ├── auth/                   # OAuth 2.1 middleware + JWKS
@@ -359,8 +347,8 @@ You choose which search engine powers your research. All of them work with lense
 | Provider | Whole-Web | Images | News | Notes |
 |----------|:---------:|:------:|:----:|-------|
 | **DuckDuckGo** | Yes | — | — | Zero-config default (no API key needed); rate-limited for heavy use |
-| **Google PSE** | Yes | Yes | Yes | Best quality; free tier: 100 queries/day |
-| **Brave Search** | Yes | Yes | Yes | Recommended for high-volume whole-web |
+| **Google PSE** | Yes | Yes | Yes | Programmable Search Engine; free tier: 100 queries/day |
+| **Brave Search** | Yes | Yes | Yes | Independent index; free tier available |
 | **Serper.dev** | Yes | Yes | Yes | Google-identical results |
 | **SearXNG** | Yes | Yes | Yes | Self-hosted, privacy-first, air-gapped deployments |
 | **SearchAPI.io** | Yes | Yes | Yes | Unified API with multiple engine backends |
@@ -407,12 +395,20 @@ export SEARCH_PROVIDER=searxng
 export SEARXNG_URL=http://localhost:8080
 ```
 
-**Single provider — Google PSE only (simplest setup):**
+**Single provider — Exa (also unlocks the `answer` & `structured_search` tools):**
 ```bash
+export SEARCH_PROVIDER=exa
+export EXA_API_KEY=...
+```
+
+**Single provider — Google PSE:**
+```bash
+export SEARCH_PROVIDER=google
 export GOOGLE_CUSTOM_SEARCH_API_KEY=AIza...
 export GOOGLE_CUSTOM_SEARCH_ID=017...
-# SEARCH_PROVIDER defaults to "google"
 ```
+
+Any provider from the [Configuration](#configuration) table works the same way — set `SEARCH_PROVIDER` and its key(s).
 
 </details>
 
@@ -499,7 +495,7 @@ For the full threat model, see [docs/SECURITY.md](docs/SECURITY.md).
 
 ### Claude Code
 
-Add to your MCP config (`~/.claude.json`):
+Add to your MCP config (`~/.claude.json`). Set `SEARCH_PROVIDER` and the matching key for whichever provider you use (see the [Configuration](#configuration) table) — this example uses Google:
 
 ```json
 {
@@ -507,10 +503,9 @@ Add to your MCP config (`~/.claude.json`):
     "web-researcher": {
       "command": "/path/to/web-researcher-mcp",
       "env": {
+        "SEARCH_PROVIDER": "google",
         "GOOGLE_CUSTOM_SEARCH_API_KEY": "AIza...",
-        "GOOGLE_CUSTOM_SEARCH_ID": "017...",
-        "SEARCH_PROVIDER": "brave",
-        "BRAVE_API_KEY": "BSA..."
+        "GOOGLE_CUSTOM_SEARCH_ID": "017..."
       }
     }
   }
@@ -577,8 +572,6 @@ services:
       - "3000:3000"
     environment:
       PORT: "3000"
-      GOOGLE_CUSTOM_SEARCH_API_KEY: ${GOOGLE_CUSTOM_SEARCH_API_KEY}
-      GOOGLE_CUSTOM_SEARCH_ID: ${GOOGLE_CUSTOM_SEARCH_ID}
       SEARCH_PROVIDER: brave
       BRAVE_API_KEY: ${BRAVE_API_KEY}
 ```
@@ -635,10 +628,10 @@ The disk cache lives at your OS cache directory (e.g., `~/Library/Caches/web-res
 <details>
 <summary><strong>Hitting search limits (429 errors)</strong></summary>
 
-Google's free tier allows 100 searches/day. If you're hitting that:
-- Switch to Brave Search (`SEARCH_PROVIDER=brave`) — more generous free tier
-- Set up multiple providers (`SEARCH_ROUTING=brave,google`) — if one is rate-limited, it uses the other
-- Or upgrade Google to paid ($5 per 1,000 searches)
+If your provider's free tier runs out (e.g. Google PSE allows 100 searches/day):
+- Switch to a different provider — set `SEARCH_PROVIDER` to any other option (see [Configuration](#configuration)); each has its own free tier
+- Set up multiple providers (e.g. `SEARCH_ROUTING=brave,google`) — if one is rate-limited, it automatically falls through to the next
+- Or upgrade your provider's plan
 
 </details>
 
@@ -675,6 +668,7 @@ Contributions are welcome. Please see [CONTRIBUTING.md](CONTRIBUTING.md) for cod
 | [docs/EXAMPLES.md](docs/EXAMPLES.md) | Usage examples with JSON tool calls |
 | [docs/API_SETUP.md](docs/API_SETUP.md) | Search provider API key setup for all providers |
 | [docs/SECURITY.md](docs/SECURITY.md) | Threat model, SSRF, auth, compliance (SOC2/GDPR/FedRAMP) |
+| [docs/PRIVACY.md](docs/PRIVACY.md) | What data goes where, third-party processors, retention |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Build, Docker, Kubernetes, client configs, scaling |
 | [docs/LESSONS_LEARNED.md](docs/LESSONS_LEARNED.md) | Node.js to Go migration story and lessons |
 | [docs/SESSION_PERSISTENCE.md](docs/SESSION_PERSISTENCE.md) | How sessions survive context loss — design, data flow, citations |
