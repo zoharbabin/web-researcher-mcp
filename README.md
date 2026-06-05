@@ -82,7 +82,7 @@ Works with Claude, Claude Desktop, Cursor, and any AI assistant that supports to
 
 ---
 
-https://github.com/user-attachments/assets/17fa3484-e4c5-4099-982d-785f544b3a94
+https://github.com/user-attachments/assets/1d17af8e-1ec4-4a37-b42b-f26712ebe860
 
 ---
 
