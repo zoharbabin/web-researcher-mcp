@@ -179,6 +179,27 @@ func (m *SessionManager) AddSources(tenantID, userID, sessionID string, sources 
 	return m.save(sess)
 }
 
+// RecordOutcome appends a bounded outcome event for cross-call error-pattern
+// aggregation (#99). Best-effort: a missing/expired/unreadable session is a
+// silent no-op so outcome telemetry never fails the calling tool.
+//
+// Concurrency: like the other mutating methods here (AppendStep/AddSources), this
+// is a non-atomic load-modify-save, so two concurrent writers to the SAME session
+// (e.g. two pods) are last-writer-wins and may drop one outcome. That is
+// acceptable for outcome telemetry by design — patterns surface from aggregate
+// counts over a session, and a single dropped sample does not change a >=3
+// threshold materially. (The in-memory manager serializes under its mutex.)
+func (m *SessionManager) RecordOutcome(tenantID, userID, sessionID string, ev session.OutcomeEvent) error {
+	sess, err := m.load(tenantID, userID, sessionID)
+	if err != nil {
+		return nil
+	}
+	session.AppendOutcome(sess, ev)
+	sess.LastUsed = nowUTC()
+	_ = m.save(sess)
+	return nil
+}
+
 func (m *SessionManager) GetIndex(tenantID, userID, sessionID string) (*session.SessionIndex, bool) {
 	sess, err := m.load(tenantID, userID, sessionID)
 	if err != nil {

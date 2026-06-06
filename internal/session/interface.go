@@ -22,6 +22,11 @@ type Manager interface {
 	SetResearchGoal(tenantID, userID, sessionID, goal string) error
 	// AddSources appends de-duplicated sources to a session.
 	AddSources(tenantID, userID, sessionID string, sources []ResearchSource) error
+	// RecordOutcome appends a bounded tool-outcome event (provider attempt/success
+	// + error kind) for cross-call error-pattern aggregation (#99). Best-effort:
+	// a missing/expired session is a silent no-op (returns nil) — outcome
+	// telemetry must never fail or alter a tool's own result.
+	RecordOutcome(tenantID, userID, sessionID string, ev OutcomeEvent) error
 	// GetIndex returns the lightweight index for a session, or ok=false.
 	GetIndex(tenantID, userID, sessionID string) (*SessionIndex, bool)
 	// GetFull loads the full session payload.
@@ -53,6 +58,11 @@ var _ Manager = (*MemoryManager)(nil)
 // internal/redisbackend) reuse the exact same index-construction logic and
 // never drift from the in-memory manager.
 func BuildIndex(sess *Session) *SessionIndex { return buildIndexFromSession(sess) }
+
+// AppendOutcome appends a bounded outcome event to a session (FIFO MaxOutcomes
+// cap). Exported so alternative Manager implementations apply the identical
+// retention bound; the in-memory manager uses the unexported appendOutcome.
+func AppendOutcome(sess *Session, ev OutcomeEvent) { appendOutcome(sess, ev) }
 
 // DefaultMaxSteps is the fallback per-session step cap, mirrored by alternative
 // managers so the "session_limit_reached" behavior is identical across backends.

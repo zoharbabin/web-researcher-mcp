@@ -29,13 +29,17 @@ type Dependencies struct {
 	// capability appears here (Exa today). Empty ⇒ the tool is not registered.
 	AnswerProviders     map[string]search.AnswerProvider
 	StructuredProviders map[string]search.StructuredProvider
-	Scraper             *scraper.Pipeline
-	Content             *content.Processor
-	Sessions            session.Manager
-	Metrics             *metrics.Collector
-	Auditor             audit.Auditor
-	Logger              *slog.Logger
-	Features            Features
+	// OAResolver enriches DOI-bearing academic_search results with open-access
+	// PDF links (Unpaywall, #45). nil ⇒ enrichment is skipped (no-op). Best-effort:
+	// never fails a search.
+	OAResolver search.OAResolver
+	Scraper    *scraper.Pipeline
+	Content    *content.Processor
+	Sessions   session.Manager
+	Metrics    *metrics.Collector
+	Auditor    audit.Auditor
+	Logger     *slog.Logger
+	Features   Features
 	// Consent records/verifies/honors consent for regulated features (#89).
 	// Defaults to a Noop (grants nothing) when unset, so guarded processing is a
 	// clean no-op until a regulated feature wires it in.
@@ -73,6 +77,14 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	registerPatentSearch(srv, deps)
 	registerSequentialSearch(srv, deps)
 	registerGetSession(srv, deps)
+	registerResearchExport(srv, deps)
+	registerFormatBibliography(srv, deps)
+
+	// citation_graph (#47) — registered only when a citation-capable academic
+	// provider (semanticscholar or openalex) is configured.
+	if hasCitationProvider(deps) {
+		registerCitationGraph(srv, deps)
+	}
 
 	// Synthesis tools — provider-independent (like academic/patent search).
 	// Each registers only when at least one provider offers the capability, so
@@ -97,6 +109,20 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 		registerWorkspaceContribute(srv, deps)
 		registerWorkspaceRead(srv, deps)
 	}
+}
+
+// hasCitationProvider reports whether any configured academic provider supports
+// citation-graph traversal (the CitationSearcher capability) — gates the
+// citation_graph tool's registration.
+func hasCitationProvider(deps Dependencies) bool {
+	for _, name := range []string{"semanticscholar", "openalex"} {
+		if ap, ok := deps.AcademicProviders[name]; ok {
+			if _, ok := ap.(search.CitationSearcher); ok {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func boolPtr(b bool) *bool { return &b }

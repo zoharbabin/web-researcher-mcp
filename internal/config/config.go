@@ -144,8 +144,10 @@ type SearchConfig struct {
 	LensAPIToken      string
 
 	// Academic-specific providers (optional, enables structured scholarly search)
-	OpenAlexEmail string
-	CrossRefEmail string
+	OpenAlexEmail         string
+	CrossRefEmail         string
+	SemanticScholarAPIKey string // optional; Semantic Scholar works keyless at a lower shared rate
+	UnpaywallEmail        string // open-access PDF resolution; falls back to OpenAlexEmail when unset
 }
 
 type OAuthConfig struct {
@@ -311,26 +313,28 @@ func Load() (*Config, error) {
 		GoogleAPIKey: googleKey,
 		GoogleCX:     googleCX,
 		Search: SearchConfig{
-			Provider:          provider,
-			FallbackProvider:  os.Getenv("SEARCH_FALLBACK_PROVIDER"),
-			Routing:           os.Getenv("SEARCH_ROUTING"),
-			GoogleAPIKey:      googleKey,
-			GoogleCX:          googleCX,
-			BraveAPIKey:       braveKey,
-			SerperAPIKey:      serperKey,
-			SearchAPIKey:      searchAPIKey,
-			TavilyAPIKey:      tavilyKey,
-			ExaAPIKey:         exaKey,
-			SearXNGURL:        searxngURL,
-			SearXNGBasicAuth:  searxngBasicAuth,
-			SearXNGHeaders:    searxngHeaders,
-			CustomLensesPath:  os.Getenv("CUSTOM_LENSES_PATH"),
-			USPTOAPIKey:       os.Getenv("USPTO_API_KEY"),
-			EPOConsumerKey:    os.Getenv("EPO_OPS_CONSUMER_KEY"),
-			EPOConsumerSecret: os.Getenv("EPO_OPS_CONSUMER_SECRET"),
-			LensAPIToken:      os.Getenv("LENS_API_TOKEN"),
-			OpenAlexEmail:     os.Getenv("OPENALEX_EMAIL"),
-			CrossRefEmail:     os.Getenv("CROSSREF_EMAIL"),
+			Provider:              provider,
+			FallbackProvider:      os.Getenv("SEARCH_FALLBACK_PROVIDER"),
+			Routing:               os.Getenv("SEARCH_ROUTING"),
+			GoogleAPIKey:          googleKey,
+			GoogleCX:              googleCX,
+			BraveAPIKey:           braveKey,
+			SerperAPIKey:          serperKey,
+			SearchAPIKey:          searchAPIKey,
+			TavilyAPIKey:          tavilyKey,
+			ExaAPIKey:             exaKey,
+			SearXNGURL:            searxngURL,
+			SearXNGBasicAuth:      searxngBasicAuth,
+			SearXNGHeaders:        searxngHeaders,
+			CustomLensesPath:      os.Getenv("CUSTOM_LENSES_PATH"),
+			USPTOAPIKey:           os.Getenv("USPTO_API_KEY"),
+			EPOConsumerKey:        os.Getenv("EPO_OPS_CONSUMER_KEY"),
+			EPOConsumerSecret:     os.Getenv("EPO_OPS_CONSUMER_SECRET"),
+			LensAPIToken:          os.Getenv("LENS_API_TOKEN"),
+			OpenAlexEmail:         os.Getenv("OPENALEX_EMAIL"),
+			CrossRefEmail:         os.Getenv("CROSSREF_EMAIL"),
+			SemanticScholarAPIKey: os.Getenv("SEMANTIC_SCHOLAR_API_KEY"),
+			UnpaywallEmail:        envOrDefault("UNPAYWALL_EMAIL", os.Getenv("OPENALEX_EMAIL")),
 		},
 		Port: port,
 		OAuth: OAuthConfig{

@@ -108,6 +108,7 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 			if errors.As(err, &se) {
 				writeNegCache(ctx, deps, input.URL, se)
 			}
+			trackScrapeOutcome(ctx, deps, input.SessionID, input.URL, err)
 			return scrapeErrorResponse(err, input.URL), nil, nil
 		}
 
@@ -161,6 +162,7 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 			trackSources(ctx, deps, input.SessionID, []session.ResearchSource{
 				{URL: input.URL, Title: result.Title, Relevance: "scraped"},
 			})
+			trackOutcome(ctx, deps, input.SessionID, "", true, "", input.URL)
 		}
 
 		return structuredResult(jsonBytes), nil, nil
@@ -201,6 +203,7 @@ func scrapeRaw(ctx context.Context, deps Dependencies, input scrapePageInput, ma
 		if errors.As(err, &se) {
 			writeNegCache(ctx, deps, input.URL, se)
 		}
+		trackScrapeOutcome(ctx, deps, input.SessionID, input.URL, err)
 		return scrapeErrorResponse(err, input.URL), nil, nil
 	}
 
@@ -229,6 +232,7 @@ func scrapeRaw(ctx context.Context, deps Dependencies, input scrapePageInput, ma
 		trackSources(ctx, deps, input.SessionID, []session.ResearchSource{
 			{URL: input.URL, Title: result.Title, Relevance: "scraped"},
 		})
+		trackOutcome(ctx, deps, input.SessionID, "", true, "", input.URL)
 	}
 
 	return structuredResult(jsonBytes), nil, nil

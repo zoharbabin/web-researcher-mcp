@@ -80,4 +80,24 @@ func TestOpenAlexLiveIntegration(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("citation edges", func(t *testing.T) {
+		// BERT DOI — stable, heavily cited, indexed by OpenAlex.
+		const seedDOI = "10.18653/v1/n19-1423"
+
+		cites, err := provider.Citations(context.Background(), seedDOI, 5)
+		if err != nil {
+			t.Fatalf("Citations error: %v", err)
+		}
+		if len(cites) == 0 {
+			t.Fatal("expected forward citations for a highly-cited seed")
+		}
+		t.Logf("citedBy count=%d, [0]=%q", len(cites), cites[0].Title)
+
+		refs, err := provider.References(context.Background(), seedDOI, 5)
+		if err != nil {
+			t.Fatalf("References error: %v", err)
+		}
+		t.Logf("references count=%d", len(refs))
+	})
 }

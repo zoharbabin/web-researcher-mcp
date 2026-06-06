@@ -72,6 +72,16 @@ func registerGetSession(srv *mcp.Server, deps Dependencies) {
 			"trust":        untrustedContentTrust,
 		}
 
+		// Cross-call error patterns + provider stats (#99): additive metadata,
+		// present only when there's something to report (patterns gate on count
+		// >= 3 in the session layer).
+		if len(idx.ErrorPatterns) > 0 {
+			output["errorPatterns"] = idx.ErrorPatterns
+		}
+		if len(idx.ProviderStats) > 0 {
+			output["providerStats"] = idx.ProviderStats
+		}
+
 		jsonBytes, _ := json.Marshal(output)
 		recordToolCall(deps, "get_research_session", time.Since(start), nil, "", false)
 		auditToolCall(ctx, deps, "get_research_session", time.Since(start), nil, "")

@@ -216,6 +216,45 @@ func (m *MemoryManager) AddSources(tenantID, userID, sessionID string, sources [
 	return nil
 }
 
+// RecordOutcome appends a bounded outcome event. Best-effort: a missing,
+// expired, or unreadable session is a silent no-op (returns nil) so outcome
+// telemetry never fails or perturbs the calling tool's result.
+func (m *MemoryManager) RecordOutcome(tenantID, userID, sessionID string, ev OutcomeEvent) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	key := sessionKey(tenantID, userID, sessionID)
+	idx, ok := m.index[key]
+	if !ok {
+		return nil
+	}
+	if time.Since(idx.LastUsed) > m.config.SessionTTL {
+		m.deleteUnlocked(key)
+		return nil
+	}
+
+	sess, err := m.store.Load(key)
+	if err != nil {
+		return nil
+	}
+
+	appendOutcome(sess, ev)
+	sess.LastUsed = time.Now()
+	if err := m.store.Save(key, sess, m.config.SessionTTL); err != nil {
+		return nil
+	}
+
+	// Rebuild to refresh ErrorPatterns/ProviderStats, but preserve any
+	// externally-supplied summary (it lives only in the index, not the session).
+	prevSummary := idx.Summary
+	newIdx := buildIndexFromSession(sess)
+	if prevSummary != "" {
+		newIdx.Summary = prevSummary
+	}
+	m.index[key] = newIdx
+	return nil
+}
+
 func (m *MemoryManager) GetIndex(tenantID, userID, sessionID string) (*SessionIndex, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -496,6 +535,9 @@ func buildIndexFromSession(sess *Session) *SessionIndex {
 		}
 		idx.Summary = sess.ResearchGoal + ". Progress: " + strings.Join(parts, "; ") + "."
 	}
+
+	// Cross-call error patterns + provider stats (#99): derived, additive metadata.
+	idx.ErrorPatterns, idx.ProviderStats = AggregateOutcomes(sess.Outcomes)
 
 	return idx
 }

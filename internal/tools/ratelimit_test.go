@@ -196,6 +196,9 @@ func TestAcademicSearchRateLimitError(t *testing.T) {
 	ctx := context.Background()
 	deps := setupTestDeps()
 	deps.Search = &rateLimitProvider{}
+	// No academic provider configured, so academic_search falls through to the
+	// site-restricted web fallback — which here is the rate-limited provider.
+	deps.AcademicProviders = nil
 	srv := createTestServer(deps)
 	session := connectTestClient(ctx, t, srv)
 	defer session.Close()

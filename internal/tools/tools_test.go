@@ -124,13 +124,34 @@ func (m *mockSynthProvider) StructuredSearch(_ context.Context, p search.Structu
 	}, nil
 }
 
+// mockAcademicProvider implements AcademicProvider + CitationSearcher, so wiring
+// it into AcademicProviders makes citation_graph register and exercises the
+// academic_search academic path in tests.
+type mockAcademicProvider struct{}
+
+func (m *mockAcademicProvider) Name() string { return "openalex" }
+func (m *mockAcademicProvider) Metadata() search.ProviderMeta {
+	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "free", Description: "mock academic"}
+}
+func (m *mockAcademicProvider) Scholarly(_ context.Context, _ search.AcademicSearchParams) ([]search.AcademicResult, error) {
+	return []search.AcademicResult{{Title: "Mock Paper", URL: "https://doi.org/10.1/x", DOI: "10.1/x", Year: 2024, Source: "openalex"}}, nil
+}
+func (m *mockAcademicProvider) Citations(_ context.Context, _ string, _ int) ([]search.AcademicResult, error) {
+	return []search.AcademicResult{{Title: "Cites It", URL: "https://doi.org/10.2/y", DOI: "10.2/y", Year: 2025, Source: "openalex", IsInfluential: true}}, nil
+}
+func (m *mockAcademicProvider) References(_ context.Context, _ string, _ int) ([]search.AcademicResult, error) {
+	return []search.AcademicResult{{Title: "Foundational", URL: "https://doi.org/10.0/z", DOI: "10.0/z", Year: 2017, Source: "openalex"}}, nil
+}
+
 func setupTestDeps() Dependencies {
 	synth := &mockSynthProvider{}
+	academic := &mockAcademicProvider{}
 	return Dependencies{
 		Cache:               cache.NewNoop(),
 		Search:              &mockProvider{},
 		AnswerProviders:     map[string]search.AnswerProvider{synth.Name(): synth},
 		StructuredProviders: map[string]search.StructuredProvider{synth.Name(): synth},
+		AcademicProviders:   map[string]search.AcademicProvider{academic.Name(): academic},
 		Scraper:             scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2}),
 		Content:             content.NewProcessor(),
 		Sessions:            func() session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),

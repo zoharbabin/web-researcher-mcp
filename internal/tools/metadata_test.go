@@ -24,6 +24,9 @@ var expectedTools = []string{
 	"search_and_scrape",
 	"sequential_search",
 	"get_research_session",
+	"research_export",
+	"format_bibliography",
+	"citation_graph",
 	"answer",
 	"structured_search",
 	"get_my_analytics",
@@ -101,6 +104,21 @@ func TestAllToolsHaveAnnotations(t *testing.T) {
 				}
 				if *tool.Annotations.OpenWorldHint {
 					t.Error("get_research_session should NOT be open-world")
+				}
+			case "research_export":
+				// Renders existing session state: idempotent, local (not open-world).
+				if !tool.Annotations.IdempotentHint {
+					t.Error("research_export should be idempotent")
+				}
+				if *tool.Annotations.OpenWorldHint {
+					t.Error("research_export should NOT be open-world")
+				}
+			case "format_bibliography":
+				if !tool.Annotations.IdempotentHint {
+					t.Error("format_bibliography should be idempotent")
+				}
+				if *tool.Annotations.OpenWorldHint {
+					t.Error("format_bibliography should NOT be open-world")
 				}
 			case "get_my_analytics":
 				// Reads internal per-user state: idempotent, not open-world.
@@ -204,14 +222,16 @@ func TestOutputSchemaMatchesResponse(t *testing.T) {
 	defer session.Close()
 
 	toolInputs := map[string]map[string]any{
-		"web_search":        {"query": "test"},
-		"image_search":      {"query": "test"},
-		"news_search":       {"query": "test"},
-		"academic_search":   {"query": "test"},
-		"patent_search":     {"query": "test"},
-		"sequential_search": {"searchStep": "initial research", "stepNumber": 1, "nextStepNeeded": false},
-		"answer":            {"query": "test"},
-		"structured_search": {"query": "test"},
+		"web_search":          {"query": "test"},
+		"image_search":        {"query": "test"},
+		"news_search":         {"query": "test"},
+		"academic_search":     {"query": "test"},
+		"patent_search":       {"query": "test"},
+		"sequential_search":   {"searchStep": "initial research", "stepNumber": 1, "nextStepNeeded": false},
+		"citation_graph":      {"paper": "10.1/x"},
+		"answer":              {"query": "test"},
+		"structured_search":   {"query": "test"},
+		"format_bibliography": {"sources": []any{map[string]any{"url": "https://example.com/a", "title": "A", "author": "Smith, J.", "date": "2024"}}},
 	}
 
 	tools := listTools(t)
@@ -286,6 +306,7 @@ func TestExternalContentToolsCarryTrustMarker(t *testing.T) {
 		"scrape_page":       "untrusted-external-content",
 		"search_and_scrape": "untrusted-external-content",
 		"sequential_search": "untrusted-external-content",
+		"citation_graph":    "untrusted-external-content",
 		"answer":            "untrusted-external-content",
 		"structured_search": "untrusted-external-content",
 	}
@@ -298,6 +319,7 @@ func TestExternalContentToolsCarryTrustMarker(t *testing.T) {
 		"scrape_page":       {"url": "https://example.com"},
 		"search_and_scrape": {"query": "test"},
 		"sequential_search": {"searchStep": "initial research", "stepNumber": 1, "nextStepNeeded": false},
+		"citation_graph":    {"paper": "10.1/x"},
 		"answer":            {"query": "test"},
 		"structured_search": {"query": "test"},
 	}

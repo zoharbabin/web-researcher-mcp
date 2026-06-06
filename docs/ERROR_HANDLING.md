@@ -217,6 +217,31 @@ Tools never panic. Tools never return Go errors from the handler function (the t
 
 ---
 
+## Layer 4: Session-level Error Aggregation
+
+Layers 1–3 handle a **single** call. Across a multi-step `sequential_search` session, repeated failures of the *same kind* (auth walls, bot blocks, rate limits) are a pattern the LLM should act on — but no single call sees the whole picture. Layer 4 is the cross-call view (#99).
+
+**How it works:**
+
+- Tools that carry a `sessionId` (scrape, academic search, and the `thorough`-depth refinement searches) record a bounded `OutcomeEvent` per call via `trackOutcome` / `trackScrapeOutcome` (`internal/tools/sourcetracker.go`): `{ provider, success, errorKind, url, timestamp }`. Scrape errors map their `ScrapeError.Kind` to the shared `ErrorKind` taxonomy via `mapScrapeErrorKind`, so the cross-call kinds line up with the per-call ones.
+- The session layer (`internal/session/outcomes.go`) stores the most-recent **200** events per session (FIFO) — bounded, tenant/user-isolated, honoring the no-unbounded-retention posture.
+- `get_research_session` surfaces the aggregation (`internal/session` `AggregateOutcomes`):
+  - `errorPatterns` — only when a kind occurs **≥ 3 times** (`ErrorPatternMinCount`, a false-positive guard). Each carries a session-level `suggestion` from the kind→remediation map.
+  - `providerStats` — per-provider `{ attempts, successes }`.
+
+**Session-level remediation map** (distinct from the per-call `suggestedAction`):
+
+| Kind | Session-level suggestion |
+|------|--------------------------|
+| `auth_required` | Consider `open_access=true` or target preprint servers (arxiv, biorxiv). |
+| `blocked` | Try alternative sources or use `web_search` for cached versions. |
+| `rate_limited` | Switch to a different provider or space requests further apart. |
+| `browser_unavailable` | Set `CHROME_PATH` for JavaScript-heavy sites. |
+
+Aggregation is **additive** — it never suppresses or alters the per-call errors that callers already receive.
+
+---
+
 ## For LLM Agents: Parsing and Recovery
 
 When consuming error responses, LLM agents can use the structured JSON for autonomous recovery:
@@ -336,6 +361,8 @@ if input.Query == "" {
 | `internal/scraper/errors.go` | `ScrapeError` type, scraper `ErrorKind` enum, helper constructors, classifiers |
 | `internal/scraper/pipeline.go` | Composite error assembly (per-tier diagnostics) |
 | `internal/tools/scrape.go` | `scrapeErrorResponse()`, negative cache helpers |
+| `internal/session/outcomes.go` | Session-level outcome log + `AggregateOutcomes()`, kind→remediation map, `ErrorPatternMinCount` |
+| `internal/tools/sourcetracker.go` | `trackOutcome()` / `trackScrapeOutcome()` — record per-call outcomes onto a session |
 | `internal/tools/search.go` | `upstreamErrorResponse()`, `toolError()`, `rateLimitError()`, resolver functions, `allSupportedProviders()` |
 | `internal/tools/scrape_errors_test.go` | Integration tests for error → response mapping |
 | `internal/scraper/scraper_test.go` | Unit tests for error classification |

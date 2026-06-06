@@ -115,6 +115,18 @@ type AcademicProvider interface {
 	Metadata() ProviderMeta
 }
 
+// CitationSearcher is the optional capability of traversing a paper's citation
+// graph — works that cite it (forward) and works it cites (backward). Backs the
+// citation_graph tool (#47). Semantic Scholar enriches edges with intent +
+// influence; OpenAlex provides counts-only edges as a fallback. seedID is a DOI
+// or a provider-native work ID. Both methods return single-hop neighborhoods
+// bounded by numResults (no recursive traversal — that's the caller's to
+// orchestrate).
+type CitationSearcher interface {
+	Citations(ctx context.Context, seedID string, numResults int) ([]AcademicResult, error)
+	References(ctx context.Context, seedID string, numResults int) ([]AcademicResult, error)
+}
+
 // AcademicSearchParams defines parameters for scholarly paper search.
 type AcademicSearchParams struct {
 	Query      string
@@ -139,22 +151,34 @@ type AcademicResult struct {
 	Source        string   `json:"source"`
 	OpenAccess    bool     `json:"openAccess,omitempty"`
 	PDFUrl        string   `json:"pdfUrl,omitempty"`
+	// TLDR is an AI-generated one-sentence summary (Semantic Scholar). Attributed
+	// as AI-generated in tool output. Empty when the provider doesn't supply one.
+	TLDR string `json:"tldr,omitempty"`
+	// IsInfluential / CitationIntents annotate a result when it is a citation edge
+	// (citation_graph tool, #47) and the edge provider supplies the signal
+	// (Semantic Scholar). Omitted for plain search results.
+	IsInfluential   bool     `json:"isInfluential,omitempty"`
+	CitationIntents []string `json:"citationIntents,omitempty"` // e.g. background|methodology|result
 }
 
 // AcademicProviderConfig holds credentials for academic-specific providers.
 type AcademicProviderConfig struct {
-	OpenAlexEmail string
-	CrossRefEmail string
-	ExaAPIKey     string // Exa (neural) — academic via the research-paper category
+	OpenAlexEmail         string
+	CrossRefEmail         string
+	ExaAPIKey             string // Exa (neural) — academic via the research-paper category
+	SemanticScholarAPIKey string // Semantic Scholar — optional; works keyless at a lower shared rate
 }
 
 // SupportedAcademicProviders lists all academic provider names. openalex and
-// crossref are authoritative bibliographic databases; exa is a neural-web
-// alternate (research-paper category) — listed last so it sorts after them when
-// no explicit routing is configured.
-var SupportedAcademicProviders = []string{"openalex", "crossref", "exa"}
+// crossref are authoritative bibliographic databases; semanticscholar adds
+// AI-enrichment (TLDR, citation intent/influence); exa is a neural-web alternate
+// (research-paper category) — listed last so it sorts after them when no
+// explicit routing is configured.
+var SupportedAcademicProviders = []string{"openalex", "crossref", "semanticscholar", "exa"}
 
 // NewAcademicProviderByName creates an academic provider by name if configured.
+// Semantic Scholar is constructed even without an API key (it works at a lower
+// shared public rate); the key, when present, raises that limit.
 func NewAcademicProviderByName(name string, cfg AcademicProviderConfig, deps Deps) AcademicProvider {
 	switch name {
 	case "openalex":
@@ -165,6 +189,8 @@ func NewAcademicProviderByName(name string, cfg AcademicProviderConfig, deps Dep
 		if cfg.CrossRefEmail != "" {
 			return NewCrossRefProvider(cfg.CrossRefEmail, deps)
 		}
+	case "semanticscholar":
+		return NewSemanticScholarProvider(cfg.SemanticScholarAPIKey, deps)
 	case "exa":
 		if cfg.ExaAPIKey != "" {
 			return NewExaProvider(cfg.ExaAPIKey, deps)

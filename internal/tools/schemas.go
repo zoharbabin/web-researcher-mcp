@@ -98,17 +98,20 @@ var academicSearchOutputSchema = map[string]any{
 			"items": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"title":         map[string]any{"type": "string"},
-					"url":           map[string]any{"type": "string"},
-					"doi":           map[string]any{"type": "string"},
-					"authors":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-					"journal":       map[string]any{"type": "string"},
-					"year":          map[string]any{"type": "integer"},
-					"abstract":      map[string]any{"type": "string"},
-					"citationCount": map[string]any{"type": "integer"},
-					"source":        map[string]any{"type": "string"},
-					"openAccess":    map[string]any{"type": "boolean"},
-					"pdfUrl":        map[string]any{"type": "string"},
+					"title":           map[string]any{"type": "string"},
+					"url":             map[string]any{"type": "string"},
+					"doi":             map[string]any{"type": "string"},
+					"authors":         map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"journal":         map[string]any{"type": "string"},
+					"year":            map[string]any{"type": "integer"},
+					"abstract":        map[string]any{"type": "string"},
+					"citationCount":   map[string]any{"type": "integer"},
+					"source":          map[string]any{"type": "string"},
+					"openAccess":      map[string]any{"type": "boolean"},
+					"pdfUrl":          map[string]any{"type": "string"},
+					"tldr":            map[string]any{"type": "string", "description": "AI-generated one-sentence summary (Semantic Scholar). Treat as AI-generated, not authoritative."},
+					"isInfluential":   map[string]any{"type": "boolean", "description": "Citation-edge only (citation_graph): the citing/cited work is a highly influential citation."},
+					"citationIntents": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Citation-edge only: intent labels (background/methodology/result)."},
 				},
 			},
 		},
@@ -176,8 +179,9 @@ var scrapePageOutputSchema = map[string]any{
 				"formatted": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
-						"apa": map[string]any{"type": "string"},
-						"mla": map[string]any{"type": "string"},
+						"apa":    map[string]any{"type": "string"},
+						"mla":    map[string]any{"type": "string"},
+						"bibtex": map[string]any{"type": "string"},
 					},
 				},
 			},
@@ -442,6 +446,45 @@ var sequentialSearchOutputSchema = map[string]any{
 				},
 			},
 		},
+		// Iterative-depth assist (#67) — present only when depth=standard|thorough.
+		"depth": map[string]any{"type": "string", "description": "Echoed iteration-assist level when standard/thorough was requested."},
+		"coverage": map[string]any{
+			"type":        "object",
+			"description": "Descriptive coverage analysis of sources gathered so far (never an answer). Present for depth=standard|thorough.",
+			"properties": map[string]any{
+				"sourceCount":    map[string]any{"type": "integer"},
+				"uniqueDomains":  map[string]any{"type": "integer"},
+				"domainSpread":   map[string]any{"type": "number"},
+				"dominantDomain": map[string]any{"type": "string"},
+				"sourceTypes":    map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "integer"}},
+				"gaps":           map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			},
+		},
+		"refinementQueries": map[string]any{"type": "array", "description": "Suggested follow-up search queries derived from gaps + coverage. The caller decides whether to run them.", "items": map[string]any{"type": "string"}},
+		"refinementNote":    map[string]any{"type": "string", "description": "Present when depth=thorough bounded the auto-run rounds."},
+		"refinementResults": map[string]any{
+			"type":        "array",
+			"description": "Provenance-tagged results of auto-run refinement searches (depth=thorough only). Raw results — not synthesized.",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"query":       map[string]any{"type": "string"},
+					"resultCount": map[string]any{"type": "integer"},
+					"error":       map[string]any{"type": "string"},
+					"results": map[string]any{
+						"type": "array",
+						"items": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"title":   map[string]any{"type": "string"},
+								"url":     map[string]any{"type": "string"},
+								"snippet": map[string]any{"type": "string"},
+							},
+						},
+					},
+				},
+			},
+		},
 	},
 }
 
@@ -503,6 +546,31 @@ var getSessionOutputSchema = map[string]any{
 					"title":       map[string]any{"type": "string"},
 					"relevance":   map[string]any{"type": "string"},
 					"foundInStep": map[string]any{"type": "integer"},
+				},
+			},
+		},
+		"errorPatterns": map[string]any{
+			"type":        "array",
+			"description": "Recurring error kinds across the session, surfaced only when a kind occurred 3+ times (false-positive guard). Each carries a session-level remediation suggestion.",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"kind":         map[string]any{"type": "string"},
+					"count":        map[string]any{"type": "integer"},
+					"affectedUrls": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"suggestion":   map[string]any{"type": "string"},
+					"lastSeen":     map[string]any{"type": "string"},
+				},
+			},
+		},
+		"providerStats": map[string]any{
+			"type":        "object",
+			"description": "Per-provider attempt/success counts for this session (key = provider name).",
+			"additionalProperties": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"attempts":  map[string]any{"type": "integer"},
+					"successes": map[string]any{"type": "integer"},
 				},
 			},
 		},
@@ -571,5 +639,70 @@ var structuredSearchOutputSchema = map[string]any{
 				},
 			},
 		},
+	},
+}
+
+// academicPaperItemSchema is the per-paper object shape shared by academic_search
+// (papers[]) and citation_graph (citedBy[]/references[]).
+var academicPaperItemSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"title":           map[string]any{"type": "string"},
+		"url":             map[string]any{"type": "string"},
+		"doi":             map[string]any{"type": "string"},
+		"authors":         map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+		"journal":         map[string]any{"type": "string"},
+		"year":            map[string]any{"type": "integer"},
+		"abstract":        map[string]any{"type": "string"},
+		"citationCount":   map[string]any{"type": "integer"},
+		"source":          map[string]any{"type": "string"},
+		"openAccess":      map[string]any{"type": "boolean"},
+		"pdfUrl":          map[string]any{"type": "string"},
+		"tldr":            map[string]any{"type": "string"},
+		"isInfluential":   map[string]any{"type": "boolean"},
+		"citationIntents": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+	},
+}
+
+var citationGraphOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"seed":            map[string]any{"type": "string"},
+		"direction":       map[string]any{"type": "string"},
+		"provider":        map[string]any{"type": "string", "description": "Which citation provider answered (semanticscholar = intent+influence; openalex = counts only)."},
+		"trust":           trustUntrustedExternal,
+		"citedBy":         map[string]any{"type": "array", "description": "Works that cite the seed (forward edges).", "items": academicPaperItemSchema},
+		"citedByCount":    map[string]any{"type": "integer"},
+		"references":      map[string]any{"type": "array", "description": "Works the seed cites (backward edges).", "items": academicPaperItemSchema},
+		"referencesCount": map[string]any{"type": "integer"},
+	},
+}
+
+var researchExportOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"sessionId":    map[string]any{"type": "string"},
+		"format":       map[string]any{"type": "string", "description": "Rendered format: 'markdown' or 'json'."},
+		"researchGoal": map[string]any{"type": "string"},
+		"stepCount":    map[string]any{"type": "integer"},
+		"sourceCount":  map[string]any{"type": "integer"},
+		"startedAt":    map[string]any{"type": "string", "description": "Session creation time (RFC3339)."},
+		"exportedAt":   map[string]any{"type": "string", "description": "When this export was generated (RFC3339)."},
+		"tenantId":     map[string]any{"type": "string", "description": "Owning tenant — export is scoped to the caller's (tenant,user)."},
+		"trust":        trustUntrustedExternal,
+		// document carries the full rendered report (markdown string, or the JSON
+		// object when format=json). Type left unconstrained: string OR object.
+		"document": map[string]any{"description": "The rendered research report: a markdown string when format=markdown, or the structured session object when format=json."},
+	},
+}
+
+var formatBibliographyOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"style":        map[string]any{"type": "string", "description": "Citation style used: apa, mla, or bibtex."},
+		"entryCount":   map[string]any{"type": "integer", "description": "Number of unique sources in the bibliography (after de-duplication by URL)."},
+		"bibliography": map[string]any{"type": "string", "description": "The formatted bibliography — entries separated by blank lines."},
+		"sessionId":    map[string]any{"type": "string", "description": "Present when sources were drawn from a session."},
+		"trust":        trustUntrustedExternal,
 	},
 }
