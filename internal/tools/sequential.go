@@ -5,13 +5,148 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/auth"
+	"github.com/zoharbabin/web-researcher-mcp/internal/content"
+	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
 )
+
+// maxRefinementRounds bounds the auto-executed refinement searches for
+// depth="thorough" (acceptance criterion: <=3). Each round is one web search.
+const maxRefinementRounds = 3
+
+// applyDepth augments the response per the requested iteration-assist depth.
+// quick (default/unknown) is a no-op. standard adds coverage analysis +
+// refinement-query suggestions. thorough additionally runs up to
+// maxRefinementRounds web searches for those suggestions and attaches the
+// merged, provenance-tagged results. It never synthesizes an answer — only
+// surfaces richer metadata and (for thorough) raw results the caller decides
+// how to use.
+func applyDepth(ctx context.Context, deps Dependencies, input sequentialSearchInput, idx *session.SessionIndex, output map[string]any) {
+	depth := strings.ToLower(strings.TrimSpace(input.Depth))
+	if depth != "standard" && depth != "thorough" {
+		return // quick / unknown → unchanged behavior
+	}
+
+	coverage := content.AnalyzeCoverage(sourcesToCoverage(idx.Sources))
+	suggestions := refinementQueries(idx, coverage)
+
+	output["depth"] = depth
+	output["coverage"] = coverage
+	if len(suggestions) > 0 {
+		output["refinementQueries"] = suggestions
+	}
+
+	if depth != "thorough" || len(suggestions) == 0 || deps.Search == nil {
+		return
+	}
+
+	// Use idx.ID, not input.SessionID: on the session-creating call (step 1)
+	// input.SessionID is empty, but auto-discovered sources must still be tracked
+	// onto the session that was just created.
+	sessionID := idx.ID
+
+	rounds := suggestions
+	if len(rounds) > maxRefinementRounds {
+		rounds = rounds[:maxRefinementRounds]
+		output["refinementNote"] = fmt.Sprintf("Auto-ran the first %d of %d suggested refinement queries (bounded).", maxRefinementRounds, len(suggestions))
+	}
+
+	refined := make([]map[string]any, 0, len(rounds))
+	for _, q := range rounds {
+		results, err := deps.Search.Web(ctx, search.WebSearchParams{Query: q, NumResults: 5})
+		entry := map[string]any{"query": q}
+		if err != nil {
+			entry["error"] = "search failed"
+			trackOutcome(ctx, deps, sessionID, deps.Search.Name(), false, "upstream_error", "")
+		} else {
+			entry["results"] = searchResultsToMaps(results)
+			entry["resultCount"] = len(results)
+			trackSources(ctx, deps, sessionID, searchResultsToSources(results))
+			trackOutcome(ctx, deps, sessionID, deps.Search.Name(), len(results) > 0, "", "")
+		}
+		refined = append(refined, entry)
+	}
+	output["refinementResults"] = refined
+}
+
+// sourcesToCoverage reduces recorded session sources to coverage inputs.
+func sourcesToCoverage(sources []session.ResearchSource) []content.CoverageInput {
+	out := make([]content.CoverageInput, 0, len(sources))
+	for _, s := range sources {
+		out = append(out, content.CoverageInput{URL: s.URL, Type: s.Relevance})
+	}
+	return out
+}
+
+// refinementQueries derives suggested follow-up search queries from the research
+// goal, the active knowledge gaps, and the coverage gaps. Deterministic and
+// de-duplicated; capped so the list stays actionable.
+func refinementQueries(idx *session.SessionIndex, cov content.Coverage) []string {
+	goal := strings.TrimSpace(idx.ResearchGoal)
+	var out []string
+	seen := map[string]bool{}
+	add := func(q string) {
+		q = strings.TrimSpace(q)
+		if q == "" || seen[q] {
+			return
+		}
+		seen[q] = true
+		out = append(out, q)
+	}
+
+	// Knowledge gaps the caller flagged are the strongest refinement signal.
+	for _, g := range idx.ActiveGaps {
+		if goal != "" {
+			add(goal + " " + g.Description)
+		} else {
+			add(g.Description)
+		}
+	}
+
+	// Coverage-derived nudges: diversify away from an over-represented domain.
+	if cov.DominantDomain != "" && goal != "" {
+		add(goal + " -site:" + cov.DominantDomain)
+	}
+
+	// Type-balance nudge: if everything is one type, suggest a complementary lens.
+	if goal != "" && len(cov.SourceTypes) == 1 {
+		for t := range cov.SourceTypes {
+			switch t {
+			case "academic":
+				add(goal + " latest news")
+			case "news":
+				add(goal + " research paper")
+			default:
+				add(goal + " peer-reviewed study")
+			}
+		}
+	}
+
+	if len(out) > maxRefinementRounds*2 {
+		out = out[:maxRefinementRounds*2]
+	}
+	return out
+}
+
+// searchResultsToMaps renders web results as plain JSON objects for the
+// provenance-tagged refinement payload.
+func searchResultsToMaps(results []search.SearchResult) []map[string]any {
+	out := make([]map[string]any, 0, len(results))
+	for _, r := range results {
+		out = append(out, map[string]any{
+			"title":   r.Title,
+			"url":     r.URL,
+			"snippet": r.Snippet,
+		})
+	}
+	return out
+}
 
 type sequentialSearchInput struct {
 	SearchStep         string   `json:"searchStep" jsonschema:"Summary of what was researched or discovered in this step. Be descriptive to build a useful research trail.,required"`
@@ -30,6 +165,7 @@ type sequentialSearchInput struct {
 	RejectedApproaches []string `json:"rejectedApproaches,omitempty" jsonschema:"Approaches considered but rejected, with brief reasons."`
 	SessionSummary     string   `json:"sessionSummary,omitempty" jsonschema:"Running summary of research so far. Update periodically for better session recovery."`
 	ResponseMode       string   `json:"responseMode,omitempty" jsonschema:"Force response format: full or summary. Default: auto (full for 8 or fewer steps, summary for more)."`
+	Depth              string   `json:"depth,omitempty" jsonschema:"Iteration assist level: quick (default — record the step and return), standard (also analyze coverage of sources gathered so far and suggest refinement queries; you decide whether to act), or thorough (also auto-run up to 3 suggested refinement searches and return their merged, provenance-tagged results). Never synthesizes an answer."`
 }
 
 func registerSequentialSearch(srv *mcp.Server, deps Dependencies) {
@@ -120,6 +256,11 @@ func registerSequentialSearch(srv *mcp.Server, deps Dependencies) {
 		}
 
 		output := buildSequentialResponse(idx, input)
+
+		// Iterative-depth assist (#67). quick (default) is a no-op — byte-for-byte
+		// the prior behavior. standard/thorough add coverage analysis + refinement
+		// suggestions; thorough also auto-runs the suggestions. Never synthesizes.
+		applyDepth(ctx, deps, input, idx, output)
 
 		jsonBytes, _ := json.Marshal(output)
 		deps.Metrics.RecordToolCall("sequential_search", time.Since(start), nil, "", false)

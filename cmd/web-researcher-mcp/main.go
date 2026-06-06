@@ -225,11 +225,23 @@ func main() {
 	patentProviders := search.AvailablePatentProviders(patentCfg, searchDeps)
 
 	academicCfg := search.AcademicProviderConfig{
-		OpenAlexEmail: cfg.Search.OpenAlexEmail,
-		CrossRefEmail: cfg.Search.CrossRefEmail,
-		ExaAPIKey:     cfg.Search.ExaAPIKey,
+		OpenAlexEmail:         cfg.Search.OpenAlexEmail,
+		CrossRefEmail:         cfg.Search.CrossRefEmail,
+		ExaAPIKey:             cfg.Search.ExaAPIKey,
+		SemanticScholarAPIKey: cfg.Search.SemanticScholarAPIKey,
 	}
 	academicProviders := search.AvailableAcademicProviders(academicCfg, searchDeps)
+
+	// Open-access enrichment (#45): resolves DOI-bearing academic results to OA
+	// PDFs via Unpaywall. nil when no email is configured — enrichment is then a
+	// no-op. Its own breaker isolates failures from the academic providers.
+	var oaResolver search.OAResolver
+	if r := search.NewUnpaywallResolver(cfg.Search.UnpaywallEmail, search.Deps{
+		HTTPClient: searchDeps.HTTPClient,
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+	}); r != nil {
+		oaResolver = r
+	}
 
 	// Synthesis capabilities (provider-independent): grounded answers and
 	// structured extraction. Discovered from config like every other provider
@@ -336,6 +348,7 @@ func main() {
 		AcademicProviders:   academicProviders,
 		AnswerProviders:     answerProviders,
 		StructuredProviders: structuredProviders,
+		OAResolver:          oaResolver,
 		Scraper:             scraperPipeline,
 		Content:             contentProcessor,
 		Sessions:            sessionManager,

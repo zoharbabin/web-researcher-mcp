@@ -48,7 +48,7 @@ type academicSearchInput struct {
 	Source     string `json:"source,omitempty" jsonschema:"Restrict to an academic source: all (default), arxiv, pubmed, ieee, nature, springer."`
 	PDFOnly    bool   `json:"pdf_only,omitempty" jsonschema:"Only return papers with direct PDF links (default: false). Useful when you plan to scrape the full paper."`
 	SortBy     string `json:"sort_by,omitempty" jsonschema:"Sort order: relevance (default) or date (newest first)."`
-	Provider   string `json:"provider,omitempty" jsonschema:"Force a specific provider. Academic: openalex, crossref, exa. Web fallback: google, brave, serper, searxng, searchapi, duckduckgo, tavily. Omit to use automatic selection (recommended)."`
+	Provider   string `json:"provider,omitempty" jsonschema:"Force a specific provider. Academic: openalex, crossref, semanticscholar, exa. Web fallback: google, brave, serper, searxng, searchapi, duckduckgo, tavily. Omit to use automatic selection (recommended)."`
 	OpenAccess bool   `json:"open_access,omitempty" jsonschema:"Only return open-access papers with free full-text (default: false)."`
 	SessionID  string `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. Sources are automatically recorded for recovery after context loss."`
 }
@@ -120,6 +120,7 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 					}
 					deps.Metrics.RecordToolCall("academic_search", time.Since(start), err, errCode, false)
 					auditToolCall(ctx, deps, "academic_search", time.Since(start), err, errCode)
+					trackOutcome(ctx, deps, input.SessionID, input.Provider, false, errCode, "")
 					return upstreamErrorResponse("academic search", err), nil, nil
 				}
 			} else {
@@ -176,6 +177,11 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 			providerSource = webSource
 		}
 
+		// Open-access enrichment (#45): fill pdfUrl/openAccess on DOI-bearing
+		// results the provider left bare, via Unpaywall. Best-effort + no-op when
+		// unconfigured; runs BEFORE the pdf_only filter so resolved PDFs count.
+		results = search.EnrichOpenAccess(ctx, deps.OAResolver, results)
+
 		// Filter PDF-only if requested
 		if input.PDFOnly && len(results) > 0 {
 			filtered := make([]search.AcademicResult, 0, len(results))
@@ -189,36 +195,7 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 
 		papers := make([]map[string]any, 0, len(results))
 		for _, r := range results {
-			paper := map[string]any{
-				"title":  r.Title,
-				"url":    r.URL,
-				"source": r.Source,
-			}
-			if r.DOI != "" {
-				paper["doi"] = r.DOI
-			}
-			if len(r.Authors) > 0 {
-				paper["authors"] = r.Authors
-			}
-			if r.Journal != "" {
-				paper["journal"] = r.Journal
-			}
-			if r.Year > 0 {
-				paper["year"] = r.Year
-			}
-			if r.Abstract != "" {
-				paper["abstract"] = r.Abstract
-			}
-			if r.CitationCount > 0 {
-				paper["citationCount"] = r.CitationCount
-			}
-			if r.OpenAccess {
-				paper["openAccess"] = r.OpenAccess
-			}
-			if r.PDFUrl != "" {
-				paper["pdfUrl"] = r.PDFUrl
-			}
-			papers = append(papers, paper)
+			papers = append(papers, academicResultToMap(r))
 		}
 
 		output := map[string]any{
@@ -243,6 +220,7 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 
 		if input.SessionID != "" {
 			trackSources(ctx, deps, input.SessionID, academicResultsToSources(results))
+			trackOutcome(ctx, deps, input.SessionID, providerSource, len(papers) > 0, "", "")
 		}
 
 		return structuredResult(jsonBytes), nil, nil
@@ -374,11 +352,59 @@ func academicProviderEnvHint(name string) string {
 		return "Set OPENALEX_EMAIL to your contact email."
 	case "crossref":
 		return "Set CROSSREF_EMAIL to your contact email."
+	case "semanticscholar":
+		return "Semantic Scholar works without a key at a lower shared rate; set SEMANTIC_SCHOLAR_API_KEY to raise the limit."
 	case "exa":
 		return "Set EXA_API_KEY to your Exa API key."
 	default:
 		return ""
 	}
+}
+
+// academicResultToMap renders an AcademicResult as the tool-output JSON object,
+// omitting empty fields (matching academicSearchOutputSchema). Shared by
+// academic_search and citation_graph so both surfaces stay consistent. `tldr` is
+// attributed as AI-generated in the schema/docs, not here.
+func academicResultToMap(r search.AcademicResult) map[string]any {
+	paper := map[string]any{
+		"title":  r.Title,
+		"url":    r.URL,
+		"source": r.Source,
+	}
+	if r.DOI != "" {
+		paper["doi"] = r.DOI
+	}
+	if len(r.Authors) > 0 {
+		paper["authors"] = r.Authors
+	}
+	if r.Journal != "" {
+		paper["journal"] = r.Journal
+	}
+	if r.Year > 0 {
+		paper["year"] = r.Year
+	}
+	if r.Abstract != "" {
+		paper["abstract"] = r.Abstract
+	}
+	if r.CitationCount > 0 {
+		paper["citationCount"] = r.CitationCount
+	}
+	if r.OpenAccess {
+		paper["openAccess"] = r.OpenAccess
+	}
+	if r.PDFUrl != "" {
+		paper["pdfUrl"] = r.PDFUrl
+	}
+	if r.TLDR != "" {
+		paper["tldr"] = r.TLDR
+	}
+	if r.IsInfluential {
+		paper["isInfluential"] = true
+	}
+	if len(r.CitationIntents) > 0 {
+		paper["citationIntents"] = r.CitationIntents
+	}
+	return paper
 }
 
 func detectAcademicSource(url string) string {

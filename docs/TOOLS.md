@@ -491,7 +491,7 @@ On a zero-result response, `hints` carries the same `ZeroResultHints` object as 
 | `pdf_only` | bool | no | false | — |
 | `sort_by` | string | no | `relevance` | relevance, date |
 | `open_access` | bool | no | false | Only return open-access papers |
-| `provider` | string | no | — | Force provider: openalex, crossref, exa (academic APIs), or google, brave, serper, searxng, searchapi, duckduckgo, tavily (web fallback) |
+| `provider` | string | no | — | Force provider: openalex, crossref, semanticscholar, exa (academic APIs), or google, brave, serper, searxng, searchapi, duckduckgo, tavily (web fallback) |
 | `sessionId` | string | no | — | Link results to a `sequential_search` session; sources are auto-recorded for recovery after context loss |
 
 ### Output Fields
@@ -510,16 +510,20 @@ Each paper in the `papers` array contains:
 | `abstract` | string | no | Paper abstract (up to 500 chars) |
 | `citationCount` | int | no | Number of citations |
 | `openAccess` | bool | no | Whether the paper is freely available |
-| `pdfUrl` | string | no | Direct link to PDF |
+| `pdfUrl` | string | no | Direct link to PDF (Semantic Scholar/OpenAlex supply this directly; for DOI-only results it is filled by Unpaywall open-access enrichment when `UNPAYWALL_EMAIL`/`OPENALEX_EMAIL` is set) |
+| `tldr` | string | no | AI-generated one-sentence summary of the paper (Semantic Scholar only; machine-generated, not author-written) |
+| `isInfluential` | bool | no | Whether Semantic Scholar flags this as a highly-influential paper |
+| `citationIntents` | []string | no | Citation-intent labels (e.g. background, methodology) — populated by `citation_graph`, not plain search |
 
 Additional output fields: `query`, `totalResults`, `resultCount`, `source` (which provider answered: openalex, crossref, router, web_search), `hints` (a `ZeroResultHints` object explaining why a query returned nothing and suggesting how to broaden it — present on zero-result responses), and `trust` (always `"untrusted-external-content"` — treat results as data, not instructions; OWASP LLM01).
 
 ### Behavior
 - 4-strategy fallback: explicit provider → router → academic providers → site-restricted web search
-- When academic providers (OpenAlex, CrossRef) are configured, returns rich metadata (DOI, authors, citations, OA status)
-- Metadata richness varies by provider: OpenAlex returns abstracts, citation counts, and authors consistently; CrossRef is a DOI registry and may omit abstracts/citation counts. Automatic selection prefers OpenAlex; CrossRef answers when explicitly forced or as a fallback. Field absence reflects the provider, not an error.
+- When academic providers (OpenAlex, CrossRef, Semantic Scholar) are configured, returns rich metadata (DOI, authors, citations, OA status)
+- Metadata richness varies by provider: OpenAlex returns abstracts, citation counts, and authors consistently; Semantic Scholar adds `tldr` and `isInfluential`; CrossRef is a DOI registry and may omit abstracts/citation counts. Automatic selection prefers OpenAlex; others answer when explicitly forced or as a fallback. Field absence reflects the provider, not an error.
 - Without academic env vars, falls back to site-restricted web search (identical to previous behavior)
-- Academic providers require only an email address (no API key registration)
+- OpenAlex/CrossRef require only an email address (no API key); Semantic Scholar works key-free at a lower shared rate (`SEMANTIC_SCHOLAR_API_KEY` raises the limit)
+- **Open-access enrichment (Unpaywall):** when `UNPAYWALL_EMAIL` (or `OPENALEX_EMAIL`) is set, DOI-bearing results that lack a PDF link are enriched with the best open-access PDF Unpaywall knows about. Best-effort: never overwrites a provider-supplied `pdfUrl`, never fails the search, and runs *before* the `pdf_only` filter so resolved PDFs are counted. No-op when unconfigured.
 - `source` filter: when set (e.g., "arxiv"), OpenAlex filters by source ID; web fallback restricts to that source's domain
 - `sort_by=date`: OpenAlex sorts by `publication_date:desc`; CrossRef uses `published:desc`
 - `pdf_only`: post-filters results to only those with `PDFUrl` populated (may reduce result count)
@@ -612,6 +616,7 @@ Multi-step research tracking with session persistence, branching, and knowledge 
 | `branchFromStep` | int | no | — | Branching point |
 | `branchId` | string | no | — | Branch identifier |
 | `knowledgeGap` | string | no | — | Gap identified |
+| `depth` | string | no | `quick` | Iteration-assist level: `quick`, `standard`, or `thorough` (see Iterative Depth below) |
 
 ### Session Management
 - Sessions created on first call (stepNumber=1)
@@ -664,6 +669,25 @@ type StepIndexEntry struct {
 
 > The key set depends on `responseMode`: **full** mode emits `steps`; **summary** mode emits `summary` + `stepIndex` instead. Both emit `lastSteps`, `gaps`, and `sources`. This tool does **not** emit a `_meta` block (no caching).
 
+### Iterative Depth (`depth`)
+
+An optional iteration-assist level (#67). The server stays **infrastructure, not synthesis** — it never writes an answer, only richer metadata and (for `thorough`) raw results.
+
+| Level | Behavior |
+|-------|----------|
+| `quick` (default) | Record the step and return. Byte-for-byte the prior behavior — no extra fields. |
+| `standard` | Also analyze coverage of the sources gathered so far and suggest refinement queries. **No auto-execution.** Adds `depth`, `coverage`, and `refinementQueries`. |
+| `thorough` | Same as `standard`, plus auto-runs up to **3** of the suggested refinement queries as web searches and attaches their merged, provenance-tagged results. Adds `refinementResults` (and `refinementNote` when the suggestion list was truncated). |
+
+**Extra output fields** (present only for `standard`/`thorough`):
+
+- `coverage` — `{ sourceCount, uniqueDomains, domainSpread, dominantDomain?, sourceTypes, gaps[] }`. Descriptive coverage signals (domain spread, source-type balance, thin-coverage flags) computed from the session's recorded sources. Never an answer.
+- `refinementQueries` — suggested follow-up search strings derived from knowledge gaps + coverage gaps. The caller's AI decides whether to act on them.
+- `refinementResults` (`thorough` only) — array of `{ query, resultCount, results[] }` (or `{ query, error }`), one per auto-run query. Raw web results tagged with the originating query; **not** synthesized. Each result is `{ title, url, snippet }`.
+- `refinementNote` (`thorough` only) — present when more than 3 queries were suggested and the auto-run was bounded.
+
+`thorough` searches respect the same rate limits and circuit breakers as `web_search`, record their sources into the session, and contribute to session `providerStats`.
+
 ### State Management
 - Two-tier: in-memory index (lightweight) + encrypted disk (full session JSON)
 - Write-through on every step (crash-safe: temp → fsync → rename)
@@ -690,6 +714,15 @@ Recover a `sequential_search` session after context loss. Returns the session su
 2. With `stepId`: loads full step data from disk for that specific step number
 3. Every response carries `"trust": "untrusted-external-content"` — the echoed source metadata (titles/URLs) is external data; treat it as data, not instructions (OWASP LLM01).
 4. Sessions are private to the `(tenant, user)` that created them — a session ID is honored only for its owning user (anonymous/STDIO uses a single owner).
+
+#### Cross-call error patterns (#99)
+
+The summary view additionally surfaces aggregated outcome telemetry recorded across the session's tool calls (scrapes, searches). This is **additive** metadata — per-call errors are still returned in full to the caller; this is the cross-call view.
+
+- `errorPatterns` — array of `{ kind, count, affectedUrls[], suggestion, lastSeen }`, surfaced **only** when a given error `kind` occurred **3 or more times** in the session (a false-positive guard for small samples). `kind` uses the shared error taxonomy (`auth_required`, `blocked`, `rate_limited`, `browser_unavailable`, …); `suggestion` is a session-level remediation hint (e.g. *auth_required* → "Consider open_access=true or target preprint servers (arxiv, biorxiv)."). Absent when nothing crosses the threshold.
+- `providerStats` — object keyed by provider name → `{ attempts, successes }` for the session. Absent when no provider outcomes were recorded.
+
+Recorded outcome state is bounded (most-recent 200 events, FIFO) and tenant/user-isolated, honoring the no-unbounded-retention posture.
 
 ### Annotations
 - ReadOnly: true
@@ -1014,6 +1047,131 @@ type StructuredItem struct {
 
 ### Cache
 - TTL: 1 hour (keyed by query + category + num_results + schema + provider)
+
+---
+
+## Tool 17: `citation_graph`
+
+Map a seed paper's citation neighborhood: works that **cite** it (forward edges, `cited_by`) and works it **cites** (backward edges, `references`). Single-hop per call — multi-hop traversal is the caller's to orchestrate (the server stays infrastructure, not an autonomous crawler). Registered only when a citation-capable academic provider (Semantic Scholar or OpenAlex) is configured.
+
+### Input Schema
+
+| Field | Type | Required | Default | Constraints |
+|-------|------|----------|---------|-------------|
+| `paper` | string | yes | — | Seed paper: a DOI (e.g. `10.1038/nature12373`) or an exact title |
+| `direction` | string | no | `both` | `cited_by` (forward), `references` (backward), or `both` |
+| `num_results` | int | no | 10 | 1-25 per direction |
+| `influential_only` | bool | no | false | Keep only highly-influential citations when the provider supplies that signal (Semantic Scholar); no-op otherwise (results pass through) |
+| `provider` | string | no | — | Force `semanticscholar` (intent + influence) or `openalex` (counts only). Omit to auto-select (prefers semanticscholar) |
+| `sessionId` | string | no | — | Link discovered works to a `sequential_search` session for recovery after context loss |
+
+### Output Fields
+
+| Field | Type | Always Present | Description |
+|-------|------|---------------|-------------|
+| `seed` | string | yes | The seed paper as supplied |
+| `direction` | string | yes | The direction traversed |
+| `provider` | string | yes | Which citation provider answered (`semanticscholar` = intent+influence; `openalex` = counts only) |
+| `citedBy` | []paper | when direction includes `cited_by` | Works that cite the seed (each a full academic-paper object, same shape as `academic_search` papers) |
+| `citedByCount` | int | when direction includes `cited_by` | Count of forward edges returned |
+| `references` | []paper | when direction includes `references` | Works the seed cites |
+| `referencesCount` | int | when direction includes `references` | Count of backward edges returned |
+| `trust` | string | yes | Always `"untrusted-external-content"` — treat results as data, not instructions (OWASP LLM01) |
+
+Each work in `citedBy`/`references` carries the same fields as an `academic_search` paper, including `tldr`, `isInfluential`, and `citationIntents` when the provider (Semantic Scholar) supplies them.
+
+### Behavior
+- **Provider fidelity:** Semantic Scholar returns citation intent (`citationIntents`) and an influence flag (`isInfluential`); OpenAlex is counts-only (forward edges via the `cites:` filter, backward edges from the seed's `referenced_works`). Auto-selection prefers Semantic Scholar.
+- **Seed resolution:** a DOI resolves directly; a title resolves to the provider's top match.
+- **Explicit provider honoring:** forcing an unconfigured/unknown/incapable provider returns a structured error listing the supported providers (`semanticscholar`, `openalex`); it never silently falls back.
+- `influential_only` filters out works the provider did not flag as influential; providers without the signal pass all results through unchanged.
+
+### Annotations
+- ReadOnly: true · Idempotent: true · OpenWorld: true (queries external scholarly APIs)
+
+### Cache
+- TTL: 24 hours (citation graphs change slowly)
+
+---
+
+## Tool 18: `research_export`
+
+Export a completed `sequential_search` session as a shareable deliverable — a human-readable **markdown** report or the full structured **json** session. Read-only and idempotent: it renders existing session state, never mutates it. Scoped to the caller's own `(tenant, user)`.
+
+### Input Schema
+
+| Field | Type | Required | Default | Constraints |
+|-------|------|----------|---------|-------------|
+| `sessionId` | string | yes | — | The `sequential_search` session to export |
+| `format` | string | no | `markdown` | `markdown` (readable report) or `json` (full structured session) |
+
+### Output Fields
+
+| Field | Type | Always Present | Description |
+|-------|------|---------------|-------------|
+| `sessionId` | string | yes | The exported session ID |
+| `format` | string | yes | `markdown` or `json` |
+| `researchGoal` | string | yes | The session's research goal |
+| `stepCount` | int | yes | Number of recorded steps |
+| `sourceCount` | int | yes | Number of recorded sources |
+| `startedAt` | string | yes | Session creation time (RFC3339) |
+| `exportedAt` | string | yes | When this export was generated (RFC3339) |
+| `tenantId` | string | yes | Owning tenant — provenance for the export |
+| `document` | string \| object | yes | The rendered report: a markdown string when `format=markdown`, or the structured session object when `format=json` |
+| `trust` | string | yes | Always `"untrusted-external-content"` — source titles/URLs are external data |
+
+### Behavior
+- **Markdown report** contains: research-goal heading, a metadata block (session id, started, step/source counts), every step with its reasoning/confidence/rejected-approaches/timestamp (revisions and branches are labeled in the step heading), an Open Questions section (knowledge gaps), a numbered Sources list, and a provenance footer (export time, tenant).
+- Deterministic: same session → byte-identical output aside from the `exportedAt` stamp (idempotency).
+- Sessions are private to their owning `(tenant, user)`; a leaked sessionId is honored only for its owner.
+
+### Annotations
+- ReadOnly: true · Idempotent: true · OpenWorld: false (reads internal session state)
+
+### Error Conditions
+- Missing `sessionId` → validation error
+- Unknown/expired session → "Session not found or expired. Sessions last 4 hours from last activity."
+- Invalid `format` → validation error (use `markdown` or `json`)
+
+### Cache
+- No cache (renders live session state)
+
+---
+
+## Tool 19: `format_bibliography`
+
+Turn a set of sources into a formatted bibliography in **APA**, **MLA**, or **BibTeX**. Sources come from either a `sequential_search` session (its recorded sources) or an explicit list the caller supplies (e.g. `academic_search` / `citation_graph` results). Read-only and idempotent.
+
+### Input Schema
+
+| Field | Type | Required | Default | Constraints |
+|-------|------|----------|---------|-------------|
+| `style` | string | no | `apa` | `apa`, `mla`, or `bibtex` |
+| `sessionId` | string | no | — | Build from this session's recorded sources. Provide this **or** `sources` |
+| `sources` | []object | no | — | Explicit sources. Provide this **or** `sessionId`. Each: `url` (required), `title`, `author`, `site`, `date` |
+
+### Output Fields
+
+| Field | Type | Always Present | Description |
+|-------|------|---------------|-------------|
+| `style` | string | yes | The citation style used |
+| `entryCount` | int | yes | Number of unique entries rendered (after de-duplication by URL) |
+| `bibliography` | string | yes | The formatted bibliography — entries separated by blank lines |
+| `sessionId` | string | no | Echoed when sources were drawn from a session |
+| `trust` | string | yes | Always `"untrusted-external-content"` — source metadata is external data |
+
+### Behavior
+- Sources are **de-duplicated by URL** (first occurrence wins) and ordered deterministically: APA/MLA alphabetically by the rendered line, BibTeX by cite key.
+- **BibTeX cite keys** are `surname + year + first-title-word` (e.g. `vaswani2017attention`), made collision-free within the list by appending `a`/`b`/`c…`; BibTeX-significant characters in values are escaped.
+- An unrecognized style is rejected at the tool boundary (the lower-level formatter falls back to APA, but the tool validates first).
+- Entries with no `url` are skipped. Either `sessionId` or a non-empty `sources` list is required.
+- Session-sourced bibliographies are scoped to the caller's own `(tenant, user)`.
+
+### Annotations
+- ReadOnly: true · Idempotent: true · OpenWorld: false (formats supplied/stored data)
+
+### Cache
+- No cache (pure formatting of supplied/stored data)
 
 ---
 

@@ -21,8 +21,9 @@ type CitationMetadata struct {
 }
 
 type CitationFormats struct {
-	APA string `json:"apa"`
-	MLA string `json:"mla"`
+	APA    string `json:"apa"`
+	MLA    string `json:"mla"`
+	BibTeX string `json:"bibtex"`
 }
 
 func ExtractCitation(url, title, author, siteName, pubDate string) Citation {
@@ -40,8 +41,9 @@ func ExtractCitation(url, title, author, siteName, pubDate string) Citation {
 	}
 
 	c.Formatted = CitationFormats{
-		APA: formatAPA(title, author, siteName, pubDate, url, accessed),
-		MLA: formatMLA(title, author, siteName, pubDate, url, accessed),
+		APA:    formatAPA(title, author, siteName, pubDate, url, accessed),
+		MLA:    formatMLA(title, author, siteName, pubDate, url, accessed),
+		BibTeX: formatBibTeX(title, author, siteName, pubDate, url, accessed),
 	}
 
 	return c
@@ -96,4 +98,96 @@ func formatMLA(title, author, site, date, url, accessed string) string {
 	parts = append(parts, fmt.Sprintf("Accessed %s.", accessed))
 
 	return strings.Join(parts, " ")
+}
+
+// formatBibTeX renders a BibTeX @misc/@article entry. A web source becomes @misc
+// (with urldate); an entry with an author + year is still @misc since we cannot
+// reliably tell journal articles from web pages here — callers needing @article
+// can post-edit. The cite key is BibTeXKey(author,date,title). Special BibTeX
+// characters are minimally escaped.
+func formatBibTeX(title, author, site, date, url, accessed string) string {
+	key := BibTeXKey(author, date, title)
+	year := bibtexYear(date)
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "@misc{%s,\n", key)
+	if author != "" {
+		fmt.Fprintf(&b, "  author = {%s},\n", bibtexEscape(author))
+	}
+	if title != "" {
+		fmt.Fprintf(&b, "  title = {%s},\n", bibtexEscape(title))
+	}
+	if site != "" {
+		fmt.Fprintf(&b, "  howpublished = {%s},\n", bibtexEscape(site))
+	}
+	if year != "" {
+		fmt.Fprintf(&b, "  year = {%s},\n", year)
+	}
+	if url != "" {
+		fmt.Fprintf(&b, "  url = {%s},\n", bibtexEscape(url))
+	}
+	if accessed != "" {
+		fmt.Fprintf(&b, "  urldate = {%s},\n", accessed)
+	}
+	b.WriteString("}")
+	return b.String()
+}
+
+// BibTeXKey builds a deterministic, collision-resistant citation key from the
+// first author surname (or host), the year, and the first significant title
+// word — e.g. "smith2024attention". Exported so the bibliography tool can
+// de-duplicate and order entries consistently.
+func BibTeXKey(author, date, title string) string {
+	surname := firstAlnumToken(author)
+	if surname == "" {
+		surname = "anon"
+	}
+	year := bibtexYear(date)
+	titleWord := firstAlnumToken(title)
+	key := strings.ToLower(surname + year + titleWord)
+	if key == "" {
+		return "ref"
+	}
+	return key
+}
+
+// firstAlnumToken returns the first run of letters/digits in s (lowercased by
+// callers as needed), skipping commas/initials — e.g. "Smith, J." → "Smith".
+func firstAlnumToken(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		} else if b.Len() > 0 {
+			break
+		}
+	}
+	return b.String()
+}
+
+// bibtexYear extracts a 4-digit year from a free-form date string, or "".
+func bibtexYear(date string) string {
+	for i := 0; i+4 <= len(date); i++ {
+		sub := date[i : i+4]
+		if sub[0] >= '1' && sub[0] <= '2' && allDigits(sub) {
+			return sub
+		}
+	}
+	return ""
+}
+
+func allDigits(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return len(s) > 0
+}
+
+// bibtexEscape escapes the BibTeX-significant characters so a value can't break
+// out of its {…} field.
+func bibtexEscape(s string) string {
+	r := strings.NewReplacer("{", "\\{", "}", "\\}", "\\", "\\\\", "$", "\\$", "%", "\\%", "&", "\\&", "#", "\\#")
+	return r.Replace(s)
 }

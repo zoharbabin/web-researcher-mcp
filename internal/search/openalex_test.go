@@ -10,6 +10,13 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
+func newOpenAlexTestDeps() Deps {
+	return Deps{
+		HTTPClient: http.DefaultClient,
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+	}
+}
+
 const testOpenAlexResponse = `{
   "results": [
     {
@@ -305,4 +312,111 @@ func TestReconstructAbstract(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestOpenAlexCitationsForward(t *testing.T) {
+	// 2 endpoints: resolve seed DOI → work (with id), then cites: filter query.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/works/doi:") {
+			_, _ = w.Write([]byte(`{"id":"https://openalex.org/W100","display_name":"Seed","publication_year":2020}`))
+			return
+		}
+		// cites: filter listing
+		_, _ = w.Write([]byte(`{"results":[{"id":"https://openalex.org/W200","display_name":"Citing Work","publication_year":2024,"cited_by_count":5}]}`))
+	}))
+	defer srv.Close()
+	p := NewOpenAlexProvider("e@x.com", newOpenAlexTestDeps())
+	p.SetBaseURL(srv.URL)
+
+	res, err := p.Citations(context.Background(), "10.1/seed", 10)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res) != 1 || res[0].Title != "Citing Work" || res[0].Source != "openalex" {
+		t.Fatalf("forward edge mapping: %+v", res)
+	}
+}
+
+func TestOpenAlexReferencesBackward(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/works/doi:") {
+			// seed work carries referenced_works
+			_, _ = w.Write([]byte(`{"id":"https://openalex.org/W100","display_name":"Seed","referenced_works":["https://openalex.org/W1","https://openalex.org/W2"]}`))
+			return
+		}
+		// openalex_id: batch fetch of referenced works
+		_, _ = w.Write([]byte(`{"results":[{"id":"https://openalex.org/W1","display_name":"Ref One","publication_year":2015},{"id":"https://openalex.org/W2","display_name":"Ref Two","publication_year":2016}]}`))
+	}))
+	defer srv.Close()
+	p := NewOpenAlexProvider("e@x.com", newOpenAlexTestDeps())
+	p.SetBaseURL(srv.URL)
+
+	res, err := p.References(context.Background(), "10.1/seed", 10)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res) != 2 {
+		t.Fatalf("backward edges: want 2, got %d (%+v)", len(res), res)
+	}
+}
+
+func TestShortOpenAlexID(t *testing.T) {
+	if shortOpenAlexID("https://openalex.org/W123") != "W123" {
+		t.Error("should extract bare ID from URL")
+	}
+	if shortOpenAlexID("W123") != "W123" {
+		t.Error("bare ID should pass through")
+	}
+}
+
+func TestIsOpenAlexWorkID(t *testing.T) {
+	cases := map[string]bool{
+		"W2741809807":           true,
+		"w123":                  true,
+		"W":                     false, // bare letter, no digits
+		"Why transformers work": false, // title starting with W
+		"Word embeddings":       false,
+		"10.1/x":                false,
+		"":                      false,
+		"W12a":                  false, // non-digit after W
+	}
+	for in, want := range cases {
+		if got := isOpenAlexWorkID(in); got != want {
+			t.Errorf("isOpenAlexWorkID(%q) = %v, want %v", in, got, want)
+		}
+	}
+}
+
+// TestOpenAlexTitleSeedStartingWithW guards the routing fix: a title seed that
+// begins with "W" must fall through to title search, not the /works/{id} entity
+// endpoint (regression for the audit finding).
+func TestOpenAlexTitleSeedStartingWithW(t *testing.T) {
+	var sawSearch bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("search") != "" {
+			sawSearch = true
+			_, _ = w.Write([]byte(`{"results":[{"id":"https://openalex.org/W9","display_name":"Why Transformers Work","publication_year":2021}]}`))
+			return
+		}
+		// An entity-endpoint hit for a title would 404 — fail the test if reached.
+		w.WriteHeader(404)
+	}))
+	defer srv.Close()
+	p := NewOpenAlexProvider("e@x.com", newOpenAlexTestDeps())
+	p.SetBaseURL(srv.URL)
+
+	w, err := p.fetchWork(context.Background(), "Why transformers work")
+	if err != nil {
+		t.Fatalf("title seed starting with W should resolve via search, got error: %v", err)
+	}
+	if !sawSearch {
+		t.Error("expected title seed to route to /works?search=, not the entity endpoint")
+	}
+	if w == nil || w.Title != "Why Transformers Work" {
+		t.Errorf("unexpected work: %+v", w)
+	}
+}
+
+func TestOpenAlexCitationInterface(t *testing.T) {
+	var _ CitationSearcher = (*OpenAlexProvider)(nil)
 }

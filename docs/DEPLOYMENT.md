@@ -249,6 +249,19 @@ These enable structured patent search via official APIs. Without them, `patent_s
 
 Each configured provider gets an independent circuit breaker. The `patent_search` tool automatically selects providers based on the requested `patent_office` region.
 
+### Academic Providers (Optional)
+
+These enable rich scholarly metadata (DOIs, authors, citation counts, abstracts, OA status) for `academic_search`, and back the `citation_graph` tool. Without them, `academic_search` falls back to site-restricted web search.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `OPENALEX_EMAIL` | Contact email for the OpenAlex polite pool (287M+ works). Also enables `citation_graph` (counts-only) | — |
+| `CROSSREF_EMAIL` | Contact email for the CrossRef polite pool (140M+ DOI-registered works) | — |
+| `SEMANTIC_SCHOLAR_API_KEY` | Semantic Scholar API key (200M+ papers + `tldr` + citation intent/influence). Works **without** a key at a lower shared rate; also powers `citation_graph` (rich edges) | — |
+| `UNPAYWALL_EMAIL` | Contact email enabling Unpaywall open-access enrichment (fills free-PDF links on DOI-bearing results that lack one). Falls back to `OPENALEX_EMAIL` when unset; no-op when neither is set | — (falls back to `OPENALEX_EMAIL`) |
+
+`citation_graph` registers only when a citation-capable academic provider (Semantic Scholar or OpenAlex) is configured. Open-access enrichment is best-effort and never fails or slows a search beyond its own bounded request.
+
 ### Multi-Provider Routing
 
 When `SEARCH_ROUTING` is set, the server uses all configured providers with intelligent fallback:
