@@ -39,21 +39,41 @@ const (
 
 // s2Throttle serializes S2 requests process-wide with a minimum spacing. Shared
 // across all SemanticScholarProvider instances because the rate limit is global
-// to the API key (or the shared keyless pool), not per-instance.
+// to the API key (or the shared keyless pool), not per-instance. `next` is the
+// earliest time the next request may fire; each caller atomically reserves and
+// advances it, then waits OUTSIDE the lock so a slow/cancelled request never
+// blocks the queue behind it.
 var s2Throttle struct {
 	mu   sync.Mutex
-	last time.Time
+	next time.Time
 }
 
-func s2Wait() {
+// s2Wait reserves this request's spaced slot and waits for it, honoring ctx.
+// The mutex is held only long enough to claim the slot (O(1)); the wait itself
+// is lock-free, so a cancelled request leaves the queue immediately and never
+// stalls other S2 callers. Returns ctx.Err() if the context ends during the wait.
+func s2Wait(ctx context.Context) error {
 	s2Throttle.mu.Lock()
-	defer s2Throttle.mu.Unlock()
-	if !s2Throttle.last.IsZero() {
-		if d := s2MinSpacing - time.Since(s2Throttle.last); d > 0 {
-			time.Sleep(d)
-		}
+	now := time.Now()
+	slot := s2Throttle.next
+	if slot.Before(now) {
+		slot = now
 	}
-	s2Throttle.last = time.Now()
+	s2Throttle.next = slot.Add(s2MinSpacing)
+	s2Throttle.mu.Unlock()
+
+	d := time.Until(slot)
+	if d <= 0 {
+		return nil
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // SemanticScholarProvider implements AcademicProvider + citation-edge lookups.
@@ -162,7 +182,11 @@ func (s *SemanticScholarProvider) edges(ctx context.Context, path string, numRes
 }
 
 func (s *SemanticScholarProvider) doRequest(ctx context.Context, path string, out any) error {
-	s2Wait() // politeness spacing for the shared/keyless rate limit
+	// Politeness spacing for the shared/keyless rate limit; honors ctx so a
+	// cancelled request abandons the queue instead of stalling other callers.
+	if err := s2Wait(ctx); err != nil {
+		return err
+	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", s.baseURL+path, nil)
 	if err != nil {

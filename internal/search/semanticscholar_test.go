@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
@@ -148,4 +149,25 @@ func TestS2Helpers(t *testing.T) {
 
 func TestSemanticScholarInterface(t *testing.T) {
 	var _ AcademicProvider = (*SemanticScholarProvider)(nil)
+}
+
+// TestS2WaitHonorsContext verifies the throttle is cancel-aware: a request whose
+// context is already cancelled returns promptly with the ctx error rather than
+// sleeping out the spacing window (and, by construction, without holding the
+// global lock across the wait). Regression for the merge-gate concurrency fix.
+func TestS2WaitHonorsContext(t *testing.T) {
+	// Reserve a slot so the NEXT caller must wait s2MinSpacing.
+	if err := s2Wait(context.Background()); err != nil {
+		t.Fatalf("priming s2Wait: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already done — the wait must observe this immediately
+	start := time.Now()
+	err := s2Wait(ctx)
+	if err == nil {
+		t.Fatal("expected ctx error when context is cancelled during the spacing wait")
+	}
+	if elapsed := time.Since(start); elapsed >= s2MinSpacing {
+		t.Errorf("s2Wait blocked the full spacing window (%v) instead of returning on cancel", elapsed)
+	}
 }

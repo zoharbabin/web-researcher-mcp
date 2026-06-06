@@ -18,6 +18,24 @@ func TestFormatBibTeXKeyAndYear(t *testing.T) {
 	}
 }
 
+func TestBibtexYear(t *testing.T) {
+	cases := map[string]string{
+		"2017-06-12":    "2017",
+		"June 2019":     "2019",
+		"pp. 1990-1995": "1990", // page range: first 4-digit token is a real year here
+		"12345":         "",     // 5-digit run, not a year (digit-flanked)
+		"123456789":     "",     // long digit run, no bounded 4-token starting 1/2
+		"no year here":  "",
+		"":              "",
+		"1999":          "1999",
+	}
+	for in, want := range cases {
+		if got := bibtexYear(in); got != want {
+			t.Errorf("bibtexYear(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestBibTeXKeyFallback(t *testing.T) {
 	if got := BibTeXKey("", "", ""); got != "anon" {
 		t.Errorf("empty fallback = %q, want anon", got)
@@ -60,7 +78,10 @@ func TestFormatBibliographyDedupAndOrder(t *testing.T) {
 		{URL: "https://example.com/a", Title: "Alpha", Author: "Adams, A.", Date: "2019"},
 		{URL: "https://example.com/b", Title: "Beta dup", Author: "Zeta, Z.", Date: "2020"},
 	}
-	out := FormatBibliography(entries, "apa")
+	out, n := FormatBibliography(entries, "apa")
+	if n != 2 {
+		t.Errorf("expected 2 unique entries after dedup, got count %d", n)
+	}
 	if strings.Count(out, "\n\n") != 1 {
 		t.Errorf("expected 2 entries (1 blank-line separator) after dedup:\n%s", out)
 	}
@@ -70,13 +91,27 @@ func TestFormatBibliographyDedupAndOrder(t *testing.T) {
 	}
 }
 
+// TestFormatBibliographyCountIgnoresEmbeddedBlankLines guards the count fix: a
+// title containing a blank line must NOT inflate the returned entry count (which
+// a naive strings.Count("\n\n") would do).
+func TestFormatBibliographyCountWithBlankLineInTitle(t *testing.T) {
+	entries := []BibEntry{
+		{URL: "https://example.com/a", Title: "Line one\n\nLine two", Author: "Doe, J.", Date: "2020"},
+		{URL: "https://example.com/b", Title: "Normal", Author: "Roe, R.", Date: "2021"},
+	}
+	_, n := FormatBibliography(entries, "apa")
+	if n != 2 {
+		t.Errorf("count must reflect unique entries (2), not blank-line separators, got %d", n)
+	}
+}
+
 func TestFormatBibliographyBibTeXCollisionKeys(t *testing.T) {
 	// Same author+year+first-title-word but different URLs → unique cite keys.
 	entries := []BibEntry{
 		{URL: "https://example.com/1", Title: "Learning models", Author: "Smith, A.", Date: "2020"},
 		{URL: "https://example.com/2", Title: "Learning systems", Author: "Smith, A.", Date: "2020"},
 	}
-	out := FormatBibliography(entries, "bibtex")
+	out, _ := FormatBibliography(entries, "bibtex")
 	if !strings.Contains(out, "@misc{smith2020learning,") {
 		t.Errorf("base key missing:\n%s", out)
 	}
@@ -87,7 +122,7 @@ func TestFormatBibliographyBibTeXCollisionKeys(t *testing.T) {
 
 func TestFormatBibliographyUnknownStyleFallsBackToAPA(t *testing.T) {
 	entries := []BibEntry{{URL: "https://example.com/a", Title: "X", Author: "Doe, J.", Date: "2020"}}
-	out := FormatBibliography(entries, "chicago")
+	out, _ := FormatBibliography(entries, "chicago")
 	if !strings.Contains(out, "Retrieved") { // APA marker
 		t.Errorf("unknown style should fall back to APA:\n%s", out)
 	}
@@ -95,7 +130,7 @@ func TestFormatBibliographyUnknownStyleFallsBackToAPA(t *testing.T) {
 
 func TestFormatBibliographySkipsNoURL(t *testing.T) {
 	entries := []BibEntry{{Title: "No URL"}, {URL: "https://example.com/a", Title: "Has URL"}}
-	out := FormatBibliography(entries, "apa")
+	out, _ := FormatBibliography(entries, "apa")
 	if strings.Contains(out, "No URL") {
 		t.Errorf("entry without URL should be skipped:\n%s", out)
 	}

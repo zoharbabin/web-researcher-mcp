@@ -88,12 +88,10 @@ func registerFormatBibliography(srv *mcp.Server, deps Dependencies) {
 			})
 		}
 
-		biblio := content.FormatBibliography(entries, style)
-		// entryCount reflects unique entries actually rendered (post-dedup by URL).
-		entryCount := 0
-		if biblio != "" {
-			entryCount = strings.Count(biblio, "\n\n") + 1
-		}
+		// entryCount comes back authoritative from the formatter (unique entries
+		// post-dedup) — never re-derived from the string, which a malformed title
+		// containing a blank line could inflate.
+		biblio, entryCount := content.FormatBibliography(entries, style)
 
 		output := map[string]any{
 			"style":        style,

@@ -20,13 +20,16 @@ type BibEntry struct {
 var SupportedBibStyles = []string{"apa", "mla", "bibtex"}
 
 // FormatBibliography renders entries into a single bibliography string in the
-// given style ("apa", "mla", or "bibtex"). Entries are de-duplicated by URL
-// (first occurrence wins), each is formatted via ExtractCitation, and the list
-// is ordered deterministically: APA/MLA alphabetically by the rendered line,
-// BibTeX by cite key. BibTeX cite keys are made unique within the list by
-// appending a/b/c… on collision so the output compiles. An unrecognized style
-// falls back to "apa". Entries with no URL are skipped.
-func FormatBibliography(entries []BibEntry, style string) string {
+// given style ("apa", "mla", or "bibtex") and returns it alongside the exact
+// number of unique entries rendered. Entries are de-duplicated by URL (first
+// occurrence wins), each is formatted via ExtractCitation, and the list is
+// ordered deterministically: APA/MLA alphabetically by the rendered line, BibTeX
+// by cite key. BibTeX cite keys are made unique within the list by appending
+// a/b/c… on collision so the output compiles. An unrecognized style falls back
+// to "apa". Entries with no URL are skipped. The returned count is authoritative
+// (the caller must not re-derive it from the string, since a malformed title
+// could contain a blank line and inflate a "\n\n"-based count).
+func FormatBibliography(entries []BibEntry, style string) (string, int) {
 	style = strings.ToLower(strings.TrimSpace(style))
 	switch style {
 	case "apa", "mla", "bibtex":
@@ -46,7 +49,7 @@ func FormatBibliography(entries []BibEntry, style string) string {
 	}
 
 	if style == "bibtex" {
-		return formatBibTeXList(deduped)
+		return formatBibTeXList(deduped), len(deduped)
 	}
 
 	lines := make([]string, 0, len(deduped))
@@ -59,7 +62,7 @@ func FormatBibliography(entries []BibEntry, style string) string {
 		}
 	}
 	sort.Strings(lines)
-	return strings.Join(lines, "\n\n")
+	return strings.Join(lines, "\n\n"), len(deduped)
 }
 
 // formatBibTeXList renders entries as a BibTeX bibliography with collision-free

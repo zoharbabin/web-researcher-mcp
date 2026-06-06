@@ -165,9 +165,18 @@ func firstAlnumToken(s string) string {
 	return b.String()
 }
 
-// bibtexYear extracts a 4-digit year from a free-form date string, or "".
+// bibtexYear extracts a 4-digit year (starting 1 or 2) from a free-form date
+// string, or "". The run must be digit-bounded — not flanked by another digit —
+// so a page range ("pp. 1990-1995" → "1990" is fine, but "12345" or a DOI's
+// "10.1234" do not false-match a 4-of-5+ digit substring).
 func bibtexYear(date string) string {
 	for i := 0; i+4 <= len(date); i++ {
+		if i > 0 && date[i-1] >= '0' && date[i-1] <= '9' {
+			continue // left-flanked by a digit → part of a longer number
+		}
+		if i+4 < len(date) && date[i+4] >= '0' && date[i+4] <= '9' {
+			continue // right-flanked by a digit → part of a longer number
+		}
 		sub := date[i : i+4]
 		if sub[0] >= '1' && sub[0] <= '2' && allDigits(sub) {
 			return sub
