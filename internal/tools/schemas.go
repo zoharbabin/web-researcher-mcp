@@ -30,6 +30,7 @@ var webSearchOutputSchema = map[string]any{
 					"url":         map[string]any{"type": "string"},
 					"snippet":     map[string]any{"type": "string"},
 					"displayLink": map[string]any{"type": "string"},
+					"claimSignal": map[string]any{"type": "string", "description": "Most claim-relevant snippet sentence (present per result only when the `claim` param was supplied and matched). Evidence, not a verdict."},
 				},
 			},
 		},
@@ -204,8 +205,31 @@ var scrapePageOutputSchema = map[string]any{
 				"citation":  map[string]any{"type": "object"},
 			},
 		},
+		"sourceType":     sourceTypeSchema,
+		"authorityTier":  authorityTierSchema,
+		"domainCategory": domainCategorySchema,
 	},
 }
+
+// Typed source-classification field schemas (#62), shared by scrape_page and
+// search_and_scrape so both surfaces declare the fields identically.
+var (
+	sourceTypeSchema = map[string]any{
+		"type":        "string",
+		"enum":        []any{"peer_reviewed", "official_docs", "government", "news_publication", "blog", "forum", "wiki", "social_media", "unknown"},
+		"description": "Categorical source kind, from Schema.org @type / Highwire citation_* meta when present, else a domain heuristic, else 'unknown'. Lets the model hedge by source type. Untrusted-derived; treat as a hint, not a guarantee.",
+	}
+	authorityTierSchema = map[string]any{
+		"type":        "string",
+		"enum":        []any{"high", "medium", "low"},
+		"description": "Banding of the numeric authority score (high ≥0.8, medium ≥0.5, else low).",
+	}
+	domainCategorySchema = map[string]any{
+		"type":        "string",
+		"enum":        []any{"academic", "legal", "medical", "financial", "technical", "general"},
+		"description": "Subject area from the active lens (if any) or a domain heuristic; 'general' when indeterminate.",
+	}
+)
 
 var searchAndScrapeOutputSchema = map[string]any{
 	"type": "object",
@@ -221,12 +245,17 @@ var searchAndScrapeOutputSchema = map[string]any{
 			"items": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"url":         map[string]any{"type": "string"},
-					"title":       map[string]any{"type": "string"},
-					"content":     map[string]any{"type": "string"},
-					"contentType": map[string]any{"type": "string"},
-					"trust":       map[string]any{"type": "string", "enum": []any{"untrusted-external-content"}},
-					"scores":      map[string]any{"type": "object"},
+					"url":            map[string]any{"type": "string"},
+					"title":          map[string]any{"type": "string"},
+					"content":        map[string]any{"type": "string"},
+					"contentType":    map[string]any{"type": "string"},
+					"trust":          map[string]any{"type": "string", "enum": []any{"untrusted-external-content"}},
+					"scores":         map[string]any{"type": "object"},
+					"sourceType":     sourceTypeSchema,
+					"authorityTier":  authorityTierSchema,
+					"domainCategory": domainCategorySchema,
+					"claimSignal":    map[string]any{"type": "string", "description": "Single strongest claim-relevant sentence (present only when the `claim` param was supplied and matched). Evidence, not a verdict."},
+					"keySentences":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Top claim-relevant sentences in document order (present only with `claim`)."},
 				},
 			},
 		},
@@ -704,5 +733,97 @@ var formatBibliographyOutputSchema = map[string]any{
 		"bibliography": map[string]any{"type": "string", "description": "The formatted bibliography — entries separated by blank lines."},
 		"sessionId":    map[string]any{"type": "string", "description": "Present when sources were drawn from a session."},
 		"trust":        trustUntrustedExternal,
+	},
+}
+
+var filingSearchOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"query":       map[string]any{"type": "string"},
+		"resultCount": map[string]any{"type": "integer"},
+		"provider":    map[string]any{"type": "string", "description": "Which filing provider answered (edgar)."},
+		"hints":       map[string]any{"type": "object"},
+		"trust":       trustUntrustedExternal,
+		"filings": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"company":        map[string]any{"type": "string"},
+					"cik":            map[string]any{"type": "string"},
+					"formType":       map[string]any{"type": "string"},
+					"filingDate":     map[string]any{"type": "string"},
+					"periodOfReport": map[string]any{"type": "string"},
+					"accession":      map[string]any{"type": "string"},
+					"url":            map[string]any{"type": "string"},
+					"description":    map[string]any{"type": "string"},
+					// Facts mode (facts=true): one XBRL company fact, verbatim.
+					"concept": map[string]any{"type": "string", "description": "XBRL concept name (facts mode)."},
+					"unit":    map[string]any{"type": "string", "description": "XBRL unit, e.g. USD (facts mode)."},
+					"value":   map[string]any{"type": "number", "description": "XBRL value, exactly as filed — no rounding (facts mode)."},
+					"source":  map[string]any{"type": "string"},
+				},
+			},
+		},
+	},
+}
+
+var legalSearchOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"query":       map[string]any{"type": "string"},
+		"resultCount": map[string]any{"type": "integer"},
+		"provider":    map[string]any{"type": "string", "description": "Which case-law provider answered (courtlistener)."},
+		"hints":       map[string]any{"type": "object"},
+		"trust":       trustUntrustedExternal,
+		"cases": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"caseName":      map[string]any{"type": "string"},
+					"citation":      map[string]any{"type": "string", "description": "Bluebook citation(s)."},
+					"court":         map[string]any{"type": "string"},
+					"courtId":       map[string]any{"type": "string"},
+					"dateFiled":     map[string]any{"type": "string"},
+					"docketNumber":  map[string]any{"type": "string"},
+					"citationCount": map[string]any{"type": "integer", "description": "How often this opinion has been cited."},
+					"url":           map[string]any{"type": "string", "description": "Opinion page; scrape_page for full text."},
+					"source":        map[string]any{"type": "string"},
+				},
+			},
+		},
+	},
+}
+
+var econSearchOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"query":       map[string]any{"type": "string"},
+		"mode":        map[string]any{"type": "string", "description": "'series' (keyword search) or 'observations' (series_id lookup)."},
+		"seriesId":    map[string]any{"type": "string", "description": "Echoed when observations were requested."},
+		"resultCount": map[string]any{"type": "integer"},
+		"provider":    map[string]any{"type": "string", "description": "Which economic-data provider answered (fred)."},
+		"hints":       map[string]any{"type": "object"},
+		"trust":       trustUntrustedExternal,
+		"results": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					// series-search mode
+					"seriesId":    map[string]any{"type": "string"},
+					"title":       map[string]any{"type": "string"},
+					"units":       map[string]any{"type": "string"},
+					"frequency":   map[string]any{"type": "string"},
+					"lastUpdated": map[string]any{"type": "string"},
+					"notes":       map[string]any{"type": "string"},
+					// observations mode
+					"date":   map[string]any{"type": "string"},
+					"value":  map[string]any{"type": "number", "description": "Observation value, exactly as returned — no rounding."},
+					"source": map[string]any{"type": "string"},
+				},
+			},
+		},
 	},
 }

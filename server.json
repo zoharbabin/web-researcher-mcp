@@ -30,7 +30,7 @@
         },
         {
           "name": "SEARCH_PROVIDER",
-          "description": "Search provider: google, brave, serper, searxng, or searchapi",
+          "description": "Search provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, or exa",
           "isRequired": false
         },
         {
@@ -60,6 +60,36 @@
           "name": "SEARXNG_URL",
           "description": "SearXNG instance URL",
           "isRequired": false
+        },
+        {
+          "name": "TAVILY_API_KEY",
+          "description": "Tavily Search API key",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "EXA_API_KEY",
+          "description": "Exa API key (also enables the answer and structured_search tools)",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "EDGAR_CONTACT_EMAIL",
+          "description": "Contact email for SEC EDGAR (enables filing_search); falls back to OPENALEX_EMAIL",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "COURTLISTENER_API_TOKEN",
+          "description": "CourtListener API token (legal_search works without it; a token raises the rate limit)",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "FRED_API_KEY",
+          "description": "FRED API key (enables econ_search for Federal Reserve economic data)",
+          "isRequired": false,
+          "isSecret": true
         }
       ]
     },

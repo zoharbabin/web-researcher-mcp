@@ -33,9 +33,10 @@ type webSearchInput struct {
 	ExactTerms   string `json:"exact_terms,omitempty" jsonschema:"Phrase that must appear verbatim in results."`
 	ExcludeTerms string `json:"exclude_terms,omitempty" jsonschema:"Terms to exclude from results (space-separated)."`
 	Country      string `json:"country,omitempty" jsonschema:"Restrict to a country using ISO 3166-1 alpha-2 code (e.g. US, GB)."`
-	Lens         string `json:"lens,omitempty" jsonschema:"Focus your search on trusted sites in a specific field: docs, academic, clinical, security, journalism, programming, news, tech, legal, medical, finance, science, government. Only one lens can be active at a time (overrides the site parameter)."`
+	Lens         string `json:"lens,omitempty" jsonschema:"Focus your search on trusted sites in a specific field: docs, academic, academic-extended, clinical, security, journalism, programming, devops, news, tech, legal, medical, finance, science, government. Only one lens can be active at a time (overrides the site parameter)."`
 	Provider     string `json:"provider,omitempty" jsonschema:"Choose which search engine to use for this query: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa. Leave empty to use the default. Returns an error if the chosen provider isn't set up."`
 	SessionID    string `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. Sources are automatically recorded in the session for recovery after context loss."`
+	Claim        string `json:"claim,omitempty" jsonschema:"Optional claim to evaluate against each result's snippet. When set, each result gains a claimSignal (the most claim-relevant snippet sentence) to help triage which links to read; for full-text evidence use search_and_scrape with claim. Evidence only — the server never decides supports/contradicts."`
 }
 
 func registerWebSearch(srv *mcp.Server, deps Dependencies) {
@@ -66,7 +67,7 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 		// importantly the provider, so two providers queried with the same terms
 		// do not collide and serve each other's cached results (idempotency +
 		// consistency across calls).
-		cacheKey := searchCacheKey("web", input.Query, numResults, input.TimeRange, input.Safe, input.Language, input.Site, input.Lens, input.Provider, input.ExactTerms, input.ExcludeTerms, input.Country)
+		cacheKey := searchCacheKey("web", input.Query, numResults, input.TimeRange, input.Safe, input.Language, input.Site, input.Lens, input.Provider, input.ExactTerms, input.ExcludeTerms, input.Country, input.Claim)
 		if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("web_search", time.Since(start), nil, "", true)
 			auditToolCallQuery(ctx, deps, "web_search", time.Since(start), nil, "", input.Query, map[string]any{"cache_hit": true})
@@ -127,6 +128,15 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 			"resultCount": len(results),
 			"results":     results,
 			"trust":       untrustedContentTrust,
+		}
+
+		// Claim evidence (#66): when a claim is supplied, enrich each result with the
+		// most claim-relevant sentence from its snippet (triage signal for which
+		// links to read; use search_and_scrape with claim for full-text evidence).
+		// Only replaces `results` when claim is set, so the default output is
+		// byte-identical to before.
+		if input.Claim != "" {
+			output["results"] = enrichResultsWithClaim(results, input.Claim)
 		}
 
 		// Zero-result recovery hints (issue #100): reuse the shared

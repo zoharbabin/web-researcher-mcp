@@ -148,6 +148,11 @@ type SearchConfig struct {
 	CrossRefEmail         string
 	SemanticScholarAPIKey string // optional; Semantic Scholar works keyless at a lower shared rate
 	UnpaywallEmail        string // open-access PDF resolution; falls back to OpenAlexEmail when unset
+
+	// Structured-domain providers (optional, enable filing/case/economic search)
+	EDGARContactEmail  string // SEC EDGAR requires a contact email for its required User-Agent
+	CourtListenerToken string // optional; CourtListener works keyless at a lower rate
+	FREDAPIKey         string // Federal Reserve Economic Data API key
 }
 
 type OAuthConfig struct {
@@ -335,6 +340,9 @@ func Load() (*Config, error) {
 			CrossRefEmail:         os.Getenv("CROSSREF_EMAIL"),
 			SemanticScholarAPIKey: os.Getenv("SEMANTIC_SCHOLAR_API_KEY"),
 			UnpaywallEmail:        envOrDefault("UNPAYWALL_EMAIL", os.Getenv("OPENALEX_EMAIL")),
+			EDGARContactEmail:     envOrDefault("EDGAR_CONTACT_EMAIL", os.Getenv("OPENALEX_EMAIL")),
+			CourtListenerToken:    os.Getenv("COURTLISTENER_API_TOKEN"),
+			FREDAPIKey:            os.Getenv("FRED_API_KEY"),
 		},
 		Port: port,
 		OAuth: OAuthConfig{

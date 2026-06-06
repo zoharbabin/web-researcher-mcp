@@ -432,6 +432,34 @@ export CROSSREF_EMAIL=you@example.com
 
 **Notes**: The email is used for the polite pool (higher rate limits). CrossRef is the official DOI registration agency — every DOI-registered work appears here with authoritative metadata.
 
+### Semantic Scholar (Worldwide — 200M+ Papers)
+
+Adds AI `tldr` summaries and citation intent/influence signals, and powers `citation_graph` with rich edges. Works **without** a key at a lower shared rate limit; a key raises throughput.
+
+**Step 1**: (Optional) Request a key at [semanticscholar.org/product/api](https://www.semanticscholar.org/product/api).
+
+**Step 2**: Configure (optional)
+
+```bash
+export SEMANTIC_SCHOLAR_API_KEY=your-key
+```
+
+**Notes**: Keyless use is rate-limited by a shared public pool and may return a `rate_limited` error under load — set a key to avoid this. Also selectable as a `citation_graph` provider.
+
+### Unpaywall (Open-Access Enrichment)
+
+Not a search provider — it fills free-PDF links on DOI-bearing `academic_search` results that lack one. Best-effort; never fails or slows a search beyond its own bounded request.
+
+**Step 1**: No registration — just provide a contact email.
+
+**Step 2**: Configure
+
+```bash
+export UNPAYWALL_EMAIL=you@example.com
+```
+
+**Notes**: Falls back to `OPENALEX_EMAIL` when unset; a complete no-op when neither is set.
+
 ### Academic Routing
 
 When multiple academic providers are configured, the router tries them in priority order with automatic fallback:
@@ -441,3 +469,49 @@ export SEARCH_ROUTING='{"academic":"openalex,crossref","patents":"epo,lens","def
 ```
 
 Without explicit routing, all configured academic providers are tried in order until one returns results. If no academic providers are configured, `academic_search` automatically falls back to site-restricted web search (zero behavioral change from previous versions).
+
+## Structured-Domain Providers (Optional)
+
+These enable dedicated structured-research tools. Each is independent; the tool registers only when its provider is configured (one keyless exception, noted).
+
+### SEC EDGAR (US Public-Company Filings)
+
+Backs `filing_search`. SEC requires a contact email in the request User-Agent — there is **no API key**.
+
+**Step 1**: No registration. SEC asks only that automated requests identify a contact email.
+
+**Step 2**: Configure
+
+```bash
+export EDGAR_CONTACT_EMAIL=you@example.com
+```
+
+**Notes**: Falls back to `OPENALEX_EMAIL` if `EDGAR_CONTACT_EMAIL` is unset; `filing_search` registers only when one of the two is set. Returns recent filings or, with `facts=true`, structured XBRL company facts passed through exactly as filed.
+
+### CourtListener (US Case Law)
+
+Backs `legal_search`. Works **keyless** — `legal_search` is always available. An optional token raises the rate limit.
+
+**Step 1**: (Optional) Register at [courtlistener.com](https://www.courtlistener.com) and create an API token in your account settings.
+
+**Step 2**: Configure (optional)
+
+```bash
+export COURTLISTENER_API_TOKEN=your-token
+```
+
+**Notes**: Without a token, roughly 100 requests/day; a token raises this to ~5000/day. Coverage is US federal and state court opinions.
+
+### FRED (Federal Reserve Economic Data)
+
+Backs `econ_search`. Requires a free API key.
+
+**Step 1**: Request a free key at [fred.stlouisfed.org](https://fred.stlouisfed.org/docs/api/api_key.html) (sign in → My Account → API Keys).
+
+**Step 2**: Configure
+
+```bash
+export FRED_API_KEY=your-fred-key
+```
+
+**Notes**: `econ_search` registers only when `FRED_API_KEY` is set. Covers 800K+ economic time series; observation values pass through exactly as FRED returns them.

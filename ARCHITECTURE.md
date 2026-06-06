@@ -103,7 +103,7 @@ web-researcher-mcp/
 │   ├── auth/                     # OAuth 2.1 middleware (JWT/JWKS)
 │   ├── audit/                    # Structured audit logging (PodID for cross-pod correlation)
 │   ├── session/                  # Per-tenant session persistence — Manager interface (memory+disk or Redis)
-│   ├── content/                  # Sanitize, dedup, truncate, quality, recommendations + auto-formatted components
+│   ├── content/                  # Sanitize, dedup, truncate, quality, typed source classification, claim evidence, recommendations + auto-formatted components
 │   ├── metrics/                  # Prometheus metrics + per-tenant aggregate analytics
 │   ├── ratelimit/                # Three-tier rate limiting + optional atomic cross-pod daily quota
 │   ├── circuit/                  # Circuit breaker
@@ -165,11 +165,12 @@ Beyond the general `Provider`, the system layers **opt-in capability interfaces*
 - **`PatentProvider`** (`Patents`) — `internal/search/domain.go`. Carries `ProviderMeta` for regional filtering (e.g. `patent_office=EP` skips US-only providers): SearchAPI, EPO OPS, The Lens, USPTO.
 - **`AcademicProvider`** (`Scholarly`) — `internal/search/domain.go`. OpenAlex, CrossRef, Semantic Scholar, and Exa (via its research-paper category).
 - **`CitationSearcher`** (`Citations` / `References`) — `internal/search/domain.go`. Forward (cited-by) and backward (references) citation edges behind the `citation_graph` tool. Implemented by Semantic Scholar (rich — citation intent + influence) and OpenAlex (counts-only); the tool auto-selects Semantic Scholar first.
+- **`FilingSearcher` / `CaseSearcher` / `EconSearcher`** — `internal/search/structured_domains.go`. The structured-research domains behind `filing_search` (SEC EDGAR), `legal_search` (CourtListener), and `econ_search` (FRED). Each follows the same `…Searcher` + `…Provider` + `Supported…Providers` + `New…ByName` + `Available…Providers` shape as the patent/academic capabilities, resolved from the `Dependencies` maps in the tool layer.
 - **`AnswerSearcher` / `StructuredSearcher`** — `internal/search/synthesis.go`. The provider-independent capabilities behind the `answer` and `structured_search` tools (grounded Q&A and per-result structured extraction). Currently Exa; a new provider (e.g. Perplexity) is added with one factory case + one list entry and the tools pick it up with no tool-layer change.
 
 Separate from the capability interfaces, **`OAResolver`** (`internal/search/unpaywall.go`, implemented by Unpaywall) is an *enrichment* layer — not a search provider. After `academic_search` returns DOI-bearing results, `EnrichOpenAccess` fills the open-access PDF link on any result the provider left bare. Best-effort and nil-safe (a no-op when unconfigured); it never overwrites a provider-supplied PDF and never fails a search.
 
-A provider can satisfy several at once — `ExaProvider` implements `Provider`, `AcademicProvider`, `AnswerProvider`, and `StructuredProvider` simultaneously, and Semantic Scholar/OpenAlex implement both `AcademicProvider` and `CitationSearcher`. The `Router` routes the `Provider`, `PatentSearcher`, and `AcademicSearcher` capabilities with per-provider breaker fallback; the synthesis and citation capabilities are resolved directly from the `Dependencies` maps in the tool layer. Each configured provider gets an independent circuit breaker.
+A provider can satisfy several at once — `ExaProvider` implements `Provider`, `AcademicProvider`, `AnswerProvider`, and `StructuredProvider` simultaneously, and Semantic Scholar/OpenAlex implement both `AcademicProvider` and `CitationSearcher`. The `Router` routes the `Provider`, `PatentSearcher`, and `AcademicSearcher` capabilities with per-provider breaker fallback; the synthesis, citation, and structured-domain (filing/case/econ) capabilities are resolved directly from the `Dependencies` maps in the tool layer. Each configured provider gets an independent circuit breaker.
 
 ### 3. Tiered Scraping Pipeline
 

@@ -262,6 +262,18 @@ These enable rich scholarly metadata (DOIs, authors, citation counts, abstracts,
 
 `citation_graph` registers only when a citation-capable academic provider (Semantic Scholar or OpenAlex) is configured. Open-access enrichment is best-effort and never fails or slows a search beyond its own bounded request.
 
+### Structured-Domain Providers (Optional)
+
+These enable dedicated structured-research tools. Each is independent; the tool registers only when its provider is configured (with one exception noted below).
+
+| Variable | Tool | Description | Default |
+|----------|------|-------------|---------|
+| `EDGAR_CONTACT_EMAIL` | `filing_search` | Contact email for SEC EDGAR's required User-Agent (no API key). Falls back to `OPENALEX_EMAIL`; `filing_search` registers only when one is set | — (falls back to `OPENALEX_EMAIL`) |
+| `COURTLISTENER_API_TOKEN` | `legal_search` | Optional token raising the CourtListener rate limit (~100→~5000 req/day). **`legal_search` is always available** (CourtListener works keyless) | — |
+| `FRED_API_KEY` | `econ_search` | Federal Reserve Economic Data API key (free at fred.stlouisfed.org). `econ_search` registers only when set | — |
+
+Each structured-domain provider gets an independent circuit breaker and uses the SSRF-safe HTTP client. `filing_search` returns XBRL company facts (with `facts=true`) and `econ_search` returns observations passed through exactly as the source provides them — no rounding.
+
 ### Multi-Provider Routing
 
 When `SEARCH_ROUTING` is set, the server uses all configured providers with intelligent fallback:

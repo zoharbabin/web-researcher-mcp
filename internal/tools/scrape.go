@@ -153,6 +153,13 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 			output["structuredData"] = result.StructuredData
 		}
 
+		// Typed source classification (#62): source_type / authority_tier /
+		// domain_category, derived from the Schema.org/Highwire signals + the
+		// numeric authority score. Additive; no lens on scrape_page.
+		for k, v := range classificationFields(classifySource(input.URL, result.Title, processedContent, "", "", result.StructuredData)) {
+			output[k] = v
+		}
+
 		jsonBytes, _ := json.Marshal(output)
 		deps.Cache.Set(ctx, cacheKey, jsonBytes, time.Hour)
 		recordToolCall(deps, "scrape_page", time.Since(start), nil, "", false)
@@ -223,6 +230,13 @@ func scrapeRaw(ctx context.Context, deps Dependencies, input scrapePageInput, ma
 		"raw":             true,
 	}
 
+	// Typed source classification (#62) — parity with full mode. Raw mode skips
+	// structured-data extraction, so source_type falls back to the host heuristic
+	// (authority_tier/domain_category are URL/host-derived and unaffected).
+	for k, v := range classificationFields(classifySource(input.URL, result.Title, result.Content, "", "", result.StructuredData)) {
+		output[k] = v
+	}
+
 	jsonBytes, _ := json.Marshal(output)
 	deps.Cache.Set(ctx, cacheKey, jsonBytes, time.Hour)
 	recordToolCall(deps, "scrape_page", time.Since(start), nil, "", false)
@@ -250,8 +264,9 @@ func scrapeCacheKey(url, mode string, maxLength int) string {
 	// GFM markdown-table content (#48) and the optional structuredData field
 	// (#46) — both change the full-mode response shape, so a v2 blob would serve
 	// table-less/garbled content and omit structuredData after an upgrade
-	// (incl. via the shared Redis cache). Bump again on any future shape change.
-	fmt.Fprintf(h, "scrape|v3|%s|%s|%d", url, mode, maxLength)
+	// (incl. via the shared Redis cache). v4 adds the typed classification fields
+	// (#62: sourceType/authorityTier/domainCategory). Bump on any future shape change.
+	fmt.Fprintf(h, "scrape|v4|%s|%s|%d", url, mode, maxLength)
 	return "scrape:" + hex.EncodeToString(h.Sum(nil))[:32]
 }
 

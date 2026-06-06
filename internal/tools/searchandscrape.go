@@ -10,6 +10,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
+	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
@@ -23,6 +24,7 @@ type searchAndScrapeInput struct {
 	FilterByQuery      bool   `json:"filter_by_query,omitempty" jsonschema:"Remove sources with low relevance to the query (default: false). Enable for precision over recall."`
 	Provider           string `json:"provider,omitempty" jsonschema:"Force a specific search provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa. Omit to use configured default."`
 	SessionID          string `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. All scraped sources are automatically recorded for recovery after context loss."`
+	Claim              string `json:"claim,omitempty" jsonschema:"Optional claim to evaluate against each source. When set, each source gains keySentences (the most claim-relevant sentences) and a claimSignal (the single strongest). The server surfaces evidence only — it never decides supports/contradicts; you make that call."`
 }
 
 func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
@@ -106,7 +108,7 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 		}
 
 		results := parallelScrape(ctx, deps, searchResults, maxLenPerSource)
-		sources, combinedParts, scraped, structuredFailures := buildSourcesStructured(results, input.Query, input.FilterByQuery)
+		sources, combinedParts, scraped, structuredFailures := buildSourcesStructured(results, input.Query, input.Claim, input.FilterByQuery)
 		combined := assembleCombined(combinedParts, deduplicate, totalMaxLen)
 
 		// Phase 1B: top-level status field
@@ -179,11 +181,12 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 }
 
 type scrapeResult struct {
-	url     string
-	title   string
-	content string
-	cType   string
-	err     error
+	url        string
+	title      string
+	content    string
+	cType      string
+	structured *scraper.StructuredData
+	err        error
 }
 
 type sourceOutput struct {
@@ -193,6 +196,14 @@ type sourceOutput struct {
 	ContentType string                `json:"contentType"`
 	Trust       string                `json:"trust"`
 	Scores      *content.QualityScore `json:"scores,omitempty"`
+	// Typed source classification (#62) — additive, always present.
+	SourceType     string `json:"sourceType,omitempty"`
+	AuthorityTier  string `json:"authorityTier,omitempty"`
+	DomainCategory string `json:"domainCategory,omitempty"`
+	// Claim evidence (#66) — present only when the `claim` param was supplied and
+	// the source contained relevant sentences. Evidence, not a verdict.
+	ClaimSignal  string   `json:"claimSignal,omitempty"`
+	KeySentences []string `json:"keySentences,omitempty"`
 }
 
 // scoredSourcesFrom adapts the tool's sourceOutput slice to the content
@@ -240,10 +251,11 @@ func parallelScrape(ctx context.Context, deps Dependencies, searchResults []sear
 			}
 			processedContent, _ := deps.Content.Process(result.Content, maxLen)
 			results[idx] = scrapeResult{
-				url:     url,
-				title:   title,
-				content: processedContent,
-				cType:   result.ContentType,
+				url:        url,
+				title:      title,
+				content:    processedContent,
+				cType:      result.ContentType,
+				structured: result.StructuredData,
 			}
 		}(i, sr.URL, sr.Title)
 	}
@@ -251,7 +263,7 @@ func parallelScrape(ctx context.Context, deps Dependencies, searchResults []sear
 	return results
 }
 
-func buildSourcesStructured(results []scrapeResult, query string, filterByQuery bool) ([]sourceOutput, []string, int, []FailureInfo) {
+func buildSourcesStructured(results []scrapeResult, query, claim string, filterByQuery bool) ([]sourceOutput, []string, int, []FailureInfo) {
 	var sources []sourceOutput
 	var combinedParts []string
 	var failures []FailureInfo
@@ -277,14 +289,31 @@ func buildSourcesStructured(results []scrapeResult, query string, filterByQuery 
 			continue
 		}
 
-		sources = append(sources, sourceOutput{
-			URL:         r.url,
-			Title:       r.title,
-			Content:     r.content,
-			ContentType: r.cType,
-			Trust:       untrustedContentTrust,
-			Scores:      &score,
-		})
+		// Typed classification (#62) — reuse the authority we just scored; no lens
+		// on search_and_scrape.
+		cls := content.ClassifySource(r.url, score.Authority, r.structured.Signals(), "")
+
+		src := sourceOutput{
+			URL:            r.url,
+			Title:          r.title,
+			Content:        r.content,
+			ContentType:    r.cType,
+			Trust:          untrustedContentTrust,
+			Scores:         &score,
+			SourceType:     cls.SourceType,
+			AuthorityTier:  cls.AuthorityTier,
+			DomainCategory: cls.DomainCategory,
+		}
+
+		// Claim evidence (#66) — only when a claim was supplied and matched.
+		if claim != "" {
+			if ev := content.ExtractClaimEvidence(r.content, claim); len(ev.KeySentences) > 0 {
+				src.ClaimSignal = ev.Signal
+				src.KeySentences = ev.KeySentences
+			}
+		}
+
+		sources = append(sources, src)
 		combinedParts = append(combinedParts, r.content)
 	}
 

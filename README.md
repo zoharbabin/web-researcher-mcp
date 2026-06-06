@@ -61,7 +61,7 @@ If your work gets cited, published, submitted to a court, or shown to a client �
 | What you get | What that means for you |
 |---|---|
 | **Search lenses** — choose your sources by field | Your AI only sees the sites you trust (PubMed, SEC.gov, arXiv — not random blogs) |
-| **Research tools for every source type** | Papers, patents, news, web pages, images, full-text reading, grounded answers with citations, structured extraction, and multi-step deep research |
+| **Research tools for every source type** | Papers, patents, SEC filings, US court records, economic data, news, web pages, images, full-text reading, grounded answers with citations, structured extraction, and multi-step deep research |
 | **Always has a backup** | Multiple search engines working together — if one has issues, the others pick up automatically |
 | **Reads full articles** | Doesn't just give you snippets — extracts and reads entire pages, PDFs, Word docs, even YouTube transcripts |
 | **Real citations, formatted** | Every source comes with a proper APA/MLA citation and a link that actually works |
@@ -117,11 +117,17 @@ https://github.com/user-attachments/assets/1d17af8e-1ec4-4a37-b42b-f26712ebe860
 | `image_search` | Find images by size, type, color, or format |
 | `news_search` | Search recent news with date controls and source filtering |
 | `academic_search` | Find real papers with real DOIs — authors, citation counts, open-access links |
+| `citation_graph` | Walk a paper's citation neighborhood — works it cites and works that cite it, with intent/influence signals |
 | `patent_search` | Search patent offices (US, Europe, international) with classification codes |
+| `filing_search` | Search SEC EDGAR for US public-company filings (10-K, 10-Q, 8-K, …) — or pull structured XBRL company facts |
+| `legal_search` | Search US court opinions and dockets via CourtListener — real cases with real citations |
+| `econ_search` | Look up economic time series from FRED (Federal Reserve) — GDP, CPI, unemployment, rates |
 | `answer` | Ask a factual question and get one synthesized answer **with citations** — the direct answer, not a reading list |
 | `structured_search` | Search and extract structured JSON per result (supply a schema), or pull entities by category (company, people, …) |
 | `sequential_search` | Multi-step deep research — your AI remembers what it already found and builds on it |
 | `get_research_session` | Recover a research session after context loss — picks up right where you left off |
+| `research_export` | Export a research session as a shareable report (markdown or JSON), with full per-step provenance |
+| `format_bibliography` | Turn collected sources into a formatted bibliography — APA, MLA, or BibTeX |
 
 These are the always-on core tools. `answer` and `structured_search` are provider-independent — they activate when a capable provider (e.g. Exa) is configured. Operators can also enable opt-in, consent-gated tools (per-user analytics, long-term memory, shared workspaces) that appear only when their feature is turned on — see [`docs/TOOLS.md`](docs/TOOLS.md) for the authoritative, CI-verified tool list and full schemas.
 
@@ -427,10 +433,12 @@ Search lenses let you control which websites your AI is allowed to search. Inste
 |------|-------|
 | `docs` | Official documentation and API references only |
 | `academic` | Preprint servers, repositories, open-access journals |
+| `academic-extended` | Preprint servers, OA aggregators, and repositories beyond core journal indexes |
 | `clinical` | Clinical trials, drug safety, evidence-based medicine |
 | `security` | CVEs, advisories, vulnerability research |
 | `journalism` | Public records, corporate filings, FOIA |
 | `programming` | Code docs, tutorials, Q&A |
+| `devops` | Infrastructure and operations — Kubernetes, Docker, Terraform, cloud, CI/CD |
 | `news` | Current events, journalism |
 | `tech` | Technology industry |
 | `legal` | Law, cases, statutes |

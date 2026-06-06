@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 )
 
 type PipelineConfig struct {
@@ -71,6 +73,46 @@ type StructuredData struct {
 // package reads it to decide whether to surface the field.
 func (s *StructuredData) IsEmpty() bool {
 	return s == nil || (len(s.JSONLD) == 0 && len(s.OpenGraph) == 0 && len(s.Citation) == 0)
+}
+
+// Signals reduces the rich StructuredData to the decoupled signals the content
+// package needs for typed source classification (#62): the top-level Schema.org
+// @type of each JSON-LD block, and whether Highwire citation_* meta was present.
+// Returns a non-nil result with zero fields when empty/nil. Keeping the JSON-LD
+// @type parse here (the scraper already owns the raw blocks) means the content
+// package never imports scraper.
+func (s *StructuredData) Signals() content.StructuredSignals {
+	if s == nil {
+		return content.StructuredSignals{}
+	}
+	sig := content.StructuredSignals{HasCitationMeta: len(s.Citation) > 0}
+	for _, raw := range s.JSONLD {
+		if t := jsonLDTopType(raw); t != "" {
+			sig.SchemaTypes = append(sig.SchemaTypes, t)
+		}
+	}
+	return sig
+}
+
+// jsonLDTopType extracts the top-level "@type" from a JSON-LD block. Schema.org
+// allows @type to be a string or array of strings; both are handled. Returns the
+// first/only type, or "".
+func jsonLDTopType(raw json.RawMessage) string {
+	var probe struct {
+		Type json.RawMessage `json:"@type"`
+	}
+	if err := json.Unmarshal(raw, &probe); err != nil || len(probe.Type) == 0 {
+		return ""
+	}
+	var single string
+	if err := json.Unmarshal(probe.Type, &single); err == nil {
+		return single
+	}
+	var many []string
+	if err := json.Unmarshal(probe.Type, &many); err == nil && len(many) > 0 {
+		return many[0]
+	}
+	return ""
 }
 
 // stampTier records which extraction tier produced a result, unless the tier

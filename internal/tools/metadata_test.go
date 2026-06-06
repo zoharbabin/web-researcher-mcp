@@ -27,6 +27,9 @@ var expectedTools = []string{
 	"research_export",
 	"format_bibliography",
 	"citation_graph",
+	"filing_search",
+	"legal_search",
+	"econ_search",
 	"answer",
 	"structured_search",
 	"get_my_analytics",
@@ -232,6 +235,9 @@ func TestOutputSchemaMatchesResponse(t *testing.T) {
 		"answer":              {"query": "test"},
 		"structured_search":   {"query": "test"},
 		"format_bibliography": {"sources": []any{map[string]any{"url": "https://example.com/a", "title": "A", "author": "Smith, J.", "date": "2024"}}},
+		"filing_search":       {"query": "AAPL"},
+		"legal_search":        {"query": "miranda"},
+		"econ_search":         {"series_id": "GDP"},
 	}
 
 	tools := listTools(t)
@@ -309,6 +315,9 @@ func TestExternalContentToolsCarryTrustMarker(t *testing.T) {
 		"citation_graph":    "untrusted-external-content",
 		"answer":            "untrusted-external-content",
 		"structured_search": "untrusted-external-content",
+		"filing_search":     "untrusted-external-content",
+		"legal_search":      "untrusted-external-content",
+		"econ_search":       "untrusted-external-content",
 	}
 	args := map[string]map[string]any{
 		"web_search":        {"query": "test"},
@@ -322,6 +331,9 @@ func TestExternalContentToolsCarryTrustMarker(t *testing.T) {
 		"citation_graph":    {"paper": "10.1/x"},
 		"answer":            {"query": "test"},
 		"structured_search": {"query": "test"},
+		"filing_search":     {"query": "AAPL"},
+		"legal_search":      {"query": "miranda"},
+		"econ_search":       {"series_id": "GDP"},
 	}
 
 	for name, wantTrust := range want {

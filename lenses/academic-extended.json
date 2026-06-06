@@ -1,0 +1,17 @@
+{
+  "name": "academic-extended",
+  "description": "Preprint servers, open-access aggregators, and repositories beyond core journal indexes",
+  "domains": [
+    "arxiv.org",
+    "biorxiv.org",
+    "medrxiv.org",
+    "ssrn.com",
+    "scholar.google.com",
+    "semanticscholar.org",
+    "doaj.org",
+    "core.ac.uk",
+    "unpaywall.org",
+    "researchgate.net"
+  ],
+  "cx": ""
+}
