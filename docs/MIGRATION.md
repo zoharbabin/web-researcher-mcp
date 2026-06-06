@@ -17,7 +17,7 @@ This guide is for users of the deprecated [`google-researcher-mcp`](https://gith
 | Language | TypeScript / Node.js 20+ | Go (single static binary) |
 | Install | `npx -y google-researcher-mcp` | `go install`, binary download, or Docker |
 | Process model | npm spawns Node.js — orphan detection issues | Native binary — clean EOF/SIGPIPE lifecycle |
-| Search backends | Google PSE only | Google PSE + Brave + Serper + SearXNG + SearchAPI.io (with multi-provider routing) |
+| Search backends | Google PSE only | Google PSE plus multiple alternatives (Brave, Serper, SearXNG, SearchAPI, Tavily, Exa) and a zero-config DuckDuckGo fallback, with multi-provider routing — canonical list: `search.SupportedProviders` |
 | Caching | In-memory only | Hybrid (memory + AES-encrypted disk) |
 | Architecture | Monolithic `server.ts` | Modular (one package per concern) |
 | Binary size | ~200MB (Node.js + Chromium) | ~22MB standalone (Chromium optional, auto-downloaded) |
@@ -129,8 +129,8 @@ All open issues from the old project are resolved in the new version:
 | Issue | Problem | Resolution |
 |-------|---------|------------|
 | [#108](https://github.com/zoharbabin/google-researcher-mcp/issues/108) | Orphan detection fails via npx | Go binary runs directly — no intermediate npm process, clean EOF/SIGPIPE handling |
-| [#107](https://github.com/zoharbabin/google-researcher-mcp/issues/107) | Google discontinuing 'entire web' search | Supports Brave, Serper, SearXNG for unrestricted search; Google PSE retained for lens queries |
-| [#55](https://github.com/zoharbabin/google-researcher-mcp/issues/55) | Support alternative search engines | Built-in support for Brave Search, Serper.dev, and SearXNG |
+| [#107](https://github.com/zoharbabin/google-researcher-mcp/issues/107) | Google discontinuing 'entire web' search | Supports multiple whole-web providers (Brave, Serper, SearXNG, SearchAPI, Tavily, Exa, DuckDuckGo) for unrestricted search; Google PSE retained for lens queries |
+| [#55](https://github.com/zoharbabin/google-researcher-mcp/issues/55) | Support alternative search engines | Built-in support for several alternative engines (Brave, Serper, SearXNG, SearchAPI, Tavily, Exa) plus zero-config DuckDuckGo |
 | [#72](https://github.com/zoharbabin/google-researcher-mcp/issues/72) | Add distributed Redis caching | Hybrid cache: memory + AES-encrypted disk (`CACHE_DIR`, `CACHE_ENCRYPTION_KEY`) |
 | [#40](https://github.com/zoharbabin/google-researcher-mcp/issues/40) | Split server.ts into modules | Fully modular: one package per concern, one file per tool |
 

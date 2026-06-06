@@ -420,6 +420,16 @@ func (p *MyProvider) Patents(ctx context.Context, params PatentSearchParams) ([]
 
 The `ProviderMeta.Regions` field controls intelligent routing — set it to the jurisdictions your provider covers so queries for other regions skip it automatically.
 
+## Adding a Structured-Domain Capability
+
+New structured-research domains (financial filings, case law, economic data, …) follow one repeatable pattern, proven by the SEC EDGAR / CourtListener / FRED trio in `internal/search/structured_domains.go`. Unlike web providers, these are **not** Router-routed — they resolve directly from the `Dependencies` maps in the tool layer, like the synthesis tools.
+
+1. **Define the capability** in `internal/search/structured_domains.go` (or a sibling file): a `…Searcher` interface (the method), a `…Provider` interface (`…Searcher` + `Name()` + `Metadata()`), the `…SearchParams` / `…Result` structs, a `…ProviderConfig`, a `Supported…Providers` slice, a `New…ProviderByName()` factory, and an `Available…Providers()` constructor (it gives each provider its own `circuit.New(...)` breaker — copy the EDGAR/FRED shape exactly).
+2. **Implement the provider** in `internal/search/<name>.go` with the usual `Deps{HTTPClient, Breaker}`, a `SetBaseURL` test hook, typed 429/404/4xx handling, `io.LimitReader`-bounded reads, and a `var _ …Provider = (*XProvider)(nil)` assertion. Mirror `edgar.go` / `courtlistener.go` / `fred.go`.
+3. **Add the tool** in `internal/tools/<name>.go`: a typed input struct (use `omitempty` + in-handler validation for "provide X or Y" inputs — a `,required` jsonschema tag is enforced by the SDK *before* your handler runs), a `resolve…Searcher` helper, `structuredResult`, `readOnlyAnnotations(true, true)`, the `untrusted-external-content` trust marker, audit + metrics, and an output schema in `internal/tools/schemas.go`. Register it conditionally in `RegisterAll()` (`internal/tools/registry.go`) and add a provider map to the `Dependencies` struct.
+4. **Wire it** in `cmd/web-researcher-mcp/main.go` (construct the config + `Available…Providers` map) and add the credential/contact env var to `internal/config/config.go` + `.env.example`.
+5. **Test + document** — `httptest` unit tests + a `//go:build live` test that skips without credentials; add the tool to `expectedTools`, `setupTestDeps`, and the trust-marker/output-schema maps in `metadata_test.go`; write a `## Tool N:` section in `docs/TOOLS.md` and a setup section in `docs/API_SETUP.md`.
+
 ## Getting Help
 
 - **Questions and discussions**: [GitHub Discussions](https://github.com/zoharbabin/web-researcher-mcp/discussions)
