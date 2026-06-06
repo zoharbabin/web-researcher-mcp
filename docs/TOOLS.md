@@ -39,6 +39,7 @@ Perform a web search and return structured result URLs with metadata.
 | `lens` | string | no | — | Domain lens (overrides `site`). See `lenses/` directory for available lenses |
 | `provider` | string | no | — | Force search provider. Returns error listing available providers if unknown |
 | `sessionId` | string | no | — | Link results to a `sequential_search` session |
+| `claim` | string | no | — | Optional claim to evaluate against each result's snippet; when set, each result gains a `claimSignal` (#66). Evidence only — never a verdict |
 
 ### Output Schema
 
@@ -57,8 +58,11 @@ type SearchResult struct {
     URL         string `json:"url"`
     Snippet     string `json:"snippet"`
     DisplayLink string `json:"displayLink"`
+    ClaimSignal string `json:"claimSignal,omitempty"` // most claim-relevant snippet sentence; present per result only when `claim` is set and matched
 }
 ```
+
+When `claim` is omitted the output is byte-identical to the above without `claimSignal`. With `claim`, the server extracts the most claim-relevant sentence from each result's snippet — evidence to help triage which links to read; for full-text claim evidence use `search_and_scrape` with `claim`.
 
 On a zero-result response, `hints` carries a `ZeroResultHints` object (the same shape `academic_search` and `patent_search` emit) explaining why nothing matched and how to recover: `reason` (`no_match` | `filters_too_restrictive`), `filtersApplied` (the constraints that may have eliminated results — `site`, `lens`, `time_range`, `country`, `language`, `exact_terms`, `exclude_terms`), and `suggestedActions` (remove-filter / try-different-provider). Suggested alternative providers are limited to those **configured and currently healthy**. On any non-empty result set the field is omitted.
 
@@ -114,6 +118,9 @@ type ScrapeOutput struct {
     ExtractedBy     string    `json:"extractedBy,omitempty"` // extraction tier: markdown|stealth|html|browser|exa:cached|exa:crawled; omitted when unknown
     Metadata        *Metadata `json:"metadata,omitempty"` // present only when a title was extracted (full/preview only)
     StructuredData  *StructuredData `json:"structuredData,omitempty"` // page-embedded machine-readable metadata; present only when found (full/preview, HTML pages)
+    SourceType      string    `json:"sourceType"`     // typed classification (#62): peer_reviewed|official_docs|government|news_publication|blog|forum|wiki|social_media|unknown
+    AuthorityTier   string    `json:"authorityTier"`  // banded authority: high|medium|low
+    DomainCategory  string    `json:"domainCategory"` // subject area: academic|legal|medical|financial|technical|general
 }
 
 type Metadata struct {
@@ -156,6 +163,8 @@ In `raw` mode the output additionally carries `"raw": true`, and `contentType` i
 **Structured data (#46).** When the page embeds machine-readable metadata, the response carries a `structuredData` object alongside `content`: `jsonLd` (each `<script type="application/ld+json">` block, kept verbatim — invalid JSON is skipped, never failing the scrape), `openGraph` (`og:*`/`article:*` meta, keys keep their prefix), and `citation` (Highwire `citation_*` meta — DOI, authors, journal). The whole object is omitted when no such markup is present, and each sub-field is omitted when empty. It is produced by the HTML-extraction tiers only (absent for `raw` mode, PDFs, YouTube, and markdown-tier results), is independently size-bounded so a pathological page cannot blow the response budget, and is **untrusted external data** under the same trust boundary as `content`.
 
 **Extraction provenance (`extractedBy`).** When known, the response names the tier that produced the content: `markdown`, `stealth`, `html`, `browser`, or — for the paid Exa fallback — `exa:cached` / `exa:crawled`. It lets a caller see whether content came from a free local tier or the metered Exa `/contents` API (Tier 5, present only when `EXA_API_KEY` is set). Omitted when unknown (e.g. document/YouTube routes).
+
+**Typed source classification (#62).** Every scrape response (full and raw) carries three categorical fields alongside the numeric content: `sourceType` (the kind of source — derived from Schema.org `@type` / Highwire `citation_*` meta when present, else a domain heuristic, else `unknown`), `authorityTier` (`high`/`medium`/`low`, a banding of the internal authority score), and `domainCategory` (`academic`/`legal`/`medical`/`financial`/`technical`/`general`, from a domain heuristic). They let the model hedge in natural language by source type. They are best-effort hints derived from untrusted page data — treat them as signals, not guarantees. (In raw mode, with no structured-data extraction, `sourceType` falls back to the host heuristic.)
 
 **Trust boundary marker.** Every scrape response (full, preview, and raw) carries `"trust": "untrusted-external-content"` in the JSON envelope — an explicit, machine-readable boundary marker. It is deliberately placed in the structured output, never inside the `content` string (where a malicious page could forge or close it), and signals that `content` is external data to be treated as data, never as instructions (OWASP LLM01, indirect prompt injection). The server cannot enforce the prompt boundary itself — the model and agent loop live in the host application — so this marker exists to make the untrusted provenance unmissable to that host.
 
@@ -277,6 +286,7 @@ Combined search + scrape pipeline with quality scoring, deduplication, and sourc
 | `filter_by_query` | bool | no | false | — |
 | `provider` | string | no | — | Force search provider for the search phase |
 | `sessionId` | string | no | — | Link results to a `sequential_search` session |
+| `claim` | string | no | — | Optional claim to evaluate against each source; when set, each source gains `keySentences` + `claimSignal` (#66). Evidence only — never a verdict |
 
 ### Output Schema
 
@@ -323,12 +333,17 @@ type Component struct {
 }
 
 type SourceResult struct {
-    URL         string        `json:"url"`
-    Title       string        `json:"title,omitempty"`
-    Content     string        `json:"content"`
-    ContentType string        `json:"contentType"`
-    Trust       string        `json:"trust"`        // "untrusted-external-content" (see top-level Trust)
-    Scores      *QualityScore `json:"scores,omitempty"`
+    URL            string        `json:"url"`
+    Title          string        `json:"title,omitempty"`
+    Content        string        `json:"content"`
+    ContentType    string        `json:"contentType"`
+    Trust          string        `json:"trust"`        // "untrusted-external-content" (see top-level Trust)
+    Scores         *QualityScore `json:"scores,omitempty"`
+    SourceType     string        `json:"sourceType,omitempty"`     // typed classification (#62): peer_reviewed|official_docs|government|news_publication|blog|forum|wiki|social_media|unknown
+    AuthorityTier  string        `json:"authorityTier,omitempty"`  // high|medium|low
+    DomainCategory string        `json:"domainCategory,omitempty"` // academic|legal|medical|financial|technical|general
+    ClaimSignal    string        `json:"claimSignal,omitempty"`    // strongest claim-relevant sentence; present only when `claim` is set and matched (#66)
+    KeySentences   []string      `json:"keySentences,omitempty"`   // top claim-relevant sentences in document order; present only with `claim`
 }
 
 type FailureInfo struct {
@@ -1172,6 +1187,108 @@ Turn a set of sources into a formatted bibliography in **APA**, **MLA**, or **Bi
 
 ### Cache
 - No cache (pure formatting of supplied/stored data)
+
+---
+
+## Tool 20: `filing_search`
+
+Search SEC EDGAR — the authoritative primary source for US public-company disclosures (10-K/10-Q/8-K/S-1/DEF 14A/…). Registered only when a filing provider is configured (`edgar`, which needs a contact email for SEC's required User-Agent).
+
+### Input Schema
+
+| Field | Type | Required | Default | Constraints |
+|-------|------|----------|---------|-------------|
+| `query` | string | yes* | — | Company name, ticker, or CIK — or free text to full-text search all filings. *Required unless `ticker` is set |
+| `form_type` | string | no | — | Restrict to a filing type (10-K, 10-Q, 8-K, S-1, DEF 14A, …) |
+| `ticker` | string | no | — | Direct ticker lookup; takes precedence over `query` for entity resolution |
+| `date_from` | string | no | — | Only filings on/after this date (YYYY-MM-DD) |
+| `date_to` | string | no | — | Only filings on/before this date (YYYY-MM-DD) |
+| `facts` | bool | no | false | Return structured XBRL company facts (revenue, net income, EPS, assets) instead of a filing list |
+| `num_results` | int | no | 5 | 1-10 |
+| `provider` | string | no | — | Force a filing provider: `edgar` |
+| `sessionId` | string | no | — | Link results to a `sequential_search` session |
+
+### Output Fields
+
+Each item in `filings[]`: `company`, `cik`, `formType`, `filingDate`, `periodOfReport`, `accession`, `url` (document link; pair with `scrape_page`), `description`, `source`. In `facts=true` mode each item is one XBRL fact: `concept`, `unit`, `value` (**exactly as filed — no rounding**). Plus `query`, `resultCount`, `provider`, `hints` (zero-result), and `trust` (`untrusted-external-content`).
+
+### Behavior
+- Entity resolution: a ticker/CIK/known-company `query` resolves to a CIK and lists its recent filings from the submissions API; otherwise a full-text search runs across all filers (EFTS).
+- `facts=true` returns a curated set of headline XBRL concepts (revenue, net income, assets, EPS, …), most-recent value each, passed through verbatim.
+- **Required `User-Agent`**: SEC blocks requests without a descriptive UA + contact email; the provider only registers when `EDGAR_CONTACT_EMAIL` (or `OPENALEX_EMAIL`) is set. No request is ever made without it.
+- Ticker→CIK map is fetched once and cached for the process lifetime.
+
+### Annotations
+- ReadOnly: true · Idempotent: true · OpenWorld: true (queries the live SEC API)
+
+### Cache
+- TTL: 24 hours (only for non-empty results)
+
+---
+
+## Tool 21: `legal_search`
+
+Search US court opinions (federal + state) via CourtListener for case-law research and precedent tracing. Registered only when a case provider is configured (`courtlistener`, which works keyless at a lower rate).
+
+### Input Schema
+
+| Field | Type | Required | Default | Constraints |
+|-------|------|----------|---------|-------------|
+| `query` | string | yes | — | Legal topic, case name (e.g. `Miranda v. Arizona`), or statutory reference |
+| `jurisdiction` | string | no | — | Court id: `scotus`, `ca9`, `ny`, … |
+| `date_from` | string | no | — | Only opinions decided on/after this date (YYYY-MM-DD) |
+| `date_to` | string | no | — | Only opinions decided on/before this date (YYYY-MM-DD) |
+| `num_results` | int | no | 10 | 1-20 |
+| `provider` | string | no | — | Force a case-law provider: `courtlistener` |
+| `sessionId` | string | no | — | Link results to a `sequential_search` session |
+
+### Output Fields
+
+Each item in `cases[]`: `caseName`, `citation` (Bluebook), `court`, `courtId`, `dateFiled`, `docketNumber`, `citationCount`, `url` (opinion page; `scrape_page` for full text), `source`. Plus `query`, `resultCount`, `provider`, `hints`, and `trust` (`untrusted-external-content`).
+
+### Behavior
+- Searches the CourtListener v4 opinions index; `jurisdiction` maps to the `court` filter, dates to `filed_after`/`filed_before`.
+- **Auth**: works keyless at ~100 req/day; `COURTLISTENER_API_TOKEN` raises the limit (~5000/day). The token is sent as an `Authorization` header and never logged.
+
+### Annotations
+- ReadOnly: true · Idempotent: true · OpenWorld: true (queries the live CourtListener API)
+
+### Cache
+- TTL: 24 hours (only for non-empty results)
+
+---
+
+## Tool 22: `econ_search`
+
+Look up macroeconomic data from FRED (Federal Reserve Economic Data) — 800K+ time series (GDP, CPI, unemployment, rates). Registered only when `FRED_API_KEY` is set.
+
+### Input Schema
+
+| Field | Type | Required | Default | Constraints |
+|-------|------|----------|---------|-------------|
+| `query` | string | yes* | — | Keyword to search series by. *Provide this OR `series_id` |
+| `series_id` | string | yes* | — | A FRED series ID (e.g. `GDP`, `CPIAUCSL`, `UNRATE`) to fetch observations. *Provide this OR `query` |
+| `date_from` | string | no | — | Only observations on/after this date (YYYY-MM-DD) |
+| `date_to` | string | no | — | Only observations on/before this date (YYYY-MM-DD) |
+| `frequency` | string | no | — | Resample: d, w, m, q, a |
+| `units` | string | no | — | FRED units transform (e.g. `pch`, `pc1`); omit for raw levels |
+| `num_results` | int | no | 5 (search) / 10 (observations) | — |
+| `provider` | string | no | — | Force an economic-data provider: `fred` |
+
+### Output Fields
+
+`mode` is `series` (keyword search) or `observations` (series_id lookup). In series mode each `results[]` item: `seriesId`, `title`, `units`, `frequency`, `lastUpdated`, `notes`. In observations mode: `seriesId`, `date`, `value` (**exactly as returned — no rounding**; missing observations carry no `value`). Plus `query`, `seriesId` (echoed in observations mode), `resultCount`, `provider`, `hints`, and `trust` (`untrusted-external-content`).
+
+### Behavior
+- `series_id` set → returns that series' observations (most-recent first), honoring date/frequency/units filters; otherwise keyword-searches series.
+- No macro web-lens fallback exists, so an error/empty returns a structured zero-result with hints (no fallback).
+- **Auth**: `FRED_API_KEY` (free at fred.stlouisfed.org) is required; the provider is skipped when unset. The key is sent as a query param and never logged.
+
+### Annotations
+- ReadOnly: true · Idempotent: true · OpenWorld: true (queries the live FRED API)
+
+### Cache
+- TTL: 6 hours (only for non-empty results)
 
 ---
 

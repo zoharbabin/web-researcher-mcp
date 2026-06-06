@@ -20,6 +20,8 @@ Search the web and get back a clean list of results — each with a title, link,
 
 **Response** contains: `urls` (array of result URLs), `query` (echoed back), `resultCount`, and `results` (array with `title`, `url`, `snippet`, `displayLink` for each result). Every response also carries a `_meta` block (`cached`, `ageSeconds`, `maxAgeSeconds`, `freshness`) telling you whether it came from cache. Results are saved temporarily — if you run the same search again, it responds instantly without using another API call.
 
+Pass an optional `claim` to get a triage signal: each result then also carries a `claimSignal` — the most claim-relevant sentence from that result's snippet — so you can tell at a glance which links are worth reading. This is snippet-level evidence only; for full-text claim evidence use `search_and_scrape` with `claim`. The server surfaces evidence, never a verdict.
+
 ---
 
 ## Domain-Focused Search with Lenses
@@ -37,7 +39,7 @@ Use a search lens to restrict results to curated high-quality sources for a spec
 }
 ```
 
-The "programming" lens focuses your search on trusted developer sources — Stack Overflow, GitHub, Go docs, MDN, and other curated sites. This means fewer noise results and more relevant answers. Available lenses: `docs`, `academic`, `clinical`, `security`, `journalism`, `programming`, `news`, `tech`, `legal`, `medical`, `finance`, `science`, `government`.
+The "programming" lens focuses your search on trusted developer sources — Stack Overflow, GitHub, Go docs, MDN, and other curated sites. This means fewer noise results and more relevant answers. Available lenses: `docs`, `academic`, `academic-extended`, `clinical`, `security`, `journalism`, `programming`, `devops`, `news`, `tech`, `legal`, `medical`, `finance`, `science`, `government`. The authoritative set is whatever JSON files live in the `lenses/` directory.
 
 ---
 
@@ -57,7 +59,9 @@ Searches the web, then reads the top results for you — pulling out the full te
 }
 ```
 
-**Response** contains: `status` (`"complete"`, `"partial"`, or `"failed"`), `query`, `combinedContent` (merged extracted text), `sources` (array with `url`, `title`, `content`, `contentType`, `scores` — included when `include_sources=true`), `summary` (`urlsSearched`, `urlsScraped`, `urlsFailed`, `processingTimeMs`), and `sizeMetadata` (`totalLength`, `estimatedTokens`, `sizeCategory`). When scrapes fail, `scrapeFailures` lists each with `url`, `kind`, `reason`, `retryable`, and `suggestedAction`. Duplicate paragraphs are removed, and long content is trimmed at sentence breaks so nothing cuts off mid-thought.
+**Response** contains: `status` (`"complete"`, `"partial"`, or `"failed"`), `query`, `combinedContent` (merged extracted text), `sources` (array with `url`, `title`, `content`, `contentType`, `scores`, plus typed source classification `sourceType`/`authorityTier`/`domainCategory` for each source — included when `include_sources=true`), `summary` (`urlsSearched`, `urlsScraped`, `urlsFailed`, `processingTimeMs`), and `sizeMetadata` (`totalLength`, `estimatedTokens`, `sizeCategory`). When scrapes fail, `scrapeFailures` lists each with `url`, `kind`, `reason`, `retryable`, and `suggestedAction`. Duplicate paragraphs are removed, and long content is trimmed at sentence breaks so nothing cuts off mid-thought.
+
+Pass an optional `claim` to evaluate each source against it: every source then also carries `keySentences` (the most claim-relevant sentences from its full text) and `claimSignal` (the single strongest). The server surfaces this evidence only — it never decides whether a source supports or contradicts the claim; your AI makes that call.
 
 ---
 
@@ -75,7 +79,7 @@ Search peer-reviewed papers, preprints, and academic databases.
 }
 ```
 
-**Response** contains: `papers` (array of `{title, url, source, doi, authors, journal, year, abstract, citationCount, openAccess, pdfUrl}`), `query`, `totalResults`, `resultCount`, and `source` (which provider answered). When no results are found, a `hints` object explains why and suggests actions (e.g., remove restrictive filters, try a different source). Results come from scholarly databases (OpenAlex, CrossRef) or site-restricted web search as fallback.
+**Response** contains: `papers` (array of `{title, url, source, doi, authors, journal, year, abstract, citationCount, openAccess, pdfUrl}` — plus `tldr`, `isInfluential`, and `citationIntents` when the provider supplies them), `query`, `totalResults`, `resultCount`, and `source` (which provider answered). When no results are found, a `hints` object explains why and suggests actions (e.g., remove restrictive filters, try a different source). Results come from scholarly databases (OpenAlex, CrossRef, Semantic Scholar, or Exa) or site-restricted web search as fallback. To trace a paper's citation neighborhood — the works it cites and the works that cite it — pair this with `citation_graph`.
 
 ---
 
@@ -96,6 +100,86 @@ Search patent databases with classification codes and office filtering.
 ```
 
 **Response** contains: `patents` (array of `{title, url, number, abstract, assignee, inventor, filed, granted, pdf, status}`), `query`, `searchType`, `resultCount`, `source` (which provider answered), and `searchUrl`. When no results are found, a `hints` object explains why (e.g., provider doesn't cover the requested region) and suggests alternatives. You can filter by patent office (US, European, international, Japan, China, Korea) and by technology category codes. The server picks the best data source for your region, or you can force a specific provider.
+
+---
+
+## SEC Filing Search
+
+Look up US public-company disclosures straight from SEC EDGAR — 10-K, 10-Q, 8-K, S-1, DEF 14A, and more. Search by company name, ticker, or CIK, or pass free text to full-text search across all filers.
+
+```json
+{
+  "tool": "filing_search",
+  "arguments": {
+    "ticker": "AAPL",
+    "form_type": "10-K",
+    "num_results": 5
+  }
+}
+```
+
+**Response** contains: `query`, `resultCount`, `provider`, `trust`, and `filings` (array with `company`, `url`, `source`, and where present `cik`, `formType`, `filingDate`, `periodOfReport`, `accession`, `description`). Pair a filing `url` with `scrape_page` to read it.
+
+To pull structured XBRL company facts (revenue, net income, EPS, assets) instead of a filing list, set `facts=true` — values pass through exactly as filed, no rounding:
+
+```json
+{
+  "tool": "filing_search",
+  "arguments": { "ticker": "AAPL", "facts": true }
+}
+```
+
+With `facts=true`, each result carries `concept`, `unit`, and `value`. Filter any search with `form_type`, `date_from`, and `date_to`. EDGAR needs no API key — only a contact email in its User-Agent (set `EDGAR_CONTACT_EMAIL`, or it falls back to `OPENALEX_EMAIL`). Results stay fresh for 24 hours.
+
+---
+
+## US Case-Law Search
+
+Search US federal and state court opinions for precedent. Query by legal topic, case name, or statutory reference; narrow by jurisdiction or decision date. Works with no API key.
+
+```json
+{
+  "tool": "legal_search",
+  "arguments": {
+    "query": "Miranda v. Arizona",
+    "jurisdiction": "scotus",
+    "num_results": 10
+  }
+}
+```
+
+**Response** contains: `query`, `resultCount`, `provider`, `trust`, and `cases` (array with `caseName`, `url`, `source`, and where present `citation` (Bluebook), `court`, `courtId`, `dateFiled`, `docketNumber`, `citationCount`). Open the full opinion via `scrape_page` on a case `url`. Filter with `jurisdiction` (e.g. `scotus`, `ca9`, `ny`), `date_from`, and `date_to`. Set `COURTLISTENER_API_TOKEN` to raise the rate limit (it works keyless otherwise). Results stay fresh for 24 hours.
+
+---
+
+## Economic Data Search
+
+Look up macroeconomic time series from FRED (Federal Reserve Economic Data) — 800K+ series including GDP, CPI, unemployment, and interest rates. Search by keyword to discover series IDs, or pass a `series_id` to retrieve observations.
+
+```json
+{
+  "tool": "econ_search",
+  "arguments": {
+    "query": "unemployment rate",
+    "num_results": 5
+  }
+}
+```
+
+In **search mode** (`mode: "series"`), `results` is an array of `{seriesId, title, units, frequency, lastUpdated, notes}`. To retrieve observations for a known series, pass `series_id`:
+
+```json
+{
+  "tool": "econ_search",
+  "arguments": {
+    "series_id": "UNRATE",
+    "date_from": "2020-01-01",
+    "units": "pch"
+  }
+}
+```
+
+In **observations mode** (`mode: "observations"`), `results` is an array of `{seriesId, date, value}`. Numeric values pass through exactly as FRED returns them — no rounding, and a real `0` is preserved (missing observations carry no `value`). Filter with `date_from`/`date_to`, resample with `frequency` (`d`/`w`/`m`/`q`/`a`), or transform with `units` (e.g. `pch` for percent change, `pc1` for year-over-year). Requires `FRED_API_KEY` (free at fred.stlouisfed.org). Results stay fresh for 6 hours.
 
 ---
 
@@ -151,7 +235,7 @@ Extract content from any URL — web pages, PDFs, DOCX, PPTX, or YouTube transcr
 }
 ```
 
-**Response** contains: `url`, `content` (extracted text), `contentType` (html/markdown/youtube/pdf/docx/pptx), `contentLength`, `truncated`, `estimatedTokens`, `sizeCategory`, `citation` (with APA/MLA formatted citations), and optionally `metadata` (`{title, author}`). The tool uses the fastest method available and only launches a full browser for sites that require JavaScript — so most pages load in under a second. On a cache hit the result also carries a `_meta` block (`cached`, `ageSeconds`, `maxAgeSeconds`, `freshness`) so you can tell how recent the content is.
+**Response** contains: `url`, `content` (extracted text), `contentType` (html/markdown/youtube/pdf/docx/pptx), `contentLength`, `truncated`, `estimatedTokens`, `sizeCategory`, `citation` (with APA/MLA/BibTeX formatted citations), typed source classification (`sourceType`: peer_reviewed/official_docs/government/news_publication/blog/forum/wiki/social_media/unknown; `authorityTier`: high/medium/low; `domainCategory`: academic/legal/medical/financial/technical/general), and optionally `metadata` (`{title, author}`), `extractedBy` (the extraction tier), and `structuredData` (JSON-LD / Open Graph / citation meta when present). The tool uses the fastest method available and only launches a full browser for sites that require JavaScript — so most pages load in under a second. On a cache hit the result also carries a `_meta` block (`cached`, `ageSeconds`, `maxAgeSeconds`, `freshness`) so you can tell how recent the content is.
 
 ### Modes
 

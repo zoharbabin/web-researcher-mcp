@@ -51,6 +51,13 @@ When you search, your query goes directly to whichever provider you configured. 
 | DuckDuckGo | Your query (zero-config default when no provider is configured) | [duckduckgo.com/privacy](https://duckduckgo.com/privacy) |
 | OpenAlex | Your academic query | [openalex.org/legal](https://openalex.org/legal/privacy-policy) |
 | CrossRef | Your academic query | [crossref.org/privacy](https://www.crossref.org/privacy/) |
+| Semantic Scholar | Your academic / citation query (optional API key) | [allenai.org/privacy-policy](https://allenai.org/privacy-policy) |
+| Unpaywall | A paper's DOI plus your contact email (open-access PDF lookup) | [unpaywall.org](https://unpaywall.org/) |
+| SEC EDGAR | Your filing query / ticker, and a contact email in the request User-Agent (SEC requires it) | [sec.gov/privacy](https://www.sec.gov/privacy) |
+| CourtListener | Your legal query (optional API token) | [free.law/privacy-policy](https://free.law/privacy-policy/) |
+| FRED (St. Louis Fed) | Your economic query / series ID, your API key | [stlouisfed.org/legal](https://www.stlouisfed.org/legal) |
+
+These are public-data APIs queried only when you call the matching tool (`academic_search`/`citation_graph`, `filing_search`, `legal_search`, `econ_search`). Only the search term, identifier, and any configured key/contact email are sent — no personal data beyond what you put in the query. EDGAR's contact email is a deliberate disclosure the SEC requires for automated access.
 
 **You choose which provider to use.** If you want maximum privacy, SearXNG lets you self-host the entire search backend with no third-party involvement.
 

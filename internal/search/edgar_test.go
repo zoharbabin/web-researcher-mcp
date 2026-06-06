@@ -1,0 +1,174 @@
+package search
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
+)
+
+func newEDGARTestProvider(t *testing.T, handler http.HandlerFunc) *EDGARProvider {
+	t.Helper()
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+	p := NewEDGARProvider("web-researcher-mcp/test (test@example.com)", Deps{
+		HTTPClient: srv.Client(),
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+	})
+	// All three bases point at the one test server; routing is by path.
+	p.SetBaseURLs(srv.URL, srv.URL, srv.URL)
+	return p
+}
+
+func TestEDGARRequiresUserAgent(t *testing.T) {
+	// Factory must skip EDGAR when no contact UA is configured.
+	if p := NewFilingProviderByName("edgar", FilingProviderConfig{}, Deps{}); p != nil {
+		t.Error("edgar must be nil without a User-Agent")
+	}
+	if p := NewFilingProviderByName("edgar", FilingProviderConfig{EDGARUserAgent: "x/1 (a@b.c)"}, Deps{}); p == nil {
+		t.Error("edgar should construct with a User-Agent")
+	}
+}
+
+func TestEDGARSetsUserAgent(t *testing.T) {
+	var gotUA string
+	p := newEDGARTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		gotUA = r.Header.Get("User-Agent")
+		w.Write([]byte(`{"hits":{"hits":[]}}`))
+	})
+	_, _ = p.Filings(context.Background(), FilingSearchParams{Query: "climate risk disclosure"})
+	if !strings.Contains(gotUA, "test@example.com") {
+		t.Errorf("EDGAR must send a contact User-Agent, got %q", gotUA)
+	}
+}
+
+func TestEDGARFullTextSearch(t *testing.T) {
+	p := newEDGARTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		// A non-ticker query first probes the ticker map (no match → empty), then
+		// falls through to EFTS full-text search.
+		if strings.Contains(r.URL.Path, "company_tickers.json") {
+			w.Write([]byte(`{}`))
+			return
+		}
+		if !strings.Contains(r.URL.Path, "search-index") {
+			t.Errorf("free-text query should hit EFTS, got %s", r.URL.Path)
+		}
+		w.Write([]byte(`{"hits":{"hits":[{"_id":"0000035527-22-000119:doc.htm","_source":{"adsh":"0000035527-22-000119","form":"10-K","file_date":"2022-02-25","period_ending":"2021-12-31","display_names":["FIFTH THIRD BANCORP (FITB)"],"ciks":["0000035527"]}}]}}`))
+	})
+	res, err := p.Filings(context.Background(), FilingSearchParams{Query: "climate risk disclosure", FormType: "10-K", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res) != 1 {
+		t.Fatalf("want 1 filing, got %d", len(res))
+	}
+	r := res[0]
+	if r.FormType != "10-K" || r.Accession != "0000035527-22-000119" || r.Source != "edgar" {
+		t.Errorf("unexpected mapping: %+v", r)
+	}
+	if !strings.HasPrefix(r.URL, "https://www.sec.gov/Archives/edgar/data/35527/") {
+		t.Errorf("document URL wrong: %s", r.URL)
+	}
+}
+
+func TestEDGARCompanySubmissionsByTicker(t *testing.T) {
+	p := newEDGARTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "company_tickers.json"):
+			w.Write([]byte(`{"0":{"cik_str":320193,"ticker":"AAPL","title":"Apple Inc."}}`))
+		case strings.Contains(r.URL.Path, "submissions/CIK0000320193.json"):
+			w.Write([]byte(`{"name":"Apple Inc.","filings":{"recent":{"accessionNumber":["0000320193-24-000001","0000320193-24-000002"],"form":["10-K","8-K"],"filingDate":["2024-11-01","2024-08-01"],"reportDate":["2024-09-28","2024-08-01"],"primaryDocument":["aapl-10k.htm","aapl-8k.htm"],"primaryDocDescription":["10-K","8-K"]}}}`))
+		default:
+			w.WriteHeader(404)
+		}
+	})
+	res, err := p.Filings(context.Background(), FilingSearchParams{Ticker: "AAPL", FormType: "10-K", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res) != 1 {
+		t.Fatalf("form_type filter should yield 1 (the 10-K), got %d", len(res))
+	}
+	if res[0].Company != "Apple Inc." || res[0].FormType != "10-K" {
+		t.Errorf("unexpected: %+v", res[0])
+	}
+}
+
+func TestEDGARCompanyFacts(t *testing.T) {
+	p := newEDGARTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "company_tickers.json"):
+			w.Write([]byte(`{"0":{"cik_str":320193,"ticker":"AAPL","title":"Apple Inc."}}`))
+		case strings.Contains(r.URL.Path, "companyfacts/CIK0000320193.json"):
+			w.Write([]byte(`{"entityName":"Apple Inc.","facts":{"us-gaap":{"NetIncomeLoss":{"label":"Net Income","units":{"USD":[{"end":"2022-09-24","val":99803000000,"form":"10-K","fy":2022},{"end":"2023-09-30","val":96995000000,"form":"10-K","fy":2023}]}}}}}`))
+		default:
+			w.WriteHeader(404)
+		}
+	})
+	res, err := p.Filings(context.Background(), FilingSearchParams{Ticker: "AAPL", Facts: true, NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res) != 1 {
+		t.Fatalf("want 1 fact, got %d", len(res))
+	}
+	if res[0].Concept != "NetIncomeLoss" || res[0].Unit != "USD" || res[0].Value != 96995000000 {
+		t.Errorf("facts must pass through latest value verbatim: %+v", res[0])
+	}
+}
+
+// TestEDGARRaggedSubmissions guards against a panic when SEC returns parallel
+// arrays of unequal length (untrusted external data). Regression for the audit
+// finding that r.Form[i] was direct-indexed.
+func TestEDGARRaggedSubmissions(t *testing.T) {
+	p := newEDGARTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "company_tickers.json"):
+			w.Write([]byte(`{"0":{"cik_str":1,"ticker":"X","title":"X Corp"}}`))
+		case strings.Contains(r.URL.Path, "submissions/"):
+			// form array shorter than accessionNumber — must not panic.
+			w.Write([]byte(`{"name":"X Corp","filings":{"recent":{"accessionNumber":["a-1","a-2"],"form":["10-K"],"filingDate":["2024-01-01","2024-02-01"]}}}`))
+		default:
+			w.WriteHeader(404)
+		}
+	})
+	// With a form filter, the loop reaches i=1 where form[1] is out of range.
+	res, err := p.Filings(context.Background(), FilingSearchParams{Ticker: "X", FormType: "10-K", NumResults: 5})
+	if err != nil {
+		t.Fatalf("ragged arrays must not error/panic: %v", err)
+	}
+	// Only the first (i=0, form present) row qualifies; i=1 is skipped safely.
+	if len(res) != 1 {
+		t.Errorf("want 1 result from the well-formed row, got %d", len(res))
+	}
+}
+
+func TestEDGARRateLimit(t *testing.T) {
+	p := newEDGARTestProvider(t, func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(429) })
+	_, err := p.Filings(context.Background(), FilingSearchParams{Query: "anything full text"})
+	if err == nil || !strings.Contains(err.Error(), "rate limited") {
+		t.Errorf("expected rate-limit error, got %v", err)
+	}
+}
+
+func TestEDGARHelpers(t *testing.T) {
+	if padCIK("320193") != "0000320193" {
+		t.Error("padCIK")
+	}
+	if !isAllDigits("12345") || isAllDigits("AAPL") {
+		t.Error("isAllDigits")
+	}
+	if !dateInRange("2022-05-01", "2022-01-01", "2022-12-31") || dateInRange("2021-01-01", "2022-01-01", "") {
+		t.Error("dateInRange")
+	}
+	if filingURL("0000320193", "0000320193-24-000001", "doc.htm") != "https://www.sec.gov/Archives/edgar/data/320193/000032019324000001/doc.htm" {
+		t.Errorf("filingURL: %s", filingURL("0000320193", "0000320193-24-000001", "doc.htm"))
+	}
+}
+
+func TestEDGARInterface(t *testing.T) {
+	var _ FilingProvider = (*EDGARProvider)(nil)
+}

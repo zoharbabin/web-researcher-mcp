@@ -24,6 +24,12 @@ type Dependencies struct {
 	SearchProviders   map[string]search.Provider
 	PatentProviders   map[string]search.PatentProvider
 	AcademicProviders map[string]search.AcademicProvider
+	// Structured-domain providers (v1.19.0). Each map is empty unless the
+	// provider is configured, in which case its tool registers. FilingProviders
+	// (SEC EDGAR), CaseProviders (CourtListener), EconProviders (FRED).
+	FilingProviders map[string]search.FilingProvider
+	CaseProviders   map[string]search.CaseProvider
+	EconProviders   map[string]search.EconProvider
 	// AnswerProviders / StructuredProviders back the provider-independent
 	// `answer` and `structured_search` tools. Any provider implementing the
 	// capability appears here (Exa today). Empty ⇒ the tool is not registered.
@@ -84,6 +90,21 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	// provider (semanticscholar or openalex) is configured.
 	if hasCitationProvider(deps) {
 		registerCitationGraph(srv, deps)
+	}
+
+	// Structured-domain tools (v1.19.0) — each registers only when its provider
+	// map is non-empty. filing_search needs EDGAR_CONTACT_EMAIL (or OPENALEX_EMAIL)
+	// and econ_search needs FRED_API_KEY, so both stay off by default. legal_search
+	// is the exception: CourtListener works keyless, so AvailableCaseProviders
+	// always builds it and legal_search is always registered.
+	if len(deps.FilingProviders) > 0 {
+		registerFilingSearch(srv, deps)
+	}
+	if len(deps.CaseProviders) > 0 {
+		registerLegalSearch(srv, deps)
+	}
+	if len(deps.EconProviders) > 0 {
+		registerEconSearch(srv, deps)
 	}
 
 	// Synthesis tools — provider-independent (like academic/patent search).

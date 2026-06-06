@@ -143,15 +143,55 @@ func (m *mockAcademicProvider) References(_ context.Context, _ string, _ int) ([
 	return []search.AcademicResult{{Title: "Foundational", URL: "https://doi.org/10.0/z", DOI: "10.0/z", Year: 2017, Source: "openalex"}}, nil
 }
 
+// mockFilingProvider implements FilingProvider, so wiring it makes filing_search
+// register and exercises the EDGAR path in the drift tests.
+type mockFilingProvider struct{}
+
+func (m *mockFilingProvider) Name() string { return "edgar" }
+func (m *mockFilingProvider) Metadata() search.ProviderMeta {
+	return search.ProviderMeta{Regions: []string{"US"}, RateClass: "free", Description: "mock edgar"}
+}
+func (m *mockFilingProvider) Filings(_ context.Context, _ search.FilingSearchParams) ([]search.FilingResult, error) {
+	return []search.FilingResult{{Company: "Mock Corp", CIK: "0000320193", FormType: "10-K", FilingDate: "2024-01-01", Accession: "0000320193-24-000001", URL: "https://www.sec.gov/Archives/edgar/data/320193/x.htm", Source: "edgar"}}, nil
+}
+
+// mockCaseProvider implements CaseProvider for legal_search.
+type mockCaseProvider struct{}
+
+func (m *mockCaseProvider) Name() string { return "courtlistener" }
+func (m *mockCaseProvider) Metadata() search.ProviderMeta {
+	return search.ProviderMeta{Regions: []string{"US"}, RateClass: "free", Description: "mock courtlistener"}
+}
+func (m *mockCaseProvider) Cases(_ context.Context, _ search.CaseSearchParams) ([]search.CaseResult, error) {
+	return []search.CaseResult{{CaseName: "Mock v. Test", Citation: "1 U.S. 1", Court: "Supreme Court", CourtID: "scotus", DateFiled: "2024-01-01", CitationCount: 3, URL: "https://www.courtlistener.com/opinion/1/mock/", Source: "courtlistener"}}, nil
+}
+
+// mockEconProvider implements EconProvider for econ_search.
+type mockEconProvider struct{}
+
+func (m *mockEconProvider) Name() string { return "fred" }
+func (m *mockEconProvider) Metadata() search.ProviderMeta {
+	return search.ProviderMeta{Regions: []string{"US"}, RateClass: "free", Description: "mock fred"}
+}
+func (m *mockEconProvider) Econ(_ context.Context, _ search.EconSearchParams) ([]search.EconResult, error) {
+	return []search.EconResult{{SeriesID: "GDP", Title: "Gross Domestic Product", Units: "Billions", Frequency: "Quarterly", Source: "fred"}}, nil
+}
+
 func setupTestDeps() Dependencies {
 	synth := &mockSynthProvider{}
 	academic := &mockAcademicProvider{}
+	filing := &mockFilingProvider{}
+	caseProv := &mockCaseProvider{}
+	econ := &mockEconProvider{}
 	return Dependencies{
 		Cache:               cache.NewNoop(),
 		Search:              &mockProvider{},
 		AnswerProviders:     map[string]search.AnswerProvider{synth.Name(): synth},
 		StructuredProviders: map[string]search.StructuredProvider{synth.Name(): synth},
 		AcademicProviders:   map[string]search.AcademicProvider{academic.Name(): academic},
+		FilingProviders:     map[string]search.FilingProvider{filing.Name(): filing},
+		CaseProviders:       map[string]search.CaseProvider{caseProv.Name(): caseProv},
+		EconProviders:       map[string]search.EconProvider{econ.Name(): econ},
 		Scraper:             scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2}),
 		Content:             content.NewProcessor(),
 		Sessions:            func() session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),

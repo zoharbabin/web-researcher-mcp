@@ -232,6 +232,20 @@ func main() {
 	}
 	academicProviders := search.AvailableAcademicProviders(academicCfg, searchDeps)
 
+	// Structured-domain providers (v1.19.0): SEC EDGAR (filings), CourtListener
+	// (case law), FRED (economic data). Each map is empty unless configured, in
+	// which case its tool registers. EDGAR needs a contact UA; CourtListener
+	// works keyless; FRED needs a key.
+	filingProviders := search.AvailableFilingProviders(search.FilingProviderConfig{
+		EDGARUserAgent: edgarUserAgent(cfg.Search.EDGARContactEmail),
+	}, searchDeps)
+	caseProviders := search.AvailableCaseProviders(search.CaseProviderConfig{
+		CourtListenerToken: cfg.Search.CourtListenerToken,
+	}, searchDeps)
+	econProviders := search.AvailableEconProviders(search.EconProviderConfig{
+		FREDAPIKey: cfg.Search.FREDAPIKey,
+	}, searchDeps)
+
 	// Open-access enrichment (#45): resolves DOI-bearing academic results to OA
 	// PDFs via Unpaywall. nil when no email is configured — enrichment is then a
 	// no-op. Its own breaker isolates failures from the academic providers.
@@ -346,6 +360,9 @@ func main() {
 		SearchProviders:     allProviders,
 		PatentProviders:     patentProviders,
 		AcademicProviders:   academicProviders,
+		FilingProviders:     filingProviders,
+		CaseProviders:       caseProviders,
+		EconProviders:       econProviders,
 		AnswerProviders:     answerProviders,
 		StructuredProviders: structuredProviders,
 		OAResolver:          oaResolver,
@@ -569,4 +586,14 @@ func main() {
 	}
 
 	logger.Info("shutdown complete")
+}
+
+// edgarUserAgent builds the SEC-required descriptive User-Agent for EDGAR, or
+// "" when no contact email is configured (EDGAR provider then stays unregistered
+// — SEC blocks requests without a contact UA). Format: "app/version (email)".
+func edgarUserAgent(contactEmail string) string {
+	if contactEmail == "" {
+		return ""
+	}
+	return "web-researcher-mcp/" + version + " (" + contactEmail + ")"
 }
