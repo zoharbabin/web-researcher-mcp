@@ -97,7 +97,7 @@ Signing unlocks the OS package managers — some validate/prefer signed binaries
 |---------|-------------------------|--------|---------------|-------|
 | Homebrew Cask | `homebrew_casks` | `zoharbabin/homebrew-tap` (`Casks/`) | `HOMEBREW_TAP_GITHUB_TOKEN` (shared with the formula) | Ships the **notarized** darwin binary; `brew install --cask zoharbabin/tap/web-researcher-mcp`. `skip_upload: auto` skips prereleases. |
 | Scoop | `scoops` | `zoharbabin/scoop-bucket` (`bucket/`) | `SCOOP_BUCKET_GITHUB_TOKEN` (gates `skip_upload`) | `scoop bucket add zoharbabin …; scoop install web-researcher-mcp`. |
-| WinGet | `winget` | fork `zoharbabin/winget-pkgs` → PR to `microsoft/winget-pkgs` | `WINGET_PKGS_GITHUB_TOKEN` (gates `skip_upload`) | Auto-opens the upstream PR; Microsoft's validation is smooth because the `.exe` is Azure-Trusted-Signing-signed. |
+| WinGet | `winget` | fork `zoharbabin/winget-pkgs` (manual PR to `microsoft/winget-pkgs`) | `WINGET_PKGS_GITHUB_TOKEN` (gates `skip_upload`) | Pushes the manifest to a branch on the fork; the maintainer opens the upstream PR manually (a fork-scoped fine-grained PAT cannot open a PR against `microsoft/winget-pkgs`, and the first submission needs manual Microsoft review anyway). Validation is smooth because the `.exe` is Azure-Trusted-Signing-signed. |
 | Chocolatey | `chocolateys` | chocolatey.org (`push.chocolatey.org`) | `CHOCOLATEY_API_KEY` (workflow installs `choco` + un-`--skip`s the pipe only when set) | `choco install web-researcher-mcp`. The Linux runner gets `choco` via `mono`. |
 
 **Tokens are configured** — `CHOCOLATEY_API_KEY` (account API key), `WINGET_PKGS_GITHUB_TOKEN`, and `SCOOP_BUCKET_GITHUB_TOKEN` are set as GitHub Actions secrets, so the next `v*` tag publishes to all four channels. To rotate or recreate a GitHub PAT (Chocolatey uses an account API key, not a PAT):
@@ -107,7 +107,7 @@ Signing unlocks the OS package managers — some validate/prefer signed binaries
 
 PATs cannot be minted by `gh`/the API (browser-only by design): GitHub → Settings → Developer settings → Fine-grained tokens.
 
-> **First-release note:** the publishers were added after v1.19.0 was tagged, so they activate on the **next** release. WinGet's first push opens a PR to `microsoft/winget-pkgs` that gets a one-time manual Microsoft review; Chocolatey's first package goes through moderation. User-facing install instructions (`winget install` / `scoop install` / `choco install` / `brew install --cask`) are added to the README only once each channel's first package is confirmed live.
+> **First-release note:** the publishers activate on a release where the channel's secret is set. WinGet pushes the manifest to a branch on the `zoharbabin/winget-pkgs` fork; the maintainer then opens the PR to `microsoft/winget-pkgs` manually (fork-scoped PATs cannot open the upstream PR, and the first submission gets a one-time manual Microsoft review regardless). Chocolatey's first package goes through moderation. User-facing install instructions (`winget install` / `scoop install` / `choco install` / `brew install --cask`) are added to the README only once each channel's first package is confirmed live.
 
 ## Local secret convention (maintainer)
 
