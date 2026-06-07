@@ -252,11 +252,16 @@ scoops:
 
 # ── WinGet (Windows Package Manager) ─────────────────────────────────────────
 # Generates the WinGet manifest and commits it to a branch on the
-# zoharbabin/winget-pkgs fork; you then open a PR to microsoft/winget-pkgs for
-# Microsoft's automated validation (smooth because our .exe is Azure Trusted
-# Signing-signed with a Microsoft-issued cert). Gated on WINGET_PKGS_GITHUB_TOKEN
-# via skip_upload. Install (once accepted upstream): `winget install
-# zoharbabin.web-researcher-mcp`.
+# zoharbabin/winget-pkgs fork. The maintainer then opens the PR to
+# microsoft/winget-pkgs manually for Microsoft's review (smooth because our .exe
+# is Azure Trusted Signing-signed with a Microsoft-issued cert). Auto-PR is
+# intentionally DISABLED: a fine-grained PAT scoped to the fork can push the
+# branch but cannot open a PR against microsoft/winget-pkgs (the upstream returns
+# "403 Resource not accessible by personal access token"), and Microsoft's first
+# submission requires a manual review regardless — so an auto-PR attempt only
+# fails the release for a step that must be manual anyway. Gated on
+# WINGET_PKGS_GITHUB_TOKEN via skip_upload. Install (once accepted upstream):
+# `winget install zoharbabin.web-researcher-mcp`.
 winget:
   - name: web-researcher-mcp
     publisher: zoharbabin
@@ -270,13 +275,6 @@ winget:
       name: winget-pkgs
       branch: "web-researcher-mcp-{{ .Version }}"
       token: "{{ .Env.WINGET_PKGS_GITHUB_TOKEN }}"
-      pull_request:
-        enabled: true
-        draft: false
-        base:
-          owner: microsoft
-          name: winget-pkgs
-          branch: master
     skip_upload: '{{ if isEnvSet "WINGET_PKGS_GITHUB_TOKEN" }}false{{ else }}true{{ end }}'
 
 # ── Chocolatey (Windows) ─────────────────────────────────────────────────────
