@@ -178,12 +178,6 @@ INSTALL_DIR=/opt/tools curl -fsSL https://raw.githubusercontent.com/zoharbabin/w
 <details>
 <summary><strong>Other install methods</strong></summary>
 
-**Scoop (Windows):**
-```powershell
-scoop bucket add zoharbabin https://github.com/zoharbabin/scoop-bucket
-scoop install web-researcher-mcp
-```
-
 **Homebrew Cask (macOS — Developer ID-signed + notarized binary):**
 ```bash
 brew install --cask zoharbabin/tap/web-researcher-mcp
