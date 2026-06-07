@@ -29,6 +29,16 @@ builds:
       - -X main.commit={{.Commit}}
       - -X main.date={{.Date}}
     mod_timestamp: "{{ .CommitTimestamp }}"
+    # Authenticode-sign the Windows .exe IN PLACE right after compile, BEFORE the
+    # archive/checksum/scoop/winget/cask pipes — so every downstream hash derives
+    # from the SIGNED binary in one run (no post-hoc re-zip + checksum rewrite, no
+    # Scoop/WinGet hash drift). The wrapper no-ops for non-windows targets and when
+    # AZURE_SIGNING_ENABLED != true (snapshot/local/no-creds), mirroring the macOS
+    # notarize self-gate. See scripts/sign-windows.sh + docs/RELEASE_SIGNING.md.
+    hooks:
+      post:
+        - cmd: ./scripts/sign-windows.sh "{{ .Path }}" "{{ .Os }}" "{{ .Arch }}"
+          output: true
 
 # macOS Developer ID signing + Apple notarization (cross-platform, OSS — runs on
 # the Linux release runner via GoReleaser's bundled quill; no macOS runner, no

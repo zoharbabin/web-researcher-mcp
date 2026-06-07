@@ -84,26 +84,43 @@ jobs:
             # source that ships choco.exe (a .NET assembly runnable under mono). We
             # do NOT trust any single curl's exit code; the gate below is the source
             # of truth: is `choco` actually runnable?
-            CHOCO_DIR=/opt/chocolatey
+            #
+            # Install under a RUNNER-WRITABLE dir (not sudo-owned /opt): choco.exe
+            # writes its own config/logs next to the assembly at runtime, so a
+            # root-owned dir makes `choco --version` fail for the non-root runner
+            # user (the silent failure that skipped the pipe before).
+            CHOCO_DIR="$HOME/chocolatey"
             CHOCO_URL="https://github.com/chocolatey/choco/releases/download/${CHOCO_VERSION}/chocolatey.v${CHOCO_VERSION}.tar.gz"
-            sudo mkdir -p "$CHOCO_DIR"
+            mkdir -p "$CHOCO_DIR"
             if curl -fsSL "$CHOCO_URL" -o /tmp/choco.tar.gz; then
-              sudo tar -xzf /tmp/choco.tar.gz -C "$CHOCO_DIR" || echo "choco extract failed; verifying next."
+              tar -xzf /tmp/choco.tar.gz -C "$CHOCO_DIR" || echo "choco extract failed; verifying next."
             else
               echo "choco tarball download failed; verifying next."
             fi
 
             # Provide a bare `choco` shim on PATH (GoReleaser shells out to `choco`,
             # not `mono choco.exe`), pointing at the extracted assembly under mono.
+            # Build the wrapper with printf '%s\n' (NOT printf %q — dash/sh rejects
+            # %q as an invalid directive and silently drops the path, which left the
+            # shim running bare `mono`). The path has no spaces, so plain
+            # interpolation into the wrapper body is safe; $@ is escaped so it
+            # expands at shim-run time, not now.
             if [ -f "$CHOCO_DIR/choco.exe" ]; then
-              printf '#!/usr/bin/env bash\nexec mono %q "$@"\n' "$CHOCO_DIR/choco.exe" | sudo tee /usr/local/bin/choco >/dev/null
+              printf '%s\n' \
+                '#!/usr/bin/env bash' \
+                "exec mono \"$CHOCO_DIR/choco.exe\" \"\$@\"" \
+                | sudo tee /usr/local/bin/choco >/dev/null
               sudo chmod +x /usr/local/bin/choco
             fi
 
-            if command -v choco >/dev/null 2>&1 && choco --version >/dev/null 2>&1; then
-              echo "choco is available ($(choco --version)) — enabling the chocolatey pipe."
+            # Verify choco actually runs — and SURFACE its output (don't swallow
+            # stderr) so a future breakage is diagnosable instead of a silent skip.
+            choco_ver_out="$(choco --version 2>&1)" && choco_ok=1 || choco_ok=0
+            if [ "$choco_ok" = 1 ]; then
+              echo "choco is available ($choco_ver_out) — enabling the chocolatey pipe."
               skip=""
             else
+              echo "choco --version output: $choco_ver_out"
               echo "::warning::choco CLI unavailable after install — skipping the chocolatey pipe for this release (other channels unaffected)."
             fi
           fi
@@ -135,99 +152,27 @@ jobs:
           MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
           MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
           MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
-
-      # ── Windows Authenticode signing via Azure Trusted/Artifact Signing ──────
-      # Signs the GoReleaser-built .exe IN PLACE on this Linux runner using jsign
-      # (no Windows job, no Wine — jsign calls the Azure REST endpoint directly),
-      # then re-packages the zip and rewrites checksums so the published artifact
-      # and checksums.txt cover the SIGNED binary. Gated on AZURE_SIGNING_ENABLED
-      # so an unset/false flag ships unsigned exactly as before (zero regression).
-      # Identity: CN=Zohar Babin (Azure individual validation). Certs are short-
-      # lived (~3 days) and auto-rotate per sign; the RFC-3161 timestamp keeps the
-      # signature valid after the cert expires. See docs/RELEASE_SIGNING.md.
-      - name: Sign Windows binary (Azure Trusted Signing)
-        if: ${{ vars.AZURE_SIGNING_ENABLED == 'true' }}
-        id: sign-windows
-        env:
+          # Windows Authenticode signing happens INSIDE GoReleaser via the
+          # builds[].hooks.post wrapper (scripts/sign-windows.sh), so the signed
+          # .exe is what gets archived + hashed + published to Scoop/WinGet/Cask —
+          # no post-GoReleaser re-zip, no manifest hash drift. The wrapper no-ops
+          # unless AZURE_SIGNING_ENABLED=true (same gate as before). Endpoint host
+          # has NO trailing slash (jsign appends the API path); alias is
+          # "<account>/<certificate-profile>".
+          AZURE_SIGNING_ENABLED: ${{ vars.AZURE_SIGNING_ENABLED }}
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          # Endpoint host for the signing account's region (East US). NO trailing
-          # slash — jsign concatenates the API path directly, so a trailing slash
-          # produces a double-slash URL and a 404 from the signing endpoint.
-          SIGN_ENDPOINT: https://eus.codesigning.azure.net
-          # jsign alias = "<account>/<certificate-profile>".
-          SIGN_ALIAS: web-researcher-signing/web-researcher-public
-        run: |
-          set -euo pipefail
-          WIN_EXE=$(find dist -name "web-researcher-mcp.exe" -path "*windows*" | head -1)
-          if [ -z "$WIN_EXE" ]; then
-            echo "::warning::Windows exe not found in dist/, skipping signing"
-            exit 0
-          fi
+          AZURE_SIGN_ENDPOINT: https://eus.codesigning.azure.net
+          AZURE_SIGN_ALIAS: web-researcher-signing/web-researcher-public
 
-          # Toolchain: JRE for jsign + Azure CLI for the access token.
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq default-jre-headless
-          if ! command -v az >/dev/null 2>&1; then
-            curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash >/dev/null
-          fi
-
-          JSIGN_VERSION="7.4"
-          curl -fsSL -o /tmp/jsign.jar \
-            "https://github.com/ebourg/jsign/releases/download/${JSIGN_VERSION}/jsign-${JSIGN_VERSION}.jar"
-
-          # Service-principal login → token scoped to the code-signing resource.
-          az login --service-principal \
-            -u "$AZURE_CLIENT_ID" -p "$AZURE_CLIENT_SECRET" --tenant "$AZURE_TENANT_ID" >/dev/null
-          ACCESS_TOKEN=$(az account get-access-token \
-            --resource https://codesigning.azure.net \
-            --query accessToken -o tsv)
-
-          # Sign in place. Timestamp via Microsoft RFC-3161 TSA so the signature
-          # outlives the short-lived cert.
-          java -jar /tmp/jsign.jar \
-            --storetype TRUSTEDSIGNING \
-            --keystore "$SIGN_ENDPOINT" \
-            --storepass "$ACCESS_TOKEN" \
-            --alias "$SIGN_ALIAS" \
-            --tsmode RFC3161 \
-            --tsaurl http://timestamp.acs.microsoft.com \
-            "$WIN_EXE"
-
-          echo "exe_path=$WIN_EXE" >> "$GITHUB_OUTPUT"
-          echo "::notice::Windows binary signed via Azure Trusted Signing"
-
-      - name: Repackage signed Windows zip + checksums
-        if: ${{ vars.AZURE_SIGNING_ENABLED == 'true' && steps.sign-windows.outputs.exe_path != '' }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SIGNED_EXE: ${{ steps.sign-windows.outputs.exe_path }}
-        run: |
-          set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
-          ZIP_NAME="web-researcher-mcp_${VERSION}_windows_amd64.zip"
-          ZIP_PATH="dist/$ZIP_NAME"
-
-          if [ ! -f "$ZIP_PATH" ]; then
-            echo "::warning::$ZIP_PATH not found; release retains its archived exe"
-            exit 0
-          fi
-
-          # Swap the signed exe into the release zip (the exe is stored flat in the
-          # archive, hence -j), then re-upload and rewrite its checksum entry.
-          cp "$SIGNED_EXE" /tmp/web-researcher-mcp.exe
-          ( cd /tmp && zip -j "$OLDPWD/$ZIP_PATH" web-researcher-mcp.exe )
-
-          gh release upload "${{ github.ref_name }}" "$ZIP_PATH" --clobber
-
-          sha256sum "$ZIP_PATH" | sed "s|dist/||" > /tmp/new_checksum.txt
-          if [ -f dist/checksums.txt ]; then
-            grep -v "$ZIP_NAME" dist/checksums.txt > /tmp/remaining.txt || true
-            cat /tmp/remaining.txt /tmp/new_checksum.txt > dist/checksums.txt
-            gh release upload "${{ github.ref_name }}" dist/checksums.txt --clobber
-          fi
-          echo "::notice::Signed Windows zip and checksums.txt updated"
+      # NOTE: Windows Authenticode signing now happens INSIDE GoReleaser, in the
+      # builds[].hooks.post wrapper (scripts/sign-windows.sh), so the signed .exe
+      # is the one GoReleaser archives, checksums, and publishes to Scoop/WinGet/
+      # Cask — eliminating the old post-GoReleaser re-zip + checksum-rewrite step
+      # and the manifest hash drift it caused. The Azure secrets +
+      # AZURE_SIGNING_ENABLED are threaded into the "Run GoReleaser" step's env
+      # above; the wrapper self-gates (no-op for non-windows / when disabled).
 
       - name: Build .mcpb bundles
         run: |
