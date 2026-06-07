@@ -61,7 +61,6 @@ jobs:
         id: choco
         env:
           CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
-        env:
           # Pin the Chocolatey CLI version so the install source is deterministic
           # and a moving "latest" can't break the release. Bump deliberately.
           CHOCO_VERSION: "2.7.2"
