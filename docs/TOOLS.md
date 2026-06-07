@@ -1338,6 +1338,25 @@ Which tools emit `_meta`:
 | `image_search`, `news_search`, `academic_search`, `patent_search`, `scrape_page` | no | yes (`cached: true`) |
 | `search_and_scrape`, `sequential_search`, `get_research_session` | no (not cached as a unit) | n/a |
 
+### Routing Provenance (`_meta.routing`)
+
+When multi-provider routing (`SEARCH_ROUTING`) is active, the search-family tools attach an operator-facing `routing` block to the same `_meta` channel (set in `routingMeta` / `withRoutingMeta`, `internal/tools/errors.go`; captured by the Router via `search.RoutingTrace`). It coexists with the cache block — `withRoutingMeta` **merges** into `_meta` without clobbering the freshness keys.
+
+This is **operator/debug data, not content.** It is LLM-invisible (a sibling of `content`, never fed to the model) and never appears in the result body — the Router's job is to make providers interchangeable to the model. The drift guard `TestRoutingMeta_PresentOnResultAndAbsentFromContent` fails CI if any routing field leaks into LLM-facing content.
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `provider_used` | string | The provider that served the result (omitted on a cache hit) |
+| `providers_attempted` | []string | Providers tried in priority order, up to the one that served |
+| `fallback` | bool | `true` when the served provider was not the first attempted |
+| `fallback_reason` | string | Coarse enum: `circuit_open` or `primary_unavailable` (omitted unless a fallback occurred). No raw breaker counts or upstream error text. |
+| `cache_hit` | bool | `true` when served from cache (provider attribution is then omitted — the cached blob's provenance is not this call's routing) |
+| `latency_ms` | int | Server-side end-to-end latency for the call |
+
+The provider **name** is the disclosure boundary: no upstream URLs, credentials, or breaker internals appear. The block is **omitted entirely** when there is nothing to observe — a single-provider / no-routing deployment, or a non-routed capability. Routing applies to the Router-routed capabilities only (web / images / news / patents / academic); the synthesis (`answer`, `structured_search`), `citation_graph`, and structured-domain (`filing_search`, `legal_search`, `econ_search`) tools resolve a single provider directly and already name it in the result body's `source`/`provider` field — they have no fallback ladder to observe. The same routing summary is also recorded under `audit.AuditEvent.Metadata["routing"]`.
+
+For the aggregate, on-demand operator views (recent errors, live provider/breaker health) see the `diagnostics://` MCP Resources and the HTTP-mode dashboard in `docs/DEPLOYMENT.md`.
+
 ### Audit & Tenant Scope
 
 Every tool call is logged through `deps.Auditor.Log()` as an `audit.AuditEvent` (`internal/audit/logger.go`) carrying `tenant_id`, `user_id`, `request_id`, `tool_name`, `duration_ms`, `success`, and an optional `error_code` (field names are the JSON tags on `AuditEvent`). Tenant and user identity are read from the request context (`auth.TenantIDFromContext` / `auth.UserIDFromContext`).

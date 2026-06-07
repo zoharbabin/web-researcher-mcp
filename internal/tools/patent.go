@@ -56,9 +56,16 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 		cacheKey := searchCacheKey("patent", input.Query, numResults, searchType, input.PatentOffice, input.Assignee, input.CPCCode, input.Provider)
 		if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("patent_search", time.Since(start), nil, "", true)
-			auditToolCall(ctx, deps, "patent_search", time.Since(start), nil, "")
-			return cachedResultWithMeta(cached, meta), nil, nil
+			rt := routingMeta(search.RoutingDecision{}, time.Since(start), true)
+			auditToolCallQuery(ctx, deps, "patent_search", time.Since(start), nil, "", "", map[string]any{"cache_hit": true, "routing": rt})
+			return withRoutingMeta(cachedResultWithMeta(cached, meta), rt), nil, nil
 		}
+
+		// Routing trace for the Router-routed patent paths (Strategy 2 = Router's
+		// Patents ladder; Strategy 4 = web-discovery fallback through the Router).
+		// The pinned-provider (Strategy 1) and direct patent-only (Strategy 3)
+		// paths name their provider in the body's `source` and have no ladder.
+		var routeDecision search.RoutingDecision
 
 		searchParams := search.PatentSearchParams{
 			Query:        input.Query,
@@ -105,10 +112,12 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 		// Strategy 2: Try the main provider (Router implements PatentSearcher)
 		if len(patents) == 0 && source == "" {
 			if ps, ok := deps.Search.(search.PatentSearcher); ok {
-				apiResults, err := ps.Patents(ctx, searchParams)
+				traceCtx, trace := search.NewRoutingTrace(ctx)
+				apiResults, err := ps.Patents(traceCtx, searchParams)
 				if err == nil && len(apiResults) > 0 {
 					patents = convertPatentResults(apiResults)
 					source = deps.Search.Name()
+					routeDecision = trace.Decision()
 				}
 			}
 		}
@@ -138,7 +147,8 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 			}
 
 			searchQuery := buildPatentDiscoveryQuery(input)
-			webResults, err := provider.Web(ctx, search.WebSearchParams{
+			traceCtx, trace := search.NewRoutingTrace(ctx)
+			webResults, err := provider.Web(traceCtx, search.WebSearchParams{
 				Query:      searchQuery,
 				NumResults: numResults + 5,
 			})
@@ -174,6 +184,7 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 			patents = enrichPatents(ctx, deps.Scraper, patentNumbers)
 			if len(patents) > 0 {
 				source = "web_discovery"
+				routeDecision = trace.Decision()
 			}
 		}
 
@@ -207,14 +218,15 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 		if len(patents) > 0 {
 			deps.Cache.Set(ctx, cacheKey, jsonBytes, 24*time.Hour)
 		}
+		rt := routingMeta(routeDecision, time.Since(start), false)
 		deps.Metrics.RecordToolCall("patent_search", time.Since(start), nil, "", false)
-		auditToolCall(ctx, deps, "patent_search", time.Since(start), nil, "")
+		auditToolCallQuery(ctx, deps, "patent_search", time.Since(start), nil, "", "", map[string]any{"routing": rt})
 
 		if input.SessionID != "" {
 			trackSources(ctx, deps, input.SessionID, patentResultsToSources(patents))
 		}
 
-		return structuredResult(jsonBytes), nil, nil
+		return withRoutingMeta(structuredResult(jsonBytes), rt), nil, nil
 	})
 }
 

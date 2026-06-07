@@ -48,8 +48,9 @@ func registerImageSearch(srv *mcp.Server, deps Dependencies) {
 		cacheKey := searchCacheKey("image", input.Query, numResults, input.Size, input.Type, input.ColorType, input.DominantColor, input.FileType, input.Safe, input.Provider)
 		if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("image_search", time.Since(start), nil, "", true)
-			auditToolCall(ctx, deps, "image_search", time.Since(start), nil, "")
-			return cachedResultWithMeta(cached, meta), nil, nil
+			rt := routingMeta(search.RoutingDecision{}, time.Since(start), true)
+			auditToolCallQuery(ctx, deps, "image_search", time.Since(start), nil, "", "", map[string]any{"cache_hit": true, "routing": rt})
+			return withRoutingMeta(cachedResultWithMeta(cached, meta), rt), nil, nil
 		}
 
 		provider, errResult := resolveProvider(deps, input.Provider)
@@ -57,7 +58,8 @@ func registerImageSearch(srv *mcp.Server, deps Dependencies) {
 			return errResult, nil, nil
 		}
 
-		results, err := provider.Images(ctx, search.ImageSearchParams{
+		traceCtx, trace := search.NewRoutingTrace(ctx)
+		results, err := provider.Images(traceCtx, search.ImageSearchParams{
 			Query:         input.Query,
 			NumResults:    numResults,
 			Size:          input.Size,
@@ -76,6 +78,7 @@ func registerImageSearch(srv *mcp.Server, deps Dependencies) {
 			auditToolCall(ctx, deps, "image_search", time.Since(start), err, errCode)
 			return upstreamErrorResponse("image search", err), nil, nil
 		}
+		rt := routingMeta(trace.Decision(), time.Since(start), false)
 
 		output := map[string]any{
 			"images":      results,
@@ -87,8 +90,8 @@ func registerImageSearch(srv *mcp.Server, deps Dependencies) {
 		jsonBytes, _ := json.Marshal(output)
 		deps.Cache.Set(ctx, cacheKey, jsonBytes, 30*time.Minute)
 		deps.Metrics.RecordToolCall("image_search", time.Since(start), nil, "", false)
-		auditToolCall(ctx, deps, "image_search", time.Since(start), nil, "")
+		auditToolCallQuery(ctx, deps, "image_search", time.Since(start), nil, "", "", map[string]any{"routing": rt})
 
-		return structuredResult(jsonBytes), nil, nil
+		return withRoutingMeta(structuredResult(jsonBytes), rt), nil, nil
 	})
 }

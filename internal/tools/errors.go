@@ -378,3 +378,61 @@ func freshResult(data []byte, ttl time.Duration) *mcp.CallToolResult {
 	}
 	return result
 }
+
+// routingMeta builds the operator-facing `_meta.routing` block from a Router
+// decision and the per-call latency (issue #58). It is debug/operator data —
+// client-app visible via `_meta`, never fed to the model (sibling to content)
+// and never written into the result body. The disclosure boundary is the
+// provider NAME: no upstream URLs, credentials, or breaker counts appear.
+//
+// Returns nil (→ no routing block emitted) when there is nothing to observe:
+// a single-provider / no-routing deployment whose decision named no attempts.
+// On a cache hit the caller passes cacheHit=true and an empty decision, so the
+// block reports only `cache_hit:true, latency_ms` and omits provider
+// attribution — the cached blob's provenance is not this call's routing
+// (OpenRouter strips routing traces on cache hits for the same reason).
+func routingMeta(d search.RoutingDecision, latency time.Duration, cacheHit bool) map[string]any {
+	if cacheHit {
+		return map[string]any{
+			"cache_hit":  true,
+			"latency_ms": latency.Milliseconds(),
+		}
+	}
+	if d.ProviderUsed == "" && len(d.Attempted) == 0 {
+		return nil // non-routed / nothing observed
+	}
+	m := map[string]any{
+		"cache_hit":  false,
+		"latency_ms": latency.Milliseconds(),
+	}
+	if d.ProviderUsed != "" {
+		m["provider_used"] = d.ProviderUsed
+	}
+	if len(d.Attempted) > 0 {
+		m["providers_attempted"] = d.Attempted
+	}
+	if d.Fallback {
+		m["fallback"] = true
+		if d.FallbackReason != "" {
+			m["fallback_reason"] = d.FallbackReason
+		}
+	}
+	return m
+}
+
+// withRoutingMeta merges a routing block into an existing result's `_meta`,
+// preserving any cache-freshness keys already present (it never clobbers the
+// cache block). A nil routing block leaves the result untouched. The merged
+// shape is `_meta: { cached, freshness, …, routing: {…} }` so the cache and
+// routing operator channels coexist (issue #58 acceptance: "merge, don't
+// overwrite"). Returns the same result for call-site chaining.
+func withRoutingMeta(result *mcp.CallToolResult, routing map[string]any) *mcp.CallToolResult {
+	if result == nil || routing == nil {
+		return result
+	}
+	if result.Meta == nil {
+		result.Meta = mcp.Meta{}
+	}
+	result.Meta["routing"] = routing
+	return result
+}

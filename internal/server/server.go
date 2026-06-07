@@ -32,6 +32,7 @@ type Config struct {
 
 type HTTPConfig struct {
 	Port           int
+	Version        string
 	Auth           *auth.Middleware
 	RateLimiter    *ratelimit.Limiter
 	AllowedOrigins []string
@@ -51,6 +52,10 @@ type HTTPConfig struct {
 	// Auditor records data.export/data.erasure/consent.* events for the admin
 	// data-subject and consent endpoints.
 	Auditor audit.Auditor
+	// Health supplies the live provider/breaker snapshot for the operator
+	// dashboard's /dashboard/data endpoint (#87). Nil (single-provider / no
+	// routing) simply omits the health panel; the rest of the dashboard works.
+	Health HealthSnapshotter
 
 	// CORSStrict, when true (the default), makes an empty AllowedOrigins deny all
 	// cross-origin requests (fail-closed). When false, an empty AllowedOrigins
@@ -121,6 +126,14 @@ func (s *Server) ServeHTTP(ctx context.Context, cfg HTTPConfig) error {
 	mux.Handle("GET /metrics", cfg.Metrics.HTTPHandler())
 
 	if cfg.AdminKey != "" {
+		// Operator dashboard (#87): the page itself is an inert shell (no data,
+		// no secrets) that prompts for the admin key client-side; its data
+		// endpoint is admin-gated exactly like /admin/*. Registered only when an
+		// admin key exists (parity with the other operator surfaces); STDIO mode
+		// never reaches ServeHTTP, so it is HTTP-only by construction.
+		mux.Handle("GET /dashboard", handleDashboard(cfg.Version))
+		mux.Handle("GET /dashboard/data", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.Auditor, handleDashboardData(cfg.Version, cfg.Metrics, cfg.Sessions, cfg.RateLimiter, cfg.Health))))
+
 		mux.Handle("DELETE /admin/cache", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.Auditor, handleAdminFlushCache(cfg.Cache))))
 		mux.Handle("DELETE /admin/sessions", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.Auditor, handleAdminFlushSessions(cfg.Sessions))))
 		mux.Handle("GET /admin/analytics", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.Auditor, handleAdminTenantAnalytics(cfg.Metrics))))

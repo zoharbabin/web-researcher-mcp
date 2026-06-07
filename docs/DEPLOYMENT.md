@@ -73,6 +73,7 @@ stdin attached (`docker run -p ... -e PORT=...`) stays up serving HTTP.
   process-up check, not a dependency health check; the server is fully
   initialized before the listener binds)
 - `GET /metrics` — Prometheus metrics
+- `GET /dashboard` — read-only operator dashboard (HTML); its data endpoint `GET /dashboard/data` is admin-gated. Both are registered only when `ADMIN_API_KEY` is set. See [Operator Dashboard](#operator-dashboard-http-mode)
 - `GET /.well-known/oauth-authorization-server` — OAuth metadata
 
 ### Transport Mode Differences
@@ -709,8 +710,37 @@ All admin endpoints require the `X-Admin-Key` header matching the `ADMIN_API_KEY
 | GET | `/admin/consent?tenant_id=&user_id=&purpose=` | Query the current consent decision for a subject + purpose |
 | POST | `/admin/workspace/members` | Add a member to a shared workspace (host's RBAC hook). Body: `{workspace_id, tenant_id, user_id}`. Only present when `WORKSPACES_ENABLED` |
 | DELETE | `/admin/workspace/members` | Remove a member from a shared workspace. Body: `{workspace_id, tenant_id, user_id}`. Only present when `WORKSPACES_ENABLED` |
+| GET | `/dashboard/data` | Aggregate JSON powering the operator dashboard (tool stats, active sessions, rate-limit config, provider health, recent errors). Aggregate-only — no per-user/per-query data. Registered with the dashboard (admin key required) |
 
 These are HTTP-only operational endpoints, not exposed via MCP tools. The `/admin/data` endpoints exist only when a personal-data store is registered; `/admin/consent` and `/admin/workspace/members` only when the corresponding regulated feature is enabled.
+
+---
+
+## Operator Observability
+
+Three operator-facing surfaces expose runtime behavior **without leaking infrastructure into LLM content**. They share one rule: routing/health/error internals are operator/debug data, never part of a tool's model-facing result body. The provider *name* is the disclosure boundary — no upstream URLs, credentials, or breaker counts are surfaced anywhere.
+
+### Per-call routing (`_meta.routing`)
+
+When `SEARCH_ROUTING` is active, search-family tool results carry a `routing` block on the MCP `_meta` channel (LLM-invisible, client-app visible): `provider_used`, `providers_attempted`, `fallback`, a coarse `fallback_reason` (`circuit_open` / `primary_unavailable`), `cache_hit`, and `latency_ms`. It answers "why did I get Google when I expected Brave?". Full field contract: see [Routing Provenance](TOOLS.md#routing-provenance-_metarouting) in `docs/TOOLS.md`. The same summary is mirrored to `audit.AuditEvent.Metadata["routing"]`.
+
+### On-demand diagnostics (MCP Resources)
+
+Read-only Resources beside `stats://*`, for operators to read on demand:
+
+| URI | Returns |
+|-----|---------|
+| `diagnostics://errors/recent` | The most recent tool errors (bounded ring, newest-first): tool, error kind, provider, redacted cause. Memory-only and bounded — no unbounded accumulation, no disk. Scoped to the caller's tenant when authenticated. Causes pass through `audit.MaskSecrets`, so no secrets, user queries, or full URLs appear |
+| `diagnostics://health` | Live provider health: an overall status (`healthy` / `degraded` / `unhealthy`) plus each routed provider's circuit-breaker state. Complements `stats://providers` (which lists *configured* providers) with *current* availability. Empty/`healthy` when multi-provider routing is not enabled (no breaker ladder to observe) |
+
+### Operator dashboard (HTTP mode)
+
+A lightweight, read-only, **aggregate-only** dashboard at `GET /dashboard` for self-hosters who don't run their own Grafana/Prometheus stack. It is a single self-contained HTML page (no CDN, no build step) that polls the admin-gated `GET /dashboard/data` and renders per-tool call counts / latency (avg, p95) / error rates, active session count, rate-limit configuration, live provider/breaker health, and the recent-errors ring.
+
+- **Auth:** the page is an inert shell that prompts for the admin key client-side; `GET /dashboard/data` is gated by `X-Admin-Key` exactly like `/admin/*`. Both routes register **only when `ADMIN_API_KEY` is set**.
+- **CSP:** each page response sets a per-request nonce-based `Content-Security-Policy` (`default-src 'none'`; nonce'd inline script/style; `connect-src 'self'`; `frame-ancestors 'none'`) — no `unsafe-inline`, no third-party origins.
+- **STDIO unaffected:** the dashboard is HTTP-only by construction (it lives in `ServeHTTP`).
+- **No new data:** it visualizes aggregate operational data that already exists via `/metrics` and the Resources above — no per-user, per-query, or tenant-identifiable data, and no new collection.
 
 ---
 

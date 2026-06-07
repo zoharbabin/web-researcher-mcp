@@ -6,6 +6,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/zoharbabin/web-researcher-mcp/internal/auth"
 	"github.com/zoharbabin/web-researcher-mcp/internal/metrics"
 	"github.com/zoharbabin/web-researcher-mcp/internal/ratelimit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
@@ -17,8 +18,22 @@ type ProviderInfo struct {
 	Type string `json:"type"`
 }
 
-func RegisterAll(srv *mcp.Server, metricsCollector *metrics.Collector, sessionManager session.Manager, rateLimiter *ratelimit.Limiter, providers []ProviderInfo) {
+// HealthProvider supplies a live provider/breaker health snapshot for the
+// diagnostics://health Resource (#81). The Router satisfies it via its Health()
+// method; resources depends on this small interface (not on the search package)
+// to stay decoupled — the same pattern as metrics.AuditLossSource. A nil
+// provider (single-provider / no-routing deployment) makes diagnostics://health
+// report an empty, "healthy" snapshot.
+type HealthProvider interface {
+	// Health returns a JSON-marshalable snapshot: an aggregate status string and
+	// a per-provider breaker list. Returned as `any` so resources need not import
+	// the search package's concrete type.
+	Health() any
+}
+
+func RegisterAll(srv *mcp.Server, metricsCollector *metrics.Collector, sessionManager session.Manager, rateLimiter *ratelimit.Limiter, providers []ProviderInfo, health HealthProvider) {
 	registerResources(srv, metricsCollector, sessionManager, rateLimiter, providers)
+	registerDiagnostics(srv, metricsCollector, health)
 	registerPrompts(srv)
 }
 
@@ -104,6 +119,70 @@ func registerResources(srv *mcp.Server, metricsCollector *metrics.Collector, ses
 			Contents: []*mcp.ResourceContents{
 				{
 					URI:      "stats://providers",
+					MIMEType: "application/json",
+					Text:     string(jsonBytes),
+				},
+			},
+		}, nil
+	})
+}
+
+// registerDiagnostics registers the operator-facing diagnostics:// Resources
+// (#81): a bounded recent-errors view and a live provider/breaker health view.
+// Both are read-only, redacted (errors pass through audit.MaskSecrets at insert
+// in the metrics ring), and aggregate/operator data — never LLM content.
+func registerDiagnostics(srv *mcp.Server, metricsCollector *metrics.Collector, health HealthProvider) {
+	srv.AddResource(&mcp.Resource{
+		URI:         "diagnostics://errors/recent",
+		Name:        "Recent Errors",
+		Description: "The most recent tool errors (bounded, newest first) — tool, error kind, provider, and a redacted cause. Operator/debug data for troubleshooting; never contains secrets, user queries, or full URLs. Scoped to your tenant when authenticated.",
+		MIMEType:    "application/json",
+	}, func(ctx context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		// Tenant scope: an authenticated caller sees only their tenant's errors;
+		// the unauthenticated/STDIO single-tenant case ("") sees all. The global
+		// operator view is the auth-gated HTTP dashboard, not this Resource.
+		tenantID := auth.TenantIDFromContext(ctx)
+		errs := metricsCollector.RecentErrors(tenantID)
+		body := map[string]any{
+			"count":  len(errs),
+			"errors": errs,
+		}
+		jsonBytes, err := json.MarshalIndent(body, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		return &mcp.ReadResourceResult{
+			Contents: []*mcp.ResourceContents{
+				{
+					URI:      "diagnostics://errors/recent",
+					MIMEType: "application/json",
+					Text:     string(jsonBytes),
+				},
+			},
+		}, nil
+	})
+
+	srv.AddResource(&mcp.Resource{
+		URI:         "diagnostics://health",
+		Name:        "Provider Health",
+		Description: "Live health of routed search providers: an overall status (healthy/degraded/unhealthy) and each provider's circuit-breaker state. Complements stats://providers (which lists configured providers) with current availability. Empty when multi-provider routing is not enabled.",
+		MIMEType:    "application/json",
+	}, func(_ context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		var snapshot any
+		if health != nil {
+			snapshot = health.Health()
+		} else {
+			// No Router (single-provider / no routing): nothing to observe.
+			snapshot = map[string]any{"status": "healthy", "providers": []any{}}
+		}
+		jsonBytes, err := json.MarshalIndent(snapshot, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		return &mcp.ReadResourceResult{
+			Contents: []*mcp.ResourceContents{
+				{
+					URI:      "diagnostics://health",
 					MIMEType: "application/json",
 					Text:     string(jsonBytes),
 				},

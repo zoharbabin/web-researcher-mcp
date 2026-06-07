@@ -28,7 +28,7 @@ internal/
 ├── redisbackend/ # SOLE go-redis importer: Redis impls of cache/persist/session for HTTP distributed state — gated, fail-fast, encrypted (opt-in via REDIS_URL)
 ├── content/      # Sanitize, dedup, truncate, quality score, typed source classification, claim-evidence extraction, citation extraction, content recommendations + auto-formatted components
 ├── config/       # Env-based config — all vars documented in .env.example
-├── server/       # MCP server lifecycle (STDIO + Streamable HTTP) + admin endpoints (cache/session flush, /admin/data, /admin/consent, /admin/analytics, /admin/workspace/members)
+├── server/       # MCP server lifecycle (STDIO + Streamable HTTP) + admin endpoints (cache/session flush, /admin/data, /admin/consent, /admin/analytics, /admin/workspace/members) + operator dashboard (/dashboard HTML + admin-gated /dashboard/data, nonce-CSP)
 ├── auth/         # OAuth 2.1 middleware (JWKS, audience/issuer validation)
 ├── audit/        # Auditor interface + structured JSON logging (PodID for cross-pod correlation)
 ├── session/      # Per-tenant session persistence — Manager interface (memory+disk default, or Redis impl)
@@ -37,10 +37,10 @@ internal/
 ├── useranalytics/# Opt-in consent-gated per-user usage analytics (Recorder + Noop)
 ├── memory/       # Opt-in consent-gated long-term cross-session memory (Store + Noop, retention TTL)
 ├── workspace/    # Opt-in shared research workspaces — server enforces data-plane + isolation, host owns membership (Store + Noop)
-├── metrics/      # Prometheus counters/histograms per tool + per-tenant aggregate analytics
+├── metrics/      # Prometheus counters/histograms per tool + per-tenant aggregate analytics + bounded recent-errors ring (diagnostics://errors/recent)
 ├── ratelimit/    # Token bucket (per-tenant + global) + optional atomic cross-pod daily quota (Redis)
 ├── circuit/      # Circuit breaker for external APIs
-└── resources/    # MCP Resources (stats) + Prompts (research templates)
+└── resources/    # MCP Resources (stats:// + diagnostics:// errors/health) + Prompts (research templates)
 lenses/           # JSON files defining domain lists for site-restricted search
 tests/e2e/        # Full process E2E tests
 tests/benchmark/  # Performance benchmarks

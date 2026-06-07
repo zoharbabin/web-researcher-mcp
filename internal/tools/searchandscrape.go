@@ -63,7 +63,8 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 			return errResult, nil, nil
 		}
 
-		searchResults, err := provider.Web(ctx, search.WebSearchParams{
+		traceCtx, trace := search.NewRoutingTrace(ctx)
+		searchResults, err := provider.Web(traceCtx, search.WebSearchParams{
 			Query:      input.Query,
 			NumResults: numResults,
 		})
@@ -76,6 +77,9 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 			auditToolCallQuery(ctx, deps, "search_and_scrape", time.Since(start), err, errCode, input.Query, nil)
 			return upstreamErrorResponse("search", err), nil, nil
 		}
+		// Routing decision describes the discovery search only (the scrape stage
+		// fetches user/result URLs directly, not through the Router).
+		rt := routingMeta(trace.Decision(), time.Since(start), false)
 
 		if len(searchResults) == 0 {
 			// Mirror the main success-path shape so callers can treat every
@@ -103,8 +107,8 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 			// Record metrics + audit like every other success path, so
 			// zero-result calls still appear in monitoring and audit trails.
 			deps.Metrics.RecordToolCall("search_and_scrape", time.Since(start), nil, "", false)
-			auditToolCallQuery(ctx, deps, "search_and_scrape", time.Since(start), nil, "", input.Query, map[string]any{"urls_scraped": 0})
-			return structuredResult(jsonBytes), nil, nil
+			auditToolCallQuery(ctx, deps, "search_and_scrape", time.Since(start), nil, "", input.Query, map[string]any{"urls_scraped": 0, "routing": rt})
+			return withRoutingMeta(structuredResult(jsonBytes), rt), nil, nil
 		}
 
 		results := parallelScrape(ctx, deps, searchResults, maxLenPerSource)
@@ -170,13 +174,13 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 
 		jsonBytes, _ := json.Marshal(output)
 		deps.Metrics.RecordToolCall("search_and_scrape", time.Since(start), nil, "", false)
-		auditToolCallQuery(ctx, deps, "search_and_scrape", time.Since(start), nil, "", input.Query, map[string]any{"urls_scraped": scraped})
+		auditToolCallQuery(ctx, deps, "search_and_scrape", time.Since(start), nil, "", input.Query, map[string]any{"urls_scraped": scraped, "routing": rt})
 
 		if input.SessionID != "" {
 			trackSources(ctx, deps, input.SessionID, sourceOutputsToSources(sources))
 		}
 
-		return structuredResult(jsonBytes), nil, nil
+		return withRoutingMeta(structuredResult(jsonBytes), rt), nil, nil
 	})
 }
 

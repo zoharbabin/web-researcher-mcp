@@ -84,9 +84,16 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 		cacheKey := searchCacheKey("academic", input.Query, numResults, input.YearFrom, input.YearTo, source, input.Provider, input.OpenAccess, input.PDFOnly)
 		if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("academic_search", time.Since(start), nil, "", true)
-			auditToolCall(ctx, deps, "academic_search", time.Since(start), nil, "")
-			return cachedResultWithMeta(cached, meta), nil, nil
+			rt := routingMeta(search.RoutingDecision{}, time.Since(start), true)
+			auditToolCallQuery(ctx, deps, "academic_search", time.Since(start), nil, "", "", map[string]any{"cache_hit": true, "routing": rt})
+			return withRoutingMeta(cachedResultWithMeta(cached, meta), rt), nil, nil
 		}
+
+		// Routing trace for the Router-routed academic path (Strategy 2). Only that
+		// path goes through the Router's fallback ladder; the pinned-provider and
+		// direct-provider strategies name their provider in the body's `source`
+		// field and have no ladder to observe (#58 scope).
+		var routeDecision search.RoutingDecision
 
 		searchParams := search.AcademicSearchParams{
 			Query:      input.Query,
@@ -139,10 +146,12 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 		// Strategy 2: Try the Router's Scholarly() method (uses routing config)
 		if len(results) == 0 && input.Provider == "" {
 			if as, ok := deps.Search.(search.AcademicSearcher); ok {
-				apiResults, err := as.Scholarly(ctx, searchParams)
+				traceCtx, trace := search.NewRoutingTrace(ctx)
+				apiResults, err := as.Scholarly(traceCtx, searchParams)
 				if err == nil && len(apiResults) > 0 {
 					results = apiResults
 					providerSource = "router"
+					routeDecision = trace.Decision()
 				}
 			}
 		}
@@ -215,15 +224,16 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 		if len(papers) > 0 {
 			deps.Cache.Set(ctx, cacheKey, jsonBytes, 1*time.Hour)
 		}
+		rt := routingMeta(routeDecision, time.Since(start), false)
 		deps.Metrics.RecordToolCall("academic_search", time.Since(start), nil, "", false)
-		auditToolCall(ctx, deps, "academic_search", time.Since(start), nil, "")
+		auditToolCallQuery(ctx, deps, "academic_search", time.Since(start), nil, "", "", map[string]any{"routing": rt})
 
 		if input.SessionID != "" {
 			trackSources(ctx, deps, input.SessionID, academicResultsToSources(results))
 			trackOutcome(ctx, deps, input.SessionID, providerSource, len(papers) > 0, "", "")
 		}
 
-		return structuredResult(jsonBytes), nil, nil
+		return withRoutingMeta(structuredResult(jsonBytes), rt), nil, nil
 	})
 }
 
