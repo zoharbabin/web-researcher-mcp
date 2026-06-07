@@ -100,13 +100,15 @@ Signing unlocks the OS package managers — some validate/prefer signed binaries
 | WinGet | `winget` | fork `zoharbabin/winget-pkgs` → PR to `microsoft/winget-pkgs` | `WINGET_PKGS_GITHUB_TOKEN` (gates `skip_upload`) | Auto-opens the upstream PR; Microsoft's validation is smooth because the `.exe` is Azure-Trusted-Signing-signed. |
 | Chocolatey | `chocolateys` | chocolatey.org (`push.chocolatey.org`) | `CHOCOLATEY_API_KEY` (workflow installs `choco` + un-`--skip`s the pipe only when set) | `choco install web-researcher-mcp`. The Linux runner gets `choco` via `mono`. |
 
-**Creating the two GitHub PATs** (Chocolatey uses an account API key, not a PAT):
+**Tokens are configured** — `CHOCOLATEY_API_KEY` (account API key), `WINGET_PKGS_GITHUB_TOKEN`, and `SCOOP_BUCKET_GITHUB_TOKEN` are set as GitHub Actions secrets, so the next `v*` tag publishes to all four channels. To rotate or recreate a GitHub PAT (Chocolatey uses an account API key, not a PAT):
 
-- **WinGet** — fine-grained PAT with **Contents: read/write + Pull requests: read/write** on `zoharbabin/winget-pkgs` (the fork already exists). Set `gh secret set WINGET_PKGS_GITHUB_TOKEN`.
-- **Scoop** — fine-grained PAT with **Contents: read/write** on `zoharbabin/scoop-bucket` (already exists). Set `gh secret set SCOOP_BUCKET_GITHUB_TOKEN`.
+- **WinGet** — fine-grained PAT with **Contents: read/write + Pull requests: read/write** on `zoharbabin/winget-pkgs`. `gh secret set WINGET_PKGS_GITHUB_TOKEN`.
+- **Scoop** — fine-grained PAT with **Contents: read/write** on `zoharbabin/scoop-bucket`. `gh secret set SCOOP_BUCKET_GITHUB_TOKEN`.
 
 PATs cannot be minted by `gh`/the API (browser-only by design): GitHub → Settings → Developer settings → Fine-grained tokens.
 
+> **First-release note:** the publishers were added after v1.19.0 was tagged, so they activate on the **next** release. WinGet's first push opens a PR to `microsoft/winget-pkgs` that gets a one-time manual Microsoft review; Chocolatey's first package goes through moderation. User-facing install instructions (`winget install` / `scoop install` / `choco install` / `brew install --cask`) are added to the README only once each channel's first package is confirmed live.
+
 ## Local secret convention (maintainer)
 
-Secret **names** are registered in `~/.zshenv` (`_SECRETS`); **values** live in the macOS Keychain (`_keychain_set <NAME>`). The `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` / `AZURE_CLIENT_SECRET`, the `MACOS_*`, the `CHOCOLATEY_API_KEY`, and (once created) `WINGET_PKGS_GITHUB_TOKEN` / `SCOOP_BUCKET_GITHUB_TOKEN` entries all follow that pattern.
+Secret **names** are registered in `~/.zshenv` (`_SECRETS`); **values** live in the macOS Keychain (`_keychain_set <NAME>`). The `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` / `AZURE_CLIENT_SECRET`, the `MACOS_*`, and the package-publishing trio (`CHOCOLATEY_API_KEY`, `WINGET_PKGS_GITHUB_TOKEN`, `SCOOP_BUCKET_GITHUB_TOKEN`) all follow that pattern.
