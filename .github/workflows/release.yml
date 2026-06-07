@@ -51,15 +51,45 @@ jobs:
       - name: Install Syft
         uses: anchore/sbom-action/download-syft@v0
 
+      # ── Chocolatey publishing prerequisite ──────────────────────────────────
+      # GoReleaser's `chocolateys` pipe shells out to the `choco` CLI to build the
+      # .nupkg, which isn't present on the Linux runner. We install it (under mono)
+      # ONLY when CHOCOLATEY_API_KEY is configured; otherwise we tell GoReleaser to
+      # skip the chocolatey pipe so the release never fails for an unset secret
+      # (mirrors the AZURE_SIGNING_ENABLED / MACOS_SIGN_P12 gating philosophy).
+      - name: Set up Chocolatey (only when key is configured)
+        id: choco
+        env:
+          CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
+        run: |
+          if [ -n "$CHOCOLATEY_API_KEY" ]; then
+            echo "Installing Chocolatey CLI (mono) for nupkg build + push…"
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq mono-devel
+            # Official Chocolatey install-on-Linux bootstrap (mono-based).
+            curl -fsSL https://community.chocolatey.org/install.sh | sudo bash
+            echo "skip_choco=" >> "$GITHUB_OUTPUT"
+          else
+            echo "CHOCOLATEY_API_KEY not set — skipping the chocolatey pipe."
+            echo "skip_choco=chocolatey" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean
+          args: release --clean ${{ steps.choco.outputs.skip_choco && format('--skip={0}', steps.choco.outputs.skip_choco) || '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          # Windows package managers (gated in .goreleaser.yml via skip_upload —
+          # an unset token makes the template emit "true", so GoReleaser builds the
+          # manifest but skips the push, zero regression until the PAT is added).
+          SCOOP_BUCKET_GITHUB_TOKEN: ${{ secrets.SCOOP_BUCKET_GITHUB_TOKEN }}
+          WINGET_PKGS_GITHUB_TOKEN: ${{ secrets.WINGET_PKGS_GITHUB_TOKEN }}
+          # Chocolatey push API key (the chocolatey pipe is --skip'd above when unset).
+          CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
           # macOS Developer ID signing + notarization (see .goreleaser.yml
           # notarize.macos). The notarize block self-gates on MACOS_SIGN_P12
           # being set, so until these secrets exist GoReleaser skips signing and
