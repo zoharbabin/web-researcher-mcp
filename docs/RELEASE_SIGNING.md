@@ -89,6 +89,24 @@ Config lives in `.goreleaser.yml` (`notarize.macos`); secrets are threaded into 
 
 On a Windows machine (or with `osslsigncode verify` on Linux/macOS), confirm the published `.exe` shows publisher **Zohar Babin** and a valid timestamp. The release `checksums.txt` entry for `*_windows_amd64.zip` must match the re-uploaded signed zip.
 
+## Package-manager distribution (built on signing)
+
+Signing unlocks the OS package managers — some validate/prefer signed binaries; signing also accrues SmartScreen/Gatekeeper reputation. All four publishers are configured in `.goreleaser.yml` and **gated**, so a release with no token/key set is byte-for-byte unchanged (the manifest is built but the push is skipped — same philosophy as the signing toggles).
+
+| Channel | `.goreleaser.yml` block | Target | Secret / gate | Notes |
+|---------|-------------------------|--------|---------------|-------|
+| Homebrew Cask | `homebrew_casks` | `zoharbabin/homebrew-tap` (`Casks/`) | `HOMEBREW_TAP_GITHUB_TOKEN` (shared with the formula) | Ships the **notarized** darwin binary; `brew install --cask zoharbabin/tap/web-researcher-mcp`. `skip_upload: auto` skips prereleases. |
+| Scoop | `scoops` | `zoharbabin/scoop-bucket` (`bucket/`) | `SCOOP_BUCKET_GITHUB_TOKEN` (gates `skip_upload`) | `scoop bucket add zoharbabin …; scoop install web-researcher-mcp`. |
+| WinGet | `winget` | fork `zoharbabin/winget-pkgs` → PR to `microsoft/winget-pkgs` | `WINGET_PKGS_GITHUB_TOKEN` (gates `skip_upload`) | Auto-opens the upstream PR; Microsoft's validation is smooth because the `.exe` is Azure-Trusted-Signing-signed. |
+| Chocolatey | `chocolateys` | chocolatey.org (`push.chocolatey.org`) | `CHOCOLATEY_API_KEY` (workflow installs `choco` + un-`--skip`s the pipe only when set) | `choco install web-researcher-mcp`. The Linux runner gets `choco` via `mono`. |
+
+**Creating the two GitHub PATs** (Chocolatey uses an account API key, not a PAT):
+
+- **WinGet** — fine-grained PAT with **Contents: read/write + Pull requests: read/write** on `zoharbabin/winget-pkgs` (the fork already exists). Set `gh secret set WINGET_PKGS_GITHUB_TOKEN`.
+- **Scoop** — fine-grained PAT with **Contents: read/write** on `zoharbabin/scoop-bucket` (already exists). Set `gh secret set SCOOP_BUCKET_GITHUB_TOKEN`.
+
+PATs cannot be minted by `gh`/the API (browser-only by design): GitHub → Settings → Developer settings → Fine-grained tokens.
+
 ## Local secret convention (maintainer)
 
-Secret **names** are registered in `~/.zshenv` (`_SECRETS`); **values** live in the macOS Keychain (`_keychain_set <NAME>`). The `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` / `AZURE_CLIENT_SECRET` entries follow that pattern.
+Secret **names** are registered in `~/.zshenv` (`_SECRETS`); **values** live in the macOS Keychain (`_keychain_set <NAME>`). The `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` / `AZURE_CLIENT_SECRET`, the `MACOS_*`, the `CHOCOLATEY_API_KEY`, and (once created) `WINGET_PKGS_GITHUB_TOKEN` / `SCOOP_BUCKET_GITHUB_TOKEN` entries all follow that pattern.

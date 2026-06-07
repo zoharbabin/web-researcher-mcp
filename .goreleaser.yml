@@ -200,6 +200,115 @@ brews:
       bin.install "web-researcher-mcp"
       (share/"web-researcher-mcp/lenses").install Dir["lenses/*"] if Dir.exist?("lenses")
 
+# ── Homebrew Cask (macOS, notarized binary) ──────────────────────────────────
+# Optional, opt-in macOS distribution alongside the formula above. The cask
+# ships the DEVELOPER-ID-SIGNED + NOTARIZED darwin binary, so a `brew install
+# --cask` user gets a Gatekeeper-clean artifact. It lives in the SAME tap as the
+# formula: `brew install zoharbabin/tap/web-researcher-mcp` resolves to the
+# formula (precedence); `brew install --cask zoharbabin/tap/web-researcher-mcp`
+# gets this cask. Gated via skip_upload so it no-ops until the tap token exists
+# (it shares HOMEBREW_TAP_GITHUB_TOKEN, already set — `auto` skips prereleases).
+homebrew_casks:
+  - name: web-researcher-mcp
+    repository:
+      owner: zoharbabin
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Casks
+    homepage: "https://github.com/zoharbabin/web-researcher-mcp"
+    description: "Your AI research assistant that cites real sources and stays honest"
+    skip_upload: auto
+    binaries:
+      - web-researcher-mcp
+    # The binary is notarized; clear the quarantine xattr on install so Gatekeeper
+    # doesn't re-prompt for the Homebrew-placed file.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr",
+                           args: ["-dr", "com.apple.quarantine", "#{staged_path}/web-researcher-mcp"],
+                           sudo: false
+          end
+
+# ── Scoop (Windows) ──────────────────────────────────────────────────────────
+# Publishes a manifest to the zoharbabin/scoop-bucket repo. Gated on
+# SCOOP_BUCKET_GITHUB_TOKEN via skip_upload: when the token is absent the
+# template yields "true" and GoReleaser builds the manifest but skips the push
+# (zero regression). Install: `scoop bucket add zoharbabin https://github.com/
+# zoharbabin/scoop-bucket; scoop install web-researcher-mcp`.
+scoops:
+  - name: web-researcher-mcp
+    repository:
+      owner: zoharbabin
+      name: scoop-bucket
+      token: "{{ .Env.SCOOP_BUCKET_GITHUB_TOKEN }}"
+      branch: main
+    directory: bucket
+    homepage: "https://github.com/zoharbabin/web-researcher-mcp"
+    description: "Your AI research assistant that cites real sources and stays honest"
+    license: "MIT"
+    skip_upload: '{{ if isEnvSet "SCOOP_BUCKET_GITHUB_TOKEN" }}auto{{ else }}true{{ end }}'
+
+# ── WinGet (Windows Package Manager) ─────────────────────────────────────────
+# Generates the WinGet manifest and commits it to a branch on the
+# zoharbabin/winget-pkgs fork; you then open a PR to microsoft/winget-pkgs for
+# Microsoft's automated validation (smooth because our .exe is Azure Trusted
+# Signing-signed with a Microsoft-issued cert). Gated on WINGET_PKGS_GITHUB_TOKEN
+# via skip_upload. Install (once accepted upstream): `winget install
+# zoharbabin.web-researcher-mcp`.
+winget:
+  - name: web-researcher-mcp
+    publisher: zoharbabin
+    short_description: "Your AI research assistant that cites real sources and stays honest"
+    license: "MIT"
+    homepage: "https://github.com/zoharbabin/web-researcher-mcp"
+    publisher_url: "https://github.com/zoharbabin"
+    package_identifier: zoharbabin.web-researcher-mcp
+    repository:
+      owner: zoharbabin
+      name: winget-pkgs
+      branch: "web-researcher-mcp-{{ .Version }}"
+      token: "{{ .Env.WINGET_PKGS_GITHUB_TOKEN }}"
+      pull_request:
+        enabled: true
+        draft: false
+        base:
+          owner: microsoft
+          name: winget-pkgs
+          branch: master
+    skip_upload: '{{ if isEnvSet "WINGET_PKGS_GITHUB_TOKEN" }}false{{ else }}true{{ end }}'
+
+# ── Chocolatey (Windows) ─────────────────────────────────────────────────────
+# Builds the .nupkg from the windows amd64 archive. Publishing requires the
+# `choco` CLI + the API key; GoReleaser shells out to `choco push`. The release
+# workflow installs choco (via mono) and exports CHOCOLATEY_API_KEY only when
+# the secret is present; skip_publish stays false so a configured run publishes.
+# When CHOCOLATEY_API_KEY is unset the workflow skips the choco setup, GoReleaser
+# can't find `choco`, so we keep the build resilient by leaving the nupkg as a
+# release artifact regardless. Install: `choco install web-researcher-mcp`.
+chocolateys:
+  - name: web-researcher-mcp
+    title: "Web Researcher MCP"
+    authors: "Zohar Babin"
+    project_url: "https://github.com/zoharbabin/web-researcher-mcp"
+    license_url: "https://github.com/zoharbabin/web-researcher-mcp/blob/main/LICENSE"
+    project_source_url: "https://github.com/zoharbabin/web-researcher-mcp"
+    docs_url: "https://github.com/zoharbabin/web-researcher-mcp/blob/main/README.md"
+    bug_tracker_url: "https://github.com/zoharbabin/web-researcher-mcp/issues"
+    icon_url: "https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/logo.png"
+    copyright: "2026 Zohar Babin"
+    summary: "Your AI research assistant that cites real sources and stays honest"
+    description: |
+      Web Researcher MCP is an MCP server that gives AI assistants web search,
+      content extraction, academic / patent / SEC-filing / case-law / economic
+      data lookup, and multi-step research — with real, verifiable citations.
+    tags: "mcp ai research search web-scraping cli"
+    require_license_acceptance: false
+    source_repo: "https://push.chocolatey.org/"
+    api_key: "{{ .Env.CHOCOLATEY_API_KEY }}"
+    skip_publish: false
+
 changelog:
   sort: asc
   use: github
