@@ -258,6 +258,10 @@ We deliberately minimize what we store:
 | Research sessions | Per-tenant:session compound key | Session TTL (default 4h) | Query context |
 | Audit logs | Structured JSON | Configurable (default 180 days) | User/tenant IDs only |
 | Rate limit counters | Per-tenant in memory | Resets daily | Tenant ID only |
+| Recent-errors ring (`diagnostics://errors/recent`) | Bounded in-memory ring, tenant-aware | None (memory-only, oldest overwritten) | No — causes redacted via `audit.MaskSecrets`; no query text, no full URLs |
+| Operator dashboard / `diagnostics://health` | Derived on read from existing metrics + breaker state | None (computed per request) | No — aggregate-only, no per-user/per-query data |
+
+The **operator-observability** surfaces added in the routing-observability work (`_meta.routing` on results, the `diagnostics://` resources, and the admin-gated `GET /dashboard`) are deliberately privacy-minimal: routing detail exposes only the provider *name* (never upstream URLs, credentials, or breaker internals), the recent-errors ring is memory-only/bounded/redacted/tenant-scoped, and the dashboard is aggregate-only and admin-gated. None of them is a personal-data store, so none adds a GDPR processing obligation. See `docs/DEPLOYMENT.md` → Operator Observability and `docs/TOOLS.md` → Routing Provenance.
 
 ### Purpose Limitation
 
@@ -388,50 +392,18 @@ Deployment recommendations:
 
 ## Configuration Reference
 
-### Security Controls
+The security- and privacy-relevant settings are grouped into these knobs — **defaults and exact variable names live in [`.env.example`](../.env.example) and [`docs/DEPLOYMENT.md`](DEPLOYMENT.md), the two authoritative homes** (this guide does not duplicate them, so they cannot drift):
 
-| Env Var | Default | Effect |
-|---------|---------|--------|
-| `CACHE_ENCRYPTION_KEY` | (unset = plaintext) | 64-char hex key enables AES-256-GCM disk encryption |
-| `CACHE_ENCRYPTION_KEY_PREV` | (unset) | 64-char hex previous key for zero-downtime rotation (decrypt fallback + lazy re-encrypt) |
-| `ALLOW_PRIVATE_IPS` | `false` | When `true`, allows scraping private/RFC1918 IPs |
-| `ALLOWED_DOMAINS` | (unset = all) | Comma-separated allowlist restricts scraping targets |
-| `ALLOWED_ORIGINS` | (unset) | CORS allowlist for HTTP mode (browser-only). Empty behavior depends on `CORS_STRICT` |
-| `CORS_STRICT` | `true` | Default fail-closed: empty `ALLOWED_ORIGINS` denies all cross-origin browser requests. Set `false` to restore the legacy reflect-any-Origin behavior (see `docs/MIGRATION.md`) |
-| `ENFORCE_SCOPES` | `false` | When `true`, scoped tokens need `tool:*`/`tool:<name>`/`research` per tool (permissive for unscoped tokens) |
-| `REQUIRED_SCOPES` | (unset) | CSV of scopes every request must carry when `ENFORCE_SCOPES=true` |
-| `CACHE_ISOLATION` | `shared` | Set `tenant` for per-tenant cache isolation |
-| `ADMIN_API_KEY` | (unset = no admin API) | Enables all `/admin/*` endpoints when set (min 16 chars); sent as `X-Admin-Key`, constant-time compared |
-| `CACHE_ADMIN_KEY` | (unset) | **Deprecated** alias for `ADMIN_API_KEY` (still accepted; logs a startup warning) |
-| `RATE_LIMIT_PER_IP` | `0` (disabled) | Pre-auth per-IP request ceiling (req/min); `TRUST_PROXY` selects the client-IP source |
+- **Encryption at rest** — a hex key turns on AES-256-GCM disk encryption for the cache, the TTL key/value store, and sessions; a previous-key slot enables zero-downtime rotation (decrypt-fallback + lazy re-encrypt).
+- **SSRF / scrape egress** — toggles for allowing private/RFC1918 IPs and a domain allowlist that restricts scrape targets.
+- **CORS** — an origin allowlist plus a fail-closed strict toggle (default deny on empty; see [`docs/MIGRATION.md`](MIGRATION.md)).
+- **Auth & scopes (HTTP mode)** — OAuth issuer/audience for JWKS validation, JWKS refresh interval, and optional per-tool scope enforcement.
+- **Admin surface** — the admin key that gates every `/admin/*` endpoint and the operator dashboard (constant-time compared; a deprecated alias is still accepted with a startup warning).
+- **Tenant isolation** — per-tenant cache isolation mode.
+- **Rate limiting (HTTP mode)** — global/second, per-tenant/minute, per-tenant/day, and a pre-auth per-IP ceiling.
+- **Audit & observability** — audit logging on/off, output path, buffer size, log level, and the Prometheus `/metrics` toggle.
 
-### Authentication (HTTP mode only)
-
-| Env Var | Default | Effect |
-|---------|---------|--------|
-| `OAUTH_ISSUER_URL` | (unset = no auth) | JWT issuer for JWKS discovery |
-| `OAUTH_AUDIENCE` | (unset) | Expected JWT audience claim |
-| `JWKS_REFRESH_INTERVAL` | `1h` | Background JWKS key refresh |
-
-### Rate Limiting (HTTP mode only)
-
-| Env Var | Default | Effect |
-|---------|---------|--------|
-| `RATE_LIMIT_GLOBAL` | `1000` | Global requests/second |
-| `RATE_LIMIT_PER_TENANT` | `120` | Per-tenant requests/minute |
-| `DAILY_QUOTA_PER_TENANT` | `5000` | Per-tenant requests/day |
-
-### Audit & Observability
-
-| Env Var | Default | Effect |
-|---------|---------|--------|
-| `AUDIT_ENABLED` | `true` | Structured audit logging |
-| `AUDIT_OUTPUT_PATH` | (unset = stderr) | File path for audit JSONL |
-| `AUDIT_BUFFER_SIZE` | `1000` | Async channel buffer size |
-| `LOG_LEVEL` | `info` | Log verbosity (debug/info/warn/error) |
-| `METRICS_ENABLED` | `true` | Prometheus metrics on `/metrics` |
-
-Full configuration reference: see `.env.example`.
+See `docs/DEPLOYMENT.md` for the table of every variable, its default, and its effect.
 
 ---
 

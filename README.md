@@ -178,6 +178,18 @@ INSTALL_DIR=/opt/tools curl -fsSL https://raw.githubusercontent.com/zoharbabin/w
 <details>
 <summary><strong>Other install methods</strong></summary>
 
+**Scoop (Windows):**
+```powershell
+scoop bucket add zoharbabin https://github.com/zoharbabin/scoop-bucket
+scoop install web-researcher-mcp
+```
+
+**Homebrew Cask (macOS — Developer ID-signed + notarized binary):**
+```bash
+brew install --cask zoharbabin/tap/web-researcher-mcp
+```
+The cask ships the notarized darwin binary (Gatekeeper-clean). Most users want the formula above (`brew install zoharbabin/tap/web-researcher-mcp`), which the bare name resolves to; pass `--cask` explicitly for the notarized artifact.
+
 **Go install** (if you have Go):
 ```bash
 go install github.com/zoharbabin/web-researcher-mcp/cmd/web-researcher-mcp@latest

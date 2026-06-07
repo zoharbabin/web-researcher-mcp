@@ -203,6 +203,16 @@ Every request carries a `context.Context` with deadline. Session and tenant IDs 
 - **Per-client backpressure**: Rate limiter per session, reject with 429
 - **Graceful shutdown**: Context cancellation propagates, in-flight requests drain
 
+### 7. Operator Observability
+
+Routing, provider health, and recent errors are **operator/debug data, never model content** — the Router exists to make providers interchangeable to the LLM, so its internals surface only through non-content channels. Three subsystems implement this, each keeping the provider *name* as the disclosure boundary (no upstream URLs, credentials, or breaker counts leak):
+
+- **Per-call routing trace** — `search.RoutingTrace` (`internal/search/routing_trace.go`) is a request-scoped, context-carried, concurrency-safe collector the `Router` populates while iterating providers. The tool layer reads its `RoutingDecision` and attaches it to the result's MCP `_meta.routing` (via `routingMeta` / `withRoutingMeta` in `internal/tools/errors.go`, merged with — never clobbering — the cache-freshness `_meta`). The same summary is mirrored to `audit.AuditEvent.Metadata["routing"]`. Omitted entirely when there is nothing to observe (single-provider / non-routed call).
+- **Recent-errors ring** — `metrics.ErrorRing` (`internal/metrics/errors.go`) is a bounded, memory-only, tenant-aware ring buffer fed at the central audit sink (`auditToolCallQuery`), so every tool error path records one redacted sample (cause passed through `audit.MaskSecrets`). No disk, no unbounded growth — consistent with the no-retention posture.
+- **Live provider health** — `search.Router.Health()` (`internal/search/health.go`) returns a tri-state `HealthSnapshot` (`healthy` / `degraded` / `unhealthy`) plus each routed provider's circuit-breaker state.
+
+These reach operators through read-only MCP Resources (`diagnostics://errors/recent`, `diagnostics://health` beside `stats://*`, registered in `internal/resources/resources.go` via the small `HealthProvider` interface) and, in HTTP mode, an admin-gated operator dashboard (`GET /dashboard` + `GET /dashboard/data`, `internal/server/dashboard.go`). The dashboard is a self-contained HTML page (no CDN, no build) under a per-request nonce CSP, aggregate-only. See `docs/TOOLS.md` (Routing Provenance) and `docs/DEPLOYMENT.md` (Operator Observability) for the field contracts.
+
 ## Technology Stack
 
 | Concern | Library | Why |

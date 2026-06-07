@@ -1379,21 +1379,34 @@ Full details: see `docs/ERROR_HANDLING.md` — covers the three-layer architectu
 
 ### Tool Annotations (MCP Protocol)
 
-All tools declare annotations for client consumption. CI enforces tool↔doc consistency via `TestAllToolsHaveAnnotations`, `TestToolsDocMatchesRegistry`, `TestOutputSchemaMatchesResponse`, and `TestToolDescriptionQuality` (`internal/tools/metadata_test.go`) — including on docs-only PRs via the standalone `docs-drift` CI job:
+Every tool declares annotations for client consumption (`readOnlyAnnotations(idempotent, openWorld)` for read tools, `writeAnnotations(idempotent)` for the two write tools — both in `internal/tools/registry.go`). CI enforces tool↔doc consistency via `TestAllToolsHaveAnnotations`, `TestToolsDocMatchesRegistry`, `TestOutputSchemaMatchesResponse`, and `TestToolDescriptionQuality` (`internal/tools/metadata_test.go`) — including on docs-only PRs via the standalone `docs-drift` CI job. No tool is `Destructive` — deletion is the `/admin/data` erasure endpoint, never a tool flag (see `docs/DEPLOYMENT.md`).
 
-| Tool | ReadOnly | Idempotent | OpenWorld | Destructive |
-|------|----------|------------|-----------|-------------|
-| web_search | true | true | true | false |
-| scrape_page | true | true | true | false |
-| search_and_scrape | true | true | true | false |
-| image_search | true | true | true | false |
-| news_search | true | true | true | false |
-| academic_search | true | true | true | false |
-| patent_search | true | true | true | false |
-| sequential_search | true | **false** | false | false |
-| get_research_session | true | true | false | false |
+| Tool | ReadOnly | Idempotent | OpenWorld |
+|------|----------|------------|-----------|
+| web_search | true | true | true |
+| scrape_page | true | true | true |
+| search_and_scrape | true | true | true |
+| image_search | true | true | true |
+| news_search | true | true | true |
+| academic_search | true | true | true |
+| patent_search | true | true | true |
+| sequential_search | true | **false** | false |
+| get_research_session | true | true | false |
+| answer | true | true | true |
+| structured_search | true | true | true |
+| citation_graph | true | true | true |
+| research_export | true | true | false |
+| format_bibliography | true | true | false |
+| filing_search | true | true | true |
+| legal_search | true | true | true |
+| econ_search | true | true | true |
+| get_my_analytics | true | true | false |
+| memory_save | **false (write)** | false | false |
+| memory_recall | true | true | false |
+| workspace_contribute | **false (write)** | false | false |
+| workspace_read | true | true | false |
 
-`sequential_search` is non-idempotent because it writes session state to disk on every call.
+Notes: `sequential_search` is non-idempotent because it writes session state to disk on every call. `memory_save` and `workspace_contribute` are the two **write** tools (`ReadOnly:false`) — non-idempotent because each call appends a new record. `OpenWorld:false` marks tools that touch only local/server state (sessions, memory, analytics, workspaces, exports) rather than the open web. `Destructive` is uniformly false — no tool is annotated destructive.
 
 ### Provider Resolution
 
