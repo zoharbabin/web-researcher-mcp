@@ -14,6 +14,7 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/audit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/auth"
 	"github.com/zoharbabin/web-researcher-mcp/internal/consent"
+	"github.com/zoharbabin/web-researcher-mcp/internal/metrics"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
@@ -70,8 +71,9 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 		cacheKey := searchCacheKey("web", input.Query, numResults, input.TimeRange, input.Safe, input.Language, input.Site, input.Lens, input.Provider, input.ExactTerms, input.ExcludeTerms, input.Country, input.Claim)
 		if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("web_search", time.Since(start), nil, "", true)
-			auditToolCallQuery(ctx, deps, "web_search", time.Since(start), nil, "", input.Query, map[string]any{"cache_hit": true})
-			return cachedResultWithMeta(cached, meta), nil, nil
+			rt := routingMeta(search.RoutingDecision{}, time.Since(start), true)
+			auditToolCallQuery(ctx, deps, "web_search", time.Since(start), nil, "", input.Query, map[string]any{"cache_hit": true, "routing": rt})
+			return withRoutingMeta(cachedResultWithMeta(cached, meta), rt), nil, nil
 		}
 
 		params := search.WebSearchParams{
@@ -106,7 +108,11 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 			return errResult, nil, nil
 		}
 
-		results, err := provider.Web(ctx, params)
+		// Install a routing trace so a multi-provider Router records which
+		// provider served, what was attempted, and whether a fallback fired
+		// (#58). A non-Router provider leaves the trace empty (no routing _meta).
+		traceCtx, trace := search.NewRoutingTrace(ctx)
+		results, err := provider.Web(traceCtx, params)
 		if err != nil {
 			errCode := "upstream_error"
 			if isRateLimitError(err) {
@@ -116,6 +122,7 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 			auditToolCallQuery(ctx, deps, "web_search", time.Since(start), err, errCode, input.Query, nil)
 			return upstreamErrorResponse("search", err), nil, nil
 		}
+		rt := routingMeta(trace.Decision(), time.Since(start), false)
 
 		urls := make([]string, len(results))
 		for i, r := range results {
@@ -151,13 +158,13 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 		jsonBytes, _ := json.Marshal(output)
 		deps.Cache.Set(ctx, cacheKey, jsonBytes, webSearchTTL)
 		deps.Metrics.RecordToolCall("web_search", time.Since(start), nil, "", false)
-		auditToolCallQuery(ctx, deps, "web_search", time.Since(start), nil, "", input.Query, map[string]any{"result_count": len(results)})
+		auditToolCallQuery(ctx, deps, "web_search", time.Since(start), nil, "", input.Query, map[string]any{"result_count": len(results), "routing": rt})
 
 		if input.SessionID != "" {
 			trackSources(ctx, deps, input.SessionID, searchResultsToSources(results))
 		}
 
-		return freshResult(jsonBytes, webSearchTTL), nil, nil
+		return withRoutingMeta(freshResult(jsonBytes, webSearchTTL), rt), nil, nil
 	})
 }
 
@@ -252,6 +259,14 @@ func auditToolCallQuery(ctx context.Context, deps Dependencies, toolName string,
 
 	meta := make(map[string]any, len(extra)+2)
 	for k, v := range extra {
+		if v == nil {
+			continue // skip absent optional metadata
+		}
+		// A typed-nil map (e.g. a nil routing block) is not == nil through an
+		// interface; drop it so audit metadata never carries an empty "routing".
+		if m, ok := v.(map[string]any); ok && m == nil {
+			continue
+		}
 		if s, ok := v.(string); ok {
 			meta[k] = audit.MaskSecrets(s)
 		} else {
@@ -272,6 +287,23 @@ func auditToolCallQuery(ctx context.Context, deps Dependencies, toolName string,
 		event.Metadata = meta
 	}
 	deps.Auditor.Log(event)
+
+	// Recent-errors ring (#81): record a redacted sample on every error path so
+	// diagnostics://errors/recent reflects live failures. The cause is redacted
+	// inside the ring; kind is the errCode; provider/tier come from extra when
+	// the caller supplied them. Tenant-scoped for the per-caller Resource view.
+	if err != nil && deps.Metrics != nil {
+		provider, _ := extra["provider"].(string)
+		tier, _ := extra["tier"].(string)
+		deps.Metrics.RecordError(metrics.ErrorRecord{
+			Tool:     toolName,
+			Kind:     errCode,
+			Provider: provider,
+			Tier:     tier,
+			TenantID: auth.TenantIDFromContext(ctx),
+			Cause:    err.Error(),
+		})
+	}
 
 	// Aggregate per-tenant usage (#91) at the same chokepoint as audit/PodID.
 	// Aggregate-only: counts + latency keyed by tenant_id, no query/content.

@@ -400,7 +400,15 @@ func main() {
 	for name := range academicProviders {
 		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "academic"})
 	}
-	resources.RegisterAll(srv.MCP(), metricsCollector, sessionManager, rateLimiter, providerInfos)
+	// Live provider/breaker health for diagnostics://health (#81) is available
+	// only when a multi-provider Router is in play; a single configured provider
+	// has no breaker ladder to observe. routerHealth adapts the Router's typed
+	// snapshot to the resources.HealthProvider interface (Health() any).
+	var healthProvider resources.HealthProvider
+	if router, ok := searchProvider.(*search.Router); ok {
+		healthProvider = routerHealth{router}
+	}
+	resources.RegisterAll(srv.MCP(), metricsCollector, sessionManager, rateLimiter, providerInfos, healthProvider)
 
 	// STDIO single-user identity (opt-in). When STDIO_USER_ID is set (only ever
 	// populated in STDIO mode — see config.Load), two things happen:
@@ -538,6 +546,7 @@ func main() {
 
 		httpCfg := server.HTTPConfig{
 			Port:              cfg.Port,
+			Version:           version,
 			Auth:              authMw,
 			RateLimiter:       rateLimiter,
 			AllowedOrigins:    cfg.AllowedOrigins,
@@ -550,6 +559,7 @@ func main() {
 			Consent:           consentManager,
 			Workspaces:        workspaceStore,
 			Auditor:           auditor,
+			Health:            httpHealth(searchProvider),
 			ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
 			ReadTimeout:       cfg.HTTP.ReadTimeout,
 			WriteTimeout:      cfg.HTTP.WriteTimeout,
@@ -596,4 +606,22 @@ func edgarUserAgent(contactEmail string) string {
 		return ""
 	}
 	return "web-researcher-mcp/" + version + " (" + contactEmail + ")"
+}
+
+// routerHealth adapts a *search.Router to resources.HealthProvider. The Router
+// exposes a strongly-typed Health() search.HealthSnapshot; the resources package
+// consumes it through a Health() any interface to avoid importing search. This
+// thin wrapper bridges the two without weakening either side's contract.
+type routerHealth struct{ r *search.Router }
+
+func (h routerHealth) Health() any { return h.r.Health() }
+
+// httpHealth returns a server.HealthSnapshotter for the operator dashboard's
+// /dashboard/data endpoint, or nil when no multi-provider Router is configured
+// (single provider → no breaker ladder to show; the panel is simply omitted).
+func httpHealth(p search.Provider) server.HealthSnapshotter {
+	if router, ok := p.(*search.Router); ok {
+		return routerHealth{router}
+	}
+	return nil
 }

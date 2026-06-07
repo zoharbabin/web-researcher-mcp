@@ -54,8 +54,9 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 		cacheKey := searchCacheKey("news", input.Query, numResults, freshness, sortBy, input.NewsSource, input.Provider)
 		if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("news_search", time.Since(start), nil, "", true)
-			auditToolCall(ctx, deps, "news_search", time.Since(start), nil, "")
-			return cachedResultWithMeta(cached, meta), nil, nil
+			rt := routingMeta(search.RoutingDecision{}, time.Since(start), true)
+			auditToolCallQuery(ctx, deps, "news_search", time.Since(start), nil, "", "", map[string]any{"cache_hit": true, "routing": rt})
+			return withRoutingMeta(cachedResultWithMeta(cached, meta), rt), nil, nil
 		}
 
 		provider, errResult := resolveProvider(deps, input.Provider)
@@ -63,7 +64,8 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 			return errResult, nil, nil
 		}
 
-		results, err := provider.News(ctx, search.NewsSearchParams{
+		traceCtx, trace := search.NewRoutingTrace(ctx)
+		results, err := provider.News(traceCtx, search.NewsSearchParams{
 			Query:      input.Query,
 			NumResults: numResults,
 			Freshness:  freshness,
@@ -79,6 +81,7 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 			auditToolCall(ctx, deps, "news_search", time.Since(start), err, errCode)
 			return upstreamErrorResponse("news search", err), nil, nil
 		}
+		rt := routingMeta(trace.Decision(), time.Since(start), false)
 
 		output := map[string]any{
 			"articles":    results,
@@ -97,12 +100,12 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 		jsonBytes, _ := json.Marshal(output)
 		deps.Cache.Set(ctx, cacheKey, jsonBytes, 15*time.Minute)
 		deps.Metrics.RecordToolCall("news_search", time.Since(start), nil, "", false)
-		auditToolCall(ctx, deps, "news_search", time.Since(start), nil, "")
+		auditToolCallQuery(ctx, deps, "news_search", time.Since(start), nil, "", "", map[string]any{"routing": rt})
 
 		if input.SessionID != "" {
 			trackSources(ctx, deps, input.SessionID, newsResultsToSources(results))
 		}
 
-		return structuredResult(jsonBytes), nil, nil
+		return withRoutingMeta(structuredResult(jsonBytes), rt), nil, nil
 	})
 }

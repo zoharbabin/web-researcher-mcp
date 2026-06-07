@@ -139,6 +139,7 @@ func NewRouter(providers map[string]Provider, cfg RouterConfig) *Router {
 func (r *Router) Name() string { return "router" }
 
 func (r *Router) Web(ctx context.Context, params WebSearchParams) ([]SearchResult, error) {
+	trace := routingTraceFromContext(ctx)
 	priority := r.priorityFor(OpWeb)
 	var lastErr error
 	for i, name := range priority {
@@ -146,16 +147,19 @@ func (r *Router) Web(ctx context.Context, params WebSearchParams) ([]SearchResul
 		if !ok {
 			continue
 		}
+		trace.attempt(name)
 		if !r.isHealthy(name) {
 			if i > 0 {
 				r.notifyFallback(OpWeb, priority[i-1], name, "circuit_open")
 			}
+			trace.fellBack(FallbackReasonCircuitOpen)
 			continue
 		}
 
 		results, err := p.Web(ctx, params)
 		if err == nil {
 			r.recordSuccess(name)
+			trace.served(name)
 			return results, nil
 		}
 
@@ -163,6 +167,7 @@ func (r *Router) Web(ctx context.Context, params WebSearchParams) ([]SearchResul
 		r.recordFailure(name)
 		r.logger.Warn("provider failed, trying next",
 			"provider", name, "operation", "web", "error", err)
+		trace.fellBack(FallbackReasonPrimaryUnavailable)
 
 		if i+1 < len(priority) {
 			r.notifyFallback(OpWeb, name, priority[i+1], err.Error())
@@ -175,6 +180,7 @@ func (r *Router) Web(ctx context.Context, params WebSearchParams) ([]SearchResul
 }
 
 func (r *Router) Images(ctx context.Context, params ImageSearchParams) ([]ImageResult, error) {
+	trace := routingTraceFromContext(ctx)
 	priority := r.priorityFor(OpImages)
 	var lastErr error
 	for i, name := range priority {
@@ -182,16 +188,19 @@ func (r *Router) Images(ctx context.Context, params ImageSearchParams) ([]ImageR
 		if !ok {
 			continue
 		}
+		trace.attempt(name)
 		if !r.isHealthy(name) {
 			if i > 0 {
 				r.notifyFallback(OpImages, priority[i-1], name, "circuit_open")
 			}
+			trace.fellBack(FallbackReasonCircuitOpen)
 			continue
 		}
 
 		results, err := p.Images(ctx, params)
 		if err == nil {
 			r.recordSuccess(name)
+			trace.served(name)
 			return results, nil
 		}
 
@@ -199,6 +208,7 @@ func (r *Router) Images(ctx context.Context, params ImageSearchParams) ([]ImageR
 		r.recordFailure(name)
 		r.logger.Warn("provider failed, trying next",
 			"provider", name, "operation", "images", "error", err)
+		trace.fellBack(FallbackReasonPrimaryUnavailable)
 
 		if i+1 < len(priority) {
 			r.notifyFallback(OpImages, name, priority[i+1], err.Error())
@@ -211,6 +221,7 @@ func (r *Router) Images(ctx context.Context, params ImageSearchParams) ([]ImageR
 }
 
 func (r *Router) News(ctx context.Context, params NewsSearchParams) ([]NewsResult, error) {
+	trace := routingTraceFromContext(ctx)
 	priority := r.priorityFor(OpNews)
 	var lastErr error
 	for i, name := range priority {
@@ -218,16 +229,19 @@ func (r *Router) News(ctx context.Context, params NewsSearchParams) ([]NewsResul
 		if !ok {
 			continue
 		}
+		trace.attempt(name)
 		if !r.isHealthy(name) {
 			if i > 0 {
 				r.notifyFallback(OpNews, priority[i-1], name, "circuit_open")
 			}
+			trace.fellBack(FallbackReasonCircuitOpen)
 			continue
 		}
 
 		results, err := p.News(ctx, params)
 		if err == nil {
 			r.recordSuccess(name)
+			trace.served(name)
 			return results, nil
 		}
 
@@ -235,6 +249,7 @@ func (r *Router) News(ctx context.Context, params NewsSearchParams) ([]NewsResul
 		r.recordFailure(name)
 		r.logger.Warn("provider failed, trying next",
 			"provider", name, "operation", "news", "error", err)
+		trace.fellBack(FallbackReasonPrimaryUnavailable)
 
 		if i+1 < len(priority) {
 			r.notifyFallback(OpNews, name, priority[i+1], err.Error())
@@ -249,6 +264,7 @@ func (r *Router) News(ctx context.Context, params NewsSearchParams) ([]NewsResul
 // Patents implements PatentSearcher by routing to patent-capable providers
 // in priority order, with region-aware filtering and circuit breaker fallback.
 func (r *Router) Patents(ctx context.Context, params PatentSearchParams) ([]PatentResult, error) {
+	trace := routingTraceFromContext(ctx)
 	priority := r.patentPriority()
 	var lastErr error
 
@@ -259,7 +275,9 @@ func (r *Router) Patents(ctx context.Context, params PatentSearchParams) ([]Pate
 			if !implements {
 				continue
 			}
+			trace.attempt(name)
 			if !r.isHealthy(name) {
+				trace.fellBack(FallbackReasonCircuitOpen)
 				continue
 			}
 			// Check region metadata if available
@@ -271,12 +289,14 @@ func (r *Router) Patents(ctx context.Context, params PatentSearchParams) ([]Pate
 			results, err := ps.Patents(ctx, params)
 			if err == nil {
 				r.recordSuccess(name)
+				trace.served(name)
 				return results, nil
 			}
 			lastErr = err
 			r.recordFailure(name)
 			r.logger.Warn("patent provider failed, trying next",
 				"provider", name, "operation", "patents", "error", err)
+			trace.fellBack(FallbackReasonPrimaryUnavailable)
 			if i+1 < len(priority) {
 				r.notifyFallback(OpPatents, name, priority[i+1], err.Error())
 			}
@@ -291,7 +311,9 @@ func (r *Router) Patents(ctx context.Context, params PatentSearchParams) ([]Pate
 		if !ok {
 			continue
 		}
+		trace.attempt(name)
 		if hasBrk && breaker.State() == circuit.StateOpen {
+			trace.fellBack(FallbackReasonCircuitOpen)
 			continue
 		}
 		if !pp.Metadata().MatchesRegion(params.PatentOffice) {
@@ -303,6 +325,7 @@ func (r *Router) Patents(ctx context.Context, params PatentSearchParams) ([]Pate
 			if hasBrk {
 				_ = breaker.Execute(func() error { return nil })
 			}
+			trace.served(name)
 			return results, nil
 		}
 		lastErr = err
@@ -311,6 +334,7 @@ func (r *Router) Patents(ctx context.Context, params PatentSearchParams) ([]Pate
 		}
 		r.logger.Warn("patent provider failed, trying next",
 			"provider", name, "operation", "patents", "error", err)
+		trace.fellBack(FallbackReasonPrimaryUnavailable)
 		if i+1 < len(priority) {
 			r.notifyFallback(OpPatents, name, priority[i+1], err.Error())
 		}
@@ -377,6 +401,7 @@ func (r *Router) patentPriority() []string {
 // Scholarly implements AcademicSearcher by routing to academic-capable providers
 // in priority order with circuit breaker fallback.
 func (r *Router) Scholarly(ctx context.Context, params AcademicSearchParams) ([]AcademicResult, error) {
+	trace := routingTraceFromContext(ctx)
 	priority := r.academicPriority()
 	var lastErr error
 
@@ -388,7 +413,9 @@ func (r *Router) Scholarly(ctx context.Context, params AcademicSearchParams) ([]
 		if !ok {
 			continue
 		}
+		trace.attempt(name)
 		if hasBrk && breaker.State() == circuit.StateOpen {
+			trace.fellBack(FallbackReasonCircuitOpen)
 			continue
 		}
 
@@ -397,6 +424,7 @@ func (r *Router) Scholarly(ctx context.Context, params AcademicSearchParams) ([]
 			if hasBrk {
 				_ = breaker.Execute(func() error { return nil })
 			}
+			trace.served(name)
 			return results, nil
 		}
 		lastErr = err
@@ -405,6 +433,7 @@ func (r *Router) Scholarly(ctx context.Context, params AcademicSearchParams) ([]
 		}
 		r.logger.Warn("academic provider failed, trying next",
 			"provider", name, "operation", "academic", "error", err)
+		trace.fellBack(FallbackReasonPrimaryUnavailable)
 		if i+1 < len(priority) {
 			r.notifyFallback(OpAcademic, name, priority[i+1], err.Error())
 		}

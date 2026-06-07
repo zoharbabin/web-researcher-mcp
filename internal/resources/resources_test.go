@@ -16,10 +16,25 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
 )
 
+// fakeHealth is a stub HealthProvider for resource tests: it returns a fixed
+// tri-state snapshot so the diagnostics://health handler can be exercised
+// without constructing a real Router.
+type fakeHealth struct{}
+
+func (fakeHealth) Health() any {
+	return map[string]any{
+		"status": "degraded",
+		"providers": []map[string]any{
+			{"name": "google", "type": "web", "breaker": "open", "available": false},
+			{"name": "brave", "type": "web", "breaker": "closed", "available": true},
+		},
+	}
+}
+
 func createTestServer(m *metrics.Collector, s session.Manager) *mcp.Server {
 	srv := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1.0.0"}, nil)
 	rl := ratelimit.New(config.RateLimitConfig{PerTenant: 120, Global: 1000, DailyQuota: 5000})
-	RegisterAll(srv, m, s, rl, []ProviderInfo{{Name: "google", Type: "web"}})
+	RegisterAll(srv, m, s, rl, []ProviderInfo{{Name: "google", Type: "web"}}, fakeHealth{})
 	return srv
 }
 
@@ -388,5 +403,113 @@ func TestRateLimitResource(t *testing.T) {
 	guidance, ok := response["guidance"].(string)
 	if !ok || guidance == "" {
 		t.Fatal("expected non-empty 'guidance' string in response")
+	}
+}
+
+// =============================================================================
+// Diagnostics Resource Tests (#81)
+// =============================================================================
+
+// TestDiagnosticsErrorsResource verifies the recent-errors Resource returns the
+// ring contents as valid JSON, newest-first, with redacted causes.
+func TestDiagnosticsErrorsResource(t *testing.T) {
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	// An unauthenticated/STDIO caller resolves to tenant "default" (the value
+	// auth.TenantIDFromContext returns with no tenant on the context). The tool
+	// layer records errors under that same tenant, so the Resource sees them.
+	m.RecordError(metrics.ErrorRecord{Tool: "web_search", Kind: "rate_limited", Provider: "google", TenantID: "default"})
+	m.RecordError(metrics.ErrorRecord{Tool: "scrape_page", Kind: "network", Cause: "dial tcp api_key=secret123 failed", TenantID: "default"})
+
+	result, err := cs.ReadResource(ctx, &mcp.ReadResourceParams{URI: "diagnostics://errors/recent"})
+	if err != nil {
+		t.Fatalf("ReadResource failed: %v", err)
+	}
+	if len(result.Contents) == 0 || result.Contents[0].URI != "diagnostics://errors/recent" {
+		t.Fatalf("unexpected contents: %+v", result.Contents)
+	}
+	var body struct {
+		Count  int `json:"count"`
+		Errors []struct {
+			Tool, Kind, Cause string
+		} `json:"errors"`
+	}
+	if err := json.Unmarshal([]byte(result.Contents[0].Text), &body); err != nil {
+		t.Fatalf("parse JSON: %v", err)
+	}
+	if body.Count != 2 || len(body.Errors) != 2 {
+		t.Fatalf("count = %d / errors = %d, want 2/2", body.Count, len(body.Errors))
+	}
+	// Newest-first.
+	if body.Errors[0].Tool != "scrape_page" {
+		t.Errorf("newest = %q, want scrape_page", body.Errors[0].Tool)
+	}
+	// Redaction at the sink.
+	for _, e := range body.Errors {
+		if strings.Contains(e.Cause, "secret123") {
+			t.Errorf("cause leaked secret: %q", e.Cause)
+		}
+	}
+}
+
+// TestDiagnosticsHealthResource verifies the health Resource renders the
+// HealthProvider snapshot as JSON.
+func TestDiagnosticsHealthResource(t *testing.T) {
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s) // wires fakeHealth (status: degraded)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.ReadResource(ctx, &mcp.ReadResourceParams{URI: "diagnostics://health"})
+	if err != nil {
+		t.Fatalf("ReadResource failed: %v", err)
+	}
+	var snap struct {
+		Status    string           `json:"status"`
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.Unmarshal([]byte(result.Contents[0].Text), &snap); err != nil {
+		t.Fatalf("parse JSON: %v", err)
+	}
+	if snap.Status != "degraded" {
+		t.Errorf("status = %q, want degraded", snap.Status)
+	}
+	if len(snap.Providers) != 2 {
+		t.Errorf("providers = %d, want 2", len(snap.Providers))
+	}
+}
+
+// TestDiagnosticsHealthResource_NilProvider verifies the no-Router path: a nil
+// HealthProvider yields an empty, healthy snapshot rather than an error.
+func TestDiagnosticsHealthResource_NilProvider(t *testing.T) {
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1.0.0"}, nil)
+	rl := ratelimit.New(config.RateLimitConfig{PerTenant: 120, Global: 1000, DailyQuota: 5000})
+	RegisterAll(srv, m, s, rl, []ProviderInfo{{Name: "google", Type: "web"}}, nil)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.ReadResource(ctx, &mcp.ReadResourceParams{URI: "diagnostics://health"})
+	if err != nil {
+		t.Fatalf("ReadResource failed: %v", err)
+	}
+	var snap struct {
+		Status    string           `json:"status"`
+		Providers []map[string]any `json:"providers"`
+	}
+	if err := json.Unmarshal([]byte(result.Contents[0].Text), &snap); err != nil {
+		t.Fatalf("parse JSON: %v", err)
+	}
+	if snap.Status != "healthy" || len(snap.Providers) != 0 {
+		t.Errorf("nil-provider snapshot = %+v, want healthy/empty", snap)
 	}
 }

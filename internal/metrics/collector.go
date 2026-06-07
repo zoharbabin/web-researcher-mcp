@@ -25,6 +25,11 @@ type Collector struct {
 	toolStats   map[string]*ToolMetrics
 	tenantStats map[string]*TenantMetrics
 	registry    *prometheus.Registry
+
+	// recentErrors is the bounded, memory-only ring backing the
+	// diagnostics://errors/recent Resource (#81). Tenant-aware, redacted at
+	// insert. Always non-nil after NewCollector.
+	recentErrors *ErrorRing
 }
 
 // TenantMetrics holds per-tenant AGGREGATE counters for billing and capacity
@@ -91,9 +96,10 @@ func NewCollector() *Collector {
 			Name: "mcp_active_connections",
 			Help: "Active MCP connections",
 		}),
-		toolStats:   make(map[string]*ToolMetrics),
-		tenantStats: make(map[string]*TenantMetrics),
-		registry:    registry,
+		toolStats:    make(map[string]*ToolMetrics),
+		tenantStats:  make(map[string]*TenantMetrics),
+		registry:     registry,
+		recentErrors: NewErrorRing(),
 	}
 
 	registry.MustRegister(c.toolCalls, c.toolErrors, c.toolLatency, c.cacheHits, c.cacheMisses, c.activeConns)
@@ -218,6 +224,21 @@ func (c *Collector) RecordTenantCall(tenantID, provider string, latency time.Dur
 		t.latencies = t.latencies[len(t.latencies)-1000:]
 	}
 	t.mu.Unlock()
+}
+
+// RecordError appends one redacted error sample to the bounded recent-errors
+// ring (#81). Called from the same tool-call error paths that already record
+// metrics — a sink, no new call sites of consequence. The cause is redacted
+// inside ErrorRing.Record; callers may pass the raw upstream message.
+func (c *Collector) RecordError(rec ErrorRecord) {
+	c.recentErrors.Record(rec)
+}
+
+// RecentErrors returns the recent-error ring contents newest-first, filtered to
+// tenantID when non-empty (per-caller Resource view) or all tenants when empty
+// (operator dashboard view). Backs diagnostics://errors/recent.
+func (c *Collector) RecentErrors(tenantID string) []ErrorRecord {
+	return c.recentErrors.Recent(tenantID)
 }
 
 // GetTenantStats returns aggregate snapshots for all tenants, or for a single
