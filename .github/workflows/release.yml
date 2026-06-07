@@ -62,17 +62,41 @@ jobs:
         env:
           CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
         run: |
-          if [ -n "$CHOCOLATEY_API_KEY" ]; then
+          # The chocolatey pipe is skipped UNLESS `choco` is PROVEN runnable. A
+          # flaky third-party bootstrap must never fail the whole release (mirrors
+          # the AZURE_SIGNING_ENABLED / MACOS_SIGN_P12 gating philosophy: a missing
+          # prerequisite degrades, never blocks). skip_choco is written exactly
+          # once, at the end, from the verified result.
+          skip="chocolatey"
+
+          if [ -z "$CHOCOLATEY_API_KEY" ]; then
+            echo "CHOCOLATEY_API_KEY not set — skipping the chocolatey pipe."
+          else
             echo "Installing Chocolatey CLI (mono) for nupkg build + push…"
             sudo apt-get update -qq
             sudo apt-get install -y -qq mono-devel
-            # Official Chocolatey install-on-Linux bootstrap (mono-based).
-            curl -fsSL https://community.chocolatey.org/install.sh | sudo bash
-            echo "skip_choco=" >> "$GITHUB_OUTPUT"
-          else
-            echo "CHOCOLATEY_API_KEY not set — skipping the chocolatey pipe."
-            echo "skip_choco=chocolatey" >> "$GITHUB_OUTPUT"
+
+            # Bootstrap choco under mono. The community install.sh URL has 404'd
+            # before, so try it but DO NOT trust its exit code (it is piped). The
+            # gate below is the source of truth: is `choco` actually runnable?
+            curl -fsSL https://community.chocolatey.org/install.sh | sudo bash || \
+              echo "chocolatey bootstrap script failed; verifying choco presence next."
+
+            # The installer drops a `choco` shim under /opt/chocolatey/bin; surface
+            # it on PATH for this and later steps, then verify it actually runs.
+            if [ -x /opt/chocolatey/bin/choco ]; then
+              echo "/opt/chocolatey/bin" >> "$GITHUB_PATH"
+              export PATH="/opt/chocolatey/bin:$PATH"
+            fi
+            if command -v choco >/dev/null 2>&1 && choco --version >/dev/null 2>&1; then
+              echo "choco is available ($(choco --version)) — enabling the chocolatey pipe."
+              skip=""
+            else
+              echo "::warning::choco CLI unavailable after bootstrap — skipping the chocolatey pipe for this release (other channels unaffected)."
+            fi
           fi
+
+          echo "skip_choco=$skip" >> "$GITHUB_OUTPUT"
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
