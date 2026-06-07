@@ -296,6 +296,17 @@ metadata.
 
 **Request correlation:** every HTTP request is assigned a correlation ID by the transport ingress middleware (adopting a sanitized inbound `X-Request-Id`, else the W3C `traceparent` trace-id, else a fresh UUIDv4). All audit events for one tool call share that `RequestID`, and it is echoed back on the response `X-Request-Id` header.
 
+### Layer 8: Operator Observability (non-content, privacy-minimal)
+
+Routing decisions, provider health, and recent errors are surfaced to operators through channels that are deliberately **not** part of any tool's model-facing content, so infrastructure detail never reaches the LLM and carries no personal data:
+
+- **Routing `_meta`** — per-call routing (which provider served, what was attempted, whether a fallback fired) is attached to the MCP result's `_meta.routing`, never the content body. The provider *name* is the disclosure boundary: no upstream URLs, credentials, or circuit-breaker counts are exposed, and the `fallback_reason` is a coarse enum (`circuit_open` / `primary_unavailable`), never a raw upstream error string.
+- **`diagnostics://errors/recent`** — a bounded, **memory-only**, tenant-scoped ring of recent errors (`internal/metrics/errors.go`). Each cause is redacted through `audit.MaskSecrets` at insert; there is no disk persistence and no unbounded growth (oldest entries are overwritten), consistent with the no-retention posture.
+- **`diagnostics://health`** — live provider/circuit-breaker state (tri-state aggregate), derived on read. No PII.
+- **`GET /dashboard`** (HTTP mode) — an admin-gated, aggregate-only operator dashboard served under a per-request nonce CSP (`internal/server/dashboard.go`); its data endpoint shares the `/admin/*` trust tier. No per-user or per-query data.
+
+None of these is a personal-data store. Field contracts live in `docs/TOOLS.md` (Routing Provenance) and `docs/DEPLOYMENT.md` (Operator Observability).
+
 ---
 
 ## Encryption
