@@ -61,6 +61,10 @@ jobs:
         id: choco
         env:
           CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
+        env:
+          # Pin the Chocolatey CLI version so the install source is deterministic
+          # and a moving "latest" can't break the release. Bump deliberately.
+          CHOCO_VERSION: "2.7.2"
         run: |
           # The chocolatey pipe is skipped UNLESS `choco` is PROVEN runnable. A
           # flaky third-party bootstrap must never fail the whole release (mirrors
@@ -72,27 +76,36 @@ jobs:
           if [ -z "$CHOCOLATEY_API_KEY" ]; then
             echo "CHOCOLATEY_API_KEY not set — skipping the chocolatey pipe."
           else
-            echo "Installing Chocolatey CLI (mono) for nupkg build + push…"
+            echo "Installing Chocolatey CLI $CHOCO_VERSION (mono) for nupkg build + push…"
             sudo apt-get update -qq
             sudo apt-get install -y -qq mono-devel
 
-            # Bootstrap choco under mono. The community install.sh URL has 404'd
-            # before, so try it but DO NOT trust its exit code (it is piped). The
-            # gate below is the source of truth: is `choco` actually runnable?
-            curl -fsSL https://community.chocolatey.org/install.sh | sudo bash || \
-              echo "chocolatey bootstrap script failed; verifying choco presence next."
-
-            # The installer drops a `choco` shim under /opt/chocolatey/bin; surface
-            # it on PATH for this and later steps, then verify it actually runs.
-            if [ -x /opt/chocolatey/bin/choco ]; then
-              echo "/opt/chocolatey/bin" >> "$GITHUB_PATH"
-              export PATH="/opt/chocolatey/bin:$PATH"
+            # The old community.chocolatey.org/install.sh bootstrap now 404s. Install
+            # from the official, versioned GitHub release tarball instead — a stable
+            # source that ships choco.exe (a .NET assembly runnable under mono). We
+            # do NOT trust any single curl's exit code; the gate below is the source
+            # of truth: is `choco` actually runnable?
+            CHOCO_DIR=/opt/chocolatey
+            CHOCO_URL="https://github.com/chocolatey/choco/releases/download/${CHOCO_VERSION}/chocolatey.v${CHOCO_VERSION}.tar.gz"
+            sudo mkdir -p "$CHOCO_DIR"
+            if curl -fsSL "$CHOCO_URL" -o /tmp/choco.tar.gz; then
+              sudo tar -xzf /tmp/choco.tar.gz -C "$CHOCO_DIR" || echo "choco extract failed; verifying next."
+            else
+              echo "choco tarball download failed; verifying next."
             fi
+
+            # Provide a bare `choco` shim on PATH (GoReleaser shells out to `choco`,
+            # not `mono choco.exe`), pointing at the extracted assembly under mono.
+            if [ -f "$CHOCO_DIR/choco.exe" ]; then
+              printf '#!/usr/bin/env bash\nexec mono %q "$@"\n' "$CHOCO_DIR/choco.exe" | sudo tee /usr/local/bin/choco >/dev/null
+              sudo chmod +x /usr/local/bin/choco
+            fi
+
             if command -v choco >/dev/null 2>&1 && choco --version >/dev/null 2>&1; then
               echo "choco is available ($(choco --version)) — enabling the chocolatey pipe."
               skip=""
             else
-              echo "::warning::choco CLI unavailable after bootstrap — skipping the chocolatey pipe for this release (other channels unaffected)."
+              echo "::warning::choco CLI unavailable after install — skipping the chocolatey pipe for this release (other channels unaffected)."
             fi
           fi
 
