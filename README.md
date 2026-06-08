@@ -121,13 +121,15 @@ https://github.com/user-attachments/assets/1d17af8e-1ec4-4a37-b42b-f26712ebe860
 | `patent_search` | Search patent offices (US, Europe, international) with classification codes |
 | `filing_search` | Search SEC EDGAR for US public-company filings (10-K, 10-Q, 8-K, …) — or pull structured XBRL company facts |
 | `legal_search` | Search US court opinions and dockets via CourtListener — real cases with real citations |
-| `econ_search` | Look up economic time series from FRED (Federal Reserve) — GDP, CPI, unemployment, rates |
+| `econ_search` | Look up economic data — World Bank global development indicators (keyless) and FRED US macro series (GDP, CPI, unemployment, rates) |
+| `clinical_search` | Search ClinicalTrials.gov — clinical-trial registrations with status, phase, sponsor, and whether results are posted (discovery, not medical advice) |
+| `verify_citation` | Check a citation before you rely on it — does it exist, match a real record, and is it retracted or a dead link? Evidence, not a verdict |
 | `answer` | Ask a factual question and get one synthesized answer **with citations** — the direct answer, not a reading list |
 | `structured_search` | Search and extract structured JSON per result (supply a schema), or pull entities by category (company, people, …) |
 | `sequential_search` | Multi-step deep research — your AI remembers what it already found and builds on it |
 | `get_research_session` | Recover a research session after context loss — picks up right where you left off |
 | `research_export` | Export a research session as a shareable report (markdown or JSON), with full per-step provenance |
-| `format_bibliography` | Turn collected sources into a formatted bibliography — APA, MLA, or BibTeX |
+| `format_bibliography` | Turn collected sources into a formatted bibliography — APA, MLA, BibTeX, RIS, or CSL-JSON (Zotero/EndNote/Mendeley-ready) |
 
 These are the always-on core tools. `answer` and `structured_search` are provider-independent — they activate when a capable provider (e.g. Exa) is configured. Operators can also enable opt-in, consent-gated tools (per-user analytics, long-term memory, shared workspaces) that appear only when their feature is turned on — see [`docs/TOOLS.md`](docs/TOOLS.md) for the authoritative, CI-verified tool list and full schemas.
 

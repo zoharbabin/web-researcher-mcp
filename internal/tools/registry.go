@@ -30,6 +30,10 @@ type Dependencies struct {
 	FilingProviders map[string]search.FilingProvider
 	CaseProviders   map[string]search.CaseProvider
 	EconProviders   map[string]search.EconProvider
+	// TrialProviders back clinical_search (ClinicalTrials.gov, #165). Keyless, so
+	// AvailableTrialProviders always builds it and clinical_search is always
+	// registered. Empty ⇒ the tool is not registered.
+	TrialProviders map[string]search.TrialProvider
 	// AnswerProviders / StructuredProviders back the provider-independent
 	// `answer` and `structured_search` tools. Any provider implementing the
 	// capability appears here (Exa today). Empty ⇒ the tool is not registered.
@@ -105,10 +109,12 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	}
 
 	// Structured-domain tools (v1.19.0) — each registers only when its provider
-	// map is non-empty. filing_search needs EDGAR_CONTACT_EMAIL (or OPENALEX_EMAIL)
-	// and econ_search needs FRED_API_KEY, so both stay off by default. legal_search
-	// is the exception: CourtListener works keyless, so AvailableCaseProviders
-	// always builds it and legal_search is always registered.
+	// map is non-empty. filing_search needs EDGAR_CONTACT_EMAIL (or OPENALEX_EMAIL),
+	// so it stays off by default. legal_search and econ_search both have a keyless
+	// provider that AvailableCaseProviders / AvailableEconProviders always build —
+	// CourtListener (case law) and World Bank (global indicators, #166) — so both
+	// tools are always registered; FRED adds US macro series to econ_search when
+	// FRED_API_KEY is set.
 	if len(deps.FilingProviders) > 0 {
 		registerFilingSearch(srv, deps)
 	}
@@ -117,6 +123,11 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	}
 	if len(deps.EconProviders) > 0 {
 		registerEconSearch(srv, deps)
+	}
+	// clinical_search (#165) — ClinicalTrials.gov is keyless, so
+	// AvailableTrialProviders always builds it and the tool is always registered.
+	if len(deps.TrialProviders) > 0 {
+		registerClinicalSearch(srv, deps)
 	}
 
 	// Synthesis tools — provider-independent (like academic/patent search).

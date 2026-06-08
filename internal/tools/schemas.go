@@ -728,9 +728,9 @@ var researchExportOutputSchema = map[string]any{
 var formatBibliographyOutputSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{
-		"style":        map[string]any{"type": "string", "description": "Citation style used: apa, mla, or bibtex."},
+		"style":        map[string]any{"type": "string", "enum": []any{"apa", "mla", "bibtex", "ris", "csl-json"}, "description": "Citation style used: apa, mla, bibtex, ris, or csl-json."},
 		"entryCount":   map[string]any{"type": "integer", "description": "Number of unique sources in the bibliography (after de-duplication by URL)."},
-		"bibliography": map[string]any{"type": "string", "description": "The formatted bibliography — entries separated by blank lines."},
+		"bibliography": map[string]any{"type": "string", "description": "The formatted bibliography. For apa/mla/bibtex/ris, records separated by blank lines; for csl-json, a JSON array string."},
 		"sessionId":    map[string]any{"type": "string", "description": "Present when sources were drawn from a session."},
 		"trust":        trustUntrustedExternal,
 	},
@@ -815,14 +815,45 @@ var legalSearchOutputSchema = map[string]any{
 	},
 }
 
+var clinicalSearchOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"query":       map[string]any{"type": "string"},
+		"resultCount": map[string]any{"type": "integer"},
+		"provider":    map[string]any{"type": "string", "description": "Which clinical-trials provider answered (clinicaltrials)."},
+		"hints":       map[string]any{"type": "object"},
+		"trust":       trustUntrustedExternal,
+		"trials": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"nctId":         map[string]any{"type": "string", "description": "ClinicalTrials.gov registration id (e.g. NCT04280705)."},
+					"title":         map[string]any{"type": "string"},
+					"status":        map[string]any{"type": "string", "description": "Overall recruitment status (RECRUITING, COMPLETED, …)."},
+					"phases":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Trial phase(s), e.g. PHASE1; absent for observational studies."},
+					"conditions":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"interventions": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"sponsor":       map[string]any{"type": "string", "description": "Lead sponsor / funder."},
+					"startDate":     map[string]any{"type": "string", "description": "Study start date (variable precision)."},
+					"hasResults":    map[string]any{"type": "boolean", "description": "Whether study results are posted to the registry."},
+					"url":           map[string]any{"type": "string", "description": "Study page; scrape_page for the full registration."},
+					"source":        map[string]any{"type": "string"},
+				},
+			},
+		},
+	},
+}
+
 var econSearchOutputSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{
 		"query":       map[string]any{"type": "string"},
 		"mode":        map[string]any{"type": "string", "description": "'series' (keyword search) or 'observations' (series_id lookup)."},
 		"seriesId":    map[string]any{"type": "string", "description": "Echoed when observations were requested."},
+		"country":     map[string]any{"type": "string", "description": "Echoed country code for a multi-country (worldbank) observation lookup."},
 		"resultCount": map[string]any{"type": "integer"},
-		"provider":    map[string]any{"type": "string", "description": "Which economic-data provider answered (fred)."},
+		"provider":    map[string]any{"type": "string", "description": "Which economic-data provider answered (fred or worldbank)."},
 		"hints":       map[string]any{"type": "object"},
 		"trust":       trustUntrustedExternal,
 		"results": map[string]any{

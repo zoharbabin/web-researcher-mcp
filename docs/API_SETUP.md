@@ -502,16 +502,24 @@ export COURTLISTENER_API_TOKEN=your-token
 
 **Notes**: Without a token, roughly 100 requests/day; a token raises this to ~5000/day. Coverage is US federal and state court opinions.
 
-### FRED (Federal Reserve Economic Data)
+### Economic data: World Bank (keyless) + FRED (key)
 
-Backs `econ_search`. Requires a free API key.
+`econ_search` is backed by two providers. **World Bank Open Data** needs no key and is always available — global development indicators for 200+ economies (`provider: worldbank`, scope by `country`). **FRED** (Federal Reserve Economic Data) adds 800K+ US macro series and needs a free key.
 
-**Step 1**: Request a free key at [fred.stlouisfed.org](https://fred.stlouisfed.org/docs/api/api_key.html) (sign in → My Account → API Keys).
+So `econ_search` works out of the box (World Bank); add the FRED key to also reach US macro series.
 
-**Step 2**: Configure
+**FRED — Step 1**: Request a free key at [fred.stlouisfed.org](https://fred.stlouisfed.org/docs/api/api_key.html) (sign in → My Account → API Keys).
+
+**FRED — Step 2**: Configure
 
 ```bash
 export FRED_API_KEY=your-fred-key
 ```
 
-**Notes**: `econ_search` registers only when `FRED_API_KEY` is set. Covers 800K+ economic time series; observation values pass through exactly as FRED returns them.
+**Notes**: World Bank requires no configuration. FRED is enabled by `FRED_API_KEY`. Observation values pass through exactly as each source returns them — no rounding; the FRED key is sent as a query param and never logged.
+
+### ClinicalTrials.gov (Clinical Trials)
+
+Backs `clinical_search`. Works **keyless** — `clinical_search` is always available. No registration or API key.
+
+**Notes**: Queries the ClinicalTrials.gov v2 API (NIH registry of 400K+ studies). Returns trial registrations as typed data (status, phase, sponsor, conditions, interventions, results availability); read the full record via `scrape_page` on the returned `url`. Discovery + primary-source retrieval only — not medical advice.

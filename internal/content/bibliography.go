@@ -8,31 +8,40 @@ import (
 
 // BibEntry is one source to be formatted into a bibliography. Only URL is
 // strictly required; the richer the metadata, the more complete the citation.
+// DOI is optional and, when present, is emitted into the formats that carry it
+// (BibTeX doi field, RIS DO tag, CSL-JSON DOI) so a reference manager keeps the
+// persistent identifier — the backbone of a verifiable citation.
 type BibEntry struct {
 	URL    string
 	Title  string
 	Author string
 	Site   string
 	Date   string
+	DOI    string
 }
 
 // SupportedBibStyles lists the citation styles FormatBibliography understands.
-var SupportedBibStyles = []string{"apa", "mla", "bibtex"}
+// apa/mla/bibtex render human-readable citations; ris and csl-json are the
+// machine-interchange formats reference managers ingest (Zotero/EndNote/Mendeley
+// read RIS; the citation.js/CSL ecosystem reads CSL-JSON).
+var SupportedBibStyles = []string{"apa", "mla", "bibtex", "ris", "csl-json"}
 
 // FormatBibliography renders entries into a single bibliography string in the
-// given style ("apa", "mla", or "bibtex") and returns it alongside the exact
-// number of unique entries rendered. Entries are de-duplicated by URL (first
-// occurrence wins), each is formatted via ExtractCitation, and the list is
-// ordered deterministically: APA/MLA alphabetically by the rendered line, BibTeX
-// by cite key. BibTeX cite keys are made unique within the list by appending
-// a/b/c… on collision so the output compiles. An unrecognized style falls back
-// to "apa". Entries with no URL are skipped. The returned count is authoritative
-// (the caller must not re-derive it from the string, since a malformed title
-// could contain a blank line and inflate a "\n\n"-based count).
+// given style and returns it alongside the exact number of unique entries
+// rendered. Supported styles: "apa"/"mla" (human-readable), "bibtex"/"ris"
+// (reference-manager interchange), and "csl-json" (a JSON array). Entries are
+// de-duplicated by URL (first occurrence wins) and ordered deterministically:
+// APA/MLA alphabetically by the rendered line; BibTeX by (collision-free) cite
+// key; RIS and CSL-JSON by the same cite key so the same inputs always produce
+// byte-identical output (no timestamps — these formats omit the accessed date so
+// they stay reproducible). An unrecognized style falls back to "apa". Entries
+// with no URL are skipped. The returned count is authoritative (the caller must
+// not re-derive it from the string, since a malformed title could contain a
+// blank line and inflate a "\n\n"-based count).
 func FormatBibliography(entries []BibEntry, style string) (string, int) {
 	style = strings.ToLower(strings.TrimSpace(style))
 	switch style {
-	case "apa", "mla", "bibtex":
+	case "apa", "mla", "bibtex", "ris", "csl-json":
 	default:
 		style = "apa"
 	}
@@ -48,8 +57,13 @@ func FormatBibliography(entries []BibEntry, style string) (string, int) {
 		deduped = append(deduped, e)
 	}
 
-	if style == "bibtex" {
+	switch style {
+	case "bibtex":
 		return formatBibTeXList(deduped), len(deduped)
+	case "ris":
+		return formatRISList(deduped), len(deduped)
+	case "csl-json":
+		return formatCSLJSONList(deduped), len(deduped)
 	}
 
 	lines := make([]string, 0, len(deduped))
@@ -78,7 +92,7 @@ func formatBibTeXList(entries []BibEntry) string {
 	for _, e := range entries {
 		c := ExtractCitation(e.URL, e.Title, e.Author, e.Site, e.Date)
 		key := BibTeXKey(e.Author, e.Date, e.Title)
-		entry := c.Formatted.BibTeX
+		entry := withBibTeXDOI(c.Formatted.BibTeX, e.DOI)
 		if n := used[key]; n > 0 {
 			// Collision: suffix the key (and rewrite the entry's key line) so the
 			// generated .bib has no duplicate identifiers. Suffixes run a,b,…,z then
@@ -99,6 +113,22 @@ func formatBibTeXList(entries []BibEntry) string {
 		lines[i] = r.entry
 	}
 	return strings.Join(lines, "\n\n")
+}
+
+// withBibTeXDOI inserts a `doi = {…}` field into a rendered @misc entry before
+// its closing brace, when a DOI is present. Kept here (not in formatBibTeX) so
+// ExtractCitation's signature stays stable for its many other callers; the DOI
+// only travels with a BibEntry.
+func withBibTeXDOI(entry, doi string) string {
+	doi = normalizeBibDOI(doi)
+	if doi == "" {
+		return entry
+	}
+	idx := strings.LastIndex(entry, "}")
+	if idx < 0 {
+		return entry
+	}
+	return entry[:idx] + "  doi = {" + bibtexEscape(doi) + "},\n" + entry[idx:]
 }
 
 // collisionSuffix returns the suffix for the n-th collision (n>=1): "a".."z" for

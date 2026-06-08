@@ -177,12 +177,24 @@ func (m *mockEconProvider) Econ(_ context.Context, _ search.EconSearchParams) ([
 	return []search.EconResult{{SeriesID: "GDP", Title: "Gross Domestic Product", Units: "Billions", Frequency: "Quarterly", Source: "fred"}}, nil
 }
 
+// mockTrialProvider implements TrialProvider for clinical_search.
+type mockTrialProvider struct{}
+
+func (m *mockTrialProvider) Name() string { return "clinicaltrials" }
+func (m *mockTrialProvider) Metadata() search.ProviderMeta {
+	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "free", Description: "mock clinicaltrials"}
+}
+func (m *mockTrialProvider) Trials(_ context.Context, _ search.TrialSearchParams) ([]search.TrialResult, error) {
+	return []search.TrialResult{{NCTID: "NCT00000000", Title: "Mock Trial", Status: "COMPLETED", Phases: []string{"PHASE1"}, Conditions: []string{"Covid19"}, Interventions: []string{"MockDrug"}, Sponsor: "Mock Sponsor", StartDate: "2024-01-01", HasResults: true, URL: "https://clinicaltrials.gov/study/NCT00000000", Source: "clinicaltrials"}}, nil
+}
+
 func setupTestDeps() Dependencies {
 	synth := &mockSynthProvider{}
 	academic := &mockAcademicProvider{}
 	filing := &mockFilingProvider{}
 	caseProv := &mockCaseProvider{}
 	econ := &mockEconProvider{}
+	trial := &mockTrialProvider{}
 	return Dependencies{
 		Cache:               cache.NewNoop(),
 		Search:              &mockProvider{},
@@ -192,6 +204,7 @@ func setupTestDeps() Dependencies {
 		FilingProviders:     map[string]search.FilingProvider{filing.Name(): filing},
 		CaseProviders:       map[string]search.CaseProvider{caseProv.Name(): caseProv},
 		EconProviders:       map[string]search.EconProvider{econ.Name(): econ},
+		TrialProviders:      map[string]search.TrialProvider{trial.Name(): trial},
 		Scraper:             scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2}),
 		Content:             content.NewProcessor(),
 		Sessions:            func() session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),

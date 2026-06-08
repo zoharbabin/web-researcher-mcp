@@ -23,13 +23,14 @@ import (
 type bibliographySource struct {
 	URL    string `json:"url" jsonschema:"Source URL (required for an entry to be included)."`
 	Title  string `json:"title,omitempty" jsonschema:"Title of the work."`
-	Author string `json:"author,omitempty" jsonschema:"Author(s); first surname is used for the BibTeX cite key."`
+	Author string `json:"author,omitempty" jsonschema:"Author(s); separate multiple with ';' or ' and '. First surname is used for the BibTeX cite key."`
 	Site   string `json:"site,omitempty" jsonschema:"Publication, site, or journal name."`
 	Date   string `json:"date,omitempty" jsonschema:"Publication date or year (used for the year field / cite key)."`
+	DOI    string `json:"doi,omitempty" jsonschema:"Digital Object Identifier (e.g. 10.1038/nature12373). Emitted into bibtex/ris/csl-json so a reference manager keeps the persistent id. Pass academic_search/citation_graph results' doi here."`
 }
 
 type formatBibliographyInput struct {
-	Style     string               `json:"style,omitempty" jsonschema:"Citation style: apa (default), mla, or bibtex."`
+	Style     string               `json:"style,omitempty" jsonschema:"Citation style: apa (default), mla, bibtex, ris, or csl-json. apa/mla are human-readable; bibtex/ris/csl-json are reference-manager interchange formats."`
 	SessionID string               `json:"sessionId,omitempty" jsonschema:"Build the bibliography from this sequential_search session's recorded sources. Provide this OR sources."`
 	Sources   []bibliographySource `json:"sources,omitempty" jsonschema:"Explicit list of sources to format. Provide this OR sessionId. Each needs at least a url."`
 }
@@ -37,7 +38,7 @@ type formatBibliographyInput struct {
 func registerFormatBibliography(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "format_bibliography",
-		Description:  "Turn a set of sources into a formatted bibliography in APA, MLA, or BibTeX. Give it either a sequential_search sessionId (it uses the session's recorded sources) or an explicit list of sources (url, title, author, site, date) — for example the results of academic_search or citation_graph. Entries are de-duplicated by URL and ordered deterministically, so the same inputs always produce the same list. Use research_export for the full narrative report and this for the citations section. Returns the bibliography as a single string plus the entry count.",
+		Description:  "Turn a set of sources into a formatted bibliography. Choose a human-readable style (apa, mla) or a reference-manager interchange format (bibtex, ris, csl-json) that imports straight into Zotero, EndNote, or Mendeley. Give it either a sequential_search sessionId (it uses the session's recorded sources) or an explicit list of sources (url, title, author, site, date, doi) — for example the results of academic_search or citation_graph (pass their doi so the persistent id survives). Entries are de-duplicated by URL and ordered deterministically, so the same inputs always produce byte-identical output (no network, no timestamps). Read-only and idempotent. Use research_export for the full narrative report and verify_citation to confirm a citation before you rely on it; this builds the citations section. Returns the bibliography as a single string plus the entry count.",
 		Annotations:  readOnlyAnnotations(true, false),
 		OutputSchema: formatBibliographyOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input formatBibliographyInput) (*mcp.CallToolResult, any, error) {
@@ -55,7 +56,7 @@ func registerFormatBibliography(srv *mcp.Server, deps Dependencies) {
 			}
 		}
 		if !valid {
-			return toolError(fmt.Sprintf("invalid style %q; use apa, mla, or bibtex", input.Style)), nil, nil
+			return toolError(fmt.Sprintf("invalid style %q; use apa, mla, bibtex, ris, or csl-json", input.Style)), nil, nil
 		}
 
 		if input.SessionID == "" && len(input.Sources) == 0 {
@@ -85,6 +86,7 @@ func registerFormatBibliography(srv *mcp.Server, deps Dependencies) {
 				Author: s.Author,
 				Site:   s.Site,
 				Date:   s.Date,
+				DOI:    s.DOI,
 			})
 		}
 
