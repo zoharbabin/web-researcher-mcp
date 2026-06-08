@@ -1,15 +1,17 @@
 {
   "name": "legal",
-  "description": "Legal research and case law",
+  "description": "Anti-hallucination legal research: official primary sources (court opinions, statutes, regulations) first, high-authority secondary sources second. Pair with legal_search (CourtListener) and verify_citation to confirm a cited case actually exists.",
   "domains": [
-    "law.cornell.edu",
     "courtlistener.com",
-    "findlaw.com",
-    "justia.com",
     "supremecourt.gov",
-    "law.com",
-    "lexisnexis.com",
-    "westlaw.com"
+    "uscourts.gov",
+    "law.cornell.edu",
+    "congress.gov",
+    "govinfo.gov",
+    "ecfr.gov",
+    "justia.com",
+    "casetext.com",
+    "oyez.org"
   ],
   "cx": ""
 }

@@ -235,7 +235,7 @@ Note: Google keys are validated as required only when you explicitly select `SEA
 | `SEARXNG_URL` | SearXNG instance URL | — |
 | `SEARXNG_BASIC_AUTH` | HTTP Basic credential `user:password` for a SearXNG behind Basic auth (malformed value fails startup; never logged) | — |
 | `SEARXNG_HEADERS` | Static request headers for SearXNG as comma-separated `Name: Value` pairs (no commas/newlines in a value; a custom `Authorization` overrides `SEARXNG_BASIC_AUTH`) | — |
-| `CUSTOM_LENSES_PATH` | External lenses directory | — |
+| `CUSTOM_LENSES_PATH` | Directory of custom lens JSON files, loaded after (and able to override) the bundled lenses; schema-validated at startup. See `lenses/README.md` | — |
 
 ### Patent Providers (Optional)
 

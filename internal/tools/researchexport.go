@@ -21,8 +21,9 @@ import (
 // a leaked sessionId is only honored for its owner.
 
 type researchExportInput struct {
-	SessionID string `json:"sessionId" jsonschema:"The sequential_search session to export.,required"`
-	Format    string `json:"format,omitempty" jsonschema:"Output format: markdown (default, a readable report) or json (the full structured session for machine use)."`
+	SessionID   string `json:"sessionId" jsonschema:"The sequential_search session to export.,required"`
+	Format      string `json:"format,omitempty" jsonschema:"Output format: markdown (default, a readable report) or json (the full structured session for machine use)."`
+	VerifyLinks bool   `json:"verify_links,omitempty" jsonschema:"When true, check each source URL is still live and attach an Internet Archive (Wayback) snapshot for any dead link. Off by default (adds latency). Best-effort: failures leave a source unverified, never error."`
 }
 
 func registerResearchExport(srv *mcp.Server, deps Dependencies) {
@@ -53,6 +54,14 @@ func registerResearchExport(srv *mcp.Server, deps Dependencies) {
 			recordToolCall(deps, "research_export", time.Since(start), err, "upstream_error", false)
 			auditToolCall(ctx, deps, "research_export", time.Since(start), err, "upstream_error")
 			return toolError("Session not found or expired. Sessions last 4 hours from last activity."), nil, nil
+		}
+
+		// Opt-in link verification (#157): annotate sources with liveness + a
+		// Wayback fallback for dead links, so an exported bibliography's citations
+		// are verifiable. Best-effort; mutates the loaded (non-persisted) session
+		// copy so this export reflects the check without caching a stale verdict.
+		if input.VerifyLinks {
+			annotateSourcesWithLiveness(ctx, deps, sess.Sources)
 		}
 
 		exportedAt := time.Now().Format(time.RFC3339)
@@ -149,6 +158,17 @@ func renderSessionMarkdown(sess *session.Session, tenantID, exportedAt string) s
 		}
 		if s.FoundInStep > 0 {
 			fmt.Fprintf(&b, " (step %d)", s.FoundInStep)
+		}
+		// Link-liveness provenance (#157), shown only when verification ran.
+		if s.Verified != nil {
+			if *s.Verified {
+				b.WriteString(" ✓ live")
+			} else {
+				b.WriteString(" ⚠️ dead link")
+				if s.ArchivedURL != "" {
+					fmt.Fprintf(&b, " — [archived copy](%s)", s.ArchivedURL)
+				}
+			}
 		}
 		b.WriteString("\n")
 	}

@@ -159,7 +159,37 @@ type AcademicResult struct {
 	// (Semantic Scholar). Omitted for plain search results.
 	IsInfluential   bool     `json:"isInfluential,omitempty"`
 	CitationIntents []string `json:"citationIntents,omitempty"` // e.g. background|methodology|result
+	// Retraction is the integrity status for a DOI-bearing result (#156), filled
+	// best-effort by EnrichRetraction from Crossref's merged Retraction Watch +
+	// publisher data. nil/omitted when clean or unresolved — never a guess.
+	Retraction *RetractionStatus `json:"retractionStatus,omitempty"`
 }
+
+// RetractionStatus is the operator/model-facing integrity signal for a scholarly
+// DOI (#156). It is evidence, not a verdict: it reports what Crossref records and
+// the model decides how to hedge. Omitted entirely when an item is clean.
+type RetractionStatus struct {
+	// Retracted is true for a formal retraction/withdrawal/removal. An
+	// expression_of_concern is NOT a retraction (Retracted stays false; Kind
+	// carries the nuance); corrections are likewise not retractions.
+	Retracted bool `json:"retracted"`
+	// Kind is the coarse integrity category: retraction | expression_of_concern |
+	// correction. (withdrawal/removal/partial_retraction map to "retraction".)
+	Kind string `json:"kind"`
+	// Date is the notice date (YYYY-MM-DD) when Crossref supplies one.
+	Date string `json:"date,omitempty"`
+	// NoticeDOI is the DOI of the retraction/correction notice (where to read why).
+	NoticeDOI string `json:"noticeDoi,omitempty"`
+	// Source is the provenance: "retraction-watch" or "publisher".
+	Source string `json:"source,omitempty"`
+}
+
+// Integrity-kind constants — the closed vocabulary callers switch on.
+const (
+	RetractionKindRetraction = "retraction"
+	RetractionKindConcern    = "expression_of_concern"
+	RetractionKindCorrection = "correction"
+)
 
 // AcademicProviderConfig holds credentials for academic-specific providers.
 type AcademicProviderConfig struct {

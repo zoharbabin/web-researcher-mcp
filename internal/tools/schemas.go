@@ -736,6 +736,25 @@ var formatBibliographyOutputSchema = map[string]any{
 	},
 }
 
+var verifyCitationOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"input":     map[string]any{"type": "string", "description": "The citation as supplied."},
+		"inputType": map[string]any{"type": "string", "enum": []any{"doi", "url", "reference"}, "description": "How the input was interpreted."},
+		"exists":    map[string]any{"type": "boolean", "description": "Whether the citation resolved to a real record / live resource. Evidence, not a verdict."},
+		"matchedRecord": map[string]any{
+			"type":        "object",
+			"description": "The academic record the citation matched (title, authors, year, DOI, …) when one was found.",
+		},
+		"matchConfidence":  map[string]any{"type": "string", "enum": []any{"high", "medium", "low", "none"}, "description": "Confidence the matched record is the cited work (high for an exact DOI; heuristic for free-text)."},
+		"retractionStatus": map[string]any{"type": "object", "description": "Crossref integrity status when the DOI is retracted/corrected; omitted when clean."},
+		"httpStatus":       map[string]any{"type": "integer", "description": "Live HTTP status for a URL input (0 = unreachable)."},
+		"archivedUrl":      map[string]any{"type": "string", "description": "Internet Archive (Wayback) snapshot URL when the live link is dead."},
+		"provenance":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "How each piece of evidence was obtained (which source answered)."},
+		"trust":            trustUntrustedExternal,
+	},
+}
+
 var filingSearchOutputSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{

@@ -107,8 +107,14 @@ hooks:
 # Deliberately excludes vuln (network) and -race (slow) to keep commits snappy.
 precommit: fmt-check vet lint test
 
+# Validate every bundled lens JSON against the schema validator (search.ValidateLens),
+# so a malformed/typo'd lens that would silently fail to restrict a search is caught
+# in CI rather than at runtime. Exercised via the search package's lens tests.
+validate-lenses:
+	go test ./internal/search/ -run 'TestBundledLensesValid|TestValidateLens' -count=1
+
 # Full verification, matching CI. Run before opening a PR.
-verify: fmt-check vet lint sec vuln test-race test-e2e build
+verify: fmt-check vet lint sec vuln validate-lenses test-race test-e2e build
 
 clean:
 	rm -f $(BINARY) coverage.out coverage.html

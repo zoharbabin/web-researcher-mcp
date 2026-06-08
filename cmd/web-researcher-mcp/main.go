@@ -209,6 +209,22 @@ func main() {
 	if err := search.GetLensRegistry().LoadFromDir("lenses"); err != nil {
 		logger.Warn("failed to load search lenses", "err", err)
 	}
+	// Custom lenses (#164): an operator-supplied directory of additional lens
+	// JSON files (CUSTOM_LENSES_PATH), loaded AFTER the bundled set so a custom
+	// lens can extend or override a bundled one (last write wins). Each file is
+	// schema-validated; an invalid lens is a hard error here (HTTP mode) so a
+	// typo'd governance lens never silently fails to restrict a search.
+	if cfg.Search.CustomLensesPath != "" {
+		if err := search.GetLensRegistry().LoadFromDir(cfg.Search.CustomLensesPath); err != nil {
+			if cfg.Port > 0 {
+				logger.Error("failed to load custom lenses", "path", cfg.Search.CustomLensesPath, "err", err)
+				os.Exit(1)
+			}
+			logger.Warn("failed to load custom lenses", "path", cfg.Search.CustomLensesPath, "err", err)
+		} else {
+			logger.Info("custom lenses loaded", "path", cfg.Search.CustomLensesPath)
+		}
+	}
 
 	searchDeps := search.Deps{
 		HTTPClient: scraper.NewSSRFSafeClient(cfg.AllowPrivateIPs),
@@ -256,6 +272,21 @@ func main() {
 	}); r != nil {
 		oaResolver = r
 	}
+
+	// Retraction integrity enrichment (#156): flags DOI-bearing academic /
+	// citation results as retracted/corrected via Crossref's merged Retraction
+	// Watch + publisher data. Keyless, so always constructed; the CrossRef email
+	// (reused) lands requests in Crossref's faster polite pool. Its own breaker
+	// isolates failures from the academic providers; enrichment is best-effort.
+	retractionResolver := search.NewCrossrefRetractionResolver(cfg.Search.CrossRefEmail, search.Deps{
+		HTTPClient: searchDeps.HTTPClient,
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+	})
+
+	// Link verifier (#157): SSRF-safe liveness + Wayback archive fallback for the
+	// opt-in verify_links flag on research_export and for verify_citation. Honors
+	// the same private-IP posture as the scrape pipeline.
+	linkVerifier := scraper.NewLinkVerifier(scraper.LinkVerifierConfig{AllowPrivateIPs: cfg.AllowPrivateIPs})
 
 	// Synthesis capabilities (provider-independent): grounded answers and
 	// structured extraction. Discovered from config like every other provider
@@ -366,6 +397,8 @@ func main() {
 		AnswerProviders:     answerProviders,
 		StructuredProviders: structuredProviders,
 		OAResolver:          oaResolver,
+		RetractionResolver:  retractionResolver,
+		LinkVerifier:        linkVerifier,
 		Scraper:             scraperPipeline,
 		Content:             contentProcessor,
 		Sessions:            sessionManager,

@@ -39,13 +39,21 @@ type Dependencies struct {
 	// PDF links (Unpaywall, #45). nil ⇒ enrichment is skipped (no-op). Best-effort:
 	// never fails a search.
 	OAResolver search.OAResolver
-	Scraper    *scraper.Pipeline
-	Content    *content.Processor
-	Sessions   session.Manager
-	Metrics    *metrics.Collector
-	Auditor    audit.Auditor
-	Logger     *slog.Logger
-	Features   Features
+	// RetractionResolver flags DOI-bearing academic/citation results with their
+	// Crossref integrity status (#156). nil ⇒ skipped (no-op). Best-effort:
+	// never fails a search. Also powers verify_citation's retraction check.
+	RetractionResolver search.RetractionResolver
+	// LinkVerifier checks source-URL liveness + Wayback archive fallback for the
+	// opt-in verify_links flag (#157) and verify_citation. nil ⇒ verification is
+	// skipped (no-op). Best-effort + bounded; never fails a tool call.
+	LinkVerifier *scraper.LinkVerifier
+	Scraper      *scraper.Pipeline
+	Content      *content.Processor
+	Sessions     session.Manager
+	Metrics      *metrics.Collector
+	Auditor      audit.Auditor
+	Logger       *slog.Logger
+	Features     Features
 	// Consent records/verifies/honors consent for regulated features (#89).
 	// Defaults to a Noop (grants nothing) when unset, so guarded processing is a
 	// clean no-op until a regulated feature wires it in.
@@ -85,6 +93,10 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	registerGetSession(srv, deps)
 	registerResearchExport(srv, deps)
 	registerFormatBibliography(srv, deps)
+	// verify_citation (#158) — always registered: it degrades gracefully when a
+	// resolver is absent (the retraction resolver + link verifier are always
+	// constructed; the academic match is best-effort).
+	registerVerifyCitation(srv, deps)
 
 	// citation_graph (#47) — registered only when a citation-capable academic
 	// provider (semanticscholar or openalex) is configured.

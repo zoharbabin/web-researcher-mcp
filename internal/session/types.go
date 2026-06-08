@@ -74,6 +74,13 @@ type ResearchSource struct {
 	Title       string `json:"title,omitempty"`
 	Relevance   string `json:"relevance,omitempty"`
 	FoundInStep int    `json:"foundInStep"`
+	// Link-liveness provenance (#157), populated only when verification is
+	// requested (opt-in verify_links on research_export / search_and_scrape).
+	// Omitted entirely when unverified, so an unverified source is unchanged.
+	HTTPStatus  int    `json:"httpStatus,omitempty"`  // last observed status (0 = network failure)
+	Verified    *bool  `json:"verified,omitempty"`    // true = resolved 2xx/3xx; pointer so "unverified" ≠ "verified:false"
+	ArchivedURL string `json:"archivedUrl,omitempty"` // Wayback snapshot when the live URL is dead
+	VerifiedAt  string `json:"verifiedAt,omitempty"`  // RFC3339 timestamp of the check
 }
 
 type KnowledgeGap struct {
