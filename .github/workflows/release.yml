@@ -105,10 +105,29 @@ jobs:
             # shim running bare `mono`). The path has no spaces, so plain
             # interpolation into the wrapper body is safe; $@ is escaped so it
             # expands at shim-run time, not now.
+            # CRITICAL: the `push` subcommand is made NON-FATAL. The Chocolatey
+            # community feed can reject a push for reasons outside this release's
+            # control (e.g. a moderated/new-maintainer account cannot push a new
+            # version while a prior submission is still pending — a 403). GoReleaser
+            # runs the chocolatey pipe LAST, but its non-zero exit aborts the whole
+            # run (skipping the post-GoReleaser signing/cosign/mcpb/registry steps).
+            # So a choco push failure must DEGRADE, not block — like the
+            # AZURE_SIGNING_ENABLED gate. `choco push` runs, its real result is
+            # surfaced as a ::warning::, but the shim exits 0. Every other subcommand
+            # (pack, --version) passes its real exit code through.
             if [ -f "$CHOCO_DIR/choco.exe" ]; then
               printf '%s\n' \
                 '#!/usr/bin/env bash' \
-                "exec mono \"$CHOCO_DIR/choco.exe\" \"\$@\"" \
+                "CHOCO_EXE=\"$CHOCO_DIR/choco.exe\"" \
+                'if [ "$1" = "push" ]; then' \
+                '  if mono "$CHOCO_EXE" "$@"; then' \
+                '    echo "::notice::chocolatey push succeeded"' \
+                '  else' \
+                '    echo "::warning::chocolatey push failed (e.g. 403 from a pending-moderation account) — skipping this channel; the rest of the release is unaffected."' \
+                '  fi' \
+                '  exit 0' \
+                'fi' \
+                'exec mono "$CHOCO_EXE" "$@"' \
                 | sudo tee /usr/local/bin/choco >/dev/null
               sudo chmod +x /usr/local/bin/choco
             fi
