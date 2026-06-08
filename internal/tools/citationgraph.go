@@ -89,6 +89,12 @@ func registerCitationGraph(srv *mcp.Server, deps Dependencies) {
 			references = filterInfluential(references)
 		}
 
+		// Integrity enrichment (#156): flag retracted/corrected works so a citation
+		// neighborhood never presents a withdrawn paper as sound. Best-effort + no-op
+		// when unconfigured.
+		citedBy = search.EnrichRetraction(ctx, deps.RetractionResolver, citedBy)
+		references = search.EnrichRetraction(ctx, deps.RetractionResolver, references)
+
 		output := map[string]any{
 			"seed":      input.Paper,
 			"direction": direction,

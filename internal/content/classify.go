@@ -19,6 +19,11 @@ type SourceClassification struct {
 	// DomainCategory is the subject area: academic, legal, medical, financial,
 	// technical, or general.
 	DomainCategory string `json:"domainCategory"`
+	// DomainReputation is the descriptive reliability tier for the host (#159),
+	// from the transparent reputation dataset. nil/omitted for unlisted hosts
+	// ("unknown") so the field never implies false confidence; descriptive only,
+	// never used to gate or reorder results.
+	DomainReputation *DomainReputation `json:"domainReputation,omitempty"`
 }
 
 // Source-type constants — the closed vocabulary callers can switch on.
@@ -58,11 +63,18 @@ type StructuredSignals struct {
 // Deterministic and allocation-light; safe to call per result.
 func ClassifySource(rawURL string, authority float64, sig StructuredSignals, lens string) SourceClassification {
 	host := classifyHost(rawURL)
-	return SourceClassification{
+	c := SourceClassification{
 		SourceType:     classifySourceType(host, sig),
 		AuthorityTier:  authorityTier(authority),
 		DomainCategory: domainCategory(lens, host),
 	}
+	// Reputation (#159): attach only when the dataset knows the host — an
+	// "unknown" tier carries no signal, so leave it nil to keep output clean and
+	// avoid implying false confidence.
+	if rep := LookupDomainReputation(host); rep.Tier != "" && rep.Tier != ReputationUnknown {
+		c.DomainReputation = &rep
+	}
+	return c
 }
 
 // authorityTier bands the numeric authority score. Thresholds mirror the

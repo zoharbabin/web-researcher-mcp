@@ -191,6 +191,11 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 		// unconfigured; runs BEFORE the pdf_only filter so resolved PDFs count.
 		results = search.EnrichOpenAccess(ctx, deps.OAResolver, results)
 
+		// Integrity enrichment (#156): flag retracted/corrected DOIs via Crossref's
+		// merged Retraction Watch + publisher data, so a search never presents a
+		// withdrawn paper as sound. Best-effort + no-op when unconfigured.
+		results = search.EnrichRetraction(ctx, deps.RetractionResolver, results)
+
 		// Filter PDF-only if requested
 		if input.PDFOnly && len(results) > 0 {
 			filtered := make([]search.AcademicResult, 0, len(results))
@@ -413,6 +418,9 @@ func academicResultToMap(r search.AcademicResult) map[string]any {
 	}
 	if len(r.CitationIntents) > 0 {
 		paper["citationIntents"] = r.CitationIntents
+	}
+	if r.Retraction != nil {
+		paper["retractionStatus"] = r.Retraction
 	}
 	return paper
 }

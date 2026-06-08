@@ -27,11 +27,17 @@ func classifySource(url, title, body, query, lens string, structured *scraper.St
 // classificationFields renders a SourceClassification as the additive output
 // keys, so the three fields are written identically across tools.
 func classificationFields(c content.SourceClassification) map[string]any {
-	return map[string]any{
+	fields := map[string]any{
 		"sourceType":     c.SourceType,
 		"authorityTier":  c.AuthorityTier,
 		"domainCategory": c.DomainCategory,
 	}
+	// Reputation (#159) is surfaced only when known — an unlisted host carries no
+	// reputation signal, so the key is omitted rather than asserting "unknown".
+	if c.DomainReputation != nil {
+		fields["domainReputation"] = c.DomainReputation
+	}
+	return fields
 }
 
 // enrichResultsWithClaim renders web_search results as JSON objects, adding a

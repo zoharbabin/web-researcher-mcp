@@ -1249,6 +1249,7 @@ Each item in `cases[]`: `caseName`, `citation` (Bluebook), `court`, `courtId`, `
 ### Behavior
 - Searches the CourtListener v4 opinions index; `jurisdiction` maps to the `court` filter, dates to `filed_after`/`filed_before`.
 - **Auth**: works keyless at ~100 req/day; `COURTLISTENER_API_TOKEN` raises the limit (~5000/day). The token is sent as an `Authorization` header and never logged.
+- **Anti-hallucination workflow**: pair with the **`legal` lens** (`web_search` with `lens: legal`, an authority-weighted primary-source pack — see `lenses/README.md`) for context, and with `verify_citation` to confirm a cited case actually exists before relying on it.
 
 ### Annotations
 - ReadOnly: true · Idempotent: true · OpenWorld: true (queries the live CourtListener API)
@@ -1289,6 +1290,39 @@ Look up macroeconomic data from FRED (Federal Reserve Economic Data) — 800K+ t
 
 ### Cache
 - TTL: 6 hours (only for non-empty results)
+
+---
+
+## Tool 23: `verify_citation`
+
+### Purpose
+
+Verify a single citation before relying on it — confirm it **exists**, matches a real record, hasn't been **retracted**, and still **resolves**. Built to catch AI-fabricated or retracted citations before they ship (legal filings, papers, articles). Composes the retraction enrichment, the link verifier, and the academic searchers; adds no new provider.
+
+### Input Schema
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `citation` | string | yes | A DOI (`10.1038/nature12373`), a URL, or a free-text reference string. The tool auto-detects which. |
+
+### Output Schema
+
+`input`, `inputType` (`doi`\|`url`\|`reference`), `exists` (bool), `matchedRecord` (the academic record when found), `matchConfidence` (`high`\|`medium`\|`low`\|`none`), `retractionStatus` (Crossref integrity status when retracted/corrected; omitted when clean), `httpStatus` + `archivedUrl` (for URL inputs — live status and a Wayback snapshot for dead links), `provenance` (how each piece of evidence was obtained), and the `trust` marker.
+
+### Behavior
+
+- **Evidence, never a verdict.** The tool reports what it found (exists/matches/retracted/resolves); the caller decides whether to cite. It never synthesizes a true/false judgment.
+- **DOI input** → existence + retraction via Crossref `works/{doi}`; a matched record (title/authors/year) via the academic searcher (`matchConfidence: high` — a DOI is exact).
+- **URL input** → liveness via the SSRF-safe link verifier; a Wayback `archivedUrl` when the live link is dead.
+- **Free-text input** → best-match academic lookup with a transparent token-overlap `matchConfidence`; retraction checked when the match carries a DOI.
+- Degrades gracefully when a resolver is unconfigured (reports the gap in `provenance`); never panics.
+
+### Annotations
+
+- ReadOnly: true · Idempotent: true · OpenWorld: true (queries live external sources)
+
+### Cache
+- Not cached (a verification is a point-in-time liveness/integrity check).
 
 ---
 
