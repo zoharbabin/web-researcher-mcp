@@ -261,6 +261,9 @@ func main() {
 	econProviders := search.AvailableEconProviders(search.EconProviderConfig{
 		FREDAPIKey: cfg.Search.FREDAPIKey,
 	}, searchDeps)
+	// Clinical trials (ClinicalTrials.gov, #165): keyless, so always built —
+	// clinical_search is part of the default tool surface.
+	trialProviders := search.AvailableTrialProviders(searchDeps)
 
 	// Open-access enrichment (#45): resolves DOI-bearing academic results to OA
 	// PDFs via Unpaywall. nil when no email is configured — enrichment is then a
@@ -394,6 +397,7 @@ func main() {
 		FilingProviders:     filingProviders,
 		CaseProviders:       caseProviders,
 		EconProviders:       econProviders,
+		TrialProviders:      trialProviders,
 		AnswerProviders:     answerProviders,
 		StructuredProviders: structuredProviders,
 		OAResolver:          oaResolver,

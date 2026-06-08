@@ -154,7 +154,7 @@ Search US federal and state court opinions for precedent. Query by legal topic, 
 
 ## Economic Data Search
 
-Look up macroeconomic time series from FRED (Federal Reserve Economic Data) — 800K+ series including GDP, CPI, unemployment, and interest rates. Search by keyword to discover series IDs, or pass a `series_id` to retrieve observations.
+Look up economic data from two providers. **World Bank Open Data** (keyless, always available) covers global development indicators for 200+ economies; **FRED** (Federal Reserve Economic Data, needs a free key) adds 800K+ US macro series — GDP, CPI, unemployment, rates. Search by keyword to discover series IDs, or pass a `series_id` to retrieve observations.
 
 ```json
 {
@@ -179,7 +179,42 @@ In **search mode** (`mode: "series"`), `results` is an array of `{seriesId, titl
 }
 ```
 
-In **observations mode** (`mode: "observations"`), `results` is an array of `{seriesId, date, value}`. Numeric values pass through exactly as FRED returns them — no rounding, and a real `0` is preserved (missing observations carry no `value`). Filter with `date_from`/`date_to`, resample with `frequency` (`d`/`w`/`m`/`q`/`a`), or transform with `units` (e.g. `pch` for percent change, `pc1` for year-over-year). Requires `FRED_API_KEY` (free at fred.stlouisfed.org). Results stay fresh for 6 hours.
+For global data, force the World Bank provider and scope by `country` (an ISO code, or `WLD` for the world aggregate — the default):
+
+```json
+{
+  "tool": "econ_search",
+  "arguments": {
+    "provider": "worldbank",
+    "series_id": "NY.GDP.MKTP.CD",
+    "country": "US",
+    "date_from": "2018",
+    "date_to": "2022"
+  }
+}
+```
+
+In **observations mode** (`mode: "observations"`), `results` is an array of `{seriesId, date, value}` (World Bank also echoes the requested `country`). Numeric values pass through exactly as the source returns them — no rounding, and a real `0` is preserved (missing observations carry no `value`). FRED supports `frequency` (`d`/`w`/`m`/`q`/`a`) and `units` (e.g. `pch`, `pc1`); World Bank scopes by `country` and filters by year. FRED requires `FRED_API_KEY` (free at fred.stlouisfed.org); World Bank needs no key. Results stay fresh for 6 hours.
+
+---
+
+## Clinical Trial Search
+
+Search **ClinicalTrials.gov** (keyless) for clinical-trial registrations — discovery and primary-source retrieval for evidence-based medicine, not medical advice. Combine free text, `condition`, `intervention`, `sponsor`, and a recruitment `status` filter.
+
+```json
+{
+  "tool": "clinical_search",
+  "arguments": {
+    "condition": "covid-19",
+    "intervention": "vaccine",
+    "status": "COMPLETED",
+    "num_results": 5
+  }
+}
+```
+
+Each `trials` item carries `{nctId, title, status, phases, conditions, interventions, sponsor, startDate, hasResults, url, source}`. `hasResults` tells you whether study results are posted to the registry — a completed trial with no posted results is worth scrutinizing. Read the full registration by passing the `url` to `scrape_page`, and check a linked publication with `verify_citation`. Results stay fresh for 6 hours.
 
 ---
 

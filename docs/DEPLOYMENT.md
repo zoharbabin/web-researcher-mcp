@@ -265,15 +265,17 @@ These enable rich scholarly metadata (DOIs, authors, citation counts, abstracts,
 
 ### Structured-Domain Providers (Optional)
 
-These enable dedicated structured-research tools. Each is independent; the tool registers only when its provider is configured (with one exception noted below).
+These enable dedicated structured-research tools. Each provider is independent. `filing_search` registers only when its provider is configured; `legal_search`, `econ_search`, and `clinical_search` each have a keyless provider, so they are **always available** (a key/token only adds coverage or raises limits).
 
 | Variable | Tool | Description | Default |
 |----------|------|-------------|---------|
 | `EDGAR_CONTACT_EMAIL` | `filing_search` | Contact email for SEC EDGAR's required User-Agent (no API key). Falls back to `OPENALEX_EMAIL`; `filing_search` registers only when one is set | — (falls back to `OPENALEX_EMAIL`) |
 | `COURTLISTENER_API_TOKEN` | `legal_search` | Optional token raising the CourtListener rate limit (~100→~5000 req/day). **`legal_search` is always available** (CourtListener works keyless) | — |
-| `FRED_API_KEY` | `econ_search` | Federal Reserve Economic Data API key (free at fred.stlouisfed.org). `econ_search` registers only when set | — |
+| `FRED_API_KEY` | `econ_search` | Federal Reserve Economic Data API key (free at fred.stlouisfed.org). **`econ_search` is always available** via keyless World Bank global indicators; this key *adds* FRED's US macro series | — |
+| — (none) | `econ_search` | World Bank Open Data — global development indicators for 200+ economies. Keyless; no configuration | — |
+| — (none) | `clinical_search` | ClinicalTrials.gov v2 — 400K+ clinical-trial registrations as typed data. Keyless; no configuration. **Always available** | — |
 
-Each structured-domain provider gets an independent circuit breaker and uses the SSRF-safe HTTP client. `filing_search` returns XBRL company facts (with `facts=true`) and `econ_search` returns observations passed through exactly as the source provides them — no rounding.
+Each structured-domain provider gets an independent circuit breaker and uses the SSRF-safe HTTP client. `filing_search` returns XBRL company facts (with `facts=true`); `econ_search` returns observations passed through exactly as the source provides them — no rounding; `clinical_search` returns trial metadata for discovery (not medical advice).
 
 ### Multi-Provider Routing
 

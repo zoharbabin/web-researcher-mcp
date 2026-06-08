@@ -186,10 +186,14 @@ type EconProvider interface {
 // provider returns that series' observations; otherwise it searches series by
 // keyword (Query).
 type EconSearchParams struct {
-	Query      string // keyword series search (when SeriesID is empty)
-	SeriesID   string // e.g. "GDP", "CPIAUCSL", "UNRATE" → return observations
-	DateFrom   string // YYYY-MM-DD
-	DateTo     string // YYYY-MM-DD
+	Query    string // keyword series search (when SeriesID is empty)
+	SeriesID string // e.g. "GDP", "CPIAUCSL", "UNRATE" → return observations
+	DateFrom string // YYYY-MM-DD
+	DateTo   string // YYYY-MM-DD
+	// Country is an optional ISO country code (e.g. "US", "WLD") used by
+	// multi-country providers (World Bank) to scope observations; single-country
+	// providers (FRED, US-only) ignore it.
+	Country    string
 	Frequency  string // optional: d, w, m, q, a
 	Units      string // optional FRED units transform (e.g. "pch")
 	NumResults int
@@ -215,17 +219,22 @@ type EconProviderConfig struct {
 	FREDAPIKey string
 }
 
-// SupportedEconProviders is the source of truth for econ provider names.
-var SupportedEconProviders = []string{"fred"}
+// SupportedEconProviders is the source of truth for econ provider names. FRED is
+// US macro data (needs a key); World Bank is global development indicators
+// (keyless), so it is always available.
+var SupportedEconProviders = []string{"fred", "worldbank"}
 
-// NewEconProviderByName constructs an econ provider, or nil when its key is
-// absent (provider skipped — no dead config).
+// NewEconProviderByName constructs an econ provider, or nil when its required
+// config is absent (provider skipped — no dead config). World Bank is keyless,
+// so it always constructs.
 func NewEconProviderByName(name string, cfg EconProviderConfig, deps Deps) EconProvider {
 	switch name {
 	case "fred":
 		if cfg.FREDAPIKey != "" {
 			return NewFREDProvider(cfg.FREDAPIKey, deps)
 		}
+	case "worldbank":
+		return NewWorldBankProvider(deps)
 	}
 	return nil
 }
@@ -240,6 +249,79 @@ func AvailableEconProviders(cfg EconProviderConfig, deps Deps) map[string]EconPr
 			Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
 		}
 		if p := NewEconProviderByName(name, cfg, provDeps); p != nil {
+			providers[name] = p
+		}
+	}
+	return providers
+}
+
+// ──────────────────── Clinical trials (ClinicalTrials.gov) ──────────────────
+
+// TrialSearcher finds clinical-trial registrations. Clinical trials don't fit
+// the filing/case/econ shapes (no monetary value, no opinion, no time series),
+// so they get their own capability pair — same structure, new domain (#165).
+type TrialSearcher interface {
+	Trials(ctx context.Context, params TrialSearchParams) ([]TrialResult, error)
+}
+
+// TrialProvider is a named, described TrialSearcher.
+type TrialProvider interface {
+	TrialSearcher
+	Name() string
+	Metadata() ProviderMeta
+}
+
+// TrialSearchParams drives a clinical-trial search. Query is free-text;
+// Condition/Intervention/Sponsor narrow by the registry's structured facets;
+// Status filters by recruitment status (e.g. "RECRUITING", "COMPLETED").
+type TrialSearchParams struct {
+	Query        string // free-text across all fields
+	Condition    string // disease/condition (e.g. "covid-19")
+	Intervention string // drug/treatment (e.g. "remdesivir")
+	Sponsor      string // lead sponsor / funder
+	Status       string // recruitment status filter (registry vocabulary)
+	NumResults   int
+}
+
+// TrialResult is one clinical-trial registration's metadata. The full record is
+// read via a follow-up scrape_page on URL.
+type TrialResult struct {
+	NCTID         string   `json:"nctId"`
+	Title         string   `json:"title"`
+	Status        string   `json:"status,omitempty"`
+	Phases        []string `json:"phases,omitempty"`
+	Conditions    []string `json:"conditions,omitempty"`
+	Interventions []string `json:"interventions,omitempty"`
+	Sponsor       string   `json:"sponsor,omitempty"`
+	StartDate     string   `json:"startDate,omitempty"`
+	HasResults    bool     `json:"hasResults"`
+	URL           string   `json:"url"`
+	Source        string   `json:"source"`
+}
+
+// SupportedTrialProviders is the source of truth for trial provider names.
+var SupportedTrialProviders = []string{"clinicaltrials"}
+
+// NewTrialProviderByName constructs a trial provider. ClinicalTrials.gov is
+// keyless, so it always constructs.
+func NewTrialProviderByName(name string, deps Deps) TrialProvider {
+	switch name {
+	case "clinicaltrials":
+		return NewClinicalTrialsProvider(deps)
+	}
+	return nil
+}
+
+// AvailableTrialProviders builds the trial providers, each with its own circuit
+// breaker (parity with the other structured-domain constructors).
+func AvailableTrialProviders(deps Deps) map[string]TrialProvider {
+	providers := make(map[string]TrialProvider)
+	for _, name := range SupportedTrialProviders {
+		provDeps := Deps{
+			HTTPClient: deps.HTTPClient,
+			Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+		}
+		if p := NewTrialProviderByName(name, provDeps); p != nil {
 			providers[name] = p
 		}
 	}

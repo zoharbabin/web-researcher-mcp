@@ -1155,29 +1155,32 @@ Export a completed `sequential_search` session as a shareable deliverable — a 
 
 ## Tool 19: `format_bibliography`
 
-Turn a set of sources into a formatted bibliography in **APA**, **MLA**, or **BibTeX**. Sources come from either a `sequential_search` session (its recorded sources) or an explicit list the caller supplies (e.g. `academic_search` / `citation_graph` results). Read-only and idempotent.
+Turn a set of sources into a formatted bibliography. Pick a human-readable style (**APA**, **MLA**) or a reference-manager interchange format (**BibTeX**, **RIS**, **CSL-JSON**) that imports straight into Zotero / EndNote / Mendeley. Sources come from either a `sequential_search` session (its recorded sources) or an explicit list the caller supplies (e.g. `academic_search` / `citation_graph` results — pass their `doi` so the persistent id survives). Read-only and idempotent.
 
 ### Input Schema
 
 | Field | Type | Required | Default | Constraints |
 |-------|------|----------|---------|-------------|
-| `style` | string | no | `apa` | `apa`, `mla`, or `bibtex` |
+| `style` | string | no | `apa` | `apa`, `mla`, `bibtex`, `ris`, or `csl-json` |
 | `sessionId` | string | no | — | Build from this session's recorded sources. Provide this **or** `sources` |
-| `sources` | []object | no | — | Explicit sources. Provide this **or** `sessionId`. Each: `url` (required), `title`, `author`, `site`, `date` |
+| `sources` | []object | no | — | Explicit sources. Provide this **or** `sessionId`. Each: `url` (required), `title`, `author`, `site`, `date`, `doi` |
 
 ### Output Fields
 
 | Field | Type | Always Present | Description |
 |-------|------|---------------|-------------|
-| `style` | string | yes | The citation style used |
+| `style` | string | yes | The citation style used (`apa`/`mla`/`bibtex`/`ris`/`csl-json`) |
 | `entryCount` | int | yes | Number of unique entries rendered (after de-duplication by URL) |
-| `bibliography` | string | yes | The formatted bibliography — entries separated by blank lines |
+| `bibliography` | string | yes | The formatted bibliography. For `apa`/`mla`/`bibtex`/`ris`, records separated by blank lines; for `csl-json`, a JSON array string |
 | `sessionId` | string | no | Echoed when sources were drawn from a session |
 | `trust` | string | yes | Always `"untrusted-external-content"` — source metadata is external data |
 
 ### Behavior
-- Sources are **de-duplicated by URL** (first occurrence wins) and ordered deterministically: APA/MLA alphabetically by the rendered line, BibTeX by cite key.
+- Sources are **de-duplicated by URL** (first occurrence wins) and ordered deterministically: APA/MLA alphabetically by the rendered line; BibTeX/RIS/CSL-JSON by (collision-free) cite key. Same inputs → **byte-identical output** (interchange formats omit the accessed-date stamp so they stay reproducible).
 - **BibTeX cite keys** are `surname + year + first-title-word` (e.g. `vaswani2017attention`), made collision-free within the list by appending `a`/`b`/`c…`; BibTeX-significant characters in values are escaped.
+- **RIS** records are generic web entries (`TY  - ELEC`), one `AU` line per author (split on `;` / ` and `), with `DO` carrying the bare DOI and `UR` the URL; values are stripped of line breaks so a title can't inject extra RIS tags.
+- **CSL-JSON** is a JSON array of `webpage` items (`id` = cite key, authors as `{"literal": …}`, `issued` date-parts, `container-title`, `DOI`, `URL`); all values are JSON-escaped.
+- **DOI** (when supplied) is normalized to the bare `10.x/y` form and emitted into bibtex (`doi`), ris (`DO`), and csl-json (`DOI`). It is not network-verified here — use `verify_citation` for that.
 - An unrecognized style is rejected at the tool boundary (the lower-level formatter falls back to APA, but the tool validates first).
 - Entries with no `url` are skipped. Either `sessionId` or a non-empty `sources` list is required.
 - Session-sourced bibliographies are scoped to the caller's own `(tenant, user)`.
@@ -1261,32 +1264,34 @@ Each item in `cases[]`: `caseName`, `citation` (Bluebook), `court`, `courtId`, `
 
 ## Tool 22: `econ_search`
 
-Look up macroeconomic data from FRED (Federal Reserve Economic Data) — 800K+ time series (GDP, CPI, unemployment, rates). Registered only when `FRED_API_KEY` is set.
+Look up macroeconomic and development data. **FRED** (Federal Reserve Economic Data) — 800K+ US time series (GDP, CPI, unemployment, rates); **World Bank Open Data** — global development indicators for 200+ economies. World Bank is keyless, so `econ_search` is always registered; FRED adds the US macro series when `FRED_API_KEY` is set.
 
 ### Input Schema
 
 | Field | Type | Required | Default | Constraints |
 |-------|------|----------|---------|-------------|
-| `query` | string | yes* | — | Keyword to search series by. *Provide this OR `series_id` |
-| `series_id` | string | yes* | — | A FRED series ID (e.g. `GDP`, `CPIAUCSL`, `UNRATE`) to fetch observations. *Provide this OR `query` |
-| `date_from` | string | no | — | Only observations on/after this date (YYYY-MM-DD) |
-| `date_to` | string | no | — | Only observations on/before this date (YYYY-MM-DD) |
-| `frequency` | string | no | — | Resample: d, w, m, q, a |
-| `units` | string | no | — | FRED units transform (e.g. `pch`, `pc1`); omit for raw levels |
+| `query` | string | yes* | — | Keyword to search series by (matches indicator name for World Bank). *Provide this OR `series_id` |
+| `series_id` | string | yes* | — | A series ID to fetch observations: FRED (`GDP`, `CPIAUCSL`, `UNRATE`) or World Bank indicator (`NY.GDP.MKTP.CD`). *Provide this OR `query` |
+| `country` | string | no | `WLD` | ISO code for multi-country providers (`worldbank`), e.g. `US`, `CN`, `WLD`. Ignored by `fred` |
+| `date_from` | string | no | — | Only observations on/after this date (YYYY-MM-DD or YYYY) |
+| `date_to` | string | no | — | Only observations on/before this date (YYYY-MM-DD or YYYY) |
+| `frequency` | string | no | — | FRED only: resample d, w, m, q, a |
+| `units` | string | no | — | FRED only: units transform (e.g. `pch`, `pc1`); omit for raw levels |
 | `num_results` | int | no | 5 (search) / 10 (observations) | — |
-| `provider` | string | no | — | Force an economic-data provider: `fred` |
+| `provider` | string | no | — | Force an economic-data provider: `fred` or `worldbank` |
 
 ### Output Fields
 
-`mode` is `series` (keyword search) or `observations` (series_id lookup). In series mode each `results[]` item: `seriesId`, `title`, `units`, `frequency`, `lastUpdated`, `notes`. In observations mode: `seriesId`, `date`, `value` (**exactly as returned — no rounding**; missing observations carry no `value`). Plus `query`, `seriesId` (echoed in observations mode), `resultCount`, `provider`, `hints`, and `trust` (`untrusted-external-content`).
+`mode` is `series` (keyword search) or `observations` (series_id lookup). In series mode each `results[]` item: `seriesId`, `title`, `units`, `frequency`, `lastUpdated`, `notes`. In observations mode: `seriesId`, `date`, `value` (**exactly as returned — no rounding**; missing observations carry no `value`). Plus `query`, `seriesId` (echoed in observations mode), `country` (echoed for a World Bank lookup), `resultCount`, `provider`, `hints`, and `trust` (`untrusted-external-content`).
 
 ### Behavior
-- `series_id` set → returns that series' observations (most-recent first), honoring date/frequency/units filters; otherwise keyword-searches series.
-- No macro web-lens fallback exists, so an error/empty returns a structured zero-result with hints (no fallback).
-- **Auth**: `FRED_API_KEY` (free at fred.stlouisfed.org) is required; the provider is skipped when unset. The key is sent as a query param and never logged.
+- `series_id` set → returns that series' observations (most-recent first); otherwise keyword-searches series. FRED honors `frequency`/`units`; World Bank scopes by `country` (default `WLD`) and filters by year.
+- **World Bank** has no server-side keyword search, so keyword mode lists the WDI indicator set and filters by name client-side; its HTTP-200 error envelope (`{"message":[…]}`) is surfaced as a structured error.
+- **Provider honoring**: an explicit `provider` is used exclusively; otherwise the first configured provider answers (FRED if keyed, else World Bank). An error/empty returns a structured zero-result with hints (no silent cross-provider fallback).
+- **Auth**: World Bank is keyless (always available). `FRED_API_KEY` (free at fred.stlouisfed.org) enables FRED; it is sent as a query param and never logged.
 
 ### Annotations
-- ReadOnly: true · Idempotent: true · OpenWorld: true (queries the live FRED API)
+- ReadOnly: true · Idempotent: true · OpenWorld: true (queries the live FRED / World Bank APIs)
 
 ### Cache
 - TTL: 6 hours (only for non-empty results)
@@ -1323,6 +1328,41 @@ Verify a single citation before relying on it — confirm it **exists**, matches
 
 ### Cache
 - Not cached (a verification is a point-in-time liveness/integrity check).
+
+---
+
+## Tool 24: `clinical_search`
+
+Search **ClinicalTrials.gov** — the NIH registry of 400K+ clinical studies — for evidence-based-medicine and systematic-review research. ClinicalTrials.gov is keyless, so this tool is always registered. Discovery + primary-source retrieval only — not medical advice.
+
+### Input Schema
+
+| Field | Type | Required | Default | Constraints |
+|-------|------|----------|---------|-------------|
+| `query` | string | yes* | — | Free-text across trial fields. *Provide at least one of `query`/`condition`/`intervention`/`sponsor` |
+| `condition` | string | yes* | — | Disease/condition (e.g. `covid-19`) |
+| `intervention` | string | yes* | — | Drug/device/treatment (e.g. `remdesivir`) |
+| `sponsor` | string | yes* | — | Lead sponsor / funder |
+| `status` | string | no | — | Recruitment status filter: `RECRUITING`, `COMPLETED`, `TERMINATED`, … |
+| `num_results` | int | no | 10 | 1–100 |
+| `provider` | string | no | — | Force a clinical-trials provider: `clinicaltrials` |
+| `sessionId` | string | no | — | Record results as sources on a `sequential_search` session |
+
+### Output Fields
+
+Each `trials[]` item: `nctId`, `title`, `status`, `phases` (array), `conditions` (array), `interventions` (array), `sponsor`, `startDate`, `hasResults` (bool — whether results are posted), `url` (study page; `scrape_page` for the full registration), `source`. Plus `query`, `resultCount`, `provider`, `hints` (when empty), and `trust` (`untrusted-external-content`).
+
+### Behavior
+- Combine `query`/`condition`/`intervention`/`sponsor`/`status` to narrow the registry's structured facets; at least one is required.
+- **Provider honoring**: an explicit `provider` is used exclusively; otherwise the first configured provider answers. An error/empty returns a structured zero-result with hints (no silent fallback).
+- A bad request surfaces as a structured upstream error (the API returns `text/plain` errors, decoded as a message snippet); a `404`/no-match is an empty result, never a panic.
+- **Auth**: keyless — ClinicalTrials.gov v2 needs no API key.
+
+### Annotations
+- ReadOnly: true · Idempotent: true · OpenWorld: true (queries the live ClinicalTrials.gov API)
+
+### Cache
+- TTL: 6 hours (only for non-empty results)
 
 ---
 
@@ -1387,7 +1427,7 @@ This is **operator/debug data, not content.** It is LLM-invisible (a sibling of 
 | `cache_hit` | bool | `true` when served from cache (provider attribution is then omitted — the cached blob's provenance is not this call's routing) |
 | `latency_ms` | int | Server-side end-to-end latency for the call |
 
-The provider **name** is the disclosure boundary: no upstream URLs, credentials, or breaker internals appear. The block is **omitted entirely** when there is nothing to observe — a single-provider / no-routing deployment, or a non-routed capability. Routing applies to the Router-routed capabilities only (web / images / news / patents / academic); the synthesis (`answer`, `structured_search`), `citation_graph`, and structured-domain (`filing_search`, `legal_search`, `econ_search`) tools resolve a single provider directly and already name it in the result body's `source`/`provider` field — they have no fallback ladder to observe. The same routing summary is also recorded under `audit.AuditEvent.Metadata["routing"]`.
+The provider **name** is the disclosure boundary: no upstream URLs, credentials, or breaker internals appear. The block is **omitted entirely** when there is nothing to observe — a single-provider / no-routing deployment, or a non-routed capability. Routing applies to the Router-routed capabilities only (web / images / news / patents / academic); the synthesis (`answer`, `structured_search`), `citation_graph`, and structured-domain (`filing_search`, `legal_search`, `econ_search`, `clinical_search`) tools resolve a single provider directly and already name it in the result body's `source`/`provider` field — they have no fallback ladder to observe. The same routing summary is also recorded under `audit.AuditEvent.Metadata["routing"]`.
 
 For the aggregate, on-demand operator views (recent errors, live provider/breaker health) see the `diagnostics://` MCP Resources and the HTTP-mode dashboard in `docs/DEPLOYMENT.md`.
 
@@ -1434,6 +1474,7 @@ Every tool declares annotations for client consumption (`readOnlyAnnotations(ide
 | filing_search | true | true | true |
 | legal_search | true | true | true |
 | econ_search | true | true | true |
+| clinical_search | true | true | true |
 | get_my_analytics | true | true | false |
 | memory_save | **false (write)** | false | false |
 | memory_recall | true | true | false |
