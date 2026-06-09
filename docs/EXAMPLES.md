@@ -385,6 +385,22 @@ To retrieve full details of a specific earlier step:
 
 ---
 
+## Auditing a Bibliography (audit_bibliography)
+
+Before filing a brief or submitting a paper, audit the whole reference list in one pass — paste the bibliography your reference manager exports (CSL-JSON, RIS, or BibTeX) and get per-entry + corpus-level flags for **retracted**, **dead-link**, and **unverifiable** citations.
+
+```json
+{
+  "tool": "audit_bibliography",
+  "arguments": {
+    "bibliography": "TY  - JOUR\nTI  - Ileal-lymphoid-nodular hyperplasia...\nDO  - 10.1016/S0140-6736(97)11096-0\nER  - ",
+    "format": "auto"
+  }
+}
+```
+
+You can also pass an explicit `entries` list or a `sequential_search` `sessionId` instead of a document. The response carries a `summary` (`{total, retracted, deadLink, notFound, unchecked, ok}`) plus per-entry `entries[]` with `exists`, `retractionStatus`, `linkLive`/`httpStatus`, an `archivedUrl` (Wayback) for dead links, `flags`, and a `reason` explaining any `not_found`/`unchecked` flag. The flags distinguish a **possible fabrication** (`not_found` — a DOI Crossref doesn't have) from a source that simply **couldn't be checked** (`unchecked` — e.g. a book or paywalled report; absence of evidence, not proof it's fake). It is **evidence, not a verdict** — you decide what to fix. The audit is capped at 200 entries per call (overflow is reported in `skipped`). Use `verify_citation` for a single citation and `format_bibliography` to produce the list.
+
 ## Combining Tools for Deep Research
 
 A typical research workflow combines multiple tools:

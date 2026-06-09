@@ -755,6 +755,50 @@ var verifyCitationOutputSchema = map[string]any{
 	},
 }
 
+var auditBibliographyOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"source":     map[string]any{"type": "string", "description": "Where the entries came from: 'entries', 'bibliography:<format>', or 'session'."},
+		"entryCount": map[string]any{"type": "integer", "description": "Number of entries audited (after the per-call cap)."},
+		"summary": map[string]any{
+			"type":        "object",
+			"description": "Corpus-level counts.",
+			"properties": map[string]any{
+				"total":     map[string]any{"type": "integer"},
+				"retracted": map[string]any{"type": "integer", "description": "Entries whose DOI/record is retracted."},
+				"deadLink":  map[string]any{"type": "integer", "description": "Entries whose URL did not resolve."},
+				"notFound":  map[string]any{"type": "integer", "description": "Entries whose DOI was looked up against Crossref and had no match — a possible fabrication."},
+				"unchecked": map[string]any{"type": "integer", "description": "Entries that could not be corroborated by any check (no identifier and no live link) — absence of evidence, NOT evidence of absence (e.g. a book or paywalled source)."},
+				"ok":        map[string]any{"type": "integer", "description": "Entries with no flags raised."},
+			},
+		},
+		"entries": map[string]any{
+			"type":        "array",
+			"description": "Per-entry evidence (input order). Evidence, not a verdict.",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"index":            map[string]any{"type": "integer"},
+					"title":            map[string]any{"type": "string"},
+					"doi":              map[string]any{"type": "string"},
+					"url":              map[string]any{"type": "string"},
+					"exists":           map[string]any{"type": "boolean", "description": "Whether existence was confirmed (Crossref for a DOI, or an academic match)."},
+					"retractionStatus": map[string]any{"type": "object", "description": "Crossref integrity status when retracted/corrected; omitted when clean."},
+					"linkLive":         map[string]any{"type": "boolean", "description": "Whether the URL resolved (2xx/3xx)."},
+					"httpStatus":       map[string]any{"type": "integer", "description": "Live HTTP status for the URL (0 = unreachable)."},
+					"archivedUrl":      map[string]any{"type": "string", "description": "Internet Archive (Wayback) snapshot when the live link is dead."},
+					"flags":            map[string]any{"type": "array", "items": map[string]any{"type": "string", "enum": []any{"retracted", "dead_link", "not_found", "unchecked"}}, "description": "Triage flags. Empty = clean. not_found = authoritative DOI absence (possible fabrication); unchecked = could not be corroborated (absence of evidence, e.g. a book/paywalled source)."},
+					"reason":           map[string]any{"type": "string", "description": "Human-readable explanation for a not_found / unchecked flag (so an uncheckable source is never read as fake)."},
+				},
+			},
+		},
+		"skipped":     map[string]any{"type": "integer", "description": "Entries beyond the per-call cap that were not audited (present only when truncated)."},
+		"skippedNote": map[string]any{"type": "string"},
+		"checkedAt":   map[string]any{"type": "string", "description": "UTC timestamp of this point-in-time audit (RFC 3339)."},
+		"trust":       trustUntrustedExternal,
+	},
+}
+
 var filingSearchOutputSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{

@@ -1321,6 +1321,7 @@ Verify a single citation before relying on it — confirm it **exists**, matches
 - **URL input** → liveness via the SSRF-safe link verifier; a Wayback `archivedUrl` when the live link is dead.
 - **Free-text input** → best-match academic lookup with a transparent token-overlap `matchConfidence`; retraction checked when the match carries a DOI.
 - Degrades gracefully when a resolver is unconfigured (reports the gap in `provenance`); never panics.
+- To check a **whole reference list** at once (a document, an explicit list, or a session), use `audit_bibliography` — the corpus-level companion that runs these same checks over every entry.
 
 ### Annotations
 
@@ -1363,6 +1364,43 @@ Each `trials[]` item: `nctId`, `title`, `status`, `phases` (array), `conditions`
 
 ### Cache
 - TTL: 6 hours (only for non-empty results)
+
+---
+
+## Tool 25: `audit_bibliography`
+
+### Purpose
+
+The corpus-level companion to `verify_citation`: audit a **whole bibliography** at once. Read a CSL-JSON / RIS / BibTeX document (what `format_bibliography` exports), an explicit list of references, or a `sequential_search` session's sources, and run the same trust checks over **every** entry — does it exist, is it retracted, and does its link still resolve. Built to catch fabricated or retracted citations across a full reference list (legal filings, papers, systematic reviews) before they ship. Composes the retraction enrichment, the link verifier, and the academic searchers; adds no new provider.
+
+### Input Schema
+
+| Field | Type | Required | Default | Constraints |
+|-------|------|----------|---------|-------------|
+| `bibliography` | string | yes* | — | A bibliography document. *Provide one of `bibliography`/`entries`/`sessionId` |
+| `format` | string | no | `auto` | `auto` (detect), `csl-json`, `ris`, or `bibtex` |
+| `entries` | []object | yes* | — | Explicit references (`url`, `title`, `author`, `site`, `date`, `doi`). *One of `bibliography`/`entries`/`sessionId` |
+| `sessionId` | string | yes* | — | Audit a `sequential_search` session's recorded sources. *One of `bibliography`/`entries`/`sessionId` |
+
+Precedence when more than one is supplied: `entries` → `bibliography` → `sessionId`.
+
+### Output Schema
+
+`source` (where entries came from: `entries` / `bibliography:<format>` / `session`), `entryCount`, `summary` (`{total, retracted, deadLink, notFound, unchecked, ok}`), and `entries[]` — per entry: `index`, `title`, `doi`, `url`, `exists` (bool), `retractionStatus` (when retracted/corrected), `linkLive` + `httpStatus`, `archivedUrl` (Wayback snapshot for a dead link), `flags` (`retracted` / `dead_link` / `not_found` / `unchecked`; empty = clean), and `reason` (a human-readable explanation for a `not_found` / `unchecked` flag). Plus `checkedAt` (RFC 3339 point-in-time stamp), the `trust` marker, and — only when the per-call cap is exceeded — `skipped` + `skippedNote`.
+
+### Behavior
+
+- **Evidence, never a verdict** (same contract as `verify_citation`). It reports what it found per entry and a corpus summary; the caller decides what to fix.
+- **One pass, bounded.** All entry URLs are checked in a single batched, concurrency-bounded link pass; DOI existence+retraction (one Crossref call each) and academic existence lookups run concurrently (bounded). A DOI is authoritative for existence+retraction; without one, existence is confirmed by a best-match academic title lookup.
+- **Flagging** (deliberately distinguishes *evidence of a problem* from *absence of evidence*): `retracted` = the DOI/record is retracted (an expression-of-concern/correction is surfaced in `retractionStatus` but not flagged retracted); `dead_link` = a URL was checked and did not resolve (a Wayback `archivedUrl` is attached when one exists); `not_found` = a DOI was looked up against Crossref and had **no match** — a possible fabrication; `unchecked` = the entry could not be corroborated by any check (no identifier, no live link) — **absence of evidence, not evidence of absence** (e.g. a book, a paywalled or offline source). `not_found` and `unchecked` are never conflated, and each carries a `reason` so a legitimate uncheckable source is never read as fake.
+- **Capped** at the first 200 entries per call; any overflow is reported in `skipped`/`skippedNote` (never silently dropped).
+- Session audits are scoped to the caller's own `(tenant, user)`. Degrades gracefully when a resolver is unconfigured; never panics.
+
+### Annotations
+- ReadOnly: true · Idempotent: true · OpenWorld: true (queries live Crossref, the open web, and the Internet Archive)
+
+### Cache
+- Not cached (a point-in-time liveness/integrity audit).
 
 ---
 
@@ -1471,6 +1509,7 @@ Every tool declares annotations for client consumption (`readOnlyAnnotations(ide
 | citation_graph | true | true | true |
 | research_export | true | true | false |
 | format_bibliography | true | true | false |
+| audit_bibliography | true | true | true |
 | filing_search | true | true | true |
 | legal_search | true | true | true |
 | econ_search | true | true | true |

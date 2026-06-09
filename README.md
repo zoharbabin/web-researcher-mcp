@@ -124,6 +124,7 @@ https://github.com/user-attachments/assets/1d17af8e-1ec4-4a37-b42b-f26712ebe860
 | `econ_search` | Look up economic data — World Bank global development indicators (keyless) and FRED US macro series (GDP, CPI, unemployment, rates) |
 | `clinical_search` | Search ClinicalTrials.gov — clinical-trial registrations with status, phase, sponsor, and whether results are posted (discovery, not medical advice) |
 | `verify_citation` | Check a citation before you rely on it — does it exist, match a real record, and is it retracted or a dead link? Evidence, not a verdict |
+| `audit_bibliography` | Audit a whole reference list in one pass — paste a CSL-JSON/RIS/BibTeX file (or a session) and get per-entry + corpus-level flags for retracted, dead-link, and unverifiable citations |
 | `answer` | Ask a factual question and get one synthesized answer **with citations** — the direct answer, not a reading list |
 | `structured_search` | Search and extract structured JSON per result (supply a schema), or pull entities by category (company, people, …) |
 | `sequential_search` | Multi-step deep research — your AI remembers what it already found and builds on it |
