@@ -298,3 +298,273 @@ func TestAuditBibliography_NothingToAudit(t *testing.T) {
 		t.Error("no input should be a tool error")
 	}
 }
+
+// --- #174: per-entry claim / mischaracterization check ---
+
+// auditClaimDeps returns test deps with a scraper that can reach httptest
+// servers (private IPs allowed) and a link verifier for the dead-link→Wayback path.
+func auditClaimDeps(t *testing.T) Dependencies {
+	t.Helper()
+	deps := setupTestDeps()
+	deps.Scraper = scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	deps.LinkVerifier = scraper.NewLinkVerifier(scraper.LinkVerifierConfig{AllowPrivateIPs: true})
+	return deps
+}
+
+func auditEntry0(t *testing.T, out map[string]any) map[string]any {
+	t.Helper()
+	entries, ok := out["entries"].([]any)
+	if !ok || len(entries) == 0 {
+		t.Fatalf("no entries in result: %v", out)
+	}
+	return entries[0].(map[string]any)
+}
+
+func TestAuditBibliography_ClaimAddressed(t *testing.T) {
+	// The source page contains sentences relevant to the claim → addressed + evidence.
+	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><article><p>The randomized trial showed that the vaccine significantly reduced infection rates. Efficacy was 95% in the treatment group.</p></article></body></html>`))
+	}))
+	defer page.Close()
+
+	out, isErr := callAudit(t, auditClaimDeps(t), map[string]any{
+		"entries": []any{map[string]any{"url": page.URL, "title": "Vaccine trial", "claim": "vaccine efficacy reduced infection"}},
+	})
+	if isErr {
+		t.Fatal("unexpected tool error")
+	}
+	e0 := auditEntry0(t, out)
+	if e0["claimSupport"] != "addressed" {
+		t.Errorf("claimSupport = %v, want addressed", e0["claimSupport"])
+	}
+	ev, _ := e0["claimEvidence"].([]any)
+	if len(ev) == 0 {
+		t.Error("expected claimEvidence sentences when addressed")
+	}
+	// Addressed + live link → not flagged mischaracterized.
+	for _, f := range e0["flags"].([]any) {
+		if f == "mischaracterized" {
+			t.Error("an addressed claim must NOT be flagged mischaracterized")
+		}
+	}
+	if summaryOf(t, out)["mischaracterized"].(float64) != 0 {
+		t.Errorf("mischaracterized count should be 0: %v", out["summary"])
+	}
+}
+
+func TestAuditBibliography_ClaimNotAddressed(t *testing.T) {
+	// The source page is about something else entirely → not_addressed → mischaracterized.
+	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><article><p>This article discusses medieval architecture and the construction of cathedrals in twelfth-century France.</p></article></body></html>`))
+	}))
+	defer page.Close()
+
+	out, isErr := callAudit(t, auditClaimDeps(t), map[string]any{
+		"entries": []any{map[string]any{"url": page.URL, "title": "Mislabeled", "claim": "quantum entanglement teleportation bandwidth"}},
+	})
+	if isErr {
+		t.Fatal("unexpected tool error")
+	}
+	e0 := auditEntry0(t, out)
+	if e0["claimSupport"] != "not_addressed" {
+		t.Errorf("claimSupport = %v, want not_addressed", e0["claimSupport"])
+	}
+	found := false
+	for _, f := range e0["flags"].([]any) {
+		if f == "mischaracterized" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("a source that doesn't address the claim must be flagged mischaracterized: %v", e0)
+	}
+	if e0["reason"] == nil || e0["reason"] == "" {
+		t.Error("a mischaracterized entry must carry a reason")
+	}
+	if summaryOf(t, out)["mischaracterized"].(float64) != 1 {
+		t.Errorf("mischaracterized count should be 1: %v", out["summary"])
+	}
+}
+
+func TestAuditBibliography_ClaimSourceUnavailable(t *testing.T) {
+	// A claim but no fetchable source (no URL) → source_unavailable, not a false flag.
+	out, isErr := callAudit(t, auditClaimDeps(t), map[string]any{
+		"entries": []any{map[string]any{"doi": "10.1/x", "title": "No URL", "claim": "some assertion"}},
+	})
+	if isErr {
+		t.Fatal("unexpected tool error")
+	}
+	e0 := auditEntry0(t, out)
+	if e0["claimSupport"] != "source_unavailable" {
+		t.Errorf("claimSupport = %v, want source_unavailable", e0["claimSupport"])
+	}
+	for _, f := range e0["flags"].([]any) {
+		if f == "mischaracterized" {
+			t.Error("source_unavailable must NOT be flagged mischaracterized (can't check ≠ fake)")
+		}
+	}
+}
+
+func TestAuditBibliography_NoClaimUnaffected(t *testing.T) {
+	// No claim → no claim fields, no fetch, behavior identical to pre-#174.
+	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(200) }))
+	defer page.Close()
+	out, isErr := callAudit(t, auditClaimDeps(t), map[string]any{
+		"entries": []any{map[string]any{"url": page.URL, "title": "No claim"}},
+	})
+	if isErr {
+		t.Fatal("unexpected tool error")
+	}
+	e0 := auditEntry0(t, out)
+	if _, present := e0["claimSupport"]; present {
+		t.Error("no claim → claimSupport must be absent")
+	}
+}
+
+func TestAuditBibliography_ClaimWaybackFallback(t *testing.T) {
+	// Live origin is dead (404); the claim check must fall back to the Wayback
+	// snapshot URL and fetch THAT for the claim text.
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(404) }))
+	defer origin.Close()
+	// The archived snapshot serves the claim-relevant content.
+	archive := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><article><p>The study concluded that remdesivir shortened recovery time in hospitalized patients.</p></article></body></html>`))
+	}))
+	defer archive.Close()
+	// Wayback availability API points at the archive server.
+	wb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"archived_snapshots":{"closest":{"available":true,"url":"` + archive.URL + `","status":"200"}}}`))
+	}))
+	defer wb.Close()
+
+	deps := auditClaimDeps(t)
+	lv := scraper.NewLinkVerifier(scraper.LinkVerifierConfig{AllowPrivateIPs: true})
+	lv.SetWaybackBase(wb.URL)
+	deps.LinkVerifier = lv
+
+	out, isErr := callAudit(t, deps, map[string]any{
+		"entries": []any{map[string]any{"url": origin.URL + "/dead", "title": "Dead but archived", "claim": "remdesivir recovery time"}},
+	})
+	if isErr {
+		t.Fatal("unexpected tool error")
+	}
+	e0 := auditEntry0(t, out)
+	// Dead link is still flagged dead_link...
+	hasDead := false
+	for _, f := range e0["flags"].([]any) {
+		if f == "dead_link" {
+			hasDead = true
+		}
+	}
+	if !hasDead {
+		t.Error("a 404 origin should still be flagged dead_link")
+	}
+	// ...but the claim was checked against the archived copy and addressed.
+	if e0["claimSupport"] != "addressed" {
+		t.Errorf("claim should be checked against the Wayback snapshot (addressed), got %v", e0["claimSupport"])
+	}
+	if e0["claimSourceUrl"] != archive.URL {
+		t.Errorf("claimSourceUrl should be the archived URL %q, got %v", archive.URL, e0["claimSourceUrl"])
+	}
+}
+
+func TestAuditBibliography_ClaimPartiallyAddressed(t *testing.T) {
+	// Source shares ONE of the claim's several terms → partial overlap → evidence
+	// shown, but NOT flagged mischaracterized (ambiguous; the human judges).
+	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><article><p>This paper studies vaccine manufacturing logistics and cold-chain distribution networks across rural regions.</p></article></body></html>`))
+	}))
+	defer page.Close()
+	out, isErr := callAudit(t, auditClaimDeps(t), map[string]any{
+		"entries": []any{map[string]any{"url": page.URL, "title": "Tangential", "claim": "vaccine efficacy randomized controlled trial mortality"}},
+	})
+	if isErr {
+		t.Fatal("unexpected tool error")
+	}
+	e0 := auditEntry0(t, out)
+	if e0["claimSupport"] != "partially_addressed" {
+		t.Errorf("claimSupport = %v, want partially_addressed", e0["claimSupport"])
+	}
+	for _, f := range e0["flags"].([]any) {
+		if f == "mischaracterized" {
+			t.Error("partial overlap must NOT be flagged mischaracterized (under-flag is the safe direction)")
+		}
+	}
+}
+
+func TestAuditBibliography_ClaimContrastSignal(t *testing.T) {
+	// Source addresses the claim's terms but REFUTES it → addressed (terms overlap)
+	// PLUS a contrastSignal so the reader doesn't mistake it for confirmation.
+	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><article><p>The randomized trial found that the vaccine had no significant effect on infection rates; efficacy did not differ from placebo.</p></article></body></html>`))
+	}))
+	defer page.Close()
+	out, isErr := callAudit(t, auditClaimDeps(t), map[string]any{
+		"entries": []any{map[string]any{"url": page.URL, "title": "Refutes", "claim": "vaccine efficacy infection rates significant"}},
+	})
+	if isErr {
+		t.Fatal("unexpected tool error")
+	}
+	e0 := auditEntry0(t, out)
+	if e0["claimSupport"] != "addressed" {
+		t.Errorf("terms overlap → addressed, got %v", e0["claimSupport"])
+	}
+	if e0["contrastSignal"] != true {
+		t.Errorf("a refuting (negation-bearing) source must raise contrastSignal: %v", e0)
+	}
+}
+
+func TestAuditBibliography_ClaimAllStopwords(t *testing.T) {
+	// A claim made only of stop words → no significant terms → cannot judge
+	// coverage → partially_addressed, NEVER mischaracterized.
+	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><article><p>Some ordinary prose about a topic.</p></article></body></html>`))
+	}))
+	defer page.Close()
+	out, isErr := callAudit(t, auditClaimDeps(t), map[string]any{
+		"entries": []any{map[string]any{"url": page.URL, "title": "Stopwords", "claim": "the and for are was"}},
+	})
+	if isErr {
+		t.Fatal("unexpected tool error")
+	}
+	e0 := auditEntry0(t, out)
+	if e0["claimSupport"] != "partially_addressed" {
+		t.Errorf("an all-stopword claim should be partially_addressed (no judgment), got %v", e0["claimSupport"])
+	}
+	for _, f := range e0["flags"].([]any) {
+		if f == "mischaracterized" {
+			t.Error("an all-stopword claim must NOT be flagged mischaracterized")
+		}
+	}
+}
+
+func TestAuditBibliography_ClaimNilScraper(t *testing.T) {
+	// A claim given, a live URL, but no scraper configured → source_unavailable,
+	// not a panic and not a false mischaracterized flag.
+	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(200) }))
+	defer page.Close()
+	deps := setupTestDeps()
+	deps.LinkVerifier = scraper.NewLinkVerifier(scraper.LinkVerifierConfig{AllowPrivateIPs: true})
+	deps.Scraper = nil // explicitly no scraper
+	out, isErr := callAudit(t, deps, map[string]any{
+		"entries": []any{map[string]any{"url": page.URL, "title": "No scraper", "claim": "some assertion here"}},
+	})
+	if isErr {
+		t.Fatal("unexpected tool error")
+	}
+	e0 := auditEntry0(t, out)
+	if e0["claimSupport"] != "source_unavailable" {
+		t.Errorf("no scraper → source_unavailable, got %v", e0["claimSupport"])
+	}
+	for _, f := range e0["flags"].([]any) {
+		if f == "mischaracterized" {
+			t.Error("source_unavailable must NOT be flagged mischaracterized")
+		}
+	}
+}
