@@ -36,6 +36,37 @@ var stanceMarkers = []string{
 	"randomized", "rct", "compared with", "compared to",
 }
 
+// contrastCues are negation/contrast terms that flip or oppose a claim's stance.
+// They are a deliberately narrow subset focused on contradiction (NOT the broad
+// stanceMarkers, which include supporting cues): a matched evidence sentence
+// carrying one of these may REFUTE the claim even though it shares the claim's
+// terms — the lexical "false-addressed" hole. We surface this as a neutral
+// "read this sentence yourself" signal, never as a refutes verdict.
+var contrastCues = []string{
+	"not significant", "no significant", "however", "although", "contrary",
+	"contradict", "dispute", "refute", "disprove", "failed to", "did not",
+	"does not", "do not", "no evidence", "no association", "no difference",
+	"in contrast", "whereas", "nevertheless", "conversely", "unlike", "rather than",
+	"contrary to", "rejected", "no effect", "not associated", "not supported",
+}
+
+// HasContrastCue reports whether any sentence in evidence contains a
+// negation/contrast cue — i.e. a matched-on-terms sentence that may oppose the
+// claim. Used by audit_bibliography (#174) to raise a neutral contrastSignal so a
+// source that lexically "addresses" a claim while refuting it isn't read as
+// reassurance. Evidence, not a verdict: it flags "read this", never "refutes".
+func HasContrastCue(sentences []string) bool {
+	for _, s := range sentences {
+		lower := strings.ToLower(s)
+		for _, c := range contrastCues {
+			if strings.Contains(lower, c) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // ExtractClaimEvidence finds the sentences in content most relevant to claim and
 // returns them (plus the single strongest as Signal). Returns a zero ClaimEvidence
 // when claim or content is empty, or when nothing relevant is found.
@@ -106,6 +137,27 @@ func ExtractClaimEvidence(text, claim string) ClaimEvidence {
 		out = append(out, h.text)
 	}
 	return ClaimEvidence{Signal: signal, KeySentences: out}
+}
+
+// ClaimTermCoverage reports how many of a claim's distinct significant terms
+// appear anywhere in text (matched) out of the total distinct significant terms
+// in the claim. It is the transparent, dependency-free measure of how much a
+// source actually overlaps a claim's topic — used by audit_bibliography (#174)
+// to distinguish a source that addresses a claim from one that's simply the
+// wrong source. total==0 means the claim had no significant terms to match.
+func ClaimTermCoverage(text, claim string) (matched, total int) {
+	terms := claimTerms(claim)
+	total = len(terms)
+	if total == 0 || strings.TrimSpace(text) == "" {
+		return 0, total
+	}
+	lower := strings.ToLower(text)
+	for _, t := range terms {
+		if strings.Contains(lower, t) {
+			matched++
+		}
+	}
+	return matched, total
 }
 
 // claimTerms tokenizes a claim into distinct, lowercased significant terms,

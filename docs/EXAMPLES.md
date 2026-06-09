@@ -399,7 +399,26 @@ Before filing a brief or submitting a paper, audit the whole reference list in o
 }
 ```
 
-You can also pass an explicit `entries` list or a `sequential_search` `sessionId` instead of a document. The response carries a `summary` (`{total, retracted, deadLink, notFound, unchecked, ok}`) plus per-entry `entries[]` with `exists`, `retractionStatus`, `linkLive`/`httpStatus`, an `archivedUrl` (Wayback) for dead links, `flags`, and a `reason` explaining any `not_found`/`unchecked` flag. The flags distinguish a **possible fabrication** (`not_found` — a DOI Crossref doesn't have) from a source that simply **couldn't be checked** (`unchecked` — e.g. a book or paywalled report; absence of evidence, not proof it's fake). It is **evidence, not a verdict** — you decide what to fix. The audit is capped at 200 entries per call (overflow is reported in `skipped`). Use `verify_citation` for a single citation and `format_bibliography` to produce the list.
+You can also pass an explicit `entries` list or a `sequential_search` `sessionId` instead of a document. The response carries a `summary` (`{total, retracted, deadLink, notFound, unchecked, mischaracterized, ok}`) plus per-entry `entries[]` with `exists`, `retractionStatus`, `linkLive`/`httpStatus`, an `archivedUrl` (Wayback) for dead links, `flags`, and a `reason` explaining any flagged entry. The flags distinguish a **possible fabrication** (`not_found` — a DOI Crossref doesn't have) from a source that simply **couldn't be checked** (`unchecked` — e.g. a book or paywalled report; absence of evidence, not proof it's fake). It is **evidence, not a verdict** — you decide what to fix. The audit is capped at 200 entries per call (overflow is reported in `skipped`). Use `verify_citation` for a single citation and `format_bibliography` to produce the list.
+
+To also check that a source **actually says what it's cited for** (mischaracterization), add a `claim` to an explicit entry:
+
+```json
+{
+  "tool": "audit_bibliography",
+  "arguments": {
+    "entries": [
+      {
+        "url": "https://www.nejm.org/doi/full/10.1056/NEJMoa2007764",
+        "title": "Remdesivir for COVID-19",
+        "claim": "remdesivir shortened recovery time in hospitalized patients"
+      }
+    ]
+  }
+}
+```
+
+The source page is fetched (live, or its Wayback snapshot if the link is dead) and checked for whether it addresses the claim. `claimSupport` reports **coverage, not a stance**: `addressed` (claim-relevant sentences found — returned in `claimEvidence` so you judge whether they support or contradict), `partially_addressed` (some overlap — evidence shown but not flagged; ambiguous, you judge), `not_addressed` (the source doesn't mention the claim → flagged `mischaracterized`), or `source_unavailable`. It never asserts "supports"/"refutes" — you read the evidence and decide.
 
 ## Combining Tools for Deep Research
 

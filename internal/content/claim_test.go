@@ -91,3 +91,42 @@ func TestClaimTermsDropsStopWords(t *testing.T) {
 		}
 	}
 }
+
+func TestClaimTermCoverage(t *testing.T) {
+	text := "The randomized trial showed the vaccine reduced infection rates significantly."
+	// All three significant terms present.
+	if m, total := ClaimTermCoverage(text, "vaccine infection rates"); m != 3 || total != 3 {
+		t.Errorf("full coverage: matched=%d total=%d, want 3/3", m, total)
+	}
+	// None present → 0/total.
+	if m, total := ClaimTermCoverage(text, "quantum teleportation bandwidth"); m != 0 || total != 3 {
+		t.Errorf("zero coverage: matched=%d total=%d, want 0/3", m, total)
+	}
+	// Partial.
+	if m, total := ClaimTermCoverage(text, "vaccine bandwidth latency"); m != 1 || total != 3 {
+		t.Errorf("partial coverage: matched=%d total=%d, want 1/3", m, total)
+	}
+	// Empty text or claim → 0.
+	if m, _ := ClaimTermCoverage("", "vaccine"); m != 0 {
+		t.Errorf("empty text should be 0 matched")
+	}
+	// All-stopword claim → total 0 (no judgment possible).
+	if _, total := ClaimTermCoverage(text, "the and for"); total != 0 {
+		t.Errorf("all-stopword claim should have total 0, got %d", total)
+	}
+}
+
+func TestHasContrastCue(t *testing.T) {
+	if !HasContrastCue([]string{"The drug had no significant effect on mortality."}) {
+		t.Error("a sentence with 'no significant' should carry a contrast cue")
+	}
+	if !HasContrastCue([]string{"Plain sentence.", "However, the result did not replicate."}) {
+		t.Error("'did not' / 'however' should be detected")
+	}
+	if HasContrastCue([]string{"The vaccine reduced infection rates substantially."}) {
+		t.Error("a plain supporting sentence should NOT carry a contrast cue")
+	}
+	if HasContrastCue(nil) {
+		t.Error("empty evidence should not signal contrast")
+	}
+}
