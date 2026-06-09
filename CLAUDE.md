@@ -26,7 +26,7 @@ internal/
 ├── cache/        # Cache interface + hybrid impl (memory + AES-encrypted disk)
 ├── persist/      # Generic TTL key/value Store (memory or AES-256-GCM disk) — backs token revocation + rate-quota durability
 ├── redisbackend/ # SOLE go-redis importer: Redis impls of cache/persist/session for HTTP distributed state — gated, fail-fast, encrypted (opt-in via REDIS_URL)
-├── content/      # Sanitize, dedup, truncate, quality score, typed source classification + domain-reputation signal, claim-evidence extraction, citation extraction, content recommendations + auto-formatted components
+├── content/      # Sanitize, dedup, truncate, quality score, typed source classification + domain-reputation signal, claim-evidence extraction, citation extraction + bibliography read/write (APA/MLA/BibTeX/RIS/CSL-JSON round-trip), content recommendations + auto-formatted components
 ├── config/       # Env-based config — all vars documented in .env.example
 ├── server/       # MCP server lifecycle (STDIO + Streamable HTTP) + admin endpoints (cache/session flush, /admin/data, /admin/consent, /admin/analytics, /admin/workspace/members) + operator dashboard (/dashboard HTML + admin-gated /dashboard/data, nonce-CSP)
 ├── auth/         # OAuth 2.1 middleware (JWKS, audience/issuer validation)

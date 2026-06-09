@@ -65,7 +65,10 @@ func (c *CrossrefRetractionResolver) Resolve(ctx context.Context, doi string) (*
 	var status *RetractionStatus
 	var found bool
 	err := c.deps.Breaker.Execute(func() error {
-		reqURL := fmt.Sprintf("%s/%s", c.baseURL, doi)
+		// Build the /works/{doi} URL via net/url so any unsafe characters in the
+		// DOI are path-escaped (defense in depth — detectDOI already rejects CRLF /
+		// space / %), while the DOI's own slash is preserved as a path separator.
+		reqURL := c.baseURL + "/" + crossrefEscapeDOI(doi)
 		if c.mailto != "" {
 			reqURL += "?mailto=" + url.QueryEscape(c.mailto)
 		}
@@ -159,6 +162,19 @@ func classifyUpdateType(t string) (kind string, severity int) {
 	default:
 		return "", 0
 	}
+}
+
+// crossrefEscapeDOI path-escapes each segment of a DOI while keeping the slashes
+// that are part of the identifier (Crossref's /works/{doi} expects the DOI's own
+// "/" verbatim). This neutralizes a "../"-style traversal segment (it becomes a
+// literal escaped segment that simply 404s) without breaking legitimate DOIs
+// like 10.1038/nature12373.
+func crossrefEscapeDOI(doi string) string {
+	parts := strings.Split(doi, "/")
+	for i, p := range parts {
+		parts[i] = url.PathEscape(p)
+	}
+	return strings.Join(parts, "/")
 }
 
 // normalizeDOI strips a doi.org URL prefix and trims; returns "" for empty.

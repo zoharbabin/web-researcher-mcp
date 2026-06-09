@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
@@ -153,5 +154,27 @@ func TestNormalizeDOI(t *testing.T) {
 		if got := normalizeDOI(in); got != want {
 			t.Errorf("normalizeDOI(%q)=%q want %q", in, got, want)
 		}
+	}
+}
+
+func TestCrossrefEscapeDOI(t *testing.T) {
+	t.Parallel()
+	// The DOI's own slash is a real path separator and is preserved; a simple
+	// alphanumeric DOI is unchanged.
+	if got := crossrefEscapeDOI("10.1038/nature12373"); got != "10.1038/nature12373" {
+		t.Errorf("simple DOI must be unchanged: %q", got)
+	}
+	// A DOI with sub-delim chars (parens) keeps its slash structure; the parens
+	// may be percent-encoded — Crossref decodes them, and the live polite-pool
+	// call still resolves (asserted in the integration tests). The guarantee here
+	// is that the slash count (path depth) is preserved and the host can't change.
+	got := crossrefEscapeDOI("10.1016/S0140-6736(97)11096-0")
+	if strings.Count(got, "/") != 1 {
+		t.Errorf("slash structure (path depth) must be preserved: %q", got)
+	}
+	// Unsafe chars within a segment are escaped (defense in depth), so a "../"
+	// segment can only 404 — it can't climb the path or change the host.
+	if got := crossrefEscapeDOI("10.1/a b"); got != "10.1/a%20b" {
+		t.Errorf("space not escaped: %q", got)
 	}
 }

@@ -101,6 +101,11 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	// resolver is absent (the retraction resolver + link verifier are always
 	// constructed; the academic match is best-effort).
 	registerVerifyCitation(srv, deps)
+	// audit_bibliography — the corpus-level companion to verify_citation. Reads a
+	// whole bibliography in (CSL-JSON/RIS/BibTeX, an explicit list, or a session)
+	// and runs existence/retraction/dead-link over every entry. Composes the same
+	// resolvers; always registered (degrades gracefully like verify_citation).
+	registerAuditBibliography(srv, deps)
 
 	// citation_graph (#47) — registered only when a citation-capable academic
 	// provider (semanticscholar or openalex) is configured.
