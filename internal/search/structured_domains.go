@@ -220,13 +220,14 @@ type EconProviderConfig struct {
 }
 
 // SupportedEconProviders is the source of truth for econ provider names. FRED is
-// US macro data (needs a key); World Bank is global development indicators
-// (keyless), so it is always available.
-var SupportedEconProviders = []string{"fred", "worldbank"}
+// US macro data (needs a key); World Bank (global development indicators), OECD
+// (OECD-economy indicators via SDMX), and Eurostat (European official statistics)
+// are all keyless, so they are always available.
+var SupportedEconProviders = []string{"fred", "worldbank", "oecd", "eurostat"}
 
 // NewEconProviderByName constructs an econ provider, or nil when its required
-// config is absent (provider skipped — no dead config). World Bank is keyless,
-// so it always constructs.
+// config is absent (provider skipped — no dead config). World Bank, OECD, and
+// Eurostat are keyless, so they always construct.
 func NewEconProviderByName(name string, cfg EconProviderConfig, deps Deps) EconProvider {
 	switch name {
 	case "fred":
@@ -235,6 +236,10 @@ func NewEconProviderByName(name string, cfg EconProviderConfig, deps Deps) EconP
 		}
 	case "worldbank":
 		return NewWorldBankProvider(deps)
+	case "oecd":
+		return NewOECDProvider(deps)
+	case "eurostat":
+		return NewEurostatProvider(deps)
 	}
 	return nil
 }

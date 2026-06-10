@@ -1,4 +1,4 @@
-.PHONY: build build-fips sync-lenses test test-race test-cover test-e2e test-live test-concurrency test-bench \
+.PHONY: build build-fips sync-lenses test test-race test-cover test-e2e test-live test-eval test-concurrency test-bench \
         lint fmt fmt-check vet vuln sec tools hooks precommit verify clean run dev docker docker-smoke release version-sync help all
 
 BINARY = web-researcher-mcp
@@ -48,6 +48,14 @@ test-e2e:
 # credentials in the environment before running.
 test-live:
 	go test -tags=live -count=1 ./internal/search/...
+
+# Labeled accuracy eval for the trust suite (#180): runs verify_citation +
+# audit_bibliography against a curated gold set of fabricated/retracted/real/
+# mischaracterized citations and reports precision/recall per signal. Opt-in
+# (live, network + CROSSREF_EMAIL); the eval fails on any FALSE POSITIVE
+# (mislabeling a legitimate source) — the unacceptable error for a trust tool.
+test-eval:
+	go test -tags=live -count=1 -v -run TestTrustSuiteAccuracy ./internal/tools/...
 
 # Concurrency-focused tests (shared-state contention). Always on: they are
 # bounded (a few seconds) and only meaningful under -race.

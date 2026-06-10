@@ -455,10 +455,7 @@ func buildTestHTTPServer(t *testing.T) *httptest.Server {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, "ok")
 	})
-	mux.HandleFunc("GET /health/ready", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, "ready")
-	})
+	mux.HandleFunc("GET /health/ready", readinessHandler(nil))
 	mux.Handle("GET /metrics", metricsCollector.HTTPHandler())
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -508,6 +505,47 @@ func TestHealthReadyEndpoint(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	if string(body) != "ready" {
 		t.Fatalf("expected body 'ready', got %q", body)
+	}
+}
+
+// statusHealth is a HealthSnapshotter returning a snapshot with a chosen status,
+// whose JSON shape matches search.HealthSnapshot (a "status" field), so
+// readinessHandler reads it exactly as it reads the real Router snapshot —
+// without importing search. (dashboard_test.go has its own fixed stubHealth.)
+type statusHealth struct{ status string }
+
+func (s statusHealth) Health() any {
+	return map[string]any{"status": s.status, "providers": []any{}}
+}
+
+// TestReadinessHandler is the #186 regression guard: /health/ready must reflect
+// provider health — 503 only when every breaker is open ("unhealthy"); 200 for
+// nil (no routing), "healthy", and "degraded" (fallback can still serve).
+func TestReadinessHandler(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		health     HealthSnapshotter
+		wantStatus int
+		wantInBody string
+	}{
+		{"nil/no-routing", nil, http.StatusOK, "ready"},
+		{"healthy", statusHealth{"healthy"}, http.StatusOK, `"status":"healthy"`},
+		{"degraded stays ready", statusHealth{"degraded"}, http.StatusOK, `"status":"degraded"`},
+		{"unhealthy → 503", statusHealth{"unhealthy"}, http.StatusServiceUnavailable, `"status":"unhealthy"`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			rec := httptest.NewRecorder()
+			readinessHandler(tc.health)(rec, httptest.NewRequest(http.MethodGet, "/health/ready", nil))
+			if rec.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d", rec.Code, tc.wantStatus)
+			}
+			if body := rec.Body.String(); !strings.Contains(body, tc.wantInBody) {
+				t.Fatalf("body = %q, want to contain %q", body, tc.wantInBody)
+			}
+		})
 	}
 }
 

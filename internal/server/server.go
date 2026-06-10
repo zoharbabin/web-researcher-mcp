@@ -28,6 +28,11 @@ type Config struct {
 	Name    string
 	Version string
 	Logger  *slog.Logger
+	// CompletionHandler, when non-nil, serves MCP completion/complete requests
+	// (argument autocompletion, e.g. lens/provider names — #193). Setting it
+	// makes the SDK advertise the completions capability automatically. Nil
+	// leaves completion unsupported (the prior behavior).
+	CompletionHandler func(context.Context, *mcp.CompleteRequest) (*mcp.CompleteResult, error)
 }
 
 type HTTPConfig struct {
@@ -91,7 +96,8 @@ func New(cfg Config) *Server {
 			Version: cfg.Version,
 		},
 		&mcp.ServerOptions{
-			Logger: cfg.Logger,
+			Logger:            cfg.Logger,
+			CompletionHandler: cfg.CompletionHandler,
 		},
 	)
 
@@ -122,10 +128,7 @@ func (s *Server) ServeHTTP(ctx context.Context, cfg HTTPConfig) error {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, "ok")
 	})
-	mux.HandleFunc("GET /health/ready", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, "ready")
-	})
+	mux.HandleFunc("GET /health/ready", readinessHandler(cfg.Health))
 
 	mux.Handle("GET /metrics", cfg.Metrics.HTTPHandler())
 
@@ -216,6 +219,71 @@ func (s *Server) ServeHTTP(ctx context.Context, cfg HTTPConfig) error {
 // defaultShutdownTimeout is the in-flight-drain budget when HTTPConfig.ShutdownTimeout
 // is unset — matches the 30s drain documented in docs/DEPLOYMENT.md.
 const defaultShutdownTimeout = 30 * time.Second
+
+// readinessHandler serves GET /health/ready. Unlike /health/live (a degraded-but-
+// alive process must NOT be killed, so liveness stays static 200), readiness
+// reflects whether the pod can actually serve a query: when multi-provider
+// routing is configured and EVERY provider's circuit breaker is open, no search
+// can succeed, so the pod should be pulled from the load balancer with a 503.
+//
+// health is the same HealthSnapshotter the operator dashboard uses (backed by
+// search.Router.Health()). The server package stays decoupled from search by
+// reading the snapshot's "status" field out of its JSON form rather than
+// importing the concrete type:
+//   - health == nil (single-provider / no routing): always 200 — there is no
+//     breaker ladder to gate on and the process is ready by construction.
+//   - status == "unhealthy" (all breakers open): 503.
+//   - status "healthy" / "degraded" (some provider can serve): 200. "degraded"
+//     stays ready — fallback providers still serve.
+//
+// The body is the aggregate status only (`{"status":"…"}`); the per-provider
+// breaker list is NOT echoed here (this route is unauthenticated — topology stays
+// behind the admin-gated dashboard / diagnostics:// resource).
+func readinessHandler(health HealthSnapshotter) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		if health == nil {
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, "ready")
+			return
+		}
+		body, err := json.Marshal(health.Health())
+		if err != nil {
+			// A snapshot that won't marshal is itself a fault — fail ready-closed.
+			w.WriteHeader(http.StatusServiceUnavailable)
+			fmt.Fprint(w, `{"status":"unhealthy"}`)
+			return
+		}
+		// Probes are UNAUTHENTICATED, so the response echoes only the aggregate
+		// status — never the provider/breaker list (operator topology). The full
+		// snapshot stays behind the admin-gated dashboard / diagnostics:// resource.
+		aggregate := readinessStatus(body)
+		httpStatus := http.StatusOK
+		if aggregate == "unhealthy" {
+			httpStatus = http.StatusServiceUnavailable
+		}
+		if aggregate == "" {
+			aggregate = "ready"
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(httpStatus)
+		fmt.Fprintf(w, `{"status":%q}`, aggregate)
+	}
+}
+
+// readinessStatus extracts the aggregate "status" string from a marshaled health
+// snapshot. Decoupling shim: the server package never imports search, so it reads
+// the field that search.HealthSnapshot.Status (and resources.fakeHealth) both
+// emit. An absent/unparsable status is treated as non-unhealthy (ready) — the
+// 503 path fires only on an explicit "unhealthy".
+func readinessStatus(snapshotJSON []byte) string {
+	var probe struct {
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(snapshotJSON, &probe); err != nil {
+		return ""
+	}
+	return probe.Status
+}
 
 // maxBytes wraps next so request bodies larger than limit bytes are rejected
 // (the wrapped handler's Read returns an error the SDK surfaces as 413). A

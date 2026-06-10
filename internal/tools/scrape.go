@@ -188,7 +188,9 @@ func scrapeRaw(ctx context.Context, deps Dependencies, input scrapePageInput, ma
 	if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
 		recordToolCall(deps, "scrape_page", time.Since(start), nil, "", true)
 		auditToolCall(ctx, deps, "scrape_page", time.Since(start), nil, "")
-		return cachedResultWithMeta(cached, meta), nil, nil
+		// A cached raw body can be large; link it past the threshold (#181) while
+		// keeping the cache-freshness _meta. Small bodies inline as before.
+		return withCacheMeta(largeResultOrInline(ctx, deps, cached, "raw page content for "+input.URL), meta), nil, nil
 	}
 
 	// Negative-cache short-circuit. URL-level failures (SSRF/blocked/auth/browser/
@@ -249,7 +251,9 @@ func scrapeRaw(ctx context.Context, deps Dependencies, input scrapePageInput, ma
 		trackOutcome(ctx, deps, input.SessionID, "", true, "", input.URL)
 	}
 
-	return structuredResult(jsonBytes), nil, nil
+	// Raw page bodies are the heaviest single-tool payload; link past the
+	// threshold (#181) so the full text stays out of context until fetched.
+	return largeResultOrInline(ctx, deps, jsonBytes, "raw page content for "+input.URL), nil, nil
 }
 
 // scrapeCacheKey keys a cached scrape by URL, mode, AND the effective

@@ -19,7 +19,7 @@ make verify                                                  # fmt-check + vet +
 ```
 cmd/web-researcher-mcp/main.go   # Wiring only — constructs deps, starts server
 internal/
-├── tools/        # One file per tool, typed input structs, registered in registry.go
+├── tools/        # One file per tool, typed input structs, registered in registry.go; large-payload resource_link store (artifacts.go: research://artifact/{id})
 ├── search/       # Provider interface + adapters + Router (multi-provider fallback); DOI enrichment: open-access (Unpaywall) + retraction status (Crossref Retraction Watch); custom/validated lenses
 ├── scraper/      # 4-tier pipeline: markdown → stealth → HTML → browser (go-rod); SSRF-safe client; link verifier (liveness + Wayback archive)
 ├── documents/    # PDF, DOCX, PPTX extraction
@@ -40,7 +40,7 @@ internal/
 ├── metrics/      # Prometheus counters/histograms per tool + per-tenant aggregate analytics + bounded recent-errors ring (diagnostics://errors/recent)
 ├── ratelimit/    # Token bucket (per-tenant + global) + optional atomic cross-pod daily quota (Redis)
 ├── circuit/      # Circuit breaker for external APIs
-└── resources/    # MCP Resources (stats:// + diagnostics:// errors/health) + Prompts (research templates)
+└── resources/    # MCP Resources (stats:// + diagnostics:// errors/health) + Prompts (research templates) + completion/complete handler (lens/provider/enum arg autocompletion, DI suppliers)
 lenses/           # JSON files defining domain lists for site-restricted search (CANONICAL source; go:embed'd into the binary via internal/search/lenses_embed/ so lenses work from any CWD/install — keep in sync with `make sync-lenses`, guarded by TestEmbeddedLensesMatchRoot)
 tests/e2e/        # Full process E2E tests
 tests/benchmark/  # Performance benchmarks
@@ -123,6 +123,8 @@ Push a `v*` tag → CI runs GoReleaser → cross-platform binaries + Docker mult
 - Unit tests (no network): mock interfaces, table-driven, `t.Parallel()`
 - Integration tests: `httptest` servers, real components, mock external APIs
 - E2E tests: real binary, real MCP transport, require API keys
+- Live tests (`//go:build live`, `make test-live`): hit real provider APIs; skip when creds absent
+- Trust-suite accuracy eval (`make test-eval`, `internal/tools/trust_eval_live_test.go`): labeled gold set (fabricated/retracted/real/mischaracterized) → precision/recall per signal; fails on any false positive (mislabeling a legitimate source)
 - Always run `go test -race ./...` before submitting
 
 ## Documentation Guidelines
