@@ -229,6 +229,23 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Persist the cross-compiled (and signed/notarized) binaries so the
+      # downstream publish-pypi job can wrap them into wheels WITHOUT re-running
+      # GoReleaser. Positioned LAST and continue-on-error so a missing-glob (e.g. a
+      # future GOAMD64 dist-dir rename) can never abort the core release's
+      # cosign/SBOM/.mcpb steps — the wheels just don't publish that run.
+      - name: Upload dist binaries for wheel build
+        if: ${{ vars.PYPI_PUBLISH_ENABLED == 'true' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-binaries
+          retention-days: 1
+          if-no-files-found: error
+          path: |
+            dist/web-researcher-mcp_*/web-researcher-mcp
+            dist/web-researcher-mcp_*/web-researcher-mcp.exe
+
   docker-sign:
     name: Sign Docker Images
     runs-on: ubuntu-latest
@@ -308,3 +325,37 @@ jobs:
           smithery mcp publish "dist/mcpb/web-researcher-mcp_${VERSION}_linux_amd64.mcpb" \
             -n web-researcher-mcp/web-researcher-mcp || echo "Smithery publish failed (non-fatal)"
 
+  # PyPI platform wheels for uvx/uv/pip (#160). A SEPARATE downstream job, off the
+  # release job's critical path: a PyPI hiccup can never abort the cosign/SBOM/.mcpb
+  # post-steps (the hard-won release-pipeline lesson). Gated on the repo var so an
+  # unconfigured repo is a clean no-op; publishes via Trusted Publishing (OIDC),
+  # no token secret. skip-existing tolerates a partial-failure re-run.
+  publish-pypi:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    needs: release
+    if: ${{ vars.PYPI_PUBLISH_ENABLED == 'true' }}
+    environment: pypi
+    permissions:
+      id-token: write   # mandatory for PyPI Trusted Publishing; job-scoped
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download dist binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-binaries
+          path: dist
+
+      - name: Build platform wheels
+        run: python3 scripts/build_wheels.py "${GITHUB_REF_NAME#v}" --dist dist --out dist/wheels
+
+      - name: Publish wheels to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/wheels
+          skip-existing: true

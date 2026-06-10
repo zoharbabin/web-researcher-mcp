@@ -43,3 +43,7 @@ assets/*.mp4
 # allowlist, so this whole folder is invisible to the published site.
 docs/internal/
 .mcpregistry_*
+
+# Python bytecode (scripts/build_wheels.py)
+__pycache__/
+*.pyc

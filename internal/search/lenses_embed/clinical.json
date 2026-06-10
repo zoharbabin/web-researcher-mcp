@@ -1,0 +1,18 @@
+{
+  "name": "clinical",
+  "description": "Clinical evidence, trials, drug safety, and evidence-based medicine",
+  "domains": [
+    "pubmed.ncbi.nlm.nih.gov",
+    "cochranelibrary.com",
+    "clinicaltrials.gov",
+    "fda.gov",
+    "who.int",
+    "nice.org.uk",
+    "ema.europa.eu",
+    "drugs.com",
+    "medlineplus.gov",
+    "uptodate.com"
+  ],
+  "cx": "",
+  "routing": ""
+}

@@ -514,6 +514,38 @@ When `REDIS_URL` is set (HTTP mode), a `RedisStore` satisfying this same interfa
 
 ---
 
+## PyPI (uvx / uv / pip)
+
+The server is published to PyPI as **platform wheels that vendor the prebuilt, signed Go binary** — no Go toolchain, no compilation. This is the broadest, fastest path for Python-native users (the `uvx` one-liner is the officially recommended way to run Python MCP servers):
+
+```bash
+# Run on demand (no install) — uv fetches the right binary for your platform:
+uvx web-researcher-mcp
+
+# Or install as a persistent tool:
+uv tool install web-researcher-mcp
+
+# Or via pip:
+pip install web-researcher-mcp
+```
+
+**Claude Code config (uvx):**
+```json
+{
+  "mcpServers": {
+    "web-researcher": {
+      "command": "uvx",
+      "args": ["web-researcher-mcp"],
+      "env": { "GOOGLE_CUSTOM_SEARCH_API_KEY": "...", "GOOGLE_CUSTOM_SEARCH_ID": "..." }
+    }
+  }
+}
+```
+
+The wheels are `py3-none-<platform>` (one per OS/arch; the `none` ABI means any Python 3.10+), built by `scripts/build_wheels.py` (stdlib-only — no build backend) from the same GoReleaser binaries every other channel ships, and published on each release via PyPI Trusted Publishing (OIDC). Publishing is gated on the `PYPI_PUBLISH_ENABLED` GitHub Actions **repository variable** (a CI knob, like `SMITHERY_ENABLED`/`AZURE_SIGNING_ENABLED` — not a runtime env var); an unset repo is a clean no-op. The PyPI side uses Trusted Publishing configured against this repo + the release workflow + the `pypi` environment. The wheel is a thin launcher that `exec`s the bundled binary, so behavior is identical to running it directly.
+
+---
+
 ## go install
 
 ```bash

@@ -1,0 +1,18 @@
+{
+  "name": "academic",
+  "description": "Preprint servers, institutional repositories, and open-access journals",
+  "domains": [
+    "arxiv.org",
+    "biorxiv.org",
+    "medrxiv.org",
+    "ssrn.com",
+    "scholar.google.com",
+    "semanticscholar.org",
+    "doaj.org",
+    "core.ac.uk",
+    "researchgate.net",
+    "jstor.org"
+  ],
+  "cx": "",
+  "routing": ""
+}

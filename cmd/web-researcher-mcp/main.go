@@ -206,8 +206,20 @@ func main() {
 	}
 	searchBreaker := circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60})
 
-	if err := search.GetLensRegistry().LoadFromDir("lenses"); err != nil {
-		logger.Warn("failed to load search lenses", "err", err)
+	// Bundled lenses load from the embedded copy FIRST, so they are always present
+	// regardless of CWD or install method (uvx/pip wheel, `go install`, a bare
+	// binary) — lenses are the core differentiator and must never silently vanish.
+	if err := search.GetLensRegistry().LoadEmbedded(); err != nil {
+		logger.Warn("failed to load embedded search lenses", "err", err)
+	}
+	// Then overlay an on-disk lenses/ dir when present (packaged installs ship one
+	// under the binary and let operators edit it). Absence is normal for
+	// CWD-independent installs — the embedded set already covered it, so a missing
+	// dir is silent; only a malformed file present on disk is worth a warning.
+	if _, statErr := os.Stat("lenses"); statErr == nil {
+		if err := search.GetLensRegistry().LoadFromDir("lenses"); err != nil {
+			logger.Warn("failed to load on-disk search lenses", "err", err)
+		}
 	}
 	// Custom lenses (#164): an operator-supplied directory of additional lens
 	// JSON files (CUSTOM_LENSES_PATH), loaded AFTER the bundled set so a custom

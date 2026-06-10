@@ -1,0 +1,17 @@
+{
+  "name": "medical",
+  "description": "Medical and health information from authoritative sources",
+  "domains": [
+    "nih.gov",
+    "mayoclinic.org",
+    "who.int",
+    "cdc.gov",
+    "pubmed.ncbi.nlm.nih.gov",
+    "medlineplus.gov",
+    "uptodate.com",
+    "bmj.com",
+    "thelancet.com",
+    "nejm.org"
+  ],
+  "cx": ""
+}
