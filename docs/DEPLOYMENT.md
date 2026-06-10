@@ -334,6 +334,7 @@ These tune the embedded `http.Server` and response security headers. **All are i
 | `HTTP_READ_TIMEOUT` | Max time to read the full request | `30s` |
 | `HTTP_WRITE_TIMEOUT` | Max time to write the response. `0` = unlimited (keep permissive for long responses) | `0` |
 | `HTTP_IDLE_TIMEOUT` | Frees idle keep-alive connections | `120s` |
+| `HTTP_SHUTDOWN_TIMEOUT` | Grace period to drain in-flight requests on SIGINT/SIGTERM before a hard close | `30s` |
 | `HTTP_MAX_HEADER_BYTES` | Caps total request header size against header-flood memory exhaustion | `1048576` (1 MB) |
 | `MAX_REQUEST_BODY_BYTES` | Caps `/mcp` and `/admin` request body size; oversized bodies are rejected with `413`. Set higher for large MCP payloads | `10485760` (10 MB) |
 | `HTTP_CSP` | `Content-Security-Policy` response header. Safe for a JSON-only API (no HTML served). An empty value omits the header | `default-src 'none'; frame-ancestors 'none'` |
@@ -719,7 +720,7 @@ via per-provider circuit breakers and graceful tool errors.
 
 On SIGINT/SIGTERM (HTTP mode), or SIGINT/SIGTERM/stdin EOF (STDIO mode):
 1. Stop accepting new connections
-2. Drain in-flight requests (30s timeout)
+2. Drain in-flight requests (`HTTP_SHUTDOWN_TIMEOUT`, default 30s; hard close on timeout)
 3. Flush cache to disk
 4. Close audit logger (drains buffered events including swap file)
 5. Terminate headless browsers

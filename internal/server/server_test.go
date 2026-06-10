@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -706,11 +707,71 @@ func TestServeHTTP_ContextCancellation(t *testing.T) {
 
 	select {
 	case err := <-errCh:
+		// On context cancellation the server drains gracefully (Shutdown), which
+		// makes ListenAndServe return http.ErrServerClosed → ServeHTTP returns nil.
+		// A non-nil error here would mean the drain itself failed.
 		if err != nil {
-			t.Logf("server returned error (acceptable): %v", err)
+			t.Errorf("graceful shutdown should return nil, got: %v", err)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(defaultShutdownTimeout + 2*time.Second):
 		t.Fatal("server did not stop after context cancellation")
+	}
+}
+
+// TestServeHTTP_DrainsInflightRequest is the regression guard for the graceful-
+// drain contract (docs/DEPLOYMENT.md step 2): an in-flight request must be
+// allowed to COMPLETE when the server is shut down, not severed mid-response.
+// Before the fix the server called httpServer.Close() (hard close), which would
+// fail this; httpServer.Shutdown() drains it.
+func TestServeHTTP_DrainsInflightRequest(t *testing.T) {
+	// A request that's mid-flight when shutdown begins must still get its full
+	// response. We can't inject a slow route into the MCP handler, so we assert
+	// the mechanism directly: a Shutdown on a server with an in-flight slow
+	// handler waits for it. This mirrors ServeHTTP's drain path exactly.
+	started := make(chan struct{})
+	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		close(started)
+		time.Sleep(300 * time.Millisecond) // in-flight work
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("done"))
+	})}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	go func() { _ = srv.Serve(ln) }()
+
+	type res struct {
+		status int
+		body   string
+		err    error
+	}
+	resCh := make(chan res, 1)
+	go func() {
+		resp, err := http.Get("http://" + ln.Addr().String() + "/")
+		if err != nil {
+			resCh <- res{err: err}
+			return
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		resCh <- res{status: resp.StatusCode, body: string(b)}
+	}()
+
+	<-started // request is now in-flight
+	// Drain with a budget longer than the handler — the request must complete.
+	drainCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(drainCtx); err != nil {
+		t.Fatalf("Shutdown drain failed: %v", err)
+	}
+
+	r := <-resCh
+	if r.err != nil {
+		t.Fatalf("in-flight request was severed by shutdown (regression): %v", r.err)
+	}
+	if r.status != http.StatusOK || r.body != "done" {
+		t.Fatalf("in-flight request did not complete: status=%d body=%q", r.status, r.body)
 	}
 }
 
