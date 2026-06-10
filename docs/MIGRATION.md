@@ -48,25 +48,31 @@ Delete the `google-researcher` entry from your MCP configuration file:
 
 ### 2. Install the new server
 
-The fastest path is the **one-line swap**: if you ran the old server with `npx`, just switch to `uvx` (from [Astral's uv](https://docs.astral.sh/uv/), the standard Python runner). It fetches the right prebuilt binary for your platform — no Node, no Go, no compile:
+Coming from `npx google-researcher-mcp`, the **lowest-friction path needs no new runtime** — the installer drops a single signed binary on your PATH and (when the `claude` CLI is present) registers it with Claude Code automatically:
 
 ```bash
-# Recommended: one-line swap from npx → uvx (no toolchain)
-uvx web-researcher-mcp
-# or install it as a persistent tool:
-uv tool install web-researcher-mcp
-# or:
-pip install web-researcher-mcp
+# macOS / Linux — one line, no Node, no Python, no compile:
+curl -fsSL https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/install.sh | sh
+
+# Windows (PowerShell):
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/install.ps1 | iex"
 ```
 
-Prefer a native install? Any of these also work:
+**Python users** — if you have (or want) [`uv`](https://docs.astral.sh/uv/), the `npx`→`uvx` shape is a direct swap (it installs `uv` once, then fetches the prebuilt binary):
+
+```bash
+uvx web-researcher-mcp                 # run on demand
+uv tool install web-researcher-mcp     # or install as a persistent tool
+pip install web-researcher-mcp         # or via pip
+```
+
+Prefer a package manager or container? Any of these also work:
 
 ```bash
 # Homebrew (macOS)
 brew install zoharbabin/tap/web-researcher-mcp
 
-# Pre-built binary
-# Visit https://github.com/zoharbabin/web-researcher-mcp/releases
+# Pre-built binary — https://github.com/zoharbabin/web-researcher-mcp/releases
 
 # Docker
 docker pull zoharbabin/web-researcher-mcp:latest
