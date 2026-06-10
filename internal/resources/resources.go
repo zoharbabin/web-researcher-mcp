@@ -214,14 +214,16 @@ func registerPrompts(srv *mcp.Server) {
 		}
 
 		prompt := "Research the topic: " + topic + "\n\n" +
-			"Available tools: web_search, scrape_page, search_and_scrape, news_search, academic_search, patent_search, image_search.\n" +
-			"Use sequential_search to track progress across steps (pass sessionId between calls).\n\n" +
+			"Available tools: web_search (add a lens to restrict to trusted sources, or a claim to get per-result evidence), scrape_page, search_and_scrape, news_search, academic_search, citation_graph, patent_search, filing_search (SEC), legal_search (US case law), econ_search (FRED/World Bank), clinical_search (ClinicalTrials.gov), image_search.\n" +
+			"Track progress with sequential_search (pass sessionId between calls); package results with research_export + format_bibliography.\n" +
+			"Before relying on any source, verify it: verify_citation (one citation) or audit_bibliography (a whole reference list) — checks existence, retraction, dead links, and whether a source actually supports a claim.\n\n" +
 			"Research depth: " + depth + " (" + steps + " steps)\n\n" +
 			"Guidance:\n" +
 			"- Start broad, then go deeper based on what you find.\n" +
 			"- If a tool returns zero results with a 'hints' object, follow its suggestedActions.\n" +
 			"- If errors include retryable:true, respect retryAfterSeconds before retrying.\n" +
 			"- Cross-reference findings across multiple sources for accuracy.\n" +
+			"- Verify citations before presenting them; never cite a source you haven't confirmed exists.\n" +
 			"- End with a summary including citations from scrape_page results.\n"
 
 		return &mcp.GetPromptResult{
@@ -250,13 +252,15 @@ func registerPrompts(srv *mcp.Server) {
 		if extra != "" {
 			prompt += "Context: " + extra + "\n\n"
 		}
-		prompt += "Available tools: web_search, news_search, search_and_scrape, scrape_page, academic_search.\n" +
+		prompt += "Available tools: web_search and search_and_scrape (both accept a claim parameter that returns the most claim-relevant sentences as evidence), news_search, scrape_page, academic_search.\n" +
+			"To check a specific source you find: verify_citation confirms a DOI/URL/reference exists, matches a real record, isn't retracted, and still resolves — evidence, never a verdict.\n" +
 			"Use sequential_search to track your verification steps.\n\n" +
 			"Approach:\n" +
-			"- Search for evidence both supporting and contradicting the claim.\n" +
+			"- Search for evidence both supporting and contradicting the claim; pass the claim to web_search/search_and_scrape to surface the relevant sentences.\n" +
 			"- Evaluate source authority and recency.\n" +
+			"- Run verify_citation on any source you intend to cite — a real-looking citation may be fabricated or retracted.\n" +
 			"- If search_and_scrape returns status:'partial', check scrapeFailures for context.\n" +
-			"- Report confidence level (high/medium/low) with reasoning and cited sources.\n"
+			"- Report confidence level (high/medium/low) with reasoning and cited, verified sources.\n"
 
 		return &mcp.GetPromptResult{
 			Description: "Fact-check: " + claim,
@@ -284,10 +288,11 @@ func registerPrompts(srv *mcp.Server) {
 		if market != "" {
 			prompt += "Market: " + market + "\n"
 		}
-		prompt += "\nAvailable tools: web_search, news_search, patent_search, search_and_scrape, scrape_page, academic_search.\n" +
+		prompt += "\nAvailable tools: web_search, news_search, patent_search, filing_search (SEC EDGAR — 10-K/10-Q/8-K + XBRL financials), econ_search (FRED/World Bank macro data), search_and_scrape, scrape_page, academic_search.\n" +
 			"Use sequential_search to track research across steps (preserves progress if context is lost).\n\n" +
 			"Research areas to cover:\n" +
 			"- Company information, recent developments, and market position\n" +
+			"- Financial disclosures via filing_search (set facts=true for structured XBRL revenue/income/EPS)\n" +
 			"- Patent portfolio and R&D direction (via patent_search with assignee parameter)\n" +
 			"- News coverage and announcements\n" +
 			"- Synthesize into strengths, weaknesses, opportunities, threats\n\n" +
@@ -321,12 +326,14 @@ func registerPrompts(srv *mcp.Server) {
 		if yearFrom != "" || yearTo != "" {
 			prompt += "Time range: " + yearFrom + " to " + yearTo + "\n\n"
 		}
-		prompt += "Available tools: academic_search, web_search, scrape_page, search_and_scrape.\n" +
-			"Use sequential_search to track progress across iterations (sessions persist 4 hours and survive restarts).\n\n" +
+		prompt += "Available tools: academic_search, citation_graph (trace what a paper cites and what cites it), clinical_search (ClinicalTrials.gov), web_search, scrape_page, search_and_scrape.\n" +
+			"Use sequential_search to track progress across iterations (sessions persist 4 hours and survive restarts).\n" +
+			"Assemble the reference list with format_bibliography (APA/MLA/BibTeX/RIS/CSL-JSON — Zotero/EndNote/Mendeley-ready), then audit_bibliography over the whole list to flag any retracted, dead-linked, not-found, or mischaracterized citations before you submit.\n\n" +
 			"Approach:\n" +
-			"- Use academic_search with year filters and source parameters for targeted results.\n" +
+			"- Use academic_search with year filters and source parameters for targeted results; citation_graph to map influential/related work.\n" +
 			"- Use scrape_page on paper URLs to get abstracts and key findings (returns APA/MLA citations).\n" +
 			"- Identify major themes, methodologies, and gaps in the literature.\n" +
+			"- Before finalizing, run audit_bibliography on your reference list — a systematic review must not cite a retracted or fabricated study.\n" +
 			"- If academic_search returns a hints object, follow its suggestions to broaden coverage.\n"
 
 		return &mcp.GetPromptResult{

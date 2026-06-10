@@ -272,6 +272,12 @@ func TestFactCheckPrompt(t *testing.T) {
 	if !strings.Contains(tc.Text, "social media debate") {
 		t.Error("expected prompt to contain the context")
 	}
+	// Drift guard: the fact-check prompt MUST surface the anti-hallucination tool
+	// (verify_citation is the whole point). This caught a regression where the
+	// prompts had drifted to a pre-trust-suite tool list.
+	if !strings.Contains(tc.Text, "verify_citation") {
+		t.Error("fact-check prompt must mention verify_citation (the anti-hallucination tool)")
+	}
 }
 
 func TestCompetitiveAnalysisPrompt(t *testing.T) {
@@ -328,6 +334,11 @@ func TestLiteratureReviewPrompt(t *testing.T) {
 	}
 	if !strings.Contains(tc.Text, "2020") || !strings.Contains(tc.Text, "2025") {
 		t.Error("expected prompt to mention year range")
+	}
+	// Drift guard: a systematic literature review must steer toward auditing the
+	// reference list for retracted/fabricated citations.
+	if !strings.Contains(tc.Text, "audit_bibliography") {
+		t.Error("literature-review prompt must mention audit_bibliography")
 	}
 }
 
