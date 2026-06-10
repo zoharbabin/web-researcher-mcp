@@ -66,6 +66,7 @@ type HTTPConfig struct {
 	ReadTimeout       time.Duration
 	WriteTimeout      time.Duration
 	IdleTimeout       time.Duration
+	ShutdownTimeout   time.Duration
 	MaxHeaderBytes    int
 	MaxRequestBody    int
 	CSP               string
@@ -363,6 +364,7 @@ func Load() (*Config, error) {
 			ReadTimeout:       envDuration("HTTP_READ_TIMEOUT", 30*time.Second),
 			WriteTimeout:      envDuration("HTTP_WRITE_TIMEOUT", 0),
 			IdleTimeout:       envDuration("HTTP_IDLE_TIMEOUT", 120*time.Second),
+			ShutdownTimeout:   envDuration("HTTP_SHUTDOWN_TIMEOUT", 30*time.Second),
 			MaxHeaderBytes:    envInt("HTTP_MAX_HEADER_BYTES", 1<<20),
 			MaxRequestBody:    envInt("MAX_REQUEST_BODY_BYTES", 10<<20),
 			CSP:               envOrDefault("HTTP_CSP", "default-src 'none'; frame-ancestors 'none'"),

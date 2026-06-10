@@ -69,6 +69,10 @@ type HTTPConfig struct {
 	ReadTimeout       time.Duration
 	WriteTimeout      time.Duration
 	IdleTimeout       time.Duration
+	// ShutdownTimeout bounds the graceful drain of in-flight requests on
+	// SIGINT/SIGTERM. Zero falls back to defaultShutdownTimeout (30s). After the
+	// budget, any still-running connections are force-closed.
+	ShutdownTimeout   time.Duration
 	MaxHeaderBytes    int
 	MaxRequestBody    int
 	CSP               string
@@ -181,7 +185,19 @@ func (s *Server) ServeHTTP(ctx context.Context, cfg HTTPConfig) error {
 
 	go func() {
 		<-ctx.Done()
-		_ = httpServer.Close()
+		// Graceful drain: stop accepting new connections and let in-flight
+		// requests (long scrapes, search_and_scrape, sequential_search, browser
+		// fetches) finish within the budget before force-closing — the behavior
+		// docs/DEPLOYMENT.md promises. On drain timeout, fall back to a hard Close.
+		drainTimeout := cfg.ShutdownTimeout
+		if drainTimeout <= 0 {
+			drainTimeout = defaultShutdownTimeout
+		}
+		drainCtx, cancel := context.WithTimeout(context.Background(), drainTimeout)
+		defer cancel()
+		if err := httpServer.Shutdown(drainCtx); err != nil {
+			_ = httpServer.Close()
+		}
 	}()
 
 	if err := httpServer.ListenAndServe(); err != http.ErrServerClosed {
@@ -189,6 +205,10 @@ func (s *Server) ServeHTTP(ctx context.Context, cfg HTTPConfig) error {
 	}
 	return nil
 }
+
+// defaultShutdownTimeout is the in-flight-drain budget when HTTPConfig.ShutdownTimeout
+// is unset — matches the 30s drain documented in docs/DEPLOYMENT.md.
+const defaultShutdownTimeout = 30 * time.Second
 
 // maxBytes wraps next so request bodies larger than limit bytes are rejected
 // (the wrapped handler's Read returns an error the SDK surfaces as 413). A

@@ -613,6 +613,7 @@ func main() {
 			ReadTimeout:       cfg.HTTP.ReadTimeout,
 			WriteTimeout:      cfg.HTTP.WriteTimeout,
 			IdleTimeout:       cfg.HTTP.IdleTimeout,
+			ShutdownTimeout:   cfg.HTTP.ShutdownTimeout,
 			MaxHeaderBytes:    cfg.HTTP.MaxHeaderBytes,
 			MaxRequestBody:    cfg.HTTP.MaxRequestBody,
 			CSP:               cfg.HTTP.CSP,
