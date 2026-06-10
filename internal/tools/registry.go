@@ -110,6 +110,11 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	// and runs existence/retraction/dead-link over every entry. Composes the same
 	// resolvers; always registered (degrades gracefully like verify_citation).
 	registerAuditBibliography(srv, deps)
+	// archive_source (#196) — the trust suite's only WRITE tool: captures a fresh
+	// Internet Archive snapshot via Save Page Now so a cited source stays
+	// verifiable. Always registered; degrades to status:"unavailable" when no link
+	// verifier is configured.
+	registerArchiveSource(srv, deps)
 
 	// citation_graph (#47) — registered only when a citation-capable academic
 	// provider (semanticscholar or openalex) is configured.

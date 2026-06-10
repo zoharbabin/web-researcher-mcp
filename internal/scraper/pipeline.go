@@ -385,6 +385,15 @@ func (p *Pipeline) browserEnabled() bool {
 // points. It requires an http or https scheme and a non-empty host, rejecting
 // file://, gopher://, ftp://, scheme-relative ("//host"), and host-less URLs.
 func validateScrapeURL(rawURL string) error {
+	return ValidateScrapeURL(rawURL)
+}
+
+// ValidateScrapeURL is the exported form of the boundary validator, shared by
+// tools that take a user-supplied URL to fetch or archive (e.g. archive_source)
+// so they reject obviously-bad input identically — without a divergent copy. It
+// does NOT do a DNS/IP check; the SSRF-safe client validates resolved IPs at
+// connect time.
+func ValidateScrapeURL(rawURL string) error {
 	u, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil {
 		return fmt.Errorf("invalid URL: %v", err)

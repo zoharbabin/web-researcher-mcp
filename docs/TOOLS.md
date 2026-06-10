@@ -131,6 +131,16 @@ type ScrapeOutput struct {
     SourceType      string    `json:"sourceType"`     // typed classification (#62): peer_reviewed|official_docs|government|news_publication|blog|forum|wiki|social_media|unknown
     AuthorityTier   string    `json:"authorityTier"`  // banded authority: high|medium|low
     DomainCategory  string    `json:"domainCategory"` // subject area: academic|legal|medical|financial|technical|general
+    DetectedDOI      string            `json:"detectedDoi,omitempty"`      // a scholarly DOI the page declares (#199); peer-reviewed pages only; omitted when none
+    RetractionStatus *RetractionStatus `json:"retractionStatus,omitempty"` // Crossref integrity status for detectedDoi; omitted when clean/unresolved — never a guess
+}
+
+type RetractionStatus struct {
+    Retracted bool   `json:"retracted"`           // true for a formal retraction/withdrawal/removal
+    Kind      string `json:"kind"`                // retraction | expression_of_concern | correction
+    Date      string `json:"date,omitempty"`      // notice date (YYYY-MM-DD) when supplied
+    NoticeDOI string `json:"noticeDoi,omitempty"` // DOI of the retraction/correction notice
+    Source    string `json:"source,omitempty"`    // provenance: retraction-watch | publisher
 }
 
 type Metadata struct {
@@ -175,6 +185,8 @@ In `raw` mode the output additionally carries `"raw": true`, and `contentType` i
 **Extraction provenance (`extractedBy`).** When known, the response names the tier that produced the content: `markdown`, `stealth`, `html`, `browser`, or — for the paid Exa fallback — `exa:cached` / `exa:crawled`. It lets a caller see whether content came from a free local tier or the metered Exa `/contents` API (Tier 5, present only when `EXA_API_KEY` is set). Omitted when unknown (e.g. document/YouTube routes).
 
 **Typed source classification (#62).** Every scrape response (full and raw) carries three categorical fields alongside the numeric content: `sourceType` (the kind of source — derived from Schema.org `@type` / Highwire `citation_*` meta when present, else a domain heuristic, else `unknown`), `authorityTier` (`high`/`medium`/`low`, a banding of the internal authority score), and `domainCategory` (`academic`/`legal`/`medical`/`financial`/`technical`/`general`, from a domain heuristic). They let the model hedge in natural language by source type. They are best-effort hints derived from untrusted page data — treat them as signals, not guarantees. (In raw mode, with no structured-data extraction, `sourceType` falls back to the host heuristic.)
+
+**Scholarly DOI + integrity status (#199).** When a page classifies as `peer_reviewed`, the response surfaces `detectedDoi` — the DOI the page declares, read from its Highwire `citation_doi` `<head>` metadata or (fallback) the first few KB of the cleaned text (the front matter, above any references list, so a references-list DOI is never mistaken for the page's own). It is **evidence, never a verdict and never an identity claim**: it says "this DOI appears on the page; here is its recorded integrity status," not "the page *is* this record" — you confirm the document's identity. When the DOI resolves to a Crossref/Retraction-Watch integrity record, `retractionStatus` is attached (the same object `verify_citation` and `academic_search` return); an `expression_of_concern`/`correction` is reported but is **not** a retraction (`retracted` stays `false`), and `retractionStatus.source` names `retraction-watch` vs `publisher`. The status is captured at scrape time and shares the one-hour scrape cache TTL — re-scrape or use `verify_citation` for a point-in-time check. Both fields are omitted on non-scholarly pages, in raw mode, and when no DOI is found or the resolver is unavailable. Use `verify_citation` to verify one citation and `audit_bibliography` to audit a whole reference list.
 
 **Trust boundary marker.** Every scrape response (full, preview, and raw) carries `"trust": "untrusted-external-content"` in the JSON envelope — an explicit, machine-readable boundary marker. It is deliberately placed in the structured output, never inside the `content` string (where a malicious page could forge or close it), and signals that `content` is external data to be treated as data, never as instructions (OWASP LLM01, indirect prompt injection). The server cannot enforce the prompt boundary itself — the model and agent loop live in the host application — so this marker exists to make the untrusted provenance unmissable to that host.
 
@@ -1320,10 +1332,11 @@ Verify a single citation before relying on it — confirm it **exists**, matches
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `citation` | string | yes | A DOI (`10.1038/nature12373`), a URL, or a free-text reference string. The tool auto-detects which. |
+| `claim` | string | no | The assertion this citation is cited for. When set, the source (the live URL, or its Wayback snapshot when dead) is fetched and checked for whether it actually addresses the claim — surfacing evidence sentences and flagging mischaracterization. Coverage + evidence, never a support/refute verdict. Off unless provided; adds one fetch. |
 
 ### Output Schema
 
-`input`, `inputType` (`doi`\|`url`\|`reference`), `exists` (bool), `matchedRecord` (the academic record when found), `matchConfidence` (`high`\|`medium`\|`low`\|`none`), `retractionStatus` (Crossref integrity status when retracted/corrected; omitted when clean), `httpStatus` + `archivedUrl` (for URL inputs — live status and a Wayback snapshot for dead links), `provenance` (how each piece of evidence was obtained), and the `trust` marker.
+`input`, `inputType` (`doi`\|`url`\|`reference`), `exists` (bool), `matchedRecord` (the academic record when found), `matchConfidence` (`high`\|`medium`\|`low`\|`none`), `retractionStatus` (Crossref integrity status when retracted/corrected; omitted when clean), `httpStatus` + `archivedUrl` (for URL inputs — live status and a Wayback snapshot for dead links), `provenance` (how each piece of evidence was obtained), and the `trust` marker. When a `claim` was supplied: `claim` (echo), `claimSupport` (`addressed`\|`partially_addressed`\|`not_addressed`\|`source_unavailable`), `claimEvidence` (claim-relevant source sentences), `claimSourceUrl` (the URL actually fetched), and `contrastSignal` (`true` only — a negation/contrast cue, read the evidence yourself).
 
 ### Behavior
 
@@ -1331,6 +1344,7 @@ Verify a single citation before relying on it — confirm it **exists**, matches
 - **DOI input** → existence + retraction via Crossref `works/{doi}`; a matched record (title/authors/year) via the academic searcher (`matchConfidence: high` — a DOI is exact).
 - **URL input** → liveness via the SSRF-safe link verifier; a Wayback `archivedUrl` when the live link is dead.
 - **Free-text input** → best-match academic lookup with a transparent token-overlap `matchConfidence`; retraction checked when the match carries a DOI.
+- **Claim check (optional).** When a `claim` is given, the source is fetched (the live URL, a matched record's URL, or a Wayback snapshot) and measured for topical overlap with the same lexical, model-free coverage as `audit_bibliography` (no model/embedding): `claimSupport` reports COVERAGE not stance, `not_addressed` is the mischaracterization signal (only when a source was actually read), and `contrastSignal` flags a negation cue. `source_unavailable` when no fetchable source (e.g. a DOI/reference whose matched record carries no URL). Off — and zero added latency — unless a claim is supplied.
 - Degrades gracefully when a resolver is unconfigured (reports the gap in `provenance`); never panics.
 - To check a **whole reference list** at once (a document, an explicit list, or a session), use `audit_bibliography` — the corpus-level companion that runs these same checks over every entry.
 
@@ -1413,6 +1427,40 @@ Precedence when more than one is supplied: `entries` → `bibliography` → `ses
 
 ### Cache
 - Not cached (a point-in-time liveness/integrity audit).
+
+---
+
+## Tool 26: `archive_source`
+
+### Purpose
+
+Capture a **fresh** Internet Archive (Wayback Machine) snapshot of a URL via Save Page Now, so a source you intend to cite stays verifiable even if the page later changes or disappears. This is the trust suite's one **write** tool: the rest of the suite can tell you a link is dead and surface an *existing* snapshot (read-only); this one *creates* a new snapshot. It makes "stays honest" durable rather than point-in-time.
+
+### Input Schema
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `url` | string | yes | The URL to capture a fresh snapshot of. Must be a public `http`/`https` URL (private/loopback hosts are refused). |
+
+### Output Schema
+
+`requestedUrl` (echo), `snapshotUrl` (the `https://web.archive.org/web/<timestamp>/<url>` snapshot; omitted when pending/unavailable), `archivedAt` (RFC 3339 — when a fresh capture was confirmed; present only on a fresh capture), `captured` (bool — `true` only for a fresh capture by this call), `status` (`archived`\|`existing`\|`pending`\|`unavailable`), `httpStatus` (Save Page Now endpoint status), `reason` (why no fresh capture, for existing/pending/unavailable), `source` (`web.archive.org Save Page Now`), `provenance`, and the `trust` marker.
+
+### Behavior
+
+- **Write tool, non-destructive.** It creates a public archive entry; it never deletes or mutates existing data. Annotated `ReadOnly:false, Destructive:false, Idempotent:true` (Save Page Now dedups within its rate window).
+- **Best-effort and honest.** Save Page Now is rate-limited and slow — a fresh capture is not guaranteed. When one can't be made, the tool falls back to the most recent **existing** snapshot and reports `captured:false` / `status:"existing"`; when nothing is confirmed it reports `status:"pending"` (the capture may still complete). It never errors on a slow/throttled capture.
+- **Evidence, never a verdict.** It returns the snapshot artifact + provenance; it does not judge the source.
+- **SSRF-safe.** The outbound request goes to the fixed `web.archive.org` host through the SSRF-safe client (every redirect hop IP-revalidated); the submitted URL is additionally validated and private/loopback hosts are refused before the request.
+- **Optional credentials.** Keyless Save Page Now works by default; setting `IA_ACCESS_KEY` + `IA_SECRET_KEY` authenticates the request for higher reliability (keys are never logged or echoed).
+- `status:"unavailable"` when no link verifier is configured (graceful, not an error).
+- Use `verify_citation` first to see whether a link is already dead or already archived.
+
+### Annotations
+- ReadOnly: false (write) · Destructive: false · Idempotent: true · OpenWorld: false (advisory; the call does reach the Internet Archive)
+
+### Cache
+- Not cached (each call is an explicit archive request).
 
 ---
 

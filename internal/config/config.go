@@ -156,6 +156,11 @@ type SearchConfig struct {
 	EDGARContactEmail  string // SEC EDGAR requires a contact email for its required User-Agent
 	CourtListenerToken string // optional; CourtListener works keyless at a lower rate
 	FREDAPIKey         string // Federal Reserve Economic Data API key
+
+	// Internet Archive Save Page Now (archive_source, #196) — optional S3-style
+	// credentials. Keyless SPN works without them; keys raise rate/reliability.
+	IAAccessKey string
+	IASecretKey string
 }
 
 type OAuthConfig struct {
@@ -348,6 +353,8 @@ func Load() (*Config, error) {
 			EDGARContactEmail:     envOrDefault("EDGAR_CONTACT_EMAIL", os.Getenv("OPENALEX_EMAIL")),
 			CourtListenerToken:    os.Getenv("COURTLISTENER_API_TOKEN"),
 			FREDAPIKey:            os.Getenv("FRED_API_KEY"),
+			IAAccessKey:           os.Getenv("IA_ACCESS_KEY"),
+			IASecretKey:           os.Getenv("IA_SECRET_KEY"),
 		},
 		Port: port,
 		OAuth: OAuthConfig{

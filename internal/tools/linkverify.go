@@ -20,6 +20,17 @@ func verifyLinkStatuses(ctx context.Context, deps Dependencies, urls []string) [
 	return deps.LinkVerifier.VerifyAll(ctx, urls)
 }
 
+// archiveURL triggers a fresh Internet Archive (Save Page Now) capture of rawURL
+// via the SSRF-safe verifier (#196). nil-safe: returns a zero ArchiveResult and
+// ok=false when no verifier is configured, so the archive_source tool can report
+// status "unavailable" gracefully rather than erroring.
+func archiveURL(ctx context.Context, deps Dependencies, rawURL string) (scraper.ArchiveResult, bool) {
+	if deps.LinkVerifier == nil {
+		return scraper.ArchiveResult{}, false
+	}
+	return deps.LinkVerifier.Archive(ctx, rawURL), true
+}
+
 // annotateSourcesWithLiveness verifies each source's URL and writes the liveness
 // provenance (httpStatus/verified/archivedUrl/verifiedAt) back onto the source
 // in place. Best-effort: a nil verifier or empty input is a no-op. The session

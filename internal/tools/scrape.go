@@ -50,7 +50,7 @@ const userAssertedContentTrust = "user-asserted-content"
 func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "scrape_page",
-		Description:  "Read a single URL and get back its content — web pages (including JavaScript-heavy sites), PDFs, Word/PowerPoint files, and YouTube transcripts — picking the best extraction method automatically. Returns readable text plus a ready-to-use citation. Reach for this when you already have a URL and want what's on the page; use search_and_scrape to find and read in one step, or web_search when you only need links. Modes: full (default, cleaned text), preview (a fast first look), and raw (verbatim page bytes with no sanitization — only for inspecting source like JSON or HTML, and the bytes are untrusted, so never execute or render them). Blocked pages and other failures return structured JSON (kind, retryable, suggestedAction). Results stay fresh for 1 hour.",
+		Description:  "Read a single URL and get back its content — web pages (including JavaScript-heavy sites), PDFs, Word/PowerPoint files, and YouTube transcripts — picking the best extraction method automatically. Returns readable text plus a ready-to-use citation. Reach for this when you already have a URL and want what's on the page; use search_and_scrape to find and read in one step, or web_search when you only need links. Modes: full (default, cleaned text), preview (a fast first look), and raw (verbatim page bytes with no sanitization — only for inspecting source like JSON or HTML, and the bytes are untrusted, so never execute or render them). If the page is a peer-reviewed article that declares a DOI, that DOI is surfaced with its retraction/integrity status (evidence to check, not a verdict — you confirm the document's identity). Blocked pages and other failures return structured JSON (kind, retryable, suggestedAction). Results stay fresh for 1 hour.",
 		Annotations:  readOnlyAnnotations(true, true),
 		OutputSchema: scrapePageOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input scrapePageInput) (*mcp.CallToolResult, any, error) {
@@ -155,9 +155,26 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 
 		// Typed source classification (#62): source_type / authority_tier /
 		// domain_category, derived from the Schema.org/Highwire signals + the
-		// numeric authority score. Additive; no lens on scrape_page.
-		for k, v := range classificationFields(classifySource(input.URL, result.Title, processedContent, "", "", result.StructuredData)) {
+		// numeric authority score. Additive; no lens on scrape_page. Captured once
+		// so the scholarly DOI gate below reuses it.
+		cls := classifySource(input.URL, result.Title, processedContent, "", "", result.StructuredData)
+		for k, v := range classificationFields(cls) {
 			output[k] = v
+		}
+
+		// Scholarly DOI + integrity status (#199). Only on peer-reviewed pages, and
+		// only from the page's own citation metadata / front-of-document text —
+		// never a references-list DOI. Evidence, not a verdict, not an identity claim:
+		// "this DOI appears on the page; here is its recorded integrity status."
+		if cls.SourceType == content.SourceTypePeerReviewed {
+			if doi := detectScholarlyDOI(result.StructuredData, processedContent); doi != "" {
+				output["detectedDoi"] = doi
+				if deps.RetractionResolver != nil {
+					if status, _, err := deps.RetractionResolver.Resolve(ctx, doi); err == nil && status != nil {
+						output["retractionStatus"] = status
+					}
+				}
+			}
 		}
 
 		jsonBytes, _ := json.Marshal(output)
@@ -256,6 +273,29 @@ func scrapeRaw(ctx context.Context, deps Dependencies, input scrapePageInput, ma
 	return largeResultOrInline(ctx, deps, jsonBytes, "raw page content for "+input.URL), nil, nil
 }
 
+// detectScholarlyDOITopBytes bounds the body fallback to the front matter of the
+// document (title/abstract/header), which sits ABOVE the references list — so a
+// references-list DOI can never be mistaken for the page's own DOI (#199).
+const detectScholarlyDOITopBytes = 4000
+
+// detectScholarlyDOI returns the page's own DOI, preferring the publisher's
+// Highwire citation_doi <head> meta (authoritative, never a references artifact)
+// and falling back only to a DOI in the first detectScholarlyDOITopBytes of the
+// cleaned body (the front matter, above any references list). Returns "" when none
+// is found. Reuses detectDOI/doiPattern (package tools); no new dependency.
+func detectScholarlyDOI(sd *scraper.StructuredData, body string) string {
+	if sd != nil {
+		if d := detectDOI(sd.Citation["citation_doi"]); d != "" {
+			return d
+		}
+	}
+	top := body
+	if len(top) > detectScholarlyDOITopBytes {
+		top = top[:detectScholarlyDOITopBytes]
+	}
+	return detectDOI(top)
+}
+
 // scrapeCacheKey keys a cached scrape by URL, mode, AND the effective
 // max_length. max_length must be part of the key because content is truncated
 // to it before caching — without it, a small-max_length request could serve a
@@ -269,8 +309,9 @@ func scrapeCacheKey(url, mode string, maxLength int) string {
 	// (#46) — both change the full-mode response shape, so a v2 blob would serve
 	// table-less/garbled content and omit structuredData after an upgrade
 	// (incl. via the shared Redis cache). v4 adds the typed classification fields
-	// (#62: sourceType/authorityTier/domainCategory). Bump on any future shape change.
-	fmt.Fprintf(h, "scrape|v4|%s|%s|%d", url, mode, maxLength)
+	// (#62: sourceType/authorityTier/domainCategory). v5 adds the scholarly
+	// detectedDoi + retractionStatus fields (#199). Bump on any future shape change.
+	fmt.Fprintf(h, "scrape|v5|%s|%s|%d", url, mode, maxLength)
 	return "scrape:" + hex.EncodeToString(h.Sum(nil))[:32]
 }
 

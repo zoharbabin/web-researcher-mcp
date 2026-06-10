@@ -302,8 +302,13 @@ func main() {
 
 	// Link verifier (#157): SSRF-safe liveness + Wayback archive fallback for the
 	// opt-in verify_links flag on research_export and for verify_citation. Honors
-	// the same private-IP posture as the scrape pipeline.
-	linkVerifier := scraper.NewLinkVerifier(scraper.LinkVerifierConfig{AllowPrivateIPs: cfg.AllowPrivateIPs})
+	// the same private-IP posture as the scrape pipeline. Optional IA Save-Page-Now
+	// credentials (#196) raise archive_source's capture reliability; keyless works.
+	linkVerifier := scraper.NewLinkVerifier(scraper.LinkVerifierConfig{
+		AllowPrivateIPs: cfg.AllowPrivateIPs,
+		IAAccessKey:     cfg.Search.IAAccessKey,
+		IASecretKey:     cfg.Search.IASecretKey,
+	})
 
 	// Synthesis capabilities (provider-independent): grounded answers and
 	// structured extraction. Discovered from config like every other provider

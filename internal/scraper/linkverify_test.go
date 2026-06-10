@@ -92,3 +92,107 @@ func TestLinkVerifier_NetworkFailureNoArchive(t *testing.T) {
 		t.Errorf("network failure: %+v", got[0])
 	}
 }
+
+// --- Save Page Now / Archive (#196) ---
+
+// TestArchive_CapturedViaContentLocation: SPN responds (no redirect) with a
+// Content-Location pointing at a /web/ snapshot → Captured=true, SnapshotURL set.
+func TestArchive_CapturedViaContentLocation(t *testing.T) {
+	t.Parallel()
+	var sawAuth string
+	spn := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sawAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Location", "/web/20260101000000/https://example.com/x")
+		w.WriteHeader(200)
+	}))
+	defer spn.Close()
+
+	v := NewLinkVerifier(LinkVerifierConfig{AllowPrivateIPs: true})
+	v.SetSaveBase(spn.URL + "/save/")
+	res := v.Archive(context.Background(), "https://example.com/x")
+	if !res.Captured || res.SnapshotURL != "https://web.archive.org/web/20260101000000/https://example.com/x" {
+		t.Fatalf("expected captured snapshot, got %+v", res)
+	}
+	if res.Timestamp == "" {
+		t.Error("captured snapshot should carry a timestamp")
+	}
+	if sawAuth != "" {
+		t.Errorf("no Authorization header expected without keys, got %q", sawAuth)
+	}
+}
+
+// TestArchive_AuthHeaderWhenKeysSet: both IA keys → Authorization: LOW access:secret.
+func TestArchive_AuthHeaderWhenKeysSet(t *testing.T) {
+	t.Parallel()
+	var sawAuth string
+	spn := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sawAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Location", "/web/20260101000000/https://example.com/x")
+		w.WriteHeader(200)
+	}))
+	defer spn.Close()
+
+	v := NewLinkVerifier(LinkVerifierConfig{AllowPrivateIPs: true, IAAccessKey: "AK", IASecretKey: "SK"})
+	v.SetSaveBase(spn.URL + "/save/")
+	_ = v.Archive(context.Background(), "https://example.com/x")
+	if sawAuth != "LOW AK:SK" {
+		t.Errorf("Authorization = %q, want LOW AK:SK", sawAuth)
+	}
+}
+
+// TestArchive_FallbackToExisting: SPN fails to produce a /web/ URL, but the
+// availability API has an existing snapshot → Captured=false, SnapshotURL from fallback.
+func TestArchive_FallbackToExisting(t *testing.T) {
+	t.Parallel()
+	spn := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(429) // throttled, no snapshot
+	}))
+	defer spn.Close()
+	wb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"archived_snapshots":{"closest":{"available":true,"url":"https://web.archive.org/web/2019/https://example.com/x","status":"200"}}}`))
+	}))
+	defer wb.Close()
+
+	v := NewLinkVerifier(LinkVerifierConfig{AllowPrivateIPs: true})
+	v.SetSaveBase(spn.URL + "/save/")
+	v.SetWaybackBase(wb.URL)
+	res := v.Archive(context.Background(), "https://example.com/x")
+	if res.Captured {
+		t.Error("a throttled SPN must not report Captured=true")
+	}
+	if res.SnapshotURL != "https://web.archive.org/web/2019/https://example.com/x" {
+		t.Errorf("expected fallback snapshot, got %q", res.SnapshotURL)
+	}
+	if res.HTTPStatus != 429 {
+		t.Errorf("HTTPStatus = %d, want 429", res.HTTPStatus)
+	}
+}
+
+// TestArchive_NothingAvailable: SPN fails and no existing snapshot → empty SnapshotURL, no panic.
+func TestArchive_NothingAvailable(t *testing.T) {
+	t.Parallel()
+	spn := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(500) }))
+	defer spn.Close()
+	wb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"archived_snapshots":{}}`))
+	}))
+	defer wb.Close()
+
+	v := NewLinkVerifier(LinkVerifierConfig{AllowPrivateIPs: true})
+	v.SetSaveBase(spn.URL + "/save/")
+	v.SetWaybackBase(wb.URL)
+	res := v.Archive(context.Background(), "https://example.com/x")
+	if res.Captured || res.SnapshotURL != "" {
+		t.Errorf("expected no snapshot, got %+v", res)
+	}
+}
+
+// TestArchive_EmptyURL: empty input → zero result, no panic.
+func TestArchive_EmptyURL(t *testing.T) {
+	t.Parallel()
+	v := NewLinkVerifier(LinkVerifierConfig{AllowPrivateIPs: true})
+	res := v.Archive(context.Background(), "")
+	if res.Captured || res.SnapshotURL != "" {
+		t.Errorf("empty url should yield zero result, got %+v", res)
+	}
+}
