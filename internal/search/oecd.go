@@ -30,11 +30,12 @@ import (
 //     → 1,500+ dataflows with id/name/agencyID/version; no server-side search, so
 //     we filter the cached list client-side by name.
 //   - SeriesID is a dataflow ref "agency,dataflow,version" (e.g.
-//     "OECD.SDD.NAD,DSD_NAMAIN1@DF_QNA,1.1"); Country injects into the REF_AREA
-//     slot of a wildcard key. The key's dimension count is dataflow-specific, so
-//     we send an all-wildcard key (the API accepts a fully-wildcarded key of the
-//     right arity); REF_AREA scoping is applied via the `c[REF_AREA]=` filter
-//     parameter, which is dimension-count-independent.
+//     "OECD.SDD.NAD,DSD_NAMAIN1@DF_QNA,1.1"). Country scoping uses the POSITIONAL
+//     key (a dot-separated slot per series dimension) with the country pinned in
+//     the REF_AREA slot — the `c[REF_AREA]=` query param is a 2.1-style filter the
+//     2.0 data endpoint rejects with 422. We resolve the dataflow's dimension
+//     order once (cached per ref) to find REF_AREA's slot; no country ⇒ empty key
+//     (whole dataflow).
 //   - errors:     proper HTTP codes (404 unknown dataflow, 406 bad Accept, 422
 //     bad key) with plain-text bodies — trust the status, not the body.
 type OECDProvider struct {
@@ -43,6 +44,9 @@ type OECDProvider struct {
 
 	flowsMu sync.Mutex
 	flows   []oecdDataflow // cached on first SUCCESSFUL fetch; nil until then
+
+	dimsMu sync.Mutex
+	dims   map[string][]string // dataflow ref → ordered series-dimension IDs (cached)
 }
 
 type oecdDataflow struct {
@@ -220,14 +224,20 @@ func (o *OECDProvider) observations(ctx context.Context, params EconSearchParams
 	if params.DateTo != "" {
 		q.Set("endPeriod", oecdPeriod(params.DateTo))
 	}
-	// REF_AREA filter is dimension-count-independent (unlike a positional key),
-	// so it works across dataflows without fetching each one's structure first.
+
+	// Country scoping in SDMX-JSON 2.0 is done via the POSITIONAL key (a
+	// dot-separated slot per series dimension), NOT a `c[REF_AREA]=` query param
+	// (that 2.1-style param is rejected with 422 by this endpoint). When a country
+	// is given we resolve the dataflow's dimension order (cached per ref) to find
+	// REF_AREA's slot and build a wildcard key with the country pinned there; an
+	// empty key requests the whole dataflow. A structure-fetch failure degrades to
+	// the unscoped key rather than erroring.
+	key := ""
 	if c := strings.TrimSpace(params.Country); c != "" {
-		q.Set("c[REF_AREA]", c)
+		key = o.buildCountryKey(ctx, ref, c)
 	}
 
-	// A bare "all" key requests every series in the (country-filtered) dataflow.
-	endpoint := fmt.Sprintf("%s/data/%s/all?%s", o.baseURL, ref, q.Encode())
+	endpoint := fmt.Sprintf("%s/data/%s/%s?%s", o.baseURL, ref, key, q.Encode())
 	body, err := o.get(ctx, endpoint, "application/vnd.sdmx.data+json;version=2.0.0")
 	if err != nil {
 		return nil, err
@@ -238,6 +248,91 @@ func (o *OECDProvider) observations(ctx context.Context, params EconSearchParams
 		return nil, fmt.Errorf("oecd: SDMX-JSON parse: %w", err)
 	}
 	return decodeSDMXObservations(&sd, ref, num), nil
+}
+
+// buildCountryKey returns a positional SDMX key (dot-separated, one empty slot per
+// series dimension) with the given country pinned in the REF_AREA slot — e.g.
+// "..USA.........." for a 13-dimension dataflow. It resolves the dataflow's
+// dimension order via the cached structure; on any failure (unresolvable
+// structure, no REF_AREA dimension) it returns "" so the caller falls back to the
+// unscoped whole-dataflow query rather than erroring.
+func (o *OECDProvider) buildCountryKey(ctx context.Context, ref, country string) string {
+	dims := o.dimensionOrder(ctx, ref)
+	refAreaPos := -1
+	for i, id := range dims {
+		if id == "REF_AREA" {
+			refAreaPos = i
+			break
+		}
+	}
+	if refAreaPos < 0 || len(dims) == 0 {
+		return "" // can't place the country → unscoped query
+	}
+	slots := make([]string, len(dims))
+	slots[refAreaPos] = country
+	return strings.Join(slots, ".")
+}
+
+// dimensionOrder returns the ordered series-dimension IDs for a dataflow ref,
+// fetched from its data-structure definition and cached per ref (the order is
+// stable for a given dataflow version). Returns nil on any failure.
+func (o *OECDProvider) dimensionOrder(ctx context.Context, ref string) []string {
+	o.dimsMu.Lock()
+	defer o.dimsMu.Unlock()
+	if o.dims == nil {
+		o.dims = make(map[string][]string)
+	}
+	if cached, ok := o.dims[ref]; ok {
+		return cached
+	}
+
+	// ref is "agency,id,version"; the structure endpoint wants slash-separated path.
+	parts := strings.SplitN(ref, ",", 3)
+	if len(parts) != 3 {
+		return nil
+	}
+	endpoint := fmt.Sprintf("%s/dataflow/%s/%s/%s?references=datastructure",
+		o.baseURL, parts[0], parts[1], parts[2])
+	body, err := o.get(ctx, endpoint, "application/vnd.sdmx.structure+json")
+	if err != nil {
+		return nil
+	}
+	var s struct {
+		Data struct {
+			DataStructures []struct {
+				DataStructureComponents struct {
+					DimensionList struct {
+						Dimensions []struct {
+							ID       string `json:"id"`
+							Position int    `json:"position"`
+						} `json:"dimensions"`
+					} `json:"dimensionList"`
+				} `json:"dataStructureComponents"`
+			} `json:"dataStructures"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &s); err != nil || len(s.Data.DataStructures) == 0 {
+		return nil
+	}
+	dimList := s.Data.DataStructures[0].DataStructureComponents.DimensionList.Dimensions
+	if len(dimList) == 0 {
+		return nil
+	}
+	// Order by position (defensive — the API usually returns them in order already).
+	order := make([]string, len(dimList))
+	for _, d := range dimList {
+		if d.Position >= 0 && d.Position < len(order) {
+			order[d.Position] = d.ID
+		}
+	}
+	// Guard against gaps (a missing position would leave an empty id).
+	for _, id := range order {
+		if id == "" {
+			return nil
+		}
+	}
+	o.dims[ref] = order
+	return order
 }
 
 // decodeSDMXObservations turns an SDMX-JSON 2.0 cube into observation rows. The
