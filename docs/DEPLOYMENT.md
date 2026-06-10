@@ -281,6 +281,7 @@ These enable dedicated structured-research tools. Each provider is independent. 
 | `FRED_API_KEY` | `econ_search` | Federal Reserve Economic Data API key (free at fred.stlouisfed.org). **`econ_search` is always available** via keyless World Bank / OECD / Eurostat providers; this key *adds* FRED's US macro series | — |
 | — (none) | `econ_search` | World Bank Open Data (global development indicators, 200+ economies), OECD (SDMX economy indicators), and Eurostat (European official statistics). All keyless; no configuration | — |
 | — (none) | `clinical_search` | ClinicalTrials.gov v2 — 400K+ clinical-trial registrations as typed data. Keyless; no configuration. **Always available** | — |
+| `IA_ACCESS_KEY` + `IA_SECRET_KEY` | `archive_source` | Optional Internet Archive S3-style credentials for Save Page Now. **`archive_source` is always available** keyless; both keys together authenticate captures for higher reliability. Never logged. Get a pair at archive.org/account/s3.php | — |
 
 Each structured-domain provider gets an independent circuit breaker and uses the SSRF-safe HTTP client. `filing_search` returns XBRL company facts (with `facts=true`); `econ_search` returns observations passed through exactly as the source provides them — no rounding; `clinical_search` returns trial metadata for discovery (not medical advice).
 

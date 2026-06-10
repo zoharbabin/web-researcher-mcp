@@ -28,6 +28,7 @@ var expectedTools = []string{
 	"format_bibliography",
 	"verify_citation",
 	"audit_bibliography",
+	"archive_source",
 	"citation_graph",
 	"filing_search",
 	"legal_search",
@@ -80,7 +81,7 @@ func TestAllToolsHaveAnnotations(t *testing.T) {
 			// memory_save is the one WRITE tool (it persists a memory). Every
 			// other tool is read-only. No tool is ever destructive — deletion is
 			// the separate #85 erasure endpoint, never a tool flag.
-			writeTools := map[string]bool{"memory_save": true, "workspace_contribute": true}
+			writeTools := map[string]bool{"memory_save": true, "workspace_contribute": true, "archive_source": true}
 			if writeTools[tool.Name] {
 				if tool.Annotations.ReadOnlyHint {
 					t.Errorf("%s writes state; ReadOnlyHint should be false", tool.Name)
@@ -156,6 +157,15 @@ func TestAllToolsHaveAnnotations(t *testing.T) {
 				}
 				if *tool.Annotations.OpenWorldHint {
 					t.Error("workspace_contribute should NOT be open-world")
+				}
+			case "archive_source":
+				// A write (creates a public IA snapshot); idempotent (SPN dedups within
+				// its rate window). writeAnnotations forces OpenWorldHint:false.
+				if !tool.Annotations.IdempotentHint {
+					t.Error("archive_source should be idempotent")
+				}
+				if *tool.Annotations.OpenWorldHint {
+					t.Error("archive_source should NOT be open-world (writeAnnotations forces false)")
 				}
 			case "workspace_read":
 				if !tool.Annotations.IdempotentHint {
@@ -239,10 +249,15 @@ func TestOutputSchemaMatchesResponse(t *testing.T) {
 		"structured_search":   {"query": "test"},
 		"format_bibliography": {"sources": []any{map[string]any{"url": "https://example.com/a", "title": "A", "author": "Smith, J.", "date": "2024"}}},
 		"audit_bibliography":  {"entries": []any{map[string]any{"url": "https://example.com/a", "title": "A", "doi": "10.1/x"}}},
-		"filing_search":       {"query": "AAPL"},
-		"legal_search":        {"query": "miranda"},
-		"econ_search":         {"series_id": "GDP"},
-		"clinical_search":     {"condition": "covid-19"},
+		// setupTestDeps has a nil LinkVerifier → archive_source returns status:"unavailable",
+		// locking the unavailable-path keys (requestedUrl/status/reason/source/trust)
+		// against archiveSourceOutputSchema. The content-path keys are covered by the
+		// stub-driven handler tests in archive_source_test.go.
+		"archive_source":  {"url": "https://example.com"},
+		"filing_search":   {"query": "AAPL"},
+		"legal_search":    {"query": "miranda"},
+		"econ_search":     {"series_id": "GDP"},
+		"clinical_search": {"condition": "covid-19"},
 	}
 
 	tools := listTools(t)

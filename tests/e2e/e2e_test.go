@@ -275,6 +275,39 @@ func TestMCPLifecycle(t *testing.T) {
 		}
 	})
 
+	// archive_source (#196) is the trust suite's write tool. Driven over the real
+	// MCP transport against a private host so it stays hermetic (no live SPN):
+	// the URL is rejected by the in-handler private-host guard, proving the tool
+	// is registered, reachable, and validates input end-to-end.
+	t.Run("CallArchiveSource", func(t *testing.T) {
+		h.send(jsonRPCRequest{
+			JSONRPC: "2.0",
+			ID:      4,
+			Method:  "tools/call",
+			Params: map[string]interface{}{
+				"name":      "archive_source",
+				"arguments": map[string]interface{}{"url": "http://127.0.0.1/private"},
+			},
+		})
+		resp := h.readResponse()
+		if resp.ID != float64(4) {
+			t.Fatalf("expected ID 4, got %v", resp.ID)
+		}
+		if resp.Error != nil {
+			t.Fatalf("archive_source transport error: %s", resp.Error)
+		}
+		// A private host is refused with an IsError tool result (not a transport error).
+		var result struct {
+			IsError bool `json:"isError"`
+		}
+		if err := json.Unmarshal(resp.Result, &result); err != nil {
+			t.Fatalf("parse archive_source result: %v", err)
+		}
+		if !result.IsError {
+			t.Error("archive_source should refuse a private/loopback host with a tool error")
+		}
+	})
+
 	t.Run("Shutdown", func(t *testing.T) {
 		h.shutdown()
 	})

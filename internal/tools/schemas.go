@@ -208,6 +208,16 @@ var scrapePageOutputSchema = map[string]any{
 		"sourceType":     sourceTypeSchema,
 		"authorityTier":  authorityTierSchema,
 		"domainCategory": domainCategorySchema,
+		// Scholarly DOI + integrity status (#199) — present only on peer-reviewed
+		// pages that declare a DOI. Evidence, never a verdict or an identity claim.
+		"detectedDoi": map[string]any{
+			"type":        "string",
+			"description": "A scholarly DOI the page declares, read from its Highwire citation_doi metadata or (fallback) the first few KB of the cleaned text — peer-reviewed pages only. Evidence that the page declares this DOI; NOT a verified assertion that the page IS that record, and never taken from a references list. Use verify_citation to confirm. Omitted when the page is not scholarly or declares no DOI.",
+		},
+		"retractionStatus": map[string]any{
+			"type":        "object",
+			"description": "Crossref (Retraction Watch + publisher) integrity status for detectedDoi when retracted/corrected/flagged — the same object academic_search and verify_citation return ({retracted, kind, date?, noticeDoi?, source?}). Omitted when clean, when no DOI was detected, or when the resolver is unavailable. Captured at scrape time (shares the scrape cache TTL); best-effort external data, never a guess.",
+		},
 	},
 }
 
@@ -751,7 +761,30 @@ var verifyCitationOutputSchema = map[string]any{
 		"httpStatus":       map[string]any{"type": "integer", "description": "Live HTTP status for a URL input (0 = unreachable)."},
 		"archivedUrl":      map[string]any{"type": "string", "description": "Internet Archive (Wayback) snapshot URL when the live link is dead."},
 		"provenance":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "How each piece of evidence was obtained (which source answered)."},
-		"trust":            trustUntrustedExternal,
+		// Optional claim check (#195) — present only when a `claim` was supplied.
+		// Same lexical, model-free coverage as audit_bibliography's per-entry claim.
+		"claim":          map[string]any{"type": "string", "description": "Echoed when a claim was provided."},
+		"claimSupport":   map[string]any{"type": "string", "enum": []any{"addressed", "partially_addressed", "not_addressed", "source_unavailable"}, "description": "Claim COVERAGE (not a support/refute verdict): addressed = strong topical overlap, claim-relevant sentences in claimEvidence; partially_addressed = some overlap, evidence shown but not flagged (ambiguous — you judge); not_addressed = source fetched but addresses none of the claim (mischaracterization); source_unavailable = no fetchable source."},
+		"claimEvidence":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Claim-relevant sentences extracted from the source, in document order. Evidence for you to judge direction — not a verdict."},
+		"claimSourceUrl": map[string]any{"type": "string", "description": "The URL actually fetched for the claim check (the live URL, or its Wayback snapshot)."},
+		"contrastSignal": map[string]any{"type": "boolean", "description": "Present (true) when a claim-relevant source sentence carries a negation/contrast cue — the source may REFUTE the claim despite sharing its terms. Read the evidence yourself; this is a heads-up, never a refutes verdict."},
+		"trust":          trustUntrustedExternal,
+	},
+}
+
+var archiveSourceOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"requestedUrl": map[string]any{"type": "string", "description": "The URL submitted for capture (echo)."},
+		"snapshotUrl":  map[string]any{"type": "string", "description": "The Wayback snapshot URL (https://web.archive.org/web/<timestamp>/<url>); omitted when status is pending or unavailable."},
+		"archivedAt":   map[string]any{"type": "string", "description": "RFC 3339 timestamp of when THIS call confirmed a fresh capture (freshness/provenance); present only on a fresh capture."},
+		"captured":     map[string]any{"type": "boolean", "description": "true only for a fresh snapshot made by this call; false when snapshotUrl came from the existing-snapshot fallback."},
+		"status":       map[string]any{"type": "string", "enum": []any{"archived", "existing", "pending", "unavailable"}, "description": "archived = a fresh capture was made; existing = fell back to a pre-existing snapshot; pending = Save Page Now accepted the request but returned no snapshot URL in time; unavailable = no link verifier is configured."},
+		"httpStatus":   map[string]any{"type": "integer", "description": "Save Page Now endpoint HTTP status (0 = unreachable/timeout/SSRF-rejected)."},
+		"reason":       map[string]any{"type": "string", "description": "Why no fresh capture was made (present for existing/pending/unavailable)."},
+		"source":       map[string]any{"type": "string", "description": "The archiving service: 'web.archive.org Save Page Now'."},
+		"provenance":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "How the snapshot was obtained."},
+		"trust":        trustUntrustedExternal,
 	},
 }
 

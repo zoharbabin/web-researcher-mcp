@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 )
@@ -30,12 +31,17 @@ type LinkStatus struct {
 }
 
 // LinkVerifier checks URL liveness with bounded concurrency and a short per-URL
-// timeout, falling back to the Wayback availability API for dead links.
+// timeout, falling back to the Wayback availability API for dead links. It can
+// also CREATE a fresh Internet Archive snapshot via Save Page Now (#196).
 type LinkVerifier struct {
-	client      *http.Client
-	waybackBase string // overridable in tests; default Wayback availability API
-	maxConc     int
-	perURL      time.Duration
+	client        *http.Client
+	archiveClient *http.Client // longer timeout for Save Page Now (slow); SSRF-safe
+	waybackBase   string       // overridable in tests; default Wayback availability API
+	saveBase      string       // overridable in tests; default Save Page Now endpoint
+	iaAccessKey   string       // optional IA S3 access key (raises SPN reliability)
+	iaSecretKey   string       // optional IA S3 secret key
+	maxConc       int
+	perURL        time.Duration
 }
 
 // LinkVerifierConfig configures a verifier. Zero values get safe defaults.
@@ -43,9 +49,30 @@ type LinkVerifierConfig struct {
 	AllowPrivateIPs bool          // mirror the scrape SSRF posture
 	MaxConcurrency  int           // default 8
 	PerURLTimeout   time.Duration // default 8s
+	// IAAccessKey/IASecretKey are optional Internet Archive S3-style credentials.
+	// When both are set, Save Page Now requests are authenticated (higher rate /
+	// reliability); keyless SPN still works without them. Never logged.
+	IAAccessKey string
+	IASecretKey string
 }
 
 const waybackAvailabilityBase = "https://archive.org/wayback/available"
+const savePageNowBase = "https://web.archive.org/save/"
+
+// archiveBudget bounds a single Save Page Now request — SPN can take many seconds,
+// so it gets its own longer budget separate from the snappy liveness timeout.
+const archiveBudget = 25 * time.Second
+
+// ArchiveResult is the outcome of a Save Page Now request. Best-effort: an empty
+// SnapshotURL means no snapshot was confirmed (SPN slow/declined/throttled and no
+// existing snapshot found). Evidence, never a verdict.
+type ArchiveResult struct {
+	RequestedURL string
+	SnapshotURL  string // https://web.archive.org/web/<ts>/<url> when known
+	Timestamp    string // RFC3339; when THIS call confirmed a fresh snapshot
+	HTTPStatus   int    // SPN endpoint status (0 = transport error / SSRF reject / timeout)
+	Captured     bool   // true only when THIS call produced a fresh snapshot
+}
 
 // NewLinkVerifier builds a verifier over an SSRF-safe client. Bounded by design:
 // a short timeout and a concurrency cap so verification never dominates a
@@ -63,11 +90,26 @@ func NewLinkVerifier(cfg LinkVerifierConfig) *LinkVerifier {
 	// longer budget. Still SSRF-safe (validates resolved IPs before connecting).
 	c := NewSSRFSafeClient(cfg.AllowPrivateIPs)
 	c.Timeout = perURL
-	return &LinkVerifier{client: c, waybackBase: waybackAvailabilityBase, maxConc: maxConc, perURL: perURL}
+	// A separate, longer-budget SSRF-safe client for Save Page Now (it is slow).
+	ac := NewSSRFSafeClient(cfg.AllowPrivateIPs)
+	ac.Timeout = archiveBudget
+	return &LinkVerifier{
+		client:        c,
+		archiveClient: ac,
+		waybackBase:   waybackAvailabilityBase,
+		saveBase:      savePageNowBase,
+		iaAccessKey:   cfg.IAAccessKey,
+		iaSecretKey:   cfg.IASecretKey,
+		maxConc:       maxConc,
+		perURL:        perURL,
+	}
 }
 
 // SetWaybackBase overrides the Wayback availability endpoint (testing).
 func (v *LinkVerifier) SetWaybackBase(base string) { v.waybackBase = base }
+
+// SetSaveBase overrides the Save Page Now endpoint (testing).
+func (v *LinkVerifier) SetSaveBase(base string) { v.saveBase = base }
 
 // VerifyAll checks every URL concurrently (bounded) and returns the statuses in
 // input order. Best-effort: a URL that errors is reported with Live=false and a
@@ -174,4 +216,67 @@ type waybackResponse struct {
 			Status    string `json:"status"`
 		} `json:"closest"`
 	} `json:"archived_snapshots"`
+}
+
+// snapshotPrefix is the canonical Wayback snapshot URL prefix.
+const snapshotPrefix = "https://web.archive.org/web/"
+
+// Archive requests a fresh Internet Archive snapshot of rawURL via Save Page Now
+// (#196). Best-effort and honest: on success it reports the new snapshot URL with
+// Captured=true; on any failure/timeout/throttle it falls back to the most recent
+// EXISTING snapshot (Captured=false), and returns an empty SnapshotURL only when
+// neither is available. It never returns an error — the caller maps the result to
+// a status. The outbound connection is to the fixed web.archive.org host through
+// the SSRF-safe client (every redirect hop IP-revalidated); the user URL is the
+// path suffix, not a separately-fetched target.
+func (v *LinkVerifier) Archive(ctx context.Context, rawURL string) ArchiveResult {
+	res := ArchiveResult{RequestedURL: rawURL}
+	if rawURL == "" {
+		return res
+	}
+
+	// Defense in depth alongside the client Timeout.
+	ctx, cancel := context.WithTimeout(ctx, archiveBudget)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, v.saveBase+rawURL, nil)
+	if err == nil {
+		req.Header.Set("User-Agent", "web-researcher-mcp link-verifier")
+		// Authenticated SPN when both IA keys are configured (never logged).
+		if v.iaAccessKey != "" && v.iaSecretKey != "" {
+			req.Header.Set("Authorization", "LOW "+v.iaAccessKey+":"+v.iaSecretKey)
+		}
+		if resp, derr := v.archiveClient.Do(req); derr == nil {
+			res.HTTPStatus = resp.StatusCode
+			// The SSRF-safe client auto-follows redirects, so the captured snapshot
+			// URL is the FINAL request URL (validated to be a /web/ snapshot).
+			final := resp.Request.URL.String()
+			if !strings.HasPrefix(final, snapshotPrefix) {
+				// No-redirect responses sometimes carry the snapshot in a header.
+				if cl := resp.Header.Get("Content-Location"); cl != "" {
+					if strings.HasPrefix(cl, "/web/") {
+						cl = "https://web.archive.org" + cl
+					}
+					if strings.HasPrefix(cl, snapshotPrefix) {
+						final = cl
+					}
+				}
+			}
+			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64*1024))
+			_ = resp.Body.Close()
+			if strings.HasPrefix(final, snapshotPrefix) {
+				res.SnapshotURL = final
+				res.Captured = true
+				res.Timestamp = time.Now().UTC().Format(time.RFC3339)
+				return res
+			}
+		}
+	}
+
+	// SPN failed / produced no confirmable snapshot — fall back to the most recent
+	// EXISTING snapshot so the caller still gets something usable (Captured stays false).
+	if snap := v.wayback(ctx, rawURL); snap != "" {
+		res.SnapshotURL = snap
+	}
+	return res
 }

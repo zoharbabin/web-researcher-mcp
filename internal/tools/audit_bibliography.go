@@ -413,6 +413,8 @@ func auditOneEntry(ctx context.Context, deps Dependencies, e content.BibEntry, r
 // missing scraper / unfetchable source yields source_unavailable, never an error.
 func auditClaimCoverage(ctx context.Context, deps Dependencies, r *auditEntryResult) {
 	// Prefer the live URL; fall back to the Wayback snapshot when the link is dead.
+	// URL selection is caller-specific (corpus entry state), so it stays here; the
+	// fetch + lexical coverage is the shared claimCoverageFor (#195).
 	fetchURL := ""
 	if r.LinkLive != nil && *r.LinkLive && r.URL != "" {
 		fetchURL = r.URL
@@ -423,50 +425,11 @@ func auditClaimCoverage(ctx context.Context, deps Dependencies, r *auditEntryRes
 		fetchURL = r.URL
 	}
 
-	if deps.Scraper == nil || fetchURL == "" {
-		r.ClaimSupport = claimSourceUnavailable
-		return
-	}
-
-	res, err := deps.Scraper.Scrape(ctx, fetchURL, auditClaimScrapeMaxBytes)
-	if err != nil || res == nil || strings.TrimSpace(res.Content) == "" {
-		r.ClaimSupport = claimSourceUnavailable
-		return
-	}
-	r.ClaimSourceURL = fetchURL
-
-	// Term coverage is the transparent, dependency-free measure of topical overlap.
-	// Zero overlap → not_addressed (the wrong source — the only case we flag, and
-	// only when the source was actually read). Partial overlap → evidence shown but
-	// NOT flagged (ambiguous; the human judges). Strong overlap → addressed.
-	//
-	// We measure PEAK coverage within a sentence window (#177), not across the whole
-	// document: on a long, broad page (e.g. a full encyclopedia article) a narrow,
-	// off-topic claim can otherwise accumulate stray term hits scattered across the
-	// page and score partially_addressed when no focused passage discusses it.
-	// Windowed coverage moves those borderline long-doc cases to the correct
-	// not_addressed end while a genuinely-covered claim (terms co-occurring in a
-	// passage) still scores fully addressed.
-	matched, total := content.ClaimTermCoverageWindowed(res.Content, r.Claim, 0)
-	ev := content.ExtractClaimEvidence(res.Content, r.Claim)
-	r.ClaimEvidence = ev.KeySentences
-	// A matched evidence sentence carrying a negation/contrast cue may REFUTE the
-	// claim while sharing its terms (the lexical "false-addressed" hole). Surface
-	// it as a neutral "read this yourself" signal — never as a refutes verdict.
-	r.ClaimContrast = content.HasContrastCue(ev.KeySentences)
-
-	switch {
-	case total == 0:
-		// The claim had no significant terms to match (e.g. all stop words) — we
-		// can't make a coverage judgment, so don't accuse.
-		r.ClaimSupport = claimPartiallyAddressed
-	case matched == 0:
-		r.ClaimSupport = claimNotAddressed
-	case float64(matched)/float64(total) >= claimAddressedThreshold:
-		r.ClaimSupport = claimAddressed
-	default:
-		r.ClaimSupport = claimPartiallyAddressed
-	}
+	cc := claimCoverageFor(ctx, deps, fetchURL, r.Claim)
+	r.ClaimSupport = cc.Support
+	r.ClaimEvidence = cc.Evidence
+	r.ClaimSourceURL = cc.SourceURL
+	r.ClaimContrast = cc.Contrast
 }
 
 // auditClaimScrapeMaxBytes bounds the per-source fetch for a claim check — large
