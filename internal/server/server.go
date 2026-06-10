@@ -183,6 +183,9 @@ func (s *Server) ServeHTTP(ctx context.Context, cfg HTTPConfig) error {
 		MaxHeaderBytes:    cfg.MaxHeaderBytes,
 	}
 
+	// #nosec G118 -- the drain context is detached from ctx by design: ctx is
+	// already cancelled (that cancellation triggered this shutdown), so deriving
+	// the drain budget from it would expire immediately and drain nothing.
 	go func() {
 		<-ctx.Done()
 		// Graceful drain: stop accepting new connections and let in-flight
@@ -193,6 +196,10 @@ func (s *Server) ServeHTTP(ctx context.Context, cfg HTTPConfig) error {
 		if drainTimeout <= 0 {
 			drainTimeout = defaultShutdownTimeout
 		}
+		// The drain context MUST be detached from ctx: ctx is already cancelled
+		// (its cancellation is what triggered this shutdown), so deriving from it
+		// would give an already-expired deadline and drain nothing. A fresh
+		// background context bounded by drainTimeout is the intended behavior.
 		drainCtx, cancel := context.WithTimeout(context.Background(), drainTimeout)
 		defer cancel()
 		if err := httpServer.Shutdown(drainCtx); err != nil {
