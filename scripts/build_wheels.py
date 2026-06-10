@@ -93,16 +93,35 @@ _BINARY_NAME = "{binary}{exe}"
 
 
 def get_binary_path():
-    """Absolute path to the bundled binary, ensuring it is executable.
+    """Absolute path to the bundled binary, made runnable on demand.
 
     Exported so other Python code can locate the binary without launching it.
-    Wheels don't always preserve the Unix exec bit, so restore it on demand.
+    Two install-time facts have to be repaired here:
+      1. Wheels don't reliably preserve the Unix exec bit — restore it.
+      2. On macOS, a file written by the installer carries a quarantine /
+         provenance xattr; Gatekeeper then SIGKILLs (signal 9) this notarized
+         binary the first time it's exec'd from the Python process. Clearing the
+         com.apple.* xattrs lets the (Developer-ID-signed, notarized) binary run.
+         Best-effort: ignore failures (non-macOS, no xattr support, read-only fs).
     """
     path = os.path.join(os.path.dirname(__file__), "bin", _BINARY_NAME)
-    if sys.platform != "win32":
-        mode = os.stat(path).st_mode
-        if not mode & stat.S_IXUSR:
-            os.chmod(path, mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    if sys.platform == "win32":
+        return path
+    mode = os.stat(path).st_mode
+    if not mode & stat.S_IXUSR:
+        os.chmod(path, mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    if sys.platform == "darwin":
+        # `xattr -c` strips com.apple.quarantine / com.apple.provenance, which
+        # otherwise cause a SIGKILL on first exec of a wheel-delivered binary.
+        try:
+            subprocess.run(
+                ["/usr/bin/xattr", "-c", path],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except OSError:
+            pass
     return path
 
 
