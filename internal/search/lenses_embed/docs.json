@@ -1,0 +1,32 @@
+{
+  "name": "docs",
+  "description": "Official documentation and API references only — no blogs, tutorials, or aggregators",
+  "domains": [
+    "go.dev",
+    "pkg.go.dev",
+    "docs.python.org",
+    "pypi.org",
+    "developer.mozilla.org",
+    "docs.rs",
+    "nodejs.org",
+    "react.dev",
+    "nextjs.org",
+    "docs.github.com",
+    "kubernetes.io",
+    "docs.docker.com",
+    "docs.aws.amazon.com",
+    "cloud.google.com",
+    "learn.microsoft.com",
+    "docs.oracle.com",
+    "docs.swift.org",
+    "kotlinlang.org",
+    "ruby-doc.org",
+    "docs.djangoproject.com",
+    "docs.spring.io",
+    "docs.flutter.dev",
+    "docs.anthropic.com",
+    "platform.openai.com"
+  ],
+  "cx": "",
+  "routing": ""
+}

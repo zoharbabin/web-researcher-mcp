@@ -75,7 +75,17 @@ func (lr *LensRegistry) LoadFromDir(dir string) error {
 	if err != nil {
 		return fmt.Errorf("failed to read lenses directory %s: %w", dir, err)
 	}
+	read := func(name string) ([]byte, error) {
+		// #nosec G304 -- reads lens files from the operator-configured directory enumerated via os.ReadDir, not request input
+		return os.ReadFile(filepath.Join(dir, name))
+	}
+	return lr.loadEntries(dir, entries, read)
+}
 
+// loadEntries is the shared lens-ingest path for both the embedded FS and a disk
+// directory: parse → default the name from the filename → validate → register
+// (last write wins). Any malformed/invalid lens fails the whole load loudly.
+func (lr *LensRegistry) loadEntries(source string, entries []os.DirEntry, read func(name string) ([]byte, error)) error {
 	lr.mu.Lock()
 	defer lr.mu.Unlock()
 
@@ -83,30 +93,22 @@ func (lr *LensRegistry) LoadFromDir(dir string) error {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
 			continue
 		}
-
-		path := filepath.Join(dir, entry.Name())
-		// #nosec G304 -- reads lens definition files from the operator-configured lenses directory enumerated via os.ReadDir, not request input
-		data, err := os.ReadFile(path)
+		data, err := read(entry.Name())
 		if err != nil {
-			return fmt.Errorf("failed to read lens file %s: %w", path, err)
+			return fmt.Errorf("failed to read lens file %s/%s: %w", source, entry.Name(), err)
 		}
-
 		var lens Lens
 		if err := json.Unmarshal(data, &lens); err != nil {
-			return fmt.Errorf("invalid lens JSON in %s: %w", path, err)
+			return fmt.Errorf("invalid lens JSON in %s/%s: %w", source, entry.Name(), err)
 		}
-
 		if lens.Name == "" {
 			lens.Name = strings.TrimSuffix(entry.Name(), ".json")
 		}
-
 		if err := ValidateLens(&lens, entry.Name()); err != nil {
 			return err
 		}
-
 		lr.lenses[lens.Name] = &lens
 	}
-
 	return nil
 }
 

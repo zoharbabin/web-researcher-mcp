@@ -1,0 +1,17 @@
+{
+  "name": "tech",
+  "description": "Technology news and analysis",
+  "domains": [
+    "arstechnica.com",
+    "techcrunch.com",
+    "theverge.com",
+    "wired.com",
+    "theregister.com",
+    "zdnet.com",
+    "engadget.com",
+    "thenextweb.com",
+    "venturebeat.com",
+    "protocol.com"
+  ],
+  "cx": ""
+}

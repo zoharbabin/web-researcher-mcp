@@ -41,7 +41,7 @@ internal/
 ├── ratelimit/    # Token bucket (per-tenant + global) + optional atomic cross-pod daily quota (Redis)
 ├── circuit/      # Circuit breaker for external APIs
 └── resources/    # MCP Resources (stats:// + diagnostics:// errors/health) + Prompts (research templates)
-lenses/           # JSON files defining domain lists for site-restricted search
+lenses/           # JSON files defining domain lists for site-restricted search (CANONICAL source; go:embed'd into the binary via internal/search/lenses_embed/ so lenses work from any CWD/install — keep in sync with `make sync-lenses`, guarded by TestEmbeddedLensesMatchRoot)
 tests/e2e/        # Full process E2E tests
 tests/benchmark/  # Performance benchmarks
 ```
@@ -52,7 +52,7 @@ Non-obvious top-level dirs (so they're not mistaken for clutter or duplicates):
 docs/             # Published docs (mkdocs site); docs/internal/ = local-only working docs (gitignored, never published)
 decks/            # Marp presentation decks (source + self-contained html/pdf), one folder per deck — published to the site under /decks/<name>/ by docs.yml (see decks/README.md)
 assets/           # Logos, social-preview, favicon, ProductHunt gallery — consumed by README, the docs site, and registries
-scripts/          # Build/release helpers (build-mcpb, docker-smoke, sync-version) — wired into Makefile/CI
+scripts/          # Build/release helpers (build-mcpb, build_wheels.py [PyPI platform wheels], docker-smoke, sync-version) — wired into Makefile/CI
 .githooks/        # Git pre-commit hook (enabled via `make hooks`) — fmt/lint/vet on staged Go files
 hooks/            # Claude Code PLUGIN hook manifest (hooks.json) — NOT a git hook; runs bin/install.sh on session start
 bin/              # Claude Code plugin installer (bin/install.sh) — distinct from the root curl installer install.sh
@@ -116,7 +116,7 @@ Full list: see `.env.example`
 
 ## Release Process
 
-Push a `v*` tag → CI runs GoReleaser → cross-platform binaries + Docker multi-arch (GHCR + Docker Hub) + .mcpb bundles + SBOM + cosign signatures. All automated via `.github/workflows/release.yml` + `.goreleaser.yml`.
+Push a `v*` tag → CI runs GoReleaser → cross-platform binaries + Docker multi-arch (GHCR + Docker Hub) + .mcpb bundles + SBOM + cosign signatures. Downstream gated jobs (each `needs: release`, off the critical path so a publisher failure can't abort the core release): Docker signing, MCP Registry, Smithery (`SMITHERY_ENABLED`), and PyPI platform wheels for uvx/uv/pip (`PYPI_PUBLISH_ENABLED`, Trusted Publishing OIDC). All automated via `.github/workflows/release.yml` + `.goreleaser.yml`.
 
 ## Testing
 

@@ -1,0 +1,17 @@
+{
+  "name": "finance",
+  "description": "Financial research, SEC filings, and market data",
+  "domains": [
+    "sec.gov",
+    "finance.yahoo.com",
+    "bloomberg.com",
+    "investopedia.com",
+    "wsj.com",
+    "ft.com",
+    "marketwatch.com",
+    "seekingalpha.com",
+    "fool.com",
+    "federalreserve.gov"
+  ],
+  "cx": ""
+}

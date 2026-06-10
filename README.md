@@ -26,6 +26,15 @@
 
 ### Get started in 30 seconds
 
+**Python users — `uvx` (no compile, any OS):**
+```bash
+# One-time: install uv (skip if you already have it)
+curl -LsSf https://astral.sh/uv/install.sh | sh        # macOS/Linux  (Windows: winget install astral-sh.uv)
+
+claude mcp add --scope user web-researcher -- uvx web-researcher-mcp
+```
+[`uv`](https://docs.astral.sh/uv/) fetches the right prebuilt binary for your platform and runs it — no Go, no compile, no manual PATH. Point any MCP client at `uvx web-researcher-mcp`. Also works with `uv tool install web-researcher-mcp` or `pip install web-researcher-mcp`.
+
 **macOS (Homebrew):**
 ```bash
 brew install zoharbabin/tap/web-researcher-mcp
@@ -42,9 +51,19 @@ curl -fsSL https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/
 powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/install.ps1 | iex"
 ```
 
-No dev tools needed — each method downloads the binary, verifies its checksum, and puts it on your PATH. The `curl`/PowerShell installers also register it with Claude Code automatically when the `claude` CLI is present; Homebrew installs the binary, so run the `claude mcp add` line above (shown) to connect it.
+No dev tools needed — every method ships the same signed binary (the PyPI wheels vendor it; the others download it and verify its checksum) and puts it on your PATH. The `curl`/PowerShell installers also register it with Claude Code automatically when the `claude` CLI is present; Homebrew installs the binary, so run the `claude mcp add` line above to connect it.
 
-**Using a different MCP client** (Claude Desktop, Cursor, …) or want to pass API keys? See [Connect to Your AI Assistant](#connect-to-your-ai-assistant) for the per-app config, and [Configuration](#configuration) to pick a search provider.
+**One-click install:**
+
+<p>
+  <a href="https://cursor.com/en/install-mcp?name=web-researcher&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyJ3ZWItcmVzZWFyY2hlci1tY3AiXX0%3D"><img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Add to Cursor" height="28"></a>
+  <a href="https://vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522web-researcher%2522%252C%2522command%2522%253A%2522uvx%2522%252C%2522args%2522%253A%255B%2522web-researcher-mcp%2522%255D%257D"><img src="https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=flat-square" alt="Install in VS Code" height="28"></a>
+  <a href="https://lmstudio.ai/install-mcp?name=web-researcher&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyJ3ZWItcmVzZWFyY2hlci1tY3AiXX0%3D"><img src="https://img.shields.io/badge/LM_Studio-Add_MCP-4A2DB8?style=flat-square" alt="Add to LM Studio" height="28"></a>
+</p>
+
+The Cursor / VS Code / LM Studio buttons install the zero-config `uvx` setup (your editor prompts to confirm before adding it; needs [`uv`](https://docs.astral.sh/uv/) — see above). It runs **DuckDuckGo web search with no API key** — great to try instantly; `image_search`/`news_search` and richer providers need a key (2 min, see [Configuration](#configuration)). **Claude Desktop:** download the [`.mcpb` bundle](https://github.com/zoharbabin/web-researcher-mcp/releases/latest) for your platform and double-click it (Settings → Extensions), or use the `uvx` line above.
+
+**Using a different MCP client** or want to pass API keys? See [Connect to Your AI Assistant](#connect-to-your-ai-assistant) for the per-app config, and [Configuration](#configuration) to pick a search provider.
 
 Your AI can now search the web, read full articles, find academic papers, look up patents, and run multi-step research — only from sources you pick.
 

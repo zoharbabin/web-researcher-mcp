@@ -1,0 +1,17 @@
+{
+  "name": "government",
+  "description": "Government policy, regulations, and official data",
+  "domains": [
+    "usa.gov",
+    "congress.gov",
+    "whitehouse.gov",
+    "europa.eu",
+    "gov.uk",
+    "un.org",
+    "canada.ca",
+    "data.gov",
+    "regulations.gov",
+    "gao.gov"
+  ],
+  "cx": ""
+}

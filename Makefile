@@ -1,4 +1,4 @@
-.PHONY: build build-fips test test-race test-cover test-e2e test-live test-concurrency test-bench \
+.PHONY: build build-fips sync-lenses test test-race test-cover test-e2e test-live test-concurrency test-bench \
         lint fmt fmt-check vet vuln sec tools hooks precommit verify clean run dev docker docker-smoke release version-sync help all
 
 BINARY = web-researcher-mcp
@@ -112,6 +112,14 @@ precommit: fmt-check vet lint test
 # in CI rather than at runtime. Exercised via the search package's lens tests.
 validate-lenses:
 	go test ./internal/search/ -run 'TestBundledLensesValid|TestValidateLens' -count=1
+
+# Regenerate the embedded lens copy from the canonical root lenses/ dir. The
+# binary embeds these so lenses work from any CWD / install method (uvx, go
+# install). Run after adding/editing a root lens; CI's TestEmbeddedLensesMatchRoot
+# fails if the embedded copy drifts from root.
+sync-lenses:
+	cp lenses/*.json internal/search/lenses_embed/
+	@echo "synced $$(ls internal/search/lenses_embed/*.json | wc -l | tr -d ' ') lenses into the embed"
 
 # Full verification, matching CI. Run before opening a PR.
 verify: fmt-check vet lint sec vuln validate-lenses test-race test-e2e build

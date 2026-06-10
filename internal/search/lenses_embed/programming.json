@@ -1,0 +1,22 @@
+{
+  "name": "programming",
+  "description": "Programming documentation, tutorials, and Q&A sites",
+  "domains": [
+    "stackoverflow.com",
+    "github.com",
+    "developer.mozilla.org",
+    "docs.python.org",
+    "learn.microsoft.com",
+    "dev.to",
+    "go.dev",
+    "nodejs.org",
+    "rust-lang.org",
+    "cppreference.com",
+    "docs.oracle.com",
+    "kotlinlang.org",
+    "pkg.go.dev",
+    "crates.io",
+    "pypi.org"
+  ],
+  "cx": ""
+}

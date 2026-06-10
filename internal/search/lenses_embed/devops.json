@@ -1,0 +1,19 @@
+{
+  "name": "devops",
+  "description": "DevOps, infrastructure, and operations documentation (Kubernetes, Docker, Terraform, cloud providers, CI/CD)",
+  "domains": [
+    "kubernetes.io",
+    "docs.docker.com",
+    "registry.terraform.io",
+    "developer.hashicorp.com",
+    "docs.aws.amazon.com",
+    "cloud.google.com",
+    "learn.microsoft.com",
+    "docs.github.com",
+    "docs.gitlab.com",
+    "prometheus.io",
+    "grafana.com",
+    "helm.sh"
+  ],
+  "cx": ""
+}

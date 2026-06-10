@@ -15,7 +15,7 @@ This guide is for users of the deprecated [`google-researcher-mcp`](https://gith
 | Aspect | Old (`google-researcher-mcp`) | New (`web-researcher-mcp`) |
 |--------|-------------------------------|----------------------------|
 | Language | TypeScript / Node.js 20+ | Go (single static binary) |
-| Install | `npx -y google-researcher-mcp` | `go install`, binary download, or Docker |
+| Install | `npx -y google-researcher-mcp` | `uvx web-researcher-mcp` (one-line swap), Homebrew, binary download, or Docker |
 | Process model | npm spawns Node.js — orphan detection issues | Native binary — clean EOF/SIGPIPE lifecycle |
 | Search backends | Google PSE only | Google PSE plus multiple alternatives (Brave, Serper, SearXNG, SearchAPI, Tavily, Exa) and a zero-config DuckDuckGo fallback, with multi-provider routing — canonical list: `search.SupportedProviders` |
 | Caching | In-memory only | Hybrid (memory + AES-encrypted disk) |
@@ -46,28 +46,45 @@ Delete the `google-researcher` entry from your MCP configuration file:
 }
 ```
 
-### 2. Install the new binary
+### 2. Install the new server
 
-Choose one method:
+The fastest path is the **one-line swap**: if you ran the old server with `npx`, just switch to `uvx` (from [Astral's uv](https://docs.astral.sh/uv/), the standard Python runner). It fetches the right prebuilt binary for your platform — no Node, no Go, no compile:
 
 ```bash
-# Option A: Go install (if you have Go installed)
-go install github.com/zoharbabin/web-researcher-mcp/cmd/web-researcher-mcp@latest
+# Recommended: one-line swap from npx → uvx (no toolchain)
+uvx web-researcher-mcp
+# or install it as a persistent tool:
+uv tool install web-researcher-mcp
+# or:
+pip install web-researcher-mcp
+```
 
-# Option B: Download pre-built binary
+Prefer a native install? Any of these also work:
+
+```bash
+# Homebrew (macOS)
+brew install zoharbabin/tap/web-researcher-mcp
+
+# Pre-built binary
 # Visit https://github.com/zoharbabin/web-researcher-mcp/releases
 
-# Option C: Docker
+# Docker
 docker pull zoharbabin/web-researcher-mcp:latest
+
+# Go install (if you have Go)
+go install github.com/zoharbabin/web-researcher-mcp/cmd/web-researcher-mcp@latest
 ```
 
 ### 3. Add the new server to your MCP config
+
+The config is the **same shape** as the old server — only the `command` changes. The simplest, using `uvx`:
 
 ```json
 {
   "mcpServers": {
     "web-researcher": {
-      "command": "web-researcher-mcp",
+      "command": "uvx",
+      "args": ["web-researcher-mcp"],
       "env": {
         "GOOGLE_CUSTOM_SEARCH_API_KEY": "YOUR_EXISTING_KEY",
         "GOOGLE_CUSTOM_SEARCH_ID": "YOUR_EXISTING_CX"
@@ -77,7 +94,7 @@ docker pull zoharbabin/web-researcher-mcp:latest
 }
 ```
 
-Your existing Google API keys work without any changes.
+If you installed the binary directly (Homebrew / release download), use `"command": "web-researcher-mcp"` with no `args` instead. **Your existing Google API keys work without any changes.**
 
 ### 4. (Optional) Add alternative search providers
 
