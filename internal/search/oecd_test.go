@@ -34,14 +34,27 @@ func TestOECDKeyless(t *testing.T) {
 // quarter to prove index-not-order lookup).
 func TestOECDObservations(t *testing.T) {
 	p := newOECDTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		// Country scoping triggers a structure fetch (to locate REF_AREA's slot)
+		// followed by the data fetch with the positional key. Serve both.
+		if strings.Contains(r.URL.Path, "/dataflow/") {
+			if !strings.Contains(r.Header.Get("Accept"), "vnd.sdmx.structure+json") {
+				t.Errorf("structure Accept = %q", r.Header.Get("Accept"))
+			}
+			// 3 dimensions: FREQ, REF_AREA (pos 1), UNIT_MEASURE.
+			w.Write([]byte(`{"data":{"dataStructures":[{"dataStructureComponents":{"dimensionList":{"dimensions":[
+				{"id":"FREQ","position":0},{"id":"REF_AREA","position":1},{"id":"UNIT_MEASURE","position":2}
+			]}}}]}}`))
+			return
+		}
 		if !strings.Contains(r.URL.Path, "/data/") {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
 		if r.URL.Query().Get("dimensionAtObservation") != "TIME_PERIOD" {
 			t.Error("dimensionAtObservation=TIME_PERIOD must be sent")
 		}
-		if r.URL.Query().Get("c[REF_AREA]") != "USA" {
-			t.Errorf("REF_AREA filter = %q, want USA", r.URL.Query().Get("c[REF_AREA]"))
+		// The positional key must pin USA in REF_AREA's slot (pos 1 of 3): ".USA."
+		if !strings.HasSuffix(r.URL.Path, "/.USA.") {
+			t.Errorf("data path should carry positional key .USA. , got %s", r.URL.Path)
 		}
 		if !strings.Contains(r.Header.Get("Accept"), "vnd.sdmx.data+json") {
 			t.Errorf("Accept = %q, want sdmx data json", r.Header.Get("Accept"))
