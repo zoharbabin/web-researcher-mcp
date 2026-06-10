@@ -116,6 +116,61 @@ func TestClaimTermCoverage(t *testing.T) {
 	}
 }
 
+func TestClaimTermCoverageWindowed(t *testing.T) {
+	// A genuinely-covered claim: all terms co-occur in one passage → full peak.
+	covered := "The randomized trial showed the vaccine reduced infection rates significantly. Methods were standard."
+	if m, total := ClaimTermCoverageWindowed(covered, "vaccine infection rates", 0); m != 3 || total != 3 {
+		t.Errorf("covered: matched=%d total=%d, want 3/3", m, total)
+	}
+
+	// The #177 regression case: a narrow off-topic claim against a long, broad
+	// document where the claim's terms are SCATTERED across distant sentences but
+	// never co-occur in any passage. Whole-doc coverage over-counts (would score
+	// partial); windowed coverage must stay low because no local window holds them.
+	var sb strings.Builder
+	sb.WriteString("CRISPR is a gene editing technology used in molecular biology. ")
+	for i := 0; i < 40; i++ {
+		sb.WriteString("Researchers applied the technique to edit genomes in various cell lines. ")
+	}
+	sb.WriteString("The treaty of Westphalia is unrelated filler appearing here once. ")
+	for i := 0; i < 40; i++ {
+		sb.WriteString("Gene editing has broad applications in medicine and agriculture. ")
+	}
+	sb.WriteString("The year 1648 is mentioned in a totally different sentence far away. ")
+	longDoc := sb.String()
+
+	// "Westphalia treaty 1648": the three terms appear but in three far-apart
+	// sentences. Whole-doc would report 3/3; windowed must report < 3 (they never
+	// share a window), so the audit can correctly treat it as not/partially covered.
+	wMatched, wTotal := ClaimTermCoverageWindowed(longDoc, "Westphalia treaty 1648", 0)
+	dMatched, _ := ClaimTermCoverage(longDoc, "Westphalia treaty 1648")
+	if wTotal != 3 {
+		t.Fatalf("windowed total=%d, want 3", wTotal)
+	}
+	if dMatched != 3 {
+		t.Fatalf("precondition: whole-doc should find all 3 scattered terms, got %d", dMatched)
+	}
+	if wMatched >= dMatched {
+		t.Errorf("windowed coverage (%d) should be LOWER than diluted whole-doc coverage (%d) for scattered terms", wMatched, dMatched)
+	}
+
+	// Short document (fewer sentences than the window) degrades to whole-doc.
+	short := "Vaccines reduce infection."
+	wm, _ := ClaimTermCoverageWindowed(short, "vaccines infection", 0)
+	dm, _ := ClaimTermCoverage(short, "vaccines infection")
+	if wm != dm {
+		t.Errorf("short doc: windowed=%d should equal whole-doc=%d", wm, dm)
+	}
+
+	// Empty / all-stopword guards mirror ClaimTermCoverage.
+	if m, _ := ClaimTermCoverageWindowed("", "vaccine", 0); m != 0 {
+		t.Error("empty text should be 0 matched")
+	}
+	if _, total := ClaimTermCoverageWindowed(covered, "the and for", 0); total != 0 {
+		t.Error("all-stopword claim should have total 0")
+	}
+}
+
 func TestHasContrastCue(t *testing.T) {
 	if !HasContrastCue([]string{"The drug had no significant effect on mortality."}) {
 		t.Error("a sentence with 'no significant' should carry a contrast cue")

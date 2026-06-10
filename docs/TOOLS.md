@@ -18,6 +18,16 @@ Each tool follows the pattern in `internal/tools/registry.go`: a typed input str
 
 ---
 
+## Large-Payload Linking (resource_link)
+
+The heaviest tools — `scrape_page` (`mode: raw`), `search_and_scrape`, and `research_export` — can return tens to hundreds of KB. When a result is **at or above the link threshold**, the tool returns an MCP `resource_link` (2025-06-18 content type) instead of inlining the full body: a small inline summary (`{resource, bytes, mimeType, summary, expiresAt, linked:true}`) plus a `resource_link` the client fetches on demand. Below the threshold, results inline exactly as before (no behavior change).
+
+- The linked body is stored in the shared `cache.Cache` (memory + AES-encrypted disk, or Redis in HTTP mode) under a **content-addressed** key and served read-only via the `research://artifact/{id}` resource template. The id is the SHA-256 of the body, so identical payloads de-dupe and the URI is stable/idempotent.
+- Artifacts are **short-lived** (bounded TTL); a fetch after expiry returns a not-found error, never another caller's data. With no cache configured, large payloads inline (correctness over size).
+- Canonical implementation: `largeResultOrInline(...)` + `registerArtifactResource(...)` in `internal/tools/artifacts.go`. Cache-freshness `_meta` (and routing `_meta`) ride on either shape.
+
+---
+
 ## Tool 1: `web_search`
 
 ### Purpose
@@ -506,7 +516,7 @@ On a zero-result response, `hints` carries the same `ZeroResultHints` object as 
 | `pdf_only` | bool | no | false | — |
 | `sort_by` | string | no | `relevance` | relevance, date |
 | `open_access` | bool | no | false | Only return open-access papers |
-| `provider` | string | no | — | Force provider: openalex, crossref, semanticscholar, exa (academic APIs), or google, brave, serper, searxng, searchapi, duckduckgo, tavily (web fallback) |
+| `provider` | string | no | — | Force provider: openalex, crossref, pubmed, semanticscholar, exa (academic APIs), or google, brave, serper, searxng, searchapi, duckduckgo, tavily (web fallback) |
 | `sessionId` | string | no | — | Link results to a `sequential_search` session; sources are auto-recorded for recovery after context loss |
 
 ### Output Fields
@@ -534,10 +544,10 @@ Additional output fields: `query`, `totalResults`, `resultCount`, `source` (whic
 
 ### Behavior
 - 4-strategy fallback: explicit provider → router → academic providers → site-restricted web search
-- When academic providers (OpenAlex, CrossRef, Semantic Scholar) are configured, returns rich metadata (DOI, authors, citations, OA status)
-- Metadata richness varies by provider: OpenAlex returns abstracts, citation counts, and authors consistently; Semantic Scholar adds `tldr` and `isInfluential`; CrossRef is a DOI registry and may omit abstracts/citation counts. Automatic selection prefers OpenAlex; others answer when explicitly forced or as a fallback. Field absence reflects the provider, not an error.
+- When academic providers (OpenAlex, CrossRef, PubMed, Semantic Scholar) are configured, returns rich metadata (DOI, authors, citations, OA status)
+- Metadata richness varies by provider: OpenAlex returns abstracts, citation counts, and authors consistently; Semantic Scholar adds `tldr` and `isInfluential`; CrossRef is a DOI registry and may omit abstracts/citation counts; PubMed returns biomedical records (title, authors, year, venue, DOI) — no abstract in the summary response. Automatic selection prefers OpenAlex; others answer when explicitly forced or as a fallback. Field absence reflects the provider, not an error.
 - Without academic env vars, falls back to site-restricted web search (identical to previous behavior)
-- OpenAlex/CrossRef require only an email address (no API key); Semantic Scholar works key-free at a lower shared rate (`SEMANTIC_SCHOLAR_API_KEY` raises the limit)
+- OpenAlex/CrossRef require only an email address (no API key); PubMed and Semantic Scholar work key-free at a lower shared rate (`PUBMED_API_KEY` / `SEMANTIC_SCHOLAR_API_KEY` raise the respective limit). PubMed DOIs feed the same retraction enrichment as every other provider.
 - **Open-access enrichment (Unpaywall):** when `UNPAYWALL_EMAIL` (or `OPENALEX_EMAIL`) is set, DOI-bearing results that lack a PDF link are enriched with the best open-access PDF Unpaywall knows about. Best-effort: never overwrites a provider-supplied `pdfUrl`, never fails the search, and runs *before* the `pdf_only` filter so resolved PDFs are counted. No-op when unconfigured.
 - `source` filter: when set (e.g., "arxiv"), OpenAlex filters by source ID; web fallback restricts to that source's domain
 - `sort_by=date`: OpenAlex sorts by `publication_date:desc`; CrossRef uses `published:desc`
@@ -1264,21 +1274,21 @@ Each item in `cases[]`: `caseName`, `citation` (Bluebook), `court`, `courtId`, `
 
 ## Tool 22: `econ_search`
 
-Look up macroeconomic and development data. **FRED** (Federal Reserve Economic Data) — 800K+ US time series (GDP, CPI, unemployment, rates); **World Bank Open Data** — global development indicators for 200+ economies. World Bank is keyless, so `econ_search` is always registered; FRED adds the US macro series when `FRED_API_KEY` is set.
+Look up macroeconomic and development data. **FRED** (Federal Reserve Economic Data) — 800K+ US time series (GDP, CPI, unemployment, rates); **World Bank Open Data** — global development indicators for 200+ economies; **OECD** (SDMX) — economic indicators for OECD economies (national accounts, prices, labour, trade); **Eurostat** — official European statistics. World Bank, OECD, and Eurostat are keyless, so `econ_search` is always registered; FRED adds the US macro series when `FRED_API_KEY` is set.
 
 ### Input Schema
 
 | Field | Type | Required | Default | Constraints |
 |-------|------|----------|---------|-------------|
 | `query` | string | yes* | — | Keyword to search series by (matches indicator name for World Bank). *Provide this OR `series_id` |
-| `series_id` | string | yes* | — | A series ID to fetch observations: FRED (`GDP`, `CPIAUCSL`, `UNRATE`) or World Bank indicator (`NY.GDP.MKTP.CD`). *Provide this OR `query` |
-| `country` | string | no | `WLD` | ISO code for multi-country providers (`worldbank`), e.g. `US`, `CN`, `WLD`. Ignored by `fred` |
+| `series_id` | string | yes* | — | A series ID to fetch observations: FRED (`GDP`, `CPIAUCSL`, `UNRATE`), a World Bank indicator (`NY.GDP.MKTP.CD`), an OECD dataflow ref (`agency,dataflow,version` — returned by a keyword search), or a Eurostat dataset code (`une_rt_m`). *Provide this OR `query` |
+| `country` | string | no | `WLD` | ISO code for multi-country providers (`worldbank` default `WLD`; `oecd` → REF_AREA, e.g. `USA`; `eurostat` → geo, e.g. `DE`). Ignored by `fred` |
 | `date_from` | string | no | — | Only observations on/after this date (YYYY-MM-DD or YYYY) |
 | `date_to` | string | no | — | Only observations on/before this date (YYYY-MM-DD or YYYY) |
 | `frequency` | string | no | — | FRED only: resample d, w, m, q, a |
 | `units` | string | no | — | FRED only: units transform (e.g. `pch`, `pc1`); omit for raw levels |
 | `num_results` | int | no | 5 (search) / 10 (observations) | — |
-| `provider` | string | no | — | Force an economic-data provider: `fred` or `worldbank` |
+| `provider` | string | no | — | Force an economic-data provider: `fred`, `worldbank`, `oecd`, or `eurostat` |
 
 ### Output Fields
 
@@ -1286,12 +1296,13 @@ Look up macroeconomic and development data. **FRED** (Federal Reserve Economic D
 
 ### Behavior
 - `series_id` set → returns that series' observations (most-recent first); otherwise keyword-searches series. FRED honors `frequency`/`units`; World Bank scopes by `country` (default `WLD`) and filters by year.
-- **World Bank** has no server-side keyword search, so keyword mode lists the WDI indicator set and filters by name client-side; its HTTP-200 error envelope (`{"message":[…]}`) is surfaced as a structured error.
-- **Provider honoring**: an explicit `provider` is used exclusively; otherwise the first configured provider answers (FRED if keyed, else World Bank). An error/empty returns a structured zero-result with hints (no silent cross-provider fallback).
-- **Auth**: World Bank is keyless (always available). `FRED_API_KEY` (free at fred.stlouisfed.org) enables FRED; it is sent as a query param and never logged.
+- **World Bank / OECD / Eurostat** have no server-side keyword search, so keyword mode lists the provider's catalogue (WDI indicators / OECD dataflows / Eurostat datasets) once and filters by name client-side; for OECD/Eurostat the matched id is the `series_id` to fetch observations with.
+- **OECD** addresses a series by a dataflow ref (`agency,dataflow,version`) plus a `REF_AREA` country filter; observations are decoded from SDMX-JSON by time index. **Eurostat** addresses a dataset by code plus a `geo` filter; observations are decoded from the JSON-stat flattened value map, surfacing its status flag (provisional/estimated) as `notes`. Both pass values through verbatim (no rounding).
+- **Provider honoring**: an explicit `provider` is used exclusively; otherwise the first configured provider answers (FRED if keyed, else World Bank/OECD/Eurostat in order). An error/empty returns a structured zero-result with hints (no silent cross-provider fallback).
+- **Auth**: World Bank, OECD, and Eurostat are keyless (always available). `FRED_API_KEY` (free at fred.stlouisfed.org) enables FRED; it is sent as a query param and never logged.
 
 ### Annotations
-- ReadOnly: true · Idempotent: true · OpenWorld: true (queries the live FRED / World Bank APIs)
+- ReadOnly: true · Idempotent: true · OpenWorld: true (queries the live FRED / World Bank / OECD / Eurostat APIs)
 
 ### Cache
 - TTL: 6 hours (only for non-empty results)
@@ -1392,7 +1403,7 @@ Precedence when more than one is supplied: `entries` → `bibliography` → `ses
 
 - **Evidence, never a verdict** (same contract as `verify_citation`). It reports what it found per entry and a corpus summary; the caller decides what to fix.
 - **One pass, bounded.** All entry URLs are checked in a single batched, concurrency-bounded link pass; DOI existence+retraction (one Crossref call each), academic existence lookups, and the optional per-entry claim fetch all run concurrently (bounded). A DOI is authoritative for existence+retraction; without one, existence is confirmed by a best-match academic title lookup.
-- **Claim check (optional, #174).** When an entry carries a `claim`, the source page is fetched (the live URL, or its Wayback snapshot when the live link is dead) and measured for topical overlap via transparent term coverage. `claimSupport` reports **coverage, not a stance**: `addressed` (strong overlap — claim-relevant sentences returned in `claimEvidence` for you to judge direction), `partially_addressed` (some overlap — evidence shown but **not** flagged; ambiguous, you judge), `not_addressed` (the source addresses **none** of the claim → the `mischaracterized` flag), or `source_unavailable` (no fetchable source). It never asserts "supports"/"refutes" — the extractor surfaces sentences, not direction — and the flag fires only on zero overlap of a fetched source, so a real-but-tangential source is never falsely accused (under-flagging is the safe direction). The check is **lexical, not semantic** (no model/embedding dependency): a long, broad source page (e.g. an encyclopedia article) may share stray terms with an unrelated claim and surface as `partially_addressed` rather than `not_addressed` — which is why partial overlap is shown as evidence for you to judge, not flagged. Because a source can share a claim's terms while *contradicting* it, a `contrastSignal: true` is added when a claim-relevant sentence carries a negation/contrast cue (e.g. "no significant", "did not", "in contrast") — a neutral "read this sentence yourself" heads-up so an `addressed` result is never mistaken for confirmation. Off unless a claim is given (no added latency otherwise).
+- **Claim check (optional, #174).** When an entry carries a `claim`, the source page is fetched (the live URL, or its Wayback snapshot when the live link is dead) and measured for topical overlap via transparent term coverage. `claimSupport` reports **coverage, not a stance**: `addressed` (strong overlap — claim-relevant sentences returned in `claimEvidence` for you to judge direction), `partially_addressed` (some overlap — evidence shown but **not** flagged; ambiguous, you judge), `not_addressed` (the source addresses **none** of the claim → the `mischaracterized` flag), or `source_unavailable` (no fetchable source). It never asserts "supports"/"refutes" — the extractor surfaces sentences, not direction — and the flag fires only on zero overlap of a fetched source, so a real-but-tangential source is never falsely accused (under-flagging is the safe direction). The check is **lexical, not semantic** (no model/embedding dependency): coverage is measured as the **peak overlap within a sentence window** (not across the whole page), so a narrow claim whose terms are merely scattered across a long, broad article scores low local coverage rather than a misleading `partially_addressed`. Borderline partial overlap is still shown as evidence for you to judge, not flagged. Because a source can share a claim's terms while *contradicting* it, a `contrastSignal: true` is added when a claim-relevant sentence carries a negation/contrast cue (e.g. "no significant", "did not", "in contrast") — a neutral "read this sentence yourself" heads-up so an `addressed` result is never mistaken for confirmation. Off unless a claim is given (no added latency otherwise).
 - **Flagging** (deliberately distinguishes *evidence of a problem* from *absence of evidence*): `retracted` = the DOI/record is retracted (an expression-of-concern/correction is surfaced in `retractionStatus` but not flagged retracted); `dead_link` = a URL was checked and did not resolve (a Wayback `archivedUrl` is attached when one exists); `not_found` = a DOI was looked up against Crossref and had **no match** — a possible fabrication; `unchecked` = the entry could not be corroborated by any check (no identifier, no live link) — **absence of evidence, not evidence of absence** (e.g. a book, a paywalled or offline source); `mischaracterized` = a claim was given and the fetched source does not address it. These are never conflated, and each carries a `reason` so a legitimate uncheckable source is never read as fake.
 - **Capped** at the first 200 entries per call; any overflow is reported in `skipped`/`skippedNote` (never silently dropped).
 - Session audits are scoped to the caller's own `(tenant, user)`. Degrades gracefully when a resolver/scraper is unconfigured; never panics.

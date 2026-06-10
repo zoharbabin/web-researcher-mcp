@@ -439,7 +439,15 @@ func auditClaimCoverage(ctx context.Context, deps Dependencies, r *auditEntryRes
 	// Zero overlap → not_addressed (the wrong source — the only case we flag, and
 	// only when the source was actually read). Partial overlap → evidence shown but
 	// NOT flagged (ambiguous; the human judges). Strong overlap → addressed.
-	matched, total := content.ClaimTermCoverage(res.Content, r.Claim)
+	//
+	// We measure PEAK coverage within a sentence window (#177), not across the whole
+	// document: on a long, broad page (e.g. a full encyclopedia article) a narrow,
+	// off-topic claim can otherwise accumulate stray term hits scattered across the
+	// page and score partially_addressed when no focused passage discusses it.
+	// Windowed coverage moves those borderline long-doc cases to the correct
+	// not_addressed end while a genuinely-covered claim (terms co-occurring in a
+	// passage) still scores fully addressed.
+	matched, total := content.ClaimTermCoverageWindowed(res.Content, r.Claim, 0)
 	ev := content.ExtractClaimEvidence(res.Content, r.Claim)
 	r.ClaimEvidence = ev.KeySentences
 	// A matched evidence sentence carrying a negation/contrast cue may REFUTE the

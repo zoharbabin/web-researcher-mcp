@@ -257,6 +257,8 @@ func main() {
 		CrossRefEmail:         cfg.Search.CrossRefEmail,
 		ExaAPIKey:             cfg.Search.ExaAPIKey,
 		SemanticScholarAPIKey: cfg.Search.SemanticScholarAPIKey,
+		PubMedAPIKey:          cfg.Search.PubMedAPIKey,
+		PubMedEmail:           cfg.Search.PubMedEmail,
 	}
 	academicProviders := search.AvailableAcademicProviders(academicCfg, searchDeps)
 
@@ -431,10 +433,19 @@ func main() {
 		Workspaces:    workspaceStore,
 	}
 
+	// Completion suppliers (#193): the live value sets the server can autocomplete
+	// for prompt arguments. Closures so they reflect the current lens registry and
+	// the provider maps built above, without resources importing search/tools.
+	completionSuppliers := resources.CompletionSuppliers{
+		Lenses:    func() []string { return search.GetLensRegistry().List() },
+		Providers: func() []string { return completionProviderNames(toolDeps) },
+	}
+
 	srv := server.New(server.Config{
-		Name:    "web-researcher-mcp",
-		Version: version,
-		Logger:  logger,
+		Name:              "web-researcher-mcp",
+		Version:           version,
+		Logger:            logger,
+		CompletionHandler: resources.NewCompletionHandler(completionSuppliers),
 	})
 
 	tools.RegisterAll(srv.MCP(), toolDeps)
@@ -674,4 +685,49 @@ func httpHealth(p search.Provider) server.HealthSnapshotter {
 		return routerHealth{router}
 	}
 	return nil
+}
+
+// completionProviderNames returns the de-duplicated union of every configured
+// provider name across all capability families, for the `provider` argument
+// completion handler (#193). Built from the same maps the tools use, so it
+// reflects exactly what a caller may legitimately pass as `provider`.
+func completionProviderNames(deps tools.Dependencies) []string {
+	seen := make(map[string]struct{})
+	add := func(name string) {
+		if name != "" {
+			seen[name] = struct{}{}
+		}
+	}
+	for name := range deps.SearchProviders {
+		add(name)
+	}
+	for name := range deps.PatentProviders {
+		add(name)
+	}
+	for name := range deps.AcademicProviders {
+		add(name)
+	}
+	for name := range deps.FilingProviders {
+		add(name)
+	}
+	for name := range deps.CaseProviders {
+		add(name)
+	}
+	for name := range deps.EconProviders {
+		add(name)
+	}
+	for name := range deps.TrialProviders {
+		add(name)
+	}
+	for name := range deps.AnswerProviders {
+		add(name)
+	}
+	for name := range deps.StructuredProviders {
+		add(name)
+	}
+	names := make([]string, 0, len(seen))
+	for name := range seen {
+		names = append(names, name)
+	}
+	return names
 }

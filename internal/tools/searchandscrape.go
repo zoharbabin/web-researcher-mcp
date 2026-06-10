@@ -180,7 +180,10 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 			trackSources(ctx, deps, input.SessionID, sourceOutputsToSources(sources))
 		}
 
-		return withRoutingMeta(structuredResult(jsonBytes), rt), nil, nil
+		// Large multi-page bundles link instead of inlining (#181) to keep context
+		// lean; small results inline unchanged. Routing _meta rides on either shape.
+		summary := fmt.Sprintf("search_and_scrape results for %q — %d pages scraped, %s combined content", input.Query, scraped, humanBytes(len(combined)))
+		return withRoutingMeta(largeResultOrInline(ctx, deps, jsonBytes, summary), rt), nil, nil
 	})
 }
 

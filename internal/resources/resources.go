@@ -198,6 +198,7 @@ func registerPrompts(srv *mcp.Server) {
 		Arguments: []*mcp.PromptArgument{
 			{Name: "topic", Description: "Research topic", Required: true},
 			{Name: "depth", Description: "Research depth: quick, standard, deep (default: standard)"},
+			{Name: "lens", Description: "Optional search lens to restrict to trusted sources (autocompletes to the configured lenses)"},
 		},
 	}, func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 		topic := req.Params.Arguments["topic"]
@@ -205,6 +206,7 @@ func registerPrompts(srv *mcp.Server) {
 		if depth == "" {
 			depth = "standard"
 		}
+		lens := req.Params.Arguments["lens"]
 
 		steps := "3"
 		if depth == "deep" {
@@ -213,10 +215,16 @@ func registerPrompts(srv *mcp.Server) {
 			steps = "2"
 		}
 
+		lensGuidance := ""
+		if lens != "" {
+			lensGuidance = "Restrict searches to the \"" + lens + "\" lens (trusted, domain-scoped sources) where it fits the question.\n"
+		}
+
 		prompt := "Research the topic: " + topic + "\n\n" +
 			"Available tools: web_search (add a lens to restrict to trusted sources, or a claim to get per-result evidence), scrape_page, search_and_scrape, news_search, academic_search, citation_graph, patent_search, filing_search (SEC), legal_search (US case law), econ_search (FRED/World Bank), clinical_search (ClinicalTrials.gov), image_search.\n" +
 			"Track progress with sequential_search (pass sessionId between calls); package results with research_export + format_bibliography.\n" +
 			"Before relying on any source, verify it: verify_citation (one citation) or audit_bibliography (a whole reference list) — checks existence, retraction, dead links, and whether a source actually supports a claim.\n\n" +
+			lensGuidance +
 			"Research depth: " + depth + " (" + steps + " steps)\n\n" +
 			"Guidance:\n" +
 			"- Start broad, then go deeper based on what you find.\n" +

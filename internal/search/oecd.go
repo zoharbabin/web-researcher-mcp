@@ -1,0 +1,390 @@
+package search
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"sort"
+	"strings"
+	"sync"
+)
+
+// OECDProvider implements EconSearcher over the modern OECD SDMX REST API
+// (sdmx.oecd.org, the system that replaced stats.oecd.org). Keyless and free —
+// OECD-country economic indicators (national accounts, prices, labour, trade, …)
+// behind the same EconProvider interface as FRED / World Bank / Eurostat.
+//
+// Verified contract (2026):
+//   - data:       /data/{agency},{dataflow},{version}/{key}?startPeriod=..&endPeriod=..&dimensionAtObservation=TIME_PERIOD
+//     Accept: application/vnd.sdmx.data+json;version=2.0.0
+//     → SDMX-JSON 2.0: data.dataSets[0].series[KEY].observations is a map keyed
+//     by the TIME index; each value is [number, ...attr-indices]. Time labels are
+//     in data.structures[0].dimensions.observation[0].values (by index, NOT
+//     date-sorted). Series dimension labels (country/indicator/unit) are in
+//     data.structures[0].dimensions.series.
+//   - discovery:  /dataflow/all/all/latest?detail=allstubs
+//     Accept: application/vnd.sdmx.structure+json (do NOT append ;version=…)
+//     → 1,500+ dataflows with id/name/agencyID/version; no server-side search, so
+//     we filter the cached list client-side by name.
+//   - SeriesID is a dataflow ref "agency,dataflow,version" (e.g.
+//     "OECD.SDD.NAD,DSD_NAMAIN1@DF_QNA,1.1"); Country injects into the REF_AREA
+//     slot of a wildcard key. The key's dimension count is dataflow-specific, so
+//     we send an all-wildcard key (the API accepts a fully-wildcarded key of the
+//     right arity); REF_AREA scoping is applied via the `c[REF_AREA]=` filter
+//     parameter, which is dimension-count-independent.
+//   - errors:     proper HTTP codes (404 unknown dataflow, 406 bad Accept, 422
+//     bad key) with plain-text bodies — trust the status, not the body.
+type OECDProvider struct {
+	baseURL string
+	deps    Deps
+
+	flowsMu sync.Mutex
+	flows   []oecdDataflow // cached on first SUCCESSFUL fetch; nil until then
+}
+
+type oecdDataflow struct {
+	Ref  string // "agency,id,version" — the data-endpoint reference
+	Name string
+}
+
+// NewOECDProvider creates the provider. No key required.
+func NewOECDProvider(deps Deps) *OECDProvider {
+	return &OECDProvider{
+		baseURL: "https://sdmx.oecd.org/public/rest",
+		deps:    deps,
+	}
+}
+
+func (o *OECDProvider) Name() string { return "oecd" }
+
+func (o *OECDProvider) Metadata() ProviderMeta {
+	return ProviderMeta{
+		Regions:      []string{"OECD", "*"},
+		Capabilities: []string{"search", "timeseries", "macro", "official-statistics"},
+		RateClass:    "free",
+		Description:  "OECD — economic indicators for OECD economies (national accounts, prices, labour, trade) via SDMX",
+	}
+}
+
+// SetBaseURL overrides the API base URL (testing).
+func (o *OECDProvider) SetBaseURL(base string) { o.baseURL = base }
+
+func (o *OECDProvider) Econ(ctx context.Context, params EconSearchParams) ([]EconResult, error) {
+	var results []EconResult
+	err := o.deps.Breaker.Execute(func() error {
+		var er error
+		results, er = o.doEcon(ctx, params)
+		return er
+	})
+	return results, err
+}
+
+func (o *OECDProvider) doEcon(ctx context.Context, params EconSearchParams) ([]EconResult, error) {
+	if params.SeriesID != "" {
+		return o.observations(ctx, params)
+	}
+	return o.dataflowSearch(ctx, params)
+}
+
+// dataflowSearch filters the cached dataflow list by a case-insensitive name
+// substring — OECD has no server-side search. Returns matching dataflow refs as
+// series rows (the ref is what the caller passes back as SeriesID).
+func (o *OECDProvider) dataflowSearch(ctx context.Context, params EconSearchParams) ([]EconResult, error) {
+	num := clamp(params.NumResults, 1, 25)
+	flows, err := o.dataflows(ctx)
+	if err != nil {
+		return nil, err
+	}
+	needle := strings.ToLower(strings.TrimSpace(params.Query))
+	out := make([]EconResult, 0, num)
+	for _, f := range flows {
+		if needle != "" && !strings.Contains(strings.ToLower(f.Name), needle) {
+			continue
+		}
+		out = append(out, EconResult{
+			SeriesID: f.Ref,
+			Title:    f.Name,
+			Source:   "oecd",
+		})
+		if len(out) >= num {
+			break
+		}
+	}
+	return out, nil
+}
+
+// sdmxStructureList is the dataflow-list response (SDMX-JSON structure 1.0).
+type sdmxStructureList struct {
+	Data struct {
+		Dataflows []struct {
+			ID       string            `json:"id"`
+			AgencyID string            `json:"agencyID"`
+			Version  string            `json:"version"`
+			Name     string            `json:"name"`
+			Names    map[string]string `json:"names"`
+		} `json:"dataflows"`
+	} `json:"data"`
+}
+
+// dataflows fetches and caches the OECD dataflow list. The list is cached only on
+// a SUCCESSFUL fetch; a transient failure is returned (not cached) so the next
+// call retries — a sticky error would permanently disable search for the process.
+func (o *OECDProvider) dataflows(ctx context.Context) ([]oecdDataflow, error) {
+	o.flowsMu.Lock()
+	defer o.flowsMu.Unlock()
+	if o.flows != nil {
+		return o.flows, nil
+	}
+
+	endpoint := o.baseURL + "/dataflow/all/all/latest?detail=allstubs"
+	body, err := o.get(ctx, endpoint, "application/vnd.sdmx.structure+json")
+	if err != nil {
+		return nil, err
+	}
+	var list sdmxStructureList
+	if err := json.Unmarshal(body, &list); err != nil {
+		return nil, fmt.Errorf("oecd: dataflow list parse: %w", err)
+	}
+	flows := make([]oecdDataflow, 0, len(list.Data.Dataflows))
+	for _, df := range list.Data.Dataflows {
+		name := df.Name
+		if name == "" {
+			name = df.Names["en"]
+		}
+		ver := df.Version
+		if ver == "" {
+			ver = "latest"
+		}
+		flows = append(flows, oecdDataflow{
+			Ref:  fmt.Sprintf("%s,%s,%s", df.AgencyID, df.ID, ver),
+			Name: name,
+		})
+	}
+	o.flows = flows
+	return o.flows, nil
+}
+
+// sdmxDimValue is one coded value of an SDMX dimension (id + human name).
+type sdmxDimValue struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// sdmxDimension is one SDMX dimension with its ordered coded values; a series-key
+// or observation-key index selects into Values.
+type sdmxDimension struct {
+	ID     string         `json:"id"`
+	Name   string         `json:"name"`
+	Values []sdmxDimValue `json:"values"`
+}
+
+// sdmxData is the subset of the SDMX-JSON 2.0 data response we decode.
+type sdmxData struct {
+	Data struct {
+		DataSets []struct {
+			Series map[string]struct {
+				Observations map[string][]json.RawMessage `json:"observations"`
+			} `json:"series"`
+		} `json:"dataSets"`
+		Structures []struct {
+			Dimensions struct {
+				Series      []sdmxDimension `json:"series"`
+				Observation []sdmxDimension `json:"observation"`
+			} `json:"dimensions"`
+		} `json:"structures"`
+	} `json:"data"`
+}
+
+// observations fetches a dataflow's observations, scoped to a country (REF_AREA)
+// and an optional time range, and decodes the SDMX-JSON value/time structure.
+func (o *OECDProvider) observations(ctx context.Context, params EconSearchParams) ([]EconResult, error) {
+	num := clamp(params.NumResults, 1, 200)
+	ref := strings.TrimSpace(params.SeriesID)
+	// The ref is interpolated into the request PATH (its commas/`@`/dots must stay
+	// literal, so url.PathEscape is unsuitable). Validate it against the SDMX
+	// dataflow-ref grapheme set instead, rejecting any path/query metacharacter
+	// (`/ ? # %` etc.) that could reshape the upstream URL — a boundary check on
+	// user-supplied input (Security Rule #5), even though the host is fixed.
+	if !validOECDRef(ref) {
+		return nil, fmt.Errorf("oecd: invalid dataflow ref %q (expected agency,dataflow,version)", ref)
+	}
+
+	q := url.Values{}
+	q.Set("dimensionAtObservation", "TIME_PERIOD")
+	if params.DateFrom != "" {
+		q.Set("startPeriod", oecdPeriod(params.DateFrom))
+	}
+	if params.DateTo != "" {
+		q.Set("endPeriod", oecdPeriod(params.DateTo))
+	}
+	// REF_AREA filter is dimension-count-independent (unlike a positional key),
+	// so it works across dataflows without fetching each one's structure first.
+	if c := strings.TrimSpace(params.Country); c != "" {
+		q.Set("c[REF_AREA]", c)
+	}
+
+	// A bare "all" key requests every series in the (country-filtered) dataflow.
+	endpoint := fmt.Sprintf("%s/data/%s/all?%s", o.baseURL, ref, q.Encode())
+	body, err := o.get(ctx, endpoint, "application/vnd.sdmx.data+json;version=2.0.0")
+	if err != nil {
+		return nil, err
+	}
+
+	var sd sdmxData
+	if err := json.Unmarshal(body, &sd); err != nil {
+		return nil, fmt.Errorf("oecd: SDMX-JSON parse: %w", err)
+	}
+	return decodeSDMXObservations(&sd, ref, num), nil
+}
+
+// decodeSDMXObservations turns an SDMX-JSON 2.0 cube into observation rows. The
+// observation map is keyed by the TIME index (dimensionAtObservation=TIME_PERIOD);
+// each value is [number, ...attribute-indices]. We resolve the TIME index to a
+// period string via structures[0].dimensions.observation[0].values (by index,
+// since that array is NOT date-sorted), and compose a title from the series
+// dimension labels.
+func decodeSDMXObservations(sd *sdmxData, ref string, limit int) []EconResult {
+	if len(sd.Data.DataSets) == 0 || len(sd.Data.Structures) == 0 {
+		return nil
+	}
+	st := sd.Data.Structures[0]
+	if len(st.Dimensions.Observation) == 0 {
+		return nil
+	}
+	timeValues := st.Dimensions.Observation[0].Values // index → {id,name}
+
+	out := make([]EconResult, 0)
+	for seriesKey, series := range sd.Data.DataSets[0].Series {
+		title, units := oecdSeriesLabels(seriesKey, st.Dimensions.Series)
+		for obsIdxStr, cells := range series.Observations {
+			obsIdx := atoiSafe(obsIdxStr)
+			if obsIdx < 0 || obsIdx >= len(timeValues) || len(cells) == 0 {
+				continue
+			}
+			var val float64
+			hasVal := false
+			// cells[0] is the observation value (nullable).
+			if string(cells[0]) != "null" {
+				if err := json.Unmarshal(cells[0], &val); err == nil {
+					hasVal = true
+				}
+			}
+			period := timeValues[obsIdx].ID
+			if timeValues[obsIdx].Name != "" {
+				period = timeValues[obsIdx].Name
+			}
+			out = append(out, EconResult{
+				SeriesID: ref,
+				Title:    title,
+				Units:    units,
+				Date:     period,
+				Value:    val,
+				HasValue: hasVal,
+				Source:   "oecd",
+			})
+		}
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Title != out[j].Title {
+			return out[i].Title < out[j].Title
+		}
+		return out[i].Date < out[j].Date
+	})
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}
+
+// oecdSeriesLabels composes a human title and units from a series key like
+// "0:1:0:..." indexing into the series dimension value lists. The title joins the
+// meaningful dimension value names; units is the UNIT_MEASURE dimension's value
+// when that dimension is present.
+func oecdSeriesLabels(seriesKey string, dims []sdmxDimension) (title, units string) {
+	idxParts := strings.Split(seriesKey, ":")
+	var labels []string
+	for d, part := range idxParts {
+		if d >= len(dims) {
+			break
+		}
+		vi := atoiSafe(part)
+		if vi < 0 || vi >= len(dims[d].Values) {
+			continue
+		}
+		valName := dims[d].Values[vi].Name
+		if valName == "" {
+			valName = dims[d].Values[vi].ID
+		}
+		switch dims[d].ID {
+		case "UNIT_MEASURE", "UNIT":
+			units = valName
+		case "REF_AREA", "MEASURE", "TRANSACTION", "INDICATOR", "SUBJECT":
+			labels = append(labels, valName)
+		}
+	}
+	return strings.Join(labels, " — "), units
+}
+
+// oecdPeriod passes through an OECD SDMX time period. OECD uses YYYY, YYYY-Qn, or
+// YYYY-MM depending on the dataflow frequency; a YYYY-MM-DD is trimmed to its year
+// (the safe lower bound that every frequency accepts as a start/end period).
+func oecdPeriod(date string) string {
+	date = strings.TrimSpace(date)
+	if len(date) >= 4 {
+		return date[:4]
+	}
+	return date
+}
+
+// validOECDRef reports whether ref is a well-formed SDMX dataflow reference
+// (`agency,dataflow,version`) safe to interpolate into the request path. It
+// allows only the characters real OECD refs use — letters, digits, and
+// `. _ - @ ,` — so no `/ ? # %` or whitespace can reshape the URL. Empty is
+// rejected. This is a closed allowlist, not a denylist.
+func validOECDRef(ref string) bool {
+	if ref == "" {
+		return false
+	}
+	for _, r := range ref {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == '.' || r == '_' || r == '-' || r == '@' || r == ',':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func (o *OECDProvider) get(ctx context.Context, endpoint, accept string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", accept)
+	resp, err := o.deps.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("oecd: request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	switch {
+	case resp.StatusCode == 404:
+		return nil, fmt.Errorf("oecd: dataflow not found")
+	case resp.StatusCode == 406:
+		return nil, fmt.Errorf("oecd: unsupported response format")
+	case resp.StatusCode == 422:
+		return nil, fmt.Errorf("oecd: invalid query key for this dataflow")
+	case resp.StatusCode == 429:
+		return nil, fmt.Errorf("oecd: rate limited")
+	case resp.StatusCode >= 400:
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("oecd: API error %d: %s", resp.StatusCode, string(b))
+	}
+	return io.ReadAll(io.LimitReader(resp.Body, 8*1024*1024))
+}
+
+var _ EconProvider = (*OECDProvider)(nil)

@@ -13,14 +13,14 @@ import (
 
 type econSearchInput struct {
 	Query      string `json:"query,omitempty" jsonschema:"Keyword to search economic series by (e.g. 'unemployment rate', 'GDP'). Provide this OR series_id."`
-	SeriesID   string `json:"series_id,omitempty" jsonschema:"A series ID to fetch its observations: a FRED id (GDP, CPIAUCSL, UNRATE) or a World Bank indicator code (NY.GDP.MKTP.CD). Provide this OR query."`
-	Country    string `json:"country,omitempty" jsonschema:"ISO country code for multi-country providers (worldbank), e.g. US, CN, WLD (World). Default WLD. Ignored by US-only providers (fred)."`
+	SeriesID   string `json:"series_id,omitempty" jsonschema:"A series ID to fetch its observations: a FRED id (GDP, CPIAUCSL, UNRATE), a World Bank indicator code (NY.GDP.MKTP.CD), an OECD dataflow ref (agency,dataflow,version — returned by a keyword search), or a Eurostat dataset code (une_rt_m). Provide this OR query."`
+	Country    string `json:"country,omitempty" jsonschema:"Country code for multi-country providers: worldbank (e.g. US, CN, WLD default), oecd REF_AREA (e.g. USA), eurostat geo (e.g. DE, EA20). Ignored by US-only providers (fred)."`
 	DateFrom   string `json:"date_from,omitempty" jsonschema:"Only observations on or after this date (YYYY-MM-DD or YYYY)."`
 	DateTo     string `json:"date_to,omitempty" jsonschema:"Only observations on or before this date (YYYY-MM-DD or YYYY)."`
 	Frequency  string `json:"frequency,omitempty" jsonschema:"FRED only: resample observations d, w, m, q, a (daily…annual)."`
 	Units      string `json:"units,omitempty" jsonschema:"FRED only: units transform, e.g. pch (percent change), pc1 (year-over-year). Omit for raw levels."`
 	NumResults int    `json:"num_results,omitempty" jsonschema:"Max series (search) or observations (series) to return. Default 5 for search, 10 for observations."`
-	Provider   string `json:"provider,omitempty" jsonschema:"Force an economic-data provider: fred (US macro) or worldbank (global indicators). Omit to use the default."`
+	Provider   string `json:"provider,omitempty" jsonschema:"Force an economic-data provider: fred (US macro), worldbank (global indicators), oecd (OECD economies), or eurostat (European statistics). Omit to use the default."`
 }
 
 func registerEconSearch(srv *mcp.Server, deps Dependencies) {

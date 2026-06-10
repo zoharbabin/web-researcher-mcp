@@ -68,10 +68,15 @@ stdin attached (`docker run -p ... -e PORT=...`) stays up serving HTTP.
 
 **Endpoints:**
 - `/mcp/` — Streamable HTTP MCP endpoint (handles POST and streaming)
-- `GET /health/live` — Liveness probe (always 200, `ok`)
-- `GET /health/ready` — Readiness probe (always 200, `ready` — a static
-  process-up check, not a dependency health check; the server is fully
-  initialized before the listener binds)
+- `GET /health/live` — Liveness probe (always 200, `ok`; a degraded-but-alive
+  process must not be killed)
+- `GET /health/ready` — Readiness probe. When multi-provider routing is
+  configured, returns `503` (with the health snapshot JSON) **only when every
+  provider's circuit breaker is open** — the pod cannot serve any query and
+  should be pulled from the load balancer; `200` otherwise (`healthy` or
+  `degraded`, since fallback providers still serve). With no routing
+  (single-provider / zero-config), it is a static `200 ready` — there is no
+  breaker ladder to gate on and the process is ready by construction.
 - `GET /metrics` — Prometheus metrics
 - `GET /dashboard` — read-only operator dashboard (HTML); its data endpoint `GET /dashboard/data` is admin-gated. Both are registered only when `ADMIN_API_KEY` is set. See [Operator Dashboard](#operator-dashboard-http-mode)
 - `GET /.well-known/oauth-authorization-server` — OAuth metadata
@@ -259,6 +264,8 @@ These enable rich scholarly metadata (DOIs, authors, citation counts, abstracts,
 | `OPENALEX_EMAIL` | Contact email for the OpenAlex polite pool (287M+ works). Also enables `citation_graph` (counts-only) | — |
 | `CROSSREF_EMAIL` | Contact email for the CrossRef polite pool (140M+ DOI-registered works) | — |
 | `SEMANTIC_SCHOLAR_API_KEY` | Semantic Scholar API key (200M+ papers + `tldr` + citation intent/influence). Works **without** a key at a lower shared rate; also powers `citation_graph` (rich edges) | — |
+| `PUBMED_API_KEY` | NCBI E-utilities API key for PubMed (biomedical literature). **PubMed is always available** keyless (~3 req/s); this key raises the rate (~10 req/s) | — |
+| `PUBMED_EMAIL` | Optional NCBI contact for PubMed requests (recommended by NCBI). Falls back to `OPENALEX_EMAIL` | — (falls back to `OPENALEX_EMAIL`) |
 | `UNPAYWALL_EMAIL` | Contact email enabling Unpaywall open-access enrichment (fills free-PDF links on DOI-bearing results that lack one). Falls back to `OPENALEX_EMAIL` when unset; no-op when neither is set | — (falls back to `OPENALEX_EMAIL`) |
 
 `citation_graph` registers only when a citation-capable academic provider (Semantic Scholar or OpenAlex) is configured. Open-access enrichment is best-effort and never fails or slows a search beyond its own bounded request.
@@ -271,8 +278,8 @@ These enable dedicated structured-research tools. Each provider is independent. 
 |----------|------|-------------|---------|
 | `EDGAR_CONTACT_EMAIL` | `filing_search` | Contact email for SEC EDGAR's required User-Agent (no API key). Falls back to `OPENALEX_EMAIL`; `filing_search` registers only when one is set | — (falls back to `OPENALEX_EMAIL`) |
 | `COURTLISTENER_API_TOKEN` | `legal_search` | Optional token raising the CourtListener rate limit (~100→~5000 req/day). **`legal_search` is always available** (CourtListener works keyless) | — |
-| `FRED_API_KEY` | `econ_search` | Federal Reserve Economic Data API key (free at fred.stlouisfed.org). **`econ_search` is always available** via keyless World Bank global indicators; this key *adds* FRED's US macro series | — |
-| — (none) | `econ_search` | World Bank Open Data — global development indicators for 200+ economies. Keyless; no configuration | — |
+| `FRED_API_KEY` | `econ_search` | Federal Reserve Economic Data API key (free at fred.stlouisfed.org). **`econ_search` is always available** via keyless World Bank / OECD / Eurostat providers; this key *adds* FRED's US macro series | — |
+| — (none) | `econ_search` | World Bank Open Data (global development indicators, 200+ economies), OECD (SDMX economy indicators), and Eurostat (European official statistics). All keyless; no configuration | — |
 | — (none) | `clinical_search` | ClinicalTrials.gov v2 — 400K+ clinical-trial registrations as typed data. Keyless; no configuration. **Always available** | — |
 
 Each structured-domain provider gets an independent circuit breaker and uses the SSRF-safe HTTP client. `filing_search` returns XBRL company facts (with `facts=true`); `econ_search` returns observations passed through exactly as the source provides them — no rounding; `clinical_search` returns trial metadata for discovery (not medical advice).
@@ -705,14 +712,22 @@ This server is distributed via:
 | Endpoint | Method | Response | Use |
 |----------|--------|----------|-----|
 | `/health/live` | GET | `200 OK` always (`ok`) | K8s liveness probe |
-| `/health/ready` | GET | `200 OK` always (`ready`) | K8s readiness probe |
+| `/health/ready` | GET | `200 OK` (`ready`/snapshot); `503` when all provider breakers are open | K8s readiness probe |
 
-Both probes are static process-up checks: a `200` means the process is running
+`/health/live` is a static process-up check: a `200` means the process is running
 and the HTTP listener is bound (the server completes all initialization —
 providers, cache, sessions, audit — before binding the port, so a successful
-connection already implies a fully-constructed server). They do not perform live
-dependency health checks; upstream provider availability is handled at call time
-via per-provider circuit breakers and graceful tool errors.
+connection already implies a fully-constructed server). A degraded-but-alive
+process must not be killed, so liveness never flips on dependency state.
+
+`/health/ready` reflects whether the pod can serve a query. With multi-provider
+routing configured, it returns `503` (body `{"status":"unhealthy"}`) **only when
+every provider's circuit breaker is open** — the pod can serve nothing and should
+be pulled from the load balancer — and `200` otherwise (`healthy`/`degraded`,
+since fallback providers still serve). With no routing (single-provider /
+zero-config) there is no breaker ladder, so it stays a static `200`. The body is
+the aggregate status only; the per-provider breaker list is operator data behind
+the admin-gated dashboard and `diagnostics://health`, not this unauthenticated probe.
 
 ---
 

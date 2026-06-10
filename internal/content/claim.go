@@ -160,6 +160,78 @@ func ClaimTermCoverage(text, claim string) (matched, total int) {
 	return matched, total
 }
 
+// ClaimTermCoverageWindowed reports the PEAK claim-term coverage found within any
+// contiguous sentence window of the source, rather than across the whole document
+// (#177). Whole-document coverage dilutes on long, broad sources: an unrelated
+// claim can pick up stray term hits scattered across a 50KB page and score
+// "partially_addressed" when no single passage actually discusses it. Measuring
+// the best-matching local window instead asks the sharper question — "does some
+// focused passage cover most of the claim's terms?" — so a genuinely off-topic
+// claim against a long page correctly scores zero local coverage.
+//
+// matched is the maximum number of distinct claim terms co-occurring in any
+// window of up to windowSize sentences; total is the claim's distinct term count.
+// Deterministic and lexical (no dependency): a single linear scan with a sliding
+// window over the already-split sentences. windowSize<=0 uses defaultClaimWindow.
+// A document with fewer sentences than the window is measured as one window (i.e.
+// degrades to whole-document coverage), so short sources are unaffected.
+func ClaimTermCoverageWindowed(text, claim string, windowSize int) (matched, total int) {
+	terms := claimTerms(claim)
+	total = len(terms)
+	if total == 0 || strings.TrimSpace(text) == "" {
+		return 0, total
+	}
+	if windowSize <= 0 {
+		windowSize = defaultClaimWindow
+	}
+
+	sentences := splitSentences(text)
+	if len(sentences) == 0 {
+		// No sentence boundaries (e.g. one long line) — fall back to whole-text.
+		return ClaimTermCoverage(text, claim)
+	}
+
+	// Per-sentence presence bitsets over the claim terms, computed once.
+	lowerSentences := make([]string, len(sentences))
+	for i, s := range sentences {
+		lowerSentences[i] = strings.ToLower(s)
+	}
+
+	best := 0
+	for start := 0; start < len(sentences); start++ {
+		end := start + windowSize
+		if end > len(sentences) {
+			end = len(sentences)
+		}
+		seen := 0
+		for ti := range terms {
+			t := terms[ti]
+			for w := start; w < end; w++ {
+				if strings.Contains(lowerSentences[w], t) {
+					seen++
+					break
+				}
+			}
+		}
+		if seen > best {
+			best = seen
+			if best == total {
+				break // can't do better than full coverage
+			}
+		}
+		// Once the window reaches the document end, sliding further only shrinks it.
+		if end == len(sentences) {
+			break
+		}
+	}
+	return best, total
+}
+
+// defaultClaimWindow is the sentence-window size for ClaimTermCoverageWindowed.
+// Sized so a claim's terms can co-occur within a focused passage (a few adjacent
+// sentences / a paragraph) without spanning an entire long article.
+const defaultClaimWindow = 4
+
 // claimTerms tokenizes a claim into distinct, lowercased significant terms,
 // dropping stop words and very short tokens so matching is meaningful.
 func claimTerms(claim string) []string {

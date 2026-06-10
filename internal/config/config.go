@@ -149,6 +149,8 @@ type SearchConfig struct {
 	CrossRefEmail         string
 	SemanticScholarAPIKey string // optional; Semantic Scholar works keyless at a lower shared rate
 	UnpaywallEmail        string // open-access PDF resolution; falls back to OpenAlexEmail when unset
+	PubMedAPIKey          string // optional; PubMed E-utilities work keyless (~3 req/s), a key raises it (~10 req/s)
+	PubMedEmail           string // optional NCBI contact (tool/email params) — falls back to OpenAlexEmail
 
 	// Structured-domain providers (optional, enable filing/case/economic search)
 	EDGARContactEmail  string // SEC EDGAR requires a contact email for its required User-Agent
@@ -341,6 +343,8 @@ func Load() (*Config, error) {
 			CrossRefEmail:         os.Getenv("CROSSREF_EMAIL"),
 			SemanticScholarAPIKey: os.Getenv("SEMANTIC_SCHOLAR_API_KEY"),
 			UnpaywallEmail:        envOrDefault("UNPAYWALL_EMAIL", os.Getenv("OPENALEX_EMAIL")),
+			PubMedAPIKey:          os.Getenv("PUBMED_API_KEY"),
+			PubMedEmail:           envOrDefault("PUBMED_EMAIL", os.Getenv("OPENALEX_EMAIL")),
 			EDGARContactEmail:     envOrDefault("EDGAR_CONTACT_EMAIL", os.Getenv("OPENALEX_EMAIL")),
 			CourtListenerToken:    os.Getenv("COURTLISTENER_API_TOKEN"),
 			FREDAPIKey:            os.Getenv("FRED_API_KEY"),

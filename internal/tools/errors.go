@@ -343,11 +343,16 @@ func buildNewsHints(input newsSearchInput, freshness, provider string, alternati
 
 // cachedResultWithMeta returns a structured result with cache freshness metadata in _meta.
 func cachedResultWithMeta(data []byte, meta *cache.EntryMeta) *mcp.CallToolResult {
-	result := &mcp.CallToolResult{
-		Content: []mcp.Content{
-			&mcp.TextContent{Text: string(data)},
-		},
-		StructuredContent: json.RawMessage(data),
+	return withCacheMeta(structuredResult(data), meta)
+}
+
+// withCacheMeta attaches cache-freshness _meta to an already-built result (inline
+// or a resource_link), so the large-payload link path (#181) keeps the same
+// cached/ageSeconds/freshness provenance a cached inline body carries. Operates
+// on .Meta only — the result's content shape is untouched.
+func withCacheMeta(result *mcp.CallToolResult, meta *cache.EntryMeta) *mcp.CallToolResult {
+	if result == nil {
+		return result
 	}
 	if meta != nil {
 		result.Meta = mcp.Meta{

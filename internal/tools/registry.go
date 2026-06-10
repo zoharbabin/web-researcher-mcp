@@ -86,6 +86,10 @@ type Features struct {
 }
 
 func RegisterAll(srv *mcp.Server, deps Dependencies) {
+	// resource_link backing store (#181): the read side of large-payload links.
+	// Registered first so the research://artifact/{id} template exists before any
+	// tool returns a link to it. No-op when no cache is configured.
+	registerArtifactResource(srv, deps)
 	registerWebSearch(srv, deps)
 	registerScrapePage(srv, deps)
 	registerSearchAndScrape(srv, deps)

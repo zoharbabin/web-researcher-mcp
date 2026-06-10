@@ -86,7 +86,9 @@ func registerResearchExport(srv *mcp.Server, deps Dependencies) {
 		jsonBytes, _ := json.Marshal(output)
 		recordToolCall(deps, "research_export", time.Since(start), nil, "", false)
 		auditToolCall(ctx, deps, "research_export", time.Since(start), nil, "")
-		return structuredResult(jsonBytes), nil, nil
+		// A full session export can be large; link it past the threshold (#181).
+		summary := fmt.Sprintf("research_export (%s) for session %s", format, input.SessionID)
+		return largeResultOrInline(ctx, deps, jsonBytes, summary), nil, nil
 	})
 }
 
