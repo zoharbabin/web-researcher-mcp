@@ -26,7 +26,8 @@ import (
 type LinkStatus struct {
 	URL         string
 	HTTPStatus  int
-	Live        bool   // resolved to a 2xx/3xx
+	Live        bool   // resolved to 2xx/3xx, or a bot-wall (403/429/503) — the resource EXISTS
+	Blocked     bool   // true when the URL exists but refused the verifier (403/429/503)
 	ArchivedURL string // Wayback snapshot, set only when Live is false and one exists
 }
 
@@ -152,7 +153,10 @@ func (v *LinkVerifier) verifyOne(ctx context.Context, rawURL string) LinkStatus 
 		}
 	}
 	st.HTTPStatus = status
-	st.Live = status >= 200 && status < 400
+	// 403/429/503 mean the resource EXISTS but refuses robots — treat as live/blocked,
+	// not dead. A bot-wall is not a missing page; wayback lookup would only mislead.
+	st.Blocked = status == 403 || status == 429 || status == 503
+	st.Live = (status >= 200 && status < 400) || st.Blocked
 
 	if !st.Live {
 		if snap := v.wayback(ctx, rawURL); snap != "" {

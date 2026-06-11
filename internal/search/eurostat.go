@@ -89,8 +89,12 @@ func (e *EurostatProvider) doEcon(ctx context.Context, params EconSearchParams) 
 }
 
 // datasetSearch filters the cached catalogue TOC by a case-insensitive title
-// substring — Eurostat has no server-side keyword search. Returns matching
-// dataset codes as series rows.
+// match — Eurostat has no server-side keyword search. For single-word queries
+// (including exact codes like "une_rt_m") we require the word to appear as a
+// contiguous substring. For multi-word queries we require ALL words to appear
+// somewhere in the title (AND-match), which lets "quarterly GDP growth" match a
+// dataset titled "GDP and main components - quarterly" even though the three
+// words are not adjacent. Returns matching dataset codes as series rows.
 func (e *EurostatProvider) datasetSearch(ctx context.Context, params EconSearchParams) ([]EconResult, error) {
 	num := clamp(params.NumResults, 1, 25)
 	toc, err := e.catalogue(ctx)
@@ -98,9 +102,22 @@ func (e *EurostatProvider) datasetSearch(ctx context.Context, params EconSearchP
 		return nil, err
 	}
 	needle := strings.ToLower(strings.TrimSpace(params.Query))
+	words := strings.Fields(needle)
+	matchesEntry := func(title string) bool {
+		lower := strings.ToLower(title)
+		if len(words) <= 1 {
+			return strings.Contains(lower, needle)
+		}
+		for _, w := range words {
+			if !strings.Contains(lower, w) {
+				return false
+			}
+		}
+		return true
+	}
 	out := make([]EconResult, 0, num)
 	for _, entry := range toc {
-		if needle != "" && !strings.Contains(strings.ToLower(entry.Title), needle) {
+		if needle != "" && !matchesEntry(entry.Title) {
 			continue
 		}
 		out = append(out, EconResult{

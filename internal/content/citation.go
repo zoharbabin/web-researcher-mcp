@@ -49,11 +49,23 @@ func ExtractCitation(url, title, author, siteName, pubDate string) Citation {
 	return c
 }
 
+// ensureTerminalPeriod appends a period unless the string already ends with one,
+// so an author name ending in an initial ("Hassabis, D.") doesn't become a
+// doubled period ("Hassabis, D..") in APA/MLA output.
+func ensureTerminalPeriod(s string) string {
+	if strings.HasSuffix(s, ".") {
+		return s
+	}
+	return s + "."
+}
+
 func formatAPA(title, author, site, date, url, accessed string) string {
 	parts := []string{}
 
 	if author != "" {
-		parts = append(parts, author+".")
+		// Avoid a doubled period when the author string already ends in one
+		// (e.g. an initial like "Hassabis, D." or "Gordon, L. I.").
+		parts = append(parts, ensureTerminalPeriod(author))
 	}
 
 	if date != "" {
@@ -79,7 +91,7 @@ func formatMLA(title, author, site, date, url, accessed string) string {
 	parts := []string{}
 
 	if author != "" {
-		parts = append(parts, author+".")
+		parts = append(parts, ensureTerminalPeriod(author))
 	}
 
 	if title != "" {

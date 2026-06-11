@@ -18,6 +18,36 @@ const (
 	ErrNotFound                    // HTTP 404/410 — the resource does not exist. Definite, NOT retryable (a dead link, not a transient fault).
 )
 
+// scrapeKindPriority ranks error kinds by how DEFINITIVE they are, so the
+// composite-error aggregator (scrapeWithTieredFallback) can pick the most
+// authoritative diagnosis when tiers disagree — independent of tier order. A
+// security/validation denial is the most definitive (permanent, never retry);
+// a 404/410 not-found and the explicit HTTP rejections (blocked/auth/rate-limit)
+// are definite remote answers; a browser-launch/eval failure and a generic
+// content-empty are the weakest (a tier-local hiccup or "page loaded but nothing
+// extracted") and must never mask a stronger sibling signal. ErrNetwork is
+// handled separately by the aggregator's allNetwork path and is not ranked here.
+func scrapeKindPriority(k ErrorKind) int {
+	switch k {
+	case ErrValidation:
+		return 6
+	case ErrNotFound:
+		return 5
+	case ErrAuth:
+		return 4
+	case ErrRateLimit:
+		return 3
+	case ErrBlocked:
+		return 2
+	case ErrBrowser:
+		return 1
+	case ErrContent:
+		return 0
+	default:
+		return 0
+	}
+}
+
 type ScrapeError struct {
 	Kind    ErrorKind
 	Message string
@@ -135,6 +165,8 @@ var botWallMarkers = []string{
 	"verify you are human",
 	"verifying you are human",
 	"please verify you are a human",
+	"verify that you're not a robot", // CourtListener / Free Law Project interstitial
+	"verify that you are not a robot",
 	"are you a robot",
 	"complete the security check",
 	"ddos protection by",
@@ -142,6 +174,8 @@ var botWallMarkers = []string{
 	"just a moment", // Cloudflare interstitial title
 	"cf-browser-verification",
 	"please turn javascript on",
+	"javascript is disabled", // bot/JS-wall shell that renders no real content
+	"please enable javascript to view",
 }
 
 // looksLikeBotWall reports whether short extracted content is a bot/JS-wall

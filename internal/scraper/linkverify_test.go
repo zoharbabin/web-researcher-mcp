@@ -78,6 +78,71 @@ func TestLinkVerifier_LiveAndDead(t *testing.T) {
 	}
 }
 
+// TestLinkVerifier_BotWallIsLiveNotDead: 403/429/503 must set Live=true and
+// Blocked=true and must NOT trigger a Wayback lookup (the resource exists).
+func TestLinkVerifier_BotWallIsLiveNotDead(t *testing.T) {
+	t.Parallel()
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/forbidden":
+			w.WriteHeader(403)
+		case "/ratelimited":
+			w.WriteHeader(429)
+		case "/unavailable":
+			w.WriteHeader(503)
+		default:
+			w.WriteHeader(500)
+		}
+	}))
+	defer origin.Close()
+
+	// waybackCalled tracks whether the Wayback stub was ever hit — it must NOT be.
+	waybackCalled := false
+	wb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		waybackCalled = true
+		_, _ = w.Write([]byte(`{"archived_snapshots":{"closest":{"available":true,"url":"http://web.archive.org/snap/blocked","status":"200"}}}`))
+	}))
+	defer wb.Close()
+
+	v := newTestVerifier(t, wb.URL)
+	got := v.VerifyAll(context.Background(), []string{
+		origin.URL + "/forbidden",
+		origin.URL + "/ratelimited",
+		origin.URL + "/unavailable",
+	})
+
+	if len(got) != 3 {
+		t.Fatalf("want 3 statuses, got %d", len(got))
+	}
+	cases := []struct {
+		name   string
+		status int
+		idx    int
+	}{
+		{"403 forbidden", 403, 0},
+		{"429 rate-limited", 429, 1},
+		{"503 unavailable", 503, 2},
+	}
+	for _, c := range cases {
+		st := got[c.idx]
+		if !st.Live {
+			t.Errorf("%s: want Live=true, got false (%+v)", c.name, st)
+		}
+		if !st.Blocked {
+			t.Errorf("%s: want Blocked=true, got false (%+v)", c.name, st)
+		}
+		if st.HTTPStatus != c.status {
+			t.Errorf("%s: want HTTPStatus=%d, got %d", c.name, c.status, st.HTTPStatus)
+		}
+		if st.ArchivedURL != "" {
+			t.Errorf("%s: ArchivedURL must be empty for bot-wall, got %q", c.name, st.ArchivedURL)
+		}
+	}
+	if waybackCalled {
+		t.Error("Wayback must NOT be queried for bot-walled URLs (Live=true skips the lookup)")
+	}
+}
+
 func TestLinkVerifier_NetworkFailureNoArchive(t *testing.T) {
 	t.Parallel()
 	// Wayback stub returns no snapshot.

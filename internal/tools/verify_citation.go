@@ -135,7 +135,7 @@ func verifyByDOI(ctx context.Context, deps Dependencies, doi, claim string, out 
 		if rec := lookupRecordByDOI(ctx, deps, doi); rec != nil {
 			out["matchedRecord"] = rec
 			out["matchConfidence"] = "high" // exact-DOI match confirmed
-			recURL = rec.URL
+			recURL = bestClaimURL(rec, doi)
 			*prov = append(*prov, "academic record matched by exact DOI")
 			if _, ok := out["exists"]; !ok {
 				out["exists"] = true
@@ -147,9 +147,11 @@ func verifyByDOI(ctx context.Context, deps Dependencies, doi, claim string, out 
 		out["exists"] = false
 		*prov = append(*prov, "no academic/retraction resolver could confirm this DOI")
 	}
-	// Optional claim check against the matched record's URL (a bare DOI has no
-	// directly-scrapeable page — publisher paywalls rarely scrape cleanly — so a
-	// claim check needs the matched record to carry a URL). Empty recURL →
+	// Optional claim check: prefer an open-access URL (rec.PDFUrl) over a doi.org
+	// redirect when available — OA URLs resolve to scrapeable HTML/PDF, while
+	// doi.org redirects typically land on publisher paywalls. Fall back to a
+	// doi.org URL when both rec.URL and rec.PDFUrl are doi.org redirects or empty,
+	// so the scraper at least gets something to try. Empty recURL →
 	// source_unavailable.
 	emitClaimCoverage(ctx, deps, recURL, claim, out, prov)
 }
@@ -205,7 +207,7 @@ func verifyByReference(ctx context.Context, deps Dependencies, ref, claim string
 			out["retractionStatus"] = status
 		}
 	}
-	emitClaimCoverage(ctx, deps, rec.URL, claim, out, prov)
+	emitClaimCoverage(ctx, deps, bestClaimURL(rec, rec.DOI), claim, out, prov)
 }
 
 // lookupAcademicRecord resolves a query (DOI or free text) to the single best
@@ -305,6 +307,13 @@ func referenceMatchConfidence(ref string, rec *search.AcademicResult) string {
 			hit++
 		}
 	}
+	// A single coincidental token match (e.g. the junk reference "garbage"
+	// matching a book titled "Garbage") must never read as a confident match.
+	// Require at least two substantive matched tokens before high/medium, so a
+	// one-word overlap stays "low" no matter the ratio.
+	if hit < 2 {
+		return "low"
+	}
 	if total > 0 && hit*100/total >= 70 {
 		return "high"
 	}
@@ -340,6 +349,47 @@ func normalizeDOI(s string) string {
 func looksLikeURL(s string) bool {
 	s = strings.ToLower(strings.TrimSpace(s))
 	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
+}
+
+// bestClaimURL returns the most scrapeable URL for an academic record when doing
+// claim-coverage checks. Priority:
+//  1. rec.PDFUrl — an open-access URL (arXiv, PMC, institutional repo) that
+//     resolves to scrapeable HTML or PDF rather than a publisher paywall.
+//  2. rec.URL — when it is NOT a doi.org redirect (i.e. a direct publisher or
+//     OA landing page that doesn't require following a redirect chain).
+//  3. A doi.org fallback constructed from doi — ensures the scraper has
+//     something to follow even when the record only carries a bare DOI URL;
+//     the scraper handles HTTP redirects and may reach an OA version this way.
+//
+// doi.org and dx.doi.org URLs are treated as redirects-to-paywall and
+// de-prioritised so that a direct OA URL is always tried first.
+func bestClaimURL(rec *search.AcademicResult, doi string) string {
+	// Prefer an explicit OA/PDF URL (arXiv, PMC, etc.) — most likely scrapeable.
+	if rec.PDFUrl != "" && !isDOIRedirect(rec.PDFUrl) {
+		return rec.PDFUrl
+	}
+	// Use rec.URL when it is not a doi.org redirect (some providers return a
+	// direct landing page URL that is scrapeable without redirect).
+	if rec.URL != "" && !isDOIRedirect(rec.URL) {
+		return rec.URL
+	}
+	// Fall back to doi.org; the scraper follows redirects and may reach content.
+	if doi != "" {
+		return "https://doi.org/" + doi
+	}
+	// Last resort: whatever URL the record carries (may be a doi.org redirect).
+	return rec.URL
+}
+
+// isDOIRedirect reports whether u is a doi.org or dx.doi.org redirect URL.
+// These typically redirect to publisher paywalls and are deprioritised for
+// claim fetching in favour of direct open-access URLs.
+func isDOIRedirect(u string) bool {
+	l := strings.ToLower(u)
+	return strings.HasPrefix(l, "https://doi.org/") ||
+		strings.HasPrefix(l, "http://doi.org/") ||
+		strings.HasPrefix(l, "https://dx.doi.org/") ||
+		strings.HasPrefix(l, "http://dx.doi.org/")
 }
 
 func waybackNote(archived string) string {

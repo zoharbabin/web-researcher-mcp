@@ -156,6 +156,19 @@ func econResultToMap(r search.EconResult, mode string) map[string]any {
 		if r.HasValue {
 			m["value"] = r.Value
 		}
+		// Multi-dimensional providers (OECD, Eurostat) return several subgroup
+		// series interleaved for the same periods and compose a disambiguating
+		// label (sex/age/seasonal-adjustment) into Title — and Units. Surface them
+		// here so a caller can tell youth from total from male/female; without this
+		// the rows share a date with different values and no way to tell them apart.
+		// FRED/World Bank single series leave Title/Units empty, so this is a no-op
+		// for them.
+		if r.Title != "" {
+			m["title"] = r.Title
+		}
+		if r.Units != "" {
+			m["units"] = r.Units
+		}
 		return m
 	}
 	// series-search mode

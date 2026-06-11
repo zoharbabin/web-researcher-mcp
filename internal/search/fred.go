@@ -173,8 +173,13 @@ func (f *FREDProvider) get(ctx context.Context, path string) ([]byte, error) {
 	if resp.StatusCode == 429 {
 		return nil, fmt.Errorf("fred: rate limited")
 	}
-	if resp.StatusCode == 400 || resp.StatusCode == 403 {
-		return nil, fmt.Errorf("fred: request rejected (check FRED_API_KEY and parameters)")
+	if resp.StatusCode == 403 {
+		return nil, fmt.Errorf("fred: access denied (check FRED_API_KEY)")
+	}
+	if resp.StatusCode == 400 {
+		// FRED returns 400 for a bad/unknown series_id or malformed parameters —
+		// NOT for a bad key (that is 403). Don't misdirect the user to their key.
+		return nil, fmt.Errorf("fred: request rejected — check the series_id and parameters (search by keyword first to discover valid series IDs)")
 	}
 	if resp.StatusCode == 404 {
 		return nil, fmt.Errorf("fred: not found")

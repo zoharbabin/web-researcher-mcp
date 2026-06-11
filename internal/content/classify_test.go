@@ -49,6 +49,10 @@ func TestClassifySourceHostHeuristic(t *testing.T) {
 		"https://medium.com/@a/post":              SourceTypeBlog,
 		"https://developer.mozilla.org/en-US/JS":  SourceTypeOfficialDocs,
 		"https://some-random-unknown-site.io/abc": SourceTypeUnknown,
+		// Legal primary hosts (non-.gov, non-.edu) classified as government (court records).
+		"https://www.courtlistener.com/opinion/1/": SourceTypeGovernment,
+		// law.cornell.edu is a legal-primary host — government wins over .edu heuristic.
+		"https://law.cornell.edu/uscode/text/42/": SourceTypeGovernment,
 	}
 	for url, want := range cases {
 		c := ClassifySource(url, 0.5, StructuredSignals{}, "")

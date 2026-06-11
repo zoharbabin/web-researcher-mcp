@@ -329,6 +329,10 @@ func (e *EDGARProvider) companyFacts(ctx context.Context, cik, company string, n
 }
 
 // latestFact returns the unit and most-recent datapoint for an XBRL concept.
+// It prefers the most-recent 10-K annual entry over 10-Q quarterly entries so
+// that headline concepts (Revenues, Assets) reflect full-year values rather than
+// a mix of stale annual + current quarterly figures. When no 10-K exists it falls
+// back to the latest entry of any form (honest: better than nothing).
 func latestFact(units map[string][]struct {
 	End  string  `json:"end"`
 	Val  float64 `json:"val"`
@@ -346,7 +350,7 @@ func latestFact(units map[string][]struct {
 		Form string  `json:"form"`
 		FY   int     `json:"fy"`
 	}
-	// Deterministic: pick the unit key alphabetically, then its latest-end value.
+	// Deterministic unit selection: alphabetically first key (e.g. "USD" before "USD/shares").
 	keys := make([]string, 0, len(units))
 	for k := range units {
 		keys = append(keys, k)
@@ -357,13 +361,24 @@ func latestFact(units map[string][]struct {
 		if len(pts) == 0 {
 			continue
 		}
-		best := pts[0]
+		// Prefer 10-K annual entries so full-year values win over quarterly snapshots.
+		var bestAnnual, bestAny dp
+		var hasAnnual bool
 		for _, p := range pts {
-			if p.End > best.End {
-				best = p
+			if strings.Contains(p.Form, "10-K") {
+				if !hasAnnual || p.End > bestAnnual.End {
+					bestAnnual = p
+					hasAnnual = true
+				}
+			}
+			if p.End > bestAny.End {
+				bestAny = p
 			}
 		}
-		return k, best
+		if hasAnnual {
+			return k, bestAnnual
+		}
+		return k, bestAny
 	}
 	return "", dp{}
 }

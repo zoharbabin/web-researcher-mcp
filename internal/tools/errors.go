@@ -142,8 +142,11 @@ func scrapeErrorToToolError(se *scraper.ScrapeError) ToolError {
 		te.RetryAfterSeconds = &seconds
 		te.SuggestedAction = ActionRetryAfterDelay
 	case scraper.ErrBlocked:
-		te.Retryable = true
-		te.SuggestedAction = ActionReportBug
+		// A bot/JS-wall or 403 is the remote site refusing us — not a server bug.
+		// Retrying the same URL rarely helps, so guide the caller to a different
+		// source rather than to a bug report or an immediate retry.
+		te.Retryable = false
+		te.SuggestedAction = ActionInformUser
 	case scraper.ErrBrowser:
 		te.Retryable = false
 		te.SuggestedAction = ActionReportBug

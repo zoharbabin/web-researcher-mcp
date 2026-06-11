@@ -29,6 +29,8 @@ func TestLooksLikeBotWall(t *testing.T) {
 		"Please verify you are a human by completing the security check.",
 		"Just a moment... cf-browser-verification",
 		"Enable JavaScript and cookies to continue",
+		"Please verify that you're not a robot to continue.", // CourtListener-style
+		"JavaScript is disabled in your browser.",
 	}
 	for _, c := range botWalls {
 		if !looksLikeBotWall(c) {
@@ -66,6 +68,59 @@ func TestClassifyRawError_NotFound(t *testing.T) {
 	se := classifyRawError(err, "https://x/y")
 	if se.Kind != ErrNotFound {
 		t.Errorf("raw 404 error → kind %v, want ErrNotFound", se.Kind)
+	}
+}
+
+// TestPipeline_NotFoundSurvivesAggregation is the regression guard for the
+// v1.27.1 404-classification gap: classifyHTTPStatus already returned ErrNotFound
+// per-tier, but the composite-error aggregator in scrapeWithTieredFallback did not
+// promote ErrNotFound into highestKind, so a real 404 surfaced as content_empty.
+// A 404 from every reachable tier must surface as ErrNotFound end-to-end.
+func TestPipeline_NotFoundSurvivesAggregation(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("404 page not found"))
+	}))
+	defer ts.Close()
+
+	// Force the browser tier off so the test is deterministic and exercises the
+	// HTTP-tier path that returns ErrNotFound (a real local Chrome would only add
+	// a weaker ErrBrowser outcome, which priority-selection must already ignore).
+	orig := statFile
+	statFile = func(path string) (any, error) { return nil, fmt.Errorf("not found") }
+	defer func() { statFile = orig }()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, ChromePath: chromeDisabled})
+	_, err := p.Scrape(testCtx(), ts.URL, 50000)
+	if err == nil {
+		t.Fatal("expected an error for a 404, got success")
+	}
+	se, ok := err.(*ScrapeError)
+	if !ok || se.Kind != ErrNotFound {
+		t.Errorf("404 should aggregate to ErrNotFound, got %T kind=%v", err, err)
+	}
+}
+
+// TestScrapeKindPriority pins the definitiveness ordering the aggregator relies
+// on: a definite remote answer (not-found / blocked / auth) must outrank a
+// tier-local browser or content-empty failure, and a validation/security denial
+// outranks everything — so the strongest sibling signal wins regardless of which
+// tier produced it (and in which order).
+func TestScrapeKindPriority(t *testing.T) {
+	t.Parallel()
+	stronger := [][2]ErrorKind{
+		{ErrValidation, ErrNotFound},
+		{ErrNotFound, ErrBlocked},
+		{ErrNotFound, ErrBrowser},
+		{ErrNotFound, ErrContent},
+		{ErrAuth, ErrContent},
+		{ErrBlocked, ErrBrowser},
+		{ErrBrowser, ErrContent},
+	}
+	for _, p := range stronger {
+		if scrapeKindPriority(p[0]) <= scrapeKindPriority(p[1]) {
+			t.Errorf("expected %v to outrank %v", p[0], p[1])
+		}
 	}
 }
 

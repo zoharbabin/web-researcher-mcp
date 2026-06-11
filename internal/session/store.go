@@ -85,6 +85,9 @@ func (s *Store) Save(key string, sess *Session, ttl time.Duration) error {
 	}
 
 	fp := s.filePath(key)
+	if err := s.ensureDir(); err != nil {
+		return err
+	}
 	tmp, err := os.CreateTemp(s.dir, ".session-*.tmp")
 	if err != nil {
 		return err
@@ -190,6 +193,9 @@ func (s *Store) rewrite(key string, plaintext []byte, expiry time.Time) error {
 	}
 
 	fp := s.filePath(key)
+	if err := s.ensureDir(); err != nil {
+		return err
+	}
 	tmp, err := os.CreateTemp(s.dir, ".session-*.tmp")
 	if err != nil {
 		return err
@@ -312,6 +318,16 @@ func (s *Store) CleanOrphans() error {
 
 func (s *Store) filePath(key string) string {
 	return filepath.Join(s.dir, fileHash(key)+".session")
+}
+
+// ensureDir re-creates the store directory if it has gone missing since
+// construction. The dir is created once in NewStoreWithPrev, but on a
+// long-lived server the OS cache location can be evicted out from under us
+// mid-run (e.g. macOS cleaning ~/Library/Caches), which would otherwise make
+// every subsequent write fail with a cryptic ENOENT and hard-block the whole
+// session/export workflow. MkdirAll is a cheap no-op when the dir exists.
+func (s *Store) ensureDir() error {
+	return os.MkdirAll(s.dir, 0700)
 }
 
 // fileHash returns the hex-encoded SHA-256 of the key (used for the on-disk

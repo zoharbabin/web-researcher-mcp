@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -29,6 +30,7 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input newsSearchInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
 
+		input.Query = strings.TrimSpace(input.Query)
 		if input.Query == "" {
 			return toolError("query is required"), nil, nil
 		}

@@ -94,8 +94,13 @@ func (o *OECDProvider) doEcon(ctx context.Context, params EconSearchParams) ([]E
 }
 
 // dataflowSearch filters the cached dataflow list by a case-insensitive name
-// substring — OECD has no server-side search. Returns matching dataflow refs as
-// series rows (the ref is what the caller passes back as SeriesID).
+// match — OECD has no server-side search. For single-word queries (including
+// exact codes like "une_rt_m") we require the word to appear as a contiguous
+// substring. For multi-word queries we require ALL words to appear somewhere in
+// the name (AND-match), which lets "quarterly GDP growth" match a dataset titled
+// "GDP and main components - quarterly" even though the three words are not
+// adjacent. Returns matching dataflow refs as series rows (the ref is what the
+// caller passes back as SeriesID).
 func (o *OECDProvider) dataflowSearch(ctx context.Context, params EconSearchParams) ([]EconResult, error) {
 	num := clamp(params.NumResults, 1, 25)
 	flows, err := o.dataflows(ctx)
@@ -103,9 +108,22 @@ func (o *OECDProvider) dataflowSearch(ctx context.Context, params EconSearchPara
 		return nil, err
 	}
 	needle := strings.ToLower(strings.TrimSpace(params.Query))
+	words := strings.Fields(needle)
+	matchesFlow := func(name string) bool {
+		lower := strings.ToLower(name)
+		if len(words) <= 1 {
+			return strings.Contains(lower, needle)
+		}
+		for _, w := range words {
+			if !strings.Contains(lower, w) {
+				return false
+			}
+		}
+		return true
+	}
 	out := make([]EconResult, 0, num)
 	for _, f := range flows {
-		if needle != "" && !strings.Contains(strings.ToLower(f.Name), needle) {
+		if needle != "" && !matchesFlow(f.Name) {
 			continue
 		}
 		out = append(out, EconResult{

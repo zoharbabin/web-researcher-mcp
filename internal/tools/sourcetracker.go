@@ -63,6 +63,9 @@ func trackScrapeOutcome(ctx context.Context, deps Dependencies, sessionID, url s
 func searchResultsToSources(results []search.SearchResult) []session.ResearchSource {
 	sources := make([]session.ResearchSource, 0, len(results))
 	for _, r := range results {
+		if r.URL == "" {
+			continue
+		}
 		sources = append(sources, session.ResearchSource{
 			URL:   r.URL,
 			Title: r.Title,
@@ -86,6 +89,9 @@ func sourceOutputsToSources(outputs []sourceOutput) []session.ResearchSource {
 func newsResultsToSources(results []search.NewsResult) []session.ResearchSource {
 	sources := make([]session.ResearchSource, 0, len(results))
 	for _, r := range results {
+		if r.URL == "" {
+			continue
+		}
 		sources = append(sources, session.ResearchSource{
 			URL:   r.URL,
 			Title: r.Title,

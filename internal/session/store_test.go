@@ -55,6 +55,35 @@ func TestStoreRoundTripEncrypted(t *testing.T) {
 	}
 }
 
+// TestStoreSaveSelfHealsMissingDir is the regression guard for the live-test
+// finding: if the store directory is evicted/removed after construction (e.g.
+// macOS cleaning ~/Library/Caches mid-run), Save must re-create it instead of
+// failing with a cryptic ENOENT that hard-blocks the whole session workflow.
+func TestStoreSaveSelfHealsMissingDir(t *testing.T) {
+	t.Parallel()
+	dir := filepath.Join(t.TempDir(), "sessions")
+	s, err := NewStore(dir, testKey)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	// Simulate the OS evicting the cache directory out from under a long-lived
+	// server after startup.
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatalf("RemoveAll: %v", err)
+	}
+	key := "tenant-1:sess-heal"
+	if err := s.Save(key, newSession("tenant-1", "sess-heal"), time.Hour); err != nil {
+		t.Fatalf("Save should self-heal a missing dir, got: %v", err)
+	}
+	got, err := s.Load(key)
+	if err != nil {
+		t.Fatalf("Load after self-heal: %v", err)
+	}
+	if got.ID != "sess-heal" {
+		t.Errorf("unexpected session after self-heal: %+v", got)
+	}
+}
+
 func TestStoreRoundTripPlaintext(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

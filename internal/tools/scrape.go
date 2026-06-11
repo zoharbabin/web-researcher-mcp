@@ -413,7 +413,10 @@ func scrapeErrorResponse(err error, url string) *mcp.CallToolResult {
 	case scraper.ErrBrowser:
 		msg = fmt.Sprintf("Scrape failed: Chrome unavailable. Set CHROME_PATH or install Chrome. Report at %s", issueURL)
 	case scraper.ErrBlocked:
-		msg = fmt.Sprintf("Blocked: %s uses bot detection. Try alternative source or report at %s", url, issueURL)
+		// A bot/JS-wall or 403 is the remote site refusing us — not a server bug.
+		// Guide to an alternative source; do NOT suggest a bug report (matches the
+		// inform_user suggestedAction set in scrapeErrorToToolError).
+		msg = fmt.Sprintf("Blocked: %s uses bot detection. Try an alternative source — its content can't be read directly.", url)
 	case scraper.ErrContent:
 		msg = fmt.Sprintf("No content extracted from %s. May need browser rendering. Report at %s", url, issueURL)
 	case scraper.ErrNotFound:

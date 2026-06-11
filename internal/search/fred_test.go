@@ -86,11 +86,28 @@ func TestFREDZeroValuePreserved(t *testing.T) {
 	}
 }
 
-func TestFREDKeyRejected(t *testing.T) {
-	p := newFREDTestProvider(t, func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(400) })
+// A 403 is a key/access problem and SHOULD point at FRED_API_KEY.
+func TestFREDAccessDenied(t *testing.T) {
+	p := newFREDTestProvider(t, func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(403) })
 	_, err := p.Econ(context.Background(), EconSearchParams{SeriesID: "GDP"})
 	if err == nil || !strings.Contains(err.Error(), "FRED_API_KEY") {
-		t.Errorf("400 should map to a key/param error, got %v", err)
+		t.Errorf("403 should map to a key/access error mentioning FRED_API_KEY, got %v", err)
+	}
+}
+
+// A 400 is a bad series_id / parameter problem and must NOT misdirect the user
+// to their key (FRED returns 400 for an unknown series even with a valid key).
+func TestFREDBadParamsNotKeyError(t *testing.T) {
+	p := newFREDTestProvider(t, func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(400) })
+	_, err := p.Econ(context.Background(), EconSearchParams{SeriesID: "NOTAREALSERIES"})
+	if err == nil {
+		t.Fatal("400 should return an error")
+	}
+	if strings.Contains(err.Error(), "FRED_API_KEY") {
+		t.Errorf("400 (bad params) must not blame the API key, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "series_id") {
+		t.Errorf("400 should point at the series_id/parameters, got %v", err)
 	}
 }
 

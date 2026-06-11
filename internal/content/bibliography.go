@@ -93,12 +93,23 @@ func formatBibTeXList(entries []BibEntry) string {
 		c := ExtractCitation(e.URL, e.Title, e.Author, e.Site, e.Date)
 		key := BibTeXKey(e.Author, e.Date, e.Title)
 		entry := withBibTeXDOI(c.Formatted.BibTeX, e.DOI)
+		// When a DOI is present the source is almost certainly a scholarly work;
+		// upgrade the entry type from @misc to @article and use journal= instead
+		// of howpublished= so reference managers classify it correctly.
+		if e.DOI != "" {
+			entry = strings.Replace(entry, "@misc{"+key+",", "@article{"+key+",", 1)
+			entry = strings.Replace(entry, "  howpublished = {", "  journal = {", 1)
+		}
 		if n := used[key]; n > 0 {
 			// Collision: suffix the key (and rewrite the entry's key line) so the
 			// generated .bib has no duplicate identifiers. Suffixes run a,b,…,z then
 			// fall back to numeric (aa1-style) so >26 collisions stay unique.
 			suffixed := key + collisionSuffix(n)
-			entry = strings.Replace(entry, "@misc{"+key+",", "@misc{"+suffixed+",", 1)
+			entryType := "@misc{"
+			if e.DOI != "" {
+				entryType = "@article{"
+			}
+			entry = strings.Replace(entry, entryType+key+",", entryType+suffixed+",", 1)
 			used[key] = n + 1
 			out = append(out, rendered{key: suffixed, entry: entry})
 		} else {
@@ -115,7 +126,7 @@ func formatBibTeXList(entries []BibEntry) string {
 	return strings.Join(lines, "\n\n")
 }
 
-// withBibTeXDOI inserts a `doi = {…}` field into a rendered @misc entry before
+// withBibTeXDOI inserts a `doi = {…}` field into a rendered BibTeX entry before
 // its closing brace, when a DOI is present. Kept here (not in formatBibTeX) so
 // ExtractCitation's signature stays stable for its many other callers; the DOI
 // only travels with a BibEntry.

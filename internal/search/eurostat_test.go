@@ -158,6 +158,51 @@ func TestEurostatSearch(t *testing.T) {
 	}
 }
 
+// TestEurostatSearchMultiWord verifies that multi-word queries use AND-matching
+// so "quarterly GDP" matches a dataset whose title contains both words even when
+// they are not adjacent ("GDP and main components - quarterly").
+func TestEurostatSearchMultiWord(t *testing.T) {
+	t.Parallel()
+	tocBody := "\"title\"\t\"code\"\t\"type\"\t\"last update\"\n" +
+		"\"GDP and main components - quarterly\"\t\"namq_10_gdp\"\t\"dataset\"\t\"\"\n" +
+		"\"Annual national accounts\"\t\"nama_10_gdp\"\t\"dataset\"\t\"\"\n" +
+		"\"Consumer Price Index - monthly\"\t\"prc_hicp_midx\"\t\"dataset\"\t\"\"\n"
+
+	p := newEurostatTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(tocBody))
+	})
+
+	// "quarterly GDP" → both words appear in the first title, but not contiguously.
+	res, err := p.Econ(context.Background(), EconSearchParams{Query: "quarterly GDP", NumResults: 10})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res) != 1 {
+		t.Fatalf("want 1 match for 'quarterly GDP', got %d: %+v", len(res), res)
+	}
+	if res[0].SeriesID != "namq_10_gdp" {
+		t.Errorf("matched wrong dataset: %q", res[0].SeriesID)
+	}
+
+	// A single-word query still uses exact substring matching.
+	res2, err := p.Econ(context.Background(), EconSearchParams{Query: "annual", NumResults: 10})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res2) != 1 || !strings.Contains(strings.ToLower(res2[0].Title), "annual") {
+		t.Errorf("single-word match wrong: %+v", res2)
+	}
+
+	// A word absent from ALL titles should return no results.
+	res3, err := p.Econ(context.Background(), EconSearchParams{Query: "quarterly nonexistent", NumResults: 10})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res3) != 0 {
+		t.Errorf("partial AND should yield 0 results when one word is absent, got %d", len(res3))
+	}
+}
+
 func TestEurostatErrors(t *testing.T) {
 	// 404 unknown dataset.
 	p := newEurostatTestProvider(t, func(w http.ResponseWriter, _ *http.Request) {

@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -40,6 +41,7 @@ func registerMemorySave(srv *mcp.Server, deps Dependencies) {
 		OutputSchema: memorySaveOutputSchema,
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input memorySaveInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
+		input.Note = strings.TrimSpace(input.Note)
 		if input.Note == "" {
 			return toolError("note is required"), nil, nil
 		}

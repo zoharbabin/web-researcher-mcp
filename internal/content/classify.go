@@ -161,6 +161,8 @@ func sourceTypeFromHost(host string) string {
 		return SourceTypeGovernment
 	case host == "wikipedia.org" || strings.HasSuffix(host, ".wikipedia.org") || host == "wikidata.org":
 		return SourceTypeWiki
+	case isLegalPrimaryHost(host):
+		return SourceTypeGovernment
 	case isAcademicHost(host):
 		return SourceTypePeerReviewed
 	case isOfficialDocsHost(host):
@@ -192,6 +194,23 @@ func isAcademicHost(host string) bool {
 		"thelancet.com", "cell.com", "bmj.com", "wiley.com", "tandfonline.com",
 		"sagepub.com", "oup.com", "pnas.org", "mdpi.com", "frontiersin.org",
 		"cambridge.org", "elsevier.com",
+	} {
+		if host == h || strings.HasSuffix(host, "."+h) {
+			return true
+		}
+	}
+	return false
+}
+
+// isLegalPrimaryHost returns true for hosts that serve primary legal records
+// (court opinions, legislation, primary legal texts). Checked before the generic
+// .edu catch-all so that legal-primary .edu hosts (e.g. law.cornell.edu) are
+// classified government rather than peer_reviewed.
+func isLegalPrimaryHost(host string) bool {
+	for _, h := range []string{
+		"courtlistener.com", // Free Law Project — US court opinions
+		"justia.com",        // Justia — US case law and codes
+		"law.cornell.edu",   // Cornell LII — primary legislation texts
 	} {
 		if host == h || strings.HasSuffix(host, "."+h) {
 			return true
