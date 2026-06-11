@@ -22,7 +22,7 @@ echo ""
 echo -e "       Your AI research assistant that cites real"
 echo -e "       sources and stays honest."
 echo ""
-echo -e "       \033[2mLinks that work. Citations you can trust.\033[0m"
+echo -e "       \033[2mCatch fabricated citations before they ship.\033[0m"
 echo ""
 echo ""
 sleep 3
@@ -30,49 +30,56 @@ sleep 3
 clear
 sleep 0.3
 
-# Scene 1: Grounded answer — the anti-fabrication hook (lead with the strongest)
+# Scene 1: Citation verification — the trust differentiator (lead with the moat)
+"$DIR/demo-sim.sh" trust
+sleep 2.5
+
+clear
+sleep 0.3
+
+# Scene 2: Grounded answer — real citations on every claim
 "$DIR/demo-sim.sh" answer
 sleep 2.5
 
 clear
 sleep 0.3
 
-# Scene 2: Medical lens — trust & source control
+# Scene 3: Medical lens — trust & source control
 "$DIR/demo-sim.sh" lenses
 sleep 2.5
 
 clear
 sleep 0.3
 
-# Scene 3: Academic search — real DOIs, no fabrication
+# Scene 4: Academic search — real DOIs, no fabrication
 "$DIR/demo-sim.sh" academic
 sleep 2.5
 
 clear
 sleep 0.3
 
-# Scene 4: Deep research — full articles, cited
+# Scene 5: Deep research — full articles, cited
 "$DIR/demo-sim.sh" research
 sleep 2.5
 
 clear
 sleep 0.3
 
-# Scene 5: News — current events from real journalists
+# Scene 6: News — current events from real journalists
 "$DIR/demo-sim.sh" news
 sleep 2.5
 
 clear
 sleep 0.3
 
-# Scene 6: Patent search — professional use case
+# Scene 7: Patent search — professional use case
 "$DIR/demo-sim.sh" patents
 sleep 2.5
 
 clear
 sleep 0.3
 
-# Scene 7: Multi-step investigation
+# Scene 8: Multi-step investigation
 "$DIR/demo-sim.sh" sequential
 sleep 2.5
 

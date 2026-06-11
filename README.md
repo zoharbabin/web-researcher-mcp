@@ -101,7 +101,7 @@ Works with Claude, Claude Desktop, Cursor, and any AI assistant that supports to
 
 ---
 
-https://github.com/user-attachments/assets/1d17af8e-1ec4-4a37-b42b-f26712ebe860
+![web-researcher-mcp demo — citation verification, grounded answers, and trusted search](https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/demo.gif)
 
 ---
 

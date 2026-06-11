@@ -374,7 +374,62 @@ scene_sequential() {
   echo -e "${DIM}12 sources verified. Full research trail available.${RESET}"
 }
 
+# --- Scene: verify_citation — catch fabricated/retracted citations before they ship ---
+
+scene_trust() {
+  header "Citation Verification — Catch Fabricated & Retracted Sources"
+  type_prompt "I have three citations from an AI-generated draft. Are they real and safe to use?"
+
+  echo -e "${CYAN}⠋${RESET} ${DIM}Calling${RESET} verify_citation${DIM}...${RESET}"
+  sleep 0.3
+
+  # Case 1: fabricated DOI
+  echo
+  echo -e "${BOLD}Citation 1:${RESET} ${DIM}\"Nguyen et al. 2024 — Deep learning for climate prediction\"${RESET}"
+  echo -e "${DIM}           DOI: 10.1038/s41586-2099-99999-x${RESET}"
+  sleep 0.4
+  echo -e "${CYAN}⠙${RESET} ${DIM}Querying Crossref...${RESET}"
+  sleep 0.5
+  echo -e "${RED}✗${RESET} ${RED}exists: false${RESET}  ${DIM}— this DOI has no Crossref record${RESET}"
+  echo -e "  ${RED}matchConfidence: none${RESET}"
+  echo -e "  ${YELLOW}⚠  Likely fabricated — never appears in any academic database${RESET}"
+  echo
+
+  sleep 0.6
+
+  # Case 2: retracted paper
+  echo -e "${BOLD}Citation 2:${RESET} ${DIM}\"Wakefield et al. 1998 — MMR vaccine and autism\"${RESET}"
+  echo -e "${DIM}           DOI: 10.1016/S0140-6736(97)11096-0${RESET}"
+  sleep 0.4
+  echo -e "${CYAN}⠙${RESET} ${DIM}Querying Crossref + Retraction Watch...${RESET}"
+  sleep 0.5
+  echo -e "${GREEN}✓${RESET} ${DIM}exists: true${RESET}"
+  echo -e "  ${RED}retractionStatus.retracted: true${RESET}"
+  echo -e "  ${DIM}retractedDate: 2010-02-02  |  reason: Data falsification${RESET}"
+  echo -e "  ${YELLOW}⚠  Fully retracted — citing this paper undermines your credibility${RESET}"
+  echo
+
+  sleep 0.6
+
+  # Case 3: real DOI, invented title (titleMatch)
+  echo -e "${BOLD}Citation 3:${RESET} ${DIM}\"Jumper et al. 2021 — Quantum entanglement teleportation bandwidth\"${RESET}"
+  echo -e "${DIM}           DOI: 10.1038/s41586-021-03819-2${RESET}"
+  sleep 0.4
+  echo -e "${CYAN}⠙${RESET} ${DIM}Querying Crossref (DOI exists)... checking title...${RESET}"
+  sleep 0.5
+  echo -e "${GREEN}✓${RESET} ${DIM}exists: true${RESET}"
+  echo -e "  ${RED}titleMatch: mismatch${RESET}  ${DIM}— actual title: \"Highly accurate protein structure prediction with AlphaFold\"${RESET}"
+  echo -e "  ${YELLOW}⚠  Real DOI, invented title — a hallucination grafted onto a real paper${RESET}"
+  echo
+
+  sleep 0.5
+  echo -e "${YELLOW}3/3 citations flagged before they could ship.${RESET}"
+  echo -e "${DIM}Fabricated DOI  |  Retracted paper  |  Real DOI + invented title${RESET}"
+  echo -e "${DIM}All three failure modes caught. Zero false positives by design.${RESET}"
+}
+
 case "$1" in
+  trust) scene_trust ;;
   answer) scene_answer ;;
   news) scene_news ;;
   research) scene_research ;;
@@ -382,5 +437,5 @@ case "$1" in
   academic) scene_academic ;;
   patents) scene_patents ;;
   sequential) scene_sequential ;;
-  *) echo "Usage: $0 {answer|news|research|lenses|academic|patents|sequential}" ;;
+  *) echo "Usage: $0 {trust|answer|news|research|lenses|academic|patents|sequential}" ;;
 esac

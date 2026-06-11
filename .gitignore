@@ -34,9 +34,11 @@ coverage.out
 /site/
 /site_src/
 
-# Generated demo assets (large binaries)
+# Generated demo assets (large binaries); demo.gif and demo.mp4 are the primary project demo — committed
 assets/*.gif
+!assets/demo.gif
 assets/*.mp4
+!assets/demo.mp4
 
 # Internal planning / marketing working docs — kept local, never published.
 # The docs site build (.github/workflows/docs.yml) uses an explicit file
