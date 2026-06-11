@@ -18,6 +18,16 @@ type ProviderInfo struct {
 	Type string `json:"type"`
 }
 
+// LensInfo describes a single curated search lens for the lenses://catalog
+// resource. Populated from search.GetLensRegistry() in main.go and passed via
+// DI to keep the resources package decoupled from the search package.
+type LensInfo struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	DomainCount int    `json:"domainCount"`
+	HasCX       bool   `json:"hasCX"`
+}
+
 // HealthProvider supplies a live provider/breaker health snapshot for the
 // diagnostics://health Resource (#81). The Router satisfies it via its Health()
 // method; resources depends on this small interface (not on the search package)
@@ -31,13 +41,13 @@ type HealthProvider interface {
 	Health() any
 }
 
-func RegisterAll(srv *mcp.Server, metricsCollector *metrics.Collector, sessionManager session.Manager, rateLimiter *ratelimit.Limiter, providers []ProviderInfo, health HealthProvider) {
-	registerResources(srv, metricsCollector, sessionManager, rateLimiter, providers)
+func RegisterAll(srv *mcp.Server, metricsCollector *metrics.Collector, sessionManager session.Manager, rateLimiter *ratelimit.Limiter, providers []ProviderInfo, health HealthProvider, lenses []LensInfo) {
+	registerResources(srv, metricsCollector, sessionManager, rateLimiter, providers, lenses)
 	registerDiagnostics(srv, metricsCollector, health)
 	registerPrompts(srv)
 }
 
-func registerResources(srv *mcp.Server, metricsCollector *metrics.Collector, sessionManager session.Manager, rateLimiter *ratelimit.Limiter, providers []ProviderInfo) {
+func registerResources(srv *mcp.Server, metricsCollector *metrics.Collector, sessionManager session.Manager, rateLimiter *ratelimit.Limiter, providers []ProviderInfo, lenses []LensInfo) {
 	srv.AddResource(&mcp.Resource{
 		URI:         "stats://tools",
 		Name:        "Tool Statistics",
@@ -119,6 +129,24 @@ func registerResources(srv *mcp.Server, metricsCollector *metrics.Collector, ses
 			Contents: []*mcp.ResourceContents{
 				{
 					URI:      "stats://providers",
+					MIMEType: "application/json",
+					Text:     string(jsonBytes),
+				},
+			},
+		}, nil
+	})
+
+	srv.AddResource(&mcp.Resource{
+		URI:         "lenses://catalog",
+		Name:        "Search Lens Catalog",
+		Description: "Available search lenses — curated domain sets for focused searches. Pass a lens name to web_search, academic_search, news_search, or image_search to restrict results to authoritative sources for that domain.",
+		MIMEType:    "application/json",
+	}, func(_ context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		jsonBytes, _ := json.MarshalIndent(map[string]any{"lenses": lenses}, "", "  ")
+		return &mcp.ReadResourceResult{
+			Contents: []*mcp.ResourceContents{
+				{
+					URI:      "lenses://catalog",
 					MIMEType: "application/json",
 					Text:     string(jsonBytes),
 				},

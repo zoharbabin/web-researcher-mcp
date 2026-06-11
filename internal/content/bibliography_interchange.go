@@ -13,8 +13,8 @@ import (
 // manager keeps the persistent identifier.
 
 // formatRISList renders entries as a single RIS document. Records are ordered by
-// cite key for determinism and separated by a blank line. Each is a generic web
-// record (TY = ELEC) with the fields RIS readers expect; ER terminates a record.
+// cite key for determinism and separated by a blank line. Entries with a DOI are
+// typed TY = JOUR; others fall back to TY = ELEC. ER terminates each record.
 func formatRISList(entries []BibEntry) string {
 	ordered := orderByCiteKey(entries)
 	records := make([]string, 0, len(ordered))
@@ -25,11 +25,16 @@ func formatRISList(entries []BibEntry) string {
 }
 
 // formatRIS renders one RIS record. RIS is line-oriented: each line is a 2-letter
-// tag, "  - ", then the value. TY must be first and ER last. We use ELEC
-// (electronic/web) as the generic type since these sources are web-discovered.
+// tag, "  - ", then the value. TY must be first and ER last. When a DOI is
+// present the source is almost certainly a journal article (TY = JOUR); otherwise
+// we fall back to ELEC (electronic/web) for web-discovered sources.
 func formatRIS(e BibEntry) string {
 	var b strings.Builder
-	b.WriteString("TY  - ELEC\n")
+	if e.DOI != "" {
+		b.WriteString("TY  - JOUR\n")
+	} else {
+		b.WriteString("TY  - ELEC\n")
+	}
 	if e.Title != "" {
 		b.WriteString("TI  - " + risValue(e.Title) + "\n")
 	}
@@ -89,15 +94,21 @@ func formatCSLJSONList(entries []BibEntry) string {
 }
 
 // formatCSLJSON renders one CSL-JSON item object (indented two spaces to sit in
-// the array). Fields follow the CSL schema: type "webpage", a title, an author
-// array of {family,given|literal}, an "issued" date-parts year, container-title
-// for the site/journal, DOI, and URL. Values are JSON-escaped.
+// the array). Fields follow the CSL schema: type "webpage" for generic web
+// sources or "article-journal" when a DOI is present (DOIs are primarily assigned
+// to scholarly works), a title, an author array of {family,given|literal}, an
+// "issued" date-parts year, container-title for the site/journal, DOI, and URL.
+// Values are JSON-escaped.
 func formatCSLJSON(e BibEntry) string {
 	var fields []string
 	add := func(s string) { fields = append(fields, "    "+s) }
 
 	add(`"id": ` + jsonString(BibTeXKey(e.Author, e.Date, e.Title)))
-	add(`"type": "webpage"`)
+	if e.DOI != "" {
+		add(`"type": "article-journal"`)
+	} else {
+		add(`"type": "webpage"`)
+	}
 	if e.Title != "" {
 		add(`"title": ` + jsonString(e.Title))
 	}

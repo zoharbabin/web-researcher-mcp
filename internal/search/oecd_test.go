@@ -218,6 +218,50 @@ func TestOECDSearch(t *testing.T) {
 	}
 }
 
+// TestOECDSearchMultiWord verifies that multi-word queries use AND-matching so
+// "quarterly GDP" matches a dataset whose title contains both words even when
+// they are not adjacent ("GDP and main components - quarterly").
+func TestOECDSearchMultiWord(t *testing.T) {
+	t.Parallel()
+	p := newOECDTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"data":{"dataflows":[
+			{"id":"DF_QNA","agencyID":"OECD.SDD.NAD","version":"1.1","name":"GDP and main components - quarterly"},
+			{"id":"DF_ANA","agencyID":"OECD.SDD.NAD","version":"1.0","name":"Annual National Accounts"},
+			{"id":"DF_CPI","agencyID":"OECD.SDD.TPS","version":"1.0","name":"Consumer Price Index"}
+		]}}`))
+	})
+	// "quarterly GDP" → both words appear in "GDP and main components - quarterly"
+	// but NOT as a single contiguous substring; AND-matching must catch it.
+	res, err := p.Econ(context.Background(), EconSearchParams{Query: "quarterly GDP", NumResults: 10})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res) != 1 {
+		t.Fatalf("want 1 match for 'quarterly GDP', got %d: %+v", len(res), res)
+	}
+	if res[0].SeriesID != "OECD.SDD.NAD,DF_QNA,1.1" {
+		t.Errorf("matched wrong dataset: %q", res[0].SeriesID)
+	}
+
+	// A single-word query still uses exact substring matching.
+	res2, err := p.Econ(context.Background(), EconSearchParams{Query: "annual", NumResults: 10})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res2) != 1 || !strings.Contains(strings.ToLower(res2[0].Title), "annual") {
+		t.Errorf("single-word match wrong: %+v", res2)
+	}
+
+	// A word absent from ALL titles should return no results.
+	res3, err := p.Econ(context.Background(), EconSearchParams{Query: "quarterly nonexistent", NumResults: 10})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res3) != 0 {
+		t.Errorf("partial AND should yield 0 results when one word is absent, got %d", len(res3))
+	}
+}
+
 func TestOECDRefValidation(t *testing.T) {
 	// A ref containing path/query metacharacters must be rejected BEFORE any
 	// request is made (no URL reshaping).

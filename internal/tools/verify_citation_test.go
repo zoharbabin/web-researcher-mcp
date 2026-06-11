@@ -235,6 +235,23 @@ func TestVerifyCitation_DOINoFabricatedRecord(t *testing.T) {
 	}
 }
 
+// TestReferenceMatchConfidence_SingleTokenIsLow guards the noisy-match finding:
+// a junk reference that coincidentally shares ONE substantive word with a record
+// title (the live "garbage" → book titled "Garbage" case) must not read as a
+// confident match — a single-token overlap stays "low" regardless of ratio.
+func TestReferenceMatchConfidence_SingleTokenIsLow(t *testing.T) {
+	t.Parallel()
+	// One-word title fully contained in the reference: hit=1, total=1, 100% —
+	// but a single coincidental token must still be "low".
+	if got := referenceMatchConfidence("@#$ garbage !!!", &search.AcademicResult{Title: "Garbage"}); got != "low" {
+		t.Errorf("single-token junk match = %q, want low", got)
+	}
+	// Two genuine matched tokens still earns a real confidence.
+	if got := referenceMatchConfidence("Highly accurate protein structure prediction", &search.AcademicResult{Title: "Highly accurate protein structure prediction with AlphaFold"}); got == "low" {
+		t.Errorf("multi-token title match = %q, want >= medium", got)
+	}
+}
+
 func TestSameDOI(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -324,6 +341,105 @@ func TestVerifyCitation_URLDeadWithArchive(t *testing.T) {
 	if out["archivedUrl"] != "http://web.archive.org/snap" {
 		t.Errorf("archivedUrl = %v, want the snapshot", out["archivedUrl"])
 	}
+}
+
+// TestBestClaimURL verifies the OA-URL preference logic: PDFUrl beats a doi.org
+// URL, a non-doi.org rec.URL beats a doi.org rec.URL, and we always fall back to
+// at least a doi.org URL rather than returning empty.
+func TestBestClaimURL(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		rec  search.AcademicResult
+		doi  string
+		want string
+	}{
+		{
+			name: "PDFUrl preferred over doi.org URL",
+			rec:  search.AcademicResult{URL: "https://doi.org/10.1/x", PDFUrl: "https://pmc.ncbi.nlm.nih.gov/articles/PMC123/"},
+			doi:  "10.1/x",
+			want: "https://pmc.ncbi.nlm.nih.gov/articles/PMC123/",
+		},
+		{
+			name: "direct URL preferred over doi.org URL when no PDFUrl",
+			rec:  search.AcademicResult{URL: "https://arxiv.org/abs/2301.00001"},
+			doi:  "10.1/x",
+			want: "https://arxiv.org/abs/2301.00001",
+		},
+		{
+			name: "doi.org fallback when rec.URL is a doi.org redirect and no PDFUrl",
+			rec:  search.AcademicResult{URL: "https://doi.org/10.1/x"},
+			doi:  "10.1/x",
+			want: "https://doi.org/10.1/x",
+		},
+		{
+			name: "doi.org fallback constructed from doi when URL is empty",
+			rec:  search.AcademicResult{DOI: "10.1/x"},
+			doi:  "10.1/x",
+			want: "https://doi.org/10.1/x",
+		},
+		{
+			name: "dx.doi.org URL is also treated as a redirect",
+			rec:  search.AcademicResult{URL: "https://dx.doi.org/10.1/x", PDFUrl: "https://europepmc.org/article/10.1/x"},
+			doi:  "10.1/x",
+			want: "https://europepmc.org/article/10.1/x",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			got := bestClaimURL(&c.rec, c.doi)
+			if got != c.want {
+				t.Errorf("bestClaimURL = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+// TestVerifyCitation_DOIClaimPrefersOAURL: when a DOI record carries a PDFUrl
+// (open-access URL), the claim check fetches that URL, not the doi.org redirect.
+func TestVerifyCitation_DOIClaimPrefersOAURL(t *testing.T) {
+	// Serve OA content at a local httptest URL that the claim check can scrape.
+	oaPage := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><article><p>The vaccine trial demonstrated significant efficacy in reducing infection rates across all age groups.</p></article></body></html>`))
+	}))
+	defer oaPage.Close()
+
+	deps := verifyClaimDeps(t)
+	// Inject a mock DOIResolver that returns a record whose PDFUrl is the local OA
+	// page and whose URL is a doi.org redirect — so we can confirm PDFUrl wins.
+	deps.AcademicProviders = map[string]search.AcademicProvider{
+		"openalex": &mockOAURLProvider{oaURL: oaPage.URL},
+	}
+
+	out := callVerifyClaim(t, deps, "10.1234/oa-test", "vaccine efficacy reduced infection")
+	if out["claimSourceUrl"] != oaPage.URL {
+		t.Errorf("claimSourceUrl = %v, want the OA page URL %s (PDFUrl must win over doi.org URL)", out["claimSourceUrl"], oaPage.URL)
+	}
+	if out["claimSupport"] != "addressed" {
+		t.Errorf("claimSupport = %v, want addressed (OA page addresses the claim)", out["claimSupport"])
+	}
+}
+
+// mockOAURLProvider returns a record whose PDFUrl is a given OA URL and whose
+// rec.URL is a doi.org redirect — used to verify bestClaimURL's OA preference.
+type mockOAURLProvider struct {
+	oaURL string
+}
+
+func (m *mockOAURLProvider) Name() string { return "openalex" }
+func (m *mockOAURLProvider) Metadata() search.ProviderMeta {
+	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "free", Description: "mock oa"}
+}
+func (m *mockOAURLProvider) Scholarly(_ context.Context, _ search.AcademicSearchParams) ([]search.AcademicResult, error) {
+	return []search.AcademicResult{{Title: "OA Paper", URL: "https://doi.org/10.1234/oa-test", DOI: "10.1234/oa-test", PDFUrl: m.oaURL, Year: 2024, Source: "openalex"}}, nil
+}
+func (m *mockOAURLProvider) ResolveByDOI(_ context.Context, doi string) (*search.AcademicResult, error) {
+	if doi == "10.1234/oa-test" {
+		return &search.AcademicResult{Title: "OA Paper", URL: "https://doi.org/10.1234/oa-test", DOI: "10.1234/oa-test", PDFUrl: m.oaURL, Year: 2024, Source: "openalex"}, nil
+	}
+	return nil, nil
 }
 
 func TestVerifyCitation_EmptyInput(t *testing.T) {

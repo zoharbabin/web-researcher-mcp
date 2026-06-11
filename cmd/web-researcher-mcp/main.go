@@ -494,7 +494,23 @@ func main() {
 	if router, ok := searchProvider.(*search.Router); ok {
 		healthProvider = routerHealth{router}
 	}
-	resources.RegisterAll(srv.MCP(), metricsCollector, sessionManager, rateLimiter, providerInfos, healthProvider)
+
+	// Build the lens catalog snapshot for lenses://catalog (#197). The registry
+	// is fully populated at this point (embedded + on-disk + custom overlays).
+	lensRegistry := search.GetLensRegistry()
+	var lensInfos []resources.LensInfo
+	for _, name := range lensRegistry.List() {
+		if l, ok := lensRegistry.Get(name); ok {
+			lensInfos = append(lensInfos, resources.LensInfo{
+				Name:        l.Name,
+				Description: l.Description,
+				DomainCount: len(l.Domains),
+				HasCX:       l.CX != "",
+			})
+		}
+	}
+
+	resources.RegisterAll(srv.MCP(), metricsCollector, sessionManager, rateLimiter, providerInfos, healthProvider, lensInfos)
 
 	// STDIO single-user identity (opt-in). When STDIO_USER_ID is set (only ever
 	// populated in STDIO mode — see config.Load), two things happen:

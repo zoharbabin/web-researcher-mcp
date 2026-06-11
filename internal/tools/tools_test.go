@@ -52,6 +52,23 @@ func (m *mockProvider) News(_ context.Context, params search.NewsSearchParams) (
 
 func (m *mockProvider) Name() string { return "mock" }
 
+// captureProvider records the WebSearchParams of the last Web call so a test can
+// assert how the tool layer transformed the input (e.g. that a lens cleared the
+// site filter and injected its domains into the query).
+type captureProvider struct{ last search.WebSearchParams }
+
+func (m *captureProvider) Web(_ context.Context, params search.WebSearchParams) ([]search.SearchResult, error) {
+	m.last = params
+	return []search.SearchResult{{Title: "Test Result", URL: "https://example.com", Snippet: "snip"}}, nil
+}
+func (m *captureProvider) Images(_ context.Context, _ search.ImageSearchParams) ([]search.ImageResult, error) {
+	return nil, nil
+}
+func (m *captureProvider) News(_ context.Context, _ search.NewsSearchParams) ([]search.NewsResult, error) {
+	return nil, nil
+}
+func (m *captureProvider) Name() string { return "capture" }
+
 // emptyWebProvider returns no web results, to exercise the search_and_scrape
 // zero-results success branch.
 type emptyWebProvider struct{}
@@ -307,6 +324,46 @@ func TestWebSearchEmptyQuery(t *testing.T) {
 	text := res.Content[0].(*mcp.TextContent).Text
 	if text != "query is required" {
 		t.Fatalf("expected 'query is required', got %q", text)
+	}
+}
+
+// TestWebSearchLensOverridesSite guards the lens+site contract finding: the
+// schema says a lens "overrides the site parameter", but the non-CX lens path
+// left params.Site set, so a caller passing both got site AND the lens domains
+// AND-ed together → an over-constrained empty result. A lens must clear site and
+// scope via its own domains.
+func TestWebSearchLensOverridesSite(t *testing.T) {
+	ctx := context.Background()
+	// The lens registry is an empty lazily-created singleton in tests; load the
+	// embedded lenses so "security" resolves (same source the binary uses).
+	if err := search.GetLensRegistry().LoadEmbedded(); err != nil {
+		t.Fatalf("load embedded lenses: %v", err)
+	}
+	cap := &captureProvider{}
+	deps := setupTestDeps()
+	deps.Search = cap
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "web_search",
+		Arguments: map[string]any{"query": "ransomware", "lens": "security", "site": "example.com"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("unexpected error: %s", res.Content[0].(*mcp.TextContent).Text)
+	}
+	if cap.last.Site != "" {
+		t.Errorf("lens must clear params.Site, got %q", cap.last.Site)
+	}
+	if !strings.Contains(cap.last.Query, "site:") {
+		t.Errorf("lens should inject its domains into the query, got %q", cap.last.Query)
+	}
+	if strings.Contains(cap.last.Query, "example.com") {
+		t.Errorf("the overridden site filter must not appear, got %q", cap.last.Query)
 	}
 }
 
@@ -1160,6 +1217,55 @@ func TestAcademicSearchEmptyQuery(t *testing.T) {
 	}
 	if !res.IsError {
 		t.Fatal("expected error for empty query")
+	}
+}
+
+// TestSearchToolsRejectWhitespaceQuery is the regression guard for the
+// whitespace-trim consistency gap found in the v1.27.1 live-test pass: a
+// whitespace-only query (e.g. "   ") must be trimmed and rejected as "query is
+// required" — identical to an empty string — across every search tool, so it can
+// never reach a provider and bill a junk search. (answer/structured_search
+// already trimmed; web/news/image/academic/search_and_scrape/legal did not.)
+func TestSearchToolsRejectWhitespaceQuery(t *testing.T) {
+	ctx := context.Background()
+	deps := setupTestDeps()
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	for _, tool := range []string{"web_search", "news_search", "image_search", "academic_search", "search_and_scrape", "legal_search"} {
+		res, err := session.CallTool(ctx, &mcp.CallToolParams{
+			Name:      tool,
+			Arguments: map[string]any{"query": "   "},
+		})
+		if err != nil {
+			t.Fatalf("%s CallTool failed: %v", tool, err)
+		}
+		if !res.IsError {
+			t.Errorf("%s: whitespace-only query should be rejected, got success", tool)
+		}
+	}
+}
+
+// TestMemorySaveRejectsWhitespaceNote: a whitespace-only note must be rejected
+// the same as an empty one, so a blank memory can't be persisted to the
+// per-user store and then pollute recall.
+func TestMemorySaveRejectsWhitespaceNote(t *testing.T) {
+	ctx := context.Background()
+	deps := setupTestDeps()
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "memory_save",
+		Arguments: map[string]any{"note": "   "},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !res.IsError {
+		t.Error("whitespace-only note should be rejected")
 	}
 }
 

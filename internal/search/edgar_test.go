@@ -169,6 +169,61 @@ func TestEDGARHelpers(t *testing.T) {
 	}
 }
 
+// TestLatestFactPrefers10K guards issue #207: latestFact must return the most-recent
+// 10-K annual entry over a more-recent 10-Q quarterly entry to avoid mixing stale
+// annual Revenues with current-quarter NetIncomeLoss in the same snapshot.
+func TestLatestFactPrefers10K(t *testing.T) {
+	t.Parallel()
+	type dp = struct {
+		End  string  `json:"end"`
+		Val  float64 `json:"val"`
+		Form string  `json:"form"`
+		FY   int     `json:"fy"`
+	}
+	units := map[string][]dp{
+		"USD": {
+			{End: "2018-12-31", Val: 100, Form: "10-K", FY: 2018},
+			{End: "2024-03-31", Val: 200, Form: "10-Q", FY: 2024}, // more recent but quarterly
+			{End: "2023-12-31", Val: 150, Form: "10-K", FY: 2023}, // most-recent annual
+		},
+	}
+	unit, best := latestFact(units)
+	if unit != "USD" {
+		t.Fatalf("unit = %q, want USD", unit)
+	}
+	if best.Form != "10-K" {
+		t.Errorf("form = %q, want 10-K (annual should beat more-recent quarterly)", best.Form)
+	}
+	if best.Val != 150 {
+		t.Errorf("val = %v, want 150 (most-recent 10-K FY2023)", best.Val)
+	}
+}
+
+// TestLatestFactFallsBackWhenNo10K verifies that when there is no 10-K entry at all,
+// latestFact returns the most-recent entry of any form type (honest fallback).
+func TestLatestFactFallsBackWhenNo10K(t *testing.T) {
+	t.Parallel()
+	type dp = struct {
+		End  string  `json:"end"`
+		Val  float64 `json:"val"`
+		Form string  `json:"form"`
+		FY   int     `json:"fy"`
+	}
+	units := map[string][]dp{
+		"USD": {
+			{End: "2023-06-30", Val: 50, Form: "10-Q", FY: 2023},
+			{End: "2024-03-31", Val: 75, Form: "10-Q", FY: 2024},
+		},
+	}
+	unit, best := latestFact(units)
+	if unit != "USD" {
+		t.Fatalf("unit = %q, want USD", unit)
+	}
+	if best.Val != 75 || best.End != "2024-03-31" {
+		t.Errorf("fallback should pick latest-end 10-Q: got val=%v end=%q", best.Val, best.End)
+	}
+}
+
 func TestEDGARInterface(t *testing.T) {
 	var _ FilingProvider = (*EDGARProvider)(nil)
 }

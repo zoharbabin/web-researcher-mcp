@@ -49,6 +49,7 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input webSearchInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
 
+		input.Query = strings.TrimSpace(input.Query)
 		if input.Query == "" {
 			return toolError("query is required"), nil, nil
 		}
@@ -95,9 +96,14 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 				return toolError(fmt.Sprintf("unknown lens: %s. Available: %v", input.Lens, registry.List())), nil, nil
 			}
 
+			// A lens OVERRIDES the site parameter (per the schema contract): the
+			// lens already scopes the search to its own domain set, so a sibling
+			// site: filter would AND with it and over-constrain to nothing. Clear
+			// it on BOTH paths — the CX engine is itself the scope, and the
+			// operator-injection path bakes the lens domains into the query.
+			params.Site = ""
 			if lensData.CX != "" {
 				params.Query = input.Query
-				params.Site = ""
 			} else {
 				params.Query = registry.BuildSiteQuery(input.Query, lensData)
 			}

@@ -676,6 +676,10 @@ func TestScoreAuthority(t *testing.T) {
 		{name: "nytimes", url: "https://www.nytimes.com/article", want: 0.7},
 		{name: "unknown domain", url: "https://randomsite.xyz/page", want: 0.5},
 		{name: "empty url", url: "", want: 0.5},
+		// Reputation-dataset fallback (#213): tier:high host not in the hardcoded list.
+		{name: "courtlistener (reputation high)", url: "https://www.courtlistener.com/opinion/1/mock/", want: 0.9},
+		// law.cornell.edu is .edu so caught by the hardcoded list already.
+		{name: "law.cornell.edu (edu)", url: "https://law.cornell.edu/uscode/", want: 0.9},
 	}
 
 	for _, tt := range tests {
@@ -778,7 +782,18 @@ func TestExtractCitation_APA(t *testing.T) {
 			siteName: "Example Site",
 			pubDate:  "2024-01-15",
 			contains: []string{"Smith, J.", "(2024-01-15).", "Test Article.", "Example Site.", "https://example.com/article"},
-			excludes: nil,
+			// Author already ends in an initial+period — must not double to "J..".
+			excludes: []string{".."},
+		},
+		{
+			name:     "author ending in initial does not double the period",
+			url:      "https://www.nature.com/articles/s41586-021-03819-2",
+			title:    "Highly accurate protein structure prediction with AlphaFold",
+			author:   "Jumper, J.; Hassabis, D.",
+			siteName: "Nature",
+			pubDate:  "2021",
+			contains: []string{"Jumper, J.; Hassabis, D.", "(2021)."},
+			excludes: []string{".."},
 		},
 		{
 			name:     "no author",

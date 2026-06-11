@@ -113,6 +113,20 @@ func scoreAuthority(url string) float64 {
 			return 0.7
 		}
 	}
+
+	// Fallback: consult domain_reputation.json so the authority score stays
+	// consistent with the reputation tier for hosts not in the hardcoded lists
+	// (e.g. courtlistener.com is tier:high but not .gov/.edu).
+	if host := classifyHost(url); host != "" {
+		rep := LookupDomainReputation(host)
+		switch rep.Tier {
+		case ReputationHigh:
+			return 0.9
+		case ReputationMixed:
+			return 0.7
+		}
+	}
+
 	return 0.5
 }
 

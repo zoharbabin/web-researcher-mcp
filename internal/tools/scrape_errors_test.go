@@ -63,8 +63,14 @@ func TestScrapeErrorResponse_BlockedError(t *testing.T) {
 	if !strings.Contains(text, "bot detection") {
 		t.Errorf("expected bot detection hint, got: %s", text)
 	}
-	if !strings.Contains(text, issueURL) {
-		t.Errorf("expected GitHub issue URL for blocked errors, got: %s", text)
+	// A bot-wall is a remote refusal, not a server bug: the message must guide to
+	// an alternative source and must NOT suggest filing a bug (it matches the
+	// inform_user / non-retryable suggestedAction).
+	if strings.Contains(text, issueURL) {
+		t.Errorf("blocked error must not suggest filing a bug, got: %s", text)
+	}
+	if !strings.Contains(text, "alternative source") {
+		t.Errorf("expected alternative-source guidance, got: %s", text)
 	}
 }
 
@@ -252,8 +258,10 @@ func TestScrapeTool_403_ReturnsBlockedError(t *testing.T) {
 	if !strings.Contains(text, "bot detection") {
 		t.Errorf("expected blocked/bot-detection message, got: %s", text)
 	}
-	if !strings.Contains(text, issueURL) {
-		t.Errorf("expected issue URL in blocked error, got: %s", text)
+	// A bot-wall is a remote refusal, not a server bug — guide to an alternative
+	// source, never a bug report (matches the inform_user suggestedAction).
+	if strings.Contains(text, issueURL) {
+		t.Errorf("blocked error must not suggest filing a bug, got: %s", text)
 	}
 }
 

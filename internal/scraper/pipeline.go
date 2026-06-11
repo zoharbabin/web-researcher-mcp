@@ -250,31 +250,30 @@ func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, max
 		return lastResult, nil
 	}
 
-	// Compose a diagnostic error showing what each tier saw
+	// Compose a diagnostic error showing what each tier saw. When tiers disagree
+	// on the kind, the MOST DEFINITIVE diagnosis wins (scrapeKindPriority) — never
+	// the last one seen. This is what stops a later tier's transient failure (e.g.
+	// the browser tier's launch/eval error on an empty page) from masking an
+	// earlier tier's authoritative signal: a 404 the HTTP tiers already saw must
+	// surface as not_found, not as the browser tier's content_empty/browser error.
 	var parts []string
 	allNetwork := true
 	highestKind := ErrContent
+	bestPriority := -1
 	for _, o := range outcomes {
 		switch {
 		case o.err != nil:
 			parts = append(parts, fmt.Sprintf("%s: %v", o.name, o.err))
 			if se, ok := o.err.(*ScrapeError); ok {
-				switch se.Kind {
-				case ErrValidation:
-					// A security/validation denial is definitive: surface it as
-					// the kind regardless of any sibling tier's timeout, and never
-					// downgrade to network (which would imply a misleading retry).
-					highestKind = ErrValidation
+				// A pure-network failure leaves allNetwork true so a run where
+				// every tier merely timed out is still reported as retryable
+				// network; anything else is a definite per-tier diagnosis.
+				if se.Kind != ErrNetwork {
 					allNetwork = false
-				case ErrBlocked, ErrAuth, ErrRateLimit, ErrBrowser:
-					if highestKind != ErrValidation {
-						highestKind = se.Kind
-					}
-					allNetwork = false
-				case ErrNetwork:
-					// keep allNetwork true
-				default:
-					allNetwork = false
+				}
+				if pr := scrapeKindPriority(se.Kind); pr > bestPriority {
+					bestPriority = pr
+					highestKind = se.Kind
 				}
 			} else {
 				allNetwork = false
