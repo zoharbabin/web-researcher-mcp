@@ -20,7 +20,6 @@ Some errors indicate a limitation in the MCP server itself — sites that should
 This creates a feedback loop: users encounter real-world edge cases → LLM guides them to report it → maintainers get actionable bug reports with the exact URL and failure mode → the server improves.
 
 The issue link appears **only** for errors where the MCP server could plausibly improve:
-- `ErrBlocked` — a commonly-needed site the scraper can't access
 - `ErrContent` — a page loaded but yielded no usable text
 - `ErrBrowser` — Chrome not available for a JS-heavy site
 - General upstream failures that persist across retries
@@ -86,6 +85,7 @@ type ScrapeError struct {
 | Content | `ErrContent` | Page loaded but <100 bytes of useful text extracted | All tiers (composite failure) |
 | Auth | `ErrAuth` | HTTP 401, login redirect detected | stealth, html |
 | Rate Limit | `ErrRateLimit` | HTTP 429 | Any tier's HTTP client |
+| Not Found | `ErrNotFound` | HTTP 404/410 — dead link, resource gone | stealth/html/browser |
 
 `ErrValidation` is distinct from `ErrBlocked` on purpose: a validation/security rejection is a **permanent** client error (the URL itself is invalid or disallowed), so it is **never retryable** and must not be reported as transient bot-detection. `ErrBlocked` is reserved for a real remote site actively refusing the request (HTTP 403 / bot walls), which is retryable from a different source.
 
@@ -102,6 +102,7 @@ Each tier uses these to create appropriately-typed errors:
 | `contentError(url, detail)` | `ErrContent` | Pipeline when all tiers extract nothing |
 | `authError(url, tier, statusCode)` | `ErrAuth` | stealth/html on 401 |
 | `rateLimitError(url, tier)` | `ErrRateLimit` | Any tier on 429 |
+| `notFoundError(url, tier, statusCode)` | `ErrNotFound` | stealth/html/browser on 404/410 |
 
 ### Classification Functions
 
@@ -161,10 +162,11 @@ Rate limited (google). Wait 60 seconds and retry, or try a different provider.
 |------|------|-----------|-----------------|
 | `rate_limited` | HTTP 429, quota exceeded | true | `retry_after_delay` |
 | `auth_required` | Provider HTTP 401 / invalid API key → `check_api_key`; scrape login wall (`ErrAuth`) → `inform_user` | false | `check_api_key` (provider) or `inform_user` (scrape) |
-| `blocked` | HTTP 403, remote bot detection | true | `report_bug` |
+| `blocked` | HTTP 403, remote bot detection | false | `inform_user` |
 | `validation` | Invalid input params, unsupported scheme, SSRF / private-IP / blocked-host / allowlist denial, or a provider-side rejection (`search.InvalidParamsError` — bad `category` / out-of-spec `schema` in `structured_search`) | false | `inform_user` |
 | `network` | DNS failure, timeout, connection refused | true | `retry_after_delay` |
 | `content_empty` | Page loaded but no text extracted | true | `report_bug` |
+| `not_found` | HTTP 404/410 — page does not exist (dead link) | false | `inform_user` |
 | `browser_unavailable` | Chrome not found/failed | false | `report_bug` |
 | `config` | Unknown/unconfigured provider | false | `try_different_provider` or `check_api_key` |
 | `upstream_unavailable` | General provider failure | true | `try_different_provider` |
@@ -283,9 +285,9 @@ The `status` field tells you immediately: `"complete"`, `"partial"`, or `"failed
 Bad: `"error: HTTP 403"`
 Good:
 ```
-Blocked: x.com uses bot detection. Try alternative source or report at https://github.com/zoharbabin/web-researcher-mcp/issues
+Blocked: x.com uses bot detection. Try an alternative source — its content can't be read directly.
 
-{"error":{"kind":"blocked","retryable":true,"suggestedAction":"report_bug","detail":"access blocked: HTTP 403"}}
+{"error":{"kind":"blocked","retryable":false,"suggestedAction":"inform_user","detail":"access blocked: HTTP 403"}}
 ```
 
 ### 2. Errors are categorized, not strings
@@ -302,7 +304,7 @@ Each layer enriches without losing information. The pipeline adds multi-tier dia
 
 ### 4. The issue link is surgical
 
-The GitHub issue link appears in exactly three places (`scrapeErrorResponse` cases for `ErrBrowser`, `ErrBlocked`, `ErrContent`) and one place in `upstreamErrorResponse` (general upstream failures). These are the only categories where a bug report could lead to an improvement.
+The GitHub issue link appears in exactly two places (`scrapeErrorResponse` cases for `ErrBrowser`, `ErrContent`) and one place in `upstreamErrorResponse` (general upstream failures). These are the only categories where a bug report could lead to an improvement.
 
 ### 5. Errors are tested
 

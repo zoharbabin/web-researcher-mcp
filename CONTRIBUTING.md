@@ -341,17 +341,17 @@ func registerMyTool(srv *mcp.Server, deps Dependencies) {
 
 2. **Register it** in `internal/tools/registry.go` — add `registerMyTool(srv, deps)` to `RegisterAll()`.
 
-3. **Add tests** in `internal/tools/tools_test.go` or a dedicated `<toolname>_test.go`.
+3. **Add tests** in `internal/tools/tools_test.go` or a dedicated `<toolname>_test.go`; add the tool name to `expectedTools` in `internal/tools/metadata_test.go`.
 
 Key conventions:
 - All tool inputs use typed structs with `jsonschema` tags (the SDK auto-generates JSON Schema from these)
 - Use `deps.Cache` for caching, `deps.Metrics` for telemetry, `deps.Auditor` for audit logging
-- Return validation errors via `toolError(msg)`, upstream errors via `upstreamErrorResponse(toolName, err)`, success via `structuredResult(jsonBytes)` (see `internal/tools/errors.go` and `docs/ERROR_HANDLING.md` for the full pattern)
+- Return validation errors via `toolError(msg)`, upstream errors via `upstreamErrorResponse(toolName, err)`, success via `structuredResult(jsonBytes)` — these helpers are defined in `internal/tools/search.go`; `scrapeErrorResponse` is in `internal/tools/scrape.go`; the `ToolError` types and `structuredError` are in `internal/tools/errors.go` (see `docs/ERROR_HANDLING.md` for the full pattern)
 - Update `docs/TOOLS.md` with a `## Tool N: \`name\`` section — the drift test `TestToolsDocMatchesRegistry` (`internal/tools/metadata_test.go`) fails CI if a registered tool is undocumented or vice-versa
 
 ### Write tools and consent-gated (regulated) tools
 
-Most tools are read-only. For the rare tool that mutates server-side state (e.g. `memory_save`, `workspace_contribute`):
+Most tools are read-only. For the rare tool that mutates server-side state (e.g. `memory_save`, `workspace_contribute`, `archive_source`):
 
 - Annotate with `writeAnnotations(idempotent)` instead of `readOnlyAnnotations(...)`. `ReadOnlyHint` becomes `false`; `DestructiveHint` stays `false` — **deletion is never a tool flag**, it is the GDPR erasure endpoint (`DELETE /admin/data`). Update the `writeTools` set and add a `case` in `TestAllToolsHaveAnnotations` (`internal/tools/metadata_test.go`).
 - If the tool processes per-user personal data, gate it on consent: `if deps.Consent == nil || !deps.Consent.HasConsent(ctx, consent.PurposeXxx) { return structuredResult(... "status":"no_consent" ...) }`. Take the subject from `auth.UserIDFromContext(ctx)` / `auth.TenantIDFromContext(ctx)` — never from a tool parameter. Refuse `anonymous`.

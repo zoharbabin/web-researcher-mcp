@@ -79,7 +79,7 @@ Search peer-reviewed papers, preprints, and academic databases.
 }
 ```
 
-**Response** contains: `papers` (array of `{title, url, source, doi, authors, journal, year, abstract, citationCount, openAccess, pdfUrl}` — plus `tldr`, `isInfluential`, and `citationIntents` when the provider supplies them), `query`, `totalResults`, `resultCount`, and `source` (which provider answered). When no results are found, a `hints` object explains why and suggests actions (e.g., remove restrictive filters, try a different source). Results come from scholarly databases (OpenAlex, CrossRef, Semantic Scholar, or Exa) or site-restricted web search as fallback. To trace a paper's citation neighborhood — the works it cites and the works that cite it — pair this with `citation_graph`.
+**Response** contains: `papers` (array of `{title, url, source, doi, authors, journal, year, abstract, citationCount, openAccess, pdfUrl}` — plus `tldr`, `isInfluential`, and `citationIntents` when the provider supplies them), `query`, `totalResults`, `resultCount`, and `source` (which provider answered). When no results are found, a `hints` object explains why and suggests actions (e.g., remove restrictive filters, try a different source). Results come from scholarly databases (OpenAlex, CrossRef, PubMed, Semantic Scholar, or Exa) or site-restricted web search as fallback. To trace a paper's citation neighborhood — the works it cites and the works that cite it — pair this with `citation_graph`.
 
 ---
 
@@ -154,7 +154,7 @@ Search US federal and state court opinions for precedent. Query by legal topic, 
 
 ## Economic Data Search
 
-Look up economic data from two providers. **World Bank Open Data** (keyless, always available) covers global development indicators for 200+ economies; **FRED** (Federal Reserve Economic Data, needs a free key) adds 800K+ US macro series — GDP, CPI, unemployment, rates. Search by keyword to discover series IDs, or pass a `series_id` to retrieve observations.
+Look up economic data from four providers. **World Bank Open Data** (keyless, always available) covers global development indicators for 200+ economies. **FRED** (Federal Reserve Economic Data, needs a free key) adds 800K+ US macro series — GDP, CPI, unemployment, rates. **OECD** (keyless) covers OECD member-country statistics. **Eurostat** (keyless) covers EU economic and social data. Search by keyword to discover series IDs, or pass a `series_id` to retrieve observations.
 
 ```json
 {
@@ -194,7 +194,7 @@ For global data, force the World Bank provider and scope by `country` (an ISO co
 }
 ```
 
-In **observations mode** (`mode: "observations"`), `results` is an array of `{seriesId, date, value}` (World Bank also echoes the requested `country`). Numeric values pass through exactly as the source returns them — no rounding, and a real `0` is preserved (missing observations carry no `value`). FRED supports `frequency` (`d`/`w`/`m`/`q`/`a`) and `units` (e.g. `pch`, `pc1`); World Bank scopes by `country` and filters by year. FRED requires `FRED_API_KEY` (free at fred.stlouisfed.org); World Bank needs no key. Results stay fresh for 6 hours.
+In **observations mode** (`mode: "observations"`), `results` is an array of `{seriesId, date, value}` (multi-country providers also include a `country` field at the top level). Numeric values pass through exactly as the source returns them — no rounding, and a real `0` is preserved (missing observations carry no `value`). FRED supports `frequency` (`d`/`w`/`m`/`q`/`a`) and `units` (e.g. `pch`, `pc1`). World Bank, OECD, and Eurostat scope by `country` and filter by year. FRED requires `FRED_API_KEY` (free at fred.stlouisfed.org); World Bank, OECD, and Eurostat need no key. Results stay fresh for 6 hours.
 
 ---
 
@@ -270,7 +270,7 @@ Extract content from any URL — web pages, PDFs, DOCX, PPTX, or YouTube transcr
 }
 ```
 
-**Response** contains: `url`, `content` (extracted text), `contentType` (html/markdown/youtube/pdf/docx/pptx), `contentLength`, `truncated`, `estimatedTokens`, `sizeCategory`, `citation` (with APA/MLA/BibTeX formatted citations), typed source classification (`sourceType`: peer_reviewed/official_docs/government/news_publication/blog/forum/wiki/social_media/unknown; `authorityTier`: high/medium/low; `domainCategory`: academic/legal/medical/financial/technical/general), and optionally `metadata` (`{title, author}`), `extractedBy` (the extraction tier), and `structuredData` (JSON-LD / Open Graph / citation meta when present). The tool uses the fastest method available and only launches a full browser for sites that require JavaScript — so most pages load in under a second. On a cache hit the result also carries a `_meta` block (`cached`, `ageSeconds`, `maxAgeSeconds`, `freshness`) so you can tell how recent the content is.
+**Response** contains: `url`, `content` (extracted text), `contentType` (html/markdown/youtube/pdf/docx/pptx), `contentLength`, `truncated`, `estimatedTokens`, `sizeCategory`, `citation` (with APA/MLA/BibTeX formatted citations), typed source classification (`sourceType`: peer_reviewed/official_docs/government/news_publication/blog/forum/wiki/social_media/unknown; `authorityTier`: high/medium/low; `domainCategory`: academic/legal/medical/financial/technical/general), and optionally `metadata` (`{title, author}`), `extractedBy` (the extraction tier), `structuredData` (JSON-LD / Open Graph / citation meta when present), `detectedDoi` (a DOI the page declares itself — useful for verifying a scrape result against `verify_citation`), and `retractionStatus` (retraction data if the detected DOI is in the Crossref retraction watch). The tool uses the fastest method available and only launches a full browser for sites that require JavaScript — so most pages load in under a second. On a cache hit the result also carries a `_meta` block (`cached`, `ageSeconds`, `maxAgeSeconds`, `freshness`) so you can tell how recent the content is.
 
 ### Modes
 

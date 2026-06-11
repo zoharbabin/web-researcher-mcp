@@ -49,15 +49,20 @@ When you search, your query goes directly to whichever provider you configured. 
 | Exa | Your query, your API key — and, only if you enable the optional paid scrape fallback, the page URL being read | [exa.ai/privacy-policy](https://exa.ai/privacy-policy) |
 | SearXNG | Your query (self-hosted — no third party) | N/A (you control the server) |
 | DuckDuckGo | Your query (zero-config default when no provider is configured) | [duckduckgo.com/privacy](https://duckduckgo.com/privacy) |
-| OpenAlex | Your academic query | [openalex.org/legal](https://openalex.org/legal/privacy-policy) |
+| OpenAlex | Your academic query; your optional contact email if `OPENALEX_EMAIL` is set (improves rate limits) | [openalex.org/legal](https://openalex.org/legal/privacy-policy) |
 | CrossRef | Your academic query | [crossref.org/privacy](https://www.crossref.org/privacy/) |
 | Semantic Scholar | Your academic / citation query (optional API key) | [allenai.org/privacy-policy](https://allenai.org/privacy-policy) |
 | Unpaywall | A paper's DOI plus your contact email (open-access PDF lookup) | [unpaywall.org](https://unpaywall.org/) |
 | SEC EDGAR | Your filing query / ticker, and a contact email in the request User-Agent (SEC requires it) | [sec.gov/privacy](https://www.sec.gov/privacy) |
 | CourtListener | Your legal query (optional API token) | [free.law/privacy-policy](https://free.law/privacy-policy/) |
 | FRED (St. Louis Fed) | Your economic query / series ID, your API key | [stlouisfed.org/legal](https://www.stlouisfed.org/legal) |
+| World Bank | Your economic query / indicator code (keyless) | [worldbank.org/en/about/legal/privacy-notice](https://www.worldbank.org/en/about/legal/privacy-notice) |
+| OECD | Your economic query / indicator code (keyless) | [oecd.org/en/about/privacy.html](https://www.oecd.org/en/about/privacy.html) |
+| Eurostat | Your economic query / indicator code (keyless) | [ec.europa.eu/info/privacy-policy](https://ec.europa.eu/info/privacy-policy_en) |
+| PubMed (NCBI) | Your academic query; your optional contact email if `PUBMED_EMAIL` is set | [nlm.nih.gov/web_policies.html](https://www.nlm.nih.gov/web_policies.html) |
+| ClinicalTrials.gov | Your clinical-trial query (keyless) | [clinicaltrials.gov/about-site/privacy-policy](https://clinicaltrials.gov/about-site/privacy-policy) |
 
-These are public-data APIs queried only when you call the matching tool (`academic_search`/`citation_graph`, `filing_search`, `legal_search`, `econ_search`). Only the search term, identifier, and any configured key/contact email are sent — no personal data beyond what you put in the query. EDGAR's contact email is a deliberate disclosure the SEC requires for automated access.
+These are public-data APIs queried only when you call the matching tool (`academic_search`/`citation_graph`, `filing_search`, `legal_search`, `econ_search`, `clinical_search`). Only the search term, identifier, and any configured key/contact email are sent — no personal data beyond what you put in the query. EDGAR's contact email is a deliberate disclosure the SEC requires for automated access.
 
 **You choose which provider to use.** If you want maximum privacy, SearXNG lets you self-host the entire search backend with no third-party involvement.
 

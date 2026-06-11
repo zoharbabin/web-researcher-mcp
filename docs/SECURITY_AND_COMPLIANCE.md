@@ -653,7 +653,8 @@ non-negotiable and enforced in code review.
    user-specified URLs. Always use `scraper.NewSSRFSafeClient()`.
 
 8. **Add annotations to new tools.**  
-   Every tool must declare `readOnlyAnnotations(idempotent, openWorld)`.
+   Read tools must declare `readOnlyAnnotations(idempotent, openWorld)`.
+   Write tools (those that mutate server-side state or trigger an external side-effect, e.g. `memory_save`, `workspace_contribute`, `archive_source`) must use `writeAnnotations(idempotent)` instead.
    The `TestAllToolsHaveAnnotations` test enforces this in CI.
 
 9. **Don't accumulate data beyond the request lifecycle.**  
@@ -827,7 +828,7 @@ These items shipped and are no longer roadmap candidates:
 
 - Zero global state (dependency injection via struct)
 - Interface-driven design (swap implementations without touching callers)
-- Read-only tool semantics (tools fetch and return — never write externally)
+- Read-only-default tool semantics (reads are the default; write tools exist but are non-destructive — deletion is always a separate admin endpoint, never a tool flag)
 - STDIO as the zero-config default
 - Go standard library preference over third-party
 - Compliance proportional to activated features (tiered model)

@@ -253,12 +253,12 @@ When a single agent spawns many parallel tool calls:
 
 Protects against cascading failures when upstream APIs are down.
 
-**States:** CLOSED → OPEN → HALF_OPEN → CLOSED. Each provider gets an independent breaker, so a failure in one never blocks fallback to another. There are three distinct breaker layers, each with its own thresholds (see `internal/search/provider.go`, `internal/search/domain.go`, and `internal/search/router.go` for the authoritative values):
+**States:** CLOSED → OPEN → HALF_OPEN → CLOSED. Each provider gets an independent breaker, so a failure in one never blocks fallback to another. There are three distinct breaker layers, each with its own thresholds (see `internal/search/provider.go`, `internal/search/domain.go`, `internal/search/structured_domains.go`, and `internal/search/router.go` for the authoritative values):
 
 | Layer | Wraps | Threshold | Reset |
 |-------|-------|-----------|-------|
 | Web provider breaker (`AvailableProviders`) | Each web provider in `search.SupportedProviders` | 3 failures | 120s |
-| Domain provider breaker (`Available{Patent,Academic}Providers`) | Each patent/academic provider's own upstream HTTP calls | 5 failures | 60s |
+| Domain provider breaker (`Available{Patent,Academic,Filing,Case,Econ,Trial}Providers`) | Each domain provider's own upstream HTTP calls | 5 failures | 60s |
 | Routing breaker (`SEARCH_ROUTING`) | Fallback decision across the priority list (web, patent, academic) | 3 failures | 30s |
 
 - Half-open attempts: 1 (all layers)

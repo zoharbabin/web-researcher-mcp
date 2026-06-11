@@ -66,7 +66,7 @@ Node.js process management is fundamentally fragile for long-lived servers launc
 
 ### 2. Interface-Driven Design Enables Fearless Extension
 
-Adding Brave Search in the Go version was one file implementing one interface — about 200 lines including tests. In the Node.js version, the equivalent change would have touched 6+ files due to tightly coupled imports in the shared directory.
+Adding Brave Search in the Go version was one file implementing one interface. In the Node.js version, the equivalent change would have touched 6+ files due to tightly coupled imports in the shared directory.
 
 **Takeaway**: When you know extension is likely (new providers, new tools), invest in clean interfaces upfront. The interface is the specification; implementations are interchangeable.
 

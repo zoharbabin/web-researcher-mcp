@@ -114,6 +114,8 @@ Then configure as in Option A.
 | `SERPER_API_KEY` | Serper.dev API key | https://serper.dev |
 | `SEARCHAPI_API_KEY` | SearchAPI.io API key | https://searchapi.io |
 | `SEARXNG_URL` | Self-hosted SearXNG instance URL | https://docs.searxng.org |
+| `TAVILY_API_KEY` | Tavily Search API key | https://app.tavily.com |
+| `EXA_API_KEY` | Exa neural/semantic search API key | https://dashboard.exa.ai |
 
 **Optional:**
 
@@ -128,7 +130,7 @@ The differentiator is the **trust suite**: `verify_citation` checks whether one 
 
 Alongside those, the always-on core tools include web search, full-page/document scraping (`mode: raw` for verbatim source), combined search-and-scrape with quality ranking, image and news search, academic search (real DOIs) and citation-graph traversal, patent search (US/EP/WO/JP/CN/KR), SEC filing search (`filing_search`, EDGAR — including XBRL company facts), US case-law search (`legal_search`, CourtListener), economic data (`econ_search`, FRED + World Bank + OECD + Eurostat), clinical-trial search (`clinical_search`, ClinicalTrials.gov), grounded `answer` and `structured_search`, research-session export and bibliography formatting (APA/MLA/BibTeX/RIS/CSL-JSON), and multi-step `sequential_search` with recoverable sessions.
 
-Optional keys `EDGAR_CONTACT_EMAIL`, `COURTLISTENER_API_TOKEN`, and `FRED_API_KEY` enrich the filing/legal/economic tools — `legal_search` works with no key, `filing_search` needs a contact email (falls back to `OPENALEX_EMAIL`), and `econ_search` registers once `FRED_API_KEY` is set.
+Optional keys `EDGAR_CONTACT_EMAIL`, `COURTLISTENER_API_TOKEN`, and `FRED_API_KEY` enrich the filing/legal/economic tools — `legal_search` works with no key, `filing_search` needs a contact email (falls back to `OPENALEX_EMAIL`), and `econ_search` is always registered (World Bank, OECD, and Eurostat are keyless); `FRED_API_KEY` adds FRED US macro series to it.
 
 Operators can additionally enable opt-in, consent-gated tools (per-user analytics, long-term memory, shared workspaces) that register only when their feature is turned on.
 

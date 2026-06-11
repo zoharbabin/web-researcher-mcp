@@ -40,7 +40,7 @@ internal/
 ├── metrics/      # Prometheus counters/histograms per tool + per-tenant aggregate analytics + bounded recent-errors ring (diagnostics://errors/recent)
 ├── ratelimit/    # Token bucket (per-tenant + global) + optional atomic cross-pod daily quota (Redis)
 ├── circuit/      # Circuit breaker for external APIs
-└── resources/    # MCP Resources (stats:// + diagnostics:// errors/health) + Prompts (research templates) + completion/complete handler (lens/provider/enum arg autocompletion, DI suppliers)
+└── resources/    # MCP Resources (stats:// + diagnostics:// errors/health + lenses://catalog + research://artifact/{id}) + Prompts (research templates) + completion/complete handler (lens/provider/enum arg autocompletion, DI suppliers)
 lenses/           # JSON files defining domain lists for site-restricted search (CANONICAL source; go:embed'd into the binary via internal/search/lenses_embed/ so lenses work from any CWD/install — keep in sync with `make sync-lenses`, guarded by TestEmbeddedLensesMatchRoot)
 tests/e2e/        # Full process E2E tests
 tests/benchmark/  # Performance benchmarks
@@ -66,7 +66,7 @@ Registry/manifest files (root, each read by a different external tool): `server.
 ## Design Rules
 
 1. **Zero global state** — all deps flow through `tools.Dependencies` struct (constructed in `main.go`)
-2. **Interface-driven** — `cache.Cache`, `search.Provider`, `audit.Auditor` are interfaces; swap implementations without touching callers. Specialized capability interfaces (each a `…Searcher` + `…Provider` pair): `search.PatentSearcher`/`PatentProvider`, `search.AcademicSearcher`/`AcademicProvider`, `search.CitationSearcher` (on academic providers), `search.AnswerSearcher`/`AnswerProvider`, `search.StructuredSearcher`/`StructuredProvider`, and the structured-domain set `search.FilingSearcher`/`FilingProvider`, `search.CaseSearcher`/`CaseProvider`, `search.EconSearcher`/`EconProvider`, `search.TrialSearcher`/`TrialProvider` (`internal/search/structured_domains.go`)
+2. **Interface-driven** — `cache.Cache`, `search.Provider`, `audit.Auditor` are interfaces; swap implementations without touching callers. Specialized capability interfaces (each a `…Searcher` + `…Provider` pair): `search.PatentSearcher`/`PatentProvider`, `search.AcademicSearcher`/`AcademicProvider`, `search.CitationSearcher` (on academic providers), `search.AnswerSearcher`/`AnswerProvider`, `search.StructuredSearcher`/`StructuredProvider`, and the structured-domain set `search.FilingSearcher`/`FilingProvider`, `search.CaseSearcher`/`CaseProvider`, `search.EconSearcher`/`EconProvider`, `search.TrialSearcher`/`TrialProvider` (`internal/search/structured_domains.go`). Enrichment resolver interfaces: `search.DOIResolver` (exact-entity DOI lookup, `domain.go`), `search.OAResolver` (Unpaywall open-access enrichment, `unpaywall.go`), `search.RetractionResolver` (Crossref retraction status, `retraction.go`)
 3. **Errors are values** — tool handlers return `toolError("message")` which sets `IsError: true` on the MCP result; never panic. Upstream errors use `upstreamErrorResponse()`. Scrape errors use typed `ScrapeError{Kind}`. Full error architecture: see `docs/ERROR_HANDLING.md`
 4. **Bounded concurrency** — scraping semaphore (5 slots), mutex-serialized browser, per-tenant rate limits
 5. **Lens routing** — if `lens` is set, `site:` operators are injected and routed to the configured provider; lenses with a dedicated `cx` route directly to that Google PSE engine
@@ -111,7 +111,7 @@ Registry/manifest files (root, each read by a different external tool): `server.
 
 Required: None — DuckDuckGo works as zero-config fallback (no API key needed).  
 For better results: `GOOGLE_CUSTOM_SEARCH_API_KEY`, `GOOGLE_CUSTOM_SEARCH_ID`  
-Optional: `SEARCH_PROVIDER` (google|brave|serper|searxng|searchapi|duckduckgo), `SEARCH_ROUTING`, `BRAVE_API_KEY`, `SEARCHAPI_API_KEY`, `PORT` (enables HTTP)  
+Optional: `SEARCH_PROVIDER` (google|brave|serper|searxng|searchapi|duckduckgo|tavily|exa), `SEARCH_ROUTING`, `BRAVE_API_KEY`, `SEARCHAPI_API_KEY`, `TAVILY_API_KEY`, `EXA_API_KEY`, `PORT` (enables HTTP)  
 Full list: see `.env.example`
 
 ## Release Process

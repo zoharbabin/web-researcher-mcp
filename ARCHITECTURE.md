@@ -103,7 +103,7 @@ web-researcher-mcp/
 │   ├── auth/                     # OAuth 2.1 middleware (JWT/JWKS)
 │   ├── audit/                    # Structured audit logging (PodID for cross-pod correlation)
 │   ├── session/                  # Per-tenant session persistence — Manager interface (memory+disk or Redis)
-│   ├── content/                  # Sanitize, dedup, truncate, quality, typed source classification, claim evidence, recommendations + auto-formatted components
+│   ├── content/                  # Sanitize, dedup, truncate, quality, typed source classification, claim evidence, citation extraction, bibliography read/write (APA/MLA/BibTeX/RIS/CSL-JSON round-trip), recommendations + auto-formatted components
 │   ├── metrics/                  # Prometheus metrics + per-tenant aggregate analytics
 │   ├── ratelimit/                # Three-tier rate limiting + optional atomic cross-pod daily quota
 │   ├── circuit/                  # Circuit breaker
@@ -163,12 +163,16 @@ When `SEARCH_ROUTING` is configured, the Router wraps all available providers wi
 Beyond the general `Provider`, the system layers **opt-in capability interfaces** so a provider implements only what it supports. Each capability follows the same shape — a `…Searcher` (the method) plus a `…Provider` (Searcher + `Name()` + `Metadata()`) — with a parallel `Supported…Providers` list, `New…ProviderByName` factory, and `Available…Providers` constructor (all in `internal/search/`):
 
 - **`PatentProvider`** (`Patents`) — `internal/search/domain.go`. Carries `ProviderMeta` for regional filtering (e.g. `patent_office=EP` skips US-only providers): SearchAPI, EPO OPS, The Lens, USPTO.
-- **`AcademicProvider`** (`Scholarly`) — `internal/search/domain.go`. OpenAlex, CrossRef, Semantic Scholar, and Exa (via its research-paper category).
+- **`AcademicProvider`** (`Scholarly`) — `internal/search/domain.go`. OpenAlex, CrossRef, PubMed, Semantic Scholar, and Exa (via its research-paper category).
 - **`CitationSearcher`** (`Citations` / `References`) — `internal/search/domain.go`. Forward (cited-by) and backward (references) citation edges behind the `citation_graph` tool. Implemented by Semantic Scholar (rich — citation intent + influence) and OpenAlex (counts-only); the tool auto-selects Semantic Scholar first.
 - **`FilingSearcher` / `CaseSearcher` / `EconSearcher` / `TrialSearcher`** — `internal/search/structured_domains.go`. The structured-research domains behind `filing_search` (SEC EDGAR), `legal_search` (CourtListener), `econ_search` (FRED + World Bank + OECD + Eurostat), and `clinical_search` (ClinicalTrials.gov). Each follows the same `…Searcher` + `…Provider` + `Supported…Providers` + `New…ByName` + `Available…Providers` shape as the patent/academic capabilities, resolved from the `Dependencies` maps in the tool layer. A new provider behind an existing interface (e.g. OECD/Eurostat under `EconProvider`) is one factory case + one list entry, no tool change.
 - **`AnswerSearcher` / `StructuredSearcher`** — `internal/search/synthesis.go`. The provider-independent capabilities behind the `answer` and `structured_search` tools (grounded Q&A and per-result structured extraction). Currently Exa; a new provider (e.g. Perplexity) is added with one factory case + one list entry and the tools pick it up with no tool-layer change.
 
-Separate from the capability interfaces, **`OAResolver`** (`internal/search/unpaywall.go`, implemented by Unpaywall) is an *enrichment* layer — not a search provider. After `academic_search` returns DOI-bearing results, `EnrichOpenAccess` fills the open-access PDF link on any result the provider left bare. Best-effort and nil-safe (a no-op when unconfigured); it never overwrites a provider-supplied PDF and never fails a search.
+Separate from the capability interfaces, three **enrichment** interfaces operate post-search on DOI-bearing results — not search providers:
+
+- **`OAResolver`** (`internal/search/unpaywall.go`, implemented by Unpaywall) — fills the open-access PDF link after `academic_search` via `EnrichOpenAccess`. Best-effort, nil-safe, never overwrites a provider-supplied PDF.
+- **`RetractionResolver`** (`internal/search/retraction.go`, implemented by `CrossrefRetractionResolver`) — flags retracted or corrected works via `EnrichRetraction`. Used by `academic_search`, `citation_graph`, `scrape_page`, and `audit_bibliography`.
+- **`DOIResolver`** (`internal/search/domain.go`, optional capability on academic providers) — performs an exact entity lookup for a DOI (e.g. OpenAlex `/works/doi:{doi}`) so `verify_citation` always retrieves the cited work directly rather than relying on a relevance-ranked search whose top hit could be a different paper.
 
 A provider can satisfy several at once — `ExaProvider` implements `Provider`, `AcademicProvider`, `AnswerProvider`, and `StructuredProvider` simultaneously, and Semantic Scholar/OpenAlex implement both `AcademicProvider` and `CitationSearcher`. The `Router` routes the `Provider`, `PatentSearcher`, and `AcademicSearcher` capabilities with per-provider breaker fallback; the synthesis, citation, and structured-domain (filing/case/econ/trial) capabilities are resolved directly from the `Dependencies` maps in the tool layer. Each configured provider gets an independent circuit breaker.
 
@@ -264,7 +268,7 @@ Browser scrapes hold a scraping semaphore slot and then acquire the browser pool
 
 Three-layer architecture: typed scraper errors (`ScrapeError{Kind}` in `internal/scraper/errors.go`) → structured tool-level responses (`structuredError()`, `upstreamErrorResponse()` in `internal/tools/errors.go`) → MCP protocol (`IsError: true` with dual-format text: natural language + JSON metadata).
 
-Every error response includes machine-readable JSON: `{"error":{"kind":"...","retryable":...,"suggestedAction":"..."}}`. This lets LLM clients branch programmatically on error type. Error kinds: `rate_limited`, `auth_required`, `blocked`, `network`, `content_empty`, `browser_unavailable`, `config`, `upstream_unavailable`.
+Every error response includes machine-readable JSON: `{"error":{"kind":"...","retryable":...,"suggestedAction":"..."}}`. This lets LLM clients branch programmatically on error type. Error kinds: `rate_limited`, `auth_required`, `blocked`, `network`, `not_found`, `content_empty`, `browser_unavailable`, `validation`, `config`, `upstream_unavailable`, `session_not_found`.
 
 Full specification: see `docs/ERROR_HANDLING.md`.
 

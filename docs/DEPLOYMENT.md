@@ -348,7 +348,7 @@ SEARCH_ROUTING='{"web":"brave,google","news":"brave,serper","images":"google,bra
 - Each provider gets an independent circuit breaker. The routing-layer breakers that govern fallback (web, patent, and academic alike) open after 3 consecutive failures and reset after 30s (`internal/search/router.go`). Domain providers additionally wrap their own upstream HTTP calls in an inner breaker (5 failures / 60s, `internal/search/domain.go`) — a separate, deeper layer, not the effective routing breaker. See those files for the authoritative values.
 - Lenses can override routing via the `"routing"` field in their JSON definition
 
-**Operation types:** `web`, `images`, `news`, `academic`, `patents`, `default`. The `academic` and `patents` lists are filtered to providers that implement the academic/patent interface — `academic` accepts `openalex`, `crossref`, `exa`; `patents` accepts `searchapi`, `epo`, `lens`, `uspto`. Names that don't implement the interface are silently dropped, so use the example values above.
+**Operation types:** `web`, `images`, `news`, `academic`, `patents`, `default`. The `academic` and `patents` lists are filtered to providers that implement the academic/patent interface — `academic` accepts `openalex`, `crossref`, `pubmed`, `semanticscholar`, `exa`; `patents` accepts `searchapi`, `epo`, `lens`, `uspto`. Names that don't implement the interface are silently dropped, so use the example values above.
 
 When no explicit routing is configured for an operation, the `default` list is used. When `SEARCH_ROUTING` is not set at all, the server uses `SEARCH_PROVIDER` as a single provider (backward compatible).
 
@@ -409,10 +409,11 @@ These tune the embedded `http.Server` and response security headers. **All are i
 
 ### Rate Limiting
 
-Rate limiting applies **only in HTTP mode** (when `PORT` is set). STDIO mode has no internal rate limiting — only upstream API quotas apply.
+The per-tenant, global, and per-IP limits below apply **only in HTTP mode** (when `PORT` is set). `MAX_CALLS_PER_DAY` is the exception: it is a transport-agnostic in-process cap that **also applies in STDIO mode** (and to all tools, not just web requests). All other STDIO calls are subject only to upstream API quotas.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
+| `MAX_CALLS_PER_DAY` | Total tool calls per day (STDIO + HTTP). Transport-agnostic hard cap. | — (disabled) |
 | `RATE_LIMIT_PER_TENANT` | Requests per minute per tenant | `120` |
 | `RATE_LIMIT_GLOBAL` | Total requests per second | `1000` |
 | `DAILY_QUOTA_PER_TENANT` | Max API calls per tenant per day | `5000` |
@@ -878,6 +879,10 @@ To force immediate re-encryption rather than waiting for natural reads, flush th
 | `stats://sessions` | Count of active sequential research sessions |
 | `stats://rate-limits` | Rate limit config and usage (per-tenant limits, daily quota remaining, reset time) |
 | `stats://providers` | Search, patent, and academic providers currently configured and available |
+| `lenses://catalog` | All registered lenses with their names, domains, and descriptions |
+| `diagnostics://errors/recent` | Bounded ring of recent errors for operator diagnostics |
+| `diagnostics://health` | Server health — version, uptime, provider availability |
+| `research://artifact/{id}` | Large-payload resource store for tool results that exceed inline size limits |
 
 ### Prompts
 

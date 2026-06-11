@@ -91,7 +91,7 @@ Config lives in `.goreleaser.yml` (`notarize.macos`); secrets are threaded into 
 
 ## Verifying a signed release
 
-On a Windows machine (or with `osslsigncode verify` on Linux/macOS), confirm the published `.exe` shows publisher **Zohar Babin** and a valid timestamp. The release `checksums.txt` entry for `*_windows_amd64.zip` must match the re-uploaded signed zip.
+On a Windows machine (or with `osslsigncode verify` on Linux/macOS), confirm the published `.exe` shows publisher **Zohar Babin** and a valid timestamp. The release `checksums.txt` entry for `*_windows_amd64.zip` reflects the signed binary (signing happens inside GoReleaser before archiving, so no separate re-upload step).
 
 ## Package-manager distribution (built on signing)
 

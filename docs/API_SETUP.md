@@ -205,7 +205,7 @@ The key is sent as the `x-api-key` header (never in the request body or logs).
 - **Paid per call.** Exa charges per request (free tier: 1,000/month). Each `answer` / `structured_search` response (when served by Exa) reports the estimated `costUsd` of that call, and the cost is recorded in the audit trail as `cost_usd`. The estimate is not an invoice.
 - **No image search.** `image_search` with Exa returns empty (no error) — keep an image-capable provider (Google, Brave, SearchAPI) in `SEARCH_ROUTING` if you need images.
 - **Search type is fixed to `auto`.** The expensive deep/deep-reasoning tiers are deliberately not exposed; `auto` is the balanced, predictable-cost default.
-- **The scrape fallback is opt-in by cost.** The Exa `/contents` tier runs only when the four free scrape tiers all fail to extract content — the common path never spends an Exa credit on scraping.
+- **The scrape fallback is opt-in by cost.** The Exa `/contents` tier runs only when the free scrape tiers (markdown → stealth → HTML → browser, when Chrome is configured) all fail to extract content — the common path never spends an Exa credit on scraping.
 - **Best used as a routing member** when you also want a free default: `SEARCH_ROUTING=brave,exa`.
 
 ---
@@ -446,6 +446,21 @@ export SEMANTIC_SCHOLAR_API_KEY=your-key
 
 **Notes**: Keyless use is rate-limited by a shared public pool and may return a `rate_limited` error under load — set a key to avoid this. Also selectable as a `citation_graph` provider.
 
+### PubMed (Biomedical Literature — 35M+ Citations)
+
+NIH's NCBI E-utilities index of biomedical and life-science literature. Works **keyless** at ~3 requests/second; a free API key raises it to ~10 req/s.
+
+**Step 1**: (Optional) Sign in at [ncbi.nlm.nih.gov/account](https://www.ncbi.nlm.nih.gov/account) and go to **Settings → API Key Management** to generate a key.
+
+**Step 2**: Configure (both are optional)
+
+```bash
+export PUBMED_API_KEY=your-ncbi-key     # raises rate limit (~10 req/s)
+export PUBMED_EMAIL=you@example.com     # NCBI contact param; falls back to OPENALEX_EMAIL when unset
+```
+
+**Notes**: Keyless use works out of the box. A key is recommended for sustained or high-volume use. `PUBMED_EMAIL` falls back to `OPENALEX_EMAIL` — setting the OpenAlex email is sufficient to cover both. Also selectable as an `academic_search` provider via `provider: pubmed`.
+
 ### Unpaywall (Open-Access Enrichment)
 
 Not a search provider — it fills free-PDF links on DOI-bearing `academic_search` results that lack one. Best-effort; never fails or slows a search beyond its own bounded request.
@@ -523,3 +538,18 @@ export FRED_API_KEY=your-fred-key
 Backs `clinical_search`. Works **keyless** — `clinical_search` is always available. No registration or API key.
 
 **Notes**: Queries the ClinicalTrials.gov v2 API (NIH registry of 400K+ studies). Returns trial registrations as typed data (status, phase, sponsor, conditions, interventions, results availability); read the full record via `scrape_page` on the returned `url`. Discovery + primary-source retrieval only — not medical advice.
+
+### Internet Archive — Save Page Now (Optional, for `archive_source`)
+
+The `archive_source` tool triggers an Internet Archive Save Page Now (SPN) capture. It works **keyless** by default — no registration is required. An optional S3-style key pair raises the rate limit and improves capture reliability for high-volume use.
+
+**Step 1**: (Optional) Sign in at [archive.org/account/s3.php](https://archive.org/account/s3.php) to generate an access/secret key pair.
+
+**Step 2**: Configure (both are optional)
+
+```bash
+export IA_ACCESS_KEY=your-ia-access-key
+export IA_SECRET_KEY=your-ia-secret-key
+```
+
+**Notes**: Both keys are required together — set neither or both. Values are never logged or included in error messages. Keyless SPN is sufficient for occasional archiving; keys are recommended for production deployments that archive frequently.

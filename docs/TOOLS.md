@@ -1568,7 +1568,7 @@ Full details: see `docs/ERROR_HANDLING.md` — covers the three-layer architectu
 
 ### Tool Annotations (MCP Protocol)
 
-Every tool declares annotations for client consumption (`readOnlyAnnotations(idempotent, openWorld)` for read tools, `writeAnnotations(idempotent)` for the two write tools — both in `internal/tools/registry.go`). CI enforces tool↔doc consistency via `TestAllToolsHaveAnnotations`, `TestToolsDocMatchesRegistry`, `TestOutputSchemaMatchesResponse`, and `TestToolDescriptionQuality` (`internal/tools/metadata_test.go`) — including on docs-only PRs via the standalone `docs-drift` CI job. No tool is `Destructive` — deletion is the `/admin/data` erasure endpoint, never a tool flag (see `docs/DEPLOYMENT.md`).
+Every tool declares annotations for client consumption (`readOnlyAnnotations(idempotent, openWorld)` for read tools, `writeAnnotations(idempotent)` for the three write tools (`memory_save`, `workspace_contribute`, `archive_source`) — all in `internal/tools/registry.go`). CI enforces tool↔doc consistency via `TestAllToolsHaveAnnotations`, `TestToolsDocMatchesRegistry`, `TestOutputSchemaMatchesResponse`, and `TestToolDescriptionQuality` (`internal/tools/metadata_test.go`) — including on docs-only PRs via the standalone `docs-drift` CI job. No tool is `Destructive` — deletion is the `/admin/data` erasure endpoint, never a tool flag (see `docs/DEPLOYMENT.md`).
 
 | Tool | ReadOnly | Idempotent | OpenWorld |
 |------|----------|------------|-----------|
@@ -1587,6 +1587,8 @@ Every tool declares annotations for client consumption (`readOnlyAnnotations(ide
 | research_export | true | true | false |
 | format_bibliography | true | true | false |
 | audit_bibliography | true | true | true |
+| verify_citation | true | true | true |
+| archive_source | **false (write)** | true | false |
 | filing_search | true | true | true |
 | legal_search | true | true | true |
 | econ_search | true | true | true |
@@ -1597,7 +1599,7 @@ Every tool declares annotations for client consumption (`readOnlyAnnotations(ide
 | workspace_contribute | **false (write)** | false | false |
 | workspace_read | true | true | false |
 
-Notes: `sequential_search` is non-idempotent because it writes session state to disk on every call. `memory_save` and `workspace_contribute` are the two **write** tools (`ReadOnly:false`) — non-idempotent because each call appends a new record. `OpenWorld:false` marks tools that touch only local/server state (sessions, memory, analytics, workspaces, exports) rather than the open web. `Destructive` is uniformly false — no tool is annotated destructive.
+Notes: `sequential_search` is non-idempotent because it writes session state to disk on every call. `memory_save`, `workspace_contribute`, and `archive_source` are the three **write** tools (`ReadOnly:false`). `memory_save` and `workspace_contribute` are non-idempotent (each call appends a new record); `archive_source` is idempotent (archiving the same URL twice is safe). `OpenWorld:false` marks tools that touch only local/server state (sessions, memory, analytics, workspaces, exports) rather than the open web. `Destructive` is uniformly false — no tool is annotated destructive.
 
 ### Provider Resolution
 

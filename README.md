@@ -144,6 +144,7 @@ Works with Claude, Claude Desktop, Cursor, and any AI assistant that supports to
 | `clinical_search` | Search ClinicalTrials.gov — clinical-trial registrations with status, phase, sponsor, and whether results are posted (discovery, not medical advice) |
 | `verify_citation` | Check a citation before you rely on it — does it exist, match a real record, and is it retracted or a dead link? Evidence, not a verdict |
 | `audit_bibliography` | Audit a whole reference list in one pass — paste a CSL-JSON/RIS/BibTeX file (or a session) and get per-entry + corpus-level flags for retracted, dead-link, and unverifiable citations |
+| `archive_source` | Capture a fresh Internet Archive (Wayback Machine) snapshot of a URL via Save Page Now so a cited source stays verifiable if the page later changes or disappears — returns snapshot URL + timestamp (write tool) |
 | `answer` | Ask a factual question and get one synthesized answer **with citations** — the direct answer, not a reading list |
 | `structured_search` | Search and extract structured JSON per result (supply a schema), or pull entities by category (company, people, …) |
 | `sequential_search` | Multi-step deep research — your AI remembers what it already found and builds on it |
@@ -151,7 +152,7 @@ Works with Claude, Claude Desktop, Cursor, and any AI assistant that supports to
 | `research_export` | Export a research session as a shareable report (markdown or JSON), with full per-step provenance |
 | `format_bibliography` | Turn collected sources into a formatted bibliography — APA, MLA, BibTeX, RIS, or CSL-JSON (Zotero/EndNote/Mendeley-ready) |
 
-These are the always-on core tools. `answer` and `structured_search` are provider-independent — they activate when a capable provider (e.g. Exa) is configured. Operators can also enable opt-in, consent-gated tools (per-user analytics, long-term memory, shared workspaces) that appear only when their feature is turned on — see [`docs/TOOLS.md`](docs/TOOLS.md) for the authoritative, CI-verified tool list and full schemas.
+Most tools above are always available. A few activate only when the right provider or config is present: `citation_graph` requires a citation-capable academic provider (OpenAlex or Semantic Scholar); `filing_search` requires `EDGAR_CONTACT_EMAIL`; `answer` and `structured_search` require a provider that supports those capabilities (e.g. Exa). Operators can also enable opt-in, consent-gated tools (per-user analytics, long-term memory, shared workspaces) that appear only when their feature is turned on — see [`docs/TOOLS.md`](docs/TOOLS.md) for the authoritative, CI-verified tool list and full schemas.
 
 ### Ready-made research templates
 
@@ -164,7 +165,7 @@ The server also ships guided **prompt templates** your AI assistant can pull in 
 | `competitive-analysis` | Size up a company and its market (news, patents, web) |
 | `literature-review` | Systematically review academic literature on a topic |
 
-In most AI apps these show up wherever you pick a prompt or "/" command. The server exposes live **status resources** too (`stats://tools`, `stats://sessions`, `stats://rate-limits`, `stats://providers`) so you — or your AI — can check usage, limits, and which providers are active. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#mcp-resources--prompts) for the full list.
+In most AI apps these show up wherever you pick a prompt or "/" command. The server exposes live **status resources** (`stats://tools`, `stats://sessions`, `stats://rate-limits`, `stats://providers`), a lens catalog (`lenses://catalog`), diagnostics (`diagnostics://errors/recent`, `diagnostics://health`), and a large-payload artifact store (`research://artifact/{id}`) so you — or your AI — can check usage, limits, and which providers are active. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#mcp-resources--prompts) for the full list.
 
 ---
 

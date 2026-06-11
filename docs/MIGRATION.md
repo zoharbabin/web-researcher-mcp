@@ -20,7 +20,7 @@ This guide is for users of the deprecated [`google-researcher-mcp`](https://gith
 | Search backends | Google PSE only | Google PSE plus multiple alternatives (Brave, Serper, SearXNG, SearchAPI, Tavily, Exa) and a zero-config DuckDuckGo fallback, with multi-provider routing — canonical list: `search.SupportedProviders` |
 | Caching | In-memory only | Hybrid (memory + AES-encrypted disk) |
 | Architecture | Monolithic `server.ts` | Modular (one package per concern) |
-| Binary size | ~200MB (Node.js + Chromium) | ~22MB standalone (Chromium optional, auto-downloaded) |
+| Binary size | ~200MB (Node.js + Chromium) | Single static binary, no runtime bundled (Chromium optional; auto-detects a local install) |
 
 ## Migration Steps
 

@@ -71,7 +71,7 @@ The index is rebuilt from disk on server startup — so even a full restart (ser
 
 ### 3. Sources are tracked server-side (not by the LLM)
 
-When search tools (`web_search`, `scrape_page`, `search_and_scrape`, `news_search`, `academic_search`, `patent_search`, `citation_graph`, `filing_search`, `legal_search`) are called with a `sessionId` parameter, the server automatically records discovered URLs and titles as session sources. This happens server-side — no LLM relay needed.
+When search tools (`web_search`, `scrape_page`, `search_and_scrape`, `news_search`, `academic_search`, `patent_search`, `citation_graph`, `filing_search`, `legal_search`, `clinical_search`) are called with a `sessionId` parameter, the server automatically records discovered URLs and titles as session sources. This happens server-side — no LLM relay needed.
 
 Why this matters: if the LLM were responsible for reporting sources back to the session, it could hallucinate URLs, forget to record some, or lose them during compaction. By recording at the server level — where the actual API responses are — the source list is always accurate and complete.
 
@@ -167,7 +167,7 @@ The AI can override this with `responseMode: "full"` to skip the synthesized sum
 
 ### Why per-tenant isolation?
 
-In HTTP mode (shared server), sessions are keyed by `{tenantID}:{sessionID}`. Tenant A cannot access Tenant B's sessions — not by guessing session IDs, not by enumeration, not by accident.
+In HTTP mode (shared server), sessions are keyed by `{tenantID}:{userID}:{sessionID}`. Tenant A cannot access Tenant B's sessions, and within a tenant, User A cannot access User B's sessions — not by guessing session IDs, not by enumeration, not by accident.
 
 In STDIO mode (single user), the tenant ID defaults to "default" — no isolation needed because there's only one user.
 
@@ -245,7 +245,7 @@ With `stepId` — loads a specific step from disk:
    a. Check 8-byte timestamp header (skip if expired)
    b. Decrypt payload
    c. Unmarshal JSON → Session
-   d. Verify: sha256(tenantID:sessionID) matches filename
+   d. Verify: sha256(tenantID:userID:sessionID) matches filename
    e. Build index, populate maps
 3. Remove corrupt/expired files
 4. Start cleanup goroutine (every 15 min)
