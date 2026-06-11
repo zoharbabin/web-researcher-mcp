@@ -10,11 +10,13 @@
   "repository": "https://github.com/zoharbabin/web-researcher-mcp",
   "license": "MIT",
   "keywords": [
-    "research",
-    "search",
-    "web",
+    "citation-verification",
+    "anti-hallucination",
+    "retraction-check",
+    "bibliography-audit",
+    "research-integrity",
     "academic",
-    "citations",
+    "web-search",
     "patents",
     "news"
   ],
