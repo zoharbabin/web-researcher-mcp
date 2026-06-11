@@ -52,6 +52,15 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int)
 		return nil, err
 	}
 
+	// Re-route to the document parser when the Content-Type header or %PDF
+	// magic bytes reveal this is a PDF (#206). isDocumentURL only checks the
+	// URL path suffix, so PDFs served at HTML-path URLs (e.g. PLoS printable
+	// views, journal download links) slip through to this tier where binary
+	// bytes fed into goquery's HTML parser produce empty or garbled output.
+	if isPDFContentType(resp.Header.Get("Content-Type")) || looksLikePDF(body) {
+		return p.scrapeBodyAsPDF(url, body, maxLength)
+	}
+
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(string(body)))
 	if err != nil {
 		return nil, err

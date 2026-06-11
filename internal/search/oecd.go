@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 // OECDProvider implements EconSearcher over the modern OECD SDMX REST API
@@ -38,12 +39,19 @@ import (
 //     (whole dataflow).
 //   - errors:     proper HTTP codes (404 unknown dataflow, 406 bad Accept, 422
 //     bad key) with plain-text bodies — trust the status, not the body.
+//
+// catalogueTTL is the maximum age of the in-memory dataflow list. OECD adds
+// new dataflows occasionally; a long-running server re-fetches after this TTL
+// so it picks up additions without a restart.
+const catalogueTTL = 24 * time.Hour
+
 type OECDProvider struct {
 	baseURL string
 	deps    Deps
 
 	flowsMu sync.Mutex
 	flows   []oecdDataflow // cached on first SUCCESSFUL fetch; nil until then
+	flowsAt time.Time      // when the cache was last populated (zero = never)
 
 	dimsMu sync.Mutex
 	dims   map[string][]string // dataflow ref → ordered series-dimension IDs (cached)
@@ -153,11 +161,12 @@ type sdmxStructureList struct {
 
 // dataflows fetches and caches the OECD dataflow list. The list is cached only on
 // a SUCCESSFUL fetch; a transient failure is returned (not cached) so the next
-// call retries — a sticky error would permanently disable search for the process.
+// call retries. The cache expires after catalogueTTL so a long-running server
+// picks up newly added dataflows without a restart.
 func (o *OECDProvider) dataflows(ctx context.Context) ([]oecdDataflow, error) {
 	o.flowsMu.Lock()
 	defer o.flowsMu.Unlock()
-	if o.flows != nil {
+	if o.flows != nil && time.Since(o.flowsAt) < catalogueTTL {
 		return o.flows, nil
 	}
 
@@ -186,6 +195,7 @@ func (o *OECDProvider) dataflows(ctx context.Context) ([]oecdDataflow, error) {
 		})
 	}
 	o.flows = flows
+	o.flowsAt = time.Now()
 	return o.flows, nil
 }
 

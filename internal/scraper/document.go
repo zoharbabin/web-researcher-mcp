@@ -11,6 +11,42 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/documents"
 )
 
+// isPDFContentType reports whether the Content-Type header value indicates PDF.
+func isPDFContentType(ct string) bool {
+	return strings.Contains(strings.ToLower(ct), "application/pdf")
+}
+
+// looksLikePDF reports whether body starts with the %PDF magic bytes, covering
+// servers that serve PDFs with an incorrect or absent Content-Type header.
+func looksLikePDF(body []byte) bool {
+	return len(body) >= 4 && body[0] == '%' && body[1] == 'P' && body[2] == 'D' && body[3] == 'F'
+}
+
+// scrapeBodyAsPDF parses already-downloaded bytes as a PDF document (#206), so
+// the stealth and HTML tiers can re-route a PDF response without a second
+// round-trip when the URL does not end in .pdf but the Content-Type or magic
+// bytes reveal it is one.
+func (p *Pipeline) scrapeBodyAsPDF(rawURL string, body []byte, maxLength int) (*ScrapeResult, error) {
+	text, meta, err := documents.Parse(body, "pdf")
+	if err != nil {
+		return nil, fmt.Errorf("document parse error: %w", err)
+	}
+	truncated := false
+	if len(text) > maxLength {
+		text = text[:maxLength]
+		truncated = true
+	}
+	return &ScrapeResult{
+		URL:         rawURL,
+		Content:     text,
+		ContentType: "pdf",
+		Title:       meta.Title,
+		Author:      meta.Author,
+		Truncated:   truncated,
+		Tier:        "document",
+	}, nil
+}
+
 func (p *Pipeline) scrapeDocument(ctx context.Context, url string, maxLength int) (*ScrapeResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()

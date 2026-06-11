@@ -1163,6 +1163,56 @@ func TestWebSearchCaching(t *testing.T) {
 	}
 }
 
+// TestWebSearchSourceReputation guards #198: web_search results from known-tier
+// hosts (e.g. sec.gov) must include a sourceReputation field; unknown hosts
+// must omit it. The test uses enrichResultsWithReputation directly since it owns
+// the output-shaping logic. The embedded reputation dataset is loaded at package
+// init time so no explicit load is needed here.
+func TestWebSearchSourceReputation(t *testing.T) {
+	t.Parallel()
+	results := []search.SearchResult{
+		{Title: "SEC filing", URL: "https://www.sec.gov/Archives/edgar/data/x.htm", Snippet: "annual report"},
+		{Title: "Random blog", URL: "https://unknown-blog.example/post", Snippet: "just a post"},
+	}
+
+	enriched := enrichResultsWithReputation(results, "")
+	if len(enriched) != 2 {
+		t.Fatalf("want 2 results, got %d", len(enriched))
+	}
+
+	// sec.gov is tier:high in the dataset — must surface sourceReputation.
+	if enriched[0]["sourceReputation"] == nil {
+		t.Errorf("sec.gov result must have sourceReputation field")
+	}
+	// unknown-blog.example is not in the dataset — must omit the field.
+	if enriched[1]["sourceReputation"] != nil {
+		t.Errorf("unknown host must omit sourceReputation, got %v", enriched[1]["sourceReputation"])
+	}
+}
+
+// TestWebSearchSourceReputationWithClaim guards that claim signal + reputation are
+// both present in the same result when both apply.
+func TestWebSearchSourceReputationWithClaim(t *testing.T) {
+	t.Parallel()
+	results := []search.SearchResult{
+		{
+			Title:   "WHO report",
+			URL:     "https://www.who.int/news/item/test",
+			Snippet: "the pandemic caused significant mortality worldwide",
+		},
+	}
+	enriched := enrichResultsWithReputation(results, "pandemic mortality")
+	if len(enriched) != 1 {
+		t.Fatalf("want 1 result")
+	}
+	if enriched[0]["sourceReputation"] == nil {
+		t.Errorf("who.int must have sourceReputation")
+	}
+	if enriched[0]["claimSignal"] == nil {
+		t.Errorf("claim signal should be present for matching snippet")
+	}
+}
+
 func TestImageSearchEmptyQuery(t *testing.T) {
 	ctx := context.Background()
 	deps := setupTestDeps()

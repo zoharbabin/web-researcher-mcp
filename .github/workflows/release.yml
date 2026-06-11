@@ -146,6 +146,45 @@ jobs:
 
           echo "skip_choco=$skip" >> "$GITHUB_OUTPUT"
 
+      # Guard against the #204 regression: AMFI SIGKILLs a darwin binary whose
+      # Developer ID signature carries an UNSATISFIABLE designated requirement,
+      # which happens when the signing p12 lacks the full Apple chain (leaf-only
+      # → quill emits `certificate root[...]` instead of `certificate 1[...]`).
+      # The release runs on Linux (no codesign), so we verify the p12 STRUCTURE
+      # here with openssl and fail fast if the intermediate ("Developer ID
+      # Certification Authority") or the Apple Root CA is missing — before
+      # GoReleaser signs+notarizes+publishes a binary that would die on launch.
+      # Self-gates on MACOS_SIGN_P12 (no-op for runs without the cert).
+      - name: Verify macOS signing chain (fail fast on #204 regression)
+        env:
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          # Self-gate: no cert configured → skip cleanly (unsigned darwin build, as before).
+          if [ -z "${MACOS_SIGN_P12:-}" ]; then
+            echo "MACOS_SIGN_P12 unset — skipping chain check (darwin binaries ship unsigned)."
+            exit 0
+          fi
+          echo "$MACOS_SIGN_P12" | base64 -d > /tmp/devid.p12
+          subjects="$(openssl pkcs12 -in /tmp/devid.p12 -nokeys -legacy \
+            -passin "pass:$MACOS_SIGN_PASSWORD" 2>/dev/null \
+            | openssl crl2pkcs7 -nocrl -certfile /dev/stdin 2>/dev/null \
+            | openssl pkcs7 -print_certs -noout 2>/dev/null \
+            | grep '^subject' || true)"
+          rm -f /tmp/devid.p12
+          echo "Certificates in MACOS_SIGN_P12:"
+          echo "$subjects"
+          missing=0
+          echo "$subjects" | grep -q "Developer ID Application" \
+            || { echo "::error::MACOS_SIGN_P12 is missing the Developer ID Application leaf cert"; missing=1; }
+          echo "$subjects" | grep -q "Developer ID Certification Authority" \
+            || { echo "::error::MACOS_SIGN_P12 is missing the 'Developer ID Certification Authority' intermediate — AMFI will SIGKILL the binary (#204). Re-export the p12 with the full chain."; missing=1; }
+          echo "$subjects" | grep -q "Apple Root CA" \
+            || { echo "::error::MACOS_SIGN_P12 is missing the Apple Root CA — AMFI will SIGKILL the binary (#204). Re-export the p12 with the full chain."; missing=1; }
+          [ "$missing" -eq 0 ] && echo "macOS signing chain OK: leaf + intermediate + root all present."
+          exit "$missing"
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:

@@ -60,9 +60,16 @@ type LinkVerifierConfig struct {
 const waybackAvailabilityBase = "https://archive.org/wayback/available"
 const savePageNowBase = "https://web.archive.org/save/"
 
-// archiveBudget bounds a single Save Page Now request — SPN can take many seconds,
-// so it gets its own longer budget separate from the snappy liveness timeout.
+// archiveBudget is the total wall-clock budget for one archive_source call,
+// covering all SPN attempts plus the Wayback fallback. SPN can take many seconds
+// per attempt, so the retry loop times itself against this ceiling rather than
+// calling time.Sleep (which would block the budget).
 const archiveBudget = 25 * time.Second
+
+// spnRetryBackoffs is the sequence of waits between SPN poll attempts. Three
+// attempts within the 25 s budget: initial try, then 3 s, then 7 s — leaving
+// ~12 s for the final attempt and the Wayback fallback.
+var spnRetryBackoffs = []time.Duration{3 * time.Second, 7 * time.Second}
 
 // ArchiveResult is the outcome of a Save Page Now request. Best-effort: an empty
 // SnapshotURL means no snapshot was confirmed (SPN slow/declined/throttled and no
@@ -73,6 +80,11 @@ type ArchiveResult struct {
 	Timestamp    string // RFC3339; when THIS call confirmed a fresh snapshot
 	HTTPStatus   int    // SPN endpoint status (0 = transport error / SSRF reject / timeout)
 	Captured     bool   // true only when THIS call produced a fresh snapshot
+	// PollURL is the canonical Wayback URL pattern to check manually when SPN
+	// did not confirm a snapshot within the call budget. Non-empty only when
+	// SnapshotURL is empty (i.e. status=pending). Format:
+	// https://web.archive.org/web/*/https://example.com/page
+	PollURL string
 }
 
 // NewLinkVerifier builds a verifier over an SSRF-safe client. Bounded by design:
@@ -239,12 +251,25 @@ func (v *LinkVerifier) Archive(ctx context.Context, rawURL string) ArchiveResult
 		return res
 	}
 
-	// Defense in depth alongside the client Timeout.
+	// Total budget for all SPN attempts + the Wayback fallback. The retry loop
+	// checks the deadline before each backoff so we never overshoot.
 	ctx, cancel := context.WithTimeout(ctx, archiveBudget)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, v.saveBase+rawURL, nil)
-	if err == nil {
+	deadline, _ := ctx.Deadline()
+
+	// Poll loop: try SPN up to 1+len(spnRetryBackoffs) times. Each attempt is
+	// independent (GET to saveBase+rawURL). On the first confirmed snapshot we
+	// return immediately; on a non-confirmation we wait the next backoff duration
+	// (bounded by the remaining budget) before re-trying. The retry matters most
+	// for never-archived URLs: SPN accepts the job on the first call but the
+	// response only carries the snapshot URL after ingestion completes (typically
+	// a few seconds later).
+	for attempt := 0; ; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, v.saveBase+rawURL, nil)
+		if err != nil {
+			break
+		}
 		req.Header.Set("User-Agent", "web-researcher-mcp link-verifier")
 		// Authenticated SPN when both IA keys are configured (never logged).
 		if v.iaAccessKey != "" && v.iaSecretKey != "" {
@@ -275,12 +300,34 @@ func (v *LinkVerifier) Archive(ctx context.Context, rawURL string) ArchiveResult
 				return res
 			}
 		}
+
+		// No snapshot confirmed yet — back off if budget allows and more retries remain.
+		if attempt >= len(spnRetryBackoffs) {
+			break
+		}
+		backoff := spnRetryBackoffs[attempt]
+		remaining := time.Until(deadline)
+		if remaining <= backoff+2*time.Second {
+			// Not enough budget for another full attempt after the backoff.
+			break
+		}
+		select {
+		case <-ctx.Done():
+		case <-time.After(backoff):
+		}
+		if ctx.Err() != nil {
+			break
+		}
 	}
 
-	// SPN failed / produced no confirmable snapshot — fall back to the most recent
+	// SPN did not confirm a snapshot within budget — fall back to the most recent
 	// EXISTING snapshot so the caller still gets something usable (Captured stays false).
 	if snap := v.wayback(ctx, rawURL); snap != "" {
 		res.SnapshotURL = snap
+	} else {
+		// No existing snapshot either — give the caller an actionable poll URL so
+		// they can check back manually once SPN's in-flight ingestion completes.
+		res.PollURL = "https://web.archive.org/web/*/" + rawURL
 	}
 	return res
 }

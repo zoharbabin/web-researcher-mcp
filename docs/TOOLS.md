@@ -64,15 +64,16 @@ type SearchOutput struct {
 }
 
 type SearchResult struct {
-    Title       string `json:"title"`
-    URL         string `json:"url"`
-    Snippet     string `json:"snippet"`
-    DisplayLink string `json:"displayLink"`
-    ClaimSignal string `json:"claimSignal,omitempty"` // most claim-relevant snippet sentence; present per result only when `claim` is set and matched
+    Title            string            `json:"title"`
+    URL              string            `json:"url"`
+    Snippet          string            `json:"snippet"`
+    DisplayLink      string            `json:"displayLink"`
+    SourceReputation *DomainReputation `json:"sourceReputation,omitempty"` // present when host is in the reputation dataset (#198); omitted for unknown hosts
+    ClaimSignal      string            `json:"claimSignal,omitempty"`      // most claim-relevant snippet sentence; present only when `claim` is set and matched (#66)
 }
 ```
 
-When `claim` is omitted the output is byte-identical to the above without `claimSignal`. With `claim`, the server extracts the most claim-relevant sentence from each result's snippet — evidence to help triage which links to read; for full-text claim evidence use `search_and_scrape` with `claim`.
+`sourceReputation` is a descriptive signal (same shape as `scrape_page`/`search_and_scrape`) indicating the host's known reliability tier (`high`, `low`, `mixed`) with a `basis` note. It is omitted for hosts not in the dataset — absence means unknown, not bad. When `claim` is set, `claimSignal` holds the most claim-relevant snippet sentence to help triage which links to read; for full-text claim evidence use `search_and_scrape` with `claim`.
 
 On a zero-result response, `hints` carries a `ZeroResultHints` object (the same shape `academic_search` and `patent_search` emit) explaining why nothing matched and how to recover: `reason` (`no_match` | `filters_too_restrictive`), `filtersApplied` (the constraints that may have eliminated results — `site`, `lens`, `time_range`, `country`, `language`, `exact_terms`, `exclude_terms`), and `suggestedActions` (remove-filter / try-different-provider). Suggested alternative providers are limited to those **configured and currently healthy**. On any non-empty result set the field is omitted.
 
@@ -1445,12 +1446,12 @@ Capture a **fresh** Internet Archive (Wayback Machine) snapshot of a URL via Sav
 
 ### Output Schema
 
-`requestedUrl` (echo), `snapshotUrl` (the `https://web.archive.org/web/<timestamp>/<url>` snapshot; omitted when pending/unavailable), `archivedAt` (RFC 3339 — when a fresh capture was confirmed; present only on a fresh capture), `captured` (bool — `true` only for a fresh capture by this call), `status` (`archived`\|`existing`\|`pending`\|`unavailable`), `httpStatus` (Save Page Now endpoint status), `reason` (why no fresh capture, for existing/pending/unavailable), `source` (`web.archive.org Save Page Now`), `provenance`, and the `trust` marker.
+`requestedUrl` (echo), `snapshotUrl` (the `https://web.archive.org/web/<timestamp>/<url>` snapshot; omitted when pending/unavailable), `archivedAt` (RFC 3339 — when a fresh capture was confirmed; present only on a fresh capture), `captured` (bool — `true` only for a fresh capture by this call), `status` (`archived`\|`existing`\|`pending`\|`unavailable`), `httpStatus` (Save Page Now endpoint status), `reason` (why no fresh capture, for existing/pending/unavailable), `pollUrl` (Wayback wildcard URL to check manually once SPN's in-flight ingestion completes; present only when `status:"pending"` and no existing snapshot was found), `source` (`web.archive.org Save Page Now`), `provenance`, and the `trust` marker.
 
 ### Behavior
 
 - **Write tool, non-destructive.** It creates a public archive entry; it never deletes or mutates existing data. Annotated `ReadOnly:false, Destructive:false, Idempotent:true` (Save Page Now dedups within its rate window).
-- **Best-effort and honest.** Save Page Now is rate-limited and slow — a fresh capture is not guaranteed. When one can't be made, the tool falls back to the most recent **existing** snapshot and reports `captured:false` / `status:"existing"`; when nothing is confirmed it reports `status:"pending"` (the capture may still complete). It never errors on a slow/throttled capture.
+- **Best-effort and honest.** Save Page Now is rate-limited and slow — a fresh capture is not guaranteed. The tool retries with backoff within its ~25 s budget so a slow-but-successful first-time capture is confirmed in-call. When one can't be made, the tool falls back to the most recent **existing** snapshot and reports `captured:false` / `status:"existing"`; when nothing is confirmed it reports `status:"pending"` with a `pollUrl` to check once in-flight ingestion completes. It never errors on a slow/throttled capture.
 - **Evidence, never a verdict.** It returns the snapshot artifact + provenance; it does not judge the source.
 - **SSRF-safe.** The outbound request goes to the fixed `web.archive.org` host through the SSRF-safe client (every redirect hop IP-revalidated); the submitted URL is additionally validated and private/loopback hosts are refused before the request.
 - **Optional credentials.** Keyless Save Page Now works by default; setting `IA_ACCESS_KEY` + `IA_SECRET_KEY` authenticates the request for higher reliability (keys are never logged or echoed).

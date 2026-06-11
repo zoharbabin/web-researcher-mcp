@@ -782,6 +782,7 @@ var archiveSourceOutputSchema = map[string]any{
 		"status":       map[string]any{"type": "string", "enum": []any{"archived", "existing", "pending", "unavailable"}, "description": "archived = a fresh capture was made; existing = fell back to a pre-existing snapshot; pending = Save Page Now accepted the request but returned no snapshot URL in time; unavailable = no link verifier is configured."},
 		"httpStatus":   map[string]any{"type": "integer", "description": "Save Page Now endpoint HTTP status (0 = unreachable/timeout/SSRF-rejected)."},
 		"reason":       map[string]any{"type": "string", "description": "Why no fresh capture was made (present for existing/pending/unavailable)."},
+		"pollUrl":      map[string]any{"type": "string", "description": "Wayback wildcard URL to check manually once SPN's in-flight ingestion completes (present only when status is pending and no existing snapshot was found)."},
 		"source":       map[string]any{"type": "string", "description": "The archiving service: 'web.archive.org Save Page Now'."},
 		"provenance":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "How the snapshot was obtained."},
 		"trust":        trustUntrustedExternal,

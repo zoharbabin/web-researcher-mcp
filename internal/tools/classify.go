@@ -1,6 +1,9 @@
 package tools
 
 import (
+	"net/url"
+	"strings"
+
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
@@ -40,13 +43,12 @@ func classificationFields(c content.SourceClassification) map[string]any {
 	return fields
 }
 
-// enrichResultsWithClaim renders web_search results as JSON objects, adding a
-// claimSignal (the most claim-relevant sentence from the snippet) when one is
-// found (#66). Snippets are short, so only the single Signal is surfaced — for
-// full-text key sentences callers use search_and_scrape with claim. Preserves
-// the SearchResult field shape so the only difference vs the default path is the
-// added claimSignal key.
-func enrichResultsWithClaim(results []search.SearchResult, claim string) []map[string]any {
+// enrichResultsWithReputation returns web_search results as JSON objects,
+// always attaching a sourceReputation field when the host is in the reputation
+// dataset (#198). The field is omitted for unknown hosts (no false confidence).
+// When claim is non-empty, a claimSignal (the most claim-relevant snippet
+// sentence) is also added (#66).
+func enrichResultsWithReputation(results []search.SearchResult, claim string) []map[string]any {
 	out := make([]map[string]any, 0, len(results))
 	for _, r := range results {
 		m := map[string]any{
@@ -55,10 +57,30 @@ func enrichResultsWithClaim(results []search.SearchResult, claim string) []map[s
 			"snippet":     r.Snippet,
 			"displayLink": r.DisplayLink,
 		}
-		if ev := content.ExtractClaimEvidence(r.Snippet, claim); ev.Signal != "" {
-			m["claimSignal"] = ev.Signal
+		if rep := reputationForURL(r.URL); rep != nil {
+			m["sourceReputation"] = rep
+		}
+		if claim != "" {
+			if ev := content.ExtractClaimEvidence(r.Snippet, claim); ev.Signal != "" {
+				m["claimSignal"] = ev.Signal
+			}
 		}
 		out = append(out, m)
 	}
 	return out
+}
+
+// reputationForURL returns the domain reputation for a URL's host, or nil when
+// the host is unknown (ReputationUnknown). Strips "www." before lookup.
+func reputationForURL(rawURL string) *content.DomainReputation {
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || u.Host == "" {
+		return nil
+	}
+	host := strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
+	rep := content.LookupDomainReputation(host)
+	if rep.Tier == "" || rep.Tier == content.ReputationUnknown {
+		return nil
+	}
+	return &rep
 }

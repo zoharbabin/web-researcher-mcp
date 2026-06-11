@@ -143,14 +143,11 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 			"trust":       untrustedContentTrust,
 		}
 
-		// Claim evidence (#66): when a claim is supplied, enrich each result with the
-		// most claim-relevant sentence from its snippet (triage signal for which
-		// links to read; use search_and_scrape with claim for full-text evidence).
-		// Only replaces `results` when claim is set, so the default output is
-		// byte-identical to before.
-		if input.Claim != "" {
-			output["results"] = enrichResultsWithClaim(results, input.Claim)
-		}
+		// Enrich results with domain reputation (#198) and optional claim signal
+		// (#66). enrichResultsWithReputation always attaches sourceReputation for
+		// known hosts (descriptive, never gates/reorders) and adds claimSignal
+		// when a claim is set — one pass covers both enhancements.
+		output["results"] = enrichResultsWithReputation(results, input.Claim)
 
 		// Zero-result recovery hints (issue #100): reuse the shared
 		// ZeroResultHints machinery (parity with academic_search/patent_search).
@@ -181,9 +178,8 @@ func searchCacheKey(toolName string, parts ...any) string {
 	// post-upgrade cache hit can never serve a blob missing a new field. v2
 	// added the "trust" untrusted-content marker to every search-family output;
 	// v3 added the optional zero-result "hints" object to web_search/news_search
-	// (#100) — bumping ensures a zero-result blob cached by an older binary is
-	// not served back without the recovery hints.
-	h.Write([]byte("|v3"))
+	// (#100); v4 added sourceReputation to every web_search result (#198).
+	h.Write([]byte("|v4"))
 	for _, p := range parts {
 		fmt.Fprintf(h, "|%v", p)
 	}

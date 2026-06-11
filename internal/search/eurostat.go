@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 // EurostatProvider implements EconSearcher over the Eurostat dissemination API:
@@ -37,6 +38,7 @@ type EurostatProvider struct {
 
 	tocMu sync.Mutex
 	toc   []eurostatTOCEntry // cached on first SUCCESSFUL fetch; nil until then
+	tocAt time.Time          // when the cache was last populated (zero = never)
 }
 
 // eurostatTOCEntry is one catalogue row (dataset code + human title).
@@ -132,22 +134,24 @@ func (e *EurostatProvider) datasetSearch(ctx context.Context, params EconSearchP
 	return out, nil
 }
 
-// catalogue fetches (once) and caches the dataset table-of-contents. The TSV has
-// a header row; columns: title, code, type, last-update, last-structure-change,
+// catalogue fetches and caches the dataset table-of-contents. The TSV has a
+// header row; columns: title, code, type, last-update, last-structure-change,
 // data-start, data-end, values. We keep only dataset/table leaves.
+// The cache expires after catalogueTTL so a long-running server picks up newly
+// added datasets without a restart. Cache only on success — a transient failure
+// is returned (not cached) so the next call retries.
 func (e *EurostatProvider) catalogue(ctx context.Context) ([]eurostatTOCEntry, error) {
 	e.tocMu.Lock()
 	defer e.tocMu.Unlock()
-	if e.toc != nil {
+	if e.toc != nil && time.Since(e.tocAt) < catalogueTTL {
 		return e.toc, nil
 	}
-	// Cache only on success — a transient failure is returned, not cached, so the
-	// next call retries (a sticky error would permanently disable dataset search).
 	body, err := e.getRaw(ctx, e.tocBaseURL+"?lang=EN")
 	if err != nil {
 		return nil, err
 	}
 	e.toc = parseEurostatTOC(string(body))
+	e.tocAt = time.Now()
 	return e.toc, nil
 }
 
