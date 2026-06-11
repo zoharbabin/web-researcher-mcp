@@ -195,7 +195,7 @@ func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, max
 
 	// For known SPA domains, prefer the browser scraper first
 	if hasBrowser && isSPADomain(url) {
-		if result, err := p.scrapeBrowser(ctx, url, maxLength); err == nil && result != nil && len(result.Content) > 100 {
+		if result, err := p.scrapeBrowser(ctx, url, maxLength); err == nil && result != nil && len(result.Content) > 100 && !looksLikeBotWall(result.Content) {
 			return stampTier(result, "browser"), nil
 		}
 	}
@@ -229,11 +229,19 @@ func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, max
 
 	for _, tier := range tiers {
 		result, err := tier.fn(ctx, url, maxLength)
+		// A bot/JS-wall interstitial (e.g. "Checking your browser…", a CAPTCHA shell)
+		// is returned with a 200 and short placeholder text. Do NOT accept it as
+		// content — record it as a blocked outcome so the composite error is
+		// ErrBlocked, not a misleading low-quality success.
+		if err == nil && result != nil && looksLikeBotWall(result.Content) {
+			outcomes = append(outcomes, tierOutcome{tier.name, nil, blockedError(url, tier.name, nil, "bot/JS-wall interstitial")})
+			continue
+		}
 		if err == nil && result != nil && len(result.Content) > 100 {
 			return stampTier(result, tier.name), nil
 		}
 		outcomes = append(outcomes, tierOutcome{tier.name, result, err})
-		if result != nil && len(result.Content) > 0 {
+		if result != nil && len(result.Content) > 0 && !looksLikeBotWall(result.Content) {
 			lastResult = stampTier(result, tier.name)
 		}
 	}

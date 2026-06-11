@@ -82,6 +82,30 @@ func TestFormatBibliographyRequiresInput(t *testing.T) {
 	}
 }
 
+// TestFormatBibliographyURLValidation: a malformed or dangerous-scheme URL is
+// rejected before it lands verbatim in a citation; a real http(s) URL and a bare
+// DOI are both accepted.
+func TestFormatBibliographyURLValidation(t *testing.T) {
+	bad := []string{"not a valid url at all", "javascript:alert(1)", "ftp://x/y", ""}
+	for _, u := range bad {
+		_, res := callTool(t, setupTestDeps(), "format_bibliography", map[string]any{
+			"sources": []any{map[string]any{"url": u, "title": "X"}},
+		})
+		if !res.IsError {
+			t.Errorf("url %q should be rejected", u)
+		}
+	}
+	good := []string{"https://example.com/a", "10.1038/nature12373"}
+	for _, u := range good {
+		_, res := callTool(t, setupTestDeps(), "format_bibliography", map[string]any{
+			"sources": []any{map[string]any{"url": u, "title": "X"}},
+		})
+		if res.IsError {
+			t.Errorf("url %q should be accepted", u)
+		}
+	}
+}
+
 func TestFormatBibliographyFromSession(t *testing.T) {
 	deps := setupTestDeps()
 	sid := makeSessionWithSources(t, deps)

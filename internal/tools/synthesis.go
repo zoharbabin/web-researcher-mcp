@@ -137,6 +137,9 @@ func registerAnswer(srv *mcp.Server, deps Dependencies) {
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input answerInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
 
+		// Trim at the boundary so a whitespace-only query is rejected before any
+		// (billed) upstream call, not treated as a real question.
+		input.Query = strings.TrimSpace(input.Query)
 		if input.Query == "" {
 			return toolError("query is required"), nil, nil
 		}
@@ -192,6 +195,7 @@ func registerStructuredSearch(srv *mcp.Server, deps Dependencies) {
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input structuredSearchInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
 
+		input.Query = strings.TrimSpace(input.Query)
 		if input.Query == "" {
 			return toolError("query is required"), nil, nil
 		}

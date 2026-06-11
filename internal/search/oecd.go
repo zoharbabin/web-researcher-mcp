@@ -395,10 +395,21 @@ func decodeSDMXObservations(sd *sdmxData, ref string, limit int) []EconResult {
 	return out
 }
 
+// oecdSeriesLabelSkip are dimensions excluded from the composed series title: the
+// unit dimensions (surfaced as Units instead) and TIME (the observation axis, not
+// a series facet). FREQ is kept — a flow can mix monthly and quarterly series, so
+// the frequency is a real differentiator. Every other coded dimension's value name
+// is joined into the title so demographically-distinct series (sex, age, measure,
+// adjustment, …) are disambiguated rather than collapsing to one identical label.
+var oecdSeriesLabelSkip = map[string]bool{
+	"UNIT_MEASURE": true, "UNIT": true,
+	"TIME_PERIOD": true, "TIME": true,
+}
+
 // oecdSeriesLabels composes a human title and units from a series key like
-// "0:1:0:..." indexing into the series dimension value lists. The title joins the
-// meaningful dimension value names; units is the UNIT_MEASURE dimension's value
-// when that dimension is present.
+// "0:1:0:..." indexing into the series dimension value lists. The title joins
+// EVERY series-dimension value name except the skip set (so sex/age/measure/etc.
+// distinguish otherwise-identical series); units is the UNIT_MEASURE/UNIT value.
 func oecdSeriesLabels(seriesKey string, dims []sdmxDimension) (title, units string) {
 	idxParts := strings.Split(seriesKey, ":")
 	var labels []string
@@ -414,23 +425,28 @@ func oecdSeriesLabels(seriesKey string, dims []sdmxDimension) (title, units stri
 		if valName == "" {
 			valName = dims[d].Values[vi].ID
 		}
-		switch dims[d].ID {
-		case "UNIT_MEASURE", "UNIT":
+		if dims[d].ID == "UNIT_MEASURE" || dims[d].ID == "UNIT" {
 			units = valName
-		case "REF_AREA", "MEASURE", "TRANSACTION", "INDICATOR", "SUBJECT":
-			labels = append(labels, valName)
+			continue
 		}
+		if oecdSeriesLabelSkip[dims[d].ID] || valName == "" {
+			continue
+		}
+		labels = append(labels, valName)
 	}
 	return strings.Join(labels, " — "), units
 }
 
-// oecdPeriod passes through an OECD SDMX time period. OECD uses YYYY, YYYY-Qn, or
-// YYYY-MM depending on the dataflow frequency; a YYYY-MM-DD is trimmed to its year
-// (the safe lower bound that every frequency accepts as a start/end period).
+// oecdPeriod passes an OECD SDMX time period through at the granularity the caller
+// supplied. OECD accepts YYYY, YYYY-MM, and YYYY-Qn and returns observations at
+// that granularity, so we must NOT truncate to the year (doing so makes a monthly
+// flow return only annual aggregates). A full ISO date YYYY-MM-DD is trimmed to
+// YYYY-MM (OECD has no daily frequency); anything else is passed through verbatim.
 func oecdPeriod(date string) string {
 	date = strings.TrimSpace(date)
-	if len(date) >= 4 {
-		return date[:4]
+	// YYYY-MM-DD → YYYY-MM (SDMX max granularity is monthly).
+	if len(date) == 10 && date[4] == '-' && date[7] == '-' {
+		return date[:7]
 	}
 	return date
 }

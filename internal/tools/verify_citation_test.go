@@ -200,6 +200,61 @@ func TestVerifyCitation_ClaimSchemaDeclared(t *testing.T) {
 	}
 }
 
+// TestVerifyCitation_DOIExactMatch: a DOI the resolver knows attaches the EXACT
+// record (matched by DOI), with matchConfidence high.
+func TestVerifyCitation_DOIExactMatch(t *testing.T) {
+	out := callVerify(t, setupTestDeps(), "10.1234/x")
+	if out["inputType"] != "doi" {
+		t.Fatalf("inputType = %v, want doi", out["inputType"])
+	}
+	rec, ok := out["matchedRecord"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected a matchedRecord for the known DOI, got %v", out["matchedRecord"])
+	}
+	if rec["doi"] != "10.1234/x" {
+		t.Errorf("matchedRecord.doi = %v, want the input DOI 10.1234/x", rec["doi"])
+	}
+	if out["matchConfidence"] != "high" {
+		t.Errorf("matchConfidence = %v, want high", out["matchConfidence"])
+	}
+}
+
+// TestVerifyCitation_DOINoFabricatedRecord is the CRITICAL anti-fabrication guard:
+// a DOI the resolver has NO exact record for must NOT carry a matchedRecord or a
+// matchConfidence — recording a near-neighbor as this DOI's record would fabricate
+// exactly what the tool exists to catch. (The mock's Scholarly() returns a record
+// with DOI 10.1/x for any query, so this also proves the fuzzy fallback never
+// attaches a non-matching DOI.)
+func TestVerifyCitation_DOINoFabricatedRecord(t *testing.T) {
+	out := callVerify(t, setupTestDeps(), "10.9999/does-not-exist")
+	if _, present := out["matchedRecord"]; present {
+		t.Errorf("a DOI with no exact record must NOT have a matchedRecord, got %v", out["matchedRecord"])
+	}
+	if _, present := out["matchConfidence"]; present {
+		t.Errorf("no matchConfidence without a matched record, got %v", out["matchConfidence"])
+	}
+}
+
+func TestSameDOI(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		a, b string
+		want bool
+	}{
+		{"10.1/x", "10.1/X", true},                                          // case-insensitive
+		{"https://doi.org/10.1038/abc", "10.1038/abc", true},                // URL-prefixed vs bare
+		{"http://dx.doi.org/10.1/Y", "doi:10.1/y", true},                    // mixed prefixes
+		{"10.1/x", "10.1/y", false},                                         // different
+		{"", "10.1/x", false},                                               // empty never matches
+		{"10.1038/s41586-021-03819-2", "10.1038/s41586-021-03828-1", false}, // the real neighbor case
+	}
+	for _, c := range cases {
+		if got := sameDOI(c.a, c.b); got != c.want {
+			t.Errorf("sameDOI(%q,%q) = %v, want %v", c.a, c.b, got, c.want)
+		}
+	}
+}
+
 func TestVerifyCitation_Reference(t *testing.T) {
 	// setupTestDeps wires a mock academic provider that returns a record with a DOI.
 	out := callVerify(t, setupTestDeps(), "Mock Paper, 2024")

@@ -80,6 +80,21 @@ func TestDomainCategoryFromLens(t *testing.T) {
 	}
 }
 
+// TestDomainCategoryJournalPublishers: major journal-publisher hosts must classify
+// as the academic domain category WITHOUT any citation meta or lens — this is the
+// signal scrape_page's #199 DOI detection relies on when a tier strips the meta.
+func TestDomainCategoryJournalPublishers(t *testing.T) {
+	for _, host := range []string{
+		"www.thelancet.com", "www.cell.com", "www.bmj.com", "onlinelibrary.wiley.com",
+		"academic.oup.com", "www.pnas.org", "www.frontiersin.org", "www.cambridge.org",
+	} {
+		c := ClassifySource("https://"+host+"/article/123", 0.5, StructuredSignals{}, "")
+		if c.DomainCategory != DomainCategoryAcademic {
+			t.Errorf("%s → domainCategory %q, want academic", host, c.DomainCategory)
+		}
+	}
+}
+
 func TestDomainCategoryLensBeatsHost(t *testing.T) {
 	// legal lens on an academic host → lens wins.
 	c := ClassifySource("https://arxiv.org/abs/1", 0.5, StructuredSignals{}, "legal")

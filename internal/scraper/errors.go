@@ -15,6 +15,7 @@ const (
 	ErrAuth                        // HTTP 401, login redirect
 	ErrRateLimit                   // HTTP 429
 	ErrValidation                  // permanent client/security rejection: bad scheme, empty host, SSRF / private-IP / blocked-hostname denial. NOT retryable.
+	ErrNotFound                    // HTTP 404/410 — the resource does not exist. Definite, NOT retryable (a dead link, not a transient fault).
 )
 
 type ScrapeError struct {
@@ -70,12 +71,20 @@ func rateLimitError(url, tier string) *ScrapeError {
 	return newScrapeError(ErrRateLimit, url, tier, nil, "HTTP 429: rate limited")
 }
 
+func notFoundError(url, tier string, statusCode int) *ScrapeError {
+	return newScrapeError(ErrNotFound, url, tier, nil, fmt.Sprintf("HTTP %d: page not found", statusCode))
+}
+
 func classifyHTTPStatus(statusCode int, url, tier string) *ScrapeError {
 	switch statusCode {
 	case 401:
 		return authError(url, tier, statusCode)
 	case 403:
 		return blockedError(url, tier, nil, fmt.Sprintf("HTTP %d", statusCode))
+	case 404, 410:
+		// Definite not-found / gone — a dead link, not a transient fault. Never
+		// retryable; the user must fix the URL, not retry or file a bug.
+		return notFoundError(url, tier, statusCode)
 	case 429:
 		return rateLimitError(url, tier)
 	default:
@@ -95,6 +104,10 @@ func classifyRawError(err error, url string) *ScrapeError {
 		// generic network/blocked buckets because an SSRF denial can co-occur
 		// with a sibling tier's timeout text.
 		return validationError(url, "", err, s)
+	case containsAny(s, "404", "410", "not found", "page not found"):
+		// A definite not-found across tiers — a dead link, not transient. Checked
+		// before the generic network bucket so it isn't reported as retryable.
+		return newScrapeError(ErrNotFound, url, "", err, s)
 	case containsAny(s, "no such host", "connection refused", "timeout", "deadline exceeded", "network", "navigation failed"):
 		return networkError(url, "", err)
 	case containsAny(s, "blocked", "403", "forbidden"):
@@ -106,6 +119,47 @@ func classifyRawError(err error, url string) *ScrapeError {
 	default:
 		return newScrapeError(ErrContent, url, "", err, s)
 	}
+}
+
+// botWallMaxBytes bounds how large extracted content can be and still be judged a
+// bot-wall interstitial. A real article is far larger; an interstitial ("Checking
+// your browser…", a CAPTCHA shell) is tiny. Keeping the check size-bounded means a
+// genuine page that merely mentions "captcha" in its body is never misclassified.
+const botWallMaxBytes = 600
+
+// botWallMarkers are phrases that, in SHORT extracted content, indicate a bot/JS
+// interstitial rather than the page itself.
+var botWallMarkers = []string{
+	"checking your browser",
+	"enable javascript and cookies to continue",
+	"verify you are human",
+	"verifying you are human",
+	"please verify you are a human",
+	"are you a robot",
+	"complete the security check",
+	"ddos protection by",
+	"attention required",
+	"just a moment", // Cloudflare interstitial title
+	"cf-browser-verification",
+	"please turn javascript on",
+}
+
+// looksLikeBotWall reports whether short extracted content is a bot/JS-wall
+// interstitial that was returned with a 200 status. Such pages must be treated as
+// blocked (ErrBlocked), not as a successful low-quality scrape — otherwise the
+// placeholder text masquerades as the page's content. Only short content is
+// considered, so a legitimate long article is never flagged.
+func looksLikeBotWall(content string) bool {
+	if len(content) > botWallMaxBytes {
+		return false
+	}
+	lower := strings.ToLower(content)
+	for _, m := range botWallMarkers {
+		if strings.Contains(lower, m) {
+			return true
+		}
+	}
+	return false
 }
 
 func containsAny(s string, substrs ...string) bool {

@@ -1764,7 +1764,8 @@ func TestClassifyHTTPStatus(t *testing.T) {
 		{429, ErrRateLimit},
 		{500, ErrNetwork},
 		{502, ErrNetwork},
-		{404, ErrNetwork},
+		{404, ErrNotFound}, // a 404 is a definite dead link, not a transient network fault
+		{410, ErrNotFound},
 	}
 	for _, tt := range tests {
 		se := classifyHTTPStatus(tt.code, "https://example.com", "stealth")

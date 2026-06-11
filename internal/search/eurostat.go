@@ -213,21 +213,25 @@ func (e *EurostatProvider) observations(ctx context.Context, params EconSearchPa
 	return decodeJSONStatObservations(&js, params.SeriesID, num), nil
 }
 
-// decodeJSONStatObservations turns a JSON-stat cube into (timePeriod,value)
-// observation rows. JSON-stat encodes values in a sparse map keyed by a single
-// flattened, row-major index over all dimensions (last dimension varies fastest).
-// To recover each value's time period we compute the per-dimension strides, find
-// the time dimension's stride, and read its coordinate out of each flat key; the
-// time category's index map (inverted to position→code) gives the period string.
-// This handles multi-dimensional cubes correctly (not just the single-series
-// case), so a query that didn't pin every dimension still maps each value to the
-// right period.
+// decodeJSONStatObservations turns a JSON-stat cube into observation rows.
+// JSON-stat encodes values in a sparse map keyed by a single flattened, row-major
+// index over ALL dimensions (last dimension varies fastest). A Eurostat dataset
+// is multi-dimensional (e.g. une_rt_m = freq×s_adj×age×unit×sex×geo×time), so
+// pinning geo still leaves several series; we must recover EVERY dimension's
+// coordinate for each value — not just the time coordinate — or distinct series
+// collapse into undifferentiated rows. For each value we therefore: (1) decode
+// the full coordinate via the per-dimension strides; (2) read the time code →
+// period; (3) compose a human series label from the non-time dimension category
+// labels (so a caller can tell "Females, seasonally adjusted, % of active pop."
+// apart from other series); (4) emit it with that label as the title suffix.
+// Rows are ordered by (series label, period) so each series' time points stay
+// together and ascend — then bounded by limit.
 func decodeJSONStatObservations(js *jsonStat, seriesID string, limit int) []EconResult {
 	if len(js.Value) == 0 || len(js.ID) == 0 || len(js.Size) != len(js.ID) {
 		return nil
 	}
 
-	// Locate the time dimension and its stride in the row-major layout.
+	// Locate the time dimension.
 	timeDim := -1
 	for i, id := range js.ID {
 		if id == "time" {
@@ -238,31 +242,35 @@ func decodeJSONStatObservations(js *jsonStat, seriesID string, limit int) []Econ
 	if timeDim < 0 {
 		return nil // no time dimension — not a time series we can render
 	}
+
+	// Row-major strides; guard against any zero-sized dimension (a malformed cube
+	// with a non-empty value map would divide/mod by zero below).
 	strides := make([]int, len(js.Size))
 	strides[len(js.Size)-1] = 1
 	for i := len(js.Size) - 2; i >= 0; i-- {
 		strides[i] = strides[i+1] * js.Size[i+1]
 	}
-	timeStride := strides[timeDim]
-	timeSize := js.Size[timeDim]
-	// Guard against a malformed/adversarial response that pairs a non-empty value
-	// map with a zero-sized dimension — the index math below divides by timeStride
-	// and mods by timeSize, both of which would panic at zero. A real cube always
-	// has positive sizes; bail to "no observations" rather than crash on bad input.
-	if timeStride <= 0 || timeSize <= 0 {
-		return nil
-	}
-
-	// Invert the time category index: position → period code, then code → label.
-	dim := js.Dimension["time"]
-	posToCode := make([]string, timeSize)
-	for code, pos := range dim.Category.Index {
-		if pos >= 0 && pos < timeSize {
-			posToCode[pos] = code
+	for _, s := range js.Size {
+		if s <= 0 {
+			return nil
 		}
 	}
 
-	title := js.Label
+	// Pre-invert each dimension's category index (position → code) once.
+	posToCode := make([][]string, len(js.ID))
+	for d, id := range js.ID {
+		dim := js.Dimension[id]
+		codes := make([]string, js.Size[d])
+		for code, pos := range dim.Category.Index {
+			if pos >= 0 && pos < len(codes) {
+				codes[pos] = code
+			}
+		}
+		posToCode[d] = codes
+	}
+
+	timeDimObj := js.Dimension["time"]
+	baseTitle := js.Label
 	units := eurostatUnits(js)
 
 	out := make([]EconResult, 0, len(js.Value))
@@ -271,14 +279,39 @@ func decodeJSONStatObservations(js *jsonStat, seriesID string, limit int) []Econ
 		if idx < 0 {
 			continue
 		}
-		timePos := (idx / timeStride) % timeSize
-		code := ""
-		if timePos < len(posToCode) {
-			code = posToCode[timePos]
+		// Recover every dimension's coordinate from the flat key.
+		period := ""
+		var labelParts []string
+		for d, id := range js.ID {
+			pos := (idx / strides[d]) % js.Size[d]
+			code := ""
+			if pos < len(posToCode[d]) {
+				code = posToCode[d][pos]
+			}
+			if d == timeDim {
+				period = code
+				if lbl, ok := timeDimObj.Category.Label[code]; ok && lbl != "" {
+					period = lbl
+				}
+				continue
+			}
+			// Build the series label from non-time dimensions that actually vary
+			// (size>1) or carry a meaningful label — skip the single-valued ones
+			// (e.g. a pinned geo) only when they add no disambiguation.
+			if js.Size[d] <= 1 {
+				continue
+			}
+			lbl := code
+			if dl, ok := js.Dimension[id].Category.Label[code]; ok && dl != "" {
+				lbl = dl
+			}
+			if lbl != "" {
+				labelParts = append(labelParts, lbl)
+			}
 		}
-		period := code
-		if lbl, ok := dim.Category.Label[code]; ok && lbl != "" {
-			period = lbl
+		title := baseTitle
+		if len(labelParts) > 0 {
+			title = baseTitle + " — " + strings.Join(labelParts, ", ")
 		}
 		r := EconResult{
 			SeriesID: seriesID,
@@ -289,15 +322,21 @@ func decodeJSONStatObservations(js *jsonStat, seriesID string, limit int) []Econ
 			HasValue: true,
 			Source:   "eurostat",
 		}
-		// Surface a status flag (provisional/estimated/etc.) as provenance.
 		if flag, ok := js.Status[flatKey]; ok && flag != "" {
 			r.Notes = "status: " + flag
 		}
 		out = append(out, r)
 	}
 
-	// Deterministic order: by period ascending (the value map is unordered).
-	sort.Slice(out, func(i, j int) bool { return out[i].Date < out[j].Date })
+	// Order by (series label, period) so each series' time points stay together
+	// and ascend — a coherent time series rather than a cross-section of distinct
+	// series all at the earliest period.
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Title != out[j].Title {
+			return out[i].Title < out[j].Title
+		}
+		return out[i].Date < out[j].Date
+	})
 	if len(out) > limit {
 		out = out[:limit]
 	}

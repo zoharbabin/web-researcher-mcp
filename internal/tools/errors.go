@@ -24,6 +24,7 @@ const (
 	ErrKindBlocked            ErrorKind = "blocked"
 	ErrKindNetwork            ErrorKind = "network"
 	ErrKindContentEmpty       ErrorKind = "content_empty"
+	ErrKindNotFound           ErrorKind = "not_found"
 	ErrKindBrowserUnavailable ErrorKind = "browser_unavailable"
 	ErrKindValidation         ErrorKind = "validation"
 	ErrKindUpstream           ErrorKind = "upstream_unavailable"
@@ -110,6 +111,8 @@ func mapScrapeErrorKind(k scraper.ErrorKind) ErrorKind {
 		return ErrKindBrowserUnavailable
 	case scraper.ErrContent:
 		return ErrKindContentEmpty
+	case scraper.ErrNotFound:
+		return ErrKindNotFound
 	case scraper.ErrAuth:
 		return ErrKindAuth
 	case scraper.ErrRateLimit:
@@ -147,6 +150,11 @@ func scrapeErrorToToolError(se *scraper.ScrapeError) ToolError {
 	case scraper.ErrContent:
 		te.Retryable = true
 		te.SuggestedAction = ActionReportBug
+	case scraper.ErrNotFound:
+		// A definite 404/410 — a dead link, not a transient fault. The user must
+		// fix the URL; never retry, never file a bug.
+		te.Retryable = false
+		te.SuggestedAction = ActionInformUser
 	case scraper.ErrAuth:
 		te.Retryable = false
 		te.SuggestedAction = ActionInformUser

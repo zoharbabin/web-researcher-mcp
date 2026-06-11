@@ -143,6 +143,17 @@ func (m *mockAcademicProvider) References(_ context.Context, _ string, _ int) ([
 	return []search.AcademicResult{{Title: "Foundational", URL: "https://doi.org/10.0/z", DOI: "10.0/z", Year: 2017, Source: "openalex"}}, nil
 }
 
+// ResolveByDOI implements the DOIResolver capability: it returns the exact record
+// ONLY for the DOI it knows (10.1234/x, a valid-shaped DOI the doiPattern accepts),
+// and nil for anything else — modeling a real entity lookup that has no record for
+// a fabricated/unknown DOI.
+func (m *mockAcademicProvider) ResolveByDOI(_ context.Context, doi string) (*search.AcademicResult, error) {
+	if doi == "10.1234/x" {
+		return &search.AcademicResult{Title: "Mock Paper", URL: "https://doi.org/10.1234/x", DOI: "10.1234/x", Year: 2024, Source: "openalex"}, nil
+	}
+	return nil, nil
+}
+
 // mockFilingProvider implements FilingProvider, so wiring it makes filing_search
 // register and exercises the EDGAR path in the drift tests.
 type mockFilingProvider struct{}

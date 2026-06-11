@@ -101,15 +101,37 @@ func TestEurostatMultiDimDecode(t *testing.T) {
 	if len(res) != 6 {
 		t.Fatalf("want 6 obs, got %d", len(res))
 	}
-	// Verify a known FR value (flat key 4 = FR 2024-02 = 2.1) decoded to the right period.
-	var found bool
+	// Each (geo,time) cell must decode to the RIGHT value at the RIGHT period AND
+	// carry its geo in the series label so DE and FR don't collapse — the bug this
+	// guards against (a varying geo dimension must disambiguate the series).
+	want := map[string]float64{ // "<geoLabel>|<period>" → value
+		"Germany|2024-01": 1.0, "Germany|2024-02": 1.1, "Germany|2024-03": 1.2,
+		"France|2024-01": 2.0, "France|2024-02": 2.1, "France|2024-03": 2.2,
+	}
 	for _, o := range res {
-		if o.Value == 2.1 && o.Date == "2024-02" {
-			found = true
+		// The series label is the dataset title + the varying-dimension labels.
+		geo := "Germany"
+		if strings.Contains(o.Title, "France") {
+			geo = "France"
+		}
+		key := geo + "|" + o.Date
+		if w, ok := want[key]; !ok || o.Value != w {
+			t.Errorf("cell %q = %v (want %v); title=%q", key, o.Value, w, o.Title)
+		}
+		delete(want, key)
+	}
+	if len(want) != 0 {
+		t.Errorf("missing/duplicated cells: %v", want)
+	}
+	// Series must be grouped + period-ascending: France rows contiguous, ascending.
+	var franceDates []string
+	for _, o := range res {
+		if strings.Contains(o.Title, "France") {
+			franceDates = append(franceDates, o.Date)
 		}
 	}
-	if !found {
-		t.Errorf("multi-dim decode wrong: FR 2024-02=2.1 not found in %+v", res)
+	if len(franceDates) != 3 || franceDates[0] != "2024-01" || franceDates[2] != "2024-03" {
+		t.Errorf("France series not coherent/ascending: %v", franceDates)
 	}
 }
 

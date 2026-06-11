@@ -465,6 +465,27 @@ func main() {
 	for name := range academicProviders {
 		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "academic"})
 	}
+	// Structured-domain + synthesis providers — so an operator can see every
+	// configured provider (incl. the keyless econ/legal/clinical ones) in
+	// stats://providers, not just web/patent/academic.
+	for name := range filingProviders {
+		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "filing"})
+	}
+	for name := range caseProviders {
+		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "legal"})
+	}
+	for name := range econProviders {
+		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "econ"})
+	}
+	for name := range trialProviders {
+		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "clinical"})
+	}
+	for name := range answerProviders {
+		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "answer"})
+	}
+	for name := range structuredProviders {
+		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "structured"})
+	}
 	// Live provider/breaker health for diagnostics://health (#81) is available
 	// only when a multi-provider Router is in play; a single configured provider
 	// has no breaker ladder to observe. routerHealth adapts the Router's typed
