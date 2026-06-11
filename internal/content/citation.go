@@ -124,7 +124,7 @@ func formatBibTeX(title, author, site, date, url, accessed string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "@misc{%s,\n", key)
 	if author != "" {
-		fmt.Fprintf(&b, "  author = {%s},\n", bibtexEscape(author))
+		fmt.Fprintf(&b, "  author = {%s},\n", bibtexEscape(normalizeBibTeXAuthor(author)))
 	}
 	if title != "" {
 		fmt.Fprintf(&b, "  title = {%s},\n", bibtexEscape(title))
@@ -204,6 +204,19 @@ func allDigits(s string) bool {
 		}
 	}
 	return len(s) > 0
+}
+
+// normalizeBibTeXAuthor converts semicolon-separated author lists to the
+// BibTeX " and "-separated form. BibTeX requires " and " as the author
+// separator (e.g. "Smith, J. and Doe, A."); semicolons are accepted at the
+// input boundary (bibliography tool, format_bibliography) but are invalid
+// BibTeX syntax.
+func normalizeBibTeXAuthor(author string) string {
+	parts := strings.Split(author, ";")
+	for i, p := range parts {
+		parts[i] = strings.TrimSpace(p)
+	}
+	return strings.Join(parts, " and ")
 }
 
 // bibtexEscape escapes the BibTeX-significant characters so a value can't break

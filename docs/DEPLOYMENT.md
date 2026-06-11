@@ -97,6 +97,51 @@ stdin attached (`docker run -p ... -e PORT=...`) stays up serving HTTP.
 
 **Design intent:** STDIO mode trusts the local user implicitly (it runs as their process). HTTP mode adds auth and rate limiting for untrusted network clients. Tool handlers execute identically regardless of transport.
 
+### Connecting an AI client to a remote HTTP endpoint
+
+Once you have a server running with `PORT` set (locally or in the cloud), point your MCP client at the `/mcp/` endpoint. The path is the same regardless of host.
+
+**Claude Code** (`~/.claude.json`):
+
+```json
+{
+  "mcpServers": {
+    "web-researcher-remote": {
+      "type": "http",
+      "url": "https://your-server.example.com/mcp/"
+    }
+  }
+}
+```
+
+**Cursor** (`~/.cursor/mcp.json`) and **VS Code** (`.vscode/mcp.json`):
+
+```json
+{
+  "servers": {
+    "web-researcher": {
+      "type": "http",
+      "url": "https://your-server.example.com/mcp/"
+    }
+  }
+}
+```
+
+**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "web-researcher": {
+      "type": "http",
+      "url": "https://your-server.example.com/mcp/"
+    }
+  }
+}
+```
+
+When OAuth is enabled (`OAUTH_ISSUER_URL` set), the client must present a valid Bearer token on each request. When OAuth is not configured, the endpoint is open to any request — restrict access via firewall or reverse-proxy auth if needed.
+
 ---
 
 ## Docker

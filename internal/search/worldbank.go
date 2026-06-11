@@ -208,7 +208,7 @@ func worldBankDateRange(from, to string) string {
 	case yf != "" && yt != "":
 		return yf + ":" + yt
 	case yf != "":
-		return yf + ":" + yf
+		return yf + ":"
 	case yt != "":
 		return yt + ":" + yt
 	}

@@ -130,7 +130,7 @@ func TestTrustSuiteAccuracy_Existence(t *testing.T) {
 	for _, g := range trustGoldDOIs {
 		out := map[string]any{}
 		var prov []string
-		verifyByDOI(ctx, deps, g.doi, "", out, &prov)
+		verifyByDOI(ctx, deps, g.doi, g.doi, "", out, &prov)
 
 		gotExists, _ := out["exists"].(bool)
 		// existence signal: predicted "real" vs actually real.
@@ -266,4 +266,44 @@ func TestTrustSuiteAccuracy_ScrapedDOIRetraction(t *testing.T) {
 		return
 	}
 	t.Skip("no publisher landing page was scrapeable in this environment — see hermetic TestScrapeDOI_* for the guarantees")
+}
+
+// TestTrustSuiteAccuracy_TitleMatch measures #221 titleMatch signal over a labeled
+// gold set: known-real DOIs with correct titles, with an invented title (mismatch),
+// and bare DOIs (not_checked). The zero-false-positive invariant is enforced: a
+// real DOI with a correct title must NEVER be flagged "mismatch".
+func TestTrustSuiteAccuracy_TitleMatch(t *testing.T) {
+	deps := newEvalDeps(t)
+	ctx := context.Background()
+
+	type tmCase struct {
+		name         string
+		citation     string // full citation string passed to verifyByDOI
+		doi          string
+		wantMismatch bool // true only when the supplied title is wrong (invented)
+	}
+
+	cases := []tmCase{
+		// Correct title alongside the DOI → must be "match", never "mismatch".
+		{"correct title AlphaFold", "10.1038/s41586-021-03819-2 Highly accurate protein structure prediction with AlphaFold", "10.1038/s41586-021-03819-2", false},
+		// Correct title with subtitle dropped → token overlap is still strong → "match".
+		{"AlphaFold DOI only prefix with partial title", "Highly accurate protein structure prediction 10.1038/s41586-021-03819-2", "10.1038/s41586-021-03819-2", false},
+		// Bare DOI only → not_checked (no title text to compare) — not a mismatch.
+		{"bare DOI Watson Crick", "10.1038/171737a0", "10.1038/171737a0", false},
+		// Invented title with multiple wrong tokens that don't appear in the real record.
+		{"invented title AlphaFold", "10.1038/s41586-021-03819-2 Quantum entanglement teleportation bandwidth", "10.1038/s41586-021-03819-2", true},
+	}
+
+	var mismatch prf
+	for _, c := range cases {
+		out := map[string]any{}
+		var prov []string
+		verifyByDOI(ctx, deps, c.doi, c.citation, "", out, &prov)
+
+		tm, _ := out["titleMatch"].(string)
+		gotMismatch := tm == "mismatch"
+		mismatch.observe(gotMismatch, c.wantMismatch)
+		t.Logf("%-50s titleMatch=%q wantMismatch=%v", c.name, tm, c.wantMismatch)
+	}
+	mismatch.report(t, "titleMatch")
 }

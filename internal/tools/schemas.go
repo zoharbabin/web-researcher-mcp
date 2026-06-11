@@ -757,6 +757,7 @@ var verifyCitationOutputSchema = map[string]any{
 			"description": "The academic record the citation matched (title, authors, year, DOI, …) when one was found.",
 		},
 		"matchConfidence":  map[string]any{"type": "string", "enum": []any{"high", "medium", "low", "none"}, "description": "Confidence the matched record is the cited work (high for an exact DOI; heuristic for free-text)."},
+		"titleMatch":       map[string]any{"type": "string", "enum": []any{"match", "mismatch", "not_checked"}, "description": "For DOI inputs only: whether the title text supplied alongside the DOI matches the record's actual title (token-overlap heuristic). 'match' = strong overlap; 'mismatch' = ≥2 substantive title tokens supplied that are absent from the record title — the caller may have the wrong paper; 'not_checked' = bare DOI only or single-token ambiguous text (not enough to judge). Omitted for URL/reference inputs."},
 		"retractionStatus": map[string]any{"type": "object", "description": "Crossref integrity status when the DOI is retracted/corrected; omitted when clean."},
 		"httpStatus":       map[string]any{"type": "integer", "description": "Live HTTP status for a URL input (0 = unreachable)."},
 		"archivedUrl":      map[string]any{"type": "string", "description": "Internet Archive (Wayback) snapshot URL when the live link is dead."},

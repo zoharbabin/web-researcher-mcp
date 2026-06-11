@@ -442,6 +442,54 @@ func (m *mockOAURLProvider) ResolveByDOI(_ context.Context, doi string) (*search
 	return nil, nil
 }
 
+// TestVerifyCitation_TitleMatch_Match: DOI + correct title → titleMatch "match".
+// The mock ResolveByDOI returns the record for "10.1234/x" with title "Mock Paper".
+func TestVerifyCitation_TitleMatch_Match(t *testing.T) {
+	out := callVerify(t, setupTestDeps(), "10.1234/x Mock Paper")
+	if out["titleMatch"] != "match" {
+		t.Errorf("titleMatch = %v, want match (correct title supplied)", out["titleMatch"])
+	}
+}
+
+// TestVerifyCitation_TitleMatch_Mismatch: DOI + clearly wrong title → titleMatch "mismatch".
+func TestVerifyCitation_TitleMatch_Mismatch(t *testing.T) {
+	out := callVerify(t, setupTestDeps(), "10.1234/x Quantum entanglement teleportation bandwidth")
+	if out["titleMatch"] != "mismatch" {
+		t.Errorf("titleMatch = %v, want mismatch (invented title supplied)", out["titleMatch"])
+	}
+}
+
+// TestVerifyCitation_TitleMatch_NotChecked: bare DOI only → titleMatch "not_checked".
+func TestVerifyCitation_TitleMatch_NotChecked(t *testing.T) {
+	out := callVerify(t, setupTestDeps(), "10.1234/x")
+	if out["titleMatch"] != "not_checked" {
+		t.Errorf("titleMatch = %v, want not_checked (bare DOI, no title text)", out["titleMatch"])
+	}
+}
+
+// TestVerifyCitation_TitleMatch_InSchema: titleMatch is declared in verifyCitationOutputSchema.
+func TestVerifyCitation_TitleMatch_InSchema(t *testing.T) {
+	out := callVerify(t, setupTestDeps(), "10.1234/x Mock Paper")
+	props, _ := verifyCitationOutputSchema["properties"].(map[string]any)
+	if props == nil {
+		t.Fatal("verifyCitationOutputSchema has no properties")
+	}
+	if _, ok := props["titleMatch"]; !ok {
+		t.Error("titleMatch is not declared in verifyCitationOutputSchema")
+	}
+	if _, ok := out["titleMatch"]; !ok {
+		t.Error("titleMatch not emitted in response for a DOI input with title text")
+	}
+}
+
+// TestVerifyCitation_TitleMatch_URLInputNoTitleMatch: non-DOI inputs must NOT emit titleMatch.
+func TestVerifyCitation_TitleMatch_URLInputNoTitleMatch(t *testing.T) {
+	out := callVerify(t, setupTestDeps(), "Mock Paper, 2024")
+	if _, present := out["titleMatch"]; present {
+		t.Errorf("titleMatch must not be emitted for reference inputs, got %v", out["titleMatch"])
+	}
+}
+
 func TestVerifyCitation_EmptyInput(t *testing.T) {
 	ctx := context.Background()
 	deps := setupTestDeps()

@@ -60,7 +60,7 @@ func registerVerifyCitation(srv *mcp.Server, deps Dependencies) {
 		switch {
 		case doi != "":
 			out["inputType"] = "doi"
-			verifyByDOI(ctx, deps, doi, claim, out, &provenance)
+			verifyByDOI(ctx, deps, doi, citation, claim, out, &provenance)
 		case isURL:
 			out["inputType"] = "url"
 			verifyByURL(ctx, deps, citation, claim, out, &provenance)
@@ -107,7 +107,9 @@ func emitClaimCoverage(ctx context.Context, deps Dependencies, fetchURL, claim s
 // verifyByDOI resolves existence + retraction via the Crossref works API (the
 // retraction resolver already queries /works/{doi}, so a found=true there is
 // authoritative existence) and enriches a matched record via academic search.
-func verifyByDOI(ctx context.Context, deps Dependencies, doi, claim string, out map[string]any, prov *[]string) {
+// citation is the full original input string; it may carry a title alongside the
+// DOI so we can run titleMatch comparison against the matched record (#221).
+func verifyByDOI(ctx context.Context, deps Dependencies, doi, citation, claim string, out map[string]any, prov *[]string) {
 	if deps.RetractionResolver != nil {
 		status, found, err := deps.RetractionResolver.Resolve(ctx, doi)
 		if err == nil {
@@ -140,6 +142,48 @@ func verifyByDOI(ctx context.Context, deps Dependencies, doi, claim string, out 
 			if _, ok := out["exists"]; !ok {
 				out["exists"] = true
 			}
+			// #221: compare caller-supplied title (text remaining after DOI removal)
+			// against the matched record title using the same token-overlap heuristic
+			// as free-text match confidence. Emitted as titleMatch: "match" |
+			// "mismatch" | "not_checked". "not_checked" when there is no title text to
+			// compare (bare DOI only). Zero false positives: a single-token overlap is
+			// "low" confidence and maps to "not_checked" (ambiguous), so a caller who
+			// supplies only the DOI or one short word is never falsely flagged.
+			if titleText := strings.TrimSpace(doiPattern.ReplaceAllString(citation, "")); titleText != "" {
+				conf := referenceMatchConfidence(titleText, rec)
+				switch conf {
+				case "high", "medium":
+					out["titleMatch"] = "match"
+				case "low":
+					// low = single coincidental token — treat as not_checked (ambiguous).
+					out["titleMatch"] = "not_checked"
+				default:
+					out["titleMatch"] = "mismatch"
+				}
+				// Detect genuine mismatch: low confidence when there are substantive
+				// tokens that do NOT match at all. Require ≥2 substantive tokens in the
+				// supplied title text that are clearly NOT in the record title.
+				if conf == "low" || conf == "none" {
+					suppliedLower := strings.ToLower(titleText)
+					recTitleLower := strings.ToLower(rec.Title)
+					var miss, totalSub int
+					for _, tok := range strings.Fields(suppliedLower) {
+						if len(tok) <= 3 {
+							continue
+						}
+						totalSub++
+						if !strings.Contains(recTitleLower, tok) {
+							miss++
+						}
+					}
+					if totalSub >= 2 && miss >= 2 {
+						out["titleMatch"] = "mismatch"
+					}
+				}
+			} else {
+				out["titleMatch"] = "not_checked"
+			}
+			*prov = append(*prov, "title compared against matched record ("+out["titleMatch"].(string)+")")
 		}
 	}
 	if _, ok := out["exists"]; !ok {

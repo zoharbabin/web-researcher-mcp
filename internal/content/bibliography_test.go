@@ -36,6 +36,35 @@ func TestBibtexYear(t *testing.T) {
 	}
 }
 
+func TestNormalizeBibTeXAuthor(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"Smith, J.", "Smith, J."},                                           // single author, no change
+		{"Smith, J.; Doe, A.", "Smith, J. and Doe, A."},                      // semicolon → " and "
+		{"Smith, J.; Doe, A.; Lee, B.", "Smith, J. and Doe, A. and Lee, B."}, // three authors
+		{"Smith, J. and Doe, A.", "Smith, J. and Doe, A."},                   // already " and ", no double-and
+		{" Smith, J. ; Doe, A. ", "Smith, J. and Doe, A."},                   // whitespace trimmed
+		{"", ""}, // empty passthrough
+	}
+	for _, c := range cases {
+		got := normalizeBibTeXAuthor(c.in)
+		if got != c.want {
+			t.Errorf("normalizeBibTeXAuthor(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// TestBibTeXAuthorSeparator guards the live bug: semicolon-separated authors must
+// produce valid BibTeX " and "-separated output, not a raw semicolon.
+func TestBibTeXAuthorSeparator(t *testing.T) {
+	c := ExtractCitation("https://example.com/x", "Paper", "Smith, J.; Doe, A.; Lee, B.", "Journal", "2020")
+	if strings.Contains(c.Formatted.BibTeX, ";") {
+		t.Errorf("BibTeX author field must not contain semicolons: %s", c.Formatted.BibTeX)
+	}
+	if !strings.Contains(c.Formatted.BibTeX, "Smith, J. and Doe, A. and Lee, B.") {
+		t.Errorf("BibTeX author field must use ' and ' separator: %s", c.Formatted.BibTeX)
+	}
+}
+
 func TestBibTeXKeyFallback(t *testing.T) {
 	if got := BibTeXKey("", "", ""); got != "anon" {
 		t.Errorf("empty fallback = %q, want anon", got)

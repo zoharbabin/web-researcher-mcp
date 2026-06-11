@@ -1,3 +1,5 @@
+description: "Your AI research assistant that cites real sources and stays honest — web search, deep content extraction, academic + patent + legal + economic research, and a trust suite that catches fabricated, retracted, or mischaracterized citations before they ship. Zero-config with DuckDuckGo; connect Google, Brave, Tavily, or Exa for richer results."
+
 startCommand:
   type: stdio
   configSchema:
