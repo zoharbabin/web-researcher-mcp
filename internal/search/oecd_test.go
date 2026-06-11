@@ -295,3 +295,45 @@ func TestOECDErrors(t *testing.T) {
 		t.Error("404 should surface an error")
 	}
 }
+
+// TestOECDCatalogueTTL guards #200: the dataflow list is re-fetched after
+// catalogueTTL expires so a long-running server picks up newly added dataflows.
+func TestOECDCatalogueTTL(t *testing.T) {
+	t.Parallel()
+	calls := 0
+	p := newOECDTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "dataflow") {
+			calls++
+		}
+		w.Write([]byte(`{"data":{"dataflows":[{"id":"DF_QNA","agencyID":"OECD","version":"1.0","name":"National Accounts"}]}}`))
+	})
+
+	// First call: fetches the catalogue.
+	if _, err := p.Econ(context.Background(), EconSearchParams{Query: "accounts"}); err != nil {
+		t.Fatalf("first call: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("expected 1 fetch after first call, got %d", calls)
+	}
+
+	// Second call: cache is fresh — no re-fetch.
+	if _, err := p.Econ(context.Background(), EconSearchParams{Query: "accounts"}); err != nil {
+		t.Fatalf("second call: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("expected still 1 fetch (cache hit), got %d", calls)
+	}
+
+	// Expire the cache by backdating flowsAt.
+	p.flowsMu.Lock()
+	p.flowsAt = p.flowsAt.Add(-2 * catalogueTTL)
+	p.flowsMu.Unlock()
+
+	// Third call after expiry: must re-fetch.
+	if _, err := p.Econ(context.Background(), EconSearchParams{Query: "accounts"}); err != nil {
+		t.Fatalf("third call: %v", err)
+	}
+	if calls != 2 {
+		t.Errorf("expected 2 fetches after TTL expiry, got %d", calls)
+	}
+}

@@ -257,3 +257,47 @@ func TestEurostatEmptyRange(t *testing.T) {
 		t.Errorf("empty range should yield no observations, got %d", len(res))
 	}
 }
+
+// TestEurostatCatalogueTTL guards #200: the TOC is re-fetched after
+// catalogueTTL expires so a long-running server picks up newly added datasets.
+func TestEurostatCatalogueTTL(t *testing.T) {
+	t.Parallel()
+	calls := 0
+	p := newEurostatTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "toc") {
+			calls++
+			w.Write([]byte("title\tcode\ttype\nGDP growth\tNAMQ_10_GDP\tdataset"))
+			return
+		}
+		w.Write([]byte(`{"id":["time"],"size":[0],"value":{},"dimension":{}}`))
+	})
+
+	// First call: fetches the TOC.
+	if _, err := p.Econ(context.Background(), EconSearchParams{Query: "gdp"}); err != nil {
+		t.Fatalf("first call: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("expected 1 fetch, got %d", calls)
+	}
+
+	// Second call: cache fresh — no re-fetch.
+	if _, err := p.Econ(context.Background(), EconSearchParams{Query: "gdp"}); err != nil {
+		t.Fatalf("second call: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("expected still 1 fetch (cache hit), got %d", calls)
+	}
+
+	// Expire the cache.
+	p.tocMu.Lock()
+	p.tocAt = p.tocAt.Add(-2 * catalogueTTL)
+	p.tocMu.Unlock()
+
+	// Third call after expiry: must re-fetch.
+	if _, err := p.Econ(context.Background(), EconSearchParams{Query: "gdp"}); err != nil {
+		t.Fatalf("third call: %v", err)
+	}
+	if calls != 2 {
+		t.Errorf("expected 2 fetches after TTL expiry, got %d", calls)
+	}
+}

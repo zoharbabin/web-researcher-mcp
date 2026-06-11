@@ -64,15 +64,16 @@ type SearchOutput struct {
 }
 
 type SearchResult struct {
-    Title       string `json:"title"`
-    URL         string `json:"url"`
-    Snippet     string `json:"snippet"`
-    DisplayLink string `json:"displayLink"`
-    ClaimSignal string `json:"claimSignal,omitempty"` // most claim-relevant snippet sentence; present per result only when `claim` is set and matched
+    Title            string            `json:"title"`
+    URL              string            `json:"url"`
+    Snippet          string            `json:"snippet"`
+    DisplayLink      string            `json:"displayLink"`
+    SourceReputation *DomainReputation `json:"sourceReputation,omitempty"` // present when host is in the reputation dataset (#198); omitted for unknown hosts
+    ClaimSignal      string            `json:"claimSignal,omitempty"`      // most claim-relevant snippet sentence; present only when `claim` is set and matched (#66)
 }
 ```
 
-When `claim` is omitted the output is byte-identical to the above without `claimSignal`. With `claim`, the server extracts the most claim-relevant sentence from each result's snippet — evidence to help triage which links to read; for full-text claim evidence use `search_and_scrape` with `claim`.
+`sourceReputation` is a descriptive signal (same shape as `scrape_page`/`search_and_scrape`) indicating the host's known reliability tier (`high`, `low`, `mixed`) with a `basis` note. It is omitted for hosts not in the dataset — absence means unknown, not bad. When `claim` is set, `claimSignal` holds the most claim-relevant snippet sentence to help triage which links to read; for full-text claim evidence use `search_and_scrape` with `claim`.
 
 On a zero-result response, `hints` carries a `ZeroResultHints` object (the same shape `academic_search` and `patent_search` emit) explaining why nothing matched and how to recover: `reason` (`no_match` | `filters_too_restrictive`), `filtersApplied` (the constraints that may have eliminated results — `site`, `lens`, `time_range`, `country`, `language`, `exact_terms`, `exclude_terms`), and `suggestedActions` (remove-filter / try-different-provider). Suggested alternative providers are limited to those **configured and currently healthy**. On any non-empty result set the field is omitted.
 
