@@ -39,6 +39,16 @@ const (
 	SourceTypeUnknown      = "unknown"
 )
 
+// Domain-category constants — the subject-area vocabulary (DomainCategory).
+const (
+	DomainCategoryAcademic  = "academic"
+	DomainCategoryLegal     = "legal"
+	DomainCategoryMedical   = "medical"
+	DomainCategoryFinancial = "financial"
+	DomainCategoryTechnical = "technical"
+	DomainCategoryGeneral   = "general"
+)
+
 // StructuredSignals is the decoupled view of scraped structured data that
 // source-type classification needs. The scraper package (which owns the rich
 // StructuredData type) builds this from it, so content has no dependency on
@@ -172,7 +182,17 @@ func isAcademicHost(host string) bool {
 	if strings.HasSuffix(host, ".edu") || strings.Contains(host, ".edu.") || strings.HasSuffix(host, ".ac.uk") {
 		return true
 	}
-	for _, h := range []string{"arxiv.org", "biorxiv.org", "medrxiv.org", "nature.com", "science.org", "nih.gov", "ieee.org", "acm.org", "semanticscholar.org", "ssrn.com", "plos.org", "springer.com", "sciencedirect.com", "jstor.org", "doaj.org"} {
+	for _, h := range []string{
+		"arxiv.org", "biorxiv.org", "medrxiv.org", "nature.com", "science.org", "nih.gov",
+		"ieee.org", "acm.org", "semanticscholar.org", "ssrn.com", "plos.org", "springer.com",
+		"sciencedirect.com", "jstor.org", "doaj.org",
+		// Major journal publishers — many serve article landing pages without the
+		// Highwire citation_* meta on every tier, so the host signal is what lets
+		// scrape_page's scholarly DOI detection (#199) engage on them.
+		"thelancet.com", "cell.com", "bmj.com", "wiley.com", "tandfonline.com",
+		"sagepub.com", "oup.com", "pnas.org", "mdpi.com", "frontiersin.org",
+		"cambridge.org", "elsevier.com",
+	} {
 		if host == h || strings.HasSuffix(host, "."+h) {
 			return true
 		}

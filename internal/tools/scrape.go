@@ -50,7 +50,7 @@ const userAssertedContentTrust = "user-asserted-content"
 func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "scrape_page",
-		Description:  "Read a single URL and get back its content — web pages (including JavaScript-heavy sites), PDFs, Word/PowerPoint files, and YouTube transcripts — picking the best extraction method automatically. Returns readable text plus a ready-to-use citation. Reach for this when you already have a URL and want what's on the page; use search_and_scrape to find and read in one step, or web_search when you only need links. Modes: full (default, cleaned text), preview (a fast first look), and raw (verbatim page bytes with no sanitization — only for inspecting source like JSON or HTML, and the bytes are untrusted, so never execute or render them). If the page is a peer-reviewed article that declares a DOI, that DOI is surfaced with its retraction/integrity status (evidence to check, not a verdict — you confirm the document's identity). Blocked pages and other failures return structured JSON (kind, retryable, suggestedAction). Results stay fresh for 1 hour.",
+		Description:  "Read a single URL and get back its content — web pages (including JavaScript-heavy sites), PDFs, Word/PowerPoint files, and YouTube transcripts — picking the best extraction method automatically. Returns readable text plus a ready-to-use citation. Reach for this when you already have a URL and want what's on the page; use search_and_scrape to find and read in one step, or web_search when you only need links. Modes: full (default, cleaned text), preview (a fast first look), and raw (verbatim page bytes with no sanitization — only for inspecting source like JSON or HTML, and the bytes are untrusted, so never execute or render them). If the page is a peer-reviewed article that declares a DOI, that DOI is surfaced with its retraction/integrity status (evidence to check, not a verdict — you confirm the document's identity). Blocked pages, bot/JS-walls, dead links (404/410), and other failures return structured JSON (kind, retryable, suggestedAction) — a 404 is reported as a non-retryable not_found, a bot-wall as blocked. Results stay fresh for 1 hour.",
 		Annotations:  readOnlyAnnotations(true, true),
 		OutputSchema: scrapePageOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input scrapePageInput) (*mcp.CallToolResult, any, error) {
@@ -162,11 +162,15 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 			output[k] = v
 		}
 
-		// Scholarly DOI + integrity status (#199). Only on peer-reviewed pages, and
-		// only from the page's own citation metadata / front-of-document text —
-		// never a references-list DOI. Evidence, not a verdict, not an identity claim:
-		// "this DOI appears on the page; here is its recorded integrity status."
-		if cls.SourceType == content.SourceTypePeerReviewed {
+		// Scholarly DOI + integrity status (#199). Fires on a peer-reviewed page OR
+		// an academic-domain host — the latter so detection still engages when a
+		// publisher page is served through a tier that strips the citation_* meta
+		// (e.g. the exa:cached text fallback), where SourceType degrades to unknown
+		// but the host is still a known journal. Detection itself stays references-
+		// safe (citation_doi meta, else bounded front-matter). Evidence, never a
+		// verdict or an identity claim: "this DOI appears on the page; here is its
+		// recorded integrity status."
+		if cls.SourceType == content.SourceTypePeerReviewed || cls.DomainCategory == content.DomainCategoryAcademic {
 			if doi := detectScholarlyDOI(result.StructuredData, processedContent); doi != "" {
 				output["detectedDoi"] = doi
 				if deps.RetractionResolver != nil {
@@ -412,6 +416,8 @@ func scrapeErrorResponse(err error, url string) *mcp.CallToolResult {
 		msg = fmt.Sprintf("Blocked: %s uses bot detection. Try alternative source or report at %s", url, issueURL)
 	case scraper.ErrContent:
 		msg = fmt.Sprintf("No content extracted from %s. May need browser rendering. Report at %s", url, issueURL)
+	case scraper.ErrNotFound:
+		msg = fmt.Sprintf("Not found: %s returned 404/410 — the page does not exist. Check the URL.", url)
 	case scraper.ErrAuth:
 		msg = fmt.Sprintf("Auth required: %s is behind a login wall.", url)
 	case scraper.ErrRateLimit:

@@ -115,6 +115,16 @@ type AcademicProvider interface {
 	Metadata() ProviderMeta
 }
 
+// DOIResolver is the optional capability of fetching the EXACT work for a DOI via
+// a direct entity lookup (e.g. OpenAlex /works/doi:{doi}) rather than a fuzzy
+// full-text search. verify_citation uses it so its matchedRecord is always the
+// cited work or nothing — a relevance-ranked DOI search returns near-neighbors
+// whose top hit is a different paper, which must never be shown as this DOI's
+// record. Returns (nil, nil) when the DOI has no record (not an error).
+type DOIResolver interface {
+	ResolveByDOI(ctx context.Context, doi string) (*AcademicResult, error)
+}
+
 // CitationSearcher is the optional capability of traversing a paper's citation
 // graph — works that cite it (forward) and works it cites (backward). Backs the
 // citation_graph tool (#47). Semantic Scholar enriches edges with intent +

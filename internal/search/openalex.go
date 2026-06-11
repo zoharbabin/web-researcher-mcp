@@ -325,50 +325,67 @@ func parseOpenAlexResponse(data []byte) ([]AcademicResult, error) {
 	}
 
 	results := make([]AcademicResult, 0, len(resp.Results))
-	for _, work := range resp.Results {
-		if work.Title == "" {
+	for i := range resp.Results {
+		if resp.Results[i].Title == "" {
 			continue
 		}
-
-		result := AcademicResult{
-			Title:         work.Title,
-			Year:          work.PublicationYear,
-			CitationCount: work.CitedByCount,
-			OpenAccess:    work.OpenAccess.IsOA,
-			Source:        "openalex",
-		}
-
-		if work.DOI != "" {
-			result.DOI = strings.TrimPrefix(work.DOI, "https://doi.org/")
-			result.URL = work.DOI
-		}
-
-		if work.OpenAccess.OAUrl != "" {
-			result.PDFUrl = work.OpenAccess.OAUrl
-		}
-
-		if work.PrimaryLocation != nil && work.PrimaryLocation.Source != nil {
-			result.Journal = work.PrimaryLocation.Source.DisplayName
-		}
-
-		for _, a := range work.Authorships {
-			if a.Author.DisplayName != "" {
-				result.Authors = append(result.Authors, a.Author.DisplayName)
-			}
-		}
-
-		result.Abstract = reconstructAbstract(work.AbstractInvertedIndex)
-		result.Abstract = truncateText(result.Abstract, 500)
-
-		if result.URL == "" && result.DOI != "" {
-			result.URL = "https://doi.org/" + result.DOI
-		}
-
-		results = append(results, result)
+		results = append(results, openAlexWorkToResult(&resp.Results[i]))
 	}
 
 	return results, nil
 }
+
+// openAlexWorkToResult converts one OpenAlex work to an AcademicResult. Shared by
+// the search-list parser and the exact-DOI entity lookup (ResolveByDOI) so both
+// emit identical record shapes.
+func openAlexWorkToResult(work *openAlexWork) AcademicResult {
+	result := AcademicResult{
+		Title:         work.Title,
+		Year:          work.PublicationYear,
+		CitationCount: work.CitedByCount,
+		OpenAccess:    work.OpenAccess.IsOA,
+		Source:        "openalex",
+	}
+	if work.DOI != "" {
+		result.DOI = strings.TrimPrefix(work.DOI, "https://doi.org/")
+		result.URL = work.DOI
+	}
+	if work.OpenAccess.OAUrl != "" {
+		result.PDFUrl = work.OpenAccess.OAUrl
+	}
+	if work.PrimaryLocation != nil && work.PrimaryLocation.Source != nil {
+		result.Journal = work.PrimaryLocation.Source.DisplayName
+	}
+	for _, a := range work.Authorships {
+		if a.Author.DisplayName != "" {
+			result.Authors = append(result.Authors, a.Author.DisplayName)
+		}
+	}
+	result.Abstract = truncateText(reconstructAbstract(work.AbstractInvertedIndex), 500)
+	if result.URL == "" && result.DOI != "" {
+		result.URL = "https://doi.org/" + result.DOI
+	}
+	return result
+}
+
+// ResolveByDOI fetches the EXACT work for a DOI via OpenAlex's /works/doi:{doi}
+// entity endpoint (not a fuzzy search), satisfying the DOIResolver capability.
+// Returns (nil, nil) when no record exists for the DOI.
+func (p *OpenAlexProvider) ResolveByDOI(ctx context.Context, doi string) (*AcademicResult, error) {
+	var out *AcademicResult
+	err := p.deps.Breaker.Execute(func() error {
+		work, er := p.fetchWork(ctx, doi)
+		if er != nil || work == nil || work.Title == "" {
+			return er
+		}
+		r := openAlexWorkToResult(work)
+		out = &r
+		return nil
+	})
+	return out, err
+}
+
+var _ DOIResolver = (*OpenAlexProvider)(nil)
 
 // openAlexSourceID maps user-friendly source names to OpenAlex source IDs.
 func openAlexSourceID(source string) string {

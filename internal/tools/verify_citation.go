@@ -119,13 +119,27 @@ func verifyByDOI(ctx context.Context, deps Dependencies, doi, claim string, out 
 		}
 	}
 	// Best-effort matched record (title/authors/year) from an academic provider.
+	// lookupAcademicRecord runs a SEARCH with the DOI as the query and takes the
+	// top hit, which can be a fuzzy neighbor rather than the exact work — so we
+	// attach it ONLY when its DOI equals the input DOI. A non-matching hit is
+	// discarded (never shown as this DOI's record); recording a wrong/unrelated
+	// paper here would be a fabrication of exactly the kind this tool exists to
+	// catch. The match is also skipped once existence is known to be false (a
+	// fabricated DOI has no real record to attach).
 	recURL := ""
-	if rec := lookupAcademicRecord(ctx, deps, doi); rec != nil {
-		out["matchedRecord"] = rec
-		out["matchConfidence"] = "high" // DOI is an exact identifier
-		recURL = rec.URL
-		if _, ok := out["exists"]; !ok {
-			out["exists"] = true
+	existsFalse := false
+	if v, ok := out["exists"].(bool); ok && !v {
+		existsFalse = true
+	}
+	if !existsFalse {
+		if rec := lookupRecordByDOI(ctx, deps, doi); rec != nil {
+			out["matchedRecord"] = rec
+			out["matchConfidence"] = "high" // exact-DOI match confirmed
+			recURL = rec.URL
+			*prov = append(*prov, "academic record matched by exact DOI")
+			if _, ok := out["exists"]; !ok {
+				out["exists"] = true
+			}
 		}
 	}
 	if _, ok := out["exists"]; !ok {
@@ -201,23 +215,71 @@ func verifyByReference(ctx context.Context, deps Dependencies, ref, claim string
 // verify_citation works whenever academic_search does. Best-effort: nil on no
 // searcher / no match / error.
 func lookupAcademicRecord(ctx context.Context, deps Dependencies, query string) *search.AcademicResult {
-	params := search.AcademicSearchParams{Query: query, NumResults: 1}
+	results := scholarlySearch(ctx, deps, query, 1)
+	if len(results) > 0 {
+		r := results[0]
+		return &r
+	}
+	return nil
+}
 
-	if as, errResult := resolveAcademicSearcher(deps, ""); errResult == nil && as != nil {
-		if results, err := as.Scholarly(ctx, params); err == nil && len(results) > 0 {
-			r := results[0]
-			return &r
+// lookupRecordByDOI resolves the academic record whose DOI EXACTLY equals doi.
+// This is what makes verify_citation's matchedRecord trustworthy: it is always
+// the cited work or nothing — a wrong/near-neighbor record would be a fabrication
+// of exactly the kind this tool exists to catch.
+//
+// Primary path: any configured provider implementing the DOIResolver capability
+// (OpenAlex via /works/doi:{doi}) does a direct ENTITY lookup, which returns the
+// exact work. Fallback: a relevance-ranked DOI search whose hits are scanned for
+// an exact-DOI match (most providers' DOI *search* never returns the exact work,
+// so this rarely matches — but it costs nothing and never returns a near-miss).
+func lookupRecordByDOI(ctx context.Context, deps Dependencies, doi string) *search.AcademicResult {
+	// Exact entity lookup via the DOIResolver capability, default provider first.
+	if as, errResult := resolveAcademicSearcher(deps, ""); errResult == nil {
+		if dr, ok := as.(search.DOIResolver); ok {
+			if rec, err := dr.ResolveByDOI(ctx, doi); err == nil && rec != nil && sameDOI(rec.DOI, doi) {
+				return rec
+			}
 		}
 	}
-	// Fallback: first configured academic provider that returns a match.
+	for _, name := range search.SupportedAcademicProviders {
+		ap, ok := deps.AcademicProviders[name]
+		if !ok {
+			continue
+		}
+		if dr, ok := ap.(search.DOIResolver); ok {
+			if rec, err := dr.ResolveByDOI(ctx, doi); err == nil && rec != nil && sameDOI(rec.DOI, doi) {
+				return rec
+			}
+		}
+	}
+	// Fallback: scan a relevance search for an exact-DOI hit (never a near-miss).
+	for _, r := range scholarlySearch(ctx, deps, doi, 5) {
+		if sameDOI(r.DOI, doi) {
+			rec := r
+			return &rec
+		}
+	}
+	return nil
+}
+
+// scholarlySearch runs an academic search across the default searcher then the
+// configured providers in deterministic order, returning the first non-empty
+// result set. Shared by the single-best and exact-DOI lookups.
+func scholarlySearch(ctx context.Context, deps Dependencies, query string, num int) []search.AcademicResult {
+	params := search.AcademicSearchParams{Query: query, NumResults: num}
+	if as, errResult := resolveAcademicSearcher(deps, ""); errResult == nil && as != nil {
+		if results, err := as.Scholarly(ctx, params); err == nil && len(results) > 0 {
+			return results
+		}
+	}
 	for _, name := range search.SupportedAcademicProviders {
 		ap, ok := deps.AcademicProviders[name]
 		if !ok {
 			continue
 		}
 		if results, err := ap.Scholarly(ctx, params); err == nil && len(results) > 0 {
-			r := results[0]
-			return &r
+			return results
 		}
 	}
 	return nil
@@ -254,6 +316,25 @@ func referenceMatchConfidence(ref string, rec *search.AcademicResult) string {
 
 func detectDOI(s string) string {
 	return strings.ToLower(strings.TrimSpace(doiPattern.FindString(s)))
+}
+
+// sameDOI reports whether two DOI strings refer to the same work. DOIs are
+// case-insensitive and may arrive bare or with a doi.org/dx.doi.org URL prefix,
+// so both sides are normalized to the bare lowercase 10.x/... form before
+// comparing. Empty on either side is never a match.
+func sameDOI(a, b string) bool {
+	na, nb := normalizeDOI(a), normalizeDOI(b)
+	return na != "" && na == nb
+}
+
+// normalizeDOI strips a leading doi.org/dx.doi.org/scheme prefix and lowercases,
+// returning the bare DOI (or "" when none is present).
+func normalizeDOI(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	if i := strings.Index(s, "10."); i >= 0 {
+		s = s[i:]
+	}
+	return s
 }
 
 func looksLikeURL(s string) bool {

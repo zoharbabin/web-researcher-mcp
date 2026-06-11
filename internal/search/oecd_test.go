@@ -104,6 +104,71 @@ func TestOECDObservations(t *testing.T) {
 	}
 }
 
+func TestOECDPeriod(t *testing.T) {
+	t.Parallel()
+	// Must NOT truncate to year (that made monthly flows return annual aggregates).
+	cases := map[string]string{
+		"2023":       "2023",    // annual passes through
+		"2023-01":    "2023-01", // monthly preserved (the bug fix)
+		"2023-Q1":    "2023-Q1", // quarterly preserved
+		"2023-01-15": "2023-01", // full ISO date trimmed to month (no daily SDMX)
+		"":           "",
+	}
+	for in, want := range cases {
+		if got := oecdPeriod(in); got != want {
+			t.Errorf("oecdPeriod(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestOECDSubgroupLabels: two series differing only by SEX must get DISTINCT
+// titles (the demographic facet must disambiguate), and monthly periods must be
+// preserved — guarding the #82 fixes.
+func TestOECDSubgroupLabels(t *testing.T) {
+	p := newOECDTestProvider(t, func(w http.ResponseWriter, _ *http.Request) {
+		// series keys: REF_AREA(0)=USA, SEX(0/1)=F/M, UNIT_MEASURE(0)=PC.
+		w.Write([]byte(`{"data":{
+			"dataSets":[{"series":{
+				"0:0:0":{"observations":{"0":[3.1],"1":[3.2]}},
+				"0:1:0":{"observations":{"0":[4.0],"1":[4.1]}}
+			}}],
+			"structures":[{"dimensions":{
+				"series":[
+					{"id":"REF_AREA","values":[{"id":"USA","name":"United States"}]},
+					{"id":"SEX","values":[{"id":"F","name":"Female"},{"id":"M","name":"Male"}]},
+					{"id":"UNIT_MEASURE","values":[{"id":"PC","name":"Percent"}]}
+				],
+				"observation":[{"id":"TIME_PERIOD","values":[{"id":"2023-01","name":"2023-01"},{"id":"2023-02","name":"2023-02"}]}]
+			}}]
+		}}`))
+	})
+	res, err := p.Econ(context.Background(), EconSearchParams{SeriesID: "A,B,1.0", Country: "USA", NumResults: 10})
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if len(res) != 4 {
+		t.Fatalf("want 4 obs (2 series × 2 periods), got %d", len(res))
+	}
+	var female, male bool
+	for _, o := range res {
+		if strings.Contains(o.Title, "Female") {
+			female = true
+		}
+		if strings.Contains(o.Title, "Male") {
+			male = true
+		}
+		if o.Date != "2023-01" && o.Date != "2023-02" {
+			t.Errorf("monthly period lost: %q", o.Date)
+		}
+		if o.Units != "Percent" {
+			t.Errorf("units = %q, want Percent", o.Units)
+		}
+	}
+	if !female || !male {
+		t.Errorf("SEX subgroups must produce distinct titles (Female/Male); got %+v", res)
+	}
+}
+
 func TestOECDNullObservation(t *testing.T) {
 	p := newOECDTestProvider(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte(`{"data":{

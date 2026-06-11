@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -79,7 +80,14 @@ func registerFormatBibliography(srv *mcp.Server, deps Dependencies) {
 			}
 		}
 
-		for _, s := range input.Sources {
+		for i, s := range input.Sources {
+			// Validate the URL at the boundary: a bibliography URL must be a real
+			// http(s) URL (or a bare DOI), never a dangerous scheme like
+			// "javascript:" or arbitrary junk that would land verbatim in a citation
+			// the user may paste elsewhere.
+			if err := validateBibliographyURL(s.URL); err != nil {
+				return toolError(fmt.Sprintf("sources[%d]: %v", i, err)), nil, nil
+			}
 			entries = append(entries, content.BibEntry{
 				URL:    s.URL,
 				Title:  s.Title,
@@ -110,4 +118,31 @@ func registerFormatBibliography(srv *mcp.Server, deps Dependencies) {
 		auditToolCall(ctx, deps, "format_bibliography", time.Since(start), nil, "")
 		return structuredResult(jsonBytes), nil, nil
 	})
+}
+
+// validateBibliographyURL accepts a well-formed http(s) URL or a bare DOI (the two
+// legitimate forms a citation's identifier takes), and rejects empty, malformed,
+// or dangerous-scheme values (e.g. "javascript:") that would otherwise land
+// verbatim in a generated citation. A DOI is allowed because academic_search /
+// citation_graph results carry one as the persistent id.
+func validateBibliographyURL(raw string) error {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return fmt.Errorf("url is required")
+	}
+	if detectDOI(s) != "" {
+		return nil // a bare or doi.org DOI is a valid citation identifier
+	}
+	u, err := url.Parse(s)
+	if err != nil {
+		return fmt.Errorf("invalid url %q", raw)
+	}
+	scheme := strings.ToLower(u.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return fmt.Errorf("url %q must be an http(s) URL or a DOI", raw)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("url %q has no host", raw)
+	}
+	return nil
 }

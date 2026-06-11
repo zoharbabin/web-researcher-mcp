@@ -51,6 +51,23 @@ func TestAnswerToolRequiresQuery(t *testing.T) {
 	if !res.IsError {
 		t.Error("empty query should be an error")
 	}
+	// A whitespace-only query must also be rejected (trimmed at the boundary)
+	// rather than run a billed upstream search.
+	_, res = callTool(t, setupTestDeps(), "answer", map[string]any{"query": "   "})
+	if !res.IsError {
+		t.Error("whitespace-only query should be an error")
+	}
+}
+
+func TestStructuredSearchRequiresQuery(t *testing.T) {
+	_, res := callTool(t, setupTestDeps(), "structured_search", map[string]any{})
+	if !res.IsError {
+		t.Error("empty query should be an error")
+	}
+	_, res = callTool(t, setupTestDeps(), "structured_search", map[string]any{"query": "  \t "})
+	if !res.IsError {
+		t.Error("whitespace-only query should be an error")
+	}
 }
 
 func TestStructuredSearchTool(t *testing.T) {
