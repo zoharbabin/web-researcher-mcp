@@ -72,6 +72,13 @@ func (p *Pipeline) scrapeHTML(ctx context.Context, url string, maxLength int) (*
 	if err != nil {
 		return nil, err
 	}
+
+	// Same PDF detection as the stealth tier — HTML tier is the third pass,
+	// still before the browser; same re-route logic applies (#206).
+	if isPDFContentType(resp.Header.Get("Content-Type")) || looksLikePDF(body) {
+		return p.scrapeBodyAsPDF(url, body, maxLength)
+	}
+
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
 	if err != nil {
 		return nil, err

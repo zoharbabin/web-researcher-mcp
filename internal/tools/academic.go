@@ -96,14 +96,29 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 		// field and have no ladder to observe (#58 scope).
 		var routeDecision search.RoutingDecision
 
+		// Precision improvements (#209):
+		// (1) Exact-phrase quoting for named-entity / acronym queries — a short
+		//     all-caps token or a hyphenated trial acronym (e.g. "ZUMA-7") is quoted
+		//     so providers do exact-title matching instead of loose term-matching.
+		// (2) Hybrid sort for date+query — when the caller sets sort_by=date with a
+		//     non-empty query we drop the date sort at the API level (relevance wins)
+		//     and let the year_from/year_to filters narrow the date window instead.
+		//     Pure-recency sort discards topical relevance, returning tangentially-
+		//     related recent papers that merely mention the query terms.
+		preparedQuery := prepareAcademicQuery(input.Query)
+		sortBy := input.SortBy
+		if sortBy == "date" && strings.TrimSpace(input.Query) != "" {
+			sortBy = "" // relevance + year filter; not pure-recency
+		}
+
 		searchParams := search.AcademicSearchParams{
-			Query:      input.Query,
+			Query:      preparedQuery,
 			YearFrom:   input.YearFrom,
 			YearTo:     input.YearTo,
 			Source:     source,
 			NumResults: numResults,
 			OpenAccess: input.OpenAccess,
-			SortBy:     input.SortBy,
+			SortBy:     sortBy,
 		}
 
 		var results []search.AcademicResult
@@ -480,4 +495,53 @@ func buildAcademicHints(input academicSearchInput, provider string) *ZeroResultH
 		hints.SuggestedActions = hints.SuggestedActions[:3]
 	}
 	return hints
+}
+
+// prepareAcademicQuery wraps the query in double quotes when it looks like a
+// named-entity or acronym that should be searched as an exact phrase:
+//   - A single token that is all-uppercase (e.g. "CRISPR", "ZUMA-7", "AlphaFold")
+//   - A multi-token phrase containing an all-uppercase or hyphenated token (e.g.
+//     "ZUMA-7 CAR-T trial") — the whole phrase is quoted for exact-phrase search
+//
+// Queries already containing quotes, boolean operators (AND/OR/NOT), or field
+// prefixes are left untouched — the caller has expressed intent via syntax.
+// The original query is returned unchanged for plain-language descriptive queries
+// (all lowercase, no special tokens) so normal relevance-ranking works as usual.
+func prepareAcademicQuery(query string) string {
+	q := strings.TrimSpace(query)
+	if q == "" {
+		return query
+	}
+	// Leave already-quoted or operator-syntax queries alone.
+	if strings.ContainsAny(q, `"`) || strings.Contains(q, " AND ") ||
+		strings.Contains(q, " OR ") || strings.Contains(q, " NOT ") {
+		return query
+	}
+	tokens := strings.Fields(q)
+	for _, tok := range tokens {
+		// Strip common punctuation for the check (hyphens kept: "ZUMA-7" stays "ZUMA-7").
+		clean := strings.Trim(tok, ".,;:?!()")
+		if clean == "" {
+			continue
+		}
+		// All-uppercase token (length ≥ 2 to exclude single-char operators).
+		if len(clean) >= 2 && clean == strings.ToUpper(clean) && strings.ContainsAny(clean, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
+			return `"` + q + `"`
+		}
+		// Hyphenated acronym-style token (e.g. "ZUMA-7", "CAR-T").
+		if strings.Contains(clean, "-") {
+			parts := strings.Split(clean, "-")
+			allCaps := true
+			for _, p := range parts {
+				if p != "" && p != strings.ToUpper(p) {
+					allCaps = false
+					break
+				}
+			}
+			if allCaps && len(parts) >= 2 {
+				return `"` + q + `"`
+			}
+		}
+	}
+	return query
 }

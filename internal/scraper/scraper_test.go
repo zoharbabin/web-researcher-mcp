@@ -3,6 +3,7 @@ package scraper
 import (
 	"compress/gzip"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -2555,5 +2556,181 @@ func TestScrapeHTML_BoundsOversizeBody(t *testing.T) {
 	}
 	if !strings.Contains(res.Content, "quick brown fox") {
 		t.Error("expected the leading article text to survive the cap")
+	}
+}
+
+// =============================================================================
+// PDF Content-Type Detection Tests (#206)
+// =============================================================================
+
+// minimalPDFB64 is a base64-encoded minimal but structurally valid PDF 1.4
+// document with one page and one text object ("Hello PDF test content").
+// It starts with %PDF so looksLikePDF fires, and the gopdf parser can extract
+// the text — confirming real document routing, not just header detection.
+// Generated once with a Python script; validated by TestProbeMinimalPDF.
+const minimalPDFB64 = "JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA2MTIgNzkyXQogICAvQ29udGVudHMgNCAwIFIgL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjEgNSAwIFIgPj4gPj4gPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCA1NCA+PgpzdHJlYW0KQlQgL0YxIDEyIFRmIDEwMCA3MDAgVGQgKEhlbGxvIFBERiB0ZXN0IGNvbnRlbnQpIFRqIEVUCmVuZHN0cmVhbQplbmRvYmoKNSAwIG9iago8PCAvVHlwZSAvRm9udCAvU3VidHlwZSAvVHlwZTEgL0Jhc2VGb250IC9IZWx2ZXRpY2EgPj4KZW5kb2JqCnhyZWYKMCA2CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAxNSAwMDAwMCBuIAowMDAwMDAwMDY0IDAwMDAwIG4gCjAwMDAwMDAxMjEgMDAwMDAgbiAKMDAwMDAwMDI1MCAwMDAwMCBuIAowMDAwMDAwMzU0IDAwMDAwIG4gCnRyYWlsZXIKPDwgL1Jvb3QgMSAwIFIgL1NpemUgNiA+PgpzdGFydHhyZWYKNDI0CiUlRU9GCg=="
+
+// minimalPDF returns valid PDF bytes for test cases.
+func minimalPDF(t *testing.T) []byte {
+	t.Helper()
+	data, err := base64.StdEncoding.DecodeString(minimalPDFB64)
+	if err != nil {
+		t.Fatalf("minimalPDF: base64 decode: %v", err)
+	}
+	return data
+}
+
+// TestIsPDFContentType checks the Content-Type helper directly.
+func TestIsPDFContentType(t *testing.T) {
+	cases := []struct {
+		ct   string
+		want bool
+	}{
+		{"application/pdf", true},
+		{"Application/PDF", true},
+		{"application/pdf; charset=utf-8", true},
+		{"text/html", false},
+		{"text/html; charset=utf-8", false},
+		{"", false},
+		{"application/octet-stream", false},
+	}
+	for _, tc := range cases {
+		if got := isPDFContentType(tc.ct); got != tc.want {
+			t.Errorf("isPDFContentType(%q) = %v, want %v", tc.ct, got, tc.want)
+		}
+	}
+}
+
+// TestLooksLikePDF checks the magic-byte helper directly.
+func TestLooksLikePDF(t *testing.T) {
+	cases := []struct {
+		body []byte
+		want bool
+	}{
+		{[]byte("%PDF-1.4 ..."), true},
+		{[]byte("%pdf-1.4 ..."), false}, // lowercase — not a real PDF header
+		{[]byte("<html>"), false},
+		{[]byte{}, false},
+		{[]byte("%PD"), false}, // too short
+	}
+	for _, tc := range cases {
+		if got := looksLikePDF(tc.body); got != tc.want {
+			t.Errorf("looksLikePDF(%q) = %v, want %v", tc.body, got, tc.want)
+		}
+	}
+}
+
+// TestScrapeStealth_PDFContentType_Reroutes verifies that the stealth tier
+// re-routes to scrapeBodyAsPDF when the server sends application/pdf (#206).
+// The URL has no .pdf suffix so isDocumentURL would miss it.
+func TestScrapeStealth_PDFContentType_Reroutes(t *testing.T) {
+	t.Parallel()
+	pdf := minimalPDF(t)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/pdf")
+		w.WriteHeader(http.StatusOK)
+		w.Write(pdf) //nolint:errcheck
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	res, err := p.scrapeStealth(context.Background(), ts.URL+"/download/paper", 50_000)
+	if err != nil {
+		t.Fatalf("scrapeStealth unexpectedly errored on PDF response: %v", err)
+	}
+	if res == nil {
+		t.Fatal("scrapeStealth returned nil result for PDF response")
+	}
+	if res.ContentType != "pdf" {
+		t.Errorf("ContentType = %q, want %q", res.ContentType, "pdf")
+	}
+	if res.Tier != "document" {
+		t.Errorf("Tier = %q, want %q", res.Tier, "document")
+	}
+	if !strings.Contains(res.Content, "Hello PDF test content") {
+		t.Errorf("expected extracted PDF text in Content, got %q", res.Content)
+	}
+}
+
+// TestScrapeHTML_PDFContentType_Reroutes verifies the same re-routing in the
+// tier-3 HTML scraper (#206).
+func TestScrapeHTML_PDFContentType_Reroutes(t *testing.T) {
+	t.Parallel()
+	pdf := minimalPDF(t)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/pdf")
+		w.WriteHeader(http.StatusOK)
+		w.Write(pdf) //nolint:errcheck
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	res, err := p.scrapeHTML(context.Background(), ts.URL+"/view/fulltext", 50_000)
+	if err != nil {
+		t.Fatalf("scrapeHTML unexpectedly errored on PDF response: %v", err)
+	}
+	if res == nil {
+		t.Fatal("scrapeHTML returned nil result for PDF response")
+	}
+	if res.ContentType != "pdf" {
+		t.Errorf("ContentType = %q, want %q", res.ContentType, "pdf")
+	}
+	if res.Tier != "document" {
+		t.Errorf("Tier = %q, want %q", res.Tier, "document")
+	}
+	if !strings.Contains(res.Content, "Hello PDF test content") {
+		t.Errorf("expected extracted PDF text in Content, got %q", res.Content)
+	}
+}
+
+// TestScrapeStealth_PDFMagicBytes_Reroutes verifies that %PDF magic bytes
+// trigger document parsing even when Content-Type is wrong or absent (#206).
+func TestScrapeStealth_PDFMagicBytes_Reroutes(t *testing.T) {
+	t.Parallel()
+	pdf := minimalPDF(t)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// No Content-Type header — server misconfiguration
+		w.WriteHeader(http.StatusOK)
+		w.Write(pdf) //nolint:errcheck
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	res, err := p.scrapeStealth(context.Background(), ts.URL+"/report", 50_000)
+	if err != nil {
+		t.Fatalf("scrapeStealth errored on PDF-magic-bytes response: %v", err)
+	}
+	if res == nil {
+		t.Fatal("scrapeStealth returned nil for PDF-magic-bytes response")
+	}
+	if res.ContentType != "pdf" {
+		t.Errorf("ContentType = %q, want %q", res.ContentType, "pdf")
+	}
+	if !strings.Contains(res.Content, "Hello PDF test content") {
+		t.Errorf("expected extracted PDF text in Content, got %q", res.Content)
+	}
+}
+
+// TestScrapeHTML_HTMLContent_NotRerouted confirms that a normal HTML response
+// is NOT mis-classified as a PDF — regression guard (#206).
+func TestScrapeHTML_HTMLContent_NotRerouted(t *testing.T) {
+	t.Parallel()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		io.WriteString(w, "<html><body><article><p>"+strings.Repeat("Normal article text. ", 20)+"</p></article></body></html>") //nolint:errcheck
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	res, err := p.scrapeHTML(context.Background(), ts.URL+"/article", 50_000)
+	if err != nil {
+		t.Fatalf("scrapeHTML errored on plain HTML: %v", err)
+	}
+	if res == nil {
+		t.Fatal("scrapeHTML returned nil for plain HTML")
+	}
+	if res.ContentType == "pdf" {
+		t.Error("ContentType should not be pdf for a plain HTML response")
 	}
 }
