@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type SearchAPIProvider struct {
@@ -191,7 +192,7 @@ func (s *SearchAPIProvider) doNewsSearch(ctx context.Context, params NewsSearchP
 			Title:       r.Title,
 			URL:         r.Link,
 			Source:      r.Source,
-			PublishedAt: r.Date,
+			PublishedAt: normalizePublishedAt(r.Date, time.Now()),
 			Snippet:     r.Snippet,
 		})
 	}

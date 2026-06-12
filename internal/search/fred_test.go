@@ -111,6 +111,53 @@ func TestFREDBadParamsNotKeyError(t *testing.T) {
 	}
 }
 
+// #233: with date_from set, the request must anchor at that start — ascending
+// sort + observation_start — so the limit window begins at date_from rather than
+// silently returning the latest N (desc+limit ignores the anchor).
+func TestFREDObservationsDateFromAnchorsAscending(t *testing.T) {
+	p := newFREDTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if got := q.Get("sort_order"); got != "asc" {
+			t.Errorf("date_from set → sort_order must be asc, got %q", got)
+		}
+		if got := q.Get("observation_start"); got != "2020-01-01" {
+			t.Errorf("observation_start = %q, want 2020-01-01", got)
+		}
+		if got := q.Get("observation_end"); got != "2022-12-31" {
+			t.Errorf("observation_end = %q, want 2022-12-31", got)
+		}
+		// Return ascending data; the first row must be at the anchor.
+		w.Write([]byte(`{"observations":[{"date":"2020-01-01","value":"3.6"},{"date":"2020-02-01","value":"3.5"}]}`))
+	})
+	res, err := p.Econ(context.Background(), EconSearchParams{
+		SeriesID: "UNRATE", DateFrom: "2020-01-01", DateTo: "2022-12-31", NumResults: 2,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res) == 0 || res[0].Date != "2020-01-01" {
+		t.Fatalf("first observation must anchor at date_from, got %+v", res)
+	}
+}
+
+// Without date_from, the default stays descending (latest-N "what's the current
+// value" case) — the anchoring fix must not regress this.
+func TestFREDObservationsNoDateFromStaysDescending(t *testing.T) {
+	p := newFREDTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if got := q.Get("sort_order"); got != "desc" {
+			t.Errorf("no date_from → sort_order must stay desc, got %q", got)
+		}
+		if _, set := q["observation_start"]; set {
+			t.Error("observation_start must be omitted when date_from is empty")
+		}
+		w.Write([]byte(`{"observations":[{"date":"2026-05-01","value":"4.0"}]}`))
+	})
+	if _, err := p.Econ(context.Background(), EconSearchParams{SeriesID: "UNRATE", NumResults: 10}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestFREDInterface(t *testing.T) {
 	var _ EconProvider = (*FREDProvider)(nil)
 }

@@ -158,6 +158,28 @@ func TestEurostatSearch(t *testing.T) {
 	}
 }
 
+// TestEurostatSearchTrimsIndentedTitle verifies the TOC's tree-indentation
+// (leading spaces INSIDE the quoted title) is stripped from the surfaced title
+// (#235), so a caller never sees `"            Unemployment rate…"`.
+func TestEurostatSearchTrimsIndentedTitle(t *testing.T) {
+	t.Parallel()
+	p := newEurostatTestProvider(t, func(w http.ResponseWriter, _ *http.Request) {
+		// The real catalogue indents titles inside the quotes to show depth.
+		w.Write([]byte("\"title\"\t\"code\"\t\"type\"\t\"last update\"\n" +
+			"\"            Unemployment rate (%) - monthly data\"\t\"une_rt_m\"\t\"dataset\"\t\"\"\n"))
+	})
+	res, err := p.Econ(context.Background(), EconSearchParams{Query: "unemployment", NumResults: 10})
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if len(res) != 1 {
+		t.Fatalf("want 1 match, got %d", len(res))
+	}
+	if got := res[0].Title; got != "Unemployment rate (%) - monthly data" {
+		t.Errorf("title = %q, want it trimmed of leading whitespace", got)
+	}
+}
+
 // TestEurostatSearchMultiWord verifies that multi-word queries use AND-matching
 // so "quarterly GDP" matches a dataset whose title contains both words even when
 // they are not adjacent ("GDP and main components - quarterly").

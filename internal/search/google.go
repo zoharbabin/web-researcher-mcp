@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type GoogleProvider struct {
@@ -185,7 +186,7 @@ func (g *GoogleProvider) doNewsSearch(ctx context.Context, params NewsSearchPara
 			URL:         item.Link,
 			Source:      item.DisplayLink,
 			Snippet:     item.Snippet,
-			PublishedAt: item.publishedAt(),
+			PublishedAt: normalizePublishedAt(item.publishedAt(), time.Now()),
 		})
 	}
 	return results, nil

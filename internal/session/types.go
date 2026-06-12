@@ -70,10 +70,15 @@ type ResearchStep struct {
 }
 
 type ResearchSource struct {
-	URL         string `json:"url"`
-	Title       string `json:"title,omitempty"`
-	Relevance   string `json:"relevance,omitempty"`
-	FoundInStep int    `json:"foundInStep"`
+	URL       string `json:"url"`
+	Title     string `json:"title,omitempty"`
+	Relevance string `json:"relevance,omitempty"`
+	// FoundInStep is the 1-indexed sequential_search step that surfaced this
+	// source, or omitted entirely when the source was not tied to a numbered step
+	// (e.g. added via a web_search carrying only a sessionId). Steps are 1-indexed,
+	// so a literal 0 would read as a real-but-nonexistent step; omitempty drops it
+	// instead, giving "no step" an unambiguous absent representation (#235).
+	FoundInStep int `json:"foundInStep,omitempty"`
 	// Link-liveness provenance (#157), populated only when verification is
 	// requested (opt-in verify_links on research_export / search_and_scrape).
 	// Omitted entirely when unverified, so an unverified source is unchanged.
@@ -85,7 +90,9 @@ type ResearchSource struct {
 
 type KnowledgeGap struct {
 	Description string `json:"description"`
-	FoundInStep int    `json:"foundInStep"`
+	// FoundInStep is the 1-indexed step that recorded the gap; omitted when 0
+	// (unattributed) for the same reason as ResearchSource.FoundInStep (#235).
+	FoundInStep int `json:"foundInStep,omitempty"`
 }
 
 type SessionIndex struct {

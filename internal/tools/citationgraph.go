@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -69,16 +70,20 @@ func registerCitationGraph(srv *mcp.Server, deps Dependencies) {
 			return cachedResultWithMeta(cached, meta), nil, nil
 		}
 
-		var citedBy, references []search.AcademicResult
-		var err error
-		if direction == "cited_by" || direction == "both" {
-			citedBy, err = searcher.Citations(ctx, input.Paper, num)
-			if err != nil {
-				return citationGraphError(ctx, deps, providerName, input.Paper, err, start), nil, nil
+		citedBy, references, err := traverseCitations(ctx, searcher, input.Paper, direction, num)
+		if err != nil {
+			// Auto-select fallback (#228): a heavily-cited paper can be absent from
+			// Semantic Scholar's keyless graph (it 404s the DOI lookup) while OpenAlex
+			// resolves it. When the caller did NOT pin a provider, retry the whole
+			// traversal on OpenAlex before surfacing an error. An EXPLICIT provider is
+			// honored exclusively (Design Rule 7) — no silent substitution.
+			if input.Provider == "" && providerName == "semanticscholar" && isPaperNotFoundErr(err) {
+				if fb, fbName, ok := fallbackCitationSearcher(deps, providerName); ok {
+					if cb, rf, ferr := traverseCitations(ctx, fb, input.Paper, direction, num); ferr == nil {
+						citedBy, references, providerName, err = cb, rf, fbName, nil
+					}
+				}
 			}
-		}
-		if direction == "references" || direction == "both" {
-			references, err = searcher.References(ctx, input.Paper, num)
 			if err != nil {
 				return citationGraphError(ctx, deps, providerName, input.Paper, err, start), nil, nil
 			}
@@ -162,6 +167,48 @@ func resolveCitationSearcher(deps Dependencies, providerName string) (search.Cit
 		}
 	}
 	return nil, "", nil
+}
+
+// traverseCitations runs the forward (cited_by) and/or backward (references)
+// edge queries for the requested direction. Either slice is nil when its
+// direction wasn't requested. Returns the first error encountered (so the caller
+// can decide whether to fall back).
+func traverseCitations(ctx context.Context, searcher search.CitationSearcher, paper, direction string, num int) (citedBy, references []search.AcademicResult, err error) {
+	if direction == "cited_by" || direction == "both" {
+		if citedBy, err = searcher.Citations(ctx, paper, num); err != nil {
+			return nil, nil, err
+		}
+	}
+	if direction == "references" || direction == "both" {
+		if references, err = searcher.References(ctx, paper, num); err != nil {
+			return nil, nil, err
+		}
+	}
+	return citedBy, references, nil
+}
+
+// fallbackCitationSearcher returns the next configured CitationSearcher whose
+// name differs from the one that just failed (today: OpenAlex after Semantic
+// Scholar), for the auto-select path only. (false) when none is available.
+func fallbackCitationSearcher(deps Dependencies, failed string) (search.CitationSearcher, string, bool) {
+	for _, name := range []string{"openalex", "semanticscholar"} {
+		if name == failed {
+			continue
+		}
+		if ap, ok := deps.AcademicProviders[name]; ok {
+			if cs, ok := ap.(search.CitationSearcher); ok {
+				return cs, name, true
+			}
+		}
+	}
+	return nil, "", false
+}
+
+// isPaperNotFoundErr reports whether a traversal error means the seed paper is
+// absent from the provider's graph (a 404), as opposed to a transient failure
+// (rate limit, network) — only a not-found should trigger the OpenAlex fallback.
+func isPaperNotFoundErr(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "paper not found")
 }
 
 func filterInfluential(in []search.AcademicResult) []search.AcademicResult {

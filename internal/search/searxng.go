@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 type SearXNGProvider struct {
@@ -127,7 +128,7 @@ func (s *SearXNGProvider) News(ctx context.Context, params NewsSearchParams) ([]
 			Title:       r.Title,
 			URL:         r.URL,
 			Source:      r.Engine,
-			PublishedAt: r.PublishedDate,
+			PublishedAt: normalizePublishedAt(r.PublishedDate, time.Now()),
 			Snippet:     r.Content,
 		})
 	}

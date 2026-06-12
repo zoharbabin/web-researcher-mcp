@@ -50,6 +50,10 @@ var trustGoldDOIs = []goldDOI{
 	{"AlphaFold (Jumper 2021)", "10.1038/s41586-021-03819-2", true, false},
 	{"Hwang & Reich 2001 (Science)", "10.1126/science.1058040", true, false},
 	{"Shannon 1948 (reprinted DOI)", "10.1002/j.1538-7305.1948.tb01338.x", true, false},
+	// arXiv DOI: registered through DataCite, 404 in Crossref, and NOT carried under
+	// this DOI by OpenAlex (which re-mints its own) — must still resolve exists=true
+	// via the authoritative doi.org handle registry (#226).
+	{"Transformer/arXiv DOI (DataCite-registered, Crossref-absent)", "10.48550/arXiv.1706.03762", true, false},
 	// ── Known-FABRICATED (plausible-looking but nonexistent → exists=false) ──
 	{"fabricated DOI (valid prefix, nonexistent suffix)", "10.1038/s41586-021-99999999-x", false, false},
 	{"fabricated DOI 2 (nonexistent)", "10.1016/j.cell.2099.13.013", false, false},
@@ -66,6 +70,10 @@ func newEvalDeps(t *testing.T) Dependencies {
 		HTTPClient: httpClient,
 		Breaker:    circuit.New(circuit.Config{FailureThreshold: 10, ResetTimeout: 60}),
 	})
+	doiRegistry := search.NewHandleDOIRegistry(search.Deps{
+		HTTPClient: httpClient,
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 10, ResetTimeout: 60}),
+	})
 	linkVerifier := scraper.NewLinkVerifier(scraper.LinkVerifierConfig{})
 	academic := search.AvailableAcademicProviders(search.AcademicProviderConfig{
 		CrossRefEmail: email,
@@ -76,6 +84,7 @@ func newEvalDeps(t *testing.T) Dependencies {
 		Cache:              cache.NewMemory(cache.MemoryConfig{MaxSizeMB: 16}),
 		AcademicProviders:  academic,
 		RetractionResolver: retraction,
+		DOIRegistry:        doiRegistry,
 		LinkVerifier:       linkVerifier,
 		Scraper:            scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 3}),
 		Content:            content.NewProcessor(),
@@ -266,6 +275,53 @@ func TestTrustSuiteAccuracy_ScrapedDOIRetraction(t *testing.T) {
 		return
 	}
 	t.Skip("no publisher landing page was scrapeable in this environment — see hermetic TestScrapeDOI_* for the guarantees")
+}
+
+// TestTrustSuiteAccuracy_UncheckedClassification validates #225 live: an entry with
+// neither a DOI nor a URL — only a title — can at most be matched by a fuzzy
+// title search, which is NOT authoritative existence. Such an entry must classify
+// `unchecked` (absence of evidence), NEVER `ok` (falsely verified) and NEVER
+// `not_found` (a title-search miss is not a Crossref absence). The zero-false-
+// positive invariant here is: no uncheckable citation is ever presented as verified.
+func TestTrustSuiteAccuracy_UncheckedClassification(t *testing.T) {
+	deps := newEvalDeps(t)
+	ctx := context.Background()
+
+	// Title-only entries with no resolvable identifier. The gibberish title cannot
+	// match any real work; the plausible-but-nonexistent title may coincidentally
+	// fuzzy-match a near-neighbor — either way, with no DOI/URL it must read as
+	// unchecked, not verified.
+	items := []auditItem{
+		{entry: content.BibEntry{Title: "Zxqvb Wgklm Frnst Plurdnik Theory Of Nonexistent Quasiparticles"}},
+		{entry: content.BibEntry{Title: "A Comprehensive Survey Of Imaginary Citation Fabrication Patterns 2099"}},
+	}
+	results := auditEntries(ctx, deps, items)
+	if len(results) != len(items) {
+		t.Fatalf("expected %d results, got %d", len(items), len(results))
+	}
+	for _, r := range results {
+		hasUnchecked, hasNotFound := false, false
+		for _, f := range r.Flags {
+			switch f {
+			case auditFlagUnchecked:
+				hasUnchecked = true
+			case auditFlagNotFound:
+				hasNotFound = true
+			}
+		}
+		t.Logf("%-60s exists=%v flags=%v", r.Title, r.Exists, r.Flags)
+		// FALSE POSITIVE 1: an uncheckable entry presented as verified (clean/ok).
+		if r.clean() {
+			t.Errorf("[unchecked] FALSE POSITIVE: title-only entry %q classified ok (verified) — it has no authoritative identifier", r.Title)
+		}
+		// FALSE POSITIVE 2: a title-search miss mislabeled as a fabricated DOI.
+		if hasNotFound {
+			t.Errorf("[unchecked] FALSE POSITIVE: title-only entry %q flagged not_found — a title miss is absence of evidence, not a Crossref absence", r.Title)
+		}
+		if !hasUnchecked {
+			t.Errorf("[unchecked] title-only entry %q should be flagged unchecked, got %v", r.Title, r.Flags)
+		}
+	}
 }
 
 // TestTrustSuiteAccuracy_TitleMatch measures #221 titleMatch signal over a labeled

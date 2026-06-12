@@ -62,6 +62,26 @@ func TestClassifySourceHostHeuristic(t *testing.T) {
 	}
 }
 
+// TestClassifyNewsHomepage locks in #235 item 1: a known news outlet's top-level
+// homepage (no NewsArticle JSON-LD, unlike an article subpage) still classifies
+// as news_publication via the host heuristic, so the type doesn't degrade to
+// "unknown" off the front page. The host list is the deliberate, conservative
+// fallback — an arbitrary unlisted outlet's homepage may still be "unknown" by
+// design (no confident guess without a structured signal).
+func TestClassifyNewsHomepage(t *testing.T) {
+	for _, u := range []string{
+		"https://www.theguardian.com/",
+		"https://www.theguardian.com",
+		"https://www.bbc.com/",
+		"https://www.reuters.com/",
+	} {
+		c := ClassifySource(u, 0.8, StructuredSignals{}, "")
+		if c.SourceType != SourceTypeNews {
+			t.Errorf("%s → sourceType %q, want %q", u, c.SourceType, SourceTypeNews)
+		}
+	}
+}
+
 func TestClassifyStructuredBeatsHeuristic(t *testing.T) {
 	// A blog host with a NewsArticle schema → structured wins (news).
 	c := ClassifySource("https://medium.com/@a/post", 0.5, StructuredSignals{SchemaTypes: []string{"NewsArticle"}}, "")

@@ -202,6 +202,14 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 			providerSource = webSource
 		}
 
+		// Quality gate (#229): drop Crossref test/placeholder records before they
+		// reach the caller. The 10.5555 prefix is Crossref's reserved test prefix —
+		// a nonsense query ("asdkjfh qwerty …") otherwise returns these as if real
+		// ("more testing qwerty", doi:10.5555/…). Filtering them lets the empty-result
+		// hints path fire instead of passing noise through. Runs before enrichment so
+		// we never spend Unpaywall/retraction calls on junk.
+		results = filterPlaceholderResults(results)
+
 		// Open-access enrichment (#45): fill pdfUrl/openAccess on DOI-bearing
 		// results the provider left bare, via Unpaywall. Best-effort + no-op when
 		// unconfigured; runs BEFORE the pdf_only filter so resolved PDFs count.
@@ -439,6 +447,33 @@ func academicResultToMap(r search.AcademicResult) map[string]any {
 		paper["retractionStatus"] = r.Retraction
 	}
 	return paper
+}
+
+// filterPlaceholderResults removes Crossref test/placeholder records (#229).
+// Crossref reserves the 10.5555 DOI prefix for test deposits; real research is
+// never published under it. Such entries surface only when a query has no genuine
+// academic signal, so dropping them lets the zero-result hints path engage instead
+// of presenting noise as findings. Conservative by design — it keys only on the
+// reserved test prefix, never on score, so a legitimate result is never discarded.
+func filterPlaceholderResults(in []search.AcademicResult) []search.AcademicResult {
+	out := in[:0:0]
+	for _, r := range in {
+		if isPlaceholderDOI(r.DOI) {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+// isPlaceholderDOI reports whether a DOI is in Crossref's reserved test prefix
+// (10.5555), normalizing any doi.org/ prefix first.
+func isPlaceholderDOI(doi string) bool {
+	d := strings.TrimSpace(strings.ToLower(doi))
+	d = strings.TrimPrefix(d, "https://doi.org/")
+	d = strings.TrimPrefix(d, "http://doi.org/")
+	d = strings.TrimPrefix(d, "doi:")
+	return strings.HasPrefix(d, "10.5555/")
 }
 
 func detectAcademicSource(url string) string {

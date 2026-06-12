@@ -2,7 +2,7 @@
   "name": "web-researcher-mcp",
   "displayName": "Web Researcher",
   "description": "Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust; medical journals, court databases, news outlets, academic papers. Analyze the full source, not just snippets. Links that work, citations you can trust, no made up closed garden pre-synthesized results.",
-  "version": "1.29.1",
+  "version": "1.29.2",
   "author": {
     "name": "Zohar Babin",
     "url": "https://github.com/zoharbabin"

@@ -514,8 +514,9 @@ func TestSearXNGProvider_NewsSearch(t *testing.T) {
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
-	if results[0].PublishedAt != "2024-01-15" {
-		t.Errorf("expected published date '2024-01-15', got %q", results[0].PublishedAt)
+	// publishedAt is normalized to ISO-8601 (#234) — a bare date becomes midnight UTC.
+	if results[0].PublishedAt != "2024-01-15T00:00:00Z" {
+		t.Errorf("expected ISO-normalized published date '2024-01-15T00:00:00Z', got %q", results[0].PublishedAt)
 	}
 }
 
@@ -2098,8 +2099,9 @@ func TestTavilyProvider_NewsSearch(t *testing.T) {
 	if results[0].Source != "www.wired.com" {
 		t.Errorf("expected source 'www.wired.com' (host extracted), got %q", results[0].Source)
 	}
-	if results[0].PublishedAt != "Fri, 29 May 2026 12:00:00 GMT" {
-		t.Errorf("expected RFC1123 published date passthrough, got %q", results[0].PublishedAt)
+	// RFC1123 is normalized to ISO-8601 UTC (#234) for programmatic sorting.
+	if results[0].PublishedAt != "2026-05-29T12:00:00Z" {
+		t.Errorf("expected ISO-normalized published date '2026-05-29T12:00:00Z', got %q", results[0].PublishedAt)
 	}
 }
 

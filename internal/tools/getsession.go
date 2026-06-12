@@ -18,7 +18,7 @@ type getSessionInput struct {
 func registerGetSession(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "get_research_session",
-		Description:  "Recover a sequential_search research session after context loss. Returns the session summary, step index, and most recent steps. Use stepId to retrieve full details of a specific earlier step. Sessions persist for 4 hours from last activity and survive server restarts.",
+		Description:  "Recover a sequential_search research session after context loss. Returns the session summary, a one-liner step index covering every step, and the last 3 steps in full detail (the `lastSteps` sliding window). For full details of any earlier step, pass its stepId. A source's `foundInStep` is the 1-indexed step that surfaced it, omitted when the source was not tied to a numbered step (e.g. added via a web_search carrying only a sessionId) — there is no step 0. Sessions persist for 4 hours from last activity and survive server restarts.",
 		Annotations:  readOnlyAnnotations(true, false),
 		OutputSchema: getSessionOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input getSessionInput) (*mcp.CallToolResult, any, error) {

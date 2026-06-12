@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 type SerperProvider struct {
@@ -134,7 +135,7 @@ func (s *SerperProvider) doNewsSearch(ctx context.Context, params NewsSearchPara
 			Title:       r.Title,
 			URL:         r.Link,
 			Source:      r.Source,
-			PublishedAt: r.Date,
+			PublishedAt: normalizePublishedAt(r.Date, time.Now()),
 			Snippet:     r.Snippet,
 		})
 	}

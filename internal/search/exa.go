@@ -173,8 +173,8 @@ func (e *ExaProvider) doNewsSearch(ctx context.Context, params NewsSearchParams)
 		results = append(results, NewsResult{
 			Title:       r.Title,
 			URL:         r.URL,
-			Source:      extractDisplayLink(r.URL), // Exa has no separate source field; host is the honest source
-			PublishedAt: r.PublishedDate,           // empty when absent → dropped by NewsResult omitempty
+			Source:      extractDisplayLink(r.URL),                         // Exa has no separate source field; host is the honest source
+			PublishedAt: normalizePublishedAt(r.PublishedDate, time.Now()), // ISO-normalized; empty when absent/unparseable → dropped by omitempty
 			Snippet:     r.snippet(),
 		})
 	}

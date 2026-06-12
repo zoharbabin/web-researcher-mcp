@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -487,6 +488,149 @@ func TestVerifyCitation_TitleMatch_URLInputNoTitleMatch(t *testing.T) {
 	out := callVerify(t, setupTestDeps(), "Mock Paper, 2024")
 	if _, present := out["titleMatch"]; present {
 		t.Errorf("titleMatch must not be emitted for reference inputs, got %v", out["titleMatch"])
+	}
+}
+
+// scholarlyURLPage returns an HTML page that classifies peer_reviewed (citation_doi
+// meta) with the given title and a long body so the HTML tier wins and populates
+// StructuredData. Used by the #232 URL-input enrichment tests.
+func scholarlyURLPage(doi, title string) string {
+	return `<html><head><title>` + title + `</title>` +
+		`<meta name="citation_doi" content="` + doi + `">` +
+		`<meta name="citation_title" content="` + title + `">` +
+		`</head><body><article><p>` +
+		strings.Repeat("This randomized study reports its methods and results in detail. ", 6) +
+		`</p></article></body></html>`
+}
+
+// TestVerifyCitation_URLScholarlyDOIDetected (#232): a URL pointing at a scholarly
+// article (citation_doi meta) must extract the DOI and run the DOI enrichment —
+// surfacing detectedDoi + matchedRecord + titleMatch — instead of liveness-only.
+// The mock ResolveByDOI knows 10.1234/x → "Mock Paper", and the page title matches.
+func TestVerifyCitation_URLScholarlyDOIDetected(t *testing.T) {
+	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(scholarlyURLPage("10.1234/x", "Mock Paper")))
+	}))
+	defer page.Close()
+
+	out := callVerify(t, verifyClaimDeps(t), page.URL)
+	if out["inputType"] != "url" {
+		t.Fatalf("inputType = %v, want url", out["inputType"])
+	}
+	if out["detectedDoi"] != "10.1234/x" {
+		t.Errorf("detectedDoi = %v, want 10.1234/x", out["detectedDoi"])
+	}
+	if _, ok := out["matchedRecord"].(map[string]any); !ok {
+		t.Errorf("expected matchedRecord for a scholarly URL, got %v", out["matchedRecord"])
+	}
+	if out["matchConfidence"] != "high" {
+		t.Errorf("matchConfidence = %v, want high (exact DOI)", out["matchConfidence"])
+	}
+	if out["titleMatch"] != "match" {
+		t.Errorf("titleMatch = %v, want match (page title equals record title)", out["titleMatch"])
+	}
+}
+
+// TestVerifyCitation_URLScholarlyTitleMismatch (#232): a scholarly URL whose page
+// title does NOT match the record the DOI resolves to → titleMatch "mismatch"
+// (a misattributed link the caller should not trust). Page DOI 10.1234/x resolves
+// to "Mock Paper", but the page title is an unrelated string.
+func TestVerifyCitation_URLScholarlyTitleMismatch(t *testing.T) {
+	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(scholarlyURLPage("10.1234/x", "Quantum entanglement teleportation bandwidth")))
+	}))
+	defer page.Close()
+
+	out := callVerify(t, verifyClaimDeps(t), page.URL)
+	if out["detectedDoi"] != "10.1234/x" {
+		t.Fatalf("detectedDoi = %v, want 10.1234/x", out["detectedDoi"])
+	}
+	if out["titleMatch"] != "mismatch" {
+		t.Errorf("titleMatch = %v, want mismatch (page title differs from record)", out["titleMatch"])
+	}
+}
+
+// TestVerifyCitation_URLScholarlyRetracted (#232): a URL to a scholarly article
+// whose DOI Crossref reports retracted → retractionStatus.retracted, surfaced from
+// a URL input exactly as a DOI input would.
+func TestVerifyCitation_URLScholarlyRetracted(t *testing.T) {
+	crossref := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"message":{"updated-by":[{"DOI":"10.1/r","type":"retraction","source":"retraction-watch","updated":{"date-time":"2020-05-05T00:00:00Z"}}]}}`))
+	}))
+	defer crossref.Close()
+	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(scholarlyURLPage("10.1234/x", "Mock Paper")))
+	}))
+	defer page.Close()
+
+	deps := verifyClaimDeps(t)
+	rr := search.NewCrossrefRetractionResolver("t@e.com", search.Deps{
+		HTTPClient: crossref.Client(),
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+	})
+	rr.SetBaseURL(crossref.URL)
+	deps.RetractionResolver = rr
+
+	out := callVerify(t, deps, page.URL)
+	rs, ok := out["retractionStatus"].(map[string]any)
+	if !ok || rs["retracted"] != true {
+		t.Errorf("expected retractionStatus.retracted=true for a retracted scholarly URL, got %v", out["retractionStatus"])
+	}
+}
+
+// TestVerifyCitation_URLNonScholarlyNoFalseDOI (#232): a plain (non-scholarly) page
+// that happens to contain a DOI-shaped string in prose must NOT trigger DOI
+// enrichment — no detectedDoi, no matchedRecord, no titleMatch. This protects the
+// liveness-only contract for ordinary web pages.
+func TestVerifyCitation_URLNonScholarlyNoFalseDOI(t *testing.T) {
+	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><head><title>Blog</title></head><body><article><p>` +
+			strings.Repeat("Just an ordinary blog post about gardening tips and seasonal planting. ", 6) +
+			`A doi-shaped string 10.1234/x appears in prose.</p></article></body></html>`))
+	}))
+	defer page.Close()
+
+	out := callVerify(t, verifyClaimDeps(t), page.URL)
+	if _, present := out["detectedDoi"]; present {
+		t.Errorf("non-scholarly page must not surface detectedDoi, got %v", out["detectedDoi"])
+	}
+	if _, present := out["matchedRecord"]; present {
+		t.Errorf("non-scholarly page must not surface matchedRecord, got %v", out["matchedRecord"])
+	}
+	if _, present := out["titleMatch"]; present {
+		t.Errorf("non-scholarly page must not surface titleMatch, got %v", out["titleMatch"])
+	}
+}
+
+// TestVerifyCitation_URLScholarlyClaim (#232): a scholarly URL given with a claim
+// surfaces BOTH the DOI enrichment (detectedDoi) and the claim coverage — the body
+// fetched for DOI detection is reused for the claim check (a code-level guarantee;
+// see enrichURLWithScholarlyDOI → emitClaimCoverageFromContent).
+func TestVerifyCitation_URLScholarlyClaim(t *testing.T) {
+	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><head><title>Mock Paper</title>` +
+			`<meta name="citation_doi" content="10.1234/x">` +
+			`<meta name="citation_title" content="Mock Paper">` +
+			`</head><body><article><p>` +
+			strings.Repeat("The randomized trial showed the vaccine significantly reduced infection rates across all groups. ", 4) +
+			`</p></article></body></html>`))
+	}))
+	defer page.Close()
+
+	out := callVerifyClaim(t, verifyClaimDeps(t), page.URL, "vaccine reduced infection rates")
+	if out["detectedDoi"] != "10.1234/x" {
+		t.Errorf("detectedDoi = %v, want 10.1234/x", out["detectedDoi"])
+	}
+	if out["claimSupport"] != "addressed" {
+		t.Errorf("claimSupport = %v, want addressed", out["claimSupport"])
+	}
+	if out["claimSourceUrl"] != page.URL {
+		t.Errorf("claimSourceUrl = %v, want %s", out["claimSourceUrl"], page.URL)
 	}
 }
 

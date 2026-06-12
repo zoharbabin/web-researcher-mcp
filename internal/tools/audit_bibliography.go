@@ -235,6 +235,16 @@ const (
 // that must appear in the source to call it fully "addressed". Above zero but
 // below it is "partially_addressed" — evidence is surfaced, no flag raised
 // (under-flagging is the safe direction, same discipline as not_found/unchecked).
+//
+// Known precision edge (#235 item 6): a claim that shares ONE strong keyword with
+// an off-topic source (e.g. "quantum computing algorithms for drug discovery"
+// against a nanoscale-thermometry paper that merely says "quantum") lands in
+// partially_addressed rather than the mischaracterized flag. That is the
+// deliberate model-free lexical tradeoff: we never assert mischaracterization on
+// thin overlap (a false positive would wrongly accuse a real source), so the
+// borderline case surfaces the evidence sentences and lets the reader judge.
+// Windowed coverage (#177) already narrows this by measuring peak overlap within
+// a passage rather than across the whole document.
 const claimAddressedThreshold = 0.6
 
 // auditEntryResult is the per-entry evidence bundle.
@@ -393,11 +403,20 @@ func auditOneEntry(ctx context.Context, deps Dependencies, e content.BibEntry, r
 	if e.Title != "" && hasAcademicSearcher(deps) {
 		r.ExistChecked = true
 		if rec := lookupAcademicRecord(ctx, deps, e.Title); rec != nil {
-			t := true
-			r.Exists = &t
-			if rec.DOI != "" && deps.RetractionResolver != nil && r.Retraction == nil {
-				if status, _, err := deps.RetractionResolver.Resolve(ctx, rec.DOI); err == nil && status != nil {
-					r.Retraction = status
+			// A title search returns the single best hit, which can be a coincidental
+			// near-neighbor (e.g. an unrelated paper sharing one common word). Only
+			// treat it as confirming existence when the match is high/medium
+			// confidence — the same token-overlap heuristic verify_citation uses for
+			// titleMatch. A "low" match is a weak coincidence, not corroboration, so
+			// the entry falls through to unchecked rather than being shown as verified
+			// (#225). The record is otherwise unused here, so a near-miss is dropped.
+			if referenceMatchConfidence(e.Title, rec) != "low" {
+				t := true
+				r.Exists = &t
+				if rec.DOI != "" && deps.RetractionResolver != nil && r.Retraction == nil {
+					if status, _, err := deps.RetractionResolver.Resolve(ctx, rec.DOI); err == nil && status != nil {
+						r.Retraction = status
+					}
 				}
 			}
 		}
@@ -479,15 +498,19 @@ func auditFlags(r auditEntryResult) ([]string, string) {
 		flags = append(flags, auditFlagNotFound)
 		return flags, "DOI not found in Crossref — verify the identifier (possible fabrication or typo)."
 	}
+	// Nothing corroborated the entry: no authoritative DOI miss, and existence was
+	// not confirmed by a high/medium-confidence academic match or a live link. A
+	// title-only entry whose academic lookup was a coincidental near-neighbor lands
+	// here (auditOneEntry only sets exists=true on a confident title match), so an
+	// uncheckable citation reads as unchecked, never as verified (#225).
 	flags = append(flags, auditFlagUnchecked)
-	switch {
-	case r.DOI == "" && r.URL == "":
-		return flags, "no DOI or URL to check — existence could not be corroborated (absence of evidence, not evidence of absence)."
-	case r.LinkLive != nil && !*r.LinkLive:
+	if r.LinkLive != nil && !*r.LinkLive {
 		return flags, "link did not resolve and no identifier confirmed existence."
-	default:
-		return flags, "could not be corroborated against an authoritative source (e.g. a book, paywalled, or non-indexed source)."
 	}
+	if r.DOI == "" && r.URL == "" {
+		return flags, "no DOI or URL to check — existence could not be corroborated (absence of evidence, not evidence of absence)."
+	}
+	return flags, "could not be corroborated against an authoritative source (e.g. a book, paywalled, or non-indexed source)."
 }
 
 // hasAcademicSearcher reports whether an academic existence lookup is even

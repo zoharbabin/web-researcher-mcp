@@ -37,15 +37,26 @@ func claimCoverageFor(ctx context.Context, deps Dependencies, fetchURL, claim st
 	if err != nil || res == nil || strings.TrimSpace(res.Content) == "" {
 		return claimCoverageResult{Support: claimSourceUnavailable}
 	}
+	return claimCoverageFromContent(res.Content, fetchURL, claim)
+}
 
+// claimCoverageFromContent runs the lexical, model-free coverage check against
+// already-fetched content — no scrape. It lets a caller that already has the
+// page body (e.g. verify_citation's URL path, which fetches once to detect a DOI)
+// reuse that single fetch for the claim check instead of fetching twice. Empty
+// body → source_unavailable.
+func claimCoverageFromContent(body, fetchURL, claim string) claimCoverageResult {
+	if strings.TrimSpace(body) == "" {
+		return claimCoverageResult{Support: claimSourceUnavailable}
+	}
 	// Term coverage is the transparent, dependency-free measure of topical overlap,
 	// measured as PEAK coverage within a sentence window (#177) so a narrow claim
 	// whose terms are merely scattered across a long page is not over-counted. Zero
 	// local overlap → not_addressed (the only flagged end, and only when the source
 	// was actually read). Partial overlap → evidence shown, NOT flagged (the human
 	// judges). Strong overlap → addressed.
-	matched, total := content.ClaimTermCoverageWindowed(res.Content, claim, 0)
-	ev := content.ExtractClaimEvidence(res.Content, claim)
+	matched, total := content.ClaimTermCoverageWindowed(body, claim, 0)
+	ev := content.ExtractClaimEvidence(body, claim)
 	out := claimCoverageResult{
 		Evidence:  ev.KeySentences,
 		SourceURL: fetchURL,

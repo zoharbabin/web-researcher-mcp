@@ -11,6 +11,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
+	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
@@ -196,6 +197,55 @@ func TestScrapeDOI_RawModeNoFields(t *testing.T) {
 	out := callScrapeDOI(t, deps, page.URL, "raw")
 	if _, present := out["detectedDoi"]; present {
 		t.Errorf("raw mode must not surface detectedDoi, got %v", out["detectedDoi"])
+	}
+}
+
+// TestDetectScholarlyDOI_FromURLPath (#231): a publisher article URL carries the
+// canonical DOI in its path (e.g. nejm.org/doi/full/10.1056/...). When the tier
+// that produced the content stripped the citation_doi meta (the exa:cached path),
+// the URL path is the authoritative, references-safe source — it must be detected.
+func TestDetectScholarlyDOI_FromURLPath(t *testing.T) {
+	t.Parallel()
+	const url = "https://www.nejm.org/doi/full/10.1056/NEJMoa2107715"
+	// No citation_doi meta, no DOI in the body front matter — only the URL path.
+	got := detectScholarlyDOI(nil, "Abstract of a clinical trial with no identifier in the prose.", url)
+	if got != "10.1056/nejmoa2107715" {
+		t.Errorf("detectScholarlyDOI from URL path = %q, want %q", got, "10.1056/nejmoa2107715")
+	}
+}
+
+// TestDetectScholarlyDOI_MetaBeatsURL: when both the citation_doi meta and a
+// (different) URL-path DOI are present, the authoritative meta wins.
+func TestDetectScholarlyDOI_MetaBeatsURL(t *testing.T) {
+	t.Parallel()
+	sd := &scraper.StructuredData{Citation: map[string]string{"citation_doi": "10.1234/meta"}}
+	got := detectScholarlyDOI(sd, "body", "https://host/doi/10.5555/urlpath")
+	if got != "10.1234/meta" {
+		t.Errorf("citation_doi meta must win over URL path, got %q", got)
+	}
+}
+
+// TestScrapeDOI_DetectedFromURLPath is the #231 end-to-end guard: a page that
+// classifies peer_reviewed via citation_title meta but carries NO citation_doi
+// (the meta a cache tier preserves) must still surface the DOI from the URL path.
+func TestScrapeDOI_DetectedFromURLPath(t *testing.T) {
+	deps, closeCR := crossrefRetractionDeps(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"message":{}}`))
+	})
+	defer closeCR()
+	// citation_title (classifies scholarly) but NO citation_doi and no DOI in body.
+	page := `<html><head><title>Trial</title><meta name="citation_title" content="Trial"></head>` +
+		`<body><article><p>` + strings.Repeat("This randomized study reports methods and results in detail. ", 6) +
+		`</p></article></body></html>`
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(page))
+	}))
+	defer ts.Close()
+
+	out := callScrapeDOI(t, deps, ts.URL+"/doi/full/10.1056/NEJMoa2107715", "")
+	if out["detectedDoi"] != "10.1056/nejmoa2107715" {
+		t.Errorf("detectedDoi = %v, want 10.1056/nejmoa2107715 (from URL path)", out["detectedDoi"])
 	}
 }
 

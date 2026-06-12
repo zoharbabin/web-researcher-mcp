@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 const (
@@ -112,8 +113,8 @@ func (t *TavilyProvider) doNewsSearch(ctx context.Context, params NewsSearchPara
 		results = append(results, NewsResult{
 			Title:       r.Title,
 			URL:         r.URL,
-			Source:      extractDisplayLink(r.URL), // Tavily has no separate source field; host is the honest source
-			PublishedAt: r.PublishedDate,           // populated on topic:"news" (RFC1123); empty on general => dropped by NewsResult omitempty
+			Source:      extractDisplayLink(r.URL),                         // Tavily has no separate source field; host is the honest source
+			PublishedAt: normalizePublishedAt(r.PublishedDate, time.Now()), // ISO-normalized (Tavily news = RFC1123); empty on general => dropped by omitempty
 			Snippet:     r.Content,
 		})
 	}

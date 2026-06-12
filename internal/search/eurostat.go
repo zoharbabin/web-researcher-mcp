@@ -168,7 +168,10 @@ func parseEurostatTOC(tsv string) []eurostatTOCEntry {
 		if len(cols) < 3 {
 			continue
 		}
-		title := strings.Trim(strings.TrimSpace(cols[0]), `"`)
+		// Trim quotes BEFORE the inner whitespace: the TOC indents the title
+		// inside its quotes to show tree depth ("   Unemployment rate…"), so
+		// trimming space first would leave the indentation once the quotes go (#235).
+		title := strings.TrimSpace(strings.Trim(strings.TrimSpace(cols[0]), `"`))
 		code := strings.Trim(strings.TrimSpace(cols[1]), `"`)
 		typ := strings.Trim(strings.TrimSpace(cols[2]), `"`)
 		if code == "" || (typ != "dataset" && typ != "table") {

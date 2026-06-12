@@ -9,6 +9,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
@@ -89,7 +90,22 @@ func emitClaimCoverage(ctx context.Context, deps Dependencies, fetchURL, claim s
 	if claim == "" {
 		return
 	}
-	cc := claimCoverageFor(ctx, deps, fetchURL, claim)
+	emitClaimCoverageResult(claimCoverageFor(ctx, deps, fetchURL, claim), claim, out, prov)
+}
+
+// emitClaimCoverageFromContent is emitClaimCoverage over an already-fetched page
+// body, reusing the single fetch verify_citation's URL path already performed for
+// scholarly-DOI detection instead of scraping the same URL twice (#232).
+func emitClaimCoverageFromContent(_ context.Context, _ Dependencies, body, fetchURL, claim string, out map[string]any, prov *[]string) {
+	if claim == "" {
+		return
+	}
+	emitClaimCoverageResult(claimCoverageFromContent(body, fetchURL, claim), claim, out, prov)
+}
+
+// emitClaimCoverageResult writes a claimCoverageResult into out with the exact
+// emission discipline both emitters share.
+func emitClaimCoverageResult(cc claimCoverageResult, claim string, out map[string]any, prov *[]string) {
 	out["claim"] = claim
 	out["claimSupport"] = cc.Support
 	if len(cc.Evidence) > 0 {
@@ -113,77 +129,64 @@ func verifyByDOI(ctx context.Context, deps Dependencies, doi, citation, claim st
 	if deps.RetractionResolver != nil {
 		status, found, err := deps.RetractionResolver.Resolve(ctx, doi)
 		if err == nil {
-			out["exists"] = found
+			// Crossref found=true is authoritative existence — record it. But
+			// found=false is NOT authoritative absence: Crossref does not index every
+			// registrant (notably arXiv DOIs, 10.48550/*, return 404 there while the
+			// work is real and indexed by OpenAlex). So a found=false must NOT short-
+			// circuit exists, or the OpenAlex ResolveByDOI lookup below never runs and
+			// a real arXiv preprint is mislabeled nonexistent (#226). Leave exists
+			// unset on found=false; the academic resolver (or the final fallback) sets
+			// it honestly.
+			if found {
+				out["exists"] = true
+			}
 			*prov = append(*prov, "crossref: works/"+doi)
 			if status != nil {
 				out["retractionStatus"] = status
 			}
 		}
 	}
-	// Best-effort matched record (title/authors/year) from an academic provider.
-	// lookupAcademicRecord runs a SEARCH with the DOI as the query and takes the
-	// top hit, which can be a fuzzy neighbor rather than the exact work — so we
-	// attach it ONLY when its DOI equals the input DOI. A non-matching hit is
-	// discarded (never shown as this DOI's record); recording a wrong/unrelated
-	// paper here would be a fabrication of exactly the kind this tool exists to
-	// catch. The match is also skipped once existence is known to be false (a
-	// fabricated DOI has no real record to attach).
+	// Best-effort matched record (title/authors/year) via an EXACT-DOI lookup.
+	// lookupRecordByDOI prefers the DOIResolver entity endpoint (OpenAlex
+	// /works/doi:{doi}), so it resolves works Crossref doesn't index — notably
+	// arXiv DOIs — and confirms existence the retraction resolver couldn't (#226).
+	// The record is attached ONLY when its DOI equals the input DOI (the resolver
+	// already enforces sameDOI); a wrong/near-neighbor paper is never shown as this
+	// DOI's record, since that would be a fabrication of exactly the kind this tool
+	// exists to catch. Always attempted: even when Crossref returned found=false,
+	// OpenAlex may legitimately resolve the work (so exists can still become true).
 	recURL := ""
-	existsFalse := false
-	if v, ok := out["exists"].(bool); ok && !v {
-		existsFalse = true
+	if rec := lookupRecordByDOI(ctx, deps, doi); rec != nil {
+		out["matchedRecord"] = rec
+		out["matchConfidence"] = "high" // exact-DOI match confirmed
+		recURL = bestClaimURL(rec, doi)
+		*prov = append(*prov, "academic record matched by exact DOI")
+		if _, ok := out["exists"]; !ok {
+			out["exists"] = true
+		}
+		// #221: compare caller-supplied title (text remaining after DOI removal)
+		// against the matched record title (see computeTitleMatch).
+		titleText := strings.TrimSpace(doiPattern.ReplaceAllString(citation, ""))
+		out["titleMatch"] = computeTitleMatch(titleText, rec)
+		*prov = append(*prov, "title compared against matched record ("+out["titleMatch"].(string)+")")
 	}
-	if !existsFalse {
-		if rec := lookupRecordByDOI(ctx, deps, doi); rec != nil {
-			out["matchedRecord"] = rec
-			out["matchConfidence"] = "high" // exact-DOI match confirmed
-			recURL = bestClaimURL(rec, doi)
-			*prov = append(*prov, "academic record matched by exact DOI")
-			if _, ok := out["exists"]; !ok {
-				out["exists"] = true
-			}
-			// #221: compare caller-supplied title (text remaining after DOI removal)
-			// against the matched record title using the same token-overlap heuristic
-			// as free-text match confidence. Emitted as titleMatch: "match" |
-			// "mismatch" | "not_checked". "not_checked" when there is no title text to
-			// compare (bare DOI only). Zero false positives: a single-token overlap is
-			// "low" confidence and maps to "not_checked" (ambiguous), so a caller who
-			// supplies only the DOI or one short word is never falsely flagged.
-			if titleText := strings.TrimSpace(doiPattern.ReplaceAllString(citation, "")); titleText != "" {
-				conf := referenceMatchConfidence(titleText, rec)
-				switch conf {
-				case "high", "medium":
-					out["titleMatch"] = "match"
-				case "low":
-					// low = single coincidental token — treat as not_checked (ambiguous).
-					out["titleMatch"] = "not_checked"
-				default:
-					out["titleMatch"] = "mismatch"
-				}
-				// Detect genuine mismatch: low confidence when there are substantive
-				// tokens that do NOT match at all. Require ≥2 substantive tokens in the
-				// supplied title text that are clearly NOT in the record title.
-				if conf == "low" || conf == "none" {
-					suppliedLower := strings.ToLower(titleText)
-					recTitleLower := strings.ToLower(rec.Title)
-					var miss, totalSub int
-					for _, tok := range strings.Fields(suppliedLower) {
-						if len(tok) <= 3 {
-							continue
-						}
-						totalSub++
-						if !strings.Contains(recTitleLower, tok) {
-							miss++
-						}
-					}
-					if totalSub >= 2 && miss >= 2 {
-						out["titleMatch"] = "mismatch"
-					}
-				}
+	// Authoritative cross-registrar existence (#226): neither Crossref nor the
+	// academic resolvers index every DOI — arXiv preprint DOIs (10.48550/*) are
+	// registered through DataCite, 404 in Crossref, and no longer carried under
+	// that DOI by OpenAlex, so both paths above leave exists unset for a real,
+	// heavily-cited preprint. The doi.org handle API resolves DOIs from EVERY
+	// registration agency, so it confirms existence the indexers miss while still
+	// reporting a fabricated DOI (valid prefix, nonexistent suffix) as not-found.
+	// Consulted only when existence is still unknown; never overrides a resolver
+	// that already confirmed existence.
+	if _, ok := out["exists"]; !ok && deps.DOIRegistry != nil {
+		if registered, err := deps.DOIRegistry.IsRegistered(ctx, doi); err == nil {
+			out["exists"] = registered
+			if registered {
+				*prov = append(*prov, "doi.org handle registry: registered")
 			} else {
-				out["titleMatch"] = "not_checked"
+				*prov = append(*prov, "doi.org handle registry: not registered with any DOI agency")
 			}
-			*prov = append(*prov, "title compared against matched record ("+out["titleMatch"].(string)+")")
 		}
 	}
 	if _, ok := out["exists"]; !ok {
@@ -200,7 +203,58 @@ func verifyByDOI(ctx context.Context, deps Dependencies, doi, citation, claim st
 	emitClaimCoverage(ctx, deps, recURL, claim, out, prov)
 }
 
-// verifyByURL checks link liveness + Wayback fallback.
+// computeTitleMatch compares a caller-supplied title string (the text remaining
+// after any DOI has been stripped, or a page's own title) against a matched
+// record's title (#221). Returns "match" | "mismatch" | "not_checked".
+// "not_checked" when there's no title text to compare (bare DOI / no title).
+// Zero false positives: a single-token overlap is "low" confidence and maps to
+// "not_checked" (ambiguous); "mismatch" fires only when ≥2 substantive tokens
+// (>3 chars) in the supplied title are clearly ABSENT from the record title.
+func computeTitleMatch(titleText string, rec *search.AcademicResult) string {
+	titleText = strings.TrimSpace(titleText)
+	if titleText == "" || rec == nil {
+		return "not_checked"
+	}
+	conf := referenceMatchConfidence(titleText, rec)
+	var result string
+	switch conf {
+	case "high", "medium":
+		result = "match"
+	case "low":
+		// low = single coincidental token — treat as not_checked (ambiguous).
+		result = "not_checked"
+	default:
+		result = "mismatch"
+	}
+	// Detect genuine mismatch: low/none confidence when there are substantive
+	// tokens that do NOT match at all. Require ≥2 substantive tokens in the
+	// supplied title text that are clearly NOT in the record title.
+	if conf == "low" || conf == "none" {
+		suppliedLower := strings.ToLower(titleText)
+		recTitleLower := strings.ToLower(rec.Title)
+		var miss, totalSub int
+		for _, tok := range strings.Fields(suppliedLower) {
+			if len(tok) <= 3 {
+				continue
+			}
+			totalSub++
+			if !strings.Contains(recTitleLower, tok) {
+				miss++
+			}
+		}
+		if totalSub >= 2 && miss >= 2 {
+			result = "mismatch"
+		}
+	}
+	return result
+}
+
+// verifyByURL checks link liveness + Wayback fallback, and — when the URL
+// resolves to a scholarly article — extracts its DOI and runs the same
+// existence/retraction/title enrichment as a DOI input (#232). Without this, a
+// URL pointing at a real-but-retracted (or fabricated-title) paper would report
+// only "the link is live", silently passing exactly the citations this tool
+// exists to catch.
 func verifyByURL(ctx context.Context, deps Dependencies, rawURL, claim string, out map[string]any, prov *[]string) {
 	fetchURL := ""
 	statuses := verifyLinkStatuses(ctx, deps, []string{rawURL})
@@ -222,7 +276,71 @@ func verifyByURL(ctx context.Context, deps Dependencies, rawURL, claim string, o
 		out["exists"] = false
 		*prov = append(*prov, "link verifier unavailable")
 	}
-	emitClaimCoverage(ctx, deps, fetchURL, claim, out, prov)
+
+	// Scholarly enrichment (#232): fetch the page once, and if it classifies as a
+	// peer-reviewed / academic-domain source, extract its DOI (citation_doi meta →
+	// URL path → references-safe front matter) and run the DOI enrichment path so a
+	// URL to a retracted or title-mismatched paper is flagged, not just "live". The
+	// single fetched body is reused for the claim-coverage check below to avoid a
+	// second fetch.
+	body := enrichURLWithScholarlyDOI(ctx, deps, fetchURL, rawURL, out, prov)
+
+	if body != "" {
+		emitClaimCoverageFromContent(ctx, deps, body, fetchURL, claim, out, prov)
+	} else {
+		emitClaimCoverage(ctx, deps, fetchURL, claim, out, prov)
+	}
+}
+
+// enrichURLWithScholarlyDOI fetches fetchURL once, classifies it, and — when it
+// is a scholarly source — detects its DOI and runs the matched-record /
+// retraction / titleMatch enrichment (the same signals verifyByDOI emits).
+// Returns the fetched page body so the caller can reuse it for claim coverage
+// (avoiding a double fetch); "" when nothing was fetched. Best-effort and
+// fail-open: any miss leaves out untouched (preserving the liveness-only result).
+func enrichURLWithScholarlyDOI(ctx context.Context, deps Dependencies, fetchURL, rawURL string, out map[string]any, prov *[]string) string {
+	if deps.Scraper == nil || fetchURL == "" {
+		return ""
+	}
+	res, err := deps.Scraper.Scrape(ctx, fetchURL, auditClaimScrapeMaxBytes)
+	if err != nil || res == nil || strings.TrimSpace(res.Content) == "" {
+		return ""
+	}
+	body := res.Content
+
+	// Classify against the ORIGINAL URL (rawURL), not a Wayback snapshot URL — the
+	// snapshot host (web.archive.org) is not the scholarly host, so the academic
+	// host/domain signal must come from the real article URL.
+	cls := classifySource(rawURL, res.Title, body, "", "", res.StructuredData)
+	if cls.SourceType != content.SourceTypePeerReviewed && cls.DomainCategory != content.DomainCategoryAcademic {
+		return body
+	}
+	doi := detectScholarlyDOI(res.StructuredData, body, rawURL)
+	if doi == "" {
+		return body
+	}
+	out["detectedDoi"] = doi
+	*prov = append(*prov, "scholarly DOI detected from page: "+doi)
+
+	// Retraction status for the detected DOI.
+	if deps.RetractionResolver != nil {
+		if status, _, err := deps.RetractionResolver.Resolve(ctx, doi); err == nil && status != nil {
+			out["retractionStatus"] = status
+			*prov = append(*prov, "crossref retraction: works/"+doi)
+		}
+	}
+	// Matched record by exact DOI — the same trustworthy entity lookup verifyByDOI
+	// uses (the cited work or nothing, never a near-neighbour).
+	if rec := lookupRecordByDOI(ctx, deps, doi); rec != nil {
+		out["matchedRecord"] = rec
+		out["matchConfidence"] = "high"
+		*prov = append(*prov, "academic record matched by exact DOI")
+		// titleMatch against the page's own title (#232): a mismatch between the
+		// page title and the matched record surfaces a misattributed URL.
+		out["titleMatch"] = computeTitleMatch(res.Title, rec)
+		*prov = append(*prov, "title compared against matched record ("+out["titleMatch"].(string)+")")
+	}
+	return body
 }
 
 // verifyByReference does a best-match academic lookup of a free-text reference,
@@ -231,6 +349,24 @@ func verifyByURL(ctx context.Context, deps Dependencies, rawURL, claim string, o
 // asserts the reference is "real".
 func verifyByReference(ctx context.Context, deps Dependencies, ref, claim string, out map[string]any, prov *[]string) {
 	rec := lookupAcademicRecord(ctx, deps, ref)
+	conf := ""
+	if rec != nil {
+		conf = referenceMatchConfidence(ref, rec)
+	}
+	// The first searcher (often Crossref) returns its single best title hit, which
+	// can be a wrong near-neighbor at "low" confidence — e.g. "Attention is all you
+	// need" resolving to an unrelated traffic-prediction paper because the real work
+	// is an arXiv preprint Crossref doesn't index well. A wrong low-confidence match
+	// is worse than an honest miss (it can validate a misattribution), so when the
+	// first hit is low confidence, scan the remaining academic providers (notably
+	// OpenAlex, which indexes arXiv by title) for a higher-confidence match (#226).
+	if rec == nil || conf == "low" {
+		if better, betterConf := bestReferenceMatch(ctx, deps, ref); better != nil &&
+			confidenceRank(betterConf) > confidenceRank(conf) {
+			rec, conf = better, betterConf
+			*prov = append(*prov, "low-confidence first match — re-resolved across academic providers")
+		}
+	}
 	if rec == nil {
 		out["exists"] = false
 		out["matchConfidence"] = "none"
@@ -243,7 +379,7 @@ func verifyByReference(ctx context.Context, deps Dependencies, ref, claim string
 	}
 	out["matchedRecord"] = rec
 	out["exists"] = true
-	out["matchConfidence"] = referenceMatchConfidence(ref, rec)
+	out["matchConfidence"] = conf
 	*prov = append(*prov, "best-match academic lookup ("+rec.Source+")")
 	// If the matched record has a DOI, check retraction too.
 	if rec.DOI != "" && deps.RetractionResolver != nil {
@@ -329,6 +465,61 @@ func scholarlySearch(ctx context.Context, deps Dependencies, query string, num i
 		}
 	}
 	return nil
+}
+
+// bestReferenceMatch resolves a free-text reference against EVERY configured
+// academic provider (default searcher first, then the supported order) and returns
+// the single match with the highest title-overlap confidence. It is the fallback
+// for when the cheap first-hit lookup returns a wrong low-confidence neighbor:
+// OpenAlex, in particular, indexes arXiv preprints by title that Crossref's
+// free-text search misses (#226). Best-effort — nil when no provider matches.
+func bestReferenceMatch(ctx context.Context, deps Dependencies, ref string) (*search.AcademicResult, string) {
+	var best *search.AcademicResult
+	bestConf := ""
+	consider := func(results []search.AcademicResult) {
+		for i := range results {
+			c := referenceMatchConfidence(ref, &results[i])
+			if best == nil || confidenceRank(c) > confidenceRank(bestConf) {
+				r := results[i]
+				best, bestConf = &r, c
+			}
+		}
+	}
+	params := search.AcademicSearchParams{Query: ref, NumResults: 5}
+	if as, errResult := resolveAcademicSearcher(deps, ""); errResult == nil && as != nil {
+		if results, err := as.Scholarly(ctx, params); err == nil {
+			consider(results)
+		}
+	}
+	for _, name := range search.SupportedAcademicProviders {
+		ap, ok := deps.AcademicProviders[name]
+		if !ok {
+			continue
+		}
+		if results, err := ap.Scholarly(ctx, params); err == nil {
+			consider(results)
+		}
+		if bestConf == "high" {
+			break // can't do better; stop querying further providers
+		}
+	}
+	return best, bestConf
+}
+
+// confidenceRank orders the coarse confidence labels so they can be compared
+// (none/"" < low < medium < high). Used to pick the strongest match across
+// providers and to decide whether a re-resolve actually improved on the first hit.
+func confidenceRank(c string) int {
+	switch c {
+	case "high":
+		return 3
+	case "medium":
+		return 2
+	case "low":
+		return 1
+	default:
+		return 0
+	}
 }
 
 // referenceMatchConfidence is a coarse, transparent heuristic: high when the

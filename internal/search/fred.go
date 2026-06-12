@@ -108,10 +108,17 @@ func (f *FREDProvider) observations(ctx context.Context, params EconSearchParams
 	num := clamp(params.NumResults, 1, 100)
 	q := f.baseParams()
 	q.Set("series_id", params.SeriesID)
-	q.Set("sort_order", "desc") // most-recent observations first
 	q.Set("limit", strconv.Itoa(num))
+	// Order so the `limit` window anchors where the caller asked. With a
+	// `date_from`, ascending takes the first N observations FROM that date
+	// (otherwise FRED filters to [date_from, end] then desc+limit hands back the
+	// latest N, silently ignoring the anchor — #233). With no `date_from`,
+	// descending gives the most-recent N (the "what's the latest value" case).
 	if params.DateFrom != "" {
+		q.Set("sort_order", "asc")
 		q.Set("observation_start", params.DateFrom)
+	} else {
+		q.Set("sort_order", "desc")
 	}
 	if params.DateTo != "" {
 		q.Set("observation_end", params.DateTo)

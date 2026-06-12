@@ -144,6 +144,36 @@ func (m *capturingSynth) StructuredSearch(_ context.Context, p search.Structured
 
 var gotStructuredNum int
 
+// TestSynthesisRelevanceHints covers the low-confidence query↔result overlap
+// signal (#235): fires only when few of a multi-term query's significant terms
+// appear in the synthesized content, and stays silent on adequate overlap or a
+// too-short query.
+func TestSynthesisRelevanceHints(t *testing.T) {
+	t.Parallel()
+
+	// Weak overlap: a multi-term query whose terms are absent from the answer.
+	h := synthesisRelevanceHints("quantum gravity loop renormalization", "A recipe for chocolate chip cookies.")
+	if h == nil {
+		t.Fatal("weak query↔result overlap should produce a low-confidence hint")
+	}
+	if h["confidence"] != "low" {
+		t.Errorf("confidence = %v, want low", h["confidence"])
+	}
+	if h["reason"] != "weak_query_result_overlap" {
+		t.Errorf("reason = %v", h["reason"])
+	}
+
+	// Adequate overlap: most query terms appear → no hint.
+	if h := synthesisRelevanceHints("tokyo population 2026", "The population of Tokyo in 2026 was about 14 million."); h != nil {
+		t.Errorf("adequate overlap should not flag, got %v", h)
+	}
+
+	// Too-short query (0–1 significant terms) → never flagged, even with no overlap.
+	if h := synthesisRelevanceHints("hi", "something completely unrelated"); h != nil {
+		t.Errorf("a one-term query must not be flagged low-confidence, got %v", h)
+	}
+}
+
 func TestStructuredSearchClampsNumResults(t *testing.T) {
 	cap := &capturingSynth{}
 	deps := setupTestDeps()

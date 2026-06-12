@@ -1213,6 +1213,31 @@ func TestWebSearchSourceReputationWithClaim(t *testing.T) {
 	}
 }
 
+// TestWebSearchClaimSignalUniform guards #235 item 2: when a claim is supplied,
+// EVERY result carries a claimSignal key (the empty string when no snippet
+// sentence is relevant), never a sometimes-absent field — so downstream
+// null-checking sees a uniform shape.
+func TestWebSearchClaimSignalUniform(t *testing.T) {
+	t.Parallel()
+	results := []search.SearchResult{
+		{Title: "Relevant", URL: "https://example.org/a", Snippet: "the pandemic caused significant mortality worldwide"},
+		{Title: "Irrelevant", URL: "https://example.org/b", Snippet: "a recipe for chocolate chip cookies"},
+	}
+	enriched := enrichResultsWithReputation(results, "pandemic mortality")
+	if len(enriched) != 2 {
+		t.Fatalf("want 2 results, got %d", len(enriched))
+	}
+	for i, e := range enriched {
+		if _, ok := e["claimSignal"]; !ok {
+			t.Errorf("result %d: claimSignal key must be present when a claim is supplied", i)
+		}
+	}
+	// The non-matching result must carry an empty signal, not be missing the key.
+	if got := enriched[1]["claimSignal"]; got != "" {
+		t.Errorf("non-matching result claimSignal = %q, want empty string", got)
+	}
+}
+
 func TestImageSearchEmptyQuery(t *testing.T) {
 	ctx := context.Background()
 	deps := setupTestDeps()

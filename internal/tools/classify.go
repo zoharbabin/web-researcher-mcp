@@ -47,7 +47,10 @@ func classificationFields(c content.SourceClassification) map[string]any {
 // always attaching a sourceReputation field when the host is in the reputation
 // dataset (#198). The field is omitted for unknown hosts (no false confidence).
 // When claim is non-empty, a claimSignal (the most claim-relevant snippet
-// sentence) is also added (#66).
+// sentence) is added to EVERY result (#66) — the empty string when no snippet
+// sentence is relevant — so the field's presence is uniform across results in a
+// claim query and downstream null-checking stays simple (#235): claimSignal is
+// always present when a claim was given, never sometimes-absent.
 func enrichResultsWithReputation(results []search.SearchResult, claim string) []map[string]any {
 	out := make([]map[string]any, 0, len(results))
 	for _, r := range results {
@@ -61,9 +64,10 @@ func enrichResultsWithReputation(results []search.SearchResult, claim string) []
 			m["sourceReputation"] = rep
 		}
 		if claim != "" {
-			if ev := content.ExtractClaimEvidence(r.Snippet, claim); ev.Signal != "" {
-				m["claimSignal"] = ev.Signal
-			}
+			// Always emit the field (empty when no relevant sentence) for a uniform
+			// per-result shape — an empty claimSignal means "no snippet sentence
+			// matched", never "field missing".
+			m["claimSignal"] = content.ExtractClaimEvidence(r.Snippet, claim).Signal
 		}
 		out = append(out, m)
 	}

@@ -171,7 +171,7 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		// verdict or an identity claim: "this DOI appears on the page; here is its
 		// recorded integrity status."
 		if cls.SourceType == content.SourceTypePeerReviewed || cls.DomainCategory == content.DomainCategoryAcademic {
-			if doi := detectScholarlyDOI(result.StructuredData, processedContent); doi != "" {
+			if doi := detectScholarlyDOI(result.StructuredData, processedContent, input.URL); doi != "" {
 				output["detectedDoi"] = doi
 				if deps.RetractionResolver != nil {
 					if status, _, err := deps.RetractionResolver.Resolve(ctx, doi); err == nil && status != nil {
@@ -282,16 +282,22 @@ func scrapeRaw(ctx context.Context, deps Dependencies, input scrapePageInput, ma
 // references-list DOI can never be mistaken for the page's own DOI (#199).
 const detectScholarlyDOITopBytes = 4000
 
-// detectScholarlyDOI returns the page's own DOI, preferring the publisher's
-// Highwire citation_doi <head> meta (authoritative, never a references artifact)
-// and falling back only to a DOI in the first detectScholarlyDOITopBytes of the
-// cleaned body (the front matter, above any references list). Returns "" when none
-// is found. Reuses detectDOI/doiPattern (package tools); no new dependency.
-func detectScholarlyDOI(sd *scraper.StructuredData, body string) string {
+// detectScholarlyDOI returns the page's own DOI, in descending order of
+// authority: the publisher's Highwire citation_doi <head> meta (never a
+// references artifact); a DOI embedded in the request URL path itself (the
+// publisher's canonical article identifier, e.g. nejm.org/doi/full/10.1056/...
+// — references-safe and present even on tiers that strip the citation meta, such
+// as exa:cached); then a DOI in the first detectScholarlyDOITopBytes of the
+// cleaned body (the front matter, above any references list). Returns "" when
+// none is found. Reuses detectDOI/doiPattern (package tools); no new dependency.
+func detectScholarlyDOI(sd *scraper.StructuredData, body, pageURL string) string {
 	if sd != nil {
 		if d := detectDOI(sd.Citation["citation_doi"]); d != "" {
 			return d
 		}
+	}
+	if d := detectDOI(pageURL); d != "" {
+		return d
 	}
 	top := body
 	if len(top) > detectScholarlyDOITopBytes {

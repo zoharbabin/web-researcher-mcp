@@ -300,6 +300,16 @@ func main() {
 		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
 	})
 
+	// Authoritative DOI existence check (#226): the doi.org handle API confirms a
+	// DOI is registered with ANY agency (Crossref, DataCite/arXiv, mEDRA…), so
+	// verify_citation can affirm a real arXiv preprint DOI that Crossref 404s and
+	// OpenAlex no longer indexes — while still reporting a fabricated DOI as
+	// nonexistent. Keyless, own breaker, best-effort.
+	doiRegistry := search.NewHandleDOIRegistry(search.Deps{
+		HTTPClient: searchDeps.HTTPClient,
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+	})
+
 	// Link verifier (#157): SSRF-safe liveness + Wayback archive fallback for the
 	// opt-in verify_links flag on research_export and for verify_citation. Honors
 	// the same private-IP posture as the scrape pipeline. Optional IA Save-Page-Now
@@ -421,6 +431,7 @@ func main() {
 		StructuredProviders: structuredProviders,
 		OAResolver:          oaResolver,
 		RetractionResolver:  retractionResolver,
+		DOIRegistry:         doiRegistry,
 		LinkVerifier:        linkVerifier,
 		Scraper:             scraperPipeline,
 		Content:             contentProcessor,

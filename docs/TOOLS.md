@@ -69,11 +69,11 @@ type SearchResult struct {
     Snippet          string            `json:"snippet"`
     DisplayLink      string            `json:"displayLink"`
     SourceReputation *DomainReputation `json:"sourceReputation,omitempty"` // present when host is in the reputation dataset (#198); omitted for unknown hosts
-    ClaimSignal      string            `json:"claimSignal,omitempty"`      // most claim-relevant snippet sentence; present only when `claim` is set and matched (#66)
+    ClaimSignal      string            `json:"claimSignal"`                // most claim-relevant snippet sentence; present on EVERY result whenever `claim` is set (empty string when no snippet sentence matched) — uniform shape (#66, #235)
 }
 ```
 
-`sourceReputation` is a descriptive signal (same shape as `scrape_page`/`search_and_scrape`) indicating the host's known reliability tier (`high`, `low`, `mixed`) with a `basis` note. It is omitted for hosts not in the dataset — absence means unknown, not bad. When `claim` is set, `claimSignal` holds the most claim-relevant snippet sentence to help triage which links to read; for full-text claim evidence use `search_and_scrape` with `claim`.
+`sourceReputation` is a descriptive signal (same shape as `scrape_page`/`search_and_scrape`) indicating the host's known reliability tier (`high`, `low`, `mixed`) with a `basis` note. It is omitted for hosts not in the dataset — absence means unknown, not bad. When `claim` is set, every result carries a `claimSignal` holding the most claim-relevant snippet sentence to help triage which links to read — it is the empty string (not absent) when no snippet sentence matched, so the field's shape is uniform across results and downstream null-checking stays simple (#235). For full-text claim evidence use `search_and_scrape` with `claim`.
 
 On a zero-result response, `hints` carries a `ZeroResultHints` object (the same shape `academic_search` and `patent_search` emit) explaining why nothing matched and how to recover: `reason` (`no_match` | `filters_too_restrictive`), `filtersApplied` (the constraints that may have eliminated results — `site`, `lens`, `time_range`, `country`, `language`, `exact_terms`, `exclude_terms`), and `suggestedActions` (remove-filter / try-different-provider). Suggested alternative providers are limited to those **configured and currently healthy**. On any non-empty result set the field is omitted.
 
@@ -187,7 +187,7 @@ In `raw` mode the output additionally carries `"raw": true`, and `contentType` i
 
 **Typed source classification (#62).** Every scrape response (full and raw) carries three categorical fields alongside the numeric content: `sourceType` (the kind of source — derived from Schema.org `@type` / Highwire `citation_*` meta when present, else a domain heuristic, else `unknown`), `authorityTier` (`high`/`medium`/`low`, a banding of the internal authority score), and `domainCategory` (`academic`/`legal`/`medical`/`financial`/`technical`/`general`, from a domain heuristic). They let the model hedge in natural language by source type. They are best-effort hints derived from untrusted page data — treat them as signals, not guarantees. (In raw mode, with no structured-data extraction, `sourceType` falls back to the host heuristic.)
 
-**Scholarly DOI + integrity status (#199).** When a page classifies as `peer_reviewed` **or** sits on a known academic-journal host (the latter so detection still engages when an extraction tier strips the citation metadata, e.g. the cached-text fallback), the response surfaces `detectedDoi` — the DOI the page declares, read from its Highwire `citation_doi` `<head>` metadata or (fallback) the first few KB of the cleaned text (the front matter, above any references list, so a references-list DOI is never mistaken for the page's own). It is **evidence, never a verdict and never an identity claim**: it says "this DOI appears on the page; here is its recorded integrity status," not "the page *is* this record" — you confirm the document's identity. When the DOI resolves to a Crossref/Retraction-Watch integrity record, `retractionStatus` is attached (the same object `verify_citation` and `academic_search` return); an `expression_of_concern`/`correction` is reported but is **not** a retraction (`retracted` stays `false`), and `retractionStatus.source` names `retraction-watch` vs `publisher`. The status is captured at scrape time and shares the one-hour scrape cache TTL — re-scrape or use `verify_citation` for a point-in-time check. Both fields are omitted on non-scholarly pages, in raw mode, and when no DOI is found or the resolver is unavailable. Use `verify_citation` to verify one citation and `audit_bibliography` to audit a whole reference list.
+**Scholarly DOI + integrity status (#199).** When a page classifies as `peer_reviewed` **or** sits on a known academic-journal host (the latter so detection still engages when an extraction tier strips the citation metadata, e.g. the cached-text fallback), the response surfaces `detectedDoi` — the DOI the page declares, read (in descending order of authority) from its Highwire `citation_doi` `<head>` metadata, then a DOI embedded in the request URL path itself (the publisher's canonical article identifier, e.g. `nejm.org/doi/full/10.1056/…` — present even on extraction tiers that strip the citation metadata, such as the cached-text fallback), then the first few KB of the cleaned text (the front matter, above any references list, so a references-list DOI is never mistaken for the page's own). It is **evidence, never a verdict and never an identity claim**: it says "this DOI appears on the page; here is its recorded integrity status," not "the page *is* this record" — you confirm the document's identity. When the DOI resolves to a Crossref/Retraction-Watch integrity record, `retractionStatus` is attached (the same object `verify_citation` and `academic_search` return); an `expression_of_concern`/`correction` is reported but is **not** a retraction (`retracted` stays `false`), and `retractionStatus.source` names `retraction-watch` vs `publisher`. The status is captured at scrape time and shares the one-hour scrape cache TTL — re-scrape or use `verify_citation` for a point-in-time check. Both fields are omitted on non-scholarly pages, in raw mode, and when no DOI is found or the resolver is unavailable. Use `verify_citation` to verify one citation and `audit_bibliography` to audit a whole reference list.
 
 **Trust boundary marker.** Every scrape response (full, preview, and raw) carries `"trust": "untrusted-external-content"` in the JSON envelope — an explicit, machine-readable boundary marker. It is deliberately placed in the structured output, never inside the `content` string (where a malicious page could forge or close it), and signals that `content` is external data to be treated as data, never as instructions (OWASP LLM01, indirect prompt injection). The server cannot enforce the prompt boundary itself — the model and agent loop live in the host application — so this marker exists to make the untrusted provenance unmissable to that host.
 
@@ -450,12 +450,13 @@ type ImageResult struct {
     ContextLink   string `json:"contextLink,omitempty"`
     Width         int    `json:"width,omitempty"`
     Height        int    `json:"height,omitempty"`
-    FileSize      string `json:"fileSize,omitempty"`
+    FileSize      string `json:"fileSize,omitempty"` // optional, provider-dependent; omitted when the provider does not report it
 }
 ```
 
 ### Provider notes
 - Filters (`type`, `color_type`, `dominant_color`, `file_type`) are passed to the provider's image API. The `size` bucket is a hint the provider applies loosely — returned dimensions may not strictly match the requested bucket. Use the `width`/`height` fields to filter precisely when exact sizing matters.
+- `fileSize`, `contextLink`, `width`, and `height` are **optional and provider-dependent** — each is emitted only when the configured provider reports it and is omitted (never fabricated) otherwise. No currently-configured provider populates `fileSize`, so treat it as reserved/best-effort.
 
 ### Cache
 - Key: SHA-256 of (query + all filter params)
@@ -492,7 +493,7 @@ type NewsArticle struct {
     Title       string `json:"title"`
     URL         string `json:"url"`
     Source      string `json:"source"`
-    PublishedAt string `json:"publishedAt,omitempty"`
+    PublishedAt string `json:"publishedAt,omitempty"` // optional, provider-dependent; ISO-8601 (RFC3339 UTC) when present
     Snippet     string `json:"snippet"`
 }
 ```
@@ -508,7 +509,7 @@ On a zero-result response, `hints` carries the same `ZeroResultHints` object as 
 5. Return deduplicated articles.
 
 ### Provider notes
-- `publishedAt` is populated when the provider exposes a publish timestamp (Google CSE via page metadata; Brave/Serper/SearchAPI/SearXNG natively). It is omitted (not fabricated) when the provider does not supply one, so treat it as best-effort.
+- `publishedAt` is **optional and provider-dependent**: populated when the provider exposes a publish timestamp (Google CSE via page metadata; Brave/Exa/Serper/SearchAPI/SearXNG/Tavily natively), omitted (not fabricated) when the provider supplies none — so treat it as best-effort. When present it is always normalized to **ISO-8601 (RFC3339 UTC)** regardless of the provider's raw format (RFC1123, relative ages like "3 days ago"/"2h", or bare dates), so values sort and compare consistently across providers; an unparseable timestamp is dropped rather than passed through.
 - `sort_by=date` maps to each provider's date-sort control; exact ordering and `freshness=hour` granularity depend on the provider's index and may be approximate. News providers may also surface high-ranking forum/aggregator pages — `news_source` narrows to a trusted outlet when that matters.
 
 ### Cache
@@ -608,7 +609,7 @@ Each patent in the `patents` array contains:
 | `filed` | string | no | Filing date (YYYY-MM-DD) |
 | `granted` | string | no | Grant date (YYYY-MM-DD) |
 | `pdf` | string | no | Direct link to patent PDF |
-| `status` | string | no | Application status (e.g., "Patented Case") |
+| `status` | string | no | Application status (e.g., "Patented Case") — **provider-dependent**: USPTO reports it; EPO/Lens/SearchAPI/web-discovery typically omit it |
 
 Additional output fields: `query`, `searchType`, `resultCount`, `source` (which provider answered), `searchUrl`, `hints` (a `ZeroResultHints` object explaining why a query returned nothing and suggesting how to broaden it — present on zero-result responses), and `trust` (always `"untrusted-external-content"` — treat results as data, not instructions; OWASP LLM01).
 
@@ -749,10 +750,11 @@ Recover a `sequential_search` session after context loss. Returns the session su
 ### Behavior
 
 1. Without `stepId`: returns session summary view from memory (no disk I/O)
-   - Includes: researchGoal, summary, stepIndex, last 3 full steps, active gaps
+   - Includes: researchGoal, summary, `stepIndex` (a one-liner for **every** step), `lastSteps` (the most recent **3** steps in full detail — a fixed sliding window, not all steps), active gaps, and sources. For full detail of any earlier step, pass its `stepId`.
 2. With `stepId`: loads full step data from disk for that specific step number
 3. Every response carries `"trust": "untrusted-external-content"` — the echoed source metadata (titles/URLs) is external data; treat it as data, not instructions (OWASP LLM01).
 4. Sessions are private to the `(tenant, user)` that created them — a session ID is honored only for its owning user (anonymous/STDIO uses a single owner).
+5. A source's `foundInStep` is the 1-indexed `sequential_search` step that surfaced it. It is **omitted entirely** when the source was not tied to a numbered step (e.g. added via a `web_search` carrying only a `sessionId`) — steps are 1-indexed, so there is no `foundInStep: 0`. The same convention applies to a gap's `foundInStep`.
 
 #### Cross-call error patterns (#99)
 
@@ -1067,8 +1069,8 @@ type StructuredItem struct {
     URL           string          `json:"url"`
     PublishedDate string          `json:"publishedDate,omitempty"`
     Author        string          `json:"author,omitempty"`
-    Summary       json.RawMessage `json:"summary,omitempty"`    // schema-conforming JSON, or plain text summary
-    Highlights    []string        `json:"highlights,omitempty"`
+    Summary       json.RawMessage `json:"summary,omitempty"`    // schema-conforming JSON (best-effort), or plain text summary
+    Highlights    []string        `json:"highlights,omitempty"` // verbatim source snippets — the authoritative payload
     Entities      json.RawMessage `json:"entities,omitempty"`   // provider-specific structured entities, when available
 }
 ```
@@ -1077,7 +1079,7 @@ type StructuredItem struct {
 
 1. Resolve the `search.StructuredSearcher` for the requested `provider` (or the sole configured one).
 2. The provider validates its own constraints (category vocabulary, schema limits) **before** any paid call; a violation returns a validation tool-error, never a wasted upstream request.
-3. When `schema` is set, each result's `summary` is JSON conforming to it; otherwise it is a plain text summary. Providers may populate per-result `entities` for entity categories (e.g. Exa's `company`).
+3. When `schema` is set, each result's `summary` is JSON conforming to it; otherwise it is a plain text summary. **Schema extraction is best-effort and provider-side:** the provider's extractor fills each field from the page, and a value it can't confidently resolve comes back `null` even when that value is visible in `highlights`. Treat `highlights` (verbatim source snippets) as the authoritative payload and `summary` as a convenience — do not assume every schema field is populated. Providers may populate per-result `entities` for entity categories (e.g. Exa's `company`).
 4. `costUsd` and the resolved provider are surfaced into audit metadata. Results are external content — `trust` is always `"untrusted-external-content"`.
 
 ### Provider notes
@@ -1309,7 +1311,7 @@ Look up macroeconomic and development data. **FRED** (Federal Reserve Economic D
 `mode` is `series` (keyword search) or `observations` (series_id lookup). In series mode each `results[]` item: `seriesId`, `title`, `units`, `frequency`, `lastUpdated`, `notes`. In observations mode: `seriesId`, `date`, `value` (**exactly as returned — no rounding**; missing observations carry no `value`), plus `title` and `units` for multi-dimensional providers (OECD/Eurostat) so interleaved subgroup series — youth vs total, male vs female — are tellable apart (a single FRED/World Bank series carries neither). Plus `query`, `seriesId` (echoed in observations mode), `country` (echoed for a World Bank lookup), `resultCount`, `provider`, `hints`, and `trust` (`untrusted-external-content`).
 
 ### Behavior
-- `series_id` set → returns that series' observations (most-recent first); otherwise keyword-searches series. FRED honors `frequency`/`units`; World Bank scopes by `country` (default `WLD`) and filters by year.
+- `series_id` set → returns that series' observations; otherwise keyword-searches series. With no `date_from` the window is the most-recent `num_results` (latest first); with a `date_from` it is the first `num_results` **on/after** that date (anchored at the requested start, oldest first) so the filter is never silently dropped. FRED honors `frequency`/`units`; World Bank scopes by `country` (default `WLD`) and filters by year.
 - **World Bank / OECD / Eurostat** have no server-side keyword search, so keyword mode lists the provider's catalogue (WDI indicators / OECD dataflows / Eurostat datasets) once and filters by name client-side; for OECD/Eurostat the matched id is the `series_id` to fetch observations with. Multi-word queries use AND-matching (all words must appear in the name — "quarterly GDP growth" matches titles containing each word even when not adjacent); single-word queries require a contiguous substring.
 - **OECD** addresses a series by a dataflow ref (`agency,dataflow,version`) plus a `REF_AREA` country filter; observations are decoded from SDMX-JSON at the requested time granularity (monthly/quarterly/annual — the period is not truncated to the year). **Eurostat** addresses a dataset by code plus a `geo` filter; observations are decoded from the JSON-stat cube by recovering every dimension's coordinate, surfacing its status flag (provisional/estimated) as `notes`. A dataset is multi-dimensional (sex/age/unit/adjustment/…), so each `title` carries the dimension labels that distinguish one series from another (e.g. "…— Females, Percentage of population in the labour force") and `units` carries the unit dimension; values pass through verbatim (no rounding).
 - **Provider honoring**: an explicit `provider` is used exclusively; otherwise the first configured provider answers (FRED if keyed, else World Bank/OECD/Eurostat in order). An error/empty returns a structured zero-result with hints (no silent cross-provider fallback).
@@ -1338,13 +1340,13 @@ Verify a single citation before relying on it — confirm it **exists**, matches
 
 ### Output Schema
 
-`input`, `inputType` (`doi`\|`url`\|`reference`), `exists` (bool), `matchedRecord` (the academic record — for a DOI input it is **only** the work whose DOI exactly equals the input, never a near-neighbor, and is omitted when no exact record exists or `exists:false`), `matchConfidence` (`high`\|`medium`\|`low`\|`none`), `titleMatch` (`match`\|`mismatch`\|`not_checked` — DOI inputs only: whether the title text supplied alongside the DOI matches the matched record's actual title; `mismatch` means ≥2 substantive title tokens were supplied that are absent from the record — the caller may have cited the wrong paper; `not_checked` when only a bare DOI was supplied), `retractionStatus` (Crossref integrity status when retracted/corrected; omitted when clean), `httpStatus` + `archivedUrl` (for URL inputs — live status and a Wayback snapshot for dead links; `exists:true` with a 403/429/503 `httpStatus` means the server is reachable but refused the verifier — the resource exists, it is not a dead link), `provenance` (how each piece of evidence was obtained), and the `trust` marker. When a `claim` was supplied: `claim` (echo), `claimSupport` (`addressed`\|`partially_addressed`\|`not_addressed`\|`source_unavailable`), `claimEvidence` (claim-relevant source sentences), `claimSourceUrl` (the URL actually fetched), and `contrastSignal` (`true` only — a negation/contrast cue, read the evidence yourself).
+`input`, `inputType` (`doi`\|`url`\|`reference`), `exists` (bool), `matchedRecord` (the academic record — for a DOI input it is **only** the work whose DOI exactly equals the input, never a near-neighbor, and is omitted when no exact record exists or `exists:false`), `matchConfidence` (`high`\|`medium`\|`low`\|`none`), `detectedDoi` (for a URL input that resolves to a scholarly article: the DOI extracted from the page — `citation_doi` meta, the URL path, or references-safe front matter — which then drives the retraction + title-match checks just like a DOI input; omitted when no scholarly DOI was found), `titleMatch` (`match`\|`mismatch`\|`not_checked`: whether a title — text supplied alongside a DOI, or a scholarly page's own title for a URL input — matches the matched record's actual title; `mismatch` means ≥2 substantive title tokens are absent from the record — the caller may have cited the wrong paper; `not_checked` when there is no title text or only a bare DOI), `retractionStatus` (Crossref integrity status when retracted/corrected; omitted when clean), `httpStatus` + `archivedUrl` (for URL inputs — live status and a Wayback snapshot for dead links; `exists:true` with a 403/429/503 `httpStatus` means the server is reachable but refused the verifier — the resource exists, it is not a dead link), `provenance` (how each piece of evidence was obtained), and the `trust` marker. When a `claim` was supplied: `claim` (echo), `claimSupport` (`addressed`\|`partially_addressed`\|`not_addressed`\|`source_unavailable`), `claimEvidence` (claim-relevant source sentences), `claimSourceUrl` (the URL actually fetched), and `contrastSignal` (`true` only — a negation/contrast cue, read the evidence yourself).
 
 ### Behavior
 
 - **Evidence, never a verdict.** The tool reports what it found (exists/matches/retracted/resolves); the caller decides whether to cite. It never synthesizes a true/false judgment.
 - **DOI input** → existence + retraction via Crossref `works/{doi}`; the matched record is fetched by **exact-DOI entity lookup** (the `DOIResolver` capability, e.g. OpenAlex `/works/doi:{doi}`) so `matchedRecord` is always the cited work or nothing — a relevance DOI *search* returns near-neighbors, which are never shown as this DOI's record. `matchedRecord`/`matchConfidence` are omitted when no exact record is found or `exists:false`. When the citation string also carries a title alongside the DOI, `titleMatch` compares those tokens against the matched record's title: `mismatch` fires only when ≥2 substantive tokens supplied are absent from the record (the caller may have paired the wrong title with this DOI), while `not_checked` means only a bare DOI was given. Zero false positives: a single coincidental token is never flagged mismatch.
-- **URL input** → liveness via the SSRF-safe link verifier; a Wayback `archivedUrl` when the live link is dead.
+- **URL input** → liveness via the SSRF-safe link verifier; a Wayback `archivedUrl` when the live link is dead. When the URL resolves to a **scholarly article** (classified peer-reviewed/academic), the page is fetched once and its DOI is extracted (`citation_doi` meta → URL path → references-safe front matter, the same authority order as `scrape_page`); a found DOI then drives the full DOI enrichment — `detectedDoi`, `retractionStatus`, `matchedRecord`/`matchConfidence` (exact-DOI lookup), and `titleMatch` comparing the page's own title against the matched record. A non-scholarly page stays liveness-only — a DOI-shaped string in prose is never surfaced.
 - **Free-text input** → best-match academic lookup with a transparent token-overlap `matchConfidence`; retraction checked when the match carries a DOI.
 - **Claim check (optional).** When a `claim` is given, the source is fetched (the live URL, a matched record's URL, or a Wayback snapshot) and measured for topical overlap with the same lexical, model-free coverage as `audit_bibliography` (no model/embedding): `claimSupport` reports COVERAGE not stance, `not_addressed` is the mischaracterization signal (only when a source was actually read), and `contrastSignal` flags a negation cue. `source_unavailable` when no fetchable source (e.g. a DOI/reference whose matched record carries no URL). Off — and zero added latency — unless a claim is supplied.
 - Degrades gracefully when a resolver is unconfigured (reports the gap in `provenance`); never panics.
@@ -1496,6 +1498,8 @@ Capture a **fresh** Internet Archive (Wayback Machine) snapshot of a URL via Sav
 ### Cache Freshness Provenance
 
 Cacheable tools attach a top-level MCP `_meta` block so a client can tell whether a result was served from cache and how stale it is. The fields (set in `cachedResultWithMeta` / `freshResult`, `internal/tools/errors.go`) are:
+
+> `_meta` rides on the MCP `CallToolResult` envelope — a **sibling of `content`, not a key inside the content JSON body**. A client reads it from the result's `meta`/`_meta` field, never by parsing the body string. The end-to-end roundtrip guard is `TestWebSearchCacheMeta_PresentOnFreshAndCacheHit`.
 
 | Field | Type | Meaning |
 |-------|------|---------|

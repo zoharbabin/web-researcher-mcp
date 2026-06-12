@@ -193,7 +193,8 @@ func isAcademicHost(host string) bool {
 		// scrape_page's scholarly DOI detection (#199) engage on them.
 		"thelancet.com", "cell.com", "bmj.com", "wiley.com", "tandfonline.com",
 		"sagepub.com", "oup.com", "pnas.org", "mdpi.com", "frontiersin.org",
-		"cambridge.org", "elsevier.com",
+		"cambridge.org", "elsevier.com", "nejm.org", "jamanetwork.com", "ahajournals.org",
+		"apa.org", "acs.org", "rsc.org", "iop.org", "aps.org",
 	} {
 		if host == h || strings.HasSuffix(host, "."+h) {
 			return true

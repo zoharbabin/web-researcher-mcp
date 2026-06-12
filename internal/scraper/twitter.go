@@ -124,6 +124,41 @@ func formatTweetResult(rawURL string, tweet map[string]any, maxLength int) *Scra
 	displayName, _ := author["name"].(string)
 	text, _ := tweet["text"].(string)
 
+	// An X Article (long-form post) carries an empty top-level `text` — the visible
+	// tweet body is just a t.co link — while the real content lives in an `article`
+	// object. Reconstruct the full body so it isn't silently lost.
+	if article, ok := tweet["article"].(map[string]any); ok {
+		title, _ := article["title"].(string)
+		var parts []string
+		if t := strings.TrimSpace(title); t != "" {
+			parts = append(parts, t)
+		}
+		// Prefer the full body reconstructed from the Draft.js content blocks; fall
+		// back to the short preview_text when the blocks are absent.
+		if body := extractArticleBody(article); body != "" {
+			parts = append(parts, body)
+		} else if preview, _ := article["preview_text"].(string); strings.TrimSpace(preview) != "" {
+			parts = append(parts, strings.TrimSpace(preview))
+		}
+		if articleBody := strings.Join(parts, "\n\n"); articleBody != "" {
+			if strings.TrimSpace(text) == "" {
+				text = articleBody
+			} else {
+				text = text + "\n\n" + articleBody
+			}
+		}
+	}
+
+	// When `text` is still empty (e.g. a media-only or link-only tweet), fall back
+	// to the unshortened raw_text so the result is never blank.
+	if strings.TrimSpace(text) == "" {
+		if rawText, ok := tweet["raw_text"].(map[string]any); ok {
+			if rt, _ := rawText["text"].(string); strings.TrimSpace(rt) != "" {
+				text = rt
+			}
+		}
+	}
+
 	likes := jsonNumber(tweet["likes"])
 	retweets := jsonNumber(tweet["retweets"])
 	views := jsonNumber(tweet["views"])
@@ -143,6 +178,51 @@ func formatTweetResult(rawURL string, tweet map[string]any, maxLength int) *Scra
 		Title:       fmt.Sprintf("Tweet by @%s", username),
 		Author:      displayName,
 	}
+}
+
+// extractArticleBody reconstructs the full text of an X Article from the
+// Draft.js content blocks FXTwitter returns under article.content.blocks[].
+// Each block carries a .text field; block .type controls light markdown shaping
+// (headers, list items). Returns "" when no content blocks are present.
+func extractArticleBody(article map[string]any) string {
+	content, ok := article["content"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	blocks, ok := content["blocks"].([]any)
+	if !ok {
+		return ""
+	}
+
+	var lines []string
+	for _, b := range blocks {
+		block, ok := b.(map[string]any)
+		if !ok {
+			continue
+		}
+		text, _ := block["text"].(string)
+		text = strings.TrimSpace(text)
+		if text == "" {
+			continue // skip empty / atomic (media-only) blocks
+		}
+		switch blockType, _ := block["type"].(string); blockType {
+		case "header-one":
+			lines = append(lines, "# "+text)
+		case "header-two":
+			lines = append(lines, "## "+text)
+		case "header-three":
+			lines = append(lines, "### "+text)
+		case "unordered-list-item":
+			lines = append(lines, "- "+text)
+		case "ordered-list-item":
+			lines = append(lines, "1. "+text)
+		case "blockquote":
+			lines = append(lines, "> "+text)
+		default:
+			lines = append(lines, text)
+		}
+	}
+	return strings.Join(lines, "\n\n")
 }
 
 func formatProfileResult(rawURL string, user map[string]any, maxLength int) *ScrapeResult {

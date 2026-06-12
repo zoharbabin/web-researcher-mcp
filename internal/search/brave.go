@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 )
 
 type BraveProvider struct {
@@ -154,7 +155,7 @@ func (b *BraveProvider) doNewsSearch(ctx context.Context, params NewsSearchParam
 			Title:       r.Title,
 			URL:         r.URL,
 			Source:      r.MetaURL.Hostname,
-			PublishedAt: r.Age,
+			PublishedAt: normalizePublishedAt(r.Age, time.Now()),
 			Snippet:     r.Description,
 		})
 	}

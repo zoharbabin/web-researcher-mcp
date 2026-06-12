@@ -637,6 +637,7 @@ var answerOutputSchema = map[string]any{
 		"provider": map[string]any{"type": "string", "description": "Which provider produced the answer."},
 		"costUsd":  map[string]any{"type": "number", "description": "Estimated cost of this call in USD for metered providers (an estimate, not an invoice); 0 for free providers."},
 		"trust":    trustUntrustedExternal,
+		"hints":    map[string]any{"type": "object", "description": "Present only on a low-confidence result: a weak query↔answer term overlap heads-up (the answer may address a loosely-related reading of the query)."},
 		"citations": map[string]any{
 			"type":        "array",
 			"description": "Sources the answer is grounded in.",
@@ -661,6 +662,7 @@ var structuredSearchOutputSchema = map[string]any{
 		"provider":    map[string]any{"type": "string", "description": "Which provider produced the results."},
 		"costUsd":     map[string]any{"type": "number", "description": "Estimated cost of this call in USD for metered providers (an estimate, not an invoice); 0 for free providers."},
 		"trust":       trustUntrustedExternal,
+		"hints":       map[string]any{"type": "object", "description": "Present only on a low-confidence result: a weak query↔result term overlap heads-up (the results may match a loosely-related reading of the query)."},
 		"results": map[string]any{
 			"type": "array",
 			"items": map[string]any{
@@ -757,7 +759,8 @@ var verifyCitationOutputSchema = map[string]any{
 			"description": "The academic record the citation matched (title, authors, year, DOI, …) when one was found.",
 		},
 		"matchConfidence":  map[string]any{"type": "string", "enum": []any{"high", "medium", "low", "none"}, "description": "Confidence the matched record is the cited work (high for an exact DOI; heuristic for free-text)."},
-		"titleMatch":       map[string]any{"type": "string", "enum": []any{"match", "mismatch", "not_checked"}, "description": "For DOI inputs only: whether the title text supplied alongside the DOI matches the record's actual title (token-overlap heuristic). 'match' = strong overlap; 'mismatch' = ≥2 substantive title tokens supplied that are absent from the record title — the caller may have the wrong paper; 'not_checked' = bare DOI only or single-token ambiguous text (not enough to judge). Omitted for URL/reference inputs."},
+		"detectedDoi":      map[string]any{"type": "string", "description": "For a URL input that resolves to a scholarly article: the DOI extracted from the page (citation_doi meta, the URL path, or references-safe front matter). Lets a URL be checked for retraction and title match like a DOI input. Omitted when no scholarly DOI was found."},
+		"titleMatch":       map[string]any{"type": "string", "enum": []any{"match", "mismatch", "not_checked"}, "description": "Whether a title (text supplied alongside a DOI, or a scholarly page's own title for a URL input) matches the matched record's actual title (token-overlap heuristic). 'match' = strong overlap; 'mismatch' = ≥2 substantive title tokens that are absent from the record title — possibly the wrong paper; 'not_checked' = no title text or single-token ambiguous text (not enough to judge). Present only when a record was matched by exact DOI (DOI inputs, or URL inputs resolving to a scholarly DOI)."},
 		"retractionStatus": map[string]any{"type": "object", "description": "Crossref integrity status when the DOI is retracted/corrected; omitted when clean."},
 		"httpStatus":       map[string]any{"type": "integer", "description": "Live HTTP status for a URL input (0 = unreachable)."},
 		"archivedUrl":      map[string]any{"type": "string", "description": "Internet Archive (Wayback) snapshot URL when the live link is dead."},

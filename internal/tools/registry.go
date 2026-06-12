@@ -47,6 +47,12 @@ type Dependencies struct {
 	// Crossref integrity status (#156). nil ⇒ skipped (no-op). Best-effort:
 	// never fails a search. Also powers verify_citation's retraction check.
 	RetractionResolver search.RetractionResolver
+	// DOIRegistry is the authoritative cross-registrar DOI existence check (#226):
+	// the doi.org handle API confirms a DOI is registered with ANY agency, so a
+	// real arXiv/DataCite DOI (which Crossref and OpenAlex don't index) still reads
+	// as existing while a fabricated DOI reads as not-found. nil ⇒ skipped (no-op).
+	// Best-effort: a transport failure leaves existence unknown, never asserts it.
+	DOIRegistry search.DOIRegistry
 	// LinkVerifier checks source-URL liveness + Wayback archive fallback for the
 	// opt-in verify_links flag (#157) and verify_citation. nil ⇒ verification is
 	// skipped (no-op). Best-effort + bounded; never fails a tool call.

@@ -176,6 +176,66 @@ func TestAuditBibliography_Unchecked(t *testing.T) {
 	}
 }
 
+func TestAuditBibliography_TitleOnlyCoincidentalMatchUnchecked(t *testing.T) {
+	// #225 regression: an entry with NEITHER a DOI nor a URL — only a title — must
+	// not be marked verified just because a title search returned a coincidental
+	// near-neighbor. The mock academic provider always returns "Mock Paper"; a title
+	// sharing no substantive token with it is a "low"-confidence match, so existence
+	// is NOT confirmed and the entry must land in unchecked (not ok, not not_found).
+	deps := setupTestDeps() // wires the mock academic provider (always returns "Mock Paper")
+	deps.LinkVerifier = scraper.NewLinkVerifier(scraper.LinkVerifierConfig{AllowPrivateIPs: true})
+
+	out, isErr := callAudit(t, deps, map[string]any{
+		"entries": []any{map[string]any{"title": "Quantum Entanglement In Superconducting Circuits"}},
+	})
+	if isErr {
+		t.Fatal("unexpected tool error")
+	}
+	s := summaryOf(t, out)
+	if s["unchecked"].(float64) != 1 {
+		t.Errorf("a title-only entry with only a coincidental academic match must be unchecked, got %v", s)
+	}
+	if s["ok"].(float64) != 0 {
+		t.Errorf("an uncheckable title-only entry must NOT be counted ok (it isn't verified existence): %v", s)
+	}
+	if s["notFound"].(float64) != 0 {
+		t.Errorf("a title-search miss is absence of evidence, never not_found: %v", s)
+	}
+	e0 := out["entries"].([]any)[0].(map[string]any)
+	if e0["exists"] == true {
+		t.Errorf("a coincidental low-confidence title match must not set exists=true: %v", e0)
+	}
+	if e0["reason"] == nil || e0["reason"] == "" {
+		t.Error("an unchecked entry must carry a reason so it isn't read as fake")
+	}
+}
+
+func TestAuditBibliography_TitleOnlyConfidentMatchOK(t *testing.T) {
+	// Complement to the regression above: a title-only entry that DOES match the
+	// academic record with high/medium confidence is legitimately corroborated and
+	// must read as ok (the fix gates on confidence, it does not break the happy path).
+	deps := setupTestDeps()
+	deps.LinkVerifier = scraper.NewLinkVerifier(scraper.LinkVerifierConfig{AllowPrivateIPs: true})
+
+	out, isErr := callAudit(t, deps, map[string]any{
+		"entries": []any{map[string]any{"title": "Mock Paper"}}, // exact title the mock returns
+	})
+	if isErr {
+		t.Fatal("unexpected tool error")
+	}
+	s := summaryOf(t, out)
+	if s["ok"].(float64) != 1 {
+		t.Errorf("a confident title match should corroborate existence (ok), got %v", s)
+	}
+	if s["unchecked"].(float64) != 0 {
+		t.Errorf("a confident title match must not be unchecked: %v", s)
+	}
+	e0 := out["entries"].([]any)[0].(map[string]any)
+	if e0["exists"] != true {
+		t.Errorf("a confident title match should set exists=true: %v", e0)
+	}
+}
+
 func TestAuditBibliography_NotFoundDOI(t *testing.T) {
 	// A DOI authoritatively absent from Crossref (404 → found=false) is not_found
 	// (a possible fabrication), distinct from unchecked.
