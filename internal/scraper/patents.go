@@ -123,7 +123,7 @@ func (p *Pipeline) ScrapePatentDetail(ctx context.Context, patentNumber string) 
 		defer closer.Close()
 	}
 
-	body, err := io.ReadAll(io.LimitReader(reader, 3*1024*1024))
+	body, err := io.ReadAll(io.LimitReader(reader, int64(p.config.MaxHTMLBytes)))
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +151,7 @@ func parsePatentDetailPage(doc *goquery.Document, number, patentURL string) *Pat
 	if abstract, exists := doc.Find(`meta[name="DC.description"]`).Attr("content"); exists {
 		result.Abstract = strings.TrimSpace(abstract)
 		if len(result.Abstract) > 500 {
-			result.Abstract = result.Abstract[:500] + "..."
+			result.Abstract = truncateBytes(result.Abstract, 500) + "..."
 		}
 	}
 	if result.Abstract == "" {
@@ -159,7 +159,7 @@ func parsePatentDetailPage(doc *goquery.Document, number, patentURL string) *Pat
 		if abstractSection.Length() > 0 {
 			result.Abstract = strings.TrimSpace(abstractSection.Find("div.abstract").Text())
 			if len(result.Abstract) > 500 {
-				result.Abstract = result.Abstract[:500] + "..."
+				result.Abstract = truncateBytes(result.Abstract, 500) + "..."
 			}
 		}
 	}

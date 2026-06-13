@@ -127,6 +127,7 @@ type ScrapeOutput struct {
     Citation        *Citation `json:"citation"`       // always present
     Raw             bool      `json:"raw,omitempty"`  // true only in raw mode; omitted otherwise
     ExtractedBy     string    `json:"extractedBy,omitempty"` // extraction tier: markdown|stealth|html|browser|exa:cached|exa:crawled; omitted when unknown
+    ExtractionQuality string  `json:"extractionQuality,omitempty"` // complete when the pipeline returned a confident extraction; partial when every tier was exhausted and the best-quality candidate was returned instead. Never an error. Omitted in raw mode.
     Metadata        *Metadata `json:"metadata,omitempty"` // present only when a title was extracted (full/preview only)
     StructuredData  *StructuredData `json:"structuredData,omitempty"` // page-embedded machine-readable metadata; present only when found (full/preview, HTML pages)
     SourceType      string    `json:"sourceType"`     // typed classification (#62): peer_reviewed|official_docs|government|news_publication|blog|forum|wiki|social_media|unknown

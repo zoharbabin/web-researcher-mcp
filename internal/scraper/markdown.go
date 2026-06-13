@@ -26,6 +26,10 @@ func (p *Pipeline) scrapeMarkdown(ctx context.Context, url string, maxLength int
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode >= 400 {
+		return nil, classifyHTTPStatus(resp.StatusCode, url, "markdown")
+	}
+
 	ct := resp.Header.Get("Content-Type")
 	if !strings.Contains(ct, "text/markdown") && !strings.Contains(ct, "text/plain") {
 		return nil, nil
@@ -43,7 +47,7 @@ func (p *Pipeline) scrapeMarkdown(ctx context.Context, url string, maxLength int
 
 	truncated := false
 	if len(content) > maxLength {
-		content = content[:maxLength]
+		content = truncateBytes(content, maxLength)
 		truncated = true
 	}
 

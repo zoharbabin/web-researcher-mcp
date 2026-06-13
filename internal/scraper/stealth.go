@@ -44,10 +44,9 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int)
 		defer closer.Close()
 	}
 
-	// Read up to 1MB of raw HTML to ensure we reach the article content,
-	// regardless of the desired output maxLength.
-	const maxHTMLRead = 1024 * 1024
-	body, err := io.ReadAll(io.LimitReader(reader, maxHTMLRead))
+	// Read up to p.config.MaxHTMLBytes of raw HTML to ensure we reach the article
+	// content, regardless of the desired output maxLength.
+	body, err := io.ReadAll(io.LimitReader(reader, int64(p.config.MaxHTMLBytes)))
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +80,7 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int)
 
 	truncated := false
 	if len(content) > maxLength {
-		content = content[:maxLength]
+		content = truncateBytes(content, maxLength)
 		truncated = true
 	}
 
@@ -156,7 +155,9 @@ func applyBrowserHeaders(req *http.Request) {
 
 func extractArticleContent(doc *goquery.Document) string {
 	// Remove noise
-	doc.Find("script, style, nav, footer, header, aside, .sidebar, .menu, .ad, .advertisement, .cookie-banner, .popup").Remove()
+	doc.Find("script, style, nav, footer, aside, header, noscript, iframe, form").Remove()
+	doc.Find("[role='navigation'], [role='banner'], [role='complementary']").Remove()
+	doc.Find(".ad, .ads, .advertisement, .sidebar, .nav, .footer, .header, .menu, .cookie-banner, .popup").Remove()
 
 	// Try structured article selectors first
 	selectors := []string{

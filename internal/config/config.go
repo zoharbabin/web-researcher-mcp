@@ -31,6 +31,8 @@ type Config struct {
 	AllowedDomains         []string
 	ChromePath             string
 	MaxScrapeConcurrency   int
+	MaxHTMLBytes           int
+	MaxDocumentBytes       int
 	SessionTTL             time.Duration
 	SessionDataDir         string
 	SessionMaxSteps        int
@@ -401,6 +403,8 @@ func Load() (*Config, error) {
 		AllowedDomains:       splitCSV(os.Getenv("ALLOWED_DOMAINS")),
 		ChromePath:           os.Getenv("CHROME_PATH"),
 		MaxScrapeConcurrency: envInt("MAX_SCRAPE_CONCURRENCY", 5),
+		MaxHTMLBytes:         envInt("MAX_HTML_BYTES", 8<<20),
+		MaxDocumentBytes:     envInt("MAX_DOCUMENT_BYTES", 50<<20),
 		SessionTTL:           envDuration("SESSION_TTL", 4*time.Hour),
 		SessionDataDir:       envOrDefault("SESSION_DATA_DIR", filepath.Join(envOrDefault("CACHE_DIR", defaultCacheDir()), "sessions")),
 		SessionMaxSteps:      envInt("SESSION_MAX_STEPS", 200),

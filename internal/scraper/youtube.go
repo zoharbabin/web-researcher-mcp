@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	videoIDRegex    = regexp.MustCompile(`(?:v=|youtu\.be/|embed/)([a-zA-Z0-9_-]{11})`)
+	videoIDRegex    = regexp.MustCompile(`(?:v=|youtu\.be/|embed/|shorts/|live/|/v/)([a-zA-Z0-9_-]{11})`)
 	playerRespRegex = regexp.MustCompile(`ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;`)
 	playerRespAlt   = regexp.MustCompile(`var\s+ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;`)
 	descriptionRe   = regexp.MustCompile(`"shortDescription"\s*:\s*"((?:[^"\\]|\\.)*)"`)
@@ -40,12 +40,12 @@ func (p *Pipeline) scrapeYouTube(ctx context.Context, rawURL string, maxLength i
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, networkError(rawURL, "youtube", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == 404 {
-		return nil, fmt.Errorf("video not found")
+	if resp.StatusCode >= 400 {
+		return nil, classifyHTTPStatus(resp.StatusCode, rawURL, "youtube")
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
@@ -60,7 +60,7 @@ func (p *Pipeline) scrapeYouTube(ctx context.Context, rawURL string, maxLength i
 	transcript, err := extractTranscript(ctx, p.client, pageHTML)
 	if err == nil && len(transcript) > 100 {
 		if len(transcript) > maxLength {
-			transcript = transcript[:maxLength]
+			transcript = truncateBytes(transcript, maxLength)
 		}
 		return &ScrapeResult{
 			URL:         rawURL,
@@ -74,7 +74,7 @@ func (p *Pipeline) scrapeYouTube(ctx context.Context, rawURL string, maxLength i
 	transcript, err = fetchTimedTextAPI(ctx, p.client, videoID)
 	if err == nil && len(transcript) > 100 {
 		if len(transcript) > maxLength {
-			transcript = transcript[:maxLength]
+			transcript = truncateBytes(transcript, maxLength)
 		}
 		return &ScrapeResult{
 			URL:         rawURL,
@@ -89,7 +89,7 @@ func (p *Pipeline) scrapeYouTube(ctx context.Context, rawURL string, maxLength i
 	if description != "" {
 		content := fmt.Sprintf("[Video: %s]\n\n%s", title, description)
 		if len(content) > maxLength {
-			content = content[:maxLength]
+			content = truncateBytes(content, maxLength)
 		}
 		return &ScrapeResult{
 			URL:         rawURL,

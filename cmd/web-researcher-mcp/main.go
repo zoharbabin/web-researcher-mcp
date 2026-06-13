@@ -357,11 +357,13 @@ func main() {
 	}
 
 	scraperPipeline := scraper.NewPipeline(scraper.PipelineConfig{
-		MaxConcurrency:  cfg.MaxScrapeConcurrency,
-		AllowPrivateIPs: cfg.AllowPrivateIPs,
-		AllowedDomains:  cfg.AllowedDomains,
-		ChromePath:      cfg.ChromePath,
-		ExaAPIKey:       cfg.Search.ExaAPIKey, // enables the paid Exa /contents fallback tier
+		MaxConcurrency:   cfg.MaxScrapeConcurrency,
+		AllowPrivateIPs:  cfg.AllowPrivateIPs,
+		AllowedDomains:   cfg.AllowedDomains,
+		ChromePath:       cfg.ChromePath,
+		ExaAPIKey:        cfg.Search.ExaAPIKey, // enables the paid Exa /contents fallback tier
+		MaxHTMLBytes:     cfg.MaxHTMLBytes,
+		MaxDocumentBytes: cfg.MaxDocumentBytes,
 	})
 	defer scraperPipeline.Close()
 

@@ -2527,7 +2527,9 @@ func TestBrowserEnabled(t *testing.T) {
 // decompression-bomb page cannot exhaust memory (OWASP Agentic ASI06). The
 // server must still return a bounded, successful result rather than OOM/erroring.
 func TestScrapeHTML_BoundsOversizeBody(t *testing.T) {
-	// Build a body well over maxHTMLRead (3MB): a valid <article> followed by a
+	// maxHTMLRead mirrors the NewPipeline default (PipelineConfig.MaxHTMLBytes).
+	const maxHTMLRead = 8 << 20 // 8 MB
+	// Build a body well over maxHTMLRead: a valid <article> followed by a
 	// huge filler tail. goquery should parse only up to the cap.
 	var sb strings.Builder
 	sb.WriteString("<html><head><title>Big</title></head><body><article><h1>Heading</h1><p>")
@@ -2813,30 +2815,30 @@ func TestLooksLikePartialShell(t *testing.T) {
 	}
 }
 
-func TestLongerResult(t *testing.T) {
+func TestBetterResult(t *testing.T) {
 	t.Parallel()
 	short := &ScrapeResult{Content: "short"}
 	long := &ScrapeResult{Content: "this is a longer result body"}
 
-	if got := longerResult(nil, nil); got != nil {
-		t.Errorf("longerResult(nil,nil) = %v, want nil", got)
+	if got := betterResult(nil, nil); got != nil {
+		t.Errorf("betterResult(nil,nil) = %v, want nil", got)
 	}
-	if got := longerResult(nil, short); got != short {
-		t.Error("longerResult(nil, x) should return x")
+	if got := betterResult(nil, short); got != short {
+		t.Error("betterResult(nil, x) should return x")
 	}
-	if got := longerResult(short, nil); got != short {
-		t.Error("longerResult(x, nil) should return x")
+	if got := betterResult(short, nil); got != short {
+		t.Error("betterResult(x, nil) should return x")
 	}
-	if got := longerResult(short, long); got != long {
-		t.Error("longerResult should pick the longer candidate")
+	if got := betterResult(short, long); got != long {
+		t.Error("betterResult should pick the longer candidate")
 	}
-	if got := longerResult(long, short); got != long {
-		t.Error("longerResult should keep the longer incumbent")
+	if got := betterResult(long, short); got != long {
+		t.Error("betterResult should keep the longer incumbent")
 	}
 	// Tie prefers the incumbent (earlier, cheaper tier).
 	tie := &ScrapeResult{Content: "short"}
-	if got := longerResult(short, tie); got != short {
-		t.Error("longerResult should prefer the incumbent on a length tie")
+	if got := betterResult(short, tie); got != short {
+		t.Error("betterResult should prefer the incumbent on a length tie")
 	}
 }
 

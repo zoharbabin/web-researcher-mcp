@@ -3,6 +3,7 @@ package scraper
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -34,16 +35,31 @@ func isTwitterURL(rawURL string) bool {
 }
 
 func (p *Pipeline) scrapeTwitter(ctx context.Context, url string, maxLength int) (*ScrapeResult, error) {
-	// Try FXTwitter API first
-	result, err := p.scrapeViaFxTwitter(ctx, url, maxLength)
-	if err == nil && result != nil {
+	result, fxErr := p.scrapeViaFxTwitter(ctx, url, maxLength)
+	if fxErr == nil && result != nil {
 		return result, nil
 	}
 
-	// Fallback: rewrite URL to XCancel and use normal scraper tiers
-	result, err = p.scrapeViaXCancel(ctx, url, maxLength)
-	if err == nil && result != nil {
+	result, xcErr := p.scrapeViaXCancel(ctx, url, maxLength)
+	if xcErr == nil && result != nil {
 		return result, nil
+	}
+
+	// Propagate the MOST informative error (e.g. ErrNotFound for a deleted tweet)
+	// rather than the first ScrapeError found or always masking with ErrBlocked.
+	// scrapeKindPriority ranks definitiveness so an authoritative 404 from one
+	// tier wins over a transient ErrNetwork timeout from the other.
+	var best *ScrapeError
+	for _, candidate := range []error{fxErr, xcErr} {
+		var se *ScrapeError
+		if candidate != nil && errors.As(candidate, &se) {
+			if best == nil || scrapeKindPriority(se.Kind) > scrapeKindPriority(best.Kind) {
+				best = se
+			}
+		}
+	}
+	if best != nil {
+		return nil, best
 	}
 
 	return nil, &ScrapeError{
@@ -65,24 +81,24 @@ func (p *Pipeline) scrapeViaFxTwitter(ctx context.Context, rawURL string, maxLen
 
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 	if err != nil {
-		return nil, err
+		return nil, networkError(rawURL, "fxtwitter", err)
 	}
 	req.Header.Set("User-Agent", "web-researcher-mcp/1.0")
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, networkError(rawURL, "fxtwitter", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("fxtwitter returned HTTP %d", resp.StatusCode)
+		return nil, classifyHTTPStatus(resp.StatusCode, rawURL, "fxtwitter")
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
 	if err != nil {
-		return nil, err
+		return nil, networkError(rawURL, "fxtwitter", err)
 	}
 
 	var envelope map[string]any
@@ -168,7 +184,7 @@ func formatTweetResult(rawURL string, tweet map[string]any, maxLength int) *Scra
 		username, displayName, text, likes, retweets, views, createdAt)
 
 	if len(content) > maxLength {
-		content = content[:maxLength]
+		content = truncateBytes(content, maxLength)
 	}
 
 	return &ScrapeResult{
@@ -239,7 +255,7 @@ func formatProfileResult(rawURL string, user map[string]any, maxLength int) *Scr
 		displayName, username, bio, followers, following, tweetsCount, joined)
 
 	if len(content) > maxLength {
-		content = content[:maxLength]
+		content = truncateBytes(content, maxLength)
 	}
 
 	return &ScrapeResult{

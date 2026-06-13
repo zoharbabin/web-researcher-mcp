@@ -132,6 +132,17 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 			"citation":        citation,
 		}
 
+		// Extraction completeness signal (#240). Informational only: "partial"
+		// means the pipeline exhausted every tier and returned the best-quality
+		// candidate it could find (e.g. a SPA shell or a low-prose page) rather
+		// than a confidently complete extraction; "complete" otherwise. Never an
+		// error or a rejection — callers may still use partial content.
+		if result.Partial {
+			output["extractionQuality"] = "partial"
+		} else {
+			output["extractionQuality"] = "complete"
+		}
+
 		if result.Title != "" {
 			output["metadata"] = map[string]any{
 				"title":  result.Title,
@@ -320,8 +331,9 @@ func scrapeCacheKey(url, mode string, maxLength int) string {
 	// table-less/garbled content and omit structuredData after an upgrade
 	// (incl. via the shared Redis cache). v4 adds the typed classification fields
 	// (#62: sourceType/authorityTier/domainCategory). v5 adds the scholarly
-	// detectedDoi + retractionStatus fields (#199). Bump on any future shape change.
-	fmt.Fprintf(h, "scrape|v5|%s|%s|%d", url, mode, maxLength)
+	// detectedDoi + retractionStatus fields (#199). v6 adds the extractionQuality
+	// (complete/partial) completeness signal (#240). Bump on any future shape change.
+	fmt.Fprintf(h, "scrape|v6|%s|%s|%d", url, mode, maxLength)
 	return "scrape:" + hex.EncodeToString(h.Sum(nil))[:32]
 }
 

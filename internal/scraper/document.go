@@ -33,7 +33,7 @@ func (p *Pipeline) scrapeBodyAsPDF(rawURL string, body []byte, maxLength int) (*
 	}
 	truncated := false
 	if len(text) > maxLength {
-		text = text[:maxLength]
+		text = truncateBytes(text, maxLength)
 		truncated = true
 	}
 	return &ScrapeResult{
@@ -60,16 +60,15 @@ func (p *Pipeline) scrapeDocument(ctx context.Context, url string, maxLength int
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, networkError(url, "document", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("HTTP %d fetching document", resp.StatusCode)
+		return nil, classifyHTTPStatus(resp.StatusCode, url, "document")
 	}
 
-	// Limit download to 10MB
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, int64(p.config.MaxDocumentBytes)))
 	if err != nil {
 		return nil, err
 	}
@@ -77,12 +76,15 @@ func (p *Pipeline) scrapeDocument(ctx context.Context, url string, maxLength int
 	contentType := detectDocType(url, resp.Header.Get("Content-Type"))
 	text, meta, err := documents.Parse(body, contentType)
 	if err != nil {
+		if len(body) >= p.config.MaxDocumentBytes {
+			return nil, fmt.Errorf("document parse error (body hit %d-byte read cap — raise MAX_DOCUMENT_BYTES): %w", p.config.MaxDocumentBytes, err)
+		}
 		return nil, fmt.Errorf("document parse error: %w", err)
 	}
 
 	truncated := false
 	if len(text) > maxLength {
-		text = text[:maxLength]
+		text = truncateBytes(text, maxLength)
 		truncated = true
 	}
 

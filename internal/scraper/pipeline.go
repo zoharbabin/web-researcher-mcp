@@ -25,6 +25,12 @@ type PipelineConfig struct {
 	// pages, and Exa only spends a request on the hard pages they cannot extract.
 	// Empty (default) ⇒ the tier is absent and no Exa request is ever made.
 	ExaAPIKey string
+	// MaxHTMLBytes bounds the decompressed HTML body each HTML-parsing tier reads
+	// before extraction (stealth, html, patents). Zero ⇒ the NewPipeline default.
+	MaxHTMLBytes int
+	// MaxDocumentBytes bounds the document download (PDF/DOCX/PPTX) in scrapeDocument.
+	// Zero ⇒ the NewPipeline default.
+	MaxDocumentBytes int
 }
 
 type ScrapeResult struct {
@@ -36,6 +42,10 @@ type ScrapeResult struct {
 	SiteName    string
 	PublishDate string
 	Truncated   bool
+	// Partial is true when the fallback returned the best-effort result across
+	// all tiers but none produced confidently-complete content. Informational;
+	// never blocks or errors. False for direct-router results (youtube/twitter/document).
+	Partial bool
 	// Tier names the extraction tier that produced this result ("markdown",
 	// "stealth", "html", "browser", "exa:cached"/"exa:crawled", "youtube",
 	// "twitter", "document", "raw"). Provenance for the tool layer — surfaced so a
@@ -142,6 +152,12 @@ type Pipeline struct {
 func NewPipeline(cfg PipelineConfig) *Pipeline {
 	if cfg.MaxConcurrency <= 0 {
 		cfg.MaxConcurrency = 5
+	}
+	if cfg.MaxHTMLBytes <= 0 {
+		cfg.MaxHTMLBytes = 8 << 20 // 8 MB
+	}
+	if cfg.MaxDocumentBytes <= 0 {
+		cfg.MaxDocumentBytes = 50 << 20 // 50 MB
 	}
 
 	return &Pipeline{
@@ -260,13 +276,13 @@ func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, max
 			if !looksLikePartialShell(stamped) {
 				return stamped, nil
 			}
-			best = longerResult(best, stamped)
+			best = betterResult(best, stamped)
 			outcomes = append(outcomes, tierOutcome{tier.name, stamped, nil})
 			continue
 		}
 		outcomes = append(outcomes, tierOutcome{tier.name, result, err})
 		if result != nil && len(result.Content) > 0 && !looksLikeBotWall(result.Content) {
-			best = longerResult(best, stampTier(result, tier.name))
+			best = betterResult(best, stampTier(result, tier.name))
 		}
 	}
 
@@ -274,6 +290,7 @@ func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, max
 	// extracted the MOST — the deterministic best-of fallback (e.g. the stealth
 	// shell when the browser tier was unavailable or also thin).
 	if best != nil && len(best.Content) > 0 {
+		best.Partial = true
 		return best, nil
 	}
 
@@ -375,14 +392,35 @@ func looksLikePartialShell(r *ScrapeResult) bool {
 	return r.rawHTMLBytes/textLen >= shellMinHTMLRatio
 }
 
-// longerResult returns whichever of two results carries more extracted content,
-// preferring the incumbent on a tie so an equal-length later tier never displaces
-// an earlier (cheaper) one. Either argument may be nil.
-func longerResult(incumbent, candidate *ScrapeResult) *ScrapeResult {
+// contentQuality scores a result by effective prose bytes: raw length weighted
+// by prose density (fraction of letters + spaces). Penalises nav/link shells
+// dense in punctuation, digits, and slashes. Used only to order fallback
+// candidates; never rejects a result. The incumbent wins on a tie so an
+// equal-quality earlier (cheaper) tier is not displaced.
+func contentQuality(r *ScrapeResult) float64 {
+	if r == nil || len(r.Content) == 0 {
+		return 0
+	}
+	letters, spaces := 0, 0
+	for _, c := range r.Content {
+		switch {
+		case (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'):
+			letters++
+		case c == ' ' || c == '\t':
+			spaces++
+		}
+	}
+	density := float64(letters+spaces) / float64(len(r.Content))
+	return float64(len(r.Content)) * density
+}
+
+// betterResult returns whichever of two results has higher effective prose
+// quality, preferring the incumbent on a tie. Either argument may be nil.
+func betterResult(incumbent, candidate *ScrapeResult) *ScrapeResult {
 	if candidate == nil {
 		return incumbent
 	}
-	if incumbent == nil || len(candidate.Content) > len(incumbent.Content) {
+	if incumbent == nil || contentQuality(candidate) > contentQuality(incumbent) {
 		return candidate
 	}
 	return incumbent
@@ -540,7 +578,11 @@ func isYouTubeURL(rawURL string) bool {
 	path := u.Path
 	switch host {
 	case "youtube.com", "m.youtube.com":
-		return strings.HasPrefix(path, "/watch") || strings.HasPrefix(path, "/embed")
+		return strings.HasPrefix(path, "/watch") ||
+			strings.HasPrefix(path, "/embed") ||
+			strings.HasPrefix(path, "/shorts/") ||
+			strings.HasPrefix(path, "/live/") ||
+			strings.HasPrefix(path, "/v/")
 	case "youtu.be":
 		return len(strings.TrimPrefix(path, "/")) > 0
 	}
@@ -568,7 +610,7 @@ func isDocumentURL(rawURL string) bool {
 var knownSPADomains = []string{
 	"go.dev", "pkg.go.dev",
 	"patents.google.com", "scholar.google.com", "news.google.com",
-	"trends.google.com",
+	"trends.google.com", "youtube.com",
 	"linkedin.com", "facebook.com", "instagram.com",
 	"medium.com", "dev.to",
 }

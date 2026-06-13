@@ -14,21 +14,13 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-// maxHTMLRead bounds the decompressed body fed into goquery's in-memory DOM in
-// the tier-3 HTML scraper, mirroring the caps the other tiers already enforce
-// (stealth.go 1MB, patents.go 3MB). Without it a large or decompression-bomb
-// page could exhaust memory (OWASP Agentic ASI06 resource exhaustion). 3MB is
-// generous for an article — this tier is only reached when markdown/stealth
-// yield too little, and content is truncated to maxLength afterward anyway.
-const maxHTMLRead = 3 * 1024 * 1024
-
 // Structured-data extraction caps (#46). structuredData is UNTRUSTED external
 // data that content.Process never sanitizes/truncates, so extractStructuredData
 // self-bounds before returning to protect the response budget (mirroring the
-// maxHTMLRead input cap). Worst-case added response size is deterministically
-// <= maxStructuredDataBytes (~64KB), a small fraction of the 50KB default
-// content budget and bounded regardless of the 3MB input. Hitting a cap stops
-// collection silently — partial enrichment is fine, it is never an error.
+// p.config.MaxHTMLBytes input cap). Worst-case added response size is
+// deterministically <= maxStructuredDataBytes (~64KB), a small fraction of the
+// 50KB default content budget and bounded regardless of the HTML input size.
+// Hitting a cap stops collection silently — partial enrichment is fine, never an error.
 const (
 	maxJSONLDBlocks        = 16        // keep at most 16 valid ld+json blocks (real pages carry 2-4)
 	maxJSONLDBlockBytes    = 32 * 1024 // skip any single ld+json block larger than 32KB before parsing
@@ -68,7 +60,7 @@ func (p *Pipeline) scrapeHTML(ctx context.Context, url string, maxLength int) (*
 		defer closer.Close()
 	}
 
-	body, err := io.ReadAll(io.LimitReader(reader, maxHTMLRead))
+	body, err := io.ReadAll(io.LimitReader(reader, int64(p.config.MaxHTMLBytes)))
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +90,7 @@ func (p *Pipeline) scrapeHTML(ctx context.Context, url string, maxLength int) (*
 	content = cleanText(content)
 	truncated := false
 	if len(content) > maxLength {
-		content = content[:maxLength]
+		content = truncateBytes(content, maxLength)
 		truncated = true
 	}
 
@@ -178,7 +170,7 @@ func extractText(sel *goquery.Selection) string {
 	// emitted ONLY through their owning <table> (as a GFM pipe table), which
 	// eliminates the old bug where a data table became disconnected cell
 	// fragments (#48).
-	sel.Find("p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, table").Each(func(_ int, s *goquery.Selection) {
+	sel.Find("p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, table, figcaption, dt, dd").Each(func(_ int, s *goquery.Selection) {
 		tag := goquery.NodeName(s)
 		if tag == "table" {
 			// Only the OUTERMOST table emits: a table nested inside another is
@@ -204,14 +196,19 @@ func extractText(sel *goquery.Selection) string {
 		text := strings.TrimSpace(s.Text())
 		if text != "" {
 			switch {
-			case strings.HasPrefix(tag, "h"):
-				parts = append(parts, "\n## "+text+"\n")
+			case strings.HasPrefix(tag, "h") && len(tag) == 2 && tag[1] >= '1' && tag[1] <= '6':
+				level := int(tag[1] - '0')
+				parts = append(parts, "\n"+strings.Repeat("#", level)+" "+text+"\n")
 			case tag == "li":
 				parts = append(parts, "- "+text)
 			case tag == "blockquote":
 				parts = append(parts, "> "+text)
 			case tag == "pre":
 				parts = append(parts, "```\n"+text+"\n```")
+			case tag == "dt":
+				parts = append(parts, text+":")
+			case tag == "dd", tag == "figcaption":
+				parts = append(parts, text)
 			default:
 				parts = append(parts, text)
 			}
@@ -416,19 +413,24 @@ func truncateBytes(s string, n int) string {
 func cleanText(s string) string {
 	lines := strings.Split(s, "\n")
 	var cleaned []string
+	prevBlank := false
 	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			cleaned = append(cleaned, line)
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			if !prevBlank {
+				cleaned = append(cleaned, "")
+			}
+			prevBlank = true
+		} else {
+			cleaned = append(cleaned, trimmed)
+			prevBlank = false
 		}
 	}
-
-	result := strings.Join(cleaned, "\n")
-
-	// Collapse multiple newlines
-	for strings.Contains(result, "\n\n\n") {
-		result = strings.ReplaceAll(result, "\n\n\n", "\n\n")
+	for len(cleaned) > 0 && cleaned[0] == "" {
+		cleaned = cleaned[1:]
 	}
-
-	return strings.TrimSpace(result)
+	for len(cleaned) > 0 && cleaned[len(cleaned)-1] == "" {
+		cleaned = cleaned[:len(cleaned)-1]
+	}
+	return strings.Join(cleaned, "\n")
 }
