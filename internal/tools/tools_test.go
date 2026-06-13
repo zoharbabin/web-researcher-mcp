@@ -1680,3 +1680,60 @@ func TestNumResultsClampedAtBoundary(t *testing.T) {
 		t.Errorf("num_results=50 should clamp to %d at the boundary, provider saw %d", maxNumResults, got)
 	}
 }
+
+func TestGetMyAnalyticsResponse(t *testing.T) {
+	t.Parallel()
+
+	deps := setupTestDeps()
+	ctx := context.Background()
+	srv := createTestServer(deps)
+	sess := connectTestClient(ctx, t, srv)
+	defer sess.Close()
+
+	// Unauthenticated user (anonymous by default in test)
+	result, err := sess.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "get_my_analytics",
+		Arguments: map[string]any{},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if result == nil {
+		t.Fatal("result is nil")
+	}
+	if len(result.Content) == 0 {
+		t.Fatal("no content in result")
+	}
+
+	textContent, ok := result.Content[0].(*mcp.TextContent)
+	if !ok {
+		t.Fatalf("unexpected content type: %T", result.Content[0])
+	}
+
+	// Parse JSON response
+	var response map[string]interface{}
+	if err := json.Unmarshal([]byte(textContent.Text), &response); err != nil {
+		t.Fatalf("failed to parse response JSON: %v\nResponse: %s", err, textContent.Text)
+	}
+
+	// Verify response structure
+	status, ok := response["status"].(string)
+	if !ok {
+		t.Fatal("missing or invalid 'status' field in response")
+	}
+
+	// Unauthenticated users should get "unavailable"
+	if status != "unavailable" {
+		t.Errorf("expected status=unavailable, got %s; full response: %v", status, response)
+	}
+
+	// Should have a reason field
+	if reason, ok := response["reason"].(string); !ok || reason == "" {
+		t.Error("missing reason field in response")
+	}
+
+	// Verify the response text contains no errors
+	if result.IsError {
+		t.Error("result should not be marked as error")
+	}
+}

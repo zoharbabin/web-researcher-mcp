@@ -2734,3 +2734,199 @@ func TestScrapeHTML_HTMLContent_NotRerouted(t *testing.T) {
 		t.Error("ContentType should not be pdf for a plain HTML response")
 	}
 }
+
+// =============================================================================
+// SPA-shell detection + escalate-then-best-tier selection (deterministic
+// completeness heuristic). A server-rendered SPA ships a large static HTML
+// shell (JS bundles, hydration JSON) that extracts into only a sliver of text;
+// the stealth tier clears the 100-byte floor on that shell, so the old "first
+// tier over 100 bytes wins" rule never escalated to the JS-executing browser
+// tier. looksLikePartialShell flags it structurally (low text + high HTML:text
+// ratio) so the pipeline keeps walking and returns the best tier's output.
+// =============================================================================
+
+func TestLooksLikePartialShell(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name         string
+		content      string
+		rawHTMLBytes int
+		want         bool
+	}{
+		{
+			name:         "spa shell: short text, huge HTML",
+			content:      strings.Repeat("x", 120), // > 100 floor, <= 2048 cap
+			rawHTMLBytes: 120 * 60,                 // 60:1 ratio
+			want:         true,
+		},
+		{
+			name:         "short but complete: little text, little HTML",
+			content:      strings.Repeat("x", 120),
+			rawHTMLBytes: 120 * 3, // 3:1 ratio — a real short page
+			want:         false,
+		},
+		{
+			name:         "substantial article never flagged regardless of ratio",
+			content:      strings.Repeat("x", shellMaxTextBytes+1),
+			rawHTMLBytes: (shellMaxTextBytes + 1) * 100,
+			want:         false,
+		},
+		{
+			name:         "non-HTML tier (rawHTMLBytes==0) never flagged",
+			content:      strings.Repeat("x", 120),
+			rawHTMLBytes: 0,
+			want:         false,
+		},
+		{
+			name:         "exactly at the ratio threshold is a shell",
+			content:      strings.Repeat("x", 100),
+			rawHTMLBytes: 100 * shellMinHTMLRatio,
+			want:         true,
+		},
+		{
+			name:         "just under the ratio threshold is not a shell",
+			content:      strings.Repeat("x", 100),
+			rawHTMLBytes: 100*shellMinHTMLRatio - 1,
+			want:         false,
+		},
+		{
+			name:         "empty content is not a shell",
+			content:      "",
+			rawHTMLBytes: 50000,
+			want:         false,
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := &ScrapeResult{Content: tt.content, rawHTMLBytes: tt.rawHTMLBytes}
+			if got := looksLikePartialShell(r); got != tt.want {
+				t.Errorf("looksLikePartialShell() = %v, want %v (text=%d html=%d)",
+					got, tt.want, len(tt.content), tt.rawHTMLBytes)
+			}
+		})
+	}
+
+	if looksLikePartialShell(nil) {
+		t.Error("looksLikePartialShell(nil) should be false")
+	}
+}
+
+func TestLongerResult(t *testing.T) {
+	t.Parallel()
+	short := &ScrapeResult{Content: "short"}
+	long := &ScrapeResult{Content: "this is a longer result body"}
+
+	if got := longerResult(nil, nil); got != nil {
+		t.Errorf("longerResult(nil,nil) = %v, want nil", got)
+	}
+	if got := longerResult(nil, short); got != short {
+		t.Error("longerResult(nil, x) should return x")
+	}
+	if got := longerResult(short, nil); got != short {
+		t.Error("longerResult(x, nil) should return x")
+	}
+	if got := longerResult(short, long); got != long {
+		t.Error("longerResult should pick the longer candidate")
+	}
+	if got := longerResult(long, short); got != long {
+		t.Error("longerResult should keep the longer incumbent")
+	}
+	// Tie prefers the incumbent (earlier, cheaper tier).
+	tie := &ScrapeResult{Content: "short"}
+	if got := longerResult(short, tie); got != short {
+		t.Error("longerResult should prefer the incumbent on a length tie")
+	}
+}
+
+// spaShellHTML builds a page whose extractable text is `para` but whose raw
+// HTML is inflated far past the shell ratio by a large inert <script> blob
+// (stripped before text extraction, so it counts toward rawHTMLBytes only).
+func spaShellHTML(title, para string) string {
+	bulk := strings.Repeat("/*hydration state padding*/\n", 600) // ~16KB of script
+	return `<!DOCTYPE html><html><head><title>` + title + `</title>` +
+		`<script type="application/json" id="__NEXT_DATA__">` + bulk + `</script>` +
+		`</head><body><div id="root"><p>` + para + `</p></div></body></html>`
+}
+
+func TestPipeline_SPAShellEscalatesPastStealth(t *testing.T) {
+	// The stealth tier extracts only the shell paragraph (clears 100 bytes) but
+	// it looks like a partial SPA shell, so the pipeline must NOT short-circuit:
+	// it keeps walking to the html tier (and would reach the browser tier if one
+	// were available). We observe the escalation by request count.
+	para := strings.Repeat("Above-the-fold blurb. ", 6) // ~132 chars > 100 floor
+	html := spaShellHTML("SPA", para)
+
+	var requestCount atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		if strings.Contains(r.Header.Get("Accept"), "text/markdown") {
+			w.WriteHeader(406)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(html))
+	}))
+	defer ts.Close()
+
+	// Force the browser tier off so the run is deterministic in CI; the best-of
+	// fallback then returns the shell content rather than erroring (no regression).
+	orig := statFile
+	statFile = func(path string) (any, error) { return nil, fmt.Errorf("not found") }
+	defer func() { statFile = orig }()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, ChromePath: chromeDisabled})
+	result, err := p.Scrape(context.Background(), ts.URL, 50000)
+	if err != nil {
+		t.Fatalf("expected best-of fallback to return shell content, got error: %v", err)
+	}
+	if result == nil || !strings.Contains(result.Content, "Above-the-fold blurb") {
+		t.Fatalf("expected shell content returned as fallback, got: %+v", result)
+	}
+	// markdown (406) + stealth + html = 3 requests proves it did NOT stop at stealth.
+	if got := requestCount.Load(); got < 3 {
+		t.Errorf("expected escalation past stealth (>=3 requests), got %d", got)
+	}
+}
+
+func TestPipeline_ShortCompletePageShortCircuits(t *testing.T) {
+	// A genuinely short but complete page (little text AND little HTML, low ratio)
+	// must short-circuit at the stealth tier — it is NOT a shell, so the html tier
+	// is never requested.
+	para := strings.Repeat("Complete short article body. ", 8) // ~232 chars
+	html := `<!DOCTYPE html><html><head><title>Short</title></head><body><article><p>` +
+		para + `</p></article></body></html>`
+
+	var requestCount atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		if strings.Contains(r.Header.Get("Accept"), "text/markdown") {
+			w.WriteHeader(406)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(html))
+	}))
+	defer ts.Close()
+
+	orig := statFile
+	statFile = func(path string) (any, error) { return nil, fmt.Errorf("not found") }
+	defer func() { statFile = orig }()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, ChromePath: chromeDisabled})
+	result, err := p.Scrape(context.Background(), ts.URL, 50000)
+	if err != nil {
+		t.Fatalf("expected success, got error: %v", err)
+	}
+	if result == nil || !strings.Contains(result.Content, "Complete short article body") {
+		t.Fatalf("expected short page content, got: %+v", result)
+	}
+	if result.Tier != "stealth" {
+		t.Errorf("expected stealth tier to win, got %q", result.Tier)
+	}
+	// markdown (406) + stealth = 2 requests; html tier must NOT have been hit.
+	if got := requestCount.Load(); got != 2 {
+		t.Errorf("expected short-circuit at stealth (2 requests), got %d", got)
+	}
+}

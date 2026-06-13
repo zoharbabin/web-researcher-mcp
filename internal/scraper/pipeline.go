@@ -49,6 +49,14 @@ type ScrapeResult struct {
 	// Best-effort enrichment — a nil pointer means "absent" (no markup found, or
 	// a non-HTML tier produced the result), never an error.
 	StructuredData *StructuredData
+	// rawHTMLBytes is the size of the decompressed HTML the HTML-parsing tiers
+	// (stealth, html) read before extraction. The pipeline reads it to detect a
+	// JavaScript-rendered SPA shell — a large HTML payload that yielded little
+	// extracted text — and to keep escalating to the JS-executing browser tier
+	// instead of accepting the partial shell (see looksLikePartialShell). Zero
+	// for tiers that don't parse raw HTML (markdown, browser, document, youtube,
+	// twitter, raw). Unexported: pipeline-internal provenance, never serialized.
+	rawHTMLBytes int
 }
 
 // StructuredData is page-embedded, machine-readable metadata lifted verbatim
@@ -225,7 +233,12 @@ func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, max
 	}
 
 	var outcomes []tierOutcome
-	var lastResult *ScrapeResult
+	// best is the longest non-bot-wall result seen so far across all tiers. It is
+	// the deterministic fallback when no tier produces confidently-complete
+	// content (e.g. a partial SPA shell is the only thing the HTTP tiers can get
+	// and the browser tier is unavailable): we return the most content extracted,
+	// never silently drop to an error.
+	var best *ScrapeResult
 
 	for _, tier := range tiers {
 		result, err := tier.fn(ctx, url, maxLength)
@@ -238,16 +251,30 @@ func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, max
 			continue
 		}
 		if err == nil && result != nil && len(result.Content) > 100 {
-			return stampTier(result, tier.name), nil
+			stamped := stampTier(result, tier.name)
+			// Confident, complete content wins immediately — same latency as before
+			// for the overwhelming majority of pages. A partial SPA shell (a large
+			// HTML payload that yielded little extracted text) does NOT short-circuit:
+			// it is kept as the fallback while the pipeline keeps escalating toward
+			// the JS-executing browser tier, which can render the real content.
+			if !looksLikePartialShell(stamped) {
+				return stamped, nil
+			}
+			best = longerResult(best, stamped)
+			outcomes = append(outcomes, tierOutcome{tier.name, stamped, nil})
+			continue
 		}
 		outcomes = append(outcomes, tierOutcome{tier.name, result, err})
 		if result != nil && len(result.Content) > 0 && !looksLikeBotWall(result.Content) {
-			lastResult = stampTier(result, tier.name)
+			best = longerResult(best, stampTier(result, tier.name))
 		}
 	}
 
-	if lastResult != nil && len(lastResult.Content) > 0 {
-		return lastResult, nil
+	// No tier produced confidently-complete content. Return whichever tier
+	// extracted the MOST — the deterministic best-of fallback (e.g. the stealth
+	// shell when the browser tier was unavailable or also thin).
+	if best != nil && len(best.Content) > 0 {
+		return best, nil
 	}
 
 	// Compose a diagnostic error showing what each tier saw. When tiers disagree
@@ -303,6 +330,62 @@ func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, max
 	}
 
 	return nil, &ScrapeError{Kind: highestKind, Message: msg, URL: url}
+}
+
+// shell-detection thresholds. Deliberately fixed constants, not tunables: the
+// goal the user asked for is a WIDER but PREDICTABLE escalation rule, so the
+// behavior is fully determined by the bytes a tier already read — no sampling,
+// no scoring, no environment knobs.
+const (
+	// shellMaxTextBytes bounds the "little extracted text" half of the signal. A
+	// result longer than this is substantial enough that re-rendering in a browser
+	// is not worth the latency, even if its HTML:text ratio is high (a long article
+	// on a heavy page). 2KB is ~1-2 short paragraphs — below a real article, above
+	// the one-line above-the-fold blurb a server-rendered SPA shell ships.
+	shellMaxTextBytes = 2048
+	// shellMinHTMLRatio is the HTML-bytes-to-text-bytes ratio above which a short
+	// result looks like a shell rather than a genuinely short page. An SPA ships a
+	// large HTML payload (JS bundles, hydration JSON, empty mount divs) for a sliver
+	// of text; a real short page ships little HTML AND little text. 20:1 cleanly
+	// separates the two (sentra.app/research was ~50:1; a short static page is <5:1).
+	shellMinHTMLRatio = 20
+)
+
+// looksLikePartialShell reports whether a tier result is most likely a
+// JavaScript-rendered SPA shell — a large static HTML payload that extracted
+// into only a sliver of readable text — rather than a genuinely short but
+// complete page. It is the deterministic gate that lets the pipeline keep
+// escalating to the JS-executing browser tier instead of accepting the shell.
+//
+// The test is purely structural and uses only bytes the tier already read:
+//   - the extracted text is short (<= shellMaxTextBytes), AND
+//   - the raw HTML is at least shellMinHTMLRatio times larger than the text.
+//
+// rawHTMLBytes is zero for tiers that don't parse raw HTML (markdown, browser,
+// document, …); those can never be flagged, which is correct — the browser tier
+// already executed JS, so its short output is final, not a shell to escalate past.
+func looksLikePartialShell(r *ScrapeResult) bool {
+	if r == nil || r.rawHTMLBytes == 0 {
+		return false
+	}
+	textLen := len(r.Content)
+	if textLen == 0 || textLen > shellMaxTextBytes {
+		return false
+	}
+	return r.rawHTMLBytes/textLen >= shellMinHTMLRatio
+}
+
+// longerResult returns whichever of two results carries more extracted content,
+// preferring the incumbent on a tie so an equal-length later tier never displaces
+// an earlier (cheaper) one. Either argument may be nil.
+func longerResult(incumbent, candidate *ScrapeResult) *ScrapeResult {
+	if candidate == nil {
+		return incumbent
+	}
+	if incumbent == nil || len(candidate.Content) > len(incumbent.Content) {
+		return candidate
+	}
+	return incumbent
 }
 
 // ScrapeRaw fetches a URL once and returns the raw response body verbatim,

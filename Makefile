@@ -1,5 +1,5 @@
 .PHONY: build build-fips sync-lenses test test-race test-cover test-e2e test-live test-eval test-concurrency test-bench \
-        lint fmt fmt-check vet vuln sec tools hooks precommit verify clean run dev docker docker-smoke release version-sync help all
+        lint fmt fmt-check vet vuln sec tools hooks precommit verify clean run dev docker docker-smoke release version-sync rebuild-local help all
 
 BINARY = web-researcher-mcp
 VERSION ?= $(shell cat VERSION 2>/dev/null || git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -155,6 +155,14 @@ release:
 
 version-sync:
 	bash scripts/sync-version.sh
+
+# Deterministic local rebuild for IRL testing: clears the Go build cache + the
+# MCP response cache (NOT sessions/persist personal data), rebuilds from
+# scratch, and reinstalls over the binary on PATH using the macOS-SIGKILL-safe
+# rm+cp+codesign sequence. Override INSTALL_PATH / CACHE_DIR as needed; pass
+# ARGS="--no-install" to build without installing.
+rebuild-local:
+	bash scripts/rebuild-local.sh $(ARGS)
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*' Makefile | grep -v '^\.PHONY' | sort | \

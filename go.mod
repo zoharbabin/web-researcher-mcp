@@ -4,6 +4,7 @@ go 1.25.11
 
 require (
 	github.com/PuerkitoBio/goquery v1.12.0
+	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/go-rod/rod v0.116.2
 	github.com/go-rod/stealth v0.4.9
 	github.com/google/uuid v1.6.0
@@ -44,7 +45,6 @@ require (
 	github.com/alexkohler/nakedret/v2 v2.0.6 // indirect
 	github.com/alexkohler/prealloc v1.1.0 // indirect
 	github.com/alfatraining/structtag v1.0.0 // indirect
-	github.com/alicebob/miniredis/v2 v2.38.0 // indirect
 	github.com/alingse/asasalint v0.0.11 // indirect
 	github.com/alingse/nilnesserr v0.2.0 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect

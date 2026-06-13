@@ -111,6 +111,10 @@ func (p *Pipeline) scrapeHTML(ctx context.Context, url string, maxLength int) (*
 		SiteName:    meta.siteName,
 		PublishDate: meta.publishDate,
 		Truncated:   truncated,
+		// Surface the decompressed HTML size so the pipeline can detect a
+		// JS-rendered SPA shell (large HTML, little extracted text) and keep
+		// escalating to the browser tier (see looksLikePartialShell).
+		rawHTMLBytes: len(body),
 	}
 	// Attach structured data only when something was captured, so ordinary pages
 	// leave the pointer nil (the clean "absent" signal).

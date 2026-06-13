@@ -14,6 +14,18 @@ go tool govulncheck ./...                                    # Vulnerability sca
 make verify                                                  # fmt-check + vet + lint + gosec + vuln + test-race + test-e2e + build (CI gate; `make all` aliases it)
 ```
 
+### Local rebuild for IRL testing
+
+`make rebuild-local` (or `scripts/rebuild-local.sh`, or the `/rebuild-local` slash command) does the full **clear-caches → rebuild → reinstall** flow deterministically in one shell call — no LLM roundtrips. Use it after a scraper/server change before restarting the MCP client to test live.
+
+```bash
+make rebuild-local                      # clear caches + build + reinstall over the binary on PATH
+make rebuild-local ARGS="--no-install"  # build only
+make rebuild-local ARGS="--help"        # flags + INSTALL_PATH/CACHE_DIR env overrides
+```
+
+It clears the Go build cache (from-scratch compile) and the MCP **response** cache (`*.cache` + `.version`) so a live tool call hits the network fresh, then rebuilds with version ldflags and reinstalls using the macOS-SIGKILL-safe `rm`+`cp`+`codesign` sequence. It deliberately **never** touches personal-data dirs under the cache root (`sessions/`, `persist/`). Restart the MCP client afterward to load the new binary.
+
 ## Architecture
 
 ```
