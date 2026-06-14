@@ -214,6 +214,13 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
    │     Strategy 1: Player response captions (primary + alt regex)
    │     Strategy 2: Direct timedtext API (en, en-US, en-GB)
    │     Strategy 3: Video description (shortDescription JSON field)
+   ├─ news.ycombinator.com → native HN API (Firebase REST + Algolia; no API key required):
+   │     /item/<id>  → story metadata (title, URL, score, author, date) + top 10 comments
+   │     /           → top 20 stories from the HN top-stories list (parallel Firebase fetch)
+   │     /newest, /best, /ask, /show, /jobs → corresponding HN list, top 20 stories
+   │     /user/<id>  → user profile (karma, about, created date)
+   │     Unknown paths fall through to the tiered HTML pipeline
+   │     `Truncated: true` when content is capped; `ContentType: "hn"`
    ├─ .pdf / application/pdf → PDF parser
    ├─ .docx / application/vnd.openxmlformats* → DOCX parser
    └─ .pptx / application/vnd.ms-powerpoint → PPTX parser
@@ -1628,5 +1635,6 @@ These are upstream behaviors we cannot control — they reflect how the underlyi
 | OpenAlex | `pdf_only` may return 0 results for common topics | Not all papers have PDF URLs indexed in their metadata |
 | DuckDuckGo | Rate-limited aggressively from cloud/datacenter IPs | Works well from local/STDIO; may return 0 results from servers |
 | DuckDuckGo | Images and News return empty results | HTML endpoint doesn't support these categories; Router falls through |
+| HackerNews | `web_search` / `news_search` only (no Images); `dateRange` filter via Algolia `numericFilters`; `num_results` capped at 20; no API key required (`SEARCH_PROVIDER=hackernews` or `provider: hackernews` per-call) | Algolia HN search index only; not a general-web index |
 
 These are not errors in web-researcher-mcp. The tool faithfully passes parameters to the upstream API and returns whatever the API provides.

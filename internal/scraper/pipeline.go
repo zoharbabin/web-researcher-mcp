@@ -31,6 +31,12 @@ type PipelineConfig struct {
 	// MaxDocumentBytes bounds the document download (PDF/DOCX/PPTX) in scrapeDocument.
 	// Zero ⇒ the NewPipeline default.
 	MaxDocumentBytes int
+	// HNFirebaseBase overrides the production HN Firebase base URL (for tests).
+	// Empty (default) ⇒ https://hacker-news.firebaseio.com/v0
+	HNFirebaseBase string
+	// HNAlgoliaBase overrides the production HN Algolia base URL (for tests).
+	// Empty (default) ⇒ https://hn.algolia.com/api/v1
+	HNAlgoliaBase string
 }
 
 type ScrapeResult struct {
@@ -197,6 +203,8 @@ func (p *Pipeline) Scrape(ctx context.Context, rawURL string, maxLength int) (*S
 		result, err = p.scrapeYouTube(ctx, url, maxLength)
 	case isTwitterURL(url):
 		result, err = p.scrapeTwitter(ctx, url, maxLength)
+	case isHNURL(url):
+		result, err = p.scrapeHN(ctx, url, maxLength)
 	case isDocumentURL(url):
 		result, err = p.scrapeDocument(ctx, url, maxLength)
 	default:
