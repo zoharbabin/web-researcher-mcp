@@ -32,16 +32,16 @@ type recommendationItem struct {
 }
 
 type recommendationResult struct {
-	Title               string                           `json:"title"`
-	URL                 string                           `json:"url,omitempty"`
-	Author              string                           `json:"author,omitempty"`
-	SelfPromotionSignal *content.SelfPromotionSignal     `json:"selfPromotionSignal,omitempty"`
+	Title               string                            `json:"title"`
+	URL                 string                            `json:"url,omitempty"`
+	Author              string                            `json:"author,omitempty"`
+	SelfPromotionSignal *content.SelfPromotionSignal      `json:"selfPromotionSignal,omitempty"`
 	ConflictOfInterest  *content.ConflictOfInterestSignal `json:"conflictOfInterest,omitempty"`
-	DomainReputation    *content.DomainReputation        `json:"domainReputation,omitempty"`
-	LinkLive            *bool                            `json:"linkLive,omitempty"`
-	HTTPStatus          int                              `json:"httpStatus,omitempty"`
-	Flags               []string                         `json:"flags"`
-	Reasons             []string                         `json:"reasons"`
+	DomainReputation    *content.DomainReputation         `json:"domainReputation,omitempty"`
+	LinkLive            *bool                             `json:"linkLive,omitempty"`
+	HTTPStatus          int                               `json:"httpStatus,omitempty"`
+	Flags               []string                          `json:"flags"`
+	Reasons             []string                          `json:"reasons"`
 }
 
 func registerVerifyRecommendation(srv *mcp.Server, deps Dependencies) {
@@ -67,9 +67,9 @@ func registerVerifyRecommendation(srv *mcp.Server, deps Dependencies) {
 		}
 
 		out := map[string]any{
-			"itemCount":        len(results),
-			"recommendations":  results,
-			"trust":            untrustedContentTrust,
+			"itemCount":       len(results),
+			"recommendations": results,
+			"trust":           untrustedContentTrust,
 		}
 
 		jsonBytes, _ := json.Marshal(out)
@@ -181,8 +181,8 @@ var verifyRecommendationOutputSchema = map[string]any{
 					"linkLive":   map[string]any{"type": "boolean", "description": "True when the URL resolves (2xx/3xx HTTP); false when dead."},
 					"httpStatus": map[string]any{"type": "integer", "description": "Live HTTP status for the URL (0 = unreachable/timeout)."},
 					"flags": map[string]any{
-						"type":  "array",
-						"items": map[string]any{"type": "string", "enum": []any{"self_promotion", "conflict_of_interest", "dead_link", "unknown_reputation", "low_reputation"}},
+						"type":        "array",
+						"items":       map[string]any{"type": "string", "enum": []any{"self_promotion", "conflict_of_interest", "dead_link", "unknown_reputation", "low_reputation"}},
 						"description": "Audit flags. Empty = no issues detected. Treat as evidence, not verdicts.",
 					},
 					"reasons": map[string]any{

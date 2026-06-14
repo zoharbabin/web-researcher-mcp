@@ -19,12 +19,12 @@ type SelfPromotionSignal struct {
 // citation's subject. Flags when a source's author wrote for or is affiliated
 // with a company cited as credible in the citation text.
 type ConflictOfInterestSignal struct {
-	Detected           bool   `json:"detected"`
-	AuthorAffiliation  string `json:"authorAffiliation"`  // e.g. "Shopify"
-	ConflictType       string `json:"conflictType"`       // "employment" | "funded_by" | "owns_equity"
-	CitedEntityName    string `json:"citedEntityName"`    // The entity mentioned in citation text
-	Evidence           string `json:"evidence"`           // e.g. "Author byline shows 'at Shopify'"
-	Confidence         string `json:"confidence"`         // "high" | "medium" | "low"
+	Detected          bool   `json:"detected"`
+	AuthorAffiliation string `json:"authorAffiliation"` // e.g. "Shopify"
+	ConflictType      string `json:"conflictType"`      // "employment" | "funded_by" | "owns_equity"
+	CitedEntityName   string `json:"citedEntityName"`   // The entity mentioned in citation text
+	Evidence          string `json:"evidence"`          // e.g. "Author byline shows 'at Shopify'"
+	Confidence        string `json:"confidence"`        // "high" | "medium" | "low"
 }
 
 // SourceClassification is the typed, categorical companion to the numeric

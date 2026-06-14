@@ -12,7 +12,7 @@ func TestVerifyRecommendationConflictOfInterest(t *testing.T) {
 		"Jane is a senior developer at Shopify with 5 years experience",
 		"Shopify — Top-rated e-commerce platform with excellent API support",
 	)
-	
+
 	if coi == nil || !coi.Detected {
 		t.Fatalf("Expected conflict of interest to be detected")
 	}
@@ -32,7 +32,7 @@ func TestVerifyRecommendationNoConflict(t *testing.T) {
 		"Jane is a senior developer at Shopify",
 		"WooCommerce — Strong open-source alternative",
 	)
-	
+
 	if coi != nil {
 		t.Fatalf("Expected no conflict, but got: %+v", coi)
 	}
@@ -46,7 +46,7 @@ func TestVerifyRecommendationSelfPromotion(t *testing.T) {
 2. WooCommerce — Good open-source option
 3. BigCommerce — Another platform to consider
 `)
-	
+
 	if signal == nil || !signal.Detected {
 		t.Fatalf("Expected self-promotion to be detected")
 	}
@@ -87,10 +87,9 @@ func TestVerifyRecommendationNoSelfPromotion(t *testing.T) {
 2. Shopify — Close second
 3. BigCommerce — Third
 `)
-	
+
 	if signal != nil {
 		t.Fatalf("Expected no self-promotion, but got: %+v", signal)
 	}
 	t.Logf("✓ No self-promotion detected when brand is not #1")
 }
-
