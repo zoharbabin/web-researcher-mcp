@@ -13,7 +13,7 @@ func TestAuthorityTier(t *testing.T) {
 
 func TestClassifySourceFromCitationMeta(t *testing.T) {
 	// Highwire citation_* meta is a strong peer-reviewed signal.
-	c := ClassifySource("https://example.com/article", 0.9, StructuredSignals{HasCitationMeta: true}, "")
+	c := ClassifySource("https://example.com/article", 0.9, StructuredSignals{HasCitationMeta: true}, "", "")
 	if c.SourceType != SourceTypePeerReviewed {
 		t.Errorf("sourceType = %q, want peer_reviewed", c.SourceType)
 	}
@@ -31,7 +31,7 @@ func TestClassifySourceFromSchemaType(t *testing.T) {
 		"QAPage":           SourceTypeForum,
 	}
 	for schemaType, want := range cases {
-		c := ClassifySource("https://example.com/x", 0.5, StructuredSignals{SchemaTypes: []string{schemaType}}, "")
+		c := ClassifySource("https://example.com/x", 0.5, StructuredSignals{SchemaTypes: []string{schemaType}}, "", "")
 		if c.SourceType != want {
 			t.Errorf("schema %q → sourceType %q, want %q", schemaType, c.SourceType, want)
 		}
@@ -55,7 +55,7 @@ func TestClassifySourceHostHeuristic(t *testing.T) {
 		"https://law.cornell.edu/uscode/text/42/": SourceTypeGovernment,
 	}
 	for url, want := range cases {
-		c := ClassifySource(url, 0.5, StructuredSignals{}, "")
+		c := ClassifySource(url, 0.5, StructuredSignals{}, "", "")
 		if c.SourceType != want {
 			t.Errorf("%s → sourceType %q, want %q", url, c.SourceType, want)
 		}
@@ -75,7 +75,7 @@ func TestClassifyNewsHomepage(t *testing.T) {
 		"https://www.bbc.com/",
 		"https://www.reuters.com/",
 	} {
-		c := ClassifySource(u, 0.8, StructuredSignals{}, "")
+		c := ClassifySource(u, 0.8, StructuredSignals{}, "", "")
 		if c.SourceType != SourceTypeNews {
 			t.Errorf("%s → sourceType %q, want %q", u, c.SourceType, SourceTypeNews)
 		}
@@ -84,7 +84,7 @@ func TestClassifyNewsHomepage(t *testing.T) {
 
 func TestClassifyStructuredBeatsHeuristic(t *testing.T) {
 	// A blog host with a NewsArticle schema → structured wins (news).
-	c := ClassifySource("https://medium.com/@a/post", 0.5, StructuredSignals{SchemaTypes: []string{"NewsArticle"}}, "")
+	c := ClassifySource("https://medium.com/@a/post", 0.5, StructuredSignals{SchemaTypes: []string{"NewsArticle"}}, "", "")
 	if c.SourceType != SourceTypeNews {
 		t.Errorf("structured signal should win: got %q", c.SourceType)
 	}
@@ -97,7 +97,7 @@ func TestDomainCategoryFromLens(t *testing.T) {
 		"devops": "technical", "academic-extended": "academic",
 	}
 	for lens, want := range cases {
-		c := ClassifySource("https://example.com/x", 0.5, StructuredSignals{}, lens)
+		c := ClassifySource("https://example.com/x", 0.5, StructuredSignals{}, lens, "")
 		if c.DomainCategory != want {
 			t.Errorf("lens %q → domainCategory %q, want %q", lens, c.DomainCategory, want)
 		}
@@ -112,7 +112,7 @@ func TestDomainCategoryJournalPublishers(t *testing.T) {
 		"www.thelancet.com", "www.cell.com", "www.bmj.com", "onlinelibrary.wiley.com",
 		"academic.oup.com", "www.pnas.org", "www.frontiersin.org", "www.cambridge.org",
 	} {
-		c := ClassifySource("https://"+host+"/article/123", 0.5, StructuredSignals{}, "")
+		c := ClassifySource("https://"+host+"/article/123", 0.5, StructuredSignals{}, "", "")
 		if c.DomainCategory != DomainCategoryAcademic {
 			t.Errorf("%s → domainCategory %q, want academic", host, c.DomainCategory)
 		}
@@ -121,14 +121,14 @@ func TestDomainCategoryJournalPublishers(t *testing.T) {
 
 func TestDomainCategoryLensBeatsHost(t *testing.T) {
 	// legal lens on an academic host → lens wins.
-	c := ClassifySource("https://arxiv.org/abs/1", 0.5, StructuredSignals{}, "legal")
+	c := ClassifySource("https://arxiv.org/abs/1", 0.5, StructuredSignals{}, "legal", "")
 	if c.DomainCategory != "legal" {
 		t.Errorf("lens should win: got %q", c.DomainCategory)
 	}
 }
 
 func TestDomainCategoryFallsBackToGeneral(t *testing.T) {
-	c := ClassifySource("https://some-shop.example/widget", 0.5, StructuredSignals{}, "")
+	c := ClassifySource("https://some-shop.example/widget", 0.5, StructuredSignals{}, "", "")
 	if c.DomainCategory != "general" {
 		t.Errorf("expected general, got %q", c.DomainCategory)
 	}

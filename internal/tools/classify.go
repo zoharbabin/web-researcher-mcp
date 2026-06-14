@@ -24,7 +24,7 @@ func classifySource(url, title, body, query, lens string, structured *scraper.St
 		Title:   title,
 		Query:   query,
 	})
-	return content.ClassifySource(url, score.Authority, structured.Signals(), lens)
+	return content.ClassifySource(url, score.Authority, structured.Signals(), lens, body)
 }
 
 // classificationFields renders a SourceClassification as the additive output
@@ -39,6 +39,10 @@ func classificationFields(c content.SourceClassification) map[string]any {
 	// reputation signal, so the key is omitted rather than asserting "unknown".
 	if c.DomainReputation != nil {
 		fields["domainReputation"] = c.DomainReputation
+	}
+	// Self-promotion signal (#244) is surfaced only when detected.
+	if c.SelfPromotion != nil && c.SelfPromotion.Detected {
+		fields["selfPromotionSignal"] = c.SelfPromotion
 	}
 	return fields
 }
@@ -77,14 +81,23 @@ func enrichResultsWithReputation(results []search.SearchResult, claim string) []
 // reputationForURL returns the domain reputation for a URL's host, or nil when
 // the host is unknown (ReputationUnknown). Strips "www." before lookup.
 func reputationForURL(rawURL string) *content.DomainReputation {
-	u, err := url.Parse(strings.TrimSpace(rawURL))
-	if err != nil || u.Host == "" {
+	host := hostForURL(rawURL)
+	if host == "" {
 		return nil
 	}
-	host := strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
 	rep := content.LookupDomainReputation(host)
 	if rep.Tier == "" || rep.Tier == content.ReputationUnknown {
 		return nil
 	}
 	return &rep
+}
+
+// hostForURL returns the lowercased registrable host of a URL with any leading
+// "www." stripped, or "" when the URL is unparseable or hostless.
+func hostForURL(rawURL string) string {
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	return strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
 }

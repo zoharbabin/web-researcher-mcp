@@ -113,6 +113,10 @@ func (p *Pipeline) scrapeHTML(ctx context.Context, url string, maxLength int) (*
 	if !sd.IsEmpty() {
 		res.StructuredData = sd
 	}
+	// Extract forum signals (Reddit upvotes, comments, etc.) from JSON-LD
+	if res.StructuredData != nil && len(res.StructuredData.JSONLD) > 0 {
+		res.ForumSignals = extractForumSignals(url, res.StructuredData.JSONLD)
+	}
 	return res, nil
 }
 
@@ -433,4 +437,77 @@ func cleanText(s string) string {
 		cleaned = cleaned[:len(cleaned)-1]
 	}
 	return strings.Join(cleaned, "\n")
+}
+
+// extractForumSignals parses JSON-LD blocks from a Reddit page and returns
+// ForumSignals. Returns nil for non-Reddit URLs or when no forum schema found.
+func extractForumSignals(rawURL string, jsonldBlocks []json.RawMessage) *ForumSignals {
+	if !strings.Contains(rawURL, "reddit.com") {
+		return nil
+	}
+
+	for _, raw := range jsonldBlocks {
+		var block map[string]interface{}
+		if err := json.Unmarshal(raw, &block); err != nil {
+			continue
+		}
+
+		t, ok := block["@type"].(string)
+		if !ok || t != "DiscussionForumPosting" {
+			continue
+		}
+
+		sig := &ForumSignals{Platform: "reddit", Upvotes: -1, Comments: -1}
+
+		// Extract upvotes from upvoteCount field
+		if upvotes, ok := block["upvoteCount"]; ok {
+			if flt, ok := upvotes.(float64); ok {
+				sig.Upvotes = int(flt)
+			}
+		}
+
+		// Extract comments and upvotes from interactionStatistic array
+		if stats, ok := block["interactionStatistic"].([]interface{}); ok {
+			for _, stat := range stats {
+				statMap, ok := stat.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				itype, ok := statMap["interactionType"].(string)
+				if !ok {
+					continue
+				}
+				count, ok := statMap["userInteractionCount"].(float64)
+				if !ok {
+					continue
+				}
+				if strings.Contains(itype, "VoteAction") && sig.Upvotes == -1 {
+					sig.Upvotes = int(count)
+				} else if strings.Contains(itype, "CommentAction") {
+					sig.Comments = int(count)
+				}
+			}
+		}
+
+		// Extract datePublished
+		if published, ok := block["datePublished"].(string); ok {
+			sig.DatePublished = published
+		}
+
+		// Extract author name
+		if author, ok := block["author"].(map[string]interface{}); ok {
+			if name, ok := author["name"].(string); ok {
+				sig.AuthorName = name
+			}
+		}
+
+		// Set credibility note for low engagement
+		if sig.Upvotes >= 0 && sig.Upvotes < 20 {
+			sig.CredibilityNote = "Low engagement: this post has fewer than 20 upvotes. Community validation is minimal."
+		}
+
+		return sig
+	}
+
+	return nil
 }

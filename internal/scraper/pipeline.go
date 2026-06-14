@@ -39,6 +39,24 @@ type PipelineConfig struct {
 	HNAlgoliaBase string
 }
 
+// ForumSignals holds engagement metadata extracted from forum pages (Reddit,
+// HackerNews). Non-nil only when the page is identified as a forum post (#247).
+type ForumSignals struct {
+	// Platform is "reddit" or "hackernews".
+	Platform string `json:"platform"`
+	// Upvotes is the post score / upvote count. -1 means not found in page data.
+	Upvotes int `json:"upvotes"`
+	// Comments is the comment count. -1 means not found.
+	Comments int `json:"comments"`
+	// DatePublished is the ISO-8601 publication timestamp from structured data.
+	DatePublished string `json:"datePublished,omitempty"`
+	// AuthorName is the post author's display name (not a user ID).
+	AuthorName string `json:"authorName,omitempty"`
+	// CredibilityNote is a human-readable note for the AI when signals suggest
+	// low engagement. Empty when engagement is normal.
+	CredibilityNote string `json:"credibilityNote,omitempty"`
+}
+
 type ScrapeResult struct {
 	URL         string
 	Content     string
@@ -65,6 +83,9 @@ type ScrapeResult struct {
 	// Best-effort enrichment — a nil pointer means "absent" (no markup found, or
 	// a non-HTML tier produced the result), never an error.
 	StructuredData *StructuredData
+	// ForumSignals holds engagement metadata (upvotes, comments, credibility) for
+	// Reddit posts extracted from JSON-LD (#247). Nil for non-Reddit URLs.
+	ForumSignals *ForumSignals
 	// rawHTMLBytes is the size of the decompressed HTML the HTML-parsing tiers
 	// (stealth, html) read before extraction. The pipeline reads it to detect a
 	// JavaScript-rendered SPA shell — a large HTML payload that yielded little

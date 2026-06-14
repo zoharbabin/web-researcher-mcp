@@ -29,6 +29,7 @@ var expectedTools = []string{
 	"verify_citation",
 	"audit_bibliography",
 	"archive_source",
+	"verify_recommendation",
 	"citation_graph",
 	"filing_search",
 	"legal_search",

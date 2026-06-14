@@ -300,7 +300,7 @@ func buildSourcesStructured(results []scrapeResult, query, claim string, filterB
 
 		// Typed classification (#62) — reuse the authority we just scored; no lens
 		// on search_and_scrape.
-		cls := content.ClassifySource(r.url, score.Authority, r.structured.Signals(), "")
+		cls := content.ClassifySource(r.url, score.Authority, r.structured.Signals(), "", r.content)
 
 		src := sourceOutput{
 			URL:            r.url,

@@ -1369,7 +1369,41 @@ Verify a single citation before relying on it — confirm it **exists**, matches
 
 ---
 
-## Tool 24: `clinical_search`
+## Tool 24: `verify_recommendation`
+
+### Purpose
+
+Audit an AI-generated recommendation list (a listicle, product ranking, or comparison) for anti-sloptimization signals. Given a list of recommendations with optional URLs and author bios, returns per-item evidence: self-promotion patterns (a brand ranking itself first), conflicts of interest (the author is employed by the recommended company), domain reputation, and link liveness. Built to catch GEO (Generative Engine Optimization) and brand-favoring recommendations so you can decide whether the list is trustworthy or gaming you. Compose with `web_search` + `verify_citation` to audit sources and claims.
+
+### Input Schema
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `recommendations` | []object | yes | Array of recommendations (max 100). Each has: `title` (the recommendation), `url` (optional), `author` (optional), `authorBio` (optional author affiliation/bio). |
+
+### Output Schema
+
+`itemCount` (recommendations audited), `recommendations[]` — per item: `title` (echo), `url` (echo when provided), `author` (echo when provided), `selfPromotionSignal` (present when the recommendation text contains ranking patterns favoring the brand; rare for structured lists, more common on full-page audits), `conflictOfInterest` (present when the author has a detected financial stake — employment / funding / equity — in the recommended entity), `domainReputation` (domain reputation when the URL host is in the known sources dataset; omitted for unlisted hosts), `linkLive` (true when the URL resolves 2xx/3xx; false when dead), `httpStatus` (live HTTP status, 0 = unreachable/timeout), `flags` (`conflict_of_interest` / `dead_link` / `unknown_reputation` / `low_reputation`; empty = no issues), `reasons[]` (human-readable explanations for any flags), and the `trust` marker.
+
+### Behavior
+
+- **Evidence, never a verdict.** The tool reports what it found (conflicts/reputation/liveness); the caller decides whether to trust the recommendation.
+- **Conflict of interest** detection: scans author bio for employment, funding, or equity indicators (e.g. "at Shopify", "advisor to") that match entities mentioned in the recommendation text. Conservative — false negatives preferred to false positives.
+- **Self-promotion signal** (when present): indicates a ranking list putting its own brand first (a brand blog recommending itself as #1, etc.). Uses lexical matching: the URL's domain token (e.g. `shopify.com` → `"shopify"`) must appear as the rank-1 item name. Does **not** detect corporate ownership (e.g. `adobe.com` ranking `"Marketo"` #1, since Marketo is an Adobe acquisition but the names don't match). See the open enhancement issue for scope-expansion plans.
+- **Domain reputation**: when known, surfaces the source's reputation tier from the embedded allowlist (academic, news, official docs, etc.).
+- **Link liveness**: batched SSRF-safe check of all provided URLs; present only when URLs are given.
+- **Scope**: up to 100 recommendations per call; any excess returns an error.
+
+### Annotations
+
+- ReadOnly: true · Idempotent: true · OpenWorld: true (queries live external sources for link liveness)
+
+### Cache
+- Link liveness checks are cached for 1 hour; domain reputation lookups use the embedded dataset (no network).
+
+---
+
+## Tool 25: `clinical_search`
 
 Search **ClinicalTrials.gov** — the NIH registry of 400K+ clinical studies — for evidence-based-medicine and systematic-review research. ClinicalTrials.gov is keyless, so this tool is always registered. Discovery + primary-source retrieval only — not medical advice.
 
@@ -1404,7 +1438,7 @@ Each `trials[]` item: `nctId`, `title`, `status`, `phases` (array), `conditions`
 
 ---
 
-## Tool 25: `audit_bibliography`
+## Tool 26: `audit_bibliography`
 
 ### Purpose
 
@@ -1442,7 +1476,7 @@ Precedence when more than one is supplied: `entries` → `bibliography` → `ses
 
 ---
 
-## Tool 26: `archive_source`
+## Tool 27: `archive_source`
 
 ### Purpose
 

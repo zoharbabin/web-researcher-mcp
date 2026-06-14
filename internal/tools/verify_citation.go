@@ -13,12 +13,10 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
-// verify_citation (#158) is the anti-hallucination capstone of Trusted Research:
-// given a DOI, URL, or free-text reference, it returns whether the citation
-// EXISTS, what record it MATCHES, whether it's RETRACTED, and whether its link
-// RESOLVES — as evidence, never a synthesized true/false verdict. It composes
-// the retraction enrichment (#156), the link verifier (#157), and the academic
-// searchers; it adds no new provider.
+// verify_citation is the anti-hallucination capstone of the trust suite: given
+// a DOI, URL, or free-text reference, it returns whether the citation EXISTS,
+// what record it MATCHES, whether it's RETRACTED, and whether its link RESOLVES
+// — as evidence, never a synthesized true/false verdict.
 //
 // Read-only, openWorld (it queries live external sources). The output carries
 // the untrusted-content trust marker like every external-content tool.
@@ -321,6 +319,17 @@ func enrichURLWithScholarlyDOI(ctx context.Context, deps Dependencies, fetchURL,
 	}
 	out["detectedDoi"] = doi
 	*prov = append(*prov, "scholarly DOI detected from page: "+doi)
+
+	// Detect conflict of interest (#245): check if author bio mentions employment
+	// at or funding from a company that appears in the citation. Used by the LLM
+	// to decide whether to weight this source differently when cited for that
+	// company's favorable attributes.
+	if res.Author != "" && strings.TrimSpace(out["input"].(string)) != "" {
+		if coi := content.DetectConflictOfInterest(res.Author, out["input"].(string)); coi != nil {
+			out["conflictOfInterest"] = coi
+			*prov = append(*prov, "conflict of interest detected: "+coi.Evidence)
+		}
+	}
 
 	// Retraction status for the detected DOI.
 	if deps.RetractionResolver != nil {

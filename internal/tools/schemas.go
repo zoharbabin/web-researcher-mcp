@@ -773,7 +773,19 @@ var verifyCitationOutputSchema = map[string]any{
 		"claimEvidence":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Claim-relevant sentences extracted from the source, in document order. Evidence for you to judge direction — not a verdict."},
 		"claimSourceUrl": map[string]any{"type": "string", "description": "The URL actually fetched for the claim check (the live URL, or its Wayback snapshot)."},
 		"contrastSignal": map[string]any{"type": "boolean", "description": "Present (true) when a claim-relevant source sentence carries a negation/contrast cue — the source may REFUTE the claim despite sharing its terms. Read the evidence yourself; this is a heads-up, never a refutes verdict."},
-		"trust":          trustUntrustedExternal,
+		"conflictOfInterest": map[string]any{
+			"type":        "object",
+			"description": "Present when the author has a detected financial stake in the cited entity. Employment / funding / equity connections that create a conflict. Omitted when no conflict is detected.",
+			"properties": map[string]any{
+				"detected":             map[string]any{"type": "boolean"},
+				"authorAffiliation":    map[string]any{"type": "string", "description": "Company/entity the author is affiliated with"},
+				"conflictType":         map[string]any{"type": "string", "enum": []any{"employment", "funded_by", "owns_equity"}, "description": "Type of conflict"},
+				"citedEntityName":      map[string]any{"type": "string", "description": "Entity mentioned in the citation text"},
+				"evidence":             map[string]any{"type": "string", "description": "Specific evidence of the conflict"},
+				"confidence":           map[string]any{"type": "string", "enum": []any{"high", "medium", "low"}, "description": "Confidence in the detected conflict"},
+			},
+		},
+		"trust": trustUntrustedExternal,
 	},
 }
 

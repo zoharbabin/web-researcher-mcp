@@ -5,6 +5,28 @@ import (
 	"strings"
 )
 
+// SelfPromotionSignal detects when a source is a ranking list that places its
+// own brand first. Attached to SourceClassification when detected.
+type SelfPromotionSignal struct {
+	Detected     bool   `json:"detected"`
+	BrandDomain  string `json:"brandDomain"`  // e.g. "shopify.com"
+	BrandToken   string `json:"brandToken"`   // e.g. "shopify"
+	RankPosition int    `json:"rankPosition"` // 1-based position of brand in list
+	Confidence   string `json:"confidence"`   // "high" | "medium" | "low"
+}
+
+// ConflictOfInterestSignal detects when an author has a financial stake in the
+// citation's subject. Flags when a source's author wrote for or is affiliated
+// with a company cited as credible in the citation text.
+type ConflictOfInterestSignal struct {
+	Detected           bool   `json:"detected"`
+	AuthorAffiliation  string `json:"authorAffiliation"`  // e.g. "Shopify"
+	ConflictType       string `json:"conflictType"`       // "employment" | "funded_by" | "owns_equity"
+	CitedEntityName    string `json:"citedEntityName"`    // The entity mentioned in citation text
+	Evidence           string `json:"evidence"`           // e.g. "Author byline shows 'at Shopify'"
+	Confidence         string `json:"confidence"`         // "high" | "medium" | "low"
+}
+
 // SourceClassification is the typed, categorical companion to the numeric
 // QualityScore (#62). Where ScoreQuality yields floats an LLM can't reliably
 // turn into natural-language hedging, these labels let it say "according to a
@@ -24,6 +46,9 @@ type SourceClassification struct {
 	// ("unknown") so the field never implies false confidence; descriptive only,
 	// never used to gate or reorder results.
 	DomainReputation *DomainReputation `json:"domainReputation,omitempty"`
+	// SelfPromotion is non-nil when the page matches the ranking-list +
+	// own-brand pattern (#244). Used to surface brand blogs that rank themselves first.
+	SelfPromotion *SelfPromotionSignal `json:"selfPromotionSignal,omitempty"`
 }
 
 // Source-type constants — the closed vocabulary callers can switch on.
@@ -69,9 +94,11 @@ type StructuredSignals struct {
 //     authoritative source_type signal when present.
 //   - lens is the active search lens (may be "") — the primary domain_category
 //     signal, with a URL-host heuristic as fallback.
+//   - body is the extracted page text used for self-promotion detection (#244);
+//     pass "" to skip that check.
 //
 // Deterministic and allocation-light; safe to call per result.
-func ClassifySource(rawURL string, authority float64, sig StructuredSignals, lens string) SourceClassification {
+func ClassifySource(rawURL string, authority float64, sig StructuredSignals, lens, body string) SourceClassification {
 	host := classifyHost(rawURL)
 	c := SourceClassification{
 		SourceType:     classifySourceType(host, sig),
@@ -83,6 +110,10 @@ func ClassifySource(rawURL string, authority float64, sig StructuredSignals, len
 	// avoid implying false confidence.
 	if rep := LookupDomainReputation(host); rep.Tier != "" && rep.Tier != ReputationUnknown {
 		c.DomainReputation = &rep
+	}
+	// Self-promotion signal (#244): detect if page ranks its own brand first
+	if body != "" {
+		c.SelfPromotion = DetectSelfPromotion(host, body)
 	}
 	return c
 }
@@ -320,4 +351,208 @@ func classifyHost(raw string) string {
 		return ""
 	}
 	return strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
+}
+
+// DetectConflictOfInterest checks whether an author bio or byline shows
+// affiliation with a company/entity mentioned in the citation text. Returns nil
+// when no conflict is detected (conservative — prioritize false negatives).
+func DetectConflictOfInterest(authorBio, citationText string) *ConflictOfInterestSignal {
+	if authorBio == "" || citationText == "" {
+		return nil
+	}
+
+	bioLower := strings.ToLower(authorBio)
+
+	// Extract company mentions from citation (patterns like "Company", "at Company", "Company's")
+	companies := extractCompanyMentions(citationText)
+
+	// Check if any company appears in the author bio with employment indicators
+	employmentKeywords := []string{" at ", " works at ", ", ", " founder ", " ceo ", " engineer ", " manager "}
+	fundedKeywords := []string{"funded by ", "grant from ", "supported by "}
+	equityKeywords := []string{"advisor ", "board member ", "shareholder ", "investor "}
+
+	for _, company := range companies {
+		companyLower := strings.ToLower(company)
+		if len(companyLower) < 3 {
+			continue
+		}
+
+		// Check employment indicators
+		for _, kw := range employmentKeywords {
+			if strings.Contains(bioLower, kw+companyLower) || strings.Contains(bioLower, companyLower+kw) {
+				return &ConflictOfInterestSignal{
+					Detected:          true,
+					AuthorAffiliation: company,
+					ConflictType:      "employment",
+					CitedEntityName:   company,
+					Evidence:          "Author bio mentions employment at " + company,
+					Confidence:        "high",
+				}
+			}
+		}
+
+		// Check funding/grant mentions
+		for _, kw := range fundedKeywords {
+			if strings.Contains(bioLower, kw+companyLower) {
+				return &ConflictOfInterestSignal{
+					Detected:          true,
+					AuthorAffiliation: company,
+					ConflictType:      "funded_by",
+					CitedEntityName:   company,
+					Evidence:          "Author bio mentions funding from " + company,
+					Confidence:        "medium",
+				}
+			}
+		}
+
+		// Check equity/board mentions
+		for _, kw := range equityKeywords {
+			if strings.Contains(bioLower, kw+companyLower) {
+				return &ConflictOfInterestSignal{
+					Detected:          true,
+					AuthorAffiliation: company,
+					ConflictType:      "owns_equity",
+					CitedEntityName:   company,
+					Evidence:          "Author bio mentions equity stake in " + company,
+					Confidence:        "medium",
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// extractCompanyMentions extracts company/entity names from text. Conservative
+// heuristic: looks for capitalized words and common company patterns.
+func extractCompanyMentions(text string) []string {
+	var companies []string
+	seen := make(map[string]bool)
+
+	// Split on sentence boundaries and look for capitalized proper nouns
+	sentences := strings.Split(text, ".")
+	for _, sent := range sentences {
+		words := strings.Fields(sent)
+		for i, word := range words {
+			// Look for capitalized words (simple proper noun detection)
+			if len(word) > 2 && word[0] >= 'A' && word[0] <= 'Z' {
+				// Skip common non-company words
+				if !isCommonWord(word) && !seen[word] {
+					companies = append(companies, strings.TrimRight(word, ",'\":;"))
+					seen[word] = true
+				}
+			}
+			// Look for known company patterns like "Inc.", "LLC", "Corp."
+			if i < len(words)-1 {
+				nextWord := words[i+1]
+				if isCompanySuffix(nextWord) && len(word) > 2 && word[0] >= 'A' && word[0] <= 'Z' {
+					company := word + " " + nextWord
+					if !seen[company] {
+						companies = append(companies, company)
+						seen[company] = true
+					}
+				}
+			}
+		}
+	}
+
+	return companies
+}
+
+// isCommonWord filters out articles, prepositions, and other non-brand words
+func isCommonWord(word string) bool {
+	common := []string{"The", "A", "An", "Is", "Are", "Was", "Were", "To", "In", "On", "At", "For", "Of", "And", "Or", "By", "As", "The"}
+	for _, c := range common {
+		if strings.EqualFold(word, c) {
+			return true
+		}
+	}
+	return false
+}
+
+// isCompanySuffix checks if a word is a company type indicator
+func isCompanySuffix(word string) bool {
+	word = strings.ToLower(strings.TrimRight(word, ".,;:"))
+	suffixes := []string{"inc", "llc", "corp", "ltd", "co", "gmbh", "ag", "sa", "bv", "nv"}
+	for _, s := range suffixes {
+		if word == s {
+			return true
+		}
+	}
+	return false
+}
+
+// DetectSelfPromotion checks whether body contains a ranking list that puts
+// the page's own domain brand in position 1. Returns nil when the pattern is
+// not detected (conservative — false negatives > false positives).
+func DetectSelfPromotion(host, body string) *SelfPromotionSignal {
+	if host == "" || body == "" {
+		return nil
+	}
+
+	// Extract brand token from host: "shopify.com" → "shopify"
+	parts := strings.Split(host, ".")
+	if len(parts) == 0 {
+		return nil
+	}
+	brandToken := strings.ToLower(parts[0])
+	if len(brandToken) < 3 {
+		return nil
+	}
+
+	// Look for ranking patterns: "1. BrandName" or "<li>1. BrandName" or "1. Brand — description"
+	// Must be in first 2 items to count as self-promotion.
+	bodyLower := strings.ToLower(body)
+
+	// Pattern 1: markdown "1. " at line start. Strip any leading heading ("###")
+	// or list ("-", "*") markers first — real listicles often render each entry
+	// as a markdown heading ("### 1. Shopify"), so the bare-line check alone misses
+	// them.
+	lines := strings.Split(bodyLower, "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		trimmed = strings.TrimLeft(trimmed, "#*->•")
+		trimmed = strings.TrimSpace(trimmed)
+		if strings.HasPrefix(trimmed, "1.") || strings.HasPrefix(trimmed, "1 ") {
+			// Extract next word
+			parts := strings.Fields(trimmed)
+			if len(parts) >= 2 {
+				nextWord := strings.ToLower(parts[1])
+				// Remove trailing punctuation
+				nextWord = strings.TrimSuffix(strings.TrimSuffix(nextWord, ","), "—")
+				if strings.Contains(nextWord, brandToken) || nextWord == brandToken {
+					return &SelfPromotionSignal{
+						Detected:     true,
+						BrandDomain:  host,
+						BrandToken:   brandToken,
+						RankPosition: 1,
+						Confidence:   "high",
+					}
+				}
+			}
+			// Found the "1." list item but the brand is not in it — not
+			// self-promotion (a list that ranks someone else first).
+			break
+		}
+	}
+
+	// Pattern 2: HTML <li>1. or ordered list with brand name
+	if strings.Contains(bodyLower, "<ol>") {
+		// Simple check: "<li>" followed by "1." or "#1" and brand token within next 200 chars
+		idx := strings.Index(bodyLower, "<li>")
+		if idx >= 0 && idx+200 < len(bodyLower) {
+			segment := bodyLower[idx : idx+200]
+			if (strings.Contains(segment, "1.") || strings.Contains(segment, "#1")) && strings.Contains(segment, brandToken) {
+				return &SelfPromotionSignal{
+					Detected:     true,
+					BrandDomain:  host,
+					BrandToken:   brandToken,
+					RankPosition: 1,
+					Confidence:   "high",
+				}
+			}
+		}
+	}
+
+	return nil
 }

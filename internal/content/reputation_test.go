@@ -57,12 +57,12 @@ func TestClassifySource_AttachesReputation(t *testing.T) {
 	if err := LoadReputationDataset(defaultReputationJSON); err != nil {
 		t.Fatalf("reload default: %v", err)
 	}
-	c := ClassifySource("https://www.sec.gov/cgi-bin/browse-edgar", 0.9, StructuredSignals{}, "")
+	c := ClassifySource("https://www.sec.gov/cgi-bin/browse-edgar", 0.9, StructuredSignals{}, "", "")
 	if c.DomainReputation == nil || c.DomainReputation.Tier != ReputationHigh {
 		t.Fatalf("expected high reputation on sec.gov, got %+v", c.DomainReputation)
 	}
 	// Unlisted host → nil (no false confidence, clean output).
-	c2 := ClassifySource("https://random-blog.example/post", 0.4, StructuredSignals{}, "")
+	c2 := ClassifySource("https://random-blog.example/post", 0.4, StructuredSignals{}, "", "")
 	if c2.DomainReputation != nil {
 		t.Errorf("unlisted host must have nil reputation, got %+v", c2.DomainReputation)
 	}
@@ -101,7 +101,7 @@ func TestClassifySource_ReputationDrivenAuthority(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
-		c := ClassifySource(tc.url, scoreAuthority(tc.url), StructuredSignals{}, "")
+		c := ClassifySource(tc.url, scoreAuthority(tc.url), StructuredSignals{}, "", "")
 		if c.AuthorityTier != tc.wantAuthority {
 			t.Errorf("%s: authorityTier = %q, want %q", tc.url, c.AuthorityTier, tc.wantAuthority)
 		}
