@@ -123,7 +123,7 @@ Registry/manifest files (root, each read by a different external tool): `server.
 
 Required: None — DuckDuckGo works as zero-config fallback (no API key needed).  
 For better results: `GOOGLE_CUSTOM_SEARCH_API_KEY`, `GOOGLE_CUSTOM_SEARCH_ID`  
-Optional: `SEARCH_PROVIDER` (google|brave|serper|searxng|searchapi|duckduckgo|tavily|exa), `SEARCH_ROUTING`, `BRAVE_API_KEY`, `SEARCHAPI_API_KEY`, `TAVILY_API_KEY`, `EXA_API_KEY`, `PORT` (enables HTTP)  
+Optional: `SEARCH_PROVIDER` (google|brave|serper|searxng|searchapi|duckduckgo|tavily|exa|hackernews), `SEARCH_ROUTING`, `BRAVE_API_KEY`, `SEARCHAPI_API_KEY`, `TAVILY_API_KEY`, `EXA_API_KEY`, `PORT` (enables HTTP)  
 Full list: see `.env.example`
 
 ## Release Process

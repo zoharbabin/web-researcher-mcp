@@ -274,7 +274,7 @@ Note: Google keys are validated as required only when you explicitly select `SEA
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SEARCH_PROVIDER` | Primary provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa | `google` (variable default); at runtime, when `google` is selected but no Google key is set, the server falls back to the zero-config `duckduckgo` provider |
+| `SEARCH_PROVIDER` | Primary provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews | `google` (variable default); at runtime, when `google` is selected but no Google key is set, the server falls back to the zero-config `duckduckgo` provider |
 | `SEARCH_FALLBACK_PROVIDER` | Fallback provider (simple fallback) | — |
 | `SEARCH_ROUTING` | Multi-provider routing (see below) | — |
 | `BRAVE_API_KEY` | Brave Search API key | — |

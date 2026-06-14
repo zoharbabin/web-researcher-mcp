@@ -13,7 +13,7 @@ startCommand:
         description: "Google Custom Search engine ID"
       search_provider:
         type: string
-        description: "Search provider (google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa)"
+        description: "Search provider (google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews)"
         default: "google"
       search_routing:
         type: string

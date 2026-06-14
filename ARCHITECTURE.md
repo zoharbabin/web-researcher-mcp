@@ -154,7 +154,7 @@ type Provider interface {
 }
 ```
 
-Several providers implement this interface — Google PSE, Brave, Serper, SearXNG, SearchAPI.io, Tavily, Exa, and DuckDuckGo (the zero-config, no-key fallback). The canonical list is `search.SupportedProviders` in `internal/search/provider.go`. The `Router` also implements `Provider`, enabling transparent multi-provider fallback — tools don't need to know whether they're calling a single provider or a routing layer.
+Several providers implement this interface — Google PSE, Brave, Serper, SearXNG, SearchAPI.io, Tavily, Exa, DuckDuckGo (the zero-config, no-key fallback), and Hacker News (the no-key HN Algolia index). The canonical list is `search.SupportedProviders` in `internal/search/provider.go`. The `Router` also implements `Provider`, enabling transparent multi-provider fallback — tools don't need to know whether they're calling a single provider or a routing layer.
 
 When `SEARCH_ROUTING` is configured, the Router wraps all available providers with per-provider circuit breakers and priority-ordered fallback. Search lenses inject `site:` operators and route through the configured provider. Lenses with a dedicated `cx` field route directly to that Google PSE engine.
 
@@ -188,7 +188,7 @@ type Pipeline struct {
 func (p *Pipeline) Scrape(ctx context.Context, url string, maxLength int) (*ScrapeResult, error)
 ```
 
-The pipeline routes specialized content (YouTube, PDF/DOCX/PPTX) via early-return detection, then falls back through tiers in order: markdown → stealth → HTML → browser (go-rod). Each tier is a private method with the same signature; the pipeline tries each in sequence and promotes the first result that meets a quality threshold. When `EXA_API_KEY` is set, a fifth, **paid** tier (Exa `/contents`) is appended as the last resort — it runs only after every free tier fails, so the common path never incurs cost. The winning tier is surfaced to the caller as `extractedBy` (e.g. `stealth`, `exa:cached`).
+The pipeline routes specialized content (YouTube, Hacker News threads, PDF/DOCX/PPTX) via early-return detection, then falls back through tiers in order: markdown → stealth → HTML → browser (go-rod). Each tier is a private method with the same signature; the pipeline tries each in sequence and promotes the first result that meets a quality threshold. When `EXA_API_KEY` is set, a fifth, **paid** tier (Exa `/contents`) is appended as the last resort — it runs only after every free tier fails, so the common path never incurs cost. The winning tier is surfaced to the caller as `extractedBy` (e.g. `stealth`, `exa:cached`).
 
 `Pipeline.ScrapeRaw()` is a separate, non-tiered path used by `scrape_page`'s `mode: raw`: it performs a single SSRF-checked fetch and returns the response body verbatim — no sanitization, no quality scoring, no tier fallback. Raw output is untrusted (it may contain injection payloads) and is cached under a distinct key so it never collides with the cleaned `full`/`preview` results.
 
@@ -246,6 +246,7 @@ For exact versions, see `go.mod`. All dependencies use MIT, Apache 2.0, or BSD l
 | Scrape (stealth HTTP) | 300-800ms | Browser-like TLS + headers, no JS |
 | Scrape (browser) | 2-10s | go-rod headless, bounded to MaxConcurrency |
 | YouTube transcript | 1-5s | 3-strategy: captions → timedtext API → description |
+| Hacker News item/list/user | 200-700ms | Native HN Firebase REST; story + top comments fetched in parallel |
 | search_and_scrape | 2-15s | Parallel scrape (semaphore=5) |
 
 ## Concurrency Limits

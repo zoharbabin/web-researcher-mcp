@@ -2,7 +2,7 @@
   "name": "web-researcher-mcp",
   "displayName": "Web Researcher",
   "description": "Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust; medical journals, court databases, news outlets, academic papers. Analyze the full source, not just snippets. Links that work, citations you can trust, no made up closed garden pre-synthesized results.",
-  "version": "1.31.0",
+  "version": "1.32.0",
   "author": {
     "name": "Zohar Babin",
     "url": "https://github.com/zoharbabin"
@@ -45,7 +45,7 @@
     "search_provider": {
       "type": "string",
       "title": "Search Provider",
-      "description": "Which search engine to use: google, brave, serper, searxng, or searchapi",
+      "description": "Which search engine to use: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, or hackernews",
       "default": "google"
     },
     "search_routing": {

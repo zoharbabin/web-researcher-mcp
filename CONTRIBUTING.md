@@ -68,7 +68,7 @@ export GOOGLE_CUSTOM_SEARCH_API_KEY="your-key"
 export GOOGLE_CUSTOM_SEARCH_ID="your-cx"
 # Optional:
 export BRAVE_API_KEY="your-brave-key"
-export SEARCH_PROVIDER="google"  # or brave, serper, searxng, searchapi, duckduckgo, tavily, exa (see search.SupportedProviders)
+export SEARCH_PROVIDER="google"  # or brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews (see search.SupportedProviders)
 ```
 
 Unit and integration tests do not require API keys. Only E2E tests that hit live services need them.

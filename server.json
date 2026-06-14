@@ -7,11 +7,11 @@
     "url": "https://github.com/zoharbabin/web-researcher-mcp",
     "source": "github"
   },
-  "version": "1.31.0",
+  "version": "1.32.0",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/zoharbabin/web-researcher-mcp:1.31.0",
+      "identifier": "ghcr.io/zoharbabin/web-researcher-mcp:1.32.0",
       "transport": {
         "type": "stdio"
       },
@@ -30,7 +30,7 @@
         },
         {
           "name": "SEARCH_PROVIDER",
-          "description": "Search provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, or exa",
+          "description": "Search provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, or hackernews",
           "isRequired": false
         },
         {
@@ -95,7 +95,7 @@
     },
     {
       "registryType": "oci",
-      "identifier": "docker.io/zoharbabin/web-researcher-mcp:1.31.0",
+      "identifier": "docker.io/zoharbabin/web-researcher-mcp:1.32.0",
       "transport": {
         "type": "stdio"
       }

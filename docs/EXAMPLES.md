@@ -259,7 +259,7 @@ Search for images with format, size, and color filters.
 
 ## Page Scraping
 
-Extract content from any URL — web pages, PDFs, DOCX, PPTX, or YouTube transcripts.
+Extract content from any URL — web pages, PDFs, DOCX, PPTX, YouTube transcripts, or Hacker News threads (read natively via the HN API).
 
 ```json
 {

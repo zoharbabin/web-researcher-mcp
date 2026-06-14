@@ -33,7 +33,7 @@
     },
     "SEARCH_PROVIDER": {
       "type": "string",
-      "description": "Search provider (google, brave, serper, searxng)",
+      "description": "Search provider (google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews)",
       "required": false,
       "default": "google"
     },
@@ -60,7 +60,7 @@
     },
     {
       "name": "scrape_page",
-      "description": "Read the full text from any URL — web pages, PDFs, Word docs, YouTube transcripts",
+      "description": "Read the full text from any URL — web pages, PDFs, Word docs, YouTube transcripts, Hacker News threads",
       "inputSchema": {
         "type": "object",
         "properties": {

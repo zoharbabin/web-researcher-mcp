@@ -82,7 +82,7 @@ If your work gets cited, published, submitted to a court, or shown to a client �
 | **Search lenses** — choose your sources by field | Your AI only sees the sites you trust (PubMed, SEC.gov, arXiv — not random blogs) |
 | **Research tools for every source type** | Papers, patents, SEC filings, US court records, economic data, news, web pages, images, full-text reading, grounded answers with citations, structured extraction, and multi-step deep research |
 | **Always has a backup** | Multiple search engines working together — if one has issues, the others pick up automatically |
-| **Reads full articles** | Doesn't just give you snippets — extracts and reads entire pages, PDFs, Word docs, even YouTube transcripts |
+| **Reads full articles** | Doesn't just give you snippets — extracts and reads entire pages, PDFs, Word docs, even YouTube transcripts and Hacker News threads |
 | **Real citations, formatted** | Every source comes with a proper APA/MLA citation and a link that actually works |
 | **Your queries stay private** | Runs on your machine — nobody sees what you're researching. Not us, not anyone. |
 | **Paper trail** | Every search is logged so you can reproduce your research process months later |
@@ -131,7 +131,7 @@ Works with Claude, Claude Desktop, Cursor, and any AI assistant that supports to
 | Tool | What it does |
 |------|-------------|
 | `web_search` | Search the web — optionally restricted to only the sources you trust via lenses |
-| `scrape_page` | Read any URL in full — web pages, PDFs, Word docs, slideshows, YouTube transcripts; supports `mode: raw` for verbatim, unsanitized source (e.g. inspecting JSON or HTML) |
+| `scrape_page` | Read any URL in full — web pages, PDFs, Word docs, slideshows, YouTube transcripts, Hacker News threads (read natively via the HN API); supports `mode: raw` for verbatim, unsanitized source (e.g. inspecting JSON or HTML) |
 | `search_and_scrape` | Search and then read the best results — with quality scoring to surface the most reliable sources |
 | `image_search` | Find images by size, type, color, or format |
 | `news_search` | Search recent news with date controls and source filtering |
@@ -298,6 +298,7 @@ Set `SEARCH_PROVIDER=<name>` and supply that provider's key. Every provider work
 | SearXNG | `searxng` | `SEARXNG_URL` | [self-hosted](https://docs.searxng.org/) |
 | Tavily | `tavily` | `TAVILY_API_KEY` | [app.tavily.com](https://app.tavily.com/) |
 | Exa | `exa` | `EXA_API_KEY` | [dashboard.exa.ai](https://dashboard.exa.ai/) |
+| Hacker News | `hackernews` | none | Built in — zero config (HN Algolia index) |
 
 > Each provider has its own free tier, signup flow, and capability mix (images, news, freshness). See **[docs/API_SETUP.md](docs/API_SETUP.md)** for step-by-step setup of every provider and a capability comparison. Set up more than one and the server fails over automatically — see [Search Providers](#search-providers).
 

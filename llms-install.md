@@ -121,7 +121,7 @@ Then configure as in Option A.
 
 | Variable | Description |
 |----------|-------------|
-| `SEARCH_PROVIDER` | Which provider to use: `google`, `brave`, `serper`, `searxng`, `searchapi`, `duckduckgo`, `tavily`, `exa` (defaults to `google`, falling back to `duckduckgo` when no key is set) |
+| `SEARCH_PROVIDER` | Which provider to use: `google`, `brave`, `serper`, `searxng`, `searchapi`, `duckduckgo`, `tavily`, `exa`, `hackernews` (defaults to `google`, falling back to `duckduckgo` when no key is set) |
 | `SEARCH_ROUTING` | Multi-provider fallback list (e.g., `brave,google,serper`) |
 
 ## Available Tools

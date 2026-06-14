@@ -62,6 +62,25 @@ For better result quality and higher volume, add one of the keyed providers belo
 
 ---
 
+## Hacker News (Zero-Config)
+
+**Free**: No API key, no registration. Searches Hacker News stories through the public [HN Algolia](https://hn.algolia.com/) index.
+
+This is a domain-specific provider — it returns Hacker News stories only, not general web results. Select it when you want HN discussion and submission results:
+
+```bash
+export SEARCH_PROVIDER=hackernews
+web-researcher-mcp
+```
+
+### Good to know
+
+- **`web_search` and `news_search` only.** `image_search` with Hacker News returns empty (no error). Keep an image-capable provider (Google, Brave, SearchAPI) in `SEARCH_ROUTING` if you need images.
+- **Date filtering works.** `dateRange` is honored via the Algolia `numericFilters` (`created_at_i`); `num_results` accepts 1–100 (values outside that range reset to the default of 10).
+- **Reading threads.** `scrape_page` on a `news.ycombinator.com` item, user, or list URL is read natively through the HN Firebase API (story + top comments) — independent of which `SEARCH_PROVIDER` is set.
+
+---
+
 ## Google Custom Search (Programmable Search Engine)
 
 **Free tier**: 100 queries/day (paid: $5 per 1,000 queries)
@@ -336,6 +355,7 @@ See [docs/DEPLOYMENT.md](DEPLOYMENT.md) for advanced routing configuration.
 | **SearchAPI.io** | Multiple engine backends via unified API | Smaller free tier |
 | **Tavily** | AI-agent search; clean LLM-ready extracted content | Paid after free credits; no native image search |
 | **Exa** | Neural/semantic search; grounded answers, structured extraction, company entities | Paid per call; no native image search |
+| **Hacker News** | Zero-config HN discussion/submission search; tech community signal | Hacker News stories only, not general web; no image search |
 
 **Recommendation**: Start with Brave (generous free tier, fast) and add Google as a fallback. Use `SEARCH_ROUTING=brave,google` for the best balance of speed and coverage.
 
