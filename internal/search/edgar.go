@@ -32,6 +32,7 @@ type EDGARProvider struct {
 
 	tickerOnce sync.Once
 	tickerMap  map[string]string // upper(ticker) → 10-digit CIK
+	nameMap    map[string]string // upper(company title) → 10-digit CIK (for company-name resolution)
 	tickerErr  error
 }
 
@@ -99,6 +100,16 @@ func (e *EDGARProvider) doFilings(ctx context.Context, params FilingSearchParams
 
 // resolveCIK maps a ticker/CIK/company-name to a 10-digit CIK. Returns ("", "",
 // nil) when the entity can't be resolved (caller falls back to full-text search).
+//
+// Resolution order:
+//  1. params.Ticker — exact ticker map lookup (always trusted; used when ticker is explicit)
+//  2. Bare numeric seed — treated as a raw CIK directly
+//  3. Exact ticker match on params.Query (e.g. query "AAPL")
+//  4. Company-name extraction from params.Query — strips known stop-words (form
+//     types, "annual", "report", "10-K", etc.) to isolate the company name token(s),
+//     then does an exact match against the SEC title map and a prefix match for
+//     single-token queries. Falls through to full-text search when no confident
+//     match is found — never guesses.
 func (e *EDGARProvider) resolveCIK(ctx context.Context, params FilingSearchParams) (string, string, error) {
 	seed := strings.TrimSpace(params.Ticker)
 	if seed == "" {
@@ -114,10 +125,84 @@ func (e *EDGARProvider) resolveCIK(ctx context.Context, params FilingSearchParam
 	if err := e.loadTickerMap(ctx); err != nil {
 		return "", "", err
 	}
+	// Exact ticker match.
 	if cik, ok := e.tickerMap[strings.ToUpper(seed)]; ok {
 		return cik, "", nil
 	}
-	return "", "", nil // not a known ticker/CIK → full-text search
+	// Company-name resolution: only attempted when the query came from params.Query
+	// (not an explicit ticker), so we don't misfire on a valid ticker that happens
+	// to look like a stop-word. Strip known noise words to isolate the company name.
+	if params.Ticker == "" {
+		cik, company := e.resolveByCompanyName(seed)
+		if cik != "" {
+			return cik, company, nil
+		}
+	}
+	return "", "", nil // fall through to full-text search
+}
+
+// queryStopWords are words that appear in natural-language filing queries but
+// carry no company-name signal. Stripping them from a query like
+// "Apple annual report 10-K" leaves "Apple", which maps cleanly to the ticker map.
+var queryStopWords = map[string]bool{
+	"annual": true, "report": true, "filing": true, "filings": true,
+	"10-k": true, "10-q": true, "8-k": true, "s-1": true, "def": true, "14a": true,
+	"proxy": true, "earnings": true, "financial": true, "statements": true,
+	"the": true, "for": true, "of": true, "and": true, "inc": true,
+	"corp": true, "company": true, "quarterly": true, "latest": true,
+}
+
+// resolveByCompanyName strips stop-words from the raw query, then tries:
+//  1. Exact upper-case match of the cleaned phrase against the SEC title map
+//     (handles "Apple Inc", "NVIDIA Corp", "Meta Platforms Inc")
+//  2. Prefix scan for single-token candidates (e.g. "Apple" matches "APPLE INC")
+//
+// Returns ("", "") when no confident match is found so the caller falls through
+// to full-text search rather than guessing.
+func (e *EDGARProvider) resolveByCompanyName(rawQuery string) (cik, company string) {
+	// Split on whitespace, discard stop-words and form-type tokens.
+	tokens := strings.Fields(rawQuery)
+	var nameTokens []string
+	for _, t := range tokens {
+		lower := strings.ToLower(t)
+		if !queryStopWords[lower] {
+			nameTokens = append(nameTokens, t)
+		}
+	}
+	if len(nameTokens) == 0 {
+		return "", ""
+	}
+	candidate := strings.ToUpper(strings.Join(nameTokens, " "))
+
+	// Exact match first (e.g. "APPLE INC" or "NVIDIA CORP").
+	if cikVal, ok := e.nameMap[candidate]; ok {
+		return cikVal, strings.Title(strings.ToLower(candidate)) //nolint:staticcheck
+	}
+
+	// Single-token prefix scan: "APPLE" → finds "APPLE INC", "APPLE HOSPITALITY REIT INC", etc.
+	// Only use when exactly one name token remains (avoids ambiguous multi-word partials).
+	if len(nameTokens) == 1 {
+		prefix := candidate + " "
+		var bestCIK, bestName string
+		for title, cikVal := range e.nameMap {
+			// Exact match takes precedence (already handled above, but guard anyway).
+			if title == candidate {
+				return cikVal, strings.Title(strings.ToLower(title)) //nolint:staticcheck
+			}
+			// Take the shortest prefix-matching title so "APPLE INC" wins over
+			// "APPLE HOSPITALITY REIT INC" for query "Apple".
+			if strings.HasPrefix(title, prefix) {
+				if bestName == "" || len(title) < len(bestName) {
+					bestCIK = cikVal
+					bestName = title
+				}
+			}
+		}
+		if bestCIK != "" {
+			return bestCIK, strings.Title(strings.ToLower(bestName)) //nolint:staticcheck
+		}
+	}
+	return "", ""
 }
 
 func (e *EDGARProvider) loadTickerMap(ctx context.Context) error {
@@ -137,11 +222,15 @@ func (e *EDGARProvider) loadTickerMap(ctx context.Context) error {
 			e.tickerErr = fmt.Errorf("edgar: ticker map parse: %w", err)
 			return
 		}
-		m := make(map[string]string, len(raw))
+		tm := make(map[string]string, len(raw))
+		nm := make(map[string]string, len(raw))
 		for _, v := range raw {
-			m[strings.ToUpper(v.Ticker)] = fmt.Sprintf("%010d", v.CIK)
+			cik := fmt.Sprintf("%010d", v.CIK)
+			tm[strings.ToUpper(v.Ticker)] = cik
+			nm[strings.ToUpper(v.Title)] = cik
 		}
-		e.tickerMap = m
+		e.tickerMap = tm
+		e.nameMap = nm
 	})
 	return e.tickerErr
 }

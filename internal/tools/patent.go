@@ -263,6 +263,15 @@ func enrichPatents(ctx context.Context, pipeline *scraper.Pipeline, numbers []st
 		return nil
 	}
 
+	// Cap the total enrichment time across all concurrent fetches.  Each
+	// ScrapePatentDetail already sets a 15 s per-fetch timeout; without an
+	// aggregate deadline a slow first fetch holds the slot and the 3-at-a-time
+	// semaphore stalls all remaining numbers, turning patent_search from ~5-10 s
+	// into 40-60 s when patents.google.com is slow.  25 s is generous for 3
+	// concurrent 15 s fetches and still recovers gracefully via the fallback.
+	enrichCtx, enrichCancel := context.WithTimeout(ctx, 25*time.Second)
+	defer enrichCancel()
+
 	results := make([]scraper.PatentResult, len(numbers))
 	var wg sync.WaitGroup
 
@@ -276,7 +285,7 @@ func enrichPatents(ctx context.Context, pipeline *scraper.Pipeline, numbers []st
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			detail, err := pipeline.ScrapePatentDetail(ctx, num)
+			detail, err := pipeline.ScrapePatentDetail(enrichCtx, num)
 			if err != nil || detail == nil {
 				// Fallback: return minimal info
 				results[idx] = scraper.PatentResult{

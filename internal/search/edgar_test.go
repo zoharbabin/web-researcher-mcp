@@ -227,3 +227,90 @@ func TestLatestFactFallsBackWhenNo10K(t *testing.T) {
 func TestEDGARInterface(t *testing.T) {
 	var _ FilingProvider = (*EDGARProvider)(nil)
 }
+
+// TestEDGARCompanyNameResolution validates the stop-word stripping + nameMap lookup
+// that fixes #238 (free-text queries like "Apple annual report 10-K" must resolve
+// to the correct CIK without falling through to the EFTS full-text search).
+func TestEDGARCompanyNameResolution(t *testing.T) {
+	t.Parallel()
+
+	// nameMap fixture: keys are upper-cased SEC company titles.
+	nameMap := map[string]string{
+		"APPLE INC":          "0000320193",
+		"NVIDIA CORP":        "0001045810",
+		"META PLATFORMS INC": "0001326801",
+	}
+
+	p := &EDGARProvider{
+		nameMap:   nameMap,
+		tickerMap: map[string]string{},
+	}
+
+	tests := []struct {
+		name    string
+		query   string
+		wantCIK string
+		wantHit bool
+	}{
+		{"exact company title", "Apple Inc", "0000320193", true},
+		{"stop-word stripping", "Apple annual report 10-K", "0000320193", true},
+		{"single token prefix scan", "Apple", "0000320193", true},
+		{"single token case insensitive", "nvidia", "0001045810", true},
+		// Two name tokens remain after stripping ("Meta Platforms") but the nameMap
+		// key is "META PLATFORMS INC" — no exact match and no prefix scan (prefix
+		// scan is single-token only to avoid false positives). Falls to EFTS. This
+		// is correct behavior: the EFTS full-text search handles multi-token company
+		// names better than a partial nameMap lookup.
+		{"multi-token no exact match falls through", "Meta Platforms annual filing", "", false},
+		{"all stop-words → no match", "annual report 10-K for the company", "", false},
+		{"unknown company → no match", "BogusWidgetCo", "", false},
+		{"ambiguous multi-token → no prefix scan", "Apple Meta annual", "", false},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cik, _ := p.resolveByCompanyName(tc.query)
+			if tc.wantHit && cik != tc.wantCIK {
+				t.Errorf("resolveByCompanyName(%q) = %q, want %q", tc.query, cik, tc.wantCIK)
+			}
+			if !tc.wantHit && cik != "" {
+				t.Errorf("resolveByCompanyName(%q) should return empty, got %q", tc.query, cik)
+			}
+		})
+	}
+}
+
+// TestEDGARQueryRoutesViaNameMap verifies the end-to-end path: a natural-language
+// query that contains a known company name hits the submissions API (not EFTS).
+func TestEDGARQueryRoutesViaNameMap(t *testing.T) {
+	t.Parallel()
+
+	eftsCalled := false
+	p := newEDGARTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "company_tickers.json"):
+			// Ticker: AAPL, Title: "APPLE INC" — company name present in the map.
+			w.Write([]byte(`{"0":{"cik_str":320193,"ticker":"AAPL","title":"APPLE INC"}}`))
+		case strings.Contains(r.URL.Path, "submissions/CIK0000320193.json"):
+			w.Write([]byte(`{"name":"Apple Inc.","filings":{"recent":{"accessionNumber":["0000320193-24-000001"],"form":["10-K"],"filingDate":["2024-11-01"],"reportDate":["2024-09-28"],"primaryDocument":["aapl-10k.htm"],"primaryDocDescription":["10-K"]}}}`))
+		case strings.Contains(r.URL.Path, "search-index"):
+			eftsCalled = true
+			w.Write([]byte(`{"hits":{"hits":[]}}`))
+		default:
+			w.WriteHeader(404)
+		}
+	})
+
+	res, err := p.Filings(context.Background(), FilingSearchParams{Query: "Apple annual report 10-K", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if eftsCalled {
+		t.Error("EFTS full-text search must NOT be called when the company name resolves via nameMap")
+	}
+	if len(res) == 0 {
+		t.Error("expected at least 1 submission result via nameMap resolution")
+	}
+}

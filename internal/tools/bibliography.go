@@ -12,6 +12,7 @@ import (
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/auth"
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
+	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
 // format_bibliography (#86) renders a citations list in APA, MLA, or BibTeX.
@@ -88,14 +89,35 @@ func registerFormatBibliography(srv *mcp.Server, deps Dependencies) {
 			if err := validateBibliographyURL(s.URL); err != nil {
 				return toolError(fmt.Sprintf("sources[%d]: %v", i, err)), nil, nil
 			}
-			entries = append(entries, content.BibEntry{
+			entry := content.BibEntry{
 				URL:    s.URL,
 				Title:  s.Title,
 				Author: s.Author,
 				Site:   s.Site,
 				Date:   s.Date,
 				DOI:    s.DOI,
-			})
+			}
+			// DOI enrichment: when a DOI is present but the title is empty,
+			// attempt an exact-entity lookup so the formatted citation is
+			// complete rather than reduced to a bare URL. The network call is
+			// best-effort — a miss leaves the entry as-is and never errors.
+			if entry.DOI != "" && entry.Title == "" {
+				if rec := resolveBibEntryByDOI(ctx, deps.AcademicProviders, entry.DOI); rec != nil {
+					if rec.Title != "" {
+						entry.Title = rec.Title
+					}
+					if entry.Author == "" && len(rec.Authors) > 0 {
+						entry.Author = strings.Join(rec.Authors, "; ")
+					}
+					if entry.Site == "" && rec.Journal != "" {
+						entry.Site = rec.Journal
+					}
+					if entry.Date == "" && rec.Year > 0 {
+						entry.Date = fmt.Sprintf("%d", rec.Year)
+					}
+				}
+			}
+			entries = append(entries, entry)
 		}
 
 		// entryCount comes back authoritative from the formatter (unique entries
@@ -118,6 +140,32 @@ func registerFormatBibliography(srv *mcp.Server, deps Dependencies) {
 		auditToolCall(ctx, deps, "format_bibliography", time.Since(start), nil, "")
 		return structuredResult(jsonBytes), nil, nil
 	})
+}
+
+// resolveBibEntryByDOI performs an exact-entity DOI lookup against the first
+// configured academic provider that implements search.DOIResolver.  Returns nil
+// when no provider is available, the DOI has no record, or any call errors — the
+// caller always treats a nil as "use the entry as-is" so the tool never errors
+// on a failed enrichment.
+//
+// The canonical provider order from search.SupportedAcademicProviders is used so
+// the enrichment is deterministic across calls: openalex → crossref → pubmed → ….
+func resolveBibEntryByDOI(ctx context.Context, providers map[string]search.AcademicProvider, doi string) *search.AcademicResult {
+	for _, name := range search.SupportedAcademicProviders {
+		ap, ok := providers[name]
+		if !ok {
+			continue
+		}
+		dr, ok := ap.(search.DOIResolver)
+		if !ok {
+			continue
+		}
+		rec, err := dr.ResolveByDOI(ctx, doi)
+		if err == nil && rec != nil {
+			return rec
+		}
+	}
+	return nil
 }
 
 // validateBibliographyURL accepts a well-formed http(s) URL or a bare DOI (the two

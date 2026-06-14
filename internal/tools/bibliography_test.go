@@ -106,6 +106,52 @@ func TestFormatBibliographyURLValidation(t *testing.T) {
 	}
 }
 
+// TestFormatBibliographyDOIEnrichment: when a source has a DOI but no title,
+// the tool must perform an exact-entity lookup (via the DOIResolver capability)
+// and populate the entry's metadata before formatting, so the citation is
+// complete rather than reduced to a bare URL. (#239)
+func TestFormatBibliographyDOIEnrichment(t *testing.T) {
+	// The mock AcademicProvider implements DOIResolver returning a result for
+	// "10.1234/x". Passing a source with that DOI and an empty title should
+	// produce a bibliography that contains the enriched title "Mock Paper".
+	out, res := callTool(t, setupTestDeps(), "format_bibliography", map[string]any{
+		"style": "apa",
+		"sources": []any{
+			// DOI present, title intentionally empty → enrichment should fill it in.
+			map[string]any{"url": "https://doi.org/10.1234/x", "doi": "10.1234/x"},
+		},
+	})
+	if res.IsError {
+		t.Fatalf("format_bibliography with DOI-only source should not error")
+	}
+	b, _ := out["bibliography"].(string)
+	if !strings.Contains(b, "Mock Paper") {
+		t.Errorf("DOI enrichment: bibliography should contain resolved title %q\nbibliography:\n%s", "Mock Paper", b)
+	}
+}
+
+// TestFormatBibliographyDOIEnrichmentSkippedWhenTitlePresent: when a title is
+// already supplied, no network lookup must be made (the mock provider returns
+// "Mock Paper" for 10.1234/x; the test verifies the explicit title is kept).
+func TestFormatBibliographyDOIEnrichmentSkippedWhenTitlePresent(t *testing.T) {
+	out, res := callTool(t, setupTestDeps(), "format_bibliography", map[string]any{
+		"sources": []any{
+			map[string]any{"url": "https://doi.org/10.1234/x", "doi": "10.1234/x", "title": "Explicit Title"},
+		},
+	})
+	if res.IsError {
+		t.Fatalf("should not error")
+	}
+	b, _ := out["bibliography"].(string)
+	// Explicit title must survive; the mock's "Mock Paper" must NOT appear.
+	if !strings.Contains(b, "Explicit Title") {
+		t.Errorf("explicit title should be preserved: %s", b)
+	}
+	if strings.Contains(b, "Mock Paper") {
+		t.Errorf("DOI enrichment must not override existing title: %s", b)
+	}
+}
+
 func TestFormatBibliographyFromSession(t *testing.T) {
 	deps := setupTestDeps()
 	sid := makeSessionWithSources(t, deps)
