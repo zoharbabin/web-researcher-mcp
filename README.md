@@ -201,6 +201,11 @@ INSTALL_DIR=/opt/tools curl -fsSL https://raw.githubusercontent.com/zoharbabin/w
 <details>
 <summary><strong>Other install methods</strong></summary>
 
+**WinGet (Windows):**
+```powershell
+winget install zoharbabin.web-researcher-mcp
+```
+
 **Scoop (Windows):**
 ```powershell
 scoop bucket add zoharbabin https://github.com/zoharbabin/scoop-bucket
