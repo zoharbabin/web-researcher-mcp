@@ -276,7 +276,7 @@ jobs:
       - name: Upload dist binaries for wheel build
         if: ${{ vars.PYPI_PUBLISH_ENABLED == 'true' }}
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v8
         with:
           name: dist-binaries
           retention-days: 1
