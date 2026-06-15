@@ -385,7 +385,7 @@ jobs:
           python-version: "3.12"
 
       - name: Download dist binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: dist-binaries
           path: dist
