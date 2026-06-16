@@ -183,6 +183,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Install pytest
+        run: python3 -m pip install --upgrade pytest
       - name: Run Python SDK tests
         run: python3 -m pytest tests/python/ --ignore=tests/python/test_live_e2e.py -v
 
@@ -320,6 +322,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Install pytest
+        run: python3 -m pip install --upgrade pytest
 
       - name: Run Python SDK live E2E tests
         env:
