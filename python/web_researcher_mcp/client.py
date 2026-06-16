@@ -240,7 +240,10 @@ class WebResearcherClient:
             try:
                 with urllib.request.urlopen(req, timeout=self._timeout):  # noqa: S310
                     pass
-            except urllib.error.HTTPError:
+            except OSError:
+                # Best-effort notification: swallow any connection-level failure
+                # (URLError, HTTPError, timeout, connection refused all subclass
+                # OSError) so it can never break the caller.
                 pass
 
         await asyncio.to_thread(_fire)
@@ -249,7 +252,10 @@ class WebResearcherClient:
         await self._request(
             "initialize",
             {
-                "protocolVersion": "2024-11-05",
+                # Negotiate the current MCP protocol revision the server speaks
+                # (unlocks the resource_link content type for large payloads).
+                # The go-sdk server negotiates down for older peers.
+                "protocolVersion": "2025-06-18",
                 "capabilities": {},
                 "clientInfo": {"name": "web-researcher-mcp-python", "version": "1.0"},
             },
@@ -291,30 +297,6 @@ class WebResearcherClient:
         """Return the list of tool schemas available on this server."""
         result = await self._request("tools/list")
         return result.get("tools", [])
-
-    # ------------------------------------------------------------------
-    # Dynamic proxy: fills in any tool not yet in the static methods above.
-    # Called once at start(); adds a callable attr for each unknown tool.
-    # ------------------------------------------------------------------
-
-    async def _install_dynamic_proxy(self) -> None:
-        try:
-            tool_list = await self.list_tools()
-        except Exception:
-            return
-        for tool in tool_list:
-            tname = tool.get("name", "")
-            if not tname or hasattr(self, tname):
-                continue
-
-            def _make_proxy(n: str):
-                async def _proxy(**kwargs: Any) -> dict[str, Any]:
-                    return await self._call_tool(n, kwargs)
-                _proxy.__name__ = n
-                _proxy.__doc__ = tool.get("description", "")
-                return _proxy
-
-            setattr(self, tname, _make_proxy(tname))
 
     # ------------------------------------------------------------------
     # Tool methods (generated from outputSchema)
@@ -379,7 +361,7 @@ class WebResearcherClient:
     async def audit_bibliography(
         self,
         bibliography: str = None,
-        entries: Optional[Optional[list]] = None,
+        entries: Optional[list] = None,
         format: str = None,
         sessionId: str = None,
     ) -> AuditBibliographyResponse:
@@ -501,7 +483,7 @@ class WebResearcherClient:
     async def format_bibliography(
         self,
         sessionId: str = None,
-        sources: Optional[Optional[list]] = None,
+        sources: Optional[list] = None,
         style: str = None,
     ) -> FormatBibliographyResponse:
         """Turn a set of sources into a formatted bibliography"""
@@ -607,7 +589,7 @@ class WebResearcherClient:
     async def memory_save(
         self,
         note: str,
-        tags: Optional[Optional[list]] = None,
+        tags: Optional[list] = None,
         topic: str = None,
         url: str = None,
     ) -> MemorySaveResponse:
@@ -754,7 +736,7 @@ class WebResearcherClient:
         isRevision: bool = False,
         knowledgeGap: str = None,
         reasoning: str = None,
-        rejectedApproaches: Optional[Optional[list]] = None,
+        rejectedApproaches: Optional[list] = None,
         researchGoal: str = None,
         responseMode: str = None,
         revisesStep: int = None,
@@ -822,7 +804,7 @@ class WebResearcherClient:
         return VerifyCitationResponse.from_dict(d)
     async def verify_recommendation(
         self,
-        recommendations: Optional[Optional[list]],
+        recommendations: Optional[list],
     ) -> VerifyRecommendationResponse:
         """Audit an AI recommendation list against anti-sloptimization signals"""
         d = await self._call_tool(
@@ -872,7 +854,7 @@ class WebResearcherClient:
         self,
         workspace_id: str,
         note: str,
-        tags: Optional[Optional[list]] = None,
+        tags: Optional[list] = None,
         url: str = None,
     ) -> WorkspaceContributeResponse:
         """Share a research finding into a shared team workspace (a COPY is stored with your attribution — never a live link to your private data)"""
@@ -1127,7 +1109,7 @@ class SyncWebResearcherClient:
     def audit_bibliography(
         self,
         bibliography: str = None,
-        entries: Optional[Optional[list]] = None,
+        entries: Optional[list] = None,
         format: str = None,
         sessionId: str = None,
     ) -> AuditBibliographyResponse:
@@ -1234,7 +1216,7 @@ class SyncWebResearcherClient:
     def format_bibliography(
         self,
         sessionId: str = None,
-        sources: Optional[Optional[list]] = None,
+        sources: Optional[list] = None,
         style: str = None,
     ) -> FormatBibliographyResponse:
         return self._run(
@@ -1322,7 +1304,7 @@ class SyncWebResearcherClient:
     def memory_save(
         self,
         note: str,
-        tags: Optional[Optional[list]] = None,
+        tags: Optional[list] = None,
         topic: str = None,
         url: str = None,
     ) -> MemorySaveResponse:
@@ -1451,7 +1433,7 @@ class SyncWebResearcherClient:
         isRevision: bool = False,
         knowledgeGap: str = None,
         reasoning: str = None,
-        rejectedApproaches: Optional[Optional[list]] = None,
+        rejectedApproaches: Optional[list] = None,
         researchGoal: str = None,
         responseMode: str = None,
         revisesStep: int = None,
@@ -1510,7 +1492,7 @@ class SyncWebResearcherClient:
         )
     def verify_recommendation(
         self,
-        recommendations: Optional[Optional[list]],
+        recommendations: Optional[list],
     ) -> VerifyRecommendationResponse:
         return self._run(
             self._async_client.verify_recommendation(
@@ -1554,7 +1536,7 @@ class SyncWebResearcherClient:
         self,
         workspace_id: str,
         note: str,
-        tags: Optional[Optional[list]] = None,
+        tags: Optional[list] = None,
         url: str = None,
     ) -> WorkspaceContributeResponse:
         return self._run(

@@ -57,12 +57,14 @@ Both `WebResearcherClient` and `SyncWebResearcherClient` accept identical keywor
 
 ## Tool methods
 
-All typed methods strip `None` keyword arguments before sending — pass only what you need.
+Every tool has a typed method on the client. The method's keyword arguments mirror the tool's JSON parameter names verbatim — see [`docs/TOOLS.md`](TOOLS.md) for the authoritative, CI-gated parameter schemas — and each returns a typed `<Name>Response` dataclass from `web_researcher_mcp.models`. `None` keyword arguments are stripped before sending, so pass only what you need.
+
+The examples below show the common tools; the full set is generated from the live Go schemas (`make gen-python-client`), so the in-editor signature is always the source of truth.
 
 ### `web_search`
 
 ```python
-result: SearchResponse = await client.web_search(
+result: WebSearchResponse = await client.web_search(
     query,
     num_results=5,        # 1–100
     time_range=None,      # "day" | "week" | "month" | "year"
@@ -72,9 +74,9 @@ result: SearchResponse = await client.web_search(
     exact_terms=None,
     exclude_terms=None,
     country=None,         # ISO 3166-1 alpha-2
-    lens=None,            # lens key from lenses catalog
+    lens=None,            # lens key from the lenses://catalog resource
     provider=None,        # "google" | "brave" | "duckduckgo" | ...
-    session_id=None,
+    sessionId=None,
     claim=None,           # claim text for claimSignal scoring
 )
 ```
@@ -82,24 +84,28 @@ result: SearchResponse = await client.web_search(
 ### `scrape_page`
 
 ```python
-result: ScrapeResult = await client.scrape_page(
+result: ScrapePageResponse = await client.scrape_page(
     url,
-    raw=False,            # True -> skip markdown conversion
+    mode=None,            # "full" | "preview" | "raw" (default full markdown)
     max_length=None,      # character cap
-    session_id=None,
+    sessionId=None,
 )
 ```
 
 ### `search_and_scrape`
 
 ```python
-result: SearchAndScrapeResult = await client.search_and_scrape(
+result: SearchAndScrapeResponse = await client.search_and_scrape(
     query,
-    num_results=3,
+    num_results=None,
     provider=None,
-    lens=None,
     claim=None,
-    session_id=None,
+    deduplicate=None,
+    filter_by_query=False,
+    include_sources=None,
+    max_length_per_source=None,
+    total_max_length=None,
+    sessionId=None,
 )
 ```
 
@@ -129,14 +135,17 @@ result: AcademicSearchResponse = await client.academic_search(
     year_from=None,
     year_to=None,
     provider=None,
-    open_access_only=False,
+    open_access=False,    # restrict to open-access papers
+    pdf_only=False,
+    sort_by=None,
+    source=None,
 )
 ```
 
 ### `verify_citation`
 
 ```python
-result: VerifyResult = await client.verify_citation(
+result: VerifyCitationResponse = await client.verify_citation(
     citation,             # DOI, URL, or free-text reference
     claim=None,           # optional claim to check against the cited work
 )
@@ -145,126 +154,70 @@ result: VerifyResult = await client.verify_citation(
 ### `audit_bibliography`
 
 ```python
-result: AuditBibliographyResult = await client.audit_bibliography(
-    bibliography=None,    # BibTeX / RIS / APA string
-    format="auto",        # "bibtex" | "ris" | "apa" | "csl-json" | "auto"
-    entries=None,         # list of {"doi": ..., "url": ..., ...} dicts
-    session_id=None,
+result: AuditBibliographyResponse = await client.audit_bibliography(
+    bibliography=None,    # CSL-JSON / RIS / BibTeX string
+    format=None,          # "bibtex" | "ris" | "csl-json" (auto-detected when omitted)
+    entries=None,         # explicit list of {"doi": ..., "url": ..., ...} dicts
+    sessionId=None,       # audit a sequential_search session instead
 )
 ```
 
 ### `archive_source`
 
 ```python
-result: ArchiveResult = await client.archive_source(url)
+result: ArchiveSourceResponse = await client.archive_source(url)
 ```
 
 ### `verify_recommendation`
 
 ```python
-result: dict = await client.verify_recommendation([
+result: VerifyRecommendationResponse = await client.verify_recommendation([
     {"title": "Best tool", "url": "https://example.com", "author": "Acme", "authorBio": "..."},
 ])
 ```
 
 ### `sequential_search`
 
+The three positional arguments are required; the rest are optional keyword arguments (note the camelCase names — they match the JSON field names exactly):
+
 ```python
-result: dict = await client.sequential_search(
+result: SequentialSearchResponse = await client.sequential_search(
     search_step,           # query or research action for this step
-    step_number=1,
-    next_step_needed=False,
-    total_steps_estimate=None,
-    session_id=None,       # omit to start a new session
-    is_revision=None,
-    revises_step=None,
-    branch_from_step=None,
-    branch_id=None,
-    knowledge_gap=None,
+    step_number,           # 1-based step index
+    next_step_needed,      # bool — False ends the session
+    sessionId=None,        # omit to start a new session
+    totalStepsEstimate=None,
+    isRevision=False,
+    revisesStep=None,
+    branchFromStep=None,
+    branchId=None,
+    knowledgeGap=None,
+    researchGoal=None,
 )
 ```
 
-### `patent_search`
+### Structured-domain searches
+
+`patent_search`, `econ_search`, `legal_search`, `clinical_search`, and `filing_search` follow the same shape — all keyword arguments, all optional, returning their typed `<Name>Response`. The exact parameters are documented per-tool in [`docs/TOOLS.md`](TOOLS.md):
 
 ```python
-result: dict = await client.patent_search(
-    query,
-    num_results=5,
-    search_type=None,      # "keyword" | "classification" | "assignee" | "inventor"
-    patent_office=None,    # "USPTO" | "EPO" | "WIPO"
-    assignee=None,
-    inventor=None,
-    cpc_code=None,
-    year_from=None,
-    year_to=None,
-    provider=None,
-)
-```
-
-### `econ_search`
-
-```python
-result: dict = await client.econ_search(
-    query,
-    series_id=None,        # FRED series ID
-    country=None,          # ISO 3166-1 alpha-2
-    date_from=None,        # "YYYY-MM-DD"
-    date_to=None,
-    frequency=None,        # "annual" | "quarterly" | "monthly"
-    num_results=5,
-    provider=None,
-)
-```
-
-### `legal_search`
-
-```python
-result: dict = await client.legal_search(
-    query,
-    jurisdiction=None,
-    date_from=None,
-    date_to=None,
-    num_results=5,
-    provider=None,
-)
-```
-
-### `clinical_search`
-
-```python
-result: dict = await client.clinical_search(
-    query,
-    condition=None,
-    intervention=None,
-    sponsor=None,
-    status=None,
-    num_results=5,
-    provider=None,
-)
-```
-
-### `filing_search`
-
-```python
-result: dict = await client.filing_search(
-    query,
-    form_type=None,
-    ticker=None,
-    date_from=None,
-    date_to=None,
-    num_results=5,
-    provider=None,
-)
+patents:  PatentSearchResponse   = await client.patent_search(query="mRNA vaccine", patent_office="USPTO")
+econ:     EconSearchResponse     = await client.econ_search(series_id="GDP", date_from="2020-01-01")
+cases:    LegalSearchResponse    = await client.legal_search(query="fair use", jurisdiction="ca9")
+trials:   ClinicalSearchResponse = await client.clinical_search(condition="melanoma", status="recruiting")
+filings:  FilingSearchResponse   = await client.filing_search(ticker="AAPL", form_type="10-K")
 ```
 
 ### Session / bibliography helpers
 
 ```python
-session: dict = await client.get_research_session(session_id)
-export:  dict = await client.research_export(session_id, format="markdown")
-biblio:  dict = await client.format_bibliography(session_id=None, format="apa", urls=None)
-graph:   dict = await client.citation_graph(doi=None, title=None, depth=1, influential_only=False)
+session: GetResearchSessionResponse = await client.get_research_session(sessionId)
+export:  ResearchExportResponse     = await client.research_export(sessionId, format="markdown")
+biblio:  FormatBibliographyResponse = await client.format_bibliography(sessionId=None, sources=None, style="apa")
+graph:   CitationGraphResponse      = await client.citation_graph(paper, direction=None, influential_only=False)
 ```
+
+`citation_graph`'s `paper` is a DOI or title; `format_bibliography` takes either a `sessionId` or an explicit `sources` list.
 
 ### Generic passthrough
 
@@ -277,111 +230,107 @@ tools: list = await client.list_tools()
 
 ## Return types
 
-All typed methods return dataclass instances defined in `web_researcher_mcp.models`.
+Every typed method returns a dataclass named `<ToolName>Response`, defined in `web_researcher_mcp.models` (e.g. `web_search` → `WebSearchResponse`, `scrape_page` → `ScrapePageResponse`). A few short aliases are exported for ergonomics: `SearchResponse` (= `WebSearchResponse`), `ScrapeResult` (= `ScrapePageResponse`), `VerifyResult` (= `VerifyCitationResponse`), `ArchiveResult` (= `ArchiveSourceResponse`), `AuditBibliographyResult` (= `AuditBibliographyResponse`), `SearchAndScrapeResult` (= `SearchAndScrapeResponse`).
 
-| Method | Return type |
-|--------|-------------|
-| `web_search` | `SearchResponse` |
-| `scrape_page` | `ScrapeResult` |
-| `search_and_scrape` | `SearchAndScrapeResult` |
-| `image_search` | `ImageSearchResponse` |
-| `news_search` | `NewsSearchResponse` |
-| `academic_search` | `AcademicSearchResponse` |
-| `verify_citation` | `VerifyResult` |
-| `audit_bibliography` | `AuditBibliographyResult` |
-| `archive_source` | `ArchiveResult` |
-| all others | `dict[str, Any]` |
+Each dataclass exposes a `from_dict` constructor and tolerates missing keys (every field defaults to `None`/empty), so partial server responses never raise. Inspect the generated `models.py` for the complete field set of any response.
 
 ### Key model shapes
 
-**`SearchResponse`**
+**`WebSearchResponse`** (alias `SearchResponse`)
 
 ```python
 @dataclass
-class SearchResponse:
-    query: str
-    results: list[SearchResult]     # each has title, url, snippet, displayLink, claimSignal
-    resultCount: int
+class WebSearchResponse:
+    query: Optional[str]
+    results: list[WebSearchResult]  # each: title, url, snippet, displayLink, claimSignal
+    resultCount: Optional[int]
     urls: list[str]
     hints: dict[str, Any]
+    trust: Optional[str]            # trust marker for externally-sourced content
 ```
 
-**`ScrapeResult`**
+**`ScrapePageResponse`** (alias `ScrapeResult`)
 
 ```python
 @dataclass
-class ScrapeResult:
-    url: str
-    content: str                    # Markdown or raw HTML
-    contentType: str
-    contentLength: int
-    truncated: bool
-    estimatedTokens: int
-    sizeCategory: str               # "tiny" | "small" | "medium" | "large" | "huge"
-    raw: bool
-    extractionQuality: str          # "high" | "medium" | "low"
-    extractedBy: str                # "markdown" | "stealth" | "html" | "browser"
+class ScrapePageResponse:
+    url: Optional[str]
+    content: Optional[str]          # Markdown or raw HTML
+    contentType: Optional[str]
+    contentLength: Optional[int]
+    truncated: Optional[bool]
+    estimatedTokens: Optional[int]
+    sizeCategory: Optional[str]     # "tiny" | "small" | "medium" | "large" | "huge"
+    raw: Optional[bool]
+    extractionQuality: Optional[str]  # "high" | "medium" | "low"
+    extractedBy: Optional[str]        # "markdown" | "stealth" | "html" | "browser"
     citation: Optional[Citation]
-    metadata: dict[str, Any]
-    sourceType: str
-    authorityTier: str
-    domainCategory: str
-    detectedDoi: str
-    retractionStatus: Optional[dict[str, Any]]
+    metadata: Optional[ScrapePageMetadata]
+    structuredData: Optional[StructuredData]
+    sourceType: Optional[str]
+    authorityTier: Optional[str]
+    domainCategory: Optional[str]
+    detectedDoi: Optional[str]
+    retractionStatus: Optional[Any]
+    trust: Optional[str]
 ```
 
-**`VerifyResult`**
+**`VerifyCitationResponse`** (alias `VerifyResult`)
 
 ```python
 @dataclass
-class VerifyResult:
-    input: str
-    inputType: str                  # "doi" | "url" | "text"
+class VerifyCitationResponse:
+    input: Optional[str]
+    inputType: Optional[str]        # "doi" | "url" | "text"
     exists: Optional[bool]
-    matchedRecord: Optional[dict]   # raw Crossref/OpenAlex record
-    matchConfidence: str            # "exact" | "fuzzy" | "none"
-    detectedDoi: str
-    titleMatch: str                 # "exact" | "partial" | "none"
+    matchedRecord: Optional[Any]    # raw Crossref/OpenAlex record
+    matchConfidence: Optional[str]  # "exact" | "fuzzy" | "none"
+    detectedDoi: Optional[str]
+    titleMatch: Optional[str]       # "exact" | "partial" | "none"
     retractionStatus: Optional[RetractionStatus]
     httpStatus: Optional[int]
-    archivedUrl: str
+    archivedUrl: Optional[str]
     provenance: list[str]
-    claim: str
-    claimSupport: str               # "supported" | "partially_supported" | "not_supported" | "unchecked"
+    claim: Optional[str]
+    claimSupport: Optional[str]     # "supported" | "partially_supported" | "not_supported" | "unchecked"
     claimEvidence: list[str]
-    claimSourceUrl: str
+    claimSourceUrl: Optional[str]
     contrastSignal: Optional[bool]
-    conflictOfInterest: Optional[dict]
+    conflictOfInterest: Optional[ConflictOfInterest]
+    trust: Optional[str]
 ```
 
-**`AuditBibliographyResult`**
+**`AuditBibliographyResponse`** (alias `AuditBibliographyResult`)
 
 ```python
 @dataclass
-class AuditBibliographyResult:
-    source: str                     # "entries" | "bibliography" | "session"
-    entryCount: int
-    summary: AuditSummary           # total/retracted/deadLink/notFound/unchecked/mischaracterized/ok
-    entries: list[BibEntryAudit]
+class AuditBibliographyResponse:
+    source: Optional[str]           # "entries" | "bibliography" | "session"
+    entryCount: Optional[int]
+    summary: Optional[AuditBibliographySummary]  # total/retracted/deadLink/notFound/unchecked/mischaracterized/ok
+    entries: list[AuditBibliographyEntry]
     skipped: Optional[int]
-    checkedAt: str
+    skippedNote: Optional[str]
+    checkedAt: Optional[str]
+    trust: Optional[str]
 ```
 
-**`ArchiveResult`**
+**`ArchiveSourceResponse`** (alias `ArchiveResult`)
 
 ```python
 @dataclass
-class ArchiveResult:
-    requestedUrl: str
-    snapshotUrl: str
-    archivedAt: str
-    captured: bool
-    status: str                     # "captured" | "pending" | "failed" | "already_exists"
-    httpStatus: int
-    reason: str
-    pollUrl: str
-    source: str                     # "wayback"
+class ArchiveSourceResponse:
+    requestedUrl: Optional[str]
+    snapshotUrl: Optional[str]
+    archivedAt: Optional[str]
+    captured: Optional[bool]
+    status: Optional[str]           # "captured" | "pending" | "failed" | "already_exists"
+    httpStatus: Optional[int]
+    reason: Optional[str]
+    pollUrl: Optional[str]
+    source: Optional[str]           # "wayback"
     provenance: list[str]
+    trust: Optional[str]
 ```
 
 ## Error handling

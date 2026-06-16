@@ -1,7 +1,7 @@
 # Privacy Policy
 
 **Effective Date:** May 26, 2026  
-**Last Updated:** May 31, 2026
+**Last Updated:** June 16, 2026
 
 ## Overview
 
@@ -49,6 +49,7 @@ When you search, your query goes directly to whichever provider you configured. 
 | Exa | Your query, your API key — and, only if you enable the optional paid scrape fallback, the page URL being read | [exa.ai/privacy-policy](https://exa.ai/privacy-policy) |
 | SearXNG | Your query (self-hosted — no third party) | N/A (you control the server) |
 | DuckDuckGo | Your query (zero-config default when no provider is configured) | [duckduckgo.com/privacy](https://duckduckgo.com/privacy) |
+| HackerNews | Your query, sent to the Algolia HN Search API (keyless) | [algolia.com/policies/privacy](https://www.algolia.com/policies/privacy/) |
 | OpenAlex | Your academic query; your optional contact email if `OPENALEX_EMAIL` is set (improves rate limits) | [openalex.org/legal](https://openalex.org/legal/privacy-policy) |
 | CrossRef | Your academic query | [crossref.org/privacy](https://www.crossref.org/privacy/) |
 | Semantic Scholar | Your academic / citation query (optional API key) | [allenai.org/privacy-policy](https://allenai.org/privacy-policy) |

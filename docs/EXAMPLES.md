@@ -39,7 +39,7 @@ Use a search lens to restrict results to curated high-quality sources for a spec
 }
 ```
 
-The "programming" lens focuses your search on trusted developer sources — Stack Overflow, GitHub, Go docs, MDN, and other curated sites. This means fewer noise results and more relevant answers. Available lenses: `docs`, `academic`, `academic-extended`, `clinical`, `security`, `journalism`, `programming`, `devops`, `news`, `tech`, `legal`, `medical`, `finance`, `science`, `government`. The authoritative set is whatever JSON files live in the `lenses/` directory.
+The "programming" lens focuses your search on trusted developer sources — Stack Overflow, GitHub, Go docs, MDN, and other curated sites. This means fewer noise results and more relevant answers. For the full, current list of available lenses, read the `lenses://catalog` MCP resource (or the JSON files in the `lenses/` directory, which are the canonical source).
 
 ---
 

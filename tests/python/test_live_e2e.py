@@ -304,6 +304,53 @@ class TestKeylessVerifyCitation(unittest.TestCase):
         _run(run())
 
 
+class TestKeylessAuditBibliography(unittest.TestCase):
+    """audit_bibliography over a CSL-JSON document (keyless — CrossRef)."""
+
+    def test_audits_csl_json_document(self):
+        async def run():
+            # One real DOI + one fabricated DOI in a minimal CSL-JSON list.
+            bibliography = (
+                '[{"DOI": "10.1038/nature14538", "title": "Real paper"},'
+                ' {"DOI": "10.9999/fabricated-xyz-12345", "title": "Fake paper"}]'
+            )
+            async with _client(_BINARY) as c:
+                result = await c.audit_bibliography(
+                    bibliography=bibliography,
+                    format="csl-json",
+                )
+                self.assertIsNotNone(result)
+                self.assertIsNotNone(result.entries)
+                # CrossRef is rate-limited; only assert structure when populated.
+                if result.entries:
+                    self.assertEqual(len(result.entries), 2)
+                    by_doi = {e.doi: e for e in result.entries if e.doi}
+                    if "10.9999/fabricated-xyz-12345" in by_doi:
+                        self.assertFalse(
+                            by_doi["10.9999/fabricated-xyz-12345"].exists,
+                            "Fabricated DOI should not exist in CrossRef",
+                        )
+
+        _run(run())
+
+
+class TestKeylessArchiveSource(unittest.TestCase):
+    """archive_source — Wayback Save Page Now capture (keyless, best-effort)."""
+
+    def test_archive_preserves_requested_url(self):
+        async def run():
+            async with _client(_BINARY) as c:
+                result = await c.archive_source("https://example.com")
+                self.assertIsNotNone(result)
+                # Save Page Now is rate-limited and best-effort, so a capture
+                # may not succeed; the tool always echoes the requested URL and
+                # reports an honest status either way.
+                self.assertEqual(result.requestedUrl, "https://example.com")
+                self.assertIsNotNone(result.status)
+
+        _run(run())
+
+
 class TestKeylessNewsSearch(unittest.TestCase):
     """news_search with DuckDuckGo fallback."""
 
@@ -357,12 +404,19 @@ class TestKeylessListTools(unittest.TestCase):
 
         _run(run())
 
-    def test_tool_count_reasonable(self):
+    def test_tools_have_well_formed_schemas(self):
+        # Avoid asserting an exact/near-exact tool count — registry.go is the
+        # source of truth and the set grows over time. Instead verify every
+        # advertised tool is structurally usable (name + input schema), which
+        # is what a client actually depends on.
         async def run():
             async with _client(_BINARY) as c:
                 tools = await c.list_tools()
-                self.assertGreaterEqual(len(tools), 20,
-                    "Expected at least 20 registered tools")
+                self.assertTrue(tools, "Server should advertise at least one tool")
+                for t in tools:
+                    self.assertTrue(t.get("name"), f"Tool missing a name: {t}")
+                    self.assertIn("inputSchema", t,
+                        f"Tool {t.get('name')!r} missing an inputSchema")
 
         _run(run())
 

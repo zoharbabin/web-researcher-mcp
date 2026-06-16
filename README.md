@@ -165,6 +165,7 @@ Works with Claude, Claude Desktop, Cursor, and any AI assistant that supports to
 | `clinical_search` | Search ClinicalTrials.gov — clinical-trial registrations with status, phase, sponsor, and whether results are posted (discovery, not medical advice) |
 | `verify_citation` | Check a citation before you rely on it — does it exist, match a real record, and is it retracted or a dead link? Evidence, not a verdict |
 | `audit_bibliography` | Audit a whole reference list in one pass — paste a CSL-JSON/RIS/BibTeX file (or a session) and get per-entry + corpus-level flags for retracted, dead-link, and unverifiable citations |
+| `verify_recommendation` | Audit an AI-generated recommendation list (listicle, product ranking) for self-promotion, author conflicts of interest, domain reputation, and dead links — catches GEO-gamed picks. Evidence, not a verdict |
 | `archive_source` | Capture a fresh Internet Archive (Wayback Machine) snapshot of a URL via Save Page Now so a cited source stays verifiable if the page later changes or disappears — returns snapshot URL + timestamp (write tool) |
 | `answer` | Ask a factual question and get one synthesized answer **with citations** — the direct answer, not a reading list |
 | `structured_search` | Search and extract structured JSON per result (supply a schema), or pull entities by category (company, people, …) |
@@ -365,36 +366,7 @@ See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#environment-variables) for the compl
 <details>
 <summary><strong>Architecture (for developers and contributors)</strong></summary>
 
-```
-web-researcher-mcp/
-├── cmd/web-researcher-mcp/     # Entry point (wiring only)
-├── internal/
-│   ├── config/                 # Env-based strongly-typed configuration
-│   ├── server/                 # MCP server lifecycle + signal handling
-│   ├── tools/                  # Tool handlers (one file per tool)
-│   ├── search/                 # Pluggable search providers + router + lens routing
-│   ├── scraper/                # Tiered scraping pipeline (markdown → stealth → HTML → browser; + optional paid Exa tier)
-│   ├── documents/              # PDF, DOCX, PPTX parsing
-│   ├── cache/                  # Hybrid cache (memory + AES-encrypted disk)
-│   ├── auth/                   # OAuth 2.1 middleware + JWKS
-│   ├── audit/                  # Structured audit logging
-│   ├── session/                # Per-tenant session persistence (memory index + encrypted disk)
-│   ├── content/                # Sanitize, dedup, truncate, quality score
-│   ├── metrics/                # Prometheus metrics + per-tool stats
-│   ├── ratelimit/              # Three-tier rate limiting
-│   ├── circuit/                # Circuit breaker for external APIs
-│   ├── persist/                # TTL key/value store (memory or encrypted disk) for token revocation + rate quotas
-│   └── resources/              # MCP Resources + Prompts
-├── lenses/                     # Search lens JSON files
-└── docs/                       # Extended documentation
-```
-
-<details>
-<summary><strong>High-Level Architecture Diagram</strong></summary>
-
-The full layered diagram (MCP transports → tool dispatch → service layer → infrastructure) and the per-package map live in **[ARCHITECTURE.md](ARCHITECTURE.md)** — kept in one place to avoid drift.
-
-</details>
+The full per-package map and the layered diagram (MCP transports → tool dispatch → service layer → infrastructure) live in **[ARCHITECTURE.md](ARCHITECTURE.md)** — kept in one place to avoid drift.
 
 <details>
 <summary><strong>Design Principles (for developers)</strong></summary>

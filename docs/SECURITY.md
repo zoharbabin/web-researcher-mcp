@@ -148,7 +148,7 @@ This fails closed only for present-but-insufficient scopes — it never silently
 ```
 
 **Rules:**
-1. Sequential search sessions are keyed by `{tenantID}:{sessionID}` — never shared
+1. Sequential search sessions are keyed by `{tenantID}:{userID}:{sessionID}` — never shared
 2. Cache can be shared for public content (search results, scraped pages are not user-specific)
 3. Audit logs include tenant ID for filtering
 
@@ -241,11 +241,11 @@ Raw HTML/Content
 - Reject with informative error when exceeded
 - Counters are in-memory by default; set `RATE_LIMIT_PERSIST=true` to write them through to the encrypted persist store so quotas survive a restart
 
-**Sub-Agent Handling:**
-When a single agent spawns many parallel tool calls:
-- Queue excess requests (up to buffer limit)
-- Apply per-session concurrency limit
-- Return 429 with `Retry-After` header when queue is full
+**Burst handling (parallel tool calls):**
+When a single agent spawns many parallel tool calls, limits are enforced by token buckets, not a queue:
+- Per-tenant and global token buckets (`internal/ratelimit/limiter.go`) — excess calls are rejected immediately, never buffered
+- Rejected HTTP requests return `429` with a `Retry-After` header (`60` for the per-minute bucket, `3600` for the daily quota)
+- Concurrent scraping is separately bounded by a fixed-size semaphore in the scrape pipeline (`internal/scraper/pipeline.go`), so a burst of scrapes runs at a capped concurrency rather than all at once
 
 ---
 

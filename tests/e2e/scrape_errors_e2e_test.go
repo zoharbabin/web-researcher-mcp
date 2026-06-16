@@ -264,10 +264,3 @@ func TestScrapeErrors_E2E(t *testing.T) {
 		h.shutdown()
 	})
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}

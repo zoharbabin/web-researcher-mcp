@@ -264,12 +264,50 @@ class Citation:
         )
 
 @dataclass
+class CitationGraphCitedby:
+    abstract: Optional[str] = None
+    authors: list[str] = field(default_factory=list)
+    citationCount: Optional[int] = None
+    citationIntents: list[str] = field(default_factory=list)
+    doi: Optional[str] = None
+    isInfluential: Optional[bool] = None
+    journal: Optional[str] = None
+    openAccess: Optional[bool] = None
+    pdfUrl: Optional[str] = None
+    source: Optional[str] = None
+    title: Optional[str] = None
+    tldr: Optional[str] = None
+    url: Optional[str] = None
+    year: Optional[int] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "CitationGraphCitedby | None":
+        if d is None:
+            return None
+        return cls(
+            abstract=d.get('abstract'),
+            authors=list(d.get('authors') or []),
+            citationCount=d.get('citationCount'),
+            citationIntents=list(d.get('citationIntents') or []),
+            doi=d.get('doi'),
+            isInfluential=d.get('isInfluential'),
+            journal=d.get('journal'),
+            openAccess=d.get('openAccess'),
+            pdfUrl=d.get('pdfUrl'),
+            source=d.get('source'),
+            title=d.get('title'),
+            tldr=d.get('tldr'),
+            url=d.get('url'),
+            year=d.get('year'),
+        )
+
+@dataclass
 class CitationGraphResponse:
-    citedBy: list[AcademicSearchPaper] = field(default_factory=list)
+    citedBy: list[CitationGraphCitedby] = field(default_factory=list)
     citedByCount: Optional[int] = None
     direction: Optional[str] = None
     provider: Optional[str] = None
-    references: list[AcademicSearchPaper] = field(default_factory=list)
+    references: list[CitationGraphCitedby] = field(default_factory=list)
     referencesCount: Optional[int] = None
     seed: Optional[str] = None
     trust: Optional[str] = None
@@ -279,11 +317,11 @@ class CitationGraphResponse:
         if d is None:
             return None
         return cls(
-            citedBy=[AcademicSearchPaper.from_dict(i) for i in (d.get('citedBy') or [])],
+            citedBy=[CitationGraphCitedby.from_dict(i) for i in (d.get('citedBy') or [])],
             citedByCount=d.get('citedByCount'),
             direction=d.get('direction'),
             provider=d.get('provider'),
-            references=[AcademicSearchPaper.from_dict(i) for i in (d.get('references') or [])],
+            references=[CitationGraphCitedby.from_dict(i) for i in (d.get('references') or [])],
             referencesCount=d.get('referencesCount'),
             seed=d.get('seed'),
             trust=d.get('trust'),
@@ -1127,12 +1165,22 @@ class SearchAndScrapeResponse:
 
 @dataclass
 class SearchAndScrapeScrapefailure:
+    kind: Optional[str] = None
+    reason: Optional[str] = None
+    retryable: Optional[bool] = None
+    suggestedAction: Optional[str] = None
+    url: Optional[str] = None
 
     @classmethod
     def from_dict(cls, d: dict[str, Any] | None) -> "SearchAndScrapeScrapefailure | None":
         if d is None:
             return None
         return cls(
+            kind=d.get('kind'),
+            reason=d.get('reason'),
+            retryable=d.get('retryable'),
+            suggestedAction=d.get('suggestedAction'),
+            url=d.get('url'),
         )
 
 @dataclass
@@ -1400,9 +1448,31 @@ class VerifyCitationResponse:
         )
 
 @dataclass
+class VerifyRecommendationConflictOfInterest:
+    authorAffiliation: Optional[str] = None
+    citedEntityName: Optional[str] = None
+    confidence: Optional[str] = None
+    conflictType: Optional[str] = None
+    detected: Optional[bool] = None
+    evidence: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "VerifyRecommendationConflictOfInterest | None":
+        if d is None:
+            return None
+        return cls(
+            authorAffiliation=d.get('authorAffiliation'),
+            citedEntityName=d.get('citedEntityName'),
+            confidence=d.get('confidence'),
+            conflictType=d.get('conflictType'),
+            detected=d.get('detected'),
+            evidence=d.get('evidence'),
+        )
+
+@dataclass
 class VerifyRecommendationRecommendation:
     author: Optional[str] = None
-    conflictOfInterest: Optional[ConflictOfInterest] = None
+    conflictOfInterest: Optional[VerifyRecommendationConflictOfInterest] = None
     domainReputation: dict[str, Any] = field(default_factory=dict)
     flags: list[str] = field(default_factory=list)
     httpStatus: Optional[int] = None
@@ -1418,7 +1488,7 @@ class VerifyRecommendationRecommendation:
             return None
         return cls(
             author=d.get('author'),
-            conflictOfInterest=ConflictOfInterest.from_dict(d.get('conflictOfInterest')) if d.get('conflictOfInterest') else None,
+            conflictOfInterest=VerifyRecommendationConflictOfInterest.from_dict(d.get('conflictOfInterest')) if d.get('conflictOfInterest') else None,
             domainReputation=dict(d.get('domainReputation') or {}),
             flags=list(d.get('flags') or []),
             httpStatus=d.get('httpStatus'),

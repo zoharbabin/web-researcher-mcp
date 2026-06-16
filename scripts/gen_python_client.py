@@ -100,11 +100,12 @@ def _pascal(s: str) -> str:
 
 
 def _schema_fingerprint(schema: dict[str, Any]) -> str:
-    props = schema.get("properties", {})
-    pairs = sorted(
-        f"{k}:{v.get('type','any')}" for k, v in props.items()
-    )
-    return hashlib.sha1("|".join(pairs).encode()).hexdigest()[:12]
+    # Hash the full canonical schema, not just top-level property name:type
+    # pairs — two object schemas that share top-level keys but differ in nested
+    # structure (e.g. an `items` object's properties) must NOT collide into the
+    # same generated dataclass.
+    canonical = json.dumps(schema, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha1(canonical.encode()).hexdigest()[:12]
 
 
 def _pytype(schema: dict[str, Any], class_name: str | None = None) -> str:
@@ -141,7 +142,10 @@ def _param_pytype(schema: dict[str, Any]) -> str:
     if isinstance(t, list):
         non_null = [x for x in t if x != "null"]
         if non_null:
-            return f"Optional[{_param_pytype({**schema, 'type': non_null[0]})}]"
+            inner = _param_pytype({**schema, "type": non_null[0]})
+            # The array/object branches already return an Optional[...]; don't
+            # double-wrap a nullable array/object into Optional[Optional[...]].
+            return inner if inner.startswith("Optional[") else f"Optional[{inner}]"
         return "Any"
     if t == "string":
         return "str"
@@ -741,11 +745,6 @@ def _resolve_return_type(tool_name: str, registry: ClassRegistry) -> str | None:
 # Per-tool method emitter
 # ---------------------------------------------------------------------------
 
-# Tools that the existing manually-written client handles with a typed return.
-# The generator overwrites these with generated versions.
-_TYPED_RETURN_TOOLS: set[str] = set()  # populated dynamically
-
-
 def _emit_async_method(tool: dict[str, Any], registry: ClassRegistry) -> str:
     name = tool["name"]
     desc = tool.get("description", "")
@@ -1051,7 +1050,10 @@ class WebResearcherClient:
             try:
                 with urllib.request.urlopen(req, timeout=self._timeout):  # noqa: S310
                     pass
-            except urllib.error.HTTPError:
+            except OSError:
+                # Best-effort notification: swallow any connection-level failure
+                # (URLError, HTTPError, timeout, connection refused all subclass
+                # OSError) so it can never break the caller.
                 pass
 
         await asyncio.to_thread(_fire)
@@ -1060,7 +1062,10 @@ class WebResearcherClient:
         await self._request(
             "initialize",
             {
-                "protocolVersion": "2024-11-05",
+                # Negotiate the current MCP protocol revision the server speaks
+                # (unlocks the resource_link content type for large payloads).
+                # The go-sdk server negotiates down for older peers.
+                "protocolVersion": "2025-06-18",
                 "capabilities": {},
                 "clientInfo": {"name": "web-researcher-mcp-python", "version": "1.0"},
             },
@@ -1102,30 +1107,6 @@ class WebResearcherClient:
         """Return the list of tool schemas available on this server."""
         result = await self._request("tools/list")
         return result.get("tools", [])
-
-    # ------------------------------------------------------------------
-    # Dynamic proxy: fills in any tool not yet in the static methods above.
-    # Called once at start(); adds a callable attr for each unknown tool.
-    # ------------------------------------------------------------------
-
-    async def _install_dynamic_proxy(self) -> None:
-        try:
-            tool_list = await self.list_tools()
-        except Exception:
-            return
-        for tool in tool_list:
-            tname = tool.get("name", "")
-            if not tname or hasattr(self, tname):
-                continue
-
-            def _make_proxy(n: str):
-                async def _proxy(**kwargs: Any) -> dict[str, Any]:
-                    return await self._call_tool(n, kwargs)
-                _proxy.__name__ = n
-                _proxy.__doc__ = tool.get("description", "")
-                return _proxy
-
-            setattr(self, tname, _make_proxy(tname))
 
     # ------------------------------------------------------------------
     # Tool methods (generated from outputSchema)

@@ -1634,6 +1634,7 @@ Every tool declares annotations for client consumption (`readOnlyAnnotations(ide
 | format_bibliography | true | true | false |
 | audit_bibliography | true | true | true |
 | verify_citation | true | true | true |
+| verify_recommendation | true | true | true |
 | archive_source | **false (write)** | true | false |
 | filing_search | true | true | true |
 | legal_search | true | true | true |

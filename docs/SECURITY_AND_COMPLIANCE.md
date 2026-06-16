@@ -187,8 +187,8 @@ static UUIDv4 values that do not rotate over the life of a session. This is an
 accepted, documented risk: a session ID is a research-continuity handle, not an
 authentication credential. Authorization is always derived from the validated
 JWT (tenant/user/scope), and sessions are keyed by the compound
-`{tenantID}:{sessionID}` so a guessed or leaked session ID cannot cross a tenant
-boundary or grant access without a valid token. Rotation was deliberately not
+`{tenantID}:{userID}:{sessionID}` so a guessed or leaked session ID cannot cross a tenant
+or user boundary or grant access without a valid token. Rotation was deliberately not
 added to avoid breaking the recovery-after-context-loss workflow the IDs exist
 to support.
 

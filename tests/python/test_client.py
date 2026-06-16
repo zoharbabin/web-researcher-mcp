@@ -295,6 +295,29 @@ class _MockMCPHandler(BaseHTTPRequestHandler):
             self._send_json(200, resp)
             return
 
+        # Additional injectable result shapes for exercising _call_tool branches.
+        shape: str = str(arguments.get("_result_shape", ""))
+        if shape == "null":
+            # result is null (e.g. a notification-shaped reply) → MCPError.
+            self._send_json(200, {"jsonrpc": "2.0", "id": req_id, "result": None})
+            return
+        if shape == "error_no_text":
+            # isError with no text block → MCPError with a generic message.
+            self._send_json(200, {
+                "jsonrpc": "2.0", "id": req_id,
+                "result": {"isError": True, "content": []},
+            })
+            return
+        if shape == "non_json_text":
+            # A text block that is not JSON → returned verbatim under "text".
+            self._send_json(200, {
+                "jsonrpc": "2.0", "id": req_id,
+                "result": {"isError": False, "content": [
+                    {"type": "text", "text": "plain non-json body"}
+                ]},
+            })
+            return
+
         if tool_name == "web_search":
             payload = _SAMPLE_SEARCH_RESPONSE
         elif tool_name == "scrape_page":
@@ -686,6 +709,36 @@ class TestWebResearcherClientAsync(unittest.TestCase):
                 self.assertIn("error", str(ctx.exception).lower())
 
         asyncio.run(_run())
+
+    def test_null_result_raises_mcp_error(self) -> None:
+        """A null tools/call result must surface as a clear MCPError."""
+        async def _run() -> None:
+            async with self._make_client() as client:
+                with self.assertRaises(MCPError) as ctx:
+                    await client.call("web_search", _result_shape="null")
+                self.assertIn("null result", str(ctx.exception))
+
+        asyncio.run(_run())
+
+    def test_error_with_no_text_raises_mcp_error(self) -> None:
+        """isError=true with no text content still raises a descriptive MCPError."""
+        async def _run() -> None:
+            async with self._make_client() as client:
+                with self.assertRaises(MCPError) as ctx:
+                    await client.call("web_search", _result_shape="error_no_text")
+                self.assertIn("error with no message", str(ctx.exception))
+
+        asyncio.run(_run())
+
+    def test_non_json_text_is_returned_verbatim(self) -> None:
+        """A non-JSON text block is passed back under a 'text' key (no raise)."""
+        async def _run() -> dict[str, Any]:
+            async with self._make_client() as client:
+                return await client.call("web_search", _result_shape="non_json_text")
+
+        result = asyncio.run(_run())
+        self.assertEqual(result.get("text"), "plain non-json body")
+        self.assertFalse(result.get("isError"))
 
     def test_none_params_stripped(self) -> None:
         """None kwargs must NOT appear in the wire-level tools/call arguments."""
