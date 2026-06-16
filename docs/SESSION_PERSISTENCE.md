@@ -262,13 +262,7 @@ A background goroutine runs every 15 minutes:
 
 ## Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SESSION_TTL` | `4h` | Idle timeout (resets on every read/write in memory; disk header updates on writes) |
-| `SESSION_DATA_DIR` | `{CACHE_DIR}/sessions` | Where encrypted session files live |
-| `SESSION_MAX_STEPS` | `200` | Max steps before session auto-completes |
-| `CACHE_ENCRYPTION_KEY` | — | 64 hex chars for AES-256-GCM (omit for plaintext) |
-| `CACHE_ENCRYPTION_KEY_PREV` | — | Optional 64-hex previous key for zero-downtime rotation. Sessions encrypted under the old key are decrypted via fallback and lazily re-encrypted with the current key on the next write |
+Session configuration variables (`SESSION_TTL`, `SESSION_DATA_DIR`, `SESSION_MAX_STEPS`, `CACHE_ENCRYPTION_KEY`, `CACHE_ENCRYPTION_KEY_PREV`) are documented in `.env.example` and [DEPLOYMENT.md](DEPLOYMENT.md#environment-variables).
 
 ---
 

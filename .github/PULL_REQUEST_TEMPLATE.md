@@ -37,7 +37,7 @@ Closes #
 
 - [ ] My code follows the project's code style
 - [ ] I have added/updated tests for new functionality
-- [ ] `make verify` is green (fmt + vet + lint + gosec + govulncheck + race tests + e2e + build)
+- [ ] `make verify` is green (fmt + vet + lint + gosec + govulncheck + validate-lenses + race tests + e2e + python-drift + python tests + build)
 - [ ] I have updated documentation if needed (docs reflect the code exactly — no drift)
 - [ ] My changes generate no new warnings
 - [ ] I have checked for potential security implications
@@ -46,6 +46,7 @@ Closes #
 
 - [ ] New env var added to **both** `.env.example` **and** `docs/DEPLOYMENT.md`
 - [ ] New tool documented in `docs/TOOLS.md` (`## Tool N: \`name\``), annotated with `readOnlyAnnotations(...)` or `writeAnnotations(...)`, and added to `setupTestDeps()` + `expectedTools` so the drift gates exercise it
+- [ ] Regenerated the Python client (`make gen-python-client`) and committed the result — the `python-drift` CI job and pre-commit hook fail otherwise
 - [ ] Destructive behavior is a separate endpoint, not a flag on a read tool
 - [ ] No hardcoded tool/provider counts or version numbers introduced (registry.go / go.mod are the sources of truth)
 - [ ] Drift gates pass (`TestToolsDocMatchesRegistry`, `TestAllToolsHaveAnnotations`, `TestOutputSchemaMatchesResponse`, `TestToolDescriptionQuality`)

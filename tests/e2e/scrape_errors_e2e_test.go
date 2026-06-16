@@ -34,7 +34,7 @@ func TestScrapeErrors_E2E(t *testing.T) {
 
 	h.send(jsonRPCRequest{JSONRPC: "2.0", Method: "notifications/initialized"})
 
-	t.Run("403_returns_blocked_error_with_issue_link", func(t *testing.T) {
+	t.Run("403_returns_blocked_error_with_hint", func(t *testing.T) {
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusForbidden)
 		}))
@@ -73,8 +73,9 @@ func TestScrapeErrors_E2E(t *testing.T) {
 		if !strings.Contains(text, "bot detection") {
 			t.Errorf("LLM should see 'bot detection' hint, got: %s", text)
 		}
-		if !strings.Contains(text, "github.com/zoharbabin/web-researcher-mcp/issues") {
-			t.Errorf("LLM should see GitHub issue link, got: %s", text)
+		// A 403 is the remote site refusing us, not a server bug — no issue link expected.
+		if strings.Contains(text, "github.com/zoharbabin/web-researcher-mcp/issues") {
+			t.Errorf("LLM should NOT see GitHub issue link for a bot-wall 403, got: %s", text)
 		}
 		t.Logf("LLM sees: %s", text)
 	})
@@ -262,11 +263,4 @@ func TestScrapeErrors_E2E(t *testing.T) {
 	t.Run("shutdown", func(t *testing.T) {
 		h.shutdown()
 	})
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

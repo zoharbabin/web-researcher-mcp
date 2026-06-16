@@ -185,6 +185,16 @@ jobs:
           [ "$missing" -eq 0 ] && echo "macOS signing chain OK: leaf + intermediate + root all present."
           exit "$missing"
 
+      # Verify the Python client was regenerated before tagging. The PR-based
+      # python-drift CI job is the primary gate, but a tag pushed directly off
+      # main (bypassing a PR) could otherwise publish a stale client to PyPI.
+      - name: Verify Python client is up-to-date
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Check Python client drift
+        run: make check-python-drift
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
@@ -380,7 +390,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
@@ -392,6 +402,25 @@ jobs:
 
       - name: Build platform wheels
         run: python3 scripts/build_wheels.py "${GITHUB_REF_NAME#v}" --dist dist --out dist/wheels
+
+      - name: Smoke-test one wheel (import check)
+        run: |
+          # Install the linux/amd64 (manylinux) wheel and verify the package is
+          # importable with its full public API surface — catches wheel assembly
+          # bugs (missing files, broken __init__) before they land on PyPI.
+          whl=$(ls dist/wheels/web_researcher_mcp-*-manylinux_2_17_x86_64.whl 2>/dev/null | head -1)
+          if [ -z "$whl" ]; then
+            echo "::warning::manylinux wheel not found — skipping smoke test"
+            exit 0
+          fi
+          pip install --quiet "$whl"
+          python3 -c "
+          import web_researcher_mcp as pkg
+          assert hasattr(pkg, 'WebResearcherClient'), 'WebResearcherClient missing'
+          assert hasattr(pkg, 'SyncWebResearcherClient'), 'SyncWebResearcherClient missing'
+          assert hasattr(pkg, '__version__'), '__version__ missing'
+          print('wheel smoke: OK —', pkg.__version__)
+          "
 
       - name: Publish wheels to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

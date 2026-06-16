@@ -272,10 +272,13 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
 ```
 
 ### Known SPA Domains (require headless browser)
+- go.dev, pkg.go.dev
 - patents.google.com, scholar.google.com, news.google.com
-- trends.google.com, twitter.com, x.com
+- trends.google.com, youtube.com
 - linkedin.com, facebook.com, instagram.com
 - medium.com, dev.to
+
+Note: twitter.com and x.com are **not** in the SPA list — they use a dedicated FxTwitter API path, not the browser tier.
 
 ### Cache
 - Key: SHA-256 of (`url` + `mode` + `max_length`) — `max_length` is part of the key so a larger request never serves a shorter cached body
@@ -289,7 +292,7 @@ All scrape errors are typed as `ScrapeError{Kind, Message, Cause, URL, Tier}`. T
 |-----------|-----------|---------|-----------------------------------------------|
 | `ErrValidation` | no (permanent) | Unsupported scheme, empty host, SSRF / private-IP / blocked-hostname denial, domain allowlist denial | "URL rejected for {url}: {detail}. Provide a valid public http(s) URL." |
 | `ErrNetwork` | yes | DNS failure, timeout, connection refused, TLS | "Network error on {url}: {detail}. Check connectivity." |
-| `ErrBlocked` | no (remote refusal) | HTTP 403, remote bot detection / JS-wall interstitial | "Blocked: {url} uses bot detection. Try alternative source or report at {issueURL}" |
+| `ErrBlocked` | no (remote refusal) | HTTP 403, remote bot detection / JS-wall interstitial | "Blocked: {url} uses bot detection. Try an alternative source — its content can't be read directly." |
 | `ErrNotFound` | no (dead link) | HTTP 404 / 410 | "Not found: {url} returned 404/410 — the page does not exist. Check the URL." |
 | `ErrBrowser` | no | Chrome not found, launch failed, connect failed | "Scrape failed: Chrome unavailable. Set CHROME_PATH or install Chrome. Report at {issueURL}" |
 | `ErrContent` | yes | Page loaded but no usable content extracted | "No content extracted from {url}. May need browser rendering. Report at {issueURL}" |
@@ -480,7 +483,7 @@ type ImageResult struct {
 |-------|------|----------|---------|-------------|
 | `query` | string | yes | — | 1-500 chars |
 | `num_results` | int | no | 5 | 1-10 |
-| `freshness` | string | no | `week` | hour, day, week, month, year |
+| `time_range` | string | no | `week` | hour, day, week, month, year |
 | `sort_by` | string | no | `relevance` | relevance, date |
 | `news_source` | string | no | — | Domain filter |
 | `provider` | string | no | — | Force search provider |
@@ -511,14 +514,14 @@ On a zero-result response, `hints` carries the same `ZeroResultHints` object as 
 ### Behavior
 
 1. Route to configured search provider's news endpoint.
-2. Apply `freshness` as date restriction.
+2. Apply `time_range` as date restriction.
 3. If `news_source` specified, add as domain filter.
 4. Sort by `sort_by`: `relevance` (default) uses the provider's native ranking; `date` requests newest-first ordering.
 5. Return deduplicated articles.
 
 ### Provider notes
 - `publishedAt` is **optional and provider-dependent**: populated when the provider exposes a publish timestamp (Google CSE via page metadata; Brave/Exa/Serper/SearchAPI/SearXNG/Tavily natively), omitted (not fabricated) when the provider supplies none — so treat it as best-effort. When present it is always normalized to **ISO-8601 (RFC3339 UTC)** regardless of the provider's raw format (RFC1123, relative ages like "3 days ago"/"2h", or bare dates), so values sort and compare consistently across providers; an unparseable timestamp is dropped rather than passed through.
-- `sort_by=date` maps to each provider's date-sort control; exact ordering and `freshness=hour` granularity depend on the provider's index and may be approximate. News providers may also surface high-ranking forum/aggregator pages — `news_source` narrows to a trusted outlet when that matters.
+- `sort_by=date` maps to each provider's date-sort control; exact ordering and `time_range=hour` granularity depend on the provider's index and may be approximate. News providers may also surface high-ranking forum/aggregator pages — `news_source` narrows to a trusted outlet when that matters.
 
 ### Cache
 - TTL: 15 minutes (news is time-sensitive)
@@ -577,7 +580,7 @@ Additional output fields: `query`, `totalResults`, `resultCount`, `source` (whic
 - `pdf_only`: post-filters results to only those with `PDFUrl` populated (may reduce result count)
 
 ### Academic Site Pool (web search fallback)
-arxiv.org, pubmed.ncbi.nlm.nih.gov, ieeexplore.ieee.org, dl.acm.org, nature.com, sciencedirect.com, link.springer.com, europepmc.org, plos.org, frontiersin.org, mdpi.com, wiley.com, jstor.org, semanticscholar.org, biorxiv.org, medrxiv.org
+arxiv.org, pubmed.ncbi.nlm.nih.gov, scholar.google.com, ieeexplore.ieee.org, dl.acm.org, nature.com, sciencedirect.com, link.springer.com, researchgate.net, plos.org, frontiersin.org, mdpi.com, wiley.com, jstor.org, semanticscholar.org, biorxiv.org, medrxiv.org
 
 ### Cache
 - TTL: 1 hour (academic providers use semantic ranking that can shift)
@@ -1512,11 +1515,15 @@ Capture a **fresh** Internet Archive (Wayback Machine) snapshot of a URL via Sav
 
 ## Cross-Cutting Concerns
 
-### Timeouts (all configurable via env)
+### Timeouts
+
+Scrape-tier timeouts are hardcoded in source; only HTTP server timeouts are env-configurable (see docs/DEPLOYMENT.md).
+
 | Operation | Default | Max |
 |-----------|---------|-----|
 | Search API call | 10s | 30s |
 | Markdown negotiation | 5s | 10s |
+| Stealth scrape (http client) | 20s | — |
 | HTML scrape (goquery) | 15s | 30s |
 | Browser scrape (go-rod) | 30s | 60s |
 | YouTube transcript | 30s | 60s |
@@ -1530,7 +1537,7 @@ Capture a **fresh** Internet Archive (Wayback Machine) snapshot of a URL via Sav
 | `scrape_page` content — hard cap (`maxScrapeLength`, all modes incl. `raw`) | 5 MB |
 | `search_and_scrape` per-source content — default | 50 KB |
 | `search_and_scrape` combined content — default `total_max_length` | 300 KB |
-| Document download | 10 MB |
+| Document download | 50 MB default |
 | YouTube transcript | 100 KB |
 
 ### Token Estimation
@@ -1634,6 +1641,7 @@ Every tool declares annotations for client consumption (`readOnlyAnnotations(ide
 | format_bibliography | true | true | false |
 | audit_bibliography | true | true | true |
 | verify_citation | true | true | true |
+| verify_recommendation | true | true | true |
 | archive_source | **false (write)** | true | false |
 | filing_search | true | true | true |
 | legal_search | true | true | true |

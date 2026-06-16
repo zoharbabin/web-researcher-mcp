@@ -126,7 +126,6 @@ type AuditConfig struct {
 
 type SearchConfig struct {
 	Provider         string
-	FallbackProvider string
 	Routing          string
 	GoogleAPIKey     string
 	GoogleCX         string
@@ -329,7 +328,6 @@ func Load() (*Config, error) {
 		GoogleCX:     googleCX,
 		Search: SearchConfig{
 			Provider:              provider,
-			FallbackProvider:      os.Getenv("SEARCH_FALLBACK_PROVIDER"),
 			Routing:               os.Getenv("SEARCH_ROUTING"),
 			GoogleAPIKey:          googleKey,
 			GoogleCX:              googleCX,

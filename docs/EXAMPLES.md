@@ -39,7 +39,7 @@ Use a search lens to restrict results to curated high-quality sources for a spec
 }
 ```
 
-The "programming" lens focuses your search on trusted developer sources — Stack Overflow, GitHub, Go docs, MDN, and other curated sites. This means fewer noise results and more relevant answers. Available lenses: `docs`, `academic`, `academic-extended`, `clinical`, `security`, `journalism`, `programming`, `devops`, `news`, `tech`, `legal`, `medical`, `finance`, `science`, `government`. The authoritative set is whatever JSON files live in the `lenses/` directory.
+The "programming" lens focuses your search on trusted developer sources — Stack Overflow, GitHub, Go docs, MDN, and other curated sites. This means fewer noise results and more relevant answers. For the full, current list of available lenses, read the `lenses://catalog` MCP resource (or the JSON files in the `lenses/` directory, which are the canonical source).
 
 ---
 
@@ -99,7 +99,7 @@ Search patent databases with classification codes and office filtering.
 }
 ```
 
-**Response** contains: `patents` (array of `{title, url, number, abstract, assignee, inventor, filed, granted, pdf, status}`), `query`, `searchType`, `resultCount`, `source` (which provider answered), and `searchUrl`. When no results are found, a `hints` object explains why (e.g., provider doesn't cover the requested region) and suggests alternatives. You can filter by patent office (US, European, international, Japan, China, Korea) and by technology category codes. The server picks the best data source for your region, or you can force a specific provider.
+**Response** contains: `patents` (array of `{title, url, number, abstract, assignee, inventor, filed, granted, pdf, status}`), `query`, `searchType`, `resultCount`, `source` (which provider answered), and `searchUrl`. When no results are found, a `hints` object explains why (e.g., provider doesn't cover the requested region) and suggests alternatives. You can filter by patent office (`all` (default), `US`, `EP` (European), `WO` (international/PCT), `JP`, `CN`, `KR`) and by technology category codes. The server picks the best data source for your region, or you can force a specific provider.
 
 ---
 
@@ -227,13 +227,13 @@ Search recent news with freshness controls and source filtering.
   "tool": "news_search",
   "arguments": {
     "query": "artificial intelligence regulation",
-    "freshness": "week",
+    "time_range": "week",
     "num_results": 5
   }
 }
 ```
 
-**Response** contains: `articles` (array of `{title, url, source, publishedAt, snippet}`), `query`, and `resultCount`. Use `freshness` values: `hour`, `day`, `week`, `month`, `year` to control how recent articles must be.
+**Response** contains: `articles` (array of `{title, url, source, publishedAt, snippet}`), `query`, and `resultCount`. Use `time_range` values: `hour`, `day`, `week`, `month`, `year` to control how recent articles must be.
 
 ---
 

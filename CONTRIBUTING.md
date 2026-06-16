@@ -150,14 +150,14 @@ See `ARCHITECTURE.md` for package organization and `docs/TOOLS.md` for tool spec
 Run the full check suite — the same gate CI enforces:
 
 ```bash
-make verify   # fmt-check + vet + lint + gosec + vuln + test-race + test-e2e + build
+make verify   # fmt-check + vet + lint + sec + vuln + validate-lenses + test-race + test-e2e + check-python-drift + test-python + build
 ```
 
 ## Commit Messages
 
 This project uses [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). Each commit message should follow this format:
 
-```
+```text
 <type>(<optional scope>): <description>
 
 [optional body]
@@ -195,7 +195,7 @@ perf(scraper): reduce allocations in HTML parsing
 
 Append `!` after the type/scope, and include a `BREAKING CHANGE:` footer:
 
-```
+```text
 feat(auth)!: require OAuth 2.1 for HTTP transport
 
 BREAKING CHANGE: HTTP transport now requires a valid JWT token.
@@ -212,7 +212,7 @@ STDIO transport is unaffected.
 2. **Keep changes focused** — one logical change per PR. Split large features into smaller, reviewable pieces.
 
 3. **Ensure quality** before requesting review — one command runs the full gate:
-   - `make verify` — formatting, vet, lint, gosec, govulncheck, race tests, e2e, build
+   - `make verify` — formatting, vet, lint, gosec, govulncheck, validate-lenses, race tests, e2e, python-drift check, python tests, build
    - (individual targets exist too: `make test-race`, `make lint`, `make sec`, `make vuln`)
    - New code has tests; documentation updated if behavior changes
 
@@ -312,7 +312,7 @@ This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.
 
 ## Adding a New Tool
 
-Adding a tool requires three files:
+Adding a tool requires:
 
 1. **Create the handler** in `internal/tools/<toolname>.go`:
 
@@ -343,11 +343,14 @@ func registerMyTool(srv *mcp.Server, deps Dependencies) {
 
 3. **Add tests** in `internal/tools/tools_test.go` or a dedicated `<toolname>_test.go`; add the tool name to `expectedTools` in `internal/tools/metadata_test.go`.
 
+4. **Document it** in `docs/TOOLS.md` with a `## Tool N: \`name\`` section — the drift test `TestToolsDocMatchesRegistry` (`internal/tools/metadata_test.go`) fails CI if a registered tool is undocumented or vice-versa.
+
+5. **Regenerate the Python client** — run `make gen-python-client` and commit the result. This updates `python/web_researcher_mcp/{models.py,client.py,__init__.py}` with the new typed method and response class. The `python-drift` CI job and pre-commit hook both fail if you skip this step.
+
 Key conventions:
 - All tool inputs use typed structs with `jsonschema` tags (the SDK auto-generates JSON Schema from these)
 - Use `deps.Cache` for caching, `deps.Metrics` for telemetry, `deps.Auditor` for audit logging
 - Return validation errors via `toolError(msg)`, upstream errors via `upstreamErrorResponse(toolName, err)`, success via `structuredResult(jsonBytes)` — these helpers are defined in `internal/tools/search.go`; `scrapeErrorResponse` is in `internal/tools/scrape.go`; the `ToolError` types and `structuredError` are in `internal/tools/errors.go` (see `docs/ERROR_HANDLING.md` for the full pattern)
-- Update `docs/TOOLS.md` with a `## Tool N: \`name\`` section — the drift test `TestToolsDocMatchesRegistry` (`internal/tools/metadata_test.go`) fails CI if a registered tool is undocumented or vice-versa
 
 ### Write tools and consent-gated (regulated) tools
 

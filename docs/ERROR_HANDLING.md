@@ -119,11 +119,12 @@ When all pipeline tiers fail, `scrapeWithTieredFallback()` in `internal/scraper/
 no content extracted from https://x.com/user/status/123 (markdown: empty, stealth: HTTP 403, html: 12 bytes, browser: chrome launch failed)
 ```
 
-The composite error's `Kind` is escalated:
-- A validation/security denial (`ErrValidation`) is definitive — it wins over any sibling tier's outcome (a private-IP block must never be downgraded to a retryable network error just because another tier also timed out)
-- Otherwise, if any tier returned `ErrBlocked`/`ErrAuth`/`ErrRateLimit`/`ErrBrowser` → use that kind
+The composite error's `Kind` is selected by priority — the single highest-priority kind across all tiers wins:
+- `ErrValidation` (priority 6) wins unconditionally — a security/validation denial is permanent and must never be downgraded
+- Otherwise the highest-priority kind from the remaining tiers: `ErrNotFound` (5) > `ErrAuth` (4) > `ErrRateLimit` (3) > `ErrBlocked` (2) > `ErrBrowser` (1) > `ErrContent` (0)
 - If all tiers returned `ErrNetwork` → use `ErrNetwork`
-- Otherwise → use `ErrContent`
+
+A 404 co-occurring with a bot-block surfaces as `not_found` (priority 5 > 2), not `blocked`.
 
 ---
 
@@ -221,7 +222,7 @@ Tools never panic. Tools never return Go errors from the handler function (the t
 
 ## Layer 4: Session-level Error Aggregation
 
-Layers 1–3 handle a **single** call. Across a multi-step `sequential_search` session, repeated failures of the *same kind* (auth walls, bot blocks, rate limits) are a pattern the LLM should act on — but no single call sees the whole picture. Layer 4 is the cross-call view (#99).
+Layers 1–3 handle a **single** call. Across a multi-step `sequential_search` session, repeated failures of the *same kind* (auth walls, bot blocks, rate limits) are a pattern the LLM should act on — but no single call sees the whole picture. Layer 4 is the cross-call view.
 
 **How it works:**
 
@@ -239,6 +240,9 @@ Layers 1–3 handle a **single** call. Across a multi-step `sequential_search` s
 | `blocked` | Try alternative sources or use `web_search` for cached versions. |
 | `rate_limited` | Switch to a different provider or space requests further apart. |
 | `browser_unavailable` | Set `CHROME_PATH` for JavaScript-heavy sites. |
+| `network` | Transient network errors — retry, or try a different source. |
+| `content_empty` | The page yielded no usable text — try a different source or the original PDF. |
+| `upstream_unavailable` | The provider is unavailable — switch providers or retry later. |
 
 Aggregation is **additive** — it never suppresses or alters the per-call errors that callers already receive.
 
@@ -335,7 +339,8 @@ if resp.StatusCode == 429 {
     return nil, fmt.Errorf("myprovider: rate limited")
 }
 if resp.StatusCode == 401 {
-    return nil, fmt.Errorf("myprovider: authentication failed (check MY_API_KEY)")
+    // isAuthError matches any of: "401", "API key not valid", "unauthorized", "INVALID_ARGUMENT"
+    return nil, fmt.Errorf("myprovider: 401 unauthorized")
 }
 ```
 

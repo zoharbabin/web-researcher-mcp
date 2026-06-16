@@ -1,7 +1,7 @@
 # Privacy Policy
 
 **Effective Date:** May 26, 2026  
-**Last Updated:** May 31, 2026
+**Last Updated:** June 16, 2026
 
 ## Overview
 
@@ -49,8 +49,9 @@ When you search, your query goes directly to whichever provider you configured. 
 | Exa | Your query, your API key — and, only if you enable the optional paid scrape fallback, the page URL being read | [exa.ai/privacy-policy](https://exa.ai/privacy-policy) |
 | SearXNG | Your query (self-hosted — no third party) | N/A (you control the server) |
 | DuckDuckGo | Your query (zero-config default when no provider is configured) | [duckduckgo.com/privacy](https://duckduckgo.com/privacy) |
+| HackerNews | Your query, sent to the Algolia HN Search API (keyless) | [algolia.com/policies/privacy](https://www.algolia.com/policies/privacy/) |
 | OpenAlex | Your academic query; your optional contact email if `OPENALEX_EMAIL` is set (improves rate limits) | [openalex.org/legal](https://openalex.org/legal/privacy-policy) |
-| CrossRef | Your academic query | [crossref.org/privacy](https://www.crossref.org/privacy/) |
+| CrossRef | Your academic query; your optional contact email if `CROSSREF_EMAIL` is set (sent as `mailto` param and in User-Agent; improves rate limits via the polite pool); also contacted for DOI retraction-status checks | [crossref.org/privacy](https://www.crossref.org/privacy/) |
 | Semantic Scholar | Your academic / citation query (optional API key) | [allenai.org/privacy-policy](https://allenai.org/privacy-policy) |
 | Unpaywall | A paper's DOI plus your contact email (open-access PDF lookup) | [unpaywall.org](https://unpaywall.org/) |
 | SEC EDGAR | Your filing query / ticker, and a contact email in the request User-Agent (SEC requires it) | [sec.gov/privacy](https://www.sec.gov/privacy) |
@@ -82,7 +83,7 @@ If you choose to deploy the software as an HTTP server (multi-tenant mode), addi
 
 - **OAuth tokens** — validated for authentication, not stored. Revoked token IDs (JTIs) may be persisted locally to an encrypted store so a revocation survives a restart; the stored value is an opaque ID with an expiry, never the token contents or any claim.
 - **Tenant identifiers** — used to isolate rate limits and sessions between users
-- **Audit logs** — tool invocations are logged locally (no raw queries by default, only a length/hash). Audit files older than the configured retention window are deleted automatically.
+- **Audit logs** — tool invocations are logged locally (no raw queries by default, only the query character count (`query_length`)). Audit files older than the configured retention window are deleted automatically.
 - **Rate limit counters** — in-memory by default and cleared on restart. With `RATE_LIMIT_PERSIST=true` the per-tenant daily-quota counters are written to a local encrypted store so quotas survive a restart — still on your own machine, never transmitted.
 - **Tenant aggregate analytics** — the server keeps **aggregate counts** per tenant (total calls, error rate, cache-hit rate, provider breakdown, latency percentiles) for billing and capacity planning, exposed only to the operator via the admin-gated `GET /admin/analytics` endpoint. This is **aggregate-only**: no per-query text, no per-user records, no content — just tallies keyed by tenant identifier. The lawful basis is the operator's **legitimate interest** in running and billing the service; because it is non-identifying at the individual level, it requires no separate consent. It is held in memory and is not transmitted off your infrastructure. (Per-*user* analytics is a distinct, consent-gated, off-by-default feature — see Your Rights.)
 
@@ -93,7 +94,7 @@ This mode is entirely self-hosted. We still do not receive or have access to any
 - **Cache location:** Your machine only (in-memory + optional encrypted disk)
 - **Encryption:** AES-256-GCM when disk caching is enabled
 - **Default retention:** Search results expire after 30 minutes, scraped pages after 1 hour, research sessions after 4 hours of inactivity
-- **Clearing cache:** Restart the server or delete the cache directory
+- **Clearing cache:** Restart the server or delete the cache directory. In HTTP server mode the cache can also be flushed without a restart via `DELETE /admin/cache` (requires admin credentials).
 - **No remote sync:** Cache is never transmitted anywhere
 
 ## Your Rights

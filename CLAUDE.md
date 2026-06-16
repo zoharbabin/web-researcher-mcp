@@ -11,7 +11,9 @@ go test -race ./...                                         # Race detector
 go test -v ./tests/e2e/...                                  # E2E (needs API keys)
 go tool golangci-lint run                                   # Lint (pinned version)
 go tool govulncheck ./...                                    # Vulnerability scan (pinned version)
-make verify                                                  # fmt-check + vet + lint + gosec + vuln + test-race + test-e2e + build (CI gate; `make all` aliases it)
+make verify                                                  # fmt-check + vet + lint + gosec + vuln + validate-lenses + test-race + test-e2e + check-python-drift + test-python + build (CI gate; `make all` aliases it)
+make test-python                                             # Python SDK unit + integration tests (no binary; mock HTTP server)
+make test-python-live                                        # Python SDK live E2E tests (builds Go binary; needs internet)
 ```
 
 ### Local rebuild for IRL testing
@@ -28,8 +30,9 @@ It clears the Go build cache (from-scratch compile) and the MCP **response** cac
 
 ## Architecture
 
-```
+```text
 cmd/web-researcher-mcp/main.go   # Wiring only — constructs deps, starts server
+cmd/gen-python-client/  # Emits Go tool schemas as JSON; piped through scripts/gen_python_client.py to regenerate the Python client
 internal/
 ├── tools/        # One file per tool, typed input structs, registered in registry.go; large-payload resource_link store (artifacts.go: research://artifact/{id})
 ├── search/       # Provider interface + adapters + Router (multi-provider fallback); DOI enrichment: open-access (Unpaywall) + retraction status (Crossref Retraction Watch); custom/validated lenses
@@ -60,11 +63,11 @@ tests/benchmark/  # Performance benchmarks
 
 Non-obvious top-level dirs (so they're not mistaken for clutter or duplicates):
 
-```
+```text
 docs/             # Published docs (mkdocs site); docs/internal/ = local-only working docs (gitignored, never published)
 decks/            # Marp presentation decks (source + self-contained html/pdf), one folder per deck — published to the site under /decks/<name>/ by docs.yml (see decks/README.md)
 assets/           # Logos, social-preview, favicon, ProductHunt gallery — consumed by README, the docs site, and registries
-scripts/          # Build/release helpers (build-mcpb, build_wheels.py [PyPI platform wheels], docker-smoke, sync-version) — wired into Makefile/CI
+scripts/          # Build/release helpers (build-mcpb, build_wheels.py [PyPI wheels], gen_python_client.py [Python client codegen], docker-smoke, sync-version, rebuild-local, sign-windows) — wired into Makefile/CI
 .githooks/        # Git pre-commit hook (enabled via `make hooks`) — fmt/lint/vet on staged Go files
 hooks/            # Claude Code PLUGIN hook manifest (hooks.json) — NOT a git hook; runs bin/install.sh on session start
 bin/              # Claude Code plugin installer (bin/install.sh) — distinct from the root curl installer install.sh
@@ -97,6 +100,7 @@ Registry/manifest files (root, each read by a different external tool): `server.
 2. Add `register<Name>(srv, deps)` to `RegisterAll()` in `internal/tools/registry.go`. **Regulated/opt-in tools** register conditionally (only when their feature dep is non-Noop) and gate every personal-data operation on `deps.Consent.HasConsent(ctx, consent.Purpose…)`; register the store's `Exporter`/`Eraser` into the `datasubject` registry in `main.go`.
 3. Add tests to `internal/tools/tools_test.go`; add the tool name to `expectedTools` (`metadata_test.go`). For a conditionally-registered tool, also wire its feature dep into `setupTestDeps()` so the drift gates exercise it.
 4. Document the schema in `docs/TOOLS.md` as a `## Tool N: \`name\`` section (the drift test parses these headers).
+5. Run `make gen-python-client` — regenerates `python/web_researcher_mcp/{models.py,client.py,__init__.py}` from the live Go schemas. Stage and commit the result. The `python-drift` CI job and the pre-commit hook both fail if you skip this step.
 
 ## How to Add a Search Provider
 
@@ -108,7 +112,7 @@ Registry/manifest files (root, each read by a different external tool): `server.
 ## Key Patterns
 
 - **Tool handler signature**: `func(ctx context.Context, req *mcp.CallToolRequest, input T) (*mcp.CallToolResult, any, error)`
-- **Error responses**: `structuredError(msg, ToolError{})` for dual-format errors (text + JSON); `toolError(msg)` for validation-only; `upstreamErrorResponse(toolName, err)` for provider failures; `scrapeErrorResponse(err, url)` for scrape failures. All defined in `internal/tools/errors.go`
+- **Error responses**: `structuredError(msg, ToolError{})` for dual-format errors (text + JSON); `toolError(msg)` for validation-only; `upstreamErrorResponse(toolName, err)` for provider failures; `scrapeErrorResponse(err, url)` for scrape failures. Defined across `internal/tools/errors.go` (`structuredError`), `search.go` (`toolError`, `upstreamErrorResponse`, `structuredResult`), and `scrape.go` (`scrapeErrorResponse`).
 - **Provider resolution**: `resolveProvider()` for web search; `resolvePatentSearcher()` for patents; `resolveAcademicSearcher()` for academic; `resolveAnswerSearcher()`/`resolveStructuredSearcher()` for the synthesis tools — all return `*mcp.CallToolResult` errors with full provider list on unknown provider
 - **Cache key**: SHA-256 of deterministic params → `deps.Cache.Get/Set`
 - **Audit**: every tool call logs `audit.AuditEvent{ToolName, Duration, Success, Metadata, ...}` via `deps.Auditor.Log()`

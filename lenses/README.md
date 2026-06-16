@@ -19,7 +19,7 @@ A **lens** restricts a `web_search` to a curated set of trusted, authority-weigh
 | `name` | yes | The lens id users pass as `lens: <name>`. Must be unique (a later load overrides an earlier one). |
 | `description` | recommended | Shown in tool docs/UX; keep to one line. |
 | `domains` | one of `domains`/`cx` | Hosts injected as `site:` operators (up to 10 used). A host, optionally path-scoped (`github.com/advisories`). No scheme, no spaces. |
-| `cx` | one of `domains`/`cx` | A dedicated Google Programmable Search Engine id. When set, the lens routes directly to that engine instead of injecting `site:` operators. |
+| `cx` | one of `domains`/`cx` | A dedicated Google Programmable Search Engine id. When set, the lens skips `site:` operator injection — the PSE engine is expected to already scope results to the intended domains. The cx value itself must be configured as the global `GOOGLE_CUSTOM_SEARCH_ID`; this field is a documentation signal, not a per-request routing override. |
 | `routing` | no | Optional provider routing hint. |
 
 A lens **must** define at least one of `domains` or `cx` — otherwise it never restricts a search. This is enforced by `search.ValidateLens` (`internal/search/lenses.go`); an invalid lens fails `make validate-lenses`. For custom lenses loaded via `CUSTOM_LENSES_PATH`, an invalid lens also fails startup in HTTP mode (`PORT` set); in STDIO mode it is a warning.

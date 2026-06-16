@@ -148,7 +148,7 @@ This fails closed only for present-but-insufficient scopes — it never silently
 ```
 
 **Rules:**
-1. Sequential search sessions are keyed by `{tenantID}:{sessionID}` — never shared
+1. Sequential search sessions are keyed by `{tenantID}:{userID}:{sessionID}` — never shared
 2. Cache can be shared for public content (search results, scraped pages are not user-specific)
 3. Audit logs include tenant ID for filtering
 
@@ -241,11 +241,11 @@ Raw HTML/Content
 - Reject with informative error when exceeded
 - Counters are in-memory by default; set `RATE_LIMIT_PERSIST=true` to write them through to the encrypted persist store so quotas survive a restart
 
-**Sub-Agent Handling:**
-When a single agent spawns many parallel tool calls:
-- Queue excess requests (up to buffer limit)
-- Apply per-session concurrency limit
-- Return 429 with `Retry-After` header when queue is full
+**Burst handling (parallel tool calls):**
+When a single agent spawns many parallel tool calls, limits are enforced by token buckets, not a queue:
+- Per-tenant and global token buckets (`internal/ratelimit/limiter.go`) — excess calls are rejected immediately, never buffered
+- Rejected HTTP requests return `429` with a `Retry-After` header (`60` for the per-minute bucket, `3600` for the daily quota)
+- Concurrent scraping is separately bounded by a fixed-size semaphore in the scrape pipeline (`internal/scraper/pipeline.go`), so a burst of scrapes runs at a capped concurrency rather than all at once
 
 ---
 
@@ -381,7 +381,7 @@ CORS is a **browser-only** control; backend-to-backend connectors (hosted MCP co
 - `CORS_STRICT=true` (**default**) — fail-closed: deny all cross-origin requests.
 - `CORS_STRICT=false` — permissive: reflect any `Origin` (legacy escape hatch).
 
-It never reflects the literal `*` together with credentials. The default is secure-by-default (fail-closed); see [MIGRATION.md](MIGRATION.md) for the breaking change that flipped it.
+It never reflects the literal `*` together with credentials. The default is secure-by-default (fail-closed).
 
 ### Pre-Auth Per-IP Rate Limit
 
@@ -422,7 +422,7 @@ How the server's controls counter the ATT&CK techniques most relevant to an inte
 
 | CSF 2.0 Function | Outcome | Implementation |
 |------------------|---------|----------------|
-| **GOVERN (GV)** | Roles, policy, supply chain | PSIRT process ([SECURITY.md](../SECURITY.md)), pinned `go tool govulncheck`/`gosec`/`golangci-lint` (go.mod tool directives) + `go mod verify`/SBOM in CI, documented design rules |
+| **GOVERN (GV)** | Roles, policy, supply chain | PSIRT process ([SECURITY.md](../SECURITY.md)), pinned `go tool govulncheck`/`gosec`/`golangci-lint` (go.mod tool directives) + SBOM in CI (GoReleaser), documented design rules |
 | **IDENTIFY (ID)** | Asset & risk awareness | This threat model, `DATA_REGION` residency labeling, per-tool audit inventory |
 | **PROTECT (PR)** | Access control & data security | OAuth 2.1 + scope gate, SSRF guard, AES-256-GCM at rest with key rotation, TLS in transit, security headers, CORS, rate limits |
 | **DETECT (DE)** | Continuous monitoring | Structured audit logs with request correlation IDs, Prometheus metrics, circuit-breaker state |
@@ -492,10 +492,8 @@ The vulnerability scanner, linter, and security scanner are pinned in `go.mod` v
 ```bash
 make vuln                # go tool govulncheck ./... — audit for known vulnerabilities
 make sec                 # go tool gosec — command/SQL injection, weak crypto, SSRF sinks
-go mod verify            # Pin dependency hashes
-cyclonedx-gomod mod -json -output sbom.json  # Generate SBOM (release pipeline)
 ```
 
-`make verify` runs the full gate (fmt-check, vet, lint, sec, vuln, race tests, e2e, build) — the same sequence CI runs.
+SBOMs are generated automatically by GoReleaser's built-in `sboms` directive on every release — no manual command needed.
 
-All dependencies: actively maintained, no unpatched CVEs, permissive licenses (MIT/Apache/BSD), >1000 stars or official/stdlib.
+`make verify` runs the full gate (fmt-check, vet, lint, sec, vuln, validate-lenses, test-race, test-e2e, check-python-drift, test-python, build) — the same sequence CI runs.

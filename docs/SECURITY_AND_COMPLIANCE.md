@@ -187,8 +187,8 @@ static UUIDv4 values that do not rotate over the life of a session. This is an
 accepted, documented risk: a session ID is a research-continuity handle, not an
 authentication credential. Authorization is always derived from the validated
 JWT (tenant/user/scope), and sessions are keyed by the compound
-`{tenantID}:{sessionID}` so a guessed or leaked session ID cannot cross a tenant
-boundary or grant access without a valid token. Rotation was deliberately not
+`{tenantID}:{userID}:{sessionID}` so a guessed or leaked session ID cannot cross a tenant
+or user boundary or grant access without a valid token. Rotation was deliberately not
 added to avoid breaking the recovery-after-context-loss workflow the IDs exist
 to support.
 
@@ -320,40 +320,21 @@ Suitable for: individual developers, local AI assistants, testing.
 Activated by setting `PORT`. Enables OAuth, rate limiting, CORS, and all
 multi-tenant security features.
 
-**Minimum secure configuration:**
+**Minimum secure configuration** requires: a port, OAuth issuer and audience for JWKS
+validation, an allowed origins list, an encryption key for the cache and sessions,
+an admin API key, and audit logging enabled with an output path. See
+[`docs/DEPLOYMENT.md`](DEPLOYMENT.md) for exact variable names and defaults.
 
-```bash
-PORT=3000
-OAUTH_ISSUER_URL=https://your-idp.example.com
-OAUTH_AUDIENCE=https://your-api.example.com
-ALLOWED_ORIGINS=https://your-app.example.com
-CACHE_ENCRYPTION_KEY=$(openssl rand -hex 32)
-ADMIN_API_KEY=$(openssl rand -hex 32)
-AUDIT_ENABLED=true
-AUDIT_OUTPUT_PATH=/var/log/web-researcher-mcp/audit.jsonl
-```
+**Production hardening** additionally enables per-tenant cache isolation, sets
+rate limits and daily quota, configures a domain allowlist if needed, and adjusts
+scrape concurrency. See [`docs/DEPLOYMENT.md`](DEPLOYMENT.md) for all variables.
 
-**Production hardening (recommended):**
-
-```bash
-CACHE_ISOLATION=tenant
-RATE_LIMIT_PER_TENANT=120
-DAILY_QUOTA_PER_TENANT=5000
-ALLOWED_DOMAINS=                    # empty = unrestricted (or set for lock-down)
-MAX_SCRAPE_CONCURRENCY=5
-```
-
-**Healthcare deployments (HIPAA):**
-
-If the MCP server processes or caches content containing Protected Health
-Information (PHI), additional configuration is required:
-
-```bash
-CACHE_ENCRYPTION_KEY=$(openssl rand -hex 32)   # Encryption renders breach non-reportable (Safe Harbor)
-CACHE_ISOLATION=tenant                          # Strict data isolation between tenants
-AUDIT_ENABLED=true                              # HIPAA requires audit controls (45 CFR 164.312(b))
-AUDIT_OUTPUT_PATH=/var/log/audit.jsonl          # Retain for 6 years (HIPAA retention requirement)
-```
+**Healthcare deployments (HIPAA):** if the server processes or caches content
+containing Protected Health Information (PHI), enable encryption at rest, strict
+per-tenant cache isolation, and audit logging with a retention path sufficient for
+the 6-year HIPAA requirement (45 CFR 164.312(b) requires audit controls; AES-256-GCM
+encryption renders a breach non-reportable under Safe Harbor). See
+[`docs/DEPLOYMENT.md`](DEPLOYMENT.md) for exact variable names and defaults.
 
 A Business Associate Agreement (BAA) is required between the entity deploying
 this server and any covered entity whose data it processes. The server's
@@ -373,11 +354,12 @@ The Docker image ships with full rendering capabilities:
 - All images signed with cosign (verify with `cosign verify`)
 
 The image includes Chromium because accurate research requires rendering
-JavaScript-heavy pages. The browser runs sandboxed (`--no-sandbox` is NOT
-used — we rely on the container's own isolation). Chromium's attack surface
-is mitigated by: non-root execution, bounded concurrency (one browser
-instance at a time via mutex), SSRF protection on all URLs before they reach
-the browser, and container-level network restrictions.
+JavaScript-heavy pages. Chromium is launched with `--no-sandbox`; container-level
+isolation (non-root UID 65534, network policies) provides the sandboxing boundary.
+Chromium's attack surface is mitigated by: non-root execution, bounded concurrency
+(single browser instance shared across goroutines; page concurrency capped by
+MaxConcurrency), SSRF protection on all URLs before they reach the browser, and
+container-level network restrictions.
 
 Deployment recommendations:
 
@@ -798,22 +780,6 @@ Our security controls map to MITRE ATT&CK techniques:
 
 ## Roadmap Considerations
 
-### Implemented
-
-These items shipped and are no longer roadmap candidates:
-
-- **Scope-based authorization (RBAC)** — JWT `scope`/`scp` claims mapped to tool
-  permissions, opt-in via `ENFORCE_SCOPES` (`internal/auth/middleware.go`)
-- **Key rotation** — `CACHE_ENCRYPTION_KEY_PREV` provides versioned keys with
-  lazy re-encryption on read, with key-bound GCM AAD
-- **Restart-durable revocation & quota** — token revocation and daily quota can
-  persist via the encrypted `persist.Store` (`RATE_LIMIT_PERSIST`)
-- **W3C Trace Context ingress** — requests adopt a sanitized `X-Request-Id` or
-  `traceparent` trace-id for audit correlation, echoed on the response
-- **NIST CSF 2.0 crosswalk + MITRE ATT&CK mapping** — see `docs/SECURITY.md`
-- **HTTP hardening** — server timeouts, body/header caps, security headers,
-  `CORS_STRICT`, and a pre-auth per-IP rate limit
-
 ### Security features planned or under consideration:
 
 - **DPoP token binding (RFC 9449)** — proof-of-possession prevents token theft
@@ -845,4 +811,3 @@ These items shipped and are no longer roadmap candidates:
 | `CONTRIBUTING.md` | Full contributor guide (setup, style, PR process) |
 | `SECURITY.md` (root) | Vulnerability reporting policy |
 | `.env.example` | All configuration options with descriptions |
-	

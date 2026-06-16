@@ -92,6 +92,7 @@ This is the architecture reference for web-researcher-mcp — the tool that give
 ```
 web-researcher-mcp/
 ├── cmd/web-researcher-mcp/       # Entry point (wiring only)
+├── cmd/gen-python-client/        # Python client schema generator (make gen-python-client)
 ├── internal/
 │   ├── config/                   # Strongly-typed config from env
 │   ├── server/                   # MCP server lifecycle (STDIO + HTTP)
@@ -116,7 +117,7 @@ web-researcher-mcp/
 │   ├── workspace/                # Opt-in shared workspaces — server-enforced data-plane + isolation, host-owned membership
 │   └── resources/                # MCP Resources + Prompts + completion/complete handler (lens/provider/enum arg autocompletion)
 ├── lenses/                       # Search lens JSON files
-├── tests/                        # E2E, integration tests + benchmarks
+├── tests/                        # E2E, integration tests, benchmarks + Python SDK tests
 ├── scripts/                      # CI/CD helper scripts
 └── docs/                         # Extended documentation
 ```
@@ -171,7 +172,7 @@ Beyond the general `Provider`, the system layers **opt-in capability interfaces*
 Separate from the capability interfaces, three **enrichment** interfaces operate post-search on DOI-bearing results — not search providers:
 
 - **`OAResolver`** (`internal/search/unpaywall.go`, implemented by Unpaywall) — fills the open-access PDF link after `academic_search` via `EnrichOpenAccess`. Best-effort, nil-safe, never overwrites a provider-supplied PDF.
-- **`RetractionResolver`** (`internal/search/retraction.go`, implemented by `CrossrefRetractionResolver`) — flags retracted or corrected works via `EnrichRetraction`. Used by `academic_search`, `citation_graph`, `scrape_page`, and `audit_bibliography`.
+- **`RetractionResolver`** (`internal/search/retraction.go`, implemented by `CrossrefRetractionResolver`) — flags retracted or corrected works via `EnrichRetraction`. Used by `academic_search`, `citation_graph`, `scrape_page`, `audit_bibliography`, and `verify_citation`.
 - **`DOIResolver`** (`internal/search/domain.go`, optional capability on academic providers) — performs an exact entity lookup for a DOI (e.g. OpenAlex `/works/doi:{doi}`) so `verify_citation` always retrieves the cited work directly rather than relying on a relevance-ranked search whose top hit could be a different paper.
 
 A provider can satisfy several at once — `ExaProvider` implements `Provider`, `AcademicProvider`, `AnswerProvider`, and `StructuredProvider` simultaneously, and Semantic Scholar/OpenAlex implement both `AcademicProvider` and `CitationSearcher`. The `Router` routes the `Provider`, `PatentSearcher`, and `AcademicSearcher` capabilities with per-provider breaker fallback; the synthesis, citation, and structured-domain (filing/case/econ/trial) capabilities are resolved directly from the `Dependencies` maps in the tool layer. Each configured provider gets an independent circuit breaker.
@@ -251,19 +252,15 @@ For exact versions, see `go.mod`. All dependencies use MIT, Apache 2.0, or BSD l
 
 ## Concurrency Limits
 
-Default values (all configurable via environment variables — see `docs/DEPLOYMENT.md`):
+Default values are all configurable via environment variables — see `docs/DEPLOYMENT.md` for the full list with defaults.
 
 ```
-Global request throughput:    1000 req/s     (RATE_LIMIT_GLOBAL)
-Per-tenant rate limit:        120 req/min    (RATE_LIMIT_PER_TENANT)  [HTTP mode only]
-Daily quota per tenant:       5000 req/day   (DAILY_QUOTA_PER_TENANT) [HTTP mode only]
-Scraping semaphore:           5 slots        (MAX_SCRAPE_CONCURRENCY)
-Browser pool (go-rod):        serialized     (mutex-protected shared instance)
+Browser pool (go-rod):        concurrent (mutex guards init only; page concurrency bounded by semaphore)
 ```
 
 Rate limiting applies only in HTTP mode. STDIO mode (the default for Claude Code, Cursor, and Claude Desktop) has no internal rate limiting — only upstream API quotas apply.
 
-Browser scrapes hold a scraping semaphore slot and then acquire the browser pool mutex (serializing browser access to a single shared instance).
+Browser scrapes hold a scraping semaphore slot; the browser pool mutex is released before page creation, so multiple scrapes run concurrently up to the semaphore limit.
 
 ## Error Handling
 

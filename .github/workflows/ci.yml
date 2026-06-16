@@ -6,6 +6,14 @@ on:
     tags: ["v*"]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_python_live:
+        description: "Run Python SDK live E2E tests (requires internet, builds Go binary)"
+        required: false
+        default: "false"
+        type: choice
+        options: ["true", "false"]
 
 permissions:
   contents: read
@@ -146,6 +154,40 @@ jobs:
             -run 'TestToolsDocMatchesRegistry|TestOutputSchemaMatchesResponse|TestToolDescriptionQuality|TestAllToolsHaveAnnotations|TestAllToolsRegistered|TestAllToolsHaveOutputSchema|TestExternalContentToolsCarryTrustMarker' \
             ./internal/tools/...
 
+  # Always-run Python client drift gate. Regenerates the Python client from the
+  # live Go schemas and fails if the committed files would change.  Runs on every
+  # PR so a Go schema change that was not followed by `make gen-python-client`
+  # is caught even on code-only PRs that skip the docs gate.
+  python-drift:
+    name: Python client drift gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.11"
+          cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify Python client matches Go schemas
+        run: make check-python-drift
+
+  # Always-run Python test suite. Runs on every PR so Python regressions are
+  # caught even on code-only PRs that skip the docs gate.
+  test-python:
+    name: Python SDK tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pytest
+        run: python3 -m pip install --upgrade pytest
+      - name: Run Python SDK tests
+        run: python3 -m pytest tests/python/ --ignore=tests/python/test_live_e2e.py -v
+
   e2e:
     name: E2E (STDIO, network-free)
     needs: changes
@@ -259,3 +301,34 @@ jobs:
       # tests excluded). Genuinely-safe sites carry inline `// #nosec` reasons.
       - name: Run gosec
         run: go tool gosec -exclude=G104 -exclude-dir=tests -quiet ./...
+
+  # Manual-dispatch Python SDK live E2E tests. Builds the Go binary from source
+  # and drives the SDK against real external APIs. Keyless providers (DuckDuckGo,
+  # PubMed, World Bank, ClinicalTrials.gov) run unconditionally; keyed providers
+  # skip when the relevant secret is absent. NOT part of the required CI gate —
+  # opt-in only via workflow_dispatch to avoid flaky failures on rate-limits.
+  python-live-e2e:
+    name: Python SDK live E2E
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_python_live == 'true' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.11"
+          cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pytest
+        run: python3 -m pip install --upgrade pytest
+
+      - name: Run Python SDK live E2E tests
+        env:
+          GOOGLE_CUSTOM_SEARCH_API_KEY: ${{ secrets.GOOGLE_CUSTOM_SEARCH_API_KEY }}
+          GOOGLE_CUSTOM_SEARCH_ID: ${{ secrets.GOOGLE_CUSTOM_SEARCH_ID }}
+          BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
+        run: make test-python-live
