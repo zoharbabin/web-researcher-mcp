@@ -14,7 +14,7 @@ import (
 type newsSearchInput struct {
 	Query      string `json:"query" jsonschema:"Topic or event to find news about. Use specific terms for precision (e.g. 'OpenAI GPT-5 release' not 'AI news').,required"`
 	NumResults int    `json:"num_results,omitempty" jsonschema:"Number of articles to return (1-10, default: 5)."`
-	Freshness  string `json:"freshness,omitempty" jsonschema:"How recent articles must be: hour, day, week (default), month, or year."`
+	TimeRange  string `json:"time_range,omitempty" jsonschema:"Restrict to a time period: hour, day, week (default), month, or year."`
 	SortBy     string `json:"sort_by,omitempty" jsonschema:"Sort order: relevance (default) or date (newest first)."`
 	NewsSource string `json:"news_source,omitempty" jsonschema:"Restrict to a specific news outlet domain (e.g. reuters.com, bbc.co.uk)."`
 	Provider   string `json:"provider,omitempty" jsonschema:"Force a specific search provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews. Omit to use configured default."`
@@ -42,7 +42,7 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 		if numResults <= 0 {
 			numResults = 5
 		}
-		freshness := input.Freshness
+		freshness := input.TimeRange
 		if freshness == "" {
 			freshness = "week"
 		}

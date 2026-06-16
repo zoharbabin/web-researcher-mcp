@@ -145,6 +145,19 @@ if __name__ == "__main__":
 MAIN = "from . import main\n\nif __name__ == \"__main__\":\n    main()\n"
 
 
+def _read_python_src(name: str, src_dir: str) -> bytes:
+    """Read a Python source file from src_dir, failing loudly if absent."""
+    path = os.path.join(src_dir, name)
+    if not os.path.isfile(path):
+        raise FileNotFoundError(
+            f"required Python source file not found: {path}\n"
+            f"  (expected in --python-src={src_dir!r}; "
+            "make sure python/web_researcher_mcp/ is populated before building wheels)"
+        )
+    with open(path, "rb") as f:
+        return f.read()
+
+
 def _record_hash(data: bytes) -> str:
     digest = hashlib.sha256(data).digest()
     return "sha256=" + base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
@@ -182,7 +195,22 @@ def _metadata(version: str, readme: str) -> str:
         "License: MIT",
         "Project-URL: Source, " + HOMEPAGE,
         "Project-URL: Issues, " + HOMEPAGE + "/issues",
+        "Project-URL: Documentation, " + HOMEPAGE + "/blob/main/docs/PYTHON_CLIENT.md",
+        "Project-URL: Changelog, " + HOMEPAGE + "/releases",
         f"Requires-Python: {REQUIRES_PYTHON}",
+        "Classifier: Development Status :: 5 - Production/Stable",
+        "Classifier: Intended Audience :: Developers",
+        "Classifier: Intended Audience :: Science/Research",
+        "Classifier: License :: OSI Approved :: MIT License",
+        "Classifier: Programming Language :: Python :: 3",
+        "Classifier: Programming Language :: Python :: 3.10",
+        "Classifier: Programming Language :: Python :: 3.11",
+        "Classifier: Programming Language :: Python :: 3.12",
+        "Classifier: Programming Language :: Python :: 3.13",
+        "Classifier: Topic :: Internet :: WWW/HTTP :: Indexing/Search",
+        "Classifier: Topic :: Scientific/Engineering :: Information Analysis",
+        "Classifier: Topic :: Software Development :: Libraries :: Python Modules",
+        "Classifier: Typing :: Typed",
         "Description-Content-Type: text/markdown",
         "",
         readme,
@@ -202,7 +230,7 @@ def _wheel_meta(tag: str) -> str:
     )
 
 
-def build_wheel(version: str, binary_path: str, goos: str, tag: str, out_dir: str, readme: str) -> str:
+def build_wheel(version: str, binary_path: str, goos: str, tag: str, out_dir: str, readme: str, python_src: str) -> str:
     """Assemble one platform wheel and return its path."""
     exe = ".exe" if goos == "windows" else ""
     dist_info = f"{PKG_NAME}-{version}.dist-info"
@@ -211,8 +239,13 @@ def build_wheel(version: str, binary_path: str, goos: str, tag: str, out_dir: st
 
     shim = SHIM.format(version=version, binary=BINARY, exe=exe)
     files = {
-        f"{PKG_NAME}/__init__.py": shim.encode(),
+        f"{PKG_NAME}/_shim.py": shim.encode(),
+        f"{PKG_NAME}/py.typed": b"",  # PEP 561 — marks the package as typed
+        f"{PKG_NAME}/__init__.py": _read_python_src("__init__.py", python_src),
         f"{PKG_NAME}/__main__.py": MAIN.encode(),
+        f"{PKG_NAME}/client.py": _read_python_src("client.py", python_src),
+        f"{PKG_NAME}/models.py": _read_python_src("models.py", python_src),
+        f"{PKG_NAME}/_server.py": _read_python_src("_server.py", python_src),
         f"{dist_info}/METADATA": _metadata(version, readme).encode(),
         f"{dist_info}/WHEEL": _wheel_meta(tag).encode(),
         f"{dist_info}/entry_points.txt": (
@@ -253,6 +286,11 @@ def main() -> int:
     ap.add_argument("--dist", default="dist", help="GoReleaser dist dir (default: dist)")
     ap.add_argument("--out", default="dist", help="output dir for wheels (default: dist)")
     ap.add_argument("--readme", default="README.md", help="README for long description")
+    ap.add_argument(
+        "--python-src",
+        default="python/web_researcher_mcp",
+        help="directory containing Python source modules to bundle (default: python/web_researcher_mcp)",
+    )
     args = ap.parse_args()
 
     version = args.version.lstrip("v")
@@ -274,7 +312,7 @@ def main() -> int:
     for goos, goarch, tags in PLATFORMS:
         binary_path = _find_binary(args.dist, goos, goarch)
         for tag in tags:
-            path = build_wheel(version, binary_path, goos, tag, args.out, readme)
+            path = build_wheel(version, binary_path, goos, tag, args.out, readme, args.python_src)
             built.append(path)
             print(f"built {os.path.basename(path)}")
 

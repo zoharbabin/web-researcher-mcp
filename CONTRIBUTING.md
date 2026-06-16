@@ -343,6 +343,8 @@ func registerMyTool(srv *mcp.Server, deps Dependencies) {
 
 3. **Add tests** in `internal/tools/tools_test.go` or a dedicated `<toolname>_test.go`; add the tool name to `expectedTools` in `internal/tools/metadata_test.go`.
 
+4. **Regenerate the Python client** — run `make gen-python-client` and commit the result. This updates `python/web_researcher_mcp/{models.py,client.py,__init__.py}` with the new typed method and response class. The `python-drift` CI job and pre-commit hook both fail if you skip this step.
+
 Key conventions:
 - All tool inputs use typed structs with `jsonschema` tags (the SDK auto-generates JSON Schema from these)
 - Use `deps.Cache` for caching, `deps.Metrics` for telemetry, `deps.Auditor` for audit logging

@@ -12,6 +12,8 @@ go test -v ./tests/e2e/...                                  # E2E (needs API key
 go tool golangci-lint run                                   # Lint (pinned version)
 go tool govulncheck ./...                                    # Vulnerability scan (pinned version)
 make verify                                                  # fmt-check + vet + lint + gosec + vuln + test-race + test-e2e + build (CI gate; `make all` aliases it)
+make test-python                                             # Python SDK unit + integration tests (no binary; mock HTTP server)
+make test-python-live                                        # Python SDK live E2E tests (builds Go binary; needs internet)
 ```
 
 ### Local rebuild for IRL testing
@@ -97,6 +99,7 @@ Registry/manifest files (root, each read by a different external tool): `server.
 2. Add `register<Name>(srv, deps)` to `RegisterAll()` in `internal/tools/registry.go`. **Regulated/opt-in tools** register conditionally (only when their feature dep is non-Noop) and gate every personal-data operation on `deps.Consent.HasConsent(ctx, consent.Purpose…)`; register the store's `Exporter`/`Eraser` into the `datasubject` registry in `main.go`.
 3. Add tests to `internal/tools/tools_test.go`; add the tool name to `expectedTools` (`metadata_test.go`). For a conditionally-registered tool, also wire its feature dep into `setupTestDeps()` so the drift gates exercise it.
 4. Document the schema in `docs/TOOLS.md` as a `## Tool N: \`name\`` section (the drift test parses these headers).
+5. Run `make gen-python-client` — regenerates `python/web_researcher_mcp/{models.py,client.py,__init__.py}` from the live Go schemas. Stage and commit the result. The `python-drift` CI job and the pre-commit hook both fail if you skip this step.
 
 ## How to Add a Search Provider
 

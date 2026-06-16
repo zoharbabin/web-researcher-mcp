@@ -1,5 +1,6 @@
-.PHONY: build build-fips sync-lenses test test-race test-cover test-e2e test-live test-eval test-concurrency test-bench \
-        lint fmt fmt-check vet vuln sec tools hooks precommit verify clean run dev docker docker-smoke release version-sync rebuild-local help all
+.PHONY: build build-fips sync-lenses test test-race test-cover test-e2e test-live test-eval test-concurrency test-bench test-python test-python-live \
+        lint fmt fmt-check vet vuln sec tools hooks precommit verify clean run dev docker docker-smoke release version-sync rebuild-local help all \
+        gen-python-client check-python-drift
 
 BINARY = web-researcher-mcp
 VERSION ?= $(shell cat VERSION 2>/dev/null || git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -66,6 +67,25 @@ test-concurrency:
 test-bench:
 	go test -bench=. -benchmem ./tests/benchmark/
 
+# Python client library tests (no binary required — uses a mock HTTP server)
+test-python:
+	python3 -m pytest tests/python/ --ignore=tests/python/test_live_e2e.py -v 2>&1 || python3 -m unittest discover -s tests/python -v
+
+# Python live E2E tests — build the real Go binary, start it, and exercise
+# the SDK against real external APIs. Keyless providers (DuckDuckGo, PubMed,
+# World Bank, ClinicalTrials.gov) run unconditionally; keyed tests skip when
+# their env var is absent. Requires Go on PATH and internet access.
+test-python-live:
+	python3 -m pytest tests/python/test_live_e2e.py -v
+
+# Regenerate the Python client from the live Go tool schemas.
+gen-python-client:
+	go run ./cmd/gen-python-client | python3 scripts/gen_python_client.py
+
+# Fail if the generated Python client is stale (use in CI / pre-commit).
+check-python-drift:
+	go run ./cmd/gen-python-client | python3 scripts/gen_python_client.py --dry-run
+
 # --- Quality gates ----------------------------------------------------------
 
 fmt:
@@ -130,7 +150,7 @@ sync-lenses:
 	@echo "synced $$(ls internal/search/lenses_embed/*.json | wc -l | tr -d ' ') lenses into the embed"
 
 # Full verification, matching CI. Run before opening a PR.
-verify: fmt-check vet lint sec vuln validate-lenses test-race test-e2e build
+verify: fmt-check vet lint sec vuln validate-lenses test-race test-e2e check-python-drift test-python build
 
 clean:
 	rm -f $(BINARY) coverage.out coverage.html

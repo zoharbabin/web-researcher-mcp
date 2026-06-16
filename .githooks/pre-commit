@@ -22,6 +22,17 @@ trap 'rm -rf "$tmpdir"' EXIT
 # Collect staged Go files (Added/Copied/Modified/Renamed), excluding deletions.
 staged_go=$(git diff --cached --name-only --diff-filter=ACMR | grep '\.go$' || true)
 
+# Always check Python client drift when any Go or Python file is staged —
+# a schema change that skips gen-python-client breaks the client silently.
+staged_any=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(go|py)$' || true)
+if [ -n "$staged_any" ]; then
+	echo "pre-commit: checking Python client drift…"
+	if ! go run ./cmd/gen-python-client | python3 scripts/gen_python_client.py --dry-run 2>&1; then
+		echo "✗ Python client is stale. Run 'make gen-python-client' and stage the result."
+		exit 1
+	fi
+fi
+
 if [ -z "$staged_go" ]; then
 	exit 0
 fi

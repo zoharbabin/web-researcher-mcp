@@ -35,6 +35,27 @@ claude mcp add --scope user web-researcher -- uvx web-researcher-mcp
 ```
 [`uv`](https://docs.astral.sh/uv/) fetches the right prebuilt binary for your platform and runs it — no Go, no compile, no manual PATH. Point any MCP client at `uvx web-researcher-mcp`. Also works with `uv tool install web-researcher-mcp` or `pip install web-researcher-mcp`.
 
+## Python SDK
+
+```python
+from web_researcher_mcp import WebResearcherClient
+
+async with WebResearcherClient() as client:
+    response = await client.web_search("CRISPR off-target effects 2024", num_results=5)
+    for r in response.results:
+        verified = await client.verify_citation(r.url)
+        print(r.title, "—", "✓" if verified.exists else "?")
+```
+
+Full documentation: [docs/PYTHON_CLIENT.md](docs/PYTHON_CLIENT.md) · [Examples notebook (Colab)](https://colab.research.google.com/github/zoharbabin/web-researcher-mcp/blob/main/examples/web_researcher_sdk_examples.ipynb)
+
+Sync wrapper (for scripts and notebooks that don't use async):
+```python
+with WebResearcherClient.sync() as client:
+    response = client.web_search("climate change 2024")
+    print(response.results[0].title)
+```
+
 **macOS (Homebrew):**
 ```bash
 brew install zoharbabin/tap/web-researcher-mcp
