@@ -4,7 +4,7 @@ This is the story of why I rebuilt [google-researcher-mcp](https://github.com/zo
 
 ## The Starting Point
 
-The original project — `google-researcher-mcp` — was a TypeScript/Node.js MCP server distributed via npm. It had real traction: 36 GitHub stars, 6,500+ npm downloads, 860+ tests, and active users. But five critical issues kept surfacing that couldn't be solved within the existing architecture.
+The original project — `google-researcher-mcp` — was a TypeScript/Node.js MCP server distributed via npm. It had real traction: GitHub stars, steady npm downloads, a broad test suite, and active users. But five critical issues kept surfacing that couldn't be solved within the existing architecture.
 
 ## Why Rewrite in Go (Not Refactored)
 
@@ -32,7 +32,7 @@ Users wanted Brave, Bing (go figure), and other providers. But the TypeScript co
 
 The in-memory cache was lost on every process restart — which happened frequently with npx-launched servers. The complex persistence manager offered four strategies (Periodic, WriteThrough, OnShutdown, Hybrid), but none reliably survived the volatile process lifecycle.
 
-**Go fix**: A `cache.Cache` interface with a hybrid implementation: memory + AES-encrypted disk. Simple, testable, and it never loses data because the disk layer persists across restarts.
+**Go fix**: A `cache.Cache` interface with a hybrid implementation: an in-memory layer over an AES-encrypted disk layer, plus an optional shared Redis tier in HTTP mode for cross-pod deployments. Simple, testable, and it never loses data because the disk layer persists across restarts.
 
 ### Monolithic Architecture (Issue #40)
 
@@ -51,8 +51,8 @@ The project had 100+ source files but a tightly coupled `shared/` directory with
 | Search providers | Google only | Multiple providers + fallback routing |
 | Concurrency | Event loop + async/await | Goroutines + semaphores |
 | Type safety | TypeScript + Zod | Go type system + struct tags |
-| Testing | 860+ Jest tests | Table-driven tests + race detector |
-| Scraping | Playwright (heavy) | 4-tier pipeline (lightweight first) |
+| Testing | Jest test suite | Table-driven tests + race detector |
+| Scraping | Playwright (heavy) | Multi-tier pipeline (lightweight first) |
 
 ## Key Lessons Learned
 
@@ -62,7 +62,7 @@ Node.js process management is fundamentally fragile for long-lived servers launc
 
 **Takeaway**: If you're spending significant engineering effort working around your runtime's limitations, that's a signal to evaluate whether the runtime fits the problem.
 
-> Side note: looking for a better runtime I looked into both Go and Rust (isn't Rust awesome!?). Go won primarily for its lightweight goroutines excelling at I/O-bound operations, and the mcp-go SDK is superbly maintained.
+> Side note: looking for a better runtime I looked into both Go and Rust (isn't Rust awesome!?). Go won primarily for its lightweight goroutines excelling at I/O-bound operations, and the official `modelcontextprotocol/go-sdk` is superbly maintained.
 
 ### 2. Interface-Driven Design Enables Fearless Extension
 
@@ -78,7 +78,7 @@ MCP servers run alongside AI assistants on developer machines. They're always-on
 
 ### 4. Caching Architecture Should Be Boring
 
-The old project had four persistence strategies with complex heuristics for when to flush. The new one has: memory + encrypted disk. Each layer is simple and independently testable. No heuristics, no race conditions, no data loss.
+The old project had four persistence strategies with complex heuristics for when to flush. The new one layers an in-memory cache over encrypted disk, with an optional shared Redis tier for multi-pod HTTP deployments. Each layer is simple and independently testable. No heuristics, no race conditions, no data loss.
 
 **Takeaway**: Boring infrastructure is reliable infrastructure. If your caching layer needs its own debugging session, it's too complex.
 
@@ -111,7 +111,7 @@ Since launching the Go version:
 
 - Zero orphan process reports (vs. recurring issue in Node.js version)
 - Multiple search providers with automatic failover (vs. single provider)
-- 4-tier scraping pipeline that tries lightweight methods first (vs. Playwright-only)
+- Multi-tier scraping pipeline that tries lightweight methods first (vs. Playwright-only)
 - Sub-100ms cold startup (vs. 2-4 seconds)
 - Production-ready: rate limiting, automatic failover, user isolation, and a compliance-ready audit trail
 

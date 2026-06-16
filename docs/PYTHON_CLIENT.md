@@ -112,8 +112,20 @@ result: SearchAndScrapeResponse = await client.search_and_scrape(
 ### `image_search`
 
 ```python
-result: ImageSearchResponse = await client.image_search(query, num_results=5, provider=None)
+result: ImageSearchResponse = await client.image_search(
+    query,
+    num_results=5,
+    provider=None,
+    color_type=None,   # e.g. "color" | "gray" | "mono" | "trans"
+    dominant_color=None,
+    file_type=None,    # e.g. "jpg" | "png" | "gif"
+    safe=None,         # "active" | "off"
+    size=None,         # e.g. "large" | "medium" | "icon"
+    type=None,         # e.g. "photo" | "clipart" | "face"
+)
 ```
+
+See [`docs/TOOLS.md`](TOOLS.md) for the full parameter schema.
 
 ### `news_search`
 
@@ -122,9 +134,14 @@ result: NewsSearchResponse = await client.news_search(
     query,
     num_results=5,
     time_range=None,      # "day" | "week" | "month" | "year"
+    news_source=None,     # restrict to a specific news outlet
+    sort_by=None,
     provider=None,
+    sessionId=None,
 )
 ```
+
+See [`docs/TOOLS.md`](TOOLS.md) for the full parameter schema.
 
 ### `academic_search`
 
@@ -178,7 +195,7 @@ result: VerifyRecommendationResponse = await client.verify_recommendation([
 
 ### `sequential_search`
 
-The three positional arguments are required; the rest are optional keyword arguments (note the camelCase names — they match the JSON field names exactly):
+The three positional arguments are required; the following shows common optional keyword arguments (note the camelCase names — they match the JSON field names exactly). See [`docs/TOOLS.md`](TOOLS.md) for the complete list.
 
 ```python
 result: SequentialSearchResponse = await client.sequential_search(
@@ -211,13 +228,14 @@ filings:  FilingSearchResponse   = await client.filing_search(ticker="AAPL", for
 ### Session / bibliography helpers
 
 ```python
-session: GetResearchSessionResponse = await client.get_research_session(sessionId)
+session: GetResearchSessionResponse = await client.get_research_session(sessionId, stepId=None)
 export:  ResearchExportResponse     = await client.research_export(sessionId, format="markdown")
-biblio:  FormatBibliographyResponse = await client.format_bibliography(sessionId=None, sources=None, style="apa")
-graph:   CitationGraphResponse      = await client.citation_graph(paper, direction=None, influential_only=False)
+biblio:  FormatBibliographyResponse = await client.format_bibliography(sessionId=None, sources=None, style=None)
+graph:   CitationGraphResponse      = await client.citation_graph(paper, direction=None, influential_only=False,
+                                                                   num_results=None, provider=None, sessionId=None)
 ```
 
-`citation_graph`'s `paper` is a DOI or title; `format_bibliography` takes either a `sessionId` or an explicit `sources` list.
+`citation_graph`'s `paper` is a DOI or title; `format_bibliography` takes either a `sessionId` or an explicit `sources` list (pass `style="apa"` to control the output format).
 
 ### Generic passthrough
 
@@ -384,7 +402,7 @@ async with WebResearcherClient(server_env={"GOOGLE_CUSTOM_SEARCH_API_KEY": "..."
 ## Testing
 
 ```bash
-make test-python                              # pytest tests/python/ -v
+make test-python                              # pytest tests/python/ --ignore=tests/python/test_live_e2e.py -v
 python3 -m pytest tests/python/ -v           # direct
 python3 -m unittest tests.python.test_client # stdlib runner
 ```

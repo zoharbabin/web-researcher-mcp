@@ -16,7 +16,7 @@ One of:
 ## Option A: Binary Install (recommended)
 
 1. Download the latest release for your platform:
-   ```
+   ```text
    https://github.com/zoharbabin/web-researcher-mcp/releases/latest
    ```
    Files are named: `web-researcher-mcp_<version>_<os>_<arch>.tar.gz`
@@ -97,32 +97,7 @@ Then configure as in Option A.
 
 ## Environment Variables
 
-**None required.** With no configuration, the server uses DuckDuckGo as a zero-config fallback search provider (no API key needed). The variables below are optional upgrades for higher quality and image/news search.
-
-**Recommended — Google (best quality whole-web + image + news):**
-
-| Variable | Description | Get it at |
-|----------|-------------|-----------|
-| `GOOGLE_CUSTOM_SEARCH_API_KEY` | Google Custom Search API key | https://console.cloud.google.com |
-| `GOOGLE_CUSTOM_SEARCH_ID` | Google Programmable Search Engine ID | https://programmablesearchengine.google.com |
-
-**Or use an alternative provider:**
-
-| Variable | Description | Get it at |
-|----------|-------------|-----------|
-| `BRAVE_API_KEY` | Brave Search API key | https://brave.com/search/api/ |
-| `SERPER_API_KEY` | Serper.dev API key | https://serper.dev |
-| `SEARCHAPI_API_KEY` | SearchAPI.io API key | https://searchapi.io |
-| `SEARXNG_URL` | Self-hosted SearXNG instance URL | https://docs.searxng.org |
-| `TAVILY_API_KEY` | Tavily Search API key | https://app.tavily.com |
-| `EXA_API_KEY` | Exa neural/semantic search API key | https://dashboard.exa.ai |
-
-**Optional:**
-
-| Variable | Description |
-|----------|-------------|
-| `SEARCH_PROVIDER` | Which provider to use: `google`, `brave`, `serper`, `searxng`, `searchapi`, `duckduckgo`, `tavily`, `exa`, `hackernews` (defaults to `google`, falling back to `duckduckgo` when no key is set) |
-| `SEARCH_ROUTING` | Multi-provider fallback list (e.g., `brave,google,serper`) |
+**None required.** With no configuration, the server uses DuckDuckGo as a zero-config fallback search provider (no API key needed). For optional provider keys and advanced configuration, see `.env.example` and `docs/DEPLOYMENT.md`.
 
 ## Available Tools
 
@@ -139,7 +114,7 @@ See [`docs/TOOLS.md`](docs/TOOLS.md) for the authoritative, CI-verified list wit
 ## Verification
 
 After configuration, test by asking your AI assistant:
-```
+```text
 Search for recent news about AI regulation
 ```
 

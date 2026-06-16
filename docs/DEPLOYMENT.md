@@ -275,7 +275,6 @@ Note: Google keys are validated as required only when you explicitly select `SEA
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `SEARCH_PROVIDER` | Primary provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews | `google` (variable default); at runtime, when `google` is selected but no Google key is set, the server falls back to the zero-config `duckduckgo` provider |
-| `SEARCH_FALLBACK_PROVIDER` | Fallback provider (simple fallback) | — |
 | `SEARCH_ROUTING` | Multi-provider routing (see below) | — |
 | `BRAVE_API_KEY` | Brave Search API key | — |
 | `SERPER_API_KEY` | Serper.dev API key | — |
@@ -450,8 +449,10 @@ DAILY_QUOTA_PER_TENANT=10000
 |----------|-------------|---------|
 | `ALLOW_PRIVATE_IPS` | Disable SSRF protection | `false` |
 | `ALLOWED_DOMAINS` | Domain whitelist (comma-separated) | — (all allowed) |
-| `CHROME_PATH` | Custom Chrome/Chromium binary path | auto-detect |
+| `CHROME_PATH` | Custom Chrome/Chromium binary path; set to `"disabled"` to turn the browser tier off entirely (no autodetect, no download) | auto-detect |
 | `MAX_SCRAPE_CONCURRENCY` | Parallel scrape limit | `5` |
+| `MAX_HTML_BYTES` | Decompressed HTML body read cap per scrape tier | `8388608` (8 MB) |
+| `MAX_DOCUMENT_BYTES` | Document (PDF/DOCX/PPTX) download cap | `52428800` (50 MB) |
 
 ### Features (Opt-In)
 
@@ -526,7 +527,7 @@ When `CACHE_ISOLATION=tenant`, all cache keys are prefixed with the authenticate
 - **Rate limits:** Per-instance. A tenant hitting N instances gets up to N× the per-tenant limit.
 - **go-rod browser instances** are per-pod. No shared browser pool.
 
-**With `REDIS_URL` set (HTTP mode), distributed state is enabled (#42):**
+**With `REDIS_URL` set (HTTP mode), distributed state is enabled:**
 
 - **Cache** gains a shared Redis L2 tier (memory L1 → Redis L2 → disk L3), so a query warmed by one pod is served from Redis by the others — upstream quota is burned once, not once-per-pod.
 - **Sessions** live in Redis with a server-side `EXPIRE`, so they survive pod restarts and a client reaching any pod finds its research (sticky sessions become optional).
@@ -543,7 +544,7 @@ When `CACHE_ISOLATION=tenant`, all cache keys are prefixed with the authenticate
 
 ### Production Readiness Checklist
 
-Before running multiple instances behind a load balancer, work through this checklist. Items marked **(per-pod without Redis)** behave differently across pods unless `REDIS_URL` is set (#42).
+Before running multiple instances behind a load balancer, work through this checklist. Items marked **(per-pod without Redis)** behave differently across pods unless `REDIS_URL` is set.
 
 - [ ] **Distributed state** — set `REDIS_URL` (+ `CACHE_ENCRYPTION_KEY`) to share sessions, cache, and rate limits across pods. This is the recommended multi-instance configuration; the items below are only concerns when Redis is *not* used.
 - [ ] **Sticky sessions** — without Redis, configure session affinity at the L7 load balancer so a client's follow-up `sequential_search` steps reach the pod holding its session. A step routed to another pod returns a typed `session_not_found` error with a `recoveryHint` (last known step) so the client can restart cleanly rather than silently forking. **(per-pod without Redis)**

@@ -336,7 +336,7 @@ If Brave is down or rate-limited, requests automatically switch to Google, then 
 For per-operation routing (different providers for different search types):
 
 ```bash
-export SEARCH_ROUTING='{"web":"brave,google","news":"brave,serper","images":"google,brave","patents":"epo,lens,searchapi,uspto","default":"brave,google,searchapi"}'
+export SEARCH_ROUTING='{"web":"brave,google","news":"brave,serper","images":"google,brave","academic":"openalex,crossref","patents":"epo,lens,searchapi,uspto","default":"brave,google,searchapi"}'
 ```
 
 See [docs/DEPLOYMENT.md](DEPLOYMENT.md) for advanced routing configuration.
@@ -384,7 +384,7 @@ export EPO_OPS_CONSUMER_SECRET=your-consumer-secret
 
 Access to US patent applications and grants.
 
-**Step 1**: Request an API key at [developer.uspto.gov](https://developer.uspto.gov).
+**Step 1**: Request an API key at [data.uspto.gov](https://data.uspto.gov).
 
 **Step 2**: Configure
 
@@ -503,11 +503,11 @@ When multiple academic providers are configured, the router tries them in priori
 export SEARCH_ROUTING='{"academic":"openalex,crossref","patents":"epo,lens","default":"brave,google"}'
 ```
 
-Without explicit routing, all configured academic providers are tried in order until one returns results. If no academic providers are configured, `academic_search` automatically falls back to site-restricted web search (zero behavioral change from previous versions).
+Without explicit routing, all configured academic providers are tried in order until one returns results. If no academic providers are configured, `academic_search` automatically falls back to site-restricted web search.
 
 ## Structured-Domain Providers (Optional)
 
-These enable dedicated structured-research tools. Each is independent; the tool registers only when its provider is configured (one keyless exception, noted).
+These enable dedicated structured-research tools. Each is independent; `filing_search` is the only one that requires configuration (a contact email). The rest are always available — see each section for optional keys that raise rate limits or add data sources.
 
 ### SEC EDGAR (US Public-Company Filings)
 
@@ -537,11 +537,16 @@ export COURTLISTENER_API_TOKEN=your-token
 
 **Notes**: Without a token, roughly 100 requests/day; a token raises this to ~5000/day. Coverage is US federal and state court opinions.
 
-### Economic data: World Bank (keyless) + FRED (key)
+### World Bank + OECD + Eurostat (keyless) + FRED (key)
 
-`econ_search` is backed by two providers. **World Bank Open Data** needs no key and is always available — global development indicators for 200+ economies (`provider: worldbank`, scope by `country`). **FRED** (Federal Reserve Economic Data) adds 800K+ US macro series and needs a free key.
+`econ_search` is backed by four providers. **World Bank Open Data**, **OECD**, and **Eurostat** are all keyless and always available. **FRED** (Federal Reserve Economic Data) adds 800K+ US macro series and needs a free key.
 
-So `econ_search` works out of the box (World Bank); add the FRED key to also reach US macro series.
+- World Bank (`provider: worldbank`) — global development indicators for 200+ economies, scope by `country`
+- OECD (`provider: oecd`) — OECD economy indicators via SDMX
+- Eurostat (`provider: eurostat`) — European official statistics
+- FRED (`provider: fred`) — US macro series (GDP, CPI, unemployment, rates)
+
+So `econ_search` works out of the box (World Bank, OECD, Eurostat); add the FRED key to also reach US macro series.
 
 **FRED — Step 1**: Request a free key at [fred.stlouisfed.org](https://fred.stlouisfed.org/docs/api/api_key.html) (sign in → My Account → API Keys).
 
@@ -551,7 +556,7 @@ So `econ_search` works out of the box (World Bank); add the FRED key to also rea
 export FRED_API_KEY=your-fred-key
 ```
 
-**Notes**: World Bank requires no configuration. FRED is enabled by `FRED_API_KEY`. Observation values pass through exactly as each source returns them — no rounding; the FRED key is sent as a query param and never logged.
+**Notes**: World Bank, OECD, and Eurostat require no configuration. FRED is enabled by `FRED_API_KEY`. Observation values pass through exactly as each source returns them — no rounding; the FRED key is sent as a query param and never logged.
 
 ### ClinicalTrials.gov (Clinical Trials)
 

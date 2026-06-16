@@ -351,8 +351,6 @@ them — and each store ships a round-trip **release-gate test**.
 > GDPR access / portability / erasure (Art. 15 / 17 / 20) becomes a property of
 > the build, not a promise in a policy PDF.
 
-<span class="pills"><span class="pill cyan">shipped in v1.13</span></span>
-
 <!-- _footer: '↳ proof: internal/datasubject/registry.go · internal/session/datasubject_test.go ("the #85 release gate")' -->
 
 ---
@@ -371,8 +369,6 @@ So the server treats consent as three things it actually does:
 - **Records** it — encrypted, logged, with a typed purpose ("memory," "analytics," "workspace").
 - **Verifies** it on every access — no record, no processing (it defaults to *off*).
 - **Honors** it — a withdrawal automatically erases the data it covered.
-
-<span class="pills"><span class="pill cyan">shipped in v1.13</span></span>
 
 <!-- _footer: '↳ proof: internal/consent/consent.go · internal/consent/store.go (HasConsent, fail-closed)' -->
 
@@ -447,10 +443,6 @@ Each technical claim here names the file that backs it — open any one and chec
 And a CI drift gate keeps the tool docs honest against the code.
 
 <br>
-
-**The receipts:** `v1.10` tenant isolation → `v1.11` zero-config fallback →
-`v1.12` HTTP hardening → `v1.13` consent + GDPR erasure →
-`v1.14` OWASP Agentic Top 10 hardening (audit-driven).
 
 <br>
 

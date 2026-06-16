@@ -113,6 +113,11 @@ All assets live in `/assets/`. Current deliverables:
 | File | Size | Use |
 |------|------|-----|
 | `logo-final-512.png` | 512x512 | Standard icon |
+| `logo-final-dark-512.png` | 512x512 | Dark-variant full icon |
+| `logo-final-light-512.png` | 512x512 | Light-variant full icon |
+| `logo-final-mono-dark-512.png` | 512x512 | Mono dark icon |
+| `logo-final-mono-white-512.png` | 512x512 | Mono white icon |
+| `logo-final-transparent-512.png` | 512x512 | Transparent-background icon |
 | `logo-400x400.png` | 400x400 | Legacy / fallback icon |
 | `logo-final-240.png` | 240x240 | Product Hunt, app stores |
 | `logo-final-128.png` | 128x128 | Medium contexts |

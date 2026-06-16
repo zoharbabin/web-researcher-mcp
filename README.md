@@ -161,7 +161,7 @@ Works with Claude, Claude Desktop, Cursor, and any AI assistant that supports to
 | `patent_search` | Search patent offices (US, Europe, international) with classification codes |
 | `filing_search` | Search SEC EDGAR for US public-company filings (10-K, 10-Q, 8-K, …) — or pull structured XBRL company facts |
 | `legal_search` | Search US court opinions and dockets via CourtListener — real cases with real citations |
-| `econ_search` | Look up economic data — World Bank global development indicators (keyless) and FRED US macro series (GDP, CPI, unemployment, rates) |
+| `econ_search` | Look up economic data — World Bank global development indicators, OECD economic indicators, Eurostat European statistics (all keyless), and FRED US macro series (GDP, CPI, unemployment, rates; requires FRED_API_KEY) |
 | `clinical_search` | Search ClinicalTrials.gov — clinical-trial registrations with status, phase, sponsor, and whether results are posted (discovery, not medical advice) |
 | `verify_citation` | Check a citation before you rely on it — does it exist, match a real record, and is it retracted or a dead link? Evidence, not a verdict |
 | `audit_bibliography` | Audit a whole reference list in one pass — paste a CSL-JSON/RIS/BibTeX file (or a session) and get per-entry + corpus-level flags for retracted, dead-link, and unverifiable citations |
@@ -328,34 +328,20 @@ When `SEARCH_PROVIDER` is unset, the server uses Google if its keys are present 
 
 ### Academic Search (Optional — no signup needed)
 
-| Variable | What to put | Why |
-|----------|-------------|-----|
-| `OPENALEX_EMAIL` | Your email address | Unlocks faster access to OpenAlex's full catalog of scholarly works — no registration, just an email |
-| `CROSSREF_EMAIL` | Your email address | Same — faster access to DOI metadata for citations |
+Academic search providers (OpenAlex, CrossRef) accept a contact email to unlock faster access via the polite pool — no registration, just an email. See [docs/API_SETUP.md](docs/API_SETUP.md) for setup and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#environment-variables) for the full variable reference.
 
 > With these set, `academic_search` returns real papers with DOIs, authors, citation counts, and open-access PDF links. Without them, it still works but uses web search as a fallback.
 
 ### Patent Search (Optional)
 
-| Variable | What it is | Where to get it |
-|----------|-------------|-----------|
-| `EPO_OPS_CONSUMER_KEY` | European Patent Office key | [developers.epo.org](https://developers.epo.org) (free) |
-| `EPO_OPS_CONSUMER_SECRET` | EPO secret | Same as above |
-| `USPTO_API_KEY` | US patent office key | [developer.uspto.gov](https://developer.uspto.gov) (free) |
-| `LENS_API_TOKEN` | The Lens (patents + scholarly) | [lens.org](https://www.lens.org) |
+Patent providers (EPO, USPTO, The Lens) require API keys for structured patent data. See [docs/API_SETUP.md](docs/API_SETUP.md) for step-by-step setup and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#environment-variables) for the full variable reference.
 
 > With these, `patent_search` returns structured patent data with classification codes, dates, and inventors. Without them, it falls back to web search.
 
 <details>
 <summary><strong>Advanced: HTTP mode, OAuth, and all other settings</strong></summary>
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PORT` | Run as a web server (for team/shared setups) | Off (runs locally) |
-| `OAUTH_ISSUER_URL` | Authentication server URL (for team access control) | |
-| `OAUTH_AUDIENCE` | Expected audience claim | |
-
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#environment-variables) for the complete list of all settings (cache, rate limiting, scraping, observability, etc.).
+HTTP mode, OAuth, rate limiting, cache, scraping, and observability settings are documented in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#environment-variables).
 
 </details>
 
@@ -397,6 +383,7 @@ You choose which search engine powers your research. All of them work with lense
 | **SearchAPI.io** | Yes | Yes | Yes | Unified API with multiple engine backends |
 | **Tavily** | Yes | — | Yes | AI-agent search; clean, LLM-ready content |
 | **Exa** | Yes | — | Yes | Neural/semantic search; also backs `answer` & `structured_search` and the optional paid scrape tier |
+| **Hacker News** | HN only | — | Yes | Zero-config (HN Algolia index); searches HN threads, not the full web |
 
 ### Multiple Providers (recommended)
 
@@ -638,7 +625,7 @@ Searches come back in under a second. Previously-seen results are cached so repe
 ```bash
 go build -o web-researcher-mcp ./cmd/web-researcher-mcp   # Build
 go test -race ./...                                        # Test (with race detector)
-make verify                                                # Full gate: fmt, vet, lint, gosec, govulncheck, tests, E2E, build
+make verify                                                # Full CI gate (see Makefile for steps)
 ```
 
 The lint, gosec, and govulncheck tools are pinned as `go.mod` tool directives, so `make verify` runs them at the exact versions CI uses (no global installs needed). Branch protection requires the Lint, Test, Security, and E2E checks to pass.
@@ -715,6 +702,7 @@ Contributions are welcome. Please see [CONTRIBUTING.md](CONTRIBUTING.md) for cod
 | [docs/SECURITY.md](docs/SECURITY.md) | Threat model, SSRF, auth, compliance (SOC2/GDPR/FedRAMP) |
 | [docs/PRIVACY.md](docs/PRIVACY.md) | What data goes where, third-party processors, retention |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Build, Docker, Kubernetes, client configs, scaling |
+| [docs/PYTHON_CLIENT.md](docs/PYTHON_CLIENT.md) | Python SDK — WebResearcherClient reference, sync wrapper, installation |
 | [docs/LESSONS_LEARNED.md](docs/LESSONS_LEARNED.md) | Node.js to Go migration story and lessons |
 | [docs/SESSION_PERSISTENCE.md](docs/SESSION_PERSISTENCE.md) | How sessions survive context loss — design, data flow, citations |
 | [docs/MIGRATION.md](docs/MIGRATION.md) | Migrating from the deprecated google-researcher-mcp |

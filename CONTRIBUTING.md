@@ -150,14 +150,14 @@ See `ARCHITECTURE.md` for package organization and `docs/TOOLS.md` for tool spec
 Run the full check suite — the same gate CI enforces:
 
 ```bash
-make verify   # fmt-check + vet + lint + gosec + vuln + test-race + test-e2e + build
+make verify   # fmt-check + vet + lint + sec + vuln + validate-lenses + test-race + test-e2e + check-python-drift + test-python + build
 ```
 
 ## Commit Messages
 
 This project uses [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). Each commit message should follow this format:
 
-```
+```text
 <type>(<optional scope>): <description>
 
 [optional body]
@@ -195,7 +195,7 @@ perf(scraper): reduce allocations in HTML parsing
 
 Append `!` after the type/scope, and include a `BREAKING CHANGE:` footer:
 
-```
+```text
 feat(auth)!: require OAuth 2.1 for HTTP transport
 
 BREAKING CHANGE: HTTP transport now requires a valid JWT token.
@@ -212,7 +212,7 @@ STDIO transport is unaffected.
 2. **Keep changes focused** — one logical change per PR. Split large features into smaller, reviewable pieces.
 
 3. **Ensure quality** before requesting review — one command runs the full gate:
-   - `make verify` — formatting, vet, lint, gosec, govulncheck, race tests, e2e, build
+   - `make verify` — formatting, vet, lint, gosec, govulncheck, validate-lenses, race tests, e2e, python-drift check, python tests, build
    - (individual targets exist too: `make test-race`, `make lint`, `make sec`, `make vuln`)
    - New code has tests; documentation updated if behavior changes
 

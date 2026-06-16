@@ -167,7 +167,7 @@ The tool names and parameters are identical between old and new:
 - `scrape_page` — same parameters (`url`, `max_length`, `mode`)
 - `search_and_scrape` — same parameters (`query`, `num_results`, `deduplicate`, etc.)
 - `image_search` — same parameters (`query`, `size`, `type`, `color_type`, etc.)
-- `news_search` — same parameters (`query`, `freshness`, `news_source`, etc.)
+- `news_search` — same parameters (`query`, `time_range`, `news_source`, etc.)
 - `academic_search` — same parameters (`query`, `source`, `year_from`, `year_to`, etc.)
 - `patent_search` — same parameters (`query`, `patent_office`, `cpc_code`, etc.)
 - `sequential_search` — same parameters (`searchStep`, `stepNumber`, `nextStepNeeded`, etc.)

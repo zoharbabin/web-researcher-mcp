@@ -4,7 +4,7 @@ How the Windows `.exe` in each release is Authenticode-signed, and how to operat
 
 ## What & where
 
-Windows binaries are signed with **Azure Trusted Signing** (a.k.a. Azure Artifact Signing) from the release job in `.github/workflows/release.yml`. Signing happens **in place on the Linux runner** via [`jsign`](https://ebourg.github.io/jsign/) — which calls the Azure signing REST endpoint directly, so there is no separate Windows job and no Wine.
+Windows binaries are signed with **Azure Trusted Signing** from the release job in `.github/workflows/release.yml`. Signing happens **in place on the Linux runner** via [`jsign`](https://ebourg.github.io/jsign/) — which calls the Azure signing REST endpoint directly, so there is no separate Windows job and no Wine.
 
 Signing runs **inside GoReleaser**, as a `builds[].hooks.post` hook (`scripts/sign-windows.sh`) that fires right after the `.exe` is compiled but **before** the archive/checksum/Scoop/WinGet/Cask pipes. Because every downstream hash derives from the signed bytes, the release zip, `checksums.txt`, and the Scoop/WinGet/Cask manifests **all carry the signed-binary hash in a single GoReleaser run** — no post-hoc re-zip or checksum rewrite, and no manifest hash drift. (Earlier releases signed *after* GoReleaser had already published the Scoop/WinGet manifests with the unsigned hash, which broke `scoop install` and tripped WinGet's `Error-Hash-Mismatch`; doing it in the build hook is the fix.) The wrapper self-gates: it no-ops for non-Windows targets and whenever `AZURE_SIGNING_ENABLED != true`, so snapshot/local/credential-less builds ship unsigned exactly as before.
 
@@ -39,7 +39,7 @@ gh variable set AZURE_SIGNING_ENABLED --body false    # disable
 | Certificate profile | `web-researcher-public` |
 | jsign alias (`<account>/<profile>`) | `web-researcher-signing/web-researcher-public` |
 
-These are non-secret and live in the workflow. The signing account requires a **paid** Azure subscription (Artifact Signing is unavailable on free/trial subscriptions). Individual eligibility is currently USA/Canada only.
+These are non-secret and live in the workflow. The signing account requires a **paid** Azure subscription (Azure Trusted Signing is unavailable on free/trial subscriptions). Individual eligibility is currently USA/Canada only.
 
 ## CI authentication (GitHub Actions secrets)
 
@@ -111,7 +111,7 @@ Signing unlocks the OS package managers — some validate/prefer signed binaries
 
 PATs cannot be minted by `gh`/the API (browser-only by design): GitHub → Settings → Developer settings → Fine-grained tokens.
 
-> **First-release note:** the publishers activate on a release where the channel's secret is set. WinGet pushes the manifest to a branch on the `zoharbabin/winget-pkgs` fork; the maintainer then opens the PR to `microsoft/winget-pkgs` manually (fork-scoped PATs cannot open the upstream PR, and the first submission gets a one-time manual Microsoft review regardless). Chocolatey's first package goes through moderation. User-facing install instructions (`winget install` / `scoop install` / `choco install` / `brew install --cask`) are added to the README only once each channel's first package is confirmed live.
+> **Chocolatey:** the first submission goes through manual moderation; `choco install web-researcher-mcp` will be added to the README once the package clears. All other channels (WinGet, Scoop, Homebrew Cask) are already live.
 
 ## Local secret convention (maintainer)
 
