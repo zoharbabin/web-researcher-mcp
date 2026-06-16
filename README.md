@@ -20,6 +20,7 @@
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://github.com/zoharbabin/web-researcher-mcp/releases"><img src="https://img.shields.io/github/v/release/zoharbabin/web-researcher-mcp" alt="Release"></a>
   <a href="https://hub.docker.com/r/zoharbabin/web-researcher-mcp"><img src="https://img.shields.io/docker/pulls/zoharbabin/web-researcher-mcp?cacheSeconds=3600" alt="Docker"></a>
+  <a href="https://pypi.org/project/web-researcher-mcp/"><img src="https://img.shields.io/pypi/v/web-researcher-mcp?label=PyPI" alt="PyPI"></a>
   <a href="https://glama.ai/mcp/servers/zoharbabin/web-researcher-mcp"><img src="https://glama.ai/mcp/servers/zoharbabin/web-researcher-mcp/badges/score.svg" alt="web-researcher-mcp MCP server"></a>
   <a href="https://github.com/zoharbabin/web-researcher-mcp/stargazers"><img src="https://img.shields.io/github/stars/zoharbabin/web-researcher-mcp?style=social" alt="GitHub Stars"></a>
 </p>
@@ -47,7 +48,9 @@ async with WebResearcherClient() as client:
         print(r.title, "—", "✓" if verified.exists else "?")
 ```
 
-Full documentation: [docs/PYTHON_CLIENT.md](docs/PYTHON_CLIENT.md) · [Examples notebook (Colab)](https://colab.research.google.com/github/zoharbabin/web-researcher-mcp/blob/main/examples/web_researcher_sdk_examples.ipynb)
+Full documentation: [docs/PYTHON_CLIENT.md](docs/PYTHON_CLIENT.md)
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/zoharbabin/web-researcher-mcp/blob/main/examples/web_researcher_sdk_examples.ipynb)
 
 Sync wrapper (for scripts and notebooks that don't use async):
 ```python
