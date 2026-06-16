@@ -121,7 +121,7 @@ jobs:
 
       - name: Upload coverage artifact
         if: matrix.go-version == '1.25.11'
-        uses: actions/upload-artifact@v8
+        uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: coverage.out
@@ -230,7 +230,7 @@ jobs:
             ./cmd/web-researcher-mcp
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v8
+        uses: actions/upload-artifact@v7
         with:
           name: binary-${{ matrix.goos }}-${{ matrix.goarch }}
           path: web-researcher-mcp-*
