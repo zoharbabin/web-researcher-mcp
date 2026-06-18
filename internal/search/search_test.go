@@ -1,6 +1,8 @@
 package search
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -2414,40 +2417,47 @@ func TestBraveProvider_Local(t *testing.T) {
 	var (
 		poisCalled  int
 		descsCalled int
+		poisIDs     []string
+		descsIDs    []string
 	)
 
-	openNow := true
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/res/v1/web/search"):
-			// Step 1: return a single location ID.
+			// Step 1: return two location IDs.
 			if r.URL.Query().Get("result_filter") != "locations" {
 				t.Errorf("web/search: expected result_filter=locations, got %q", r.URL.Query().Get("result_filter"))
 			}
-			fmt.Fprint(w, `{"locations":{"results":[{"id":"abc123"}]}}`)
+			fmt.Fprint(w, `{"locations":{"results":[{"id":"abc123"},{"id":"def456"}]}}`)
 
 		case strings.HasPrefix(r.URL.Path, "/res/v1/local/pois"):
 			poisCalled++
-			// Step 2: return POI details for id=abc123.
-			fmt.Fprintf(w, `{"results":[{
+			// Brave requires repeated ids= params, not a comma-joined value.
+			poisIDs = r.URL.Query()["ids"]
+			// Step 2: POI details in Brave's real shape (title, url, coordinates
+			// array, postal_address.displayAddress, contact.telephone, rating
+			// with reviewCount, structured opening_hours). Only abc123 has data.
+			fmt.Fprint(w, `{"type":"local_pois","results":[{
 				"id":"abc123",
-				"name":"Mock Coffee",
-				"address":{"streetAddress":"1 Main St","addressLocality":"Seattle","addressRegion":"WA","postalCode":"98101"},
-				"coordinates":{"latitude":47.6062,"longitude":-122.3321},
-				"phone":"+1-206-555-0100",
+				"title":"Mock Coffee",
 				"url":"https://mock.example.com",
+				"coordinates":[47.6062,-122.3321],
+				"postal_address":{"type":"PostalAddress","displayAddress":"1 Main St, Seattle, WA 98101"},
+				"contact":{"telephone":"+12065550100"},
 				"categories":["coffee shop","cafe"],
-				"rating":{"ratingValue":4.5,"ratingCount":120},
-				"priceRange":"$",
-				"openingHours":["Mon-Fri: 7AM-7PM"],
-				"openNow":%v
-			}]}`, openNow)
+				"rating":{"ratingValue":4.5,"bestRating":5.0,"reviewCount":120},
+				"opening_hours":{
+					"current_day":[{"abbr_name":"Thu","full_name":"Thursday","opens":"07:00","closes":"19:00"}],
+					"days":[[{"abbr_name":"Fri","full_name":"Friday","opens":"07:00","closes":"18:00"}]]
+				}
+			}]}`)
 
 		case strings.HasPrefix(r.URL.Path, "/res/v1/local/descriptions"):
 			descsCalled++
-			// Step 3: return a description for id=abc123.
-			fmt.Fprint(w, `{"results":[{"id":"abc123","descriptions":["A cozy coffee shop."]}]}`)
+			descsIDs = r.URL.Query()["ids"]
+			// Step 3: description is a single string (not an array).
+			fmt.Fprint(w, `{"type":"local_descriptions","results":[{"type":"local_description","id":"abc123","description":"A cozy coffee shop."}]}`)
 
 		default:
 			t.Errorf("unexpected request path: %s", r.URL.Path)
@@ -2473,6 +2483,14 @@ func TestBraveProvider_Local(t *testing.T) {
 	if descsCalled != 1 {
 		t.Errorf("expected descriptions endpoint called once, got %d", descsCalled)
 	}
+	// Both IDs must be sent as separate repeated ids= params.
+	wantIDs := []string{"abc123", "def456"}
+	if !reflect.DeepEqual(poisIDs, wantIDs) {
+		t.Errorf("pois ids = %v, want %v (repeated params)", poisIDs, wantIDs)
+	}
+	if !reflect.DeepEqual(descsIDs, wantIDs) {
+		t.Errorf("descriptions ids = %v, want %v (repeated params)", descsIDs, wantIDs)
+	}
 
 	r := results[0]
 	if r.ID != "abc123" {
@@ -2481,7 +2499,7 @@ func TestBraveProvider_Local(t *testing.T) {
 	if r.Name != "Mock Coffee" {
 		t.Errorf("Name = %q, want %q", r.Name, "Mock Coffee")
 	}
-	wantAddr := "1 Main St, Seattle, WA, 98101"
+	wantAddr := "1 Main St, Seattle, WA 98101"
 	if r.Address != wantAddr {
 		t.Errorf("Address = %q, want %q", r.Address, wantAddr)
 	}
@@ -2491,8 +2509,8 @@ func TestBraveProvider_Local(t *testing.T) {
 	if r.Lon != -122.3321 {
 		t.Errorf("Lon = %v, want -122.3321", r.Lon)
 	}
-	if r.Phone != "+1-206-555-0100" {
-		t.Errorf("Phone = %q, want %q", r.Phone, "+1-206-555-0100")
+	if r.Phone != "+12065550100" {
+		t.Errorf("Phone = %q, want %q", r.Phone, "+12065550100")
 	}
 	if r.Website != "https://mock.example.com" {
 		t.Errorf("Website = %q, want %q", r.Website, "https://mock.example.com")
@@ -2506,20 +2524,89 @@ func TestBraveProvider_Local(t *testing.T) {
 	if r.RatingCount != 120 {
 		t.Errorf("RatingCount = %v, want 120", r.RatingCount)
 	}
-	if r.PriceRange != "$" {
-		t.Errorf("PriceRange = %q, want %q", r.PriceRange, "$")
-	}
-	if r.OpenNow == nil || !*r.OpenNow {
-		t.Errorf("OpenNow = %v, want true", r.OpenNow)
-	}
-	if len(r.Hours) != 1 || r.Hours[0] != "Mon-Fri: 7AM-7PM" {
-		t.Errorf("Hours = %v, want [Mon-Fri: 7AM-7PM]", r.Hours)
+	wantHours := []string{"Thursday: 07:00-19:00", "Friday: 07:00-18:00"}
+	if !reflect.DeepEqual(r.Hours, wantHours) {
+		t.Errorf("Hours = %v, want %v", r.Hours, wantHours)
 	}
 	if r.Description != "A cozy coffee shop." {
 		t.Errorf("Description = %q, want %q", r.Description, "A cozy coffee shop.")
 	}
 	if r.Source != "brave" {
 		t.Errorf("Source = %q, want %q", r.Source, "brave")
+	}
+}
+
+// TestBraveProvider_Local_CapsToNumResults verifies that when the locations
+// filter returns more IDs than requested (Brave ignores `count` there), only
+// NumResults IDs are forwarded to the POI endpoint — keeping the request URL
+// bounded and honoring the caller's limit.
+func TestBraveProvider_Local_CapsToNumResults(t *testing.T) {
+	t.Parallel()
+
+	var poisIDs []string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/res/v1/web/search"):
+			// Return 10 location IDs regardless of the requested count.
+			var ids []string
+			for i := 0; i < 10; i++ {
+				ids = append(ids, fmt.Sprintf(`{"id":"loc%d"}`, i))
+			}
+			fmt.Fprintf(w, `{"locations":{"results":[%s]}}`, strings.Join(ids, ","))
+		case strings.HasPrefix(r.URL.Path, "/res/v1/local/pois"):
+			poisIDs = r.URL.Query()["ids"]
+			fmt.Fprint(w, `{"type":"local_pois","results":[]}`)
+		case strings.HasPrefix(r.URL.Path, "/res/v1/local/descriptions"):
+			fmt.Fprint(w, `{"type":"local_descriptions","results":[]}`)
+		default:
+			t.Errorf("unexpected request path: %s", r.URL.Path)
+		}
+	}))
+	defer ts.Close()
+
+	client := &http.Client{Transport: &rewriteTransport{baseURL: ts.URL, inner: http.DefaultTransport}}
+	deps := Deps{HTTPClient: client, Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	b := NewBraveProvider("brave-key", BraveConfig{}, deps)
+
+	if _, err := b.Local(context.Background(), LocalSearchParams{Query: "coffee", NumResults: 3}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(poisIDs) != 3 {
+		t.Errorf("forwarded %d ids to pois, want 3 (capped to NumResults)", len(poisIDs))
+	}
+}
+
+// TestBraveProvider_GzipErrorBody verifies that an error response whose body is
+// gzip-encoded (Brave gzips everything when we send Accept-Encoding: gzip) is
+// decompressed before being surfaced — otherwise the message is unreadable binary.
+func TestBraveProvider_GzipErrorBody(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	_, _ = gw.Write([]byte(`{"error":"quota exceeded"}`))
+	_ = gw.Close()
+	gzipped := buf.Bytes()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Encoding", "gzip")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write(gzipped)
+	}))
+	defer ts.Close()
+
+	client := &http.Client{Transport: &rewriteTransport{baseURL: ts.URL, inner: http.DefaultTransport}}
+	deps := Deps{HTTPClient: client, Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	b := NewBraveProvider("brave-key", BraveConfig{}, deps)
+
+	_, err := b.Web(context.Background(), WebSearchParams{Query: "q", NumResults: 1})
+	if err == nil {
+		t.Fatal("expected an error for HTTP 500")
+	}
+	if !strings.Contains(err.Error(), "quota exceeded") {
+		t.Errorf("error body not decompressed: %q", err.Error())
 	}
 }
 
@@ -2593,12 +2680,21 @@ func TestBraveProvider_Context(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
+		// Brave's real /llm/context shape: grounding.generic[] (url/title/snippets)
+		// plus a sources map keyed by URL. There is no top-level "context" string;
+		// the provider assembles it from the generic snippets.
 		fmt.Fprint(w, `{
-			"context": "The capital of France is Paris, a major European city.",
-			"sources": [
-				{"title": "France - Wikipedia", "url": "https://en.wikipedia.org/wiki/France", "age": "2024-01-01", "chunk": "Paris is the capital of France."},
-				{"title": "Paris Guide",        "url": "https://example.com/paris",               "chunk": "Paris is a major European city."}
-			]
+			"grounding": {
+				"generic": [
+					{"url": "https://en.wikipedia.org/wiki/France", "title": "France - Wikipedia", "snippets": ["Paris is the capital of France.", "It sits on the Seine."]},
+					{"url": "https://example.com/paris", "title": "Paris Guide", "snippets": ["Paris is a major European city."]}
+				],
+				"map": []
+			},
+			"sources": {
+				"https://en.wikipedia.org/wiki/France": {"title": "France - Wikipedia", "hostname": "en.wikipedia.org", "age": ["Friday, May 30, 2025", "2025-05-30", "383 days ago"], "snippet": "Paris is the capital of France."},
+				"https://example.com/paris": {"title": "Paris Guide", "hostname": "example.com", "snippet": "Paris is a major European city."}
+			}
 		}`)
 	}))
 	defer ts.Close()
@@ -2621,7 +2717,8 @@ func TestBraveProvider_Context(t *testing.T) {
 	if result == nil {
 		t.Fatal("expected non-nil result")
 	}
-	wantContext := "The capital of France is Paris, a major European city."
+	// Assembled context = each source's snippets joined by space, sources by \n\n.
+	wantContext := "Paris is the capital of France. It sits on the Seine.\n\nParis is a major European city."
 	if result.Context != wantContext {
 		t.Errorf("Context = %q, want %q", result.Context, wantContext)
 	}
@@ -2638,16 +2735,16 @@ func TestBraveProvider_Context(t *testing.T) {
 	if sn.URL != "https://en.wikipedia.org/wiki/France" {
 		t.Errorf("Snippets[0].URL = %q, want %q", sn.URL, "https://en.wikipedia.org/wiki/France")
 	}
-	if sn.Age != "2024-01-01" {
-		t.Errorf("Snippets[0].Age = %q, want %q", sn.Age, "2024-01-01")
+	if sn.Age != "2025-05-30" {
+		t.Errorf("Snippets[0].Age = %q, want %q (ISO element of age tuple)", sn.Age, "2025-05-30")
 	}
-	if sn.Text != "Paris is the capital of France." {
+	if sn.Text != "Paris is the capital of France. It sits on the Seine." {
 		t.Errorf("Snippets[0].Text = %q", sn.Text)
 	}
 	if sn.Source != "brave" {
 		t.Errorf("Snippets[0].Source = %q, want %q", sn.Source, "brave")
 	}
-	// Second snippet has no age — age field should be omitted/empty.
+	// Second source has no age tuple — Age should be empty.
 	sn2 := result.Snippets[1]
 	if sn2.Age != "" {
 		t.Errorf("Snippets[1].Age = %q, want empty", sn2.Age)
@@ -2699,7 +2796,7 @@ func TestBraveProvider_Context_OptionalParams(t *testing.T) {
 			t.Errorf("expected threshold absent, got %q", q.Get("threshold"))
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"context":"ok","sources":[]}`)
+		fmt.Fprint(w, `{"grounding":{"generic":[],"map":[]},"sources":{}}`)
 	}))
 	defer ts.Close()
 

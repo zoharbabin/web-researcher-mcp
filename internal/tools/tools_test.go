@@ -249,7 +249,6 @@ func (m *mockLocalProvider) Metadata() search.ProviderMeta {
 	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "paid", Description: "mock brave local"}
 }
 func (m *mockLocalProvider) Local(_ context.Context, _ search.LocalSearchParams) ([]search.LocalResult, error) {
-	openNow := true
 	return []search.LocalResult{{
 		ID:          "local-mock-001",
 		Name:        "Mock Coffee Shop",
@@ -261,9 +260,7 @@ func (m *mockLocalProvider) Local(_ context.Context, _ search.LocalSearchParams)
 		Categories:  []string{"coffee shop", "cafe"},
 		Rating:      4.5,
 		RatingCount: 120,
-		PriceRange:  "$$",
-		OpenNow:     &openNow,
-		Hours:       []string{"Monday: 7AM-7PM"},
+		Hours:       []string{"Monday: 07:00-19:00"},
 		Description: "A cozy mock coffee shop in downtown Seattle.",
 		Source:      "brave",
 	}}, nil

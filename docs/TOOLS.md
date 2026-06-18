@@ -1474,7 +1474,7 @@ Search for **physical places** (restaurants, cafes, shops, services, points of i
 
 ### Output Fields
 
-Each `places[]` item: `id` (ephemeral), `name`, `address`, `lat`, `lon`, `phone`, `website` (use `scrape_page` for the full site), `categories` (array), `rating`, `ratingCount`, `priceRange`, `openNow` (bool, absent when unknown), `hours` (array), `description` (absent when unavailable), `source`. Plus `query`, `resultCount`, `provider`, `hints` (when empty), and `trust` (`untrusted-external-content`).
+Each `places[]` item: `id` (ephemeral), `name`, `address`, `lat`, `lon`, `phone`, `website` (use `scrape_page` for the full site), `categories` (array), `rating`, `ratingCount`, `hours` (array, e.g. `'Thursday: 06:59-17:00'`), `description` (absent when unavailable), `source`. Plus `query`, `resultCount`, `provider`, `hints` (when empty), and `trust` (`untrusted-external-content`).
 
 ### Behavior
 

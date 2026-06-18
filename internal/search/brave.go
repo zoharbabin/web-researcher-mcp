@@ -212,14 +212,9 @@ func (b *BraveProvider) doRequest(ctx context.Context, apiURL string) ([]byte, e
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == 429 {
-		return nil, fmt.Errorf("brave API rate limited")
-	}
-	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return nil, fmt.Errorf("brave API error %d: %s", resp.StatusCode, string(body))
-	}
-
+	// Brave gzip-encodes every response (errors included) when we send
+	// Accept-Encoding: gzip, so decompress before reading either path —
+	// otherwise error bodies surface as unreadable binary.
 	var reader io.Reader = resp.Body
 	if resp.Header.Get("Content-Encoding") == "gzip" {
 		gr, err := gzip.NewReader(resp.Body)
@@ -228,6 +223,14 @@ func (b *BraveProvider) doRequest(ctx context.Context, apiURL string) ([]byte, e
 		}
 		defer gr.Close()
 		reader = gr
+	}
+
+	if resp.StatusCode == 429 {
+		return nil, fmt.Errorf("brave API rate limited")
+	}
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(io.LimitReader(reader, 1024))
+		return nil, fmt.Errorf("brave API error %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	return io.ReadAll(io.LimitReader(reader, 5*1024*1024))
@@ -297,47 +300,52 @@ func (b *BraveProvider) Local(ctx context.Context, params LocalSearchParams) ([]
 	if len(ids) == 0 {
 		return []LocalResult{}, nil
 	}
-	// Brave's POI endpoint accepts at most 20 IDs per request.
-	if len(ids) > 20 {
-		ids = ids[:20]
+	// The locations filter ignores `count` and returns far more IDs than
+	// requested, so cap to the caller's NumResults here (also keeps the
+	// POI request URL well under Brave's length limit). n is already
+	// clamped to 1-20 above.
+	if len(ids) > n {
+		ids = ids[:n]
 	}
 
-	idParam := url.QueryEscape(strings.Join(ids, ","))
+	// Brave requires each ID as its own repeated `ids=` query parameter
+	// (ids=a&ids=b). A single comma-joined value yields a null POI result.
+	idQuery := url.Values{}
+	for _, id := range ids {
+		idQuery.Add("ids", id)
+	}
+	idParam := idQuery.Encode()
 
 	// Step 2: fetch POI details for the collected IDs.
-	poisData, err := b.doRequest(ctx, "https://api.search.brave.com/res/v1/local/pois?ids="+idParam)
+	poisData, err := b.doRequest(ctx, "https://api.search.brave.com/res/v1/local/pois?"+idParam)
 	if err != nil {
 		return nil, err
 	}
 
 	// Step 3: fetch AI-generated descriptions (best-effort — don't fail the call).
-	descData, _ := b.doRequest(ctx, "https://api.search.brave.com/res/v1/local/descriptions?ids="+idParam)
+	descData, _ := b.doRequest(ctx, "https://api.search.brave.com/res/v1/local/descriptions?"+idParam)
 
 	var poisResp struct {
 		Results []struct {
-			ID      string `json:"id"`
-			Name    string `json:"name"`
-			Address struct {
-				StreetAddress   string `json:"streetAddress"`
-				AddressLocality string `json:"addressLocality"`
-				AddressRegion   string `json:"addressRegion"`
-				PostalCode      string `json:"postalCode"`
-				AddressCountry  string `json:"addressCountry"`
-			} `json:"address"`
-			Coordinates struct {
-				Latitude  float64 `json:"latitude"`
-				Longitude float64 `json:"longitude"`
-			} `json:"coordinates"`
-			Phone      string   `json:"phone"`
-			Website    string   `json:"url"`
+			ID            string    `json:"id"`
+			Title         string    `json:"title"`
+			Website       string    `json:"url"`
+			Coordinates   []float64 `json:"coordinates"` // [latitude, longitude]
+			PostalAddress struct {
+				DisplayAddress string `json:"displayAddress"`
+			} `json:"postal_address"`
+			Contact struct {
+				Telephone string `json:"telephone"`
+			} `json:"contact"`
 			Categories []string `json:"categories"`
 			Rating     struct {
 				RatingValue float64 `json:"ratingValue"`
-				RatingCount int     `json:"ratingCount"`
+				ReviewCount int     `json:"reviewCount"`
 			} `json:"rating"`
-			PriceRange   string   `json:"priceRange"`
-			OpeningHours []string `json:"openingHours"`
-			OpenNow      *bool    `json:"openNow"`
+			OpeningHours struct {
+				CurrentDay []braveDayHours   `json:"current_day"`
+				Days       [][]braveDayHours `json:"days"`
+			} `json:"opening_hours"`
 		} `json:"results"`
 	}
 	if err := json.Unmarshal(poisData, &poisResp); err != nil {
@@ -349,14 +357,14 @@ func (b *BraveProvider) Local(ctx context.Context, params LocalSearchParams) ([]
 	if descData != nil {
 		var descResp struct {
 			Results []struct {
-				ID           string   `json:"id"`
-				Descriptions []string `json:"descriptions"`
+				ID          string `json:"id"`
+				Description string `json:"description"`
 			} `json:"results"`
 		}
 		if err := json.Unmarshal(descData, &descResp); err == nil {
 			for _, d := range descResp.Results {
-				if len(d.Descriptions) > 0 {
-					descMap[d.ID] = d.Descriptions[0]
+				if d.Description != "" {
+					descMap[d.ID] = d.Description
 				}
 			}
 		}
@@ -364,39 +372,56 @@ func (b *BraveProvider) Local(ctx context.Context, params LocalSearchParams) ([]
 
 	results := make([]LocalResult, 0, len(poisResp.Results))
 	for _, p := range poisResp.Results {
-		parts := []string{}
-		if p.Address.StreetAddress != "" {
-			parts = append(parts, p.Address.StreetAddress)
-		}
-		if p.Address.AddressLocality != "" {
-			parts = append(parts, p.Address.AddressLocality)
-		}
-		if p.Address.AddressRegion != "" {
-			parts = append(parts, p.Address.AddressRegion)
-		}
-		if p.Address.PostalCode != "" {
-			parts = append(parts, p.Address.PostalCode)
+		var lat, lon float64
+		if len(p.Coordinates) >= 2 {
+			lat, lon = p.Coordinates[0], p.Coordinates[1]
 		}
 
 		results = append(results, LocalResult{
 			ID:          p.ID,
-			Name:        p.Name,
-			Address:     strings.Join(parts, ", "),
-			Lat:         p.Coordinates.Latitude,
-			Lon:         p.Coordinates.Longitude,
-			Phone:       p.Phone,
+			Name:        p.Title,
+			Address:     p.PostalAddress.DisplayAddress,
+			Lat:         lat,
+			Lon:         lon,
+			Phone:       p.Contact.Telephone,
 			Website:     p.Website,
 			Categories:  p.Categories,
 			Rating:      p.Rating.RatingValue,
-			RatingCount: p.Rating.RatingCount,
-			PriceRange:  p.PriceRange,
-			Hours:       p.OpeningHours,
-			OpenNow:     p.OpenNow,
+			RatingCount: p.Rating.ReviewCount,
+			Hours:       braveFormatHours(p.OpeningHours.CurrentDay, p.OpeningHours.Days),
 			Description: descMap[p.ID],
 			Source:      "brave",
 		})
 	}
 	return results, nil
+}
+
+// braveDayHours is one open segment for a single day in Brave's structured
+// opening_hours block (a day may have several segments, e.g. a lunch break).
+type braveDayHours struct {
+	FullName string `json:"full_name"` // e.g. "Thursday"
+	Opens    string `json:"opens"`     // "HH:MM"
+	Closes   string `json:"closes"`    // "HH:MM"
+}
+
+// braveFormatHours flattens Brave's structured opening_hours (today's
+// current_day plus the remaining days) into human-readable "Day: HH:MM-HH:MM"
+// strings, preserving the API's day ordering.
+func braveFormatHours(current []braveDayHours, days [][]braveDayHours) []string {
+	var out []string
+	add := func(segs []braveDayHours) {
+		for _, s := range segs {
+			if s.FullName == "" {
+				continue
+			}
+			out = append(out, fmt.Sprintf("%s: %s-%s", s.FullName, s.Opens, s.Closes))
+		}
+	}
+	add(current)
+	for _, d := range days {
+		add(d)
+	}
+	return out
 }
 
 // Context implements ContextSearcher via Brave's /res/v1/llm/context endpoint.
@@ -428,32 +453,63 @@ func (b *BraveProvider) Context(ctx context.Context, params ContextParams) (*Con
 			return err
 		}
 
+		// Brave's /llm/context response has no top-level assembled string. It
+		// returns grounding.generic[] (each url/title plus an ordered snippets[]
+		// of plain-text excerpts) and a sources map keyed by URL (title/hostname/
+		// age/snippet). We assemble the grounding text ourselves from the generic
+		// snippets and carry each as a provenance-bearing ContextSnippet.
 		var resp struct {
-			Context string `json:"context"`
-			Sources []struct {
+			Grounding struct {
+				Generic []struct {
+					URL      string   `json:"url"`
+					Title    string   `json:"title"`
+					Snippets []string `json:"snippets"`
+				} `json:"generic"`
+			} `json:"grounding"`
+			Sources map[string]struct {
 				Title string `json:"title"`
-				URL   string `json:"url"`
-				Age   string `json:"age,omitempty"`
-				Chunk string `json:"chunk"` // text excerpt that contributed
+				Age   []any  `json:"age"` // ["Friday, May 30, 2025", "2025-05-30", "383 days ago"]
 			} `json:"sources"`
 		}
 		if err := json.Unmarshal(data, &resp); err != nil {
 			return fmt.Errorf("brave context: failed to parse response: %w", err)
 		}
 
-		snippets := make([]ContextSnippet, 0, len(resp.Sources))
-		for _, s := range resp.Sources {
+		// braveContextAge picks the ISO-ish middle element of the age tuple when
+		// present (the human "X days ago" form is the least useful for callers).
+		braveContextAge := func(url string) string {
+			s, ok := resp.Sources[url]
+			if !ok || len(s.Age) < 2 {
+				return ""
+			}
+			if iso, ok := s.Age[1].(string); ok {
+				return iso
+			}
+			return ""
+		}
+
+		var b strings.Builder
+		snippets := make([]ContextSnippet, 0, len(resp.Grounding.Generic))
+		for _, g := range resp.Grounding.Generic {
+			text := strings.Join(g.Snippets, " ")
+			if text == "" {
+				continue
+			}
+			if b.Len() > 0 {
+				b.WriteString("\n\n")
+			}
+			b.WriteString(text)
 			snippets = append(snippets, ContextSnippet{
-				Title:  s.Title,
-				URL:    s.URL,
-				Age:    s.Age,
-				Text:   s.Chunk,
+				Title:  g.Title,
+				URL:    g.URL,
+				Age:    braveContextAge(g.URL),
+				Text:   text,
 				Source: "brave",
 			})
 		}
 
 		result = &ContextResult{
-			Context:  resp.Context,
+			Context:  b.String(),
 			Snippets: snippets,
 			Source:   "brave",
 		}

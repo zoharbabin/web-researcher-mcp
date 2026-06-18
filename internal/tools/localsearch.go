@@ -33,7 +33,7 @@ func registerLocal(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "local_search",
 		Description: "Search for physical places (restaurants, shops, services, points of interest) by local intent query. " +
-			"Returns structured POI data: name, address, coordinates, phone, website, categories, rating, price range, opening hours, and a short description for each result. " +
+			"Returns structured POI data: name, address, coordinates, phone, website, categories, rating, opening hours, and a short description for each result. " +
 			"Backed by Brave's three-call local pipeline (web search for location IDs → POI details → AI descriptions); requires BRAVE_API_KEY. " +
 			"Location IDs are ephemeral and are never persisted beyond the request. " +
 			"Use web_search for general location pages, scrape_page to read a business website in full, or search_and_scrape to retrieve text alongside URL results. " +
@@ -170,12 +170,6 @@ func localResultToMap(r search.LocalResult) map[string]any {
 	}
 	if r.RatingCount != 0 {
 		m["ratingCount"] = r.RatingCount
-	}
-	if r.PriceRange != "" {
-		m["priceRange"] = r.PriceRange
-	}
-	if r.OpenNow != nil {
-		m["openNow"] = *r.OpenNow
 	}
 	if len(r.Hours) > 0 {
 		m["hours"] = r.Hours

@@ -52,8 +52,6 @@ type LocalResult struct {
 	Categories  []string `json:"categories,omitempty"`
 	Rating      float64  `json:"rating,omitempty"`
 	RatingCount int      `json:"ratingCount,omitempty"`
-	PriceRange  string   `json:"priceRange,omitempty"`
-	OpenNow     *bool    `json:"openNow,omitempty"`
 	Hours       []string `json:"hours,omitempty"`
 	Description string   `json:"description,omitempty"`
 	Source      string   `json:"source"`
