@@ -24,6 +24,16 @@ import (
 // (defense-in-depth; OWASP Agentic ASI06).
 const maxNumResults = 10
 
+// maxImageResults / maxNewsResults are the link-only count ceilings for
+// image_search / news_search. These tools return provider links (no per-result
+// scraping fan-out), so they can safely expose the providers' larger documented
+// maxima — Brave allows up to 200 images (F6) and 50 news articles (F7) — while
+// still bounding upstream billing at the tool edge.
+const (
+	maxImageResults = 200
+	maxNewsResults  = 50
+)
+
 type webSearchInput struct {
 	Query        string `json:"query" jsonschema:"The search query text (1-500 chars). Be specific with key terms and qualifiers for better results.,required"`
 	NumResults   int    `json:"num_results,omitempty" jsonschema:"Number of results to return (1-10). Default: 5. Higher values increase latency."`
@@ -109,7 +119,7 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 				params.Query = registry.BuildSiteQuery(input.Query, lensData)
 			}
 			if lensData.Goggle != "" {
-				params.GoggleURL = lensData.Goggle
+				params.Goggles = []string{lensData.Goggle}
 			}
 		}
 
@@ -122,7 +132,11 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 		// provider served, what was attempted, and whether a fallback fired
 		// (#58). A non-Router provider leaves the trace empty (no routing _meta).
 		traceCtx, trace := search.NewRoutingTrace(ctx)
-		results, err := provider.Web(traceCtx, params)
+		// Install a result-meta collector so a provider can surface a pagination
+		// signal (Brave's more_results_available, F8) into _meta without it ever
+		// entering the result body. Empty for providers that emit nothing.
+		metaCtx, resultMeta := search.NewResultMeta(traceCtx)
+		results, err := provider.Web(metaCtx, params)
 		if err != nil {
 			errCode := "upstream_error"
 			if isRateLimitError(err) {
@@ -171,7 +185,8 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 			trackSources(ctx, deps, input.SessionID, searchResultsToSources(results))
 		}
 
-		return withRoutingMeta(freshResult(jsonBytes, webSearchTTL), rt), nil, nil
+		moreVal, moreOK := resultMeta.MoreResultsAvailable()
+		return withMoreResults(withRoutingMeta(freshResult(jsonBytes, webSearchTTL), rt), moreVal, moreOK), nil, nil
 	})
 }
 

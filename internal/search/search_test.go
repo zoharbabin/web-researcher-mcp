@@ -938,13 +938,18 @@ func TestBraveProvider_GoggleInjection(t *testing.T) {
 	_, err := b.Web(context.Background(), WebSearchParams{
 		Query:      "golang channels",
 		NumResults: 5,
-		GoggleURL:  goggleURL,
+		Goggles:    []string{goggleURL},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if capturedQuery.Get("goggles_id") != goggleURL {
-		t.Errorf("expected goggles_id=%q in request, got %q", goggleURL, capturedQuery.Get("goggles_id"))
+	// F1: the live param is `goggles` (string|string[]); `goggles_id` is deprecated
+	// and on Brave's removal path, so it must NOT be emitted.
+	if got := capturedQuery.Get("goggles"); got != goggleURL {
+		t.Errorf("expected goggles=%q in request, got %q", goggleURL, got)
+	}
+	if got := capturedQuery.Get("goggles_id"); got != "" {
+		t.Errorf("deprecated goggles_id must not be sent, got %q", got)
 	}
 }
 
@@ -966,8 +971,11 @@ func TestBraveProvider_NoGoggleWhenUnset(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	if got := capturedQuery.Get("goggles"); got != "" {
+		t.Errorf("expected no goggles when Goggles is unset, got %q", got)
+	}
 	if got := capturedQuery.Get("goggles_id"); got != "" {
-		t.Errorf("expected no goggles_id when GoggleURL is unset, got %q", got)
+		t.Errorf("expected no goggles_id (deprecated) ever, got %q", got)
 	}
 }
 
@@ -1053,12 +1061,14 @@ func TestBraveProvider_Pagination(t *testing.T) {
 	deps := Deps{HTTPClient: client, Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
 	b := NewBraveProvider("key", BraveConfig{}, deps)
 
+	// F8: Brave's documented offset range is 0–9; an out-of-range request must be
+	// clamped to 9, not passed through (Brave rejects/ignores larger values).
 	_, err := b.Web(context.Background(), WebSearchParams{Query: "paginate", NumResults: 10, Offset: 20})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if capturedQuery.Get("offset") != "20" {
-		t.Errorf("expected offset=20 in request, got %q", capturedQuery.Get("offset"))
+	if capturedQuery.Get("offset") != "9" {
+		t.Errorf("expected offset clamped to 9, got %q", capturedQuery.Get("offset"))
 	}
 }
 
@@ -2483,13 +2493,16 @@ func TestBraveProvider_Local(t *testing.T) {
 	if descsCalled != 1 {
 		t.Errorf("expected descriptions endpoint called once, got %d", descsCalled)
 	}
-	// Both IDs must be sent as separate repeated ids= params.
-	wantIDs := []string{"abc123", "def456"}
-	if !reflect.DeepEqual(poisIDs, wantIDs) {
-		t.Errorf("pois ids = %v, want %v (repeated params)", poisIDs, wantIDs)
+	// Step 2 (POIs) gets both location IDs as separate repeated ids= params.
+	wantPOIIDs := []string{"abc123", "def456"}
+	if !reflect.DeepEqual(poisIDs, wantPOIIDs) {
+		t.Errorf("pois ids = %v, want %v (repeated params)", poisIDs, wantPOIIDs)
 	}
-	if !reflect.DeepEqual(descsIDs, wantIDs) {
-		t.Errorf("descriptions ids = %v, want %v (repeated params)", descsIDs, wantIDs)
+	// Step 3 (descriptions) is keyed off the POIs that actually came back, not
+	// the original ID list: def456 returned no POI, so only abc123 is enriched.
+	wantDescIDs := []string{"abc123"}
+	if !reflect.DeepEqual(descsIDs, wantDescIDs) {
+		t.Errorf("descriptions ids = %v, want %v (only realized POIs)", descsIDs, wantDescIDs)
 	}
 
 	r := results[0]
@@ -2668,11 +2681,39 @@ func TestBraveProvider_Context(t *testing.T) {
 		if q.Get("q") == "" {
 			t.Error("expected non-empty q param")
 		}
-		if q.Get("max_tokens") != "8192" {
-			t.Errorf("max_tokens = %q, want %q", q.Get("max_tokens"), "8192")
+		// F5: Brave's documented /llm/context param names (the old max_tokens/
+		// threshold spellings were silently dropped by Brave).
+		if q.Get("maximum_number_of_tokens") != "8192" {
+			t.Errorf("maximum_number_of_tokens = %q, want %q", q.Get("maximum_number_of_tokens"), "8192")
 		}
-		if q.Get("threshold") != "balanced" {
-			t.Errorf("threshold = %q, want %q", q.Get("threshold"), "balanced")
+		if q.Get("context_threshold_mode") != "balanced" {
+			t.Errorf("context_threshold_mode = %q, want %q", q.Get("context_threshold_mode"), "balanced")
+		}
+		// The deprecated spellings must NOT be sent.
+		if got := q.Get("max_tokens"); got != "" {
+			t.Errorf("deprecated max_tokens must not be sent, got %q", got)
+		}
+		if got := q.Get("threshold"); got != "" {
+			t.Errorf("deprecated threshold must not be sent, got %q", got)
+		}
+		// F5: the remaining documented /llm/context params must use Brave's exact
+		// spellings (the old lang/max_urls/etc. spellings were silently dropped).
+		for param, want := range map[string]string{
+			"country":                            "fr",
+			"search_lang":                        "en",
+			"maximum_number_of_urls":             "10",
+			"maximum_number_of_snippets":         "20",
+			"maximum_number_of_tokens_per_url":   "1024",
+			"maximum_number_of_snippets_per_url": "5",
+			"enable_local":                       "true",
+		} {
+			if got := q.Get(param); got != want {
+				t.Errorf("%s = %q, want %q", param, got, want)
+			}
+		}
+		// The deprecated `lang` spelling must NOT be sent (Brave uses search_lang).
+		if got := q.Get("lang"); got != "" {
+			t.Errorf("deprecated lang must not be sent, got %q", got)
 		}
 		// Verify API key is present.
 		if tok := r.Header.Get("X-Subscription-Token"); tok != "brave-ctx-key" {
@@ -2703,10 +2744,18 @@ func TestBraveProvider_Context(t *testing.T) {
 	deps := Deps{HTTPClient: client, Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
 	b := NewBraveProvider("brave-ctx-key", BraveConfig{}, deps)
 
+	enableLocal := true
 	result, err := b.Context(context.Background(), ContextParams{
-		Query:     "capital of France",
-		MaxTokens: 8192,
-		Threshold: "balanced",
+		Query:             "capital of France",
+		MaxTokens:         8192,
+		ThresholdMode:     "balanced",
+		Country:           "fr",
+		Language:          "en",
+		MaxURLs:           10,
+		MaxSnippets:       20,
+		MaxTokensPerURL:   1024,
+		MaxSnippetsPerURL: 5,
+		EnableLocal:       &enableLocal,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2785,15 +2834,16 @@ func TestBraveProvider_Context_OptionalParams(t *testing.T) {
 		if q.Get("country") != "US" {
 			t.Errorf("country = %q, want %q", q.Get("country"), "US")
 		}
-		if q.Get("lang") != "en" {
-			t.Errorf("lang = %q, want %q", q.Get("lang"), "en")
+		// F5: language scopes via search_lang, not the old `lang` spelling.
+		if q.Get("search_lang") != "en" {
+			t.Errorf("search_lang = %q, want %q", q.Get("search_lang"), "en")
 		}
-		// No max_tokens or threshold when not set.
-		if q.Get("max_tokens") != "" {
-			t.Errorf("expected max_tokens absent, got %q", q.Get("max_tokens"))
+		// No token/threshold params when not set (documented names).
+		if q.Get("maximum_number_of_tokens") != "" {
+			t.Errorf("expected maximum_number_of_tokens absent, got %q", q.Get("maximum_number_of_tokens"))
 		}
-		if q.Get("threshold") != "" {
-			t.Errorf("expected threshold absent, got %q", q.Get("threshold"))
+		if q.Get("context_threshold_mode") != "" {
+			t.Errorf("expected context_threshold_mode absent, got %q", q.Get("context_threshold_mode"))
 		}
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"grounding":{"generic":[],"map":[]},"sources":{}}`)

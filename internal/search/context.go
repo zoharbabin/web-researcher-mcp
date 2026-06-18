@@ -28,13 +28,21 @@ type ContextProvider interface {
 	Metadata() ProviderMeta
 }
 
-// ContextParams drives a grounding-context request.
+// ContextParams drives a grounding-context request. Field names below map to
+// Brave's /llm/context query params (the Brave spellings are noted): zero/empty
+// optional fields are omitted so Brave applies its documented defaults.
 type ContextParams struct {
-	Query     string
-	MaxTokens int    // max tokens in the assembled context; default 8192
-	Threshold string // "strict", "balanced" (default), or "lenient"
-	Country   string // ISO 3166-1 alpha-2 country code
-	Language  string // BCP 47 language code (e.g. "en")
+	Query             string
+	MaxTokens         int    // maximum_number_of_tokens; 1024–32768, default 8192
+	ThresholdMode     string // context_threshold_mode: "strict", "balanced" (default), "lenient", or "disabled"
+	Country           string // ISO 3166-1 alpha-2 country code
+	Language          string // search_lang; BCP 47 language code (e.g. "en")
+	Freshness         string // freshness window (mapped via mapBraveFreshness)
+	MaxURLs           int    // maximum_number_of_urls; 1–50, 0 = omit
+	MaxSnippets       int    // maximum_number_of_snippets; 1–100, 0 = omit
+	MaxTokensPerURL   int    // maximum_number_of_tokens_per_url; 512–8192, 0 = omit
+	MaxSnippetsPerURL int    // maximum_number_of_snippets_per_url; 1–100, 0 = omit
+	EnableLocal       *bool  // enable_local; nil = omit
 }
 
 // ContextSnippet is one source excerpt contributing to the assembled context,

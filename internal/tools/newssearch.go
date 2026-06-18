@@ -13,10 +13,13 @@ import (
 
 type newsSearchInput struct {
 	Query      string `json:"query" jsonschema:"Topic or event to find news about. Use specific terms for precision (e.g. 'OpenAI GPT-5 release' not 'AI news').,required"`
-	NumResults int    `json:"num_results,omitempty" jsonschema:"Number of articles to return (1-10, default: 5)."`
+	NumResults int    `json:"num_results,omitempty" jsonschema:"Number of articles to return (1-50, default: 5). Brave returns up to 50; Google up to 10."`
 	TimeRange  string `json:"time_range,omitempty" jsonschema:"Restrict to a time period: hour, day, week (default), month, or year."`
-	SortBy     string `json:"sort_by,omitempty" jsonschema:"Sort order: relevance (default) or date (newest first)."`
-	NewsSource string `json:"news_source,omitempty" jsonschema:"Restrict to a specific news outlet domain (e.g. reuters.com, bbc.co.uk)."`
+	SortBy     string `json:"sort_by,omitempty" jsonschema:"Sort order: relevance (default) or date (newest first). Google only — Brave news has no sort param and ignores it."`
+	NewsSource string `json:"news_source,omitempty" jsonschema:"Restrict to a specific news outlet domain (e.g. reuters.com, bbc.co.uk). Google only — Brave news has no source filter and ignores it."`
+	Country    string `json:"country,omitempty" jsonschema:"Country to localize results to, ISO 3166-1 alpha-2 (e.g. 'us', 'gb'). Honored by Brave news."`
+	Language   string `json:"language,omitempty" jsonschema:"Language to scope results to, BCP 47 / 2-letter code (e.g. 'en', 'de'). Honored by Brave news (search_lang)."`
+	Safe       string `json:"safe,omitempty" jsonschema:"SafeSearch level: off, moderate, or strict. Honored by Brave news."`
 	Provider   string `json:"provider,omitempty" jsonschema:"Force a specific search provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews. Omit to use configured default."`
 	SessionID  string `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. Sources are automatically recorded for recovery after context loss."`
 }
@@ -36,8 +39,8 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 		}
 
 		numResults := input.NumResults
-		if numResults > maxNumResults {
-			numResults = maxNumResults
+		if numResults > maxNewsResults {
+			numResults = maxNewsResults
 		}
 		if numResults <= 0 {
 			numResults = 5
@@ -51,9 +54,9 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 			sortBy = "relevance"
 		}
 
-		// Include provider so different providers never collide on the same
-		// query (idempotency + consistency across calls).
-		cacheKey := searchCacheKey("news", input.Query, numResults, freshness, sortBy, input.NewsSource, input.Provider)
+		// Include provider + locale/safe so different providers / regions / safe
+		// levels never collide on the same query (idempotency + consistency).
+		cacheKey := searchCacheKey("news", input.Query, numResults, freshness, sortBy, input.NewsSource, input.Country, input.Language, input.Safe, input.Provider)
 		if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("news_search", time.Since(start), nil, "", true)
 			rt := routingMeta(search.RoutingDecision{}, time.Since(start), true)
@@ -73,6 +76,9 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 			Freshness:  freshness,
 			SortBy:     sortBy,
 			Source:     input.NewsSource,
+			Country:    input.Country,
+			Language:   input.Language,
+			Safe:       input.Safe,
 		})
 		if err != nil {
 			errCode := "upstream_error"

@@ -18,28 +18,34 @@ type WebSearchParams struct {
 	Site         string
 	ExactTerms   string
 	ExcludeTerms string
-	Offset       int    // pagination offset (provider-specific, ignored when 0)
-	ResultFilter string // comma-separated types to return: web, news, images, videos, discussions, faq (Brave only)
-	GoggleURL    string // Brave Goggles re-ranking URL (Brave only; ignored by other providers)
+	Offset       int      // pagination offset (provider-specific, ignored when 0)
+	ResultFilter string   // comma-separated types to return: web, news, images, videos, discussions, faq (Brave only)
+	Goggles      []string // Brave Goggles re-ranking URLs (Brave only; up to 3; ignored by other providers)
 }
 
 type ImageSearchParams struct {
 	Query         string
 	NumResults    int
-	Size          string
-	Type          string
-	ColorType     string
-	DominantColor string
-	FileType      string
-	Safe          string
+	Size          string // Google/SearchAPI only (Brave has no documented image size param)
+	Type          string // Google/SearchAPI only (Brave has no documented image type param)
+	ColorType     string // Google/SearchAPI only
+	DominantColor string // Google/SearchAPI only
+	FileType      string // Google/SearchAPI only
+	Safe          string // SafeSearch level; Brave images accept only off|strict
+	Country       string // ISO 3166-1 alpha-2; Brave search & Google cr/lr honor it
+	Language      string // BCP 47 (search_lang on Brave, lr on Google)
 }
 
 type NewsSearchParams struct {
 	Query      string
 	NumResults int
 	Freshness  string
-	SortBy     string
-	Source     string
+	SortBy     string // Google only (no documented Brave news sort)
+	Source     string // Google only (site: restriction; Brave has no news-source filter)
+	Country    string // ISO 3166-1 alpha-2 (Brave news country)
+	Language   string // BCP 47 (search_lang on Brave news)
+	Safe       string // SafeSearch level; Brave news accepts off|moderate|strict
+	Offset     int    // pagination offset 0–9 (Brave news); ignored when 0
 }
 
 type SearchResult struct {

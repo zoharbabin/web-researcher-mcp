@@ -71,9 +71,9 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 		// Falls through to normal search + scrape on any error or empty result.
 		if ctxSearcher, ok := provider.(search.ContextSearcher); ok {
 			ctxResult, ctxErr := ctxSearcher.Context(ctx, search.ContextParams{
-				Query:     input.Query,
-				MaxTokens: 8192,
-				Threshold: "balanced",
+				Query:         input.Query,
+				MaxTokens:     8192,
+				ThresholdMode: "balanced",
 			})
 			if ctxErr == nil && ctxResult != nil && ctxResult.Context != "" {
 				sources := make([]sourceOutput, 0, len(ctxResult.Snippets))

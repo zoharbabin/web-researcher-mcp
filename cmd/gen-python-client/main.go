@@ -85,6 +85,7 @@ func buildDeps() tools.Dependencies {
 	caseProv := &mockCaseProvider{}
 	econ := &mockEconProvider{}
 	trial := &mockTrialProvider{}
+	local := &mockLocalProvider{}
 
 	mgr, _ := session.NewManager(session.Config{MaxSessions: 100})
 
@@ -98,6 +99,7 @@ func buildDeps() tools.Dependencies {
 		CaseProviders:       map[string]search.CaseProvider{caseProv.Name(): caseProv},
 		EconProviders:       map[string]search.EconProvider{econ.Name(): econ},
 		TrialProviders:      map[string]search.TrialProvider{trial.Name(): trial},
+		LocalProviders:      map[string]search.LocalProvider{local.Name(): local},
 		AnswerProviders:     map[string]search.AnswerProvider{synth.Name(): synth},
 		StructuredProviders: map[string]search.StructuredProvider{synth.Name(): synth},
 		Scraper:             scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2}),
@@ -203,4 +205,14 @@ func (m *mockTrialProvider) Metadata() search.ProviderMeta {
 }
 func (m *mockTrialProvider) Trials(_ context.Context, _ search.TrialSearchParams) ([]search.TrialResult, error) {
 	return []search.TrialResult{{NCTID: "NCT00000000", Title: "Mock Trial", Source: "clinicaltrials"}}, nil
+}
+
+type mockLocalProvider struct{}
+
+func (m *mockLocalProvider) Name() string { return "brave" }
+func (m *mockLocalProvider) Metadata() search.ProviderMeta {
+	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "paid"}
+}
+func (m *mockLocalProvider) Local(_ context.Context, _ search.LocalSearchParams) ([]search.LocalResult, error) {
+	return []search.LocalResult{{ID: "x", Name: "Mock Place", Source: "brave"}}, nil
 }
