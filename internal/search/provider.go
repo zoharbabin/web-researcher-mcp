@@ -18,6 +18,9 @@ type WebSearchParams struct {
 	Site         string
 	ExactTerms   string
 	ExcludeTerms string
+	Offset       int    // pagination offset (provider-specific, ignored when 0)
+	ResultFilter string // comma-separated types to return: web, news, images, videos, discussions, faq (Brave only)
+	GoggleURL    string // Brave Goggles re-ranking URL (Brave only; ignored by other providers)
 }
 
 type ImageSearchParams struct {
@@ -40,10 +43,11 @@ type NewsSearchParams struct {
 }
 
 type SearchResult struct {
-	Title       string `json:"title"`
-	URL         string `json:"url"`
-	Snippet     string `json:"snippet"`
-	DisplayLink string `json:"displayLink"`
+	Title         string   `json:"title"`
+	URL           string   `json:"url"`
+	Snippet       string   `json:"snippet"`
+	DisplayLink   string   `json:"displayLink"`
+	ExtraSnippets []string `json:"extraSnippets,omitempty"`
 }
 
 type ImageResult struct {
@@ -58,11 +62,12 @@ type ImageResult struct {
 }
 
 type NewsResult struct {
-	Title       string `json:"title"`
-	URL         string `json:"url"`
-	Source      string `json:"source"`
-	PublishedAt string `json:"publishedAt,omitempty"`
-	Snippet     string `json:"snippet"`
+	Title         string   `json:"title"`
+	URL           string   `json:"url"`
+	Source        string   `json:"source"`
+	PublishedAt   string   `json:"publishedAt,omitempty"`
+	Snippet       string   `json:"snippet"`
+	ExtraSnippets []string `json:"extraSnippets,omitempty"`
 }
 
 // Provider is the core web-search capability: Web, Images, and News.
@@ -119,7 +124,7 @@ var SupportedProviders = []string{"google", "brave", "serper", "searxng", "searc
 func NewProvider(cfg config.SearchConfig, deps Deps) Provider {
 	switch cfg.Provider {
 	case "brave":
-		return NewBraveProvider(cfg.BraveAPIKey, deps)
+		return NewBraveProvider(cfg.BraveAPIKey, BraveConfig{ExtraSnippets: cfg.BraveExtraSnippets}, deps)
 	case "serper":
 		return NewSerperProvider(cfg.SerperAPIKey, deps)
 	case "searxng":
@@ -152,7 +157,7 @@ func NewProviderByName(name string, cfg config.SearchConfig, deps Deps) Provider
 		}
 	case "brave":
 		if cfg.BraveAPIKey != "" {
-			return NewBraveProvider(cfg.BraveAPIKey, deps)
+			return NewBraveProvider(cfg.BraveAPIKey, BraveConfig{ExtraSnippets: cfg.BraveExtraSnippets}, deps)
 		}
 	case "serper":
 		if cfg.SerperAPIKey != "" {

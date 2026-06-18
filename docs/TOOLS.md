@@ -130,6 +130,7 @@ type ScrapeOutput struct {
     ExtractionQuality string  `json:"extractionQuality,omitempty"` // complete when the pipeline returned a confident extraction; partial when every tier was exhausted and the best-quality candidate was returned instead. Never an error. Omitted in raw mode.
     Metadata        *Metadata `json:"metadata,omitempty"` // present only when a title was extracted (full/preview only)
     StructuredData  *StructuredData `json:"structuredData,omitempty"` // page-embedded machine-readable metadata; present only when found (full/preview, HTML pages)
+    ForumSignals    *ForumSignals   `json:"forumSignals,omitempty"`   // Reddit engagement metadata extracted from JSON-LD; present only for Reddit posts where the HTML tier ran (#247)
     SourceType      string    `json:"sourceType"`     // typed classification (#62): peer_reviewed|official_docs|government|news_publication|blog|forum|wiki|social_media|unknown
     AuthorityTier   string    `json:"authorityTier"`  // banded authority: high|medium|low
     DomainCategory  string    `json:"domainCategory"` // subject area: academic|legal|medical|financial|technical|general
@@ -148,6 +149,15 @@ type RetractionStatus struct {
 type Metadata struct {
     Title  string `json:"title"`
     Author string `json:"author"`
+}
+
+type ForumSignals struct {
+    Platform        string `json:"platform"`                  // Forum platform, e.g. "reddit"
+    Upvotes         int    `json:"upvotes"`                   // Vote count from JSON-LD interactionStatistic
+    Comments        int    `json:"comments"`                  // Comment count
+    DatePublished   string `json:"datePublished,omitempty"`   // ISO 8601 publish date when available
+    AuthorName      string `json:"authorName,omitempty"`      // Original poster name when available
+    CredibilityNote string `json:"credibilityNote,omitempty"` // Contextual note, e.g. vote-manipulation risk when Upvotes < 20
 }
 
 type StructuredData struct {
@@ -181,6 +191,8 @@ On a **cache hit**, the result also carries a top-level `_meta` block with cache
 In `raw` mode the output additionally carries `"raw": true`, and `contentType` is the server's real `Content-Type` header (it may be empty). No `metadata` block is emitted.
 
 **Tables in content (#48).** HTML `<table>` elements are rendered as GitHub-flavored markdown pipe tables inside `content` (header row + `---` separator + data rows), preserving row/column structure instead of flattening cells into disconnected fragments. Pipe characters in cells are escaped and multi-line cells are collapsed to a single row. Layout, malformed, single-column, and nested tables degrade gracefully to plain text — never an error, never a panic.
+
+**Forum engagement signals (#247).** For Reddit posts where the HTML extraction tier ran, the response carries a `forumSignals` object: `platform` (`"reddit"`), `upvotes` (vote count from JSON-LD `interactionStatistic`), `comments` (comment count), `datePublished` (ISO 8601), `authorName` (original poster), and `credibilityNote` (set when `upvotes < 20`, noting vote-manipulation risk). The field is **omitted entirely** for non-Reddit URLs, `raw` mode, and any non-HTML extraction tier (markdown, browser, document, YouTube, Twitter) — never `null`, only present-or-absent.
 
 **Structured data (#46).** When the page embeds machine-readable metadata, the response carries a `structuredData` object alongside `content`: `jsonLd` (each `<script type="application/ld+json">` block, kept verbatim — invalid JSON is skipped, never failing the scrape), `openGraph` (`og:*`/`article:*` meta, keys keep their prefix), and `citation` (Highwire `citation_*` meta — DOI, authors, journal). The whole object is omitted when no such markup is present, and each sub-field is omitted when empty. It is produced by the HTML-extraction tiers only (absent for `raw` mode, PDFs, YouTube, and markdown-tier results), is independently size-bounded so a pathological page cannot blow the response budget, and is **untrusted external data** under the same trust boundary as `content`.
 
@@ -1380,21 +1392,24 @@ Audit an AI-generated recommendation list (a listicle, product ranking, or compa
 
 ### Input Schema
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `recommendations` | []object | yes | Array of recommendations (max 100). Each has: `title` (the recommendation), `url` (optional), `author` (optional), `authorBio` (optional author affiliation/bio). |
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `recommendations` | []object | yes | — | Array of recommendations (max 100). Each has: `title` (the recommendation), `url` (optional), `author` (optional), `authorBio` (optional author affiliation/bio). |
+| `claim` | string | no | — | Optional context describing what the list claims (e.g. "best e-commerce platforms for small businesses"). When set, triggers corroboration searches across independent journalism and tech sources per recommendation. |
+| `numCorroborationResults` | int | no | 5 | Results to fetch per lens per recommendation when `claim` is set. Max 10. |
 
 ### Output Schema
 
-`itemCount` (recommendations audited), `recommendations[]` — per item: `title` (echo), `url` (echo when provided), `author` (echo when provided), `selfPromotionSignal` (present when the recommendation text contains ranking patterns favoring the brand; rare for structured lists, more common on full-page audits), `conflictOfInterest` (present when the author has a detected financial stake — employment / funding / equity — in the recommended entity), `domainReputation` (domain reputation when the URL host is in the known sources dataset; omitted for unlisted hosts), `linkLive` (true when the URL resolves 2xx/3xx; false when dead), `httpStatus` (live HTTP status, 0 = unreachable/timeout), `flags` (`conflict_of_interest` / `dead_link` / `unknown_reputation` / `low_reputation`; empty = no issues), `reasons[]` (human-readable explanations for any flags), and the `trust` marker.
+`itemCount` (recommendations audited), `recommendations[]` — per item: `title` (echo), `url` (echo when provided), `author` (echo when provided), `selfPromotionSignal` (present when the recommendation text contains ranking patterns favoring the brand; rare for structured lists, more common on full-page audits), `conflictOfInterest` (present when the author has a detected financial stake — employment / funding / equity — in the recommended entity), `domainReputation` (domain reputation when the URL host is in the known sources dataset; omitted for unlisted hosts), `linkLive` (true when the URL resolves 2xx/3xx; false when dead), `httpStatus` (live HTTP status, 0 = unreachable/timeout), `corroborationSearches[]` (present when `claim` was given — one entry per corroboration lens with `query`, `lens`, `resultCount`, `agreeCount`, `disagreeCount`, `silentCount`, and `topResults[]`), `flags` (`conflict_of_interest` / `dead_link` / `unknown_reputation` / `low_reputation`; empty = no issues), `reasons[]` (human-readable explanations for any flags), and the `trust` marker. Top-level `aggregateFlags[]` (present only when `claim` is given): `no_independent_corroboration` fires when zero results across all lenses agreed with any recommendation.
 
 ### Behavior
 
-- **Evidence, never a verdict.** The tool reports what it found (conflicts/reputation/liveness); the caller decides whether to trust the recommendation.
+- **Evidence, never a verdict.** The tool reports what it found (conflicts/reputation/liveness/corroboration); the caller decides whether to trust the recommendation.
 - **Conflict of interest** detection: scans author bio for employment, funding, or equity indicators (e.g. "at Shopify", "advisor to") that match entities mentioned in the recommendation text. Conservative — false negatives preferred to false positives.
 - **Self-promotion signal** (when present): indicates a ranking list putting its own brand first (a brand blog recommending itself as #1, etc.). Uses lexical matching: the URL's domain token (e.g. `shopify.com` → `"shopify"`) must appear as the rank-1 item name. Does **not** detect corporate ownership (e.g. `adobe.com` ranking `"Marketo"` #1, since Marketo is an Adobe acquisition but the names don't match). See the open enhancement issue for scope-expansion plans.
 - **Domain reputation**: when known, surfaces the source's reputation tier from the embedded allowlist (academic, news, official docs, etc.).
 - **Link liveness**: batched SSRF-safe check of all provided URLs; present only when URLs are given.
+- **Corroboration search (#246)**: when `claim` is provided and a recommendation has a `title`, the tool issues one site-scoped search per lens (`journalism` — independent press, SEC/court/data.gov; `tech` — Ars Technica, TechCrunch, The Verge, Wired) against the default provider. Each result is scored by `claimSignal`: `"addressed"` → `agreeCount`, `"not_addressed"` → `disagreeCount`, all others → `silentCount`. The aggregate flag `no_independent_corroboration` fires when no result across all lenses agreed with any recommendation. Fail-open: a missing lens or provider error leaves `corroborationSearches` nil without failing the audit.
 - **Scope**: up to 100 recommendations per call; any excess returns an error.
 
 ### Annotations
@@ -1441,7 +1456,44 @@ Each `trials[]` item: `nctId`, `title`, `status`, `phases` (array), `conditions`
 
 ---
 
-## Tool 26: `audit_bibliography`
+## Tool 26: `local_search`
+
+Search for **physical places** (restaurants, cafes, shops, services, points of interest) by local intent query. Backed by Brave's three-call local pipeline: web search with `result_filter=locations` to collect ephemeral location IDs, then `local/pois` for structured POI details, then `local/descriptions` for AI-generated descriptions (best-effort). Requires `BRAVE_API_KEY`; the tool is not registered when the key is absent. Location IDs are ephemeral — never persisted beyond the request lifecycle.
+
+### Input Schema
+
+| Field | Type | Required | Default | Constraints |
+|-------|------|----------|---------|-------------|
+| `query` | string | yes | — | Local intent query (e.g. `'best coffee shops near downtown Seattle'`) |
+| `near` | string | no | — | Optional location bias appended to the query (city, neighborhood, region) |
+| `country` | string | no | — | ISO 3166-1 alpha-2 country restriction (e.g. `US`, `GB`) |
+| `units` | string | no | — | `metric` or `imperial` |
+| `num_results` | int | no | 5 | 1–20 |
+| `provider` | string | no | — | Force a local-search provider: `brave` |
+| `sessionId` | string | no | — | Record results as sources on a `sequential_search` session |
+
+### Output Fields
+
+Each `places[]` item: `id` (ephemeral), `name`, `address`, `lat`, `lon`, `phone`, `website` (use `scrape_page` for the full site), `categories` (array), `rating`, `ratingCount`, `hours` (array, e.g. `'Thursday: 06:59-17:00'`), `description` (absent when unavailable), `source`. Plus `query`, `resultCount`, `provider`, `hints` (when empty), and `trust` (`untrusted-external-content`).
+
+### Behavior
+
+- **Provider honoring**: an explicit `provider` is used exclusively; an unknown or unconfigured provider returns a structured error (no silent fallback).
+- When `near` is provided it is appended to `query` before the API call; both forms influence the location-biased web search in step 1.
+- The descriptions step is best-effort: a failure there does not fail the whole call — results are returned without descriptions.
+- Returns an empty `places` array (with `hints`) when no location results match; never panics.
+
+### Annotations
+
+- ReadOnly: true · Idempotent: true · OpenWorld: true (queries the live Brave Search API)
+
+### Cache
+
+- TTL: 6 hours (only for non-empty results)
+
+---
+
+## Tool 27: `audit_bibliography`
 
 ### Purpose
 
@@ -1479,7 +1531,7 @@ Precedence when more than one is supplied: `entries` → `bibliography` → `ses
 
 ---
 
-## Tool 27: `archive_source`
+## Tool 28: `archive_source`
 
 ### Purpose
 
@@ -1647,6 +1699,7 @@ Every tool declares annotations for client consumption (`readOnlyAnnotations(ide
 | legal_search | true | true | true |
 | econ_search | true | true | true |
 | clinical_search | true | true | true |
+| local_search | true | true | true |
 | get_my_analytics | true | true | false |
 | memory_save | **false (write)** | false | false |
 | memory_recall | true | true | false |

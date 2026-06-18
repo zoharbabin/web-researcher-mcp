@@ -206,6 +206,18 @@ var scrapePageOutputSchema = map[string]any{
 				"citation":  map[string]any{"type": "object"},
 			},
 		},
+		"forumSignals": map[string]any{
+			"type":        "object",
+			"description": "Reddit engagement signals extracted from JSON-LD (#247): upvotes, comment count, credibility note. Present only for Reddit posts where the HTML extraction tier ran; absent for all other URLs, raw mode, and non-HTML tiers.",
+			"properties": map[string]any{
+				"platform":        map[string]any{"type": "string", "description": "Forum platform (e.g. 'reddit')."},
+				"upvotes":         map[string]any{"type": "integer", "description": "Vote count (upvotes) from the JSON-LD interaction stats."},
+				"comments":        map[string]any{"type": "integer", "description": "Number of comments."},
+				"datePublished":   map[string]any{"type": "string", "description": "ISO 8601 publish date when available."},
+				"authorName":      map[string]any{"type": "string", "description": "Original poster name when available."},
+				"credibilityNote": map[string]any{"type": "string", "description": "Contextual note about the reliability of this forum signal (e.g. vote manipulation risk on Reddit)."},
+			},
+		},
 		"sourceType":     sourceTypeSchema,
 		"authorityTier":  authorityTierSchema,
 		"domainCategory": domainCategorySchema,
@@ -982,6 +994,38 @@ var econSearchOutputSchema = map[string]any{
 					"date":   map[string]any{"type": "string"},
 					"value":  map[string]any{"type": "number", "description": "Observation value, exactly as returned — no rounding."},
 					"source": map[string]any{"type": "string"},
+				},
+			},
+		},
+	},
+}
+
+var localSearchOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"query":       map[string]any{"type": "string"},
+		"resultCount": map[string]any{"type": "integer"},
+		"provider":    map[string]any{"type": "string", "description": "Which local-search provider answered (brave)."},
+		"hints":       map[string]any{"type": "object"},
+		"trust":       trustUntrustedExternal,
+		"places": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":          map[string]any{"type": "string", "description": "Ephemeral provider-assigned location ID. Not stable across calls."},
+					"name":        map[string]any{"type": "string"},
+					"address":     map[string]any{"type": "string", "description": "Formatted address (street, city, region, postal code)."},
+					"lat":         map[string]any{"type": "number", "description": "WGS-84 latitude."},
+					"lon":         map[string]any{"type": "number", "description": "WGS-84 longitude."},
+					"phone":       map[string]any{"type": "string"},
+					"website":     map[string]any{"type": "string", "description": "Business URL; use scrape_page to read the full site."},
+					"categories":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Category tags (e.g. 'restaurant', 'coffee shop')."},
+					"rating":      map[string]any{"type": "number", "description": "Aggregate user rating (0-5 scale)."},
+					"ratingCount": map[string]any{"type": "integer", "description": "Number of user ratings."},
+					"hours":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Opening hours strings (e.g. 'Thursday: 06:59-17:00')."},
+					"description": map[string]any{"type": "string", "description": "Short AI-generated description of the place. Absent when unavailable."},
+					"source":      map[string]any{"type": "string"},
 				},
 			},
 		},

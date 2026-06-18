@@ -35,6 +35,7 @@ var expectedTools = []string{
 	"legal_search",
 	"econ_search",
 	"clinical_search",
+	"local_search",
 	"answer",
 	"structured_search",
 	"get_my_analytics",
@@ -259,6 +260,7 @@ func TestOutputSchemaMatchesResponse(t *testing.T) {
 		"legal_search":    {"query": "miranda"},
 		"econ_search":     {"series_id": "GDP"},
 		"clinical_search": {"condition": "covid-19"},
+		"local_search":    {"query": "coffee near me"},
 	}
 
 	tools := listTools(t)
@@ -342,6 +344,7 @@ func TestExternalContentToolsCarryTrustMarker(t *testing.T) {
 		"legal_search":       "untrusted-external-content",
 		"econ_search":        "untrusted-external-content",
 		"clinical_search":    "untrusted-external-content",
+		"local_search":       "untrusted-external-content",
 	}
 	args := map[string]map[string]any{
 		"web_search":         {"query": "test"},
@@ -361,6 +364,7 @@ func TestExternalContentToolsCarryTrustMarker(t *testing.T) {
 		"legal_search":       {"query": "miranda"},
 		"econ_search":        {"series_id": "GDP"},
 		"clinical_search":    {"condition": "covid-19"},
+		"local_search":       {"query": "coffee near me"},
 	}
 
 	for name, wantTrust := range want {

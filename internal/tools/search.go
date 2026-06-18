@@ -99,13 +99,17 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 			// A lens OVERRIDES the site parameter (per the schema contract): the
 			// lens already scopes the search to its own domain set, so a sibling
 			// site: filter would AND with it and over-constrain to nothing. Clear
-			// it on BOTH paths — the CX engine is itself the scope, and the
-			// operator-injection path bakes the lens domains into the query.
+			// it on BOTH paths — the CX engine is itself the scope, the Goggle
+			// re-ranks server-side at Brave, and the operator-injection path bakes
+			// the lens domains into the query.
 			params.Site = ""
 			if lensData.CX != "" {
 				params.Query = input.Query
 			} else {
 				params.Query = registry.BuildSiteQuery(input.Query, lensData)
+			}
+			if lensData.Goggle != "" {
+				params.GoggleURL = lensData.Goggle
 			}
 		}
 
@@ -553,6 +557,8 @@ func allSupportedProviders() []string {
 		search.SupportedAcademicProviders,
 		search.SupportedAnswerProviders,
 		search.SupportedStructuredProviders,
+		search.SupportedLocalProviders,
+		search.SupportedContextProviders,
 	} {
 		for _, name := range lists {
 			if !seen[name] {

@@ -9,6 +9,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
+	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
 // verify_recommendation audits an AI recommendation (e.g. a product list or
@@ -20,34 +21,53 @@ import (
 // Read-only, openWorld (queries external sources for link liveness, domain
 // reputation, and author conflicts).
 
+// defaultCorroborationResults is the number of results to fetch per lens when
+// corroboration is requested but NumCorroborationResults is unset (0).
+const defaultCorroborationResults = 5
+
 type verifyRecommendationInput struct {
-	Recommendations []recommendationItem `json:"recommendations" jsonschema:"Array of recommendations to audit. Each has: title (the recommendation), url (optional), author (optional), authorBio (optional). At least 1 required."`
+	Recommendations         []recommendationItem `json:"recommendations" jsonschema:"Array of recommendations to audit. Each has: title (the recommendation), url (optional), author (optional), authorBio (optional). At least 1 required."`
+	Claim                   string               `json:"claim,omitempty" jsonschema:"Optional claim or context describing what the recommendation list is about (e.g. 'best e-commerce platforms for small businesses'). When set, triggers corroboration searches across independent journalism and tech sources to surface agreement/disagreement with each recommendation."`
+	NumCorroborationResults int                  `json:"numCorroborationResults,omitempty" jsonschema:"Number of search results to fetch per lens per recommendation when claim is set. Default 5, max 10."`
 }
 
 type recommendationItem struct {
-	Title     string `json:"title"`     // The recommended item (e.g. "Shopify" for a "best e-commerce platforms" listicle)
-	URL       string `json:"url"`       // Optional: URL where the recommendation points
-	Author    string `json:"author"`    // Optional: author name
-	AuthorBio string `json:"authorBio"` // Optional: author affiliation or bio
+	Title     string `json:"title"`
+	URL       string `json:"url,omitempty"`
+	Author    string `json:"author,omitempty"`
+	AuthorBio string `json:"authorBio,omitempty"`
+}
+
+// corroborationResult holds the outcome of one corroboration search — a query
+// issued against a specific lens to find independent coverage of a recommendation.
+type corroborationResult struct {
+	Query         string           `json:"query"`
+	Lens          string           `json:"lens"`
+	ResultCount   int              `json:"resultCount"`
+	AgreeCount    int              `json:"agreeCount"`
+	DisagreeCount int              `json:"disagreeCount"`
+	SilentCount   int              `json:"silentCount"`
+	TopResults    []map[string]any `json:"topResults,omitempty"`
 }
 
 type recommendationResult struct {
-	Title               string                            `json:"title"`
-	URL                 string                            `json:"url,omitempty"`
-	Author              string                            `json:"author,omitempty"`
-	SelfPromotionSignal *content.SelfPromotionSignal      `json:"selfPromotionSignal,omitempty"`
-	ConflictOfInterest  *content.ConflictOfInterestSignal `json:"conflictOfInterest,omitempty"`
-	DomainReputation    *content.DomainReputation         `json:"domainReputation,omitempty"`
-	LinkLive            *bool                             `json:"linkLive,omitempty"`
-	HTTPStatus          int                               `json:"httpStatus,omitempty"`
-	Flags               []string                          `json:"flags"`
-	Reasons             []string                          `json:"reasons"`
+	Title                 string                            `json:"title"`
+	URL                   string                            `json:"url,omitempty"`
+	Author                string                            `json:"author,omitempty"`
+	SelfPromotionSignal   *content.SelfPromotionSignal      `json:"selfPromotionSignal,omitempty"`
+	ConflictOfInterest    *content.ConflictOfInterestSignal `json:"conflictOfInterest,omitempty"`
+	DomainReputation      *content.DomainReputation         `json:"domainReputation,omitempty"`
+	LinkLive              *bool                             `json:"linkLive,omitempty"`
+	HTTPStatus            int                               `json:"httpStatus,omitempty"`
+	CorroborationSearches []corroborationResult             `json:"corroborationSearches,omitempty"`
+	Flags                 []string                          `json:"flags"`
+	Reasons               []string                          `json:"reasons"`
 }
 
 func registerVerifyRecommendation(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "verify_recommendation",
-		Description:  "Audit an AI recommendation list against anti-sloptimization signals. Given a list of recommended items (products, services, articles), returns per-item evidence: self-promotion patterns (a brand ranking itself first), conflicts of interest (author employed by the recommended company), domain reputation (is this a known trustworthy source), and link liveness. Flags suspect recommendations so you can decide whether the list is gaming you or genuinely helpful. Built for catching GEO (Generative Engine Optimization) and brand-favoring listicles. Use alongside web_search + verify_citation to audit sources and claims.",
+		Description:  "Audit an AI recommendation list against anti-sloptimization signals. Given a list of recommended items (products, services, articles), returns per-item evidence: self-promotion patterns (a brand ranking itself first), conflicts of interest (author employed by the recommended company), domain reputation (is this a known trustworthy source), link liveness, and — when a claim is provided — corroboration searches across independent journalism and tech sources that show how widely each recommendation is independently endorsed or contested. Flags suspect recommendations so you can decide whether the list is gaming you or genuinely helpful. Built for catching GEO (Generative Engine Optimization) and brand-favoring listicles. Use alongside web_search + verify_citation to audit sources and claims.",
 		Annotations:  readOnlyAnnotations(true, true),
 		OutputSchema: verifyRecommendationOutputSchema,
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input verifyRecommendationInput) (*mcp.CallToolResult, any, error) {
@@ -60,16 +80,42 @@ func registerVerifyRecommendation(srv *mcp.Server, deps Dependencies) {
 			return toolError("recommendations list is limited to 100 items"), nil, nil
 		}
 
+		numCorroboration := input.NumCorroborationResults
+		if numCorroboration <= 0 {
+			numCorroboration = defaultCorroborationResults
+		}
+		if numCorroboration > 10 {
+			numCorroboration = 10
+		}
+
 		results := []recommendationResult{}
 		for _, rec := range input.Recommendations {
-			result := verifyOneRecommendation(ctx, deps, rec)
+			result := verifyOneRecommendation(ctx, deps, rec, input.Claim, numCorroboration)
 			results = append(results, result)
+		}
+
+		// Aggregate flag: fired when a claim was given but NOT ONE recommendation
+		// received any independent agreement across all corroboration lenses.
+		aggregateFlags := []string{}
+		if input.Claim != "" {
+			totalAgree := 0
+			for _, r := range results {
+				for _, cs := range r.CorroborationSearches {
+					totalAgree += cs.AgreeCount
+				}
+			}
+			if totalAgree == 0 {
+				aggregateFlags = append(aggregateFlags, "no_independent_corroboration")
+			}
 		}
 
 		out := map[string]any{
 			"itemCount":       len(results),
 			"recommendations": results,
 			"trust":           untrustedContentTrust,
+		}
+		if len(aggregateFlags) > 0 {
+			out["aggregateFlags"] = aggregateFlags
 		}
 
 		jsonBytes, _ := json.Marshal(out)
@@ -79,7 +125,7 @@ func registerVerifyRecommendation(srv *mcp.Server, deps Dependencies) {
 	})
 }
 
-func verifyOneRecommendation(ctx context.Context, deps Dependencies, rec recommendationItem) recommendationResult {
+func verifyOneRecommendation(ctx context.Context, deps Dependencies, rec recommendationItem, claim string, numResults int) recommendationResult {
 	result := recommendationResult{
 		Title:   rec.Title,
 		URL:     rec.URL,
@@ -128,6 +174,15 @@ func verifyOneRecommendation(ctx context.Context, deps Dependencies, rec recomme
 		}
 	}
 
+	// Corroboration search (#246): query independent journalism and tech lenses
+	// to find sources that agree, disagree, or are silent about this recommendation
+	// in the context of the caller's claim. Skipped when no claim is provided or
+	// when the item has no title to search for. Fail-open — a provider error or
+	// missing lens leaves CorroborationSearches nil rather than failing the audit.
+	if claim != "" && rec.Title != "" {
+		result.CorroborationSearches = corroborateRecommendation(ctx, deps, rec.Title, claim, numResults)
+	}
+
 	return result
 }
 
@@ -147,6 +202,64 @@ func detectSelfPromotionForURL(ctx context.Context, deps Dependencies, rawURL st
 		return nil
 	}
 	return content.DetectSelfPromotion(host, res.Content)
+}
+
+// corroborationLenses are the lens names searched in order. Journalism covers
+// investigative/public-record sources; tech covers independent tech press.
+// Both are independent of the recommendation author's domain, making them
+// resistant to brand-controlled or sponsored content.
+var corroborationLenses = []string{"journalism", "tech"}
+
+// corroborateRecommendation issues one web search per corroborationLens for
+// the recommended item title within the caller's claim context. It counts how
+// many results address the recommendation positively (agree), negatively
+// (disagree), or neutrally/silently (silent). The signal mapping follows
+// content.ClaimEvidence: "addressed" → agreeCount, "not_addressed" →
+// disagreeCount, all others (partially_addressed, or empty) → silentCount.
+//
+// The function is fail-open: a nil provider, missing lens, or network error
+// produces an empty slice rather than propagating an error — the audit's
+// reputation/liveness signals are unaffected. deps.Search (the default provider
+// or router) is used; provider-agnostic, no hardcoded preference.
+func corroborateRecommendation(ctx context.Context, deps Dependencies, title, claim string, numResults int) []corroborationResult {
+	if deps.Search == nil {
+		return nil
+	}
+	registry := search.GetLensRegistry()
+	var corroborations []corroborationResult
+	for _, lensName := range corroborationLenses {
+		lensData, ok := registry.Get(lensName)
+		if !ok {
+			continue
+		}
+		query := registry.BuildSiteQuery(title+" "+claim, lensData)
+		results, err := deps.Search.Web(ctx, search.WebSearchParams{
+			Query:      query,
+			NumResults: numResults,
+		})
+		if err != nil || len(results) == 0 {
+			continue
+		}
+		enriched := enrichResultsWithReputation(results, title)
+		cr := corroborationResult{
+			Query:       query,
+			Lens:        lensName,
+			ResultCount: len(enriched),
+		}
+		for _, r := range enriched {
+			switch r["claimSignal"] {
+			case "addressed":
+				cr.AgreeCount++
+			case "not_addressed":
+				cr.DisagreeCount++
+			default:
+				cr.SilentCount++
+			}
+		}
+		cr.TopResults = enriched
+		corroborations = append(corroborations, cr)
+	}
+	return corroborations
 }
 
 var verifyRecommendationOutputSchema = map[string]any{
@@ -180,10 +293,26 @@ var verifyRecommendationOutputSchema = map[string]any{
 					},
 					"linkLive":   map[string]any{"type": "boolean", "description": "True when the URL resolves (2xx/3xx HTTP); false when dead."},
 					"httpStatus": map[string]any{"type": "integer", "description": "Live HTTP status for the URL (0 = unreachable/timeout)."},
+					"corroborationSearches": map[string]any{
+						"type":        "array",
+						"description": "Present when the `claim` field was supplied. One entry per corroboration lens (journalism, tech). Shows whether independent sources agree, disagree, or are silent about this recommendation in the context of the claim.",
+						"items": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"query":         map[string]any{"type": "string", "description": "The site-scoped query issued against this lens."},
+								"lens":          map[string]any{"type": "string", "description": "Lens name used (e.g. 'journalism', 'tech')."},
+								"resultCount":   map[string]any{"type": "integer", "description": "Total results returned by the search."},
+								"agreeCount":    map[string]any{"type": "integer", "description": "Results whose snippet addresses the recommendation positively in context of the claim."},
+								"disagreeCount": map[string]any{"type": "integer", "description": "Results whose snippet contradicts or does not address the recommendation."},
+								"silentCount":   map[string]any{"type": "integer", "description": "Results that mention the item but neither agree nor disagree with the claim context."},
+								"topResults":    map[string]any{"type": "array", "description": "Enriched search results including claimSignal and sourceReputation per result."},
+							},
+						},
+					},
 					"flags": map[string]any{
 						"type":        "array",
 						"items":       map[string]any{"type": "string", "enum": []any{"self_promotion", "conflict_of_interest", "dead_link", "unknown_reputation", "low_reputation"}},
-						"description": "Audit flags. Empty = no issues detected. Treat as evidence, not verdicts.",
+						"description": "Per-item audit flags. Empty = no issues detected. Treat as evidence, not verdicts.",
 					},
 					"reasons": map[string]any{
 						"type":        "array",
@@ -192,6 +321,11 @@ var verifyRecommendationOutputSchema = map[string]any{
 					},
 				},
 			},
+		},
+		"aggregateFlags": map[string]any{
+			"type":        "array",
+			"items":       map[string]any{"type": "string", "enum": []any{"no_independent_corroboration"}},
+			"description": "Aggregate flags across all recommendations (present only when `claim` was given). 'no_independent_corroboration' fires when zero results across all lenses agreed with any recommendation — a strong signal the list may be AI-generated or sponsored without independent validation.",
 		},
 		"trust": trustUntrustedExternal,
 	},

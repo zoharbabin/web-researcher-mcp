@@ -34,6 +34,16 @@ type Dependencies struct {
 	// AvailableTrialProviders always builds it and clinical_search is always
 	// registered. Empty ⇒ the tool is not registered.
 	TrialProviders map[string]search.TrialProvider
+	// LocalProviders back local_search (#259). Brave is the sole provider today;
+	// requires BRAVE_API_KEY. Empty ⇒ the tool is not registered.
+	LocalProviders map[string]search.LocalProvider
+	// ContextProviders back the Brave LLM Context endpoint (#257). When the
+	// resolved search provider for a search_and_scrape call implements
+	// ContextSearcher, the tool attempts server-side context assembly first (a
+	// single API call instead of N page scrapes), falling through to normal
+	// scraping on failure or empty result. Requires a Brave Data for AI plan.
+	// Empty ⇒ the ContextSearcher path is never attempted.
+	ContextProviders map[string]search.ContextProvider
 	// AnswerProviders / StructuredProviders back the provider-independent
 	// `answer` and `structured_search` tools. Any provider implementing the
 	// capability appears here (Exa today). Empty ⇒ the tool is not registered.
@@ -152,6 +162,10 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	// AvailableTrialProviders always builds it and the tool is always registered.
 	if len(deps.TrialProviders) > 0 {
 		registerClinicalSearch(srv, deps)
+	}
+	// local_search (#259) — Brave Local Search API; requires BRAVE_API_KEY.
+	if len(deps.LocalProviders) > 0 {
+		registerLocal(srv, deps)
 	}
 
 	// Synthesis tools — provider-independent (like academic/patent search).

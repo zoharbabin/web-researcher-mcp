@@ -805,12 +805,16 @@ class WebResearcherClient:
     async def verify_recommendation(
         self,
         recommendations: Optional[list],
+        claim: str = None,
+        numCorroborationResults: int = None,
     ) -> VerifyRecommendationResponse:
         """Audit an AI recommendation list against anti-sloptimization signals"""
         d = await self._call_tool(
             "verify_recommendation",
             {
                 "recommendations": recommendations,
+                "claim": claim,
+                "numCorroborationResults": numCorroborationResults,
             },
         )
         return VerifyRecommendationResponse.from_dict(d)
@@ -1493,10 +1497,14 @@ class SyncWebResearcherClient:
     def verify_recommendation(
         self,
         recommendations: Optional[list],
+        claim: str = None,
+        numCorroborationResults: int = None,
     ) -> VerifyRecommendationResponse:
         return self._run(
             self._async_client.verify_recommendation(
             recommendations=recommendations,
+            claim=claim,
+            numCorroborationResults=numCorroborationResults,
             )
         )
     def web_search(

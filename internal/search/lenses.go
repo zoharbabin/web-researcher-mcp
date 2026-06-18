@@ -15,6 +15,7 @@ type Lens struct {
 	Domains     []string `json:"domains"`
 	CX          string   `json:"cx"`
 	Routing     string   `json:"routing,omitempty"`
+	Goggle      string   `json:"goggle,omitempty"`
 }
 
 type LensRegistry struct {
@@ -47,8 +48,11 @@ func ValidateLens(lens *Lens, source string) error {
 	if strings.TrimSpace(lens.Name) == "" {
 		return fmt.Errorf("lens %s: missing required \"name\"", source)
 	}
-	if len(lens.Domains) == 0 && strings.TrimSpace(lens.CX) == "" {
-		return fmt.Errorf("lens %q (%s): must define at least one of \"domains\" or \"cx\" (otherwise it never restricts a search)", lens.Name, source)
+	if len(lens.Domains) == 0 && strings.TrimSpace(lens.CX) == "" && strings.TrimSpace(lens.Goggle) == "" {
+		return fmt.Errorf("lens %q (%s): must define at least one of \"domains\", \"cx\", or \"goggle\"", lens.Name, source)
+	}
+	if strings.TrimSpace(lens.Goggle) != "" && !strings.HasPrefix(strings.TrimSpace(lens.Goggle), "https://") {
+		return fmt.Errorf("lens %q (%s): goggle must be an https:// URL", lens.Name, source)
 	}
 	for i, d := range lens.Domains {
 		if strings.TrimSpace(d) == "" {

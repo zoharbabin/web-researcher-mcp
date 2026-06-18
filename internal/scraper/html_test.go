@@ -2,6 +2,7 @@ package scraper
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -478,5 +479,74 @@ func TestScrapeRaw_NoStructuredData(t *testing.T) {
 	}
 	if !res.StructuredData.IsEmpty() {
 		t.Errorf("raw result must have no structured data, got %+v", res.StructuredData)
+	}
+}
+
+// =============================================================================
+// #247 — ForumSignals extraction
+// =============================================================================
+
+// TestExtractForumSignals_Reddit checks that a Reddit JSON-LD block is parsed
+// into a non-nil ForumSignals with correct upvotes and comment counts.
+func TestExtractForumSignals_Reddit(t *testing.T) {
+	blocks := []json.RawMessage{
+		json.RawMessage(`{
+			"@type": "DiscussionForumPosting",
+			"upvoteCount": 142,
+			"commentCount": 37,
+			"datePublished": "2024-01-15T10:30:00Z",
+			"author": {"@type": "Person", "name": "test_user"}
+		}`),
+	}
+	sig := extractForumSignals("https://www.reddit.com/r/golang/comments/abc/test", blocks)
+	if sig == nil {
+		t.Fatal("expected ForumSignals, got nil")
+	}
+	if sig.Platform != "reddit" {
+		t.Errorf("platform: got %q, want 'reddit'", sig.Platform)
+	}
+	if sig.Upvotes != 142 {
+		t.Errorf("upvotes: got %d, want 142", sig.Upvotes)
+	}
+	if sig.DatePublished != "2024-01-15T10:30:00Z" {
+		t.Errorf("datePublished: got %q", sig.DatePublished)
+	}
+	if sig.AuthorName != "test_user" {
+		t.Errorf("authorName: got %q", sig.AuthorName)
+	}
+}
+
+// TestExtractForumSignals_NonReddit confirms non-Reddit URLs return nil.
+func TestExtractForumSignals_NonReddit(t *testing.T) {
+	block := []json.RawMessage{
+		json.RawMessage(`{"@type":"DiscussionForumPosting","upvoteCount":100}`),
+	}
+	if sig := extractForumSignals("https://news.ycombinator.com/item?id=123", block); sig != nil {
+		t.Errorf("expected nil for non-Reddit URL, got %+v", sig)
+	}
+}
+
+// TestExtractForumSignals_NoForumType confirms a non-forum JSON-LD block returns nil.
+func TestExtractForumSignals_NoForumType(t *testing.T) {
+	block := []json.RawMessage{
+		json.RawMessage(`{"@type":"Article","headline":"Some article"}`),
+	}
+	if sig := extractForumSignals("https://www.reddit.com/r/test/comments/xyz/article", block); sig != nil {
+		t.Errorf("expected nil for non-DiscussionForumPosting type, got %+v", sig)
+	}
+}
+
+// TestExtractForumSignals_LowEngagementNote confirms the credibility note fires
+// for posts with fewer than 20 upvotes.
+func TestExtractForumSignals_LowEngagementNote(t *testing.T) {
+	block := []json.RawMessage{
+		json.RawMessage(`{"@type":"DiscussionForumPosting","upvoteCount":5}`),
+	}
+	sig := extractForumSignals("https://www.reddit.com/r/test/comments/xyz/low", block)
+	if sig == nil {
+		t.Fatal("expected ForumSignals, got nil")
+	}
+	if sig.CredibilityNote == "" {
+		t.Error("expected credibility note for low-engagement post, got empty string")
 	}
 }

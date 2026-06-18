@@ -151,3 +151,37 @@ func TestScrapePage_RawModeNoStructuredData(t *testing.T) {
 		t.Errorf("raw mode must not carry structuredData, got %v", out["structuredData"])
 	}
 }
+
+// TestScrapePage_ForumSignalsAbsentForNonReddit confirms forumSignals is omitted
+// for a regular (non-Reddit) URL — the field must never appear as null, only
+// as a present object or absent entirely (#247).
+func TestScrapePage_ForumSignalsAbsentForNonReddit(t *testing.T) {
+	page := `<html><head><title>Plain page</title></head><body><article><p>` +
+		strings.Repeat("Regular web content no forum signals here. ", 6) + `</p></article></body></html>`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(page))
+	}))
+	defer ts.Close()
+
+	ctx := context.Background()
+	srv := createTestServer(scrapeTestDeps())
+	client := connectTestClient(ctx, t, srv)
+	defer client.Close()
+
+	res, err := client.CallTool(ctx, &mcp.CallToolParams{Name: "scrape_page", Arguments: map[string]any{"url": ts.URL}})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("unexpected error: %s", res.Content[0].(*mcp.TextContent).Text)
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &out); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if _, present := out["forumSignals"]; present {
+		t.Errorf("forumSignals must be absent for non-Reddit URL, got %v", out["forumSignals"])
+	}
+}

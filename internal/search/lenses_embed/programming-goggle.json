@@ -1,0 +1,6 @@
+{
+  "name": "programming-goggle",
+  "description": "Developer-first results re-ranked by the Brave Programming Goggle — surfaces documentation, repos, and authoritative technical content",
+  "domains": [],
+  "goggle": "https://raw.githubusercontent.com/brave/goggles-quickstart/main/goggles/programming.goggle"
+}
