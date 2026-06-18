@@ -999,3 +999,37 @@ var econSearchOutputSchema = map[string]any{
 		},
 	},
 }
+
+var localSearchOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"query":       map[string]any{"type": "string"},
+		"resultCount": map[string]any{"type": "integer"},
+		"provider":    map[string]any{"type": "string", "description": "Which local-search provider answered (brave)."},
+		"hints":       map[string]any{"type": "object"},
+		"trust":       trustUntrustedExternal,
+		"places": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":          map[string]any{"type": "string", "description": "Ephemeral provider-assigned location ID. Not stable across calls."},
+					"name":        map[string]any{"type": "string"},
+					"address":     map[string]any{"type": "string", "description": "Formatted address (street, city, region, postal code)."},
+					"lat":         map[string]any{"type": "number", "description": "WGS-84 latitude."},
+					"lon":         map[string]any{"type": "number", "description": "WGS-84 longitude."},
+					"phone":       map[string]any{"type": "string"},
+					"website":     map[string]any{"type": "string", "description": "Business URL; use scrape_page to read the full site."},
+					"categories":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Category tags (e.g. 'restaurant', 'coffee shop')."},
+					"rating":      map[string]any{"type": "number", "description": "Aggregate user rating (0-5 scale)."},
+					"ratingCount": map[string]any{"type": "integer", "description": "Number of user ratings."},
+					"priceRange":  map[string]any{"type": "string", "description": "Price level indicator (e.g. '$', '$$', '$$$')."},
+					"openNow":     map[string]any{"type": "boolean", "description": "Whether the place is currently open. Absent when unknown."},
+					"hours":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Opening hours strings (e.g. 'Monday: 9AM-5PM')."},
+					"description": map[string]any{"type": "string", "description": "Short AI-generated description of the place. Absent when unavailable."},
+					"source":      map[string]any{"type": "string"},
+				},
+			},
+		},
+	},
+}

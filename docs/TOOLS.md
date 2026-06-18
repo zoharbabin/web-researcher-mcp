@@ -1456,7 +1456,44 @@ Each `trials[]` item: `nctId`, `title`, `status`, `phases` (array), `conditions`
 
 ---
 
-## Tool 26: `audit_bibliography`
+## Tool 26: `local_search`
+
+Search for **physical places** (restaurants, cafes, shops, services, points of interest) by local intent query. Backed by Brave's three-call local pipeline: web search with `result_filter=locations` to collect ephemeral location IDs, then `local/pois` for structured POI details, then `local/descriptions` for AI-generated descriptions (best-effort). Requires `BRAVE_API_KEY`; the tool is not registered when the key is absent. Location IDs are ephemeral — never persisted beyond the request lifecycle.
+
+### Input Schema
+
+| Field | Type | Required | Default | Constraints |
+|-------|------|----------|---------|-------------|
+| `query` | string | yes | — | Local intent query (e.g. `'best coffee shops near downtown Seattle'`) |
+| `near` | string | no | — | Optional location bias appended to the query (city, neighborhood, region) |
+| `country` | string | no | — | ISO 3166-1 alpha-2 country restriction (e.g. `US`, `GB`) |
+| `units` | string | no | — | `metric` or `imperial` |
+| `num_results` | int | no | 5 | 1–20 |
+| `provider` | string | no | — | Force a local-search provider: `brave` |
+| `sessionId` | string | no | — | Record results as sources on a `sequential_search` session |
+
+### Output Fields
+
+Each `places[]` item: `id` (ephemeral), `name`, `address`, `lat`, `lon`, `phone`, `website` (use `scrape_page` for the full site), `categories` (array), `rating`, `ratingCount`, `priceRange`, `openNow` (bool, absent when unknown), `hours` (array), `description` (absent when unavailable), `source`. Plus `query`, `resultCount`, `provider`, `hints` (when empty), and `trust` (`untrusted-external-content`).
+
+### Behavior
+
+- **Provider honoring**: an explicit `provider` is used exclusively; an unknown or unconfigured provider returns a structured error (no silent fallback).
+- When `near` is provided it is appended to `query` before the API call; both forms influence the location-biased web search in step 1.
+- The descriptions step is best-effort: a failure there does not fail the whole call — results are returned without descriptions.
+- Returns an empty `places` array (with `hints`) when no location results match; never panics.
+
+### Annotations
+
+- ReadOnly: true · Idempotent: true · OpenWorld: true (queries the live Brave Search API)
+
+### Cache
+
+- TTL: 6 hours (only for non-empty results)
+
+---
+
+## Tool 27: `audit_bibliography`
 
 ### Purpose
 
@@ -1494,7 +1531,7 @@ Precedence when more than one is supplied: `entries` → `bibliography` → `ses
 
 ---
 
-## Tool 27: `archive_source`
+## Tool 28: `archive_source`
 
 ### Purpose
 
@@ -1662,6 +1699,7 @@ Every tool declares annotations for client consumption (`readOnlyAnnotations(ide
 | legal_search | true | true | true |
 | econ_search | true | true | true |
 | clinical_search | true | true | true |
+| local_search | true | true | true |
 | get_my_analytics | true | true | false |
 | memory_save | **false (write)** | false | false |
 | memory_recall | true | true | false |

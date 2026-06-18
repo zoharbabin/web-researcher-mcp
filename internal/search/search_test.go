@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -320,9 +321,10 @@ func TestBraveProvider_WebSearch(t *testing.T) {
 
 		resp := braveWebResponse{}
 		resp.Web.Results = []struct {
-			Title       string `json:"title"`
-			URL         string `json:"url"`
-			Description string `json:"description"`
+			Title         string   `json:"title"`
+			URL           string   `json:"url"`
+			Description   string   `json:"description"`
+			ExtraSnippets []string `json:"extra_snippets"`
 		}{
 			{Title: "Brave Result", URL: "https://example.com/brave", Description: "Found via Brave"},
 		}
@@ -333,7 +335,7 @@ func TestBraveProvider_WebSearch(t *testing.T) {
 
 	client := &http.Client{Transport: &rewriteTransport{baseURL: ts.URL, inner: http.DefaultTransport}}
 	deps := Deps{HTTPClient: client, Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
-	b := NewBraveProvider("brave-key", deps)
+	b := NewBraveProvider("brave-key", BraveConfig{}, deps)
 
 	results, err := b.Web(context.Background(), WebSearchParams{Query: "test", NumResults: 5})
 	if err != nil {
@@ -355,7 +357,7 @@ func TestBraveProvider_RateLimited(t *testing.T) {
 
 	client := &http.Client{Transport: &rewriteTransport{baseURL: ts.URL, inner: http.DefaultTransport}}
 	deps := Deps{HTTPClient: client, Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
-	b := NewBraveProvider("key", deps)
+	b := NewBraveProvider("key", BraveConfig{}, deps)
 
 	_, err := b.Web(context.Background(), WebSearchParams{Query: "test", NumResults: 5})
 	if err == nil {
@@ -885,6 +887,87 @@ func TestClamp(t *testing.T) {
 	}
 }
 
+// =============================================================================
+// ValidateLens Goggle Tests
+// =============================================================================
+
+func TestValidateLens_GoggleOnly(t *testing.T) {
+	lens := &Lens{
+		Name:        "goggle-only",
+		Description: "re-ranked by a Goggle",
+		Domains:     []string{},
+		Goggle:      "https://raw.githubusercontent.com/brave/goggles-quickstart/main/goggles/programming.goggle",
+	}
+	if err := ValidateLens(lens, "test"); err != nil {
+		t.Errorf("goggle-only lens should pass validation, got: %v", err)
+	}
+}
+
+func TestValidateLens_GoggleInvalidURL(t *testing.T) {
+	lens := &Lens{
+		Name:   "bad-goggle",
+		Goggle: "http://raw.githubusercontent.com/brave/goggles-quickstart/main/goggles/programming.goggle",
+	}
+	err := ValidateLens(lens, "test")
+	if err == nil {
+		t.Fatal("expected error for goggle with http:// (not https://)")
+	}
+	if !strings.Contains(err.Error(), "https://") {
+		t.Errorf("expected error to mention https://, got: %v", err)
+	}
+}
+
+func TestBraveProvider_GoggleInjection(t *testing.T) {
+	var capturedQuery url.Values
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedQuery = r.URL.Query()
+		resp := braveWebResponse{}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer ts.Close()
+
+	client := &http.Client{Transport: &rewriteTransport{baseURL: ts.URL, inner: http.DefaultTransport}}
+	deps := Deps{HTTPClient: client, Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	b := NewBraveProvider("key", BraveConfig{}, deps)
+
+	goggleURL := "https://raw.githubusercontent.com/brave/goggles-quickstart/main/goggles/programming.goggle"
+	_, err := b.Web(context.Background(), WebSearchParams{
+		Query:      "golang channels",
+		NumResults: 5,
+		GoggleURL:  goggleURL,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capturedQuery.Get("goggles_id") != goggleURL {
+		t.Errorf("expected goggles_id=%q in request, got %q", goggleURL, capturedQuery.Get("goggles_id"))
+	}
+}
+
+func TestBraveProvider_NoGoggleWhenUnset(t *testing.T) {
+	var capturedQuery url.Values
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedQuery = r.URL.Query()
+		resp := braveWebResponse{}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer ts.Close()
+
+	client := &http.Client{Transport: &rewriteTransport{baseURL: ts.URL, inner: http.DefaultTransport}}
+	deps := Deps{HTTPClient: client, Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	b := NewBraveProvider("key", BraveConfig{}, deps)
+
+	_, err := b.Web(context.Background(), WebSearchParams{Query: "golang", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := capturedQuery.Get("goggles_id"); got != "" {
+		t.Errorf("expected no goggles_id when GoggleURL is unset, got %q", got)
+	}
+}
+
 func TestMapBraveFreshness(t *testing.T) {
 	tests := []struct {
 		input    string
@@ -896,12 +979,106 @@ func TestMapBraveFreshness(t *testing.T) {
 		{"month", "pm"},
 		{"year", "py"},
 		{"invalid", ""},
+		// Custom date range passthrough
+		{"2024-01-01..2024-12-31", "2024-01-01to2024-12-31"},
+		{"2023-06-01..2023-06-30", "2023-06-01to2023-06-30"},
 	}
 	for _, tt := range tests {
 		got := mapBraveFreshness(tt.input)
 		if got != tt.expected {
 			t.Errorf("mapBraveFreshness(%q) = %q, want %q", tt.input, got, tt.expected)
 		}
+	}
+}
+
+func TestBraveProvider_ExtraSnippets(t *testing.T) {
+	var capturedQuery url.Values
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedQuery = r.URL.Query()
+		resp := braveWebResponse{}
+		resp.Web.Results = []struct {
+			Title         string   `json:"title"`
+			URL           string   `json:"url"`
+			Description   string   `json:"description"`
+			ExtraSnippets []string `json:"extra_snippets"`
+		}{
+			{
+				Title:         "Result with snippets",
+				URL:           "https://example.com/1",
+				Description:   "Main snippet",
+				ExtraSnippets: []string{"extra one", "extra two"},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer ts.Close()
+
+	client := &http.Client{Transport: &rewriteTransport{baseURL: ts.URL, inner: http.DefaultTransport}}
+	deps := Deps{HTTPClient: client, Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	b := NewBraveProvider("key", BraveConfig{ExtraSnippets: true}, deps)
+
+	results, err := b.Web(context.Background(), WebSearchParams{Query: "snippets test", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capturedQuery.Get("extra_snippets") != "1" {
+		t.Errorf("expected extra_snippets=1 in request, got %q", capturedQuery.Get("extra_snippets"))
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if len(results[0].ExtraSnippets) != 2 {
+		t.Errorf("expected 2 extra snippets, got %d", len(results[0].ExtraSnippets))
+	}
+	if results[0].ExtraSnippets[0] != "extra one" {
+		t.Errorf("unexpected extra snippet[0]: %q", results[0].ExtraSnippets[0])
+	}
+}
+
+func TestBraveProvider_Pagination(t *testing.T) {
+	var capturedQuery url.Values
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedQuery = r.URL.Query()
+		resp := braveWebResponse{}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer ts.Close()
+
+	client := &http.Client{Transport: &rewriteTransport{baseURL: ts.URL, inner: http.DefaultTransport}}
+	deps := Deps{HTTPClient: client, Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	b := NewBraveProvider("key", BraveConfig{}, deps)
+
+	_, err := b.Web(context.Background(), WebSearchParams{Query: "paginate", NumResults: 10, Offset: 20})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capturedQuery.Get("offset") != "20" {
+		t.Errorf("expected offset=20 in request, got %q", capturedQuery.Get("offset"))
+	}
+}
+
+func TestBraveProvider_ResultFilter(t *testing.T) {
+	var capturedQuery url.Values
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedQuery = r.URL.Query()
+		resp := braveWebResponse{}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer ts.Close()
+
+	client := &http.Client{Transport: &rewriteTransport{baseURL: ts.URL, inner: http.DefaultTransport}}
+	deps := Deps{HTTPClient: client, Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	b := NewBraveProvider("key", BraveConfig{}, deps)
+
+	_, err := b.Web(context.Background(), WebSearchParams{Query: "filter test", NumResults: 5, ResultFilter: "web,discussions"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capturedQuery.Get("result_filter") != "web,discussions" {
+		t.Errorf("expected result_filter=web,discussions in request, got %q", capturedQuery.Get("result_filter"))
 	}
 }
 
@@ -2219,6 +2396,325 @@ func TestMapTavilyTimeRange(t *testing.T) {
 		if got := mapTavilyTimeRange(in); got != want {
 			t.Errorf("mapTavilyTimeRange(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// =============================================================================
+// BraveProvider Local Search Tests
+// =============================================================================
+
+// TestBraveProvider_Local exercises the three-call Brave local pipeline:
+//
+//	web/search?result_filter=locations → location IDs
+//	local/pois?ids=…                  → POI details
+//	local/descriptions?ids=…          → AI descriptions (best-effort)
+func TestBraveProvider_Local(t *testing.T) {
+	t.Parallel()
+
+	var (
+		poisCalled  int
+		descsCalled int
+	)
+
+	openNow := true
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/res/v1/web/search"):
+			// Step 1: return a single location ID.
+			if r.URL.Query().Get("result_filter") != "locations" {
+				t.Errorf("web/search: expected result_filter=locations, got %q", r.URL.Query().Get("result_filter"))
+			}
+			fmt.Fprint(w, `{"locations":{"results":[{"id":"abc123"}]}}`)
+
+		case strings.HasPrefix(r.URL.Path, "/res/v1/local/pois"):
+			poisCalled++
+			// Step 2: return POI details for id=abc123.
+			fmt.Fprintf(w, `{"results":[{
+				"id":"abc123",
+				"name":"Mock Coffee",
+				"address":{"streetAddress":"1 Main St","addressLocality":"Seattle","addressRegion":"WA","postalCode":"98101"},
+				"coordinates":{"latitude":47.6062,"longitude":-122.3321},
+				"phone":"+1-206-555-0100",
+				"url":"https://mock.example.com",
+				"categories":["coffee shop","cafe"],
+				"rating":{"ratingValue":4.5,"ratingCount":120},
+				"priceRange":"$",
+				"openingHours":["Mon-Fri: 7AM-7PM"],
+				"openNow":%v
+			}]}`, openNow)
+
+		case strings.HasPrefix(r.URL.Path, "/res/v1/local/descriptions"):
+			descsCalled++
+			// Step 3: return a description for id=abc123.
+			fmt.Fprint(w, `{"results":[{"id":"abc123","descriptions":["A cozy coffee shop."]}]}`)
+
+		default:
+			t.Errorf("unexpected request path: %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	client := &http.Client{Transport: &rewriteTransport{baseURL: ts.URL, inner: http.DefaultTransport}}
+	deps := Deps{HTTPClient: client, Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	b := NewBraveProvider("brave-key", BraveConfig{}, deps)
+
+	results, err := b.Local(context.Background(), LocalSearchParams{Query: "coffee", Near: "Seattle", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if poisCalled != 1 {
+		t.Errorf("expected pois endpoint called once, got %d", poisCalled)
+	}
+	if descsCalled != 1 {
+		t.Errorf("expected descriptions endpoint called once, got %d", descsCalled)
+	}
+
+	r := results[0]
+	if r.ID != "abc123" {
+		t.Errorf("ID = %q, want %q", r.ID, "abc123")
+	}
+	if r.Name != "Mock Coffee" {
+		t.Errorf("Name = %q, want %q", r.Name, "Mock Coffee")
+	}
+	wantAddr := "1 Main St, Seattle, WA, 98101"
+	if r.Address != wantAddr {
+		t.Errorf("Address = %q, want %q", r.Address, wantAddr)
+	}
+	if r.Lat != 47.6062 {
+		t.Errorf("Lat = %v, want 47.6062", r.Lat)
+	}
+	if r.Lon != -122.3321 {
+		t.Errorf("Lon = %v, want -122.3321", r.Lon)
+	}
+	if r.Phone != "+1-206-555-0100" {
+		t.Errorf("Phone = %q, want %q", r.Phone, "+1-206-555-0100")
+	}
+	if r.Website != "https://mock.example.com" {
+		t.Errorf("Website = %q, want %q", r.Website, "https://mock.example.com")
+	}
+	if len(r.Categories) != 2 || r.Categories[0] != "coffee shop" {
+		t.Errorf("Categories = %v, want [coffee shop cafe]", r.Categories)
+	}
+	if r.Rating != 4.5 {
+		t.Errorf("Rating = %v, want 4.5", r.Rating)
+	}
+	if r.RatingCount != 120 {
+		t.Errorf("RatingCount = %v, want 120", r.RatingCount)
+	}
+	if r.PriceRange != "$" {
+		t.Errorf("PriceRange = %q, want %q", r.PriceRange, "$")
+	}
+	if r.OpenNow == nil || !*r.OpenNow {
+		t.Errorf("OpenNow = %v, want true", r.OpenNow)
+	}
+	if len(r.Hours) != 1 || r.Hours[0] != "Mon-Fri: 7AM-7PM" {
+		t.Errorf("Hours = %v, want [Mon-Fri: 7AM-7PM]", r.Hours)
+	}
+	if r.Description != "A cozy coffee shop." {
+		t.Errorf("Description = %q, want %q", r.Description, "A cozy coffee shop.")
+	}
+	if r.Source != "brave" {
+		t.Errorf("Source = %q, want %q", r.Source, "brave")
+	}
+}
+
+// TestBraveProvider_Local_EmptyLocations verifies that when the web/search
+// response contains no location IDs, the provider returns an empty slice
+// immediately without making POI or description requests.
+func TestBraveProvider_Local_EmptyLocations(t *testing.T) {
+	t.Parallel()
+
+	var extraCalls int
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasPrefix(r.URL.Path, "/res/v1/web/search") {
+			fmt.Fprint(w, `{"locations":{"results":[]}}`)
+			return
+		}
+		// Any other endpoint is unexpected.
+		extraCalls++
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer ts.Close()
+
+	client := &http.Client{Transport: &rewriteTransport{baseURL: ts.URL, inner: http.DefaultTransport}}
+	deps := Deps{HTTPClient: client, Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	b := NewBraveProvider("brave-key", BraveConfig{}, deps)
+
+	results, err := b.Local(context.Background(), LocalSearchParams{Query: "nonexistent place"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("expected empty results, got %d", len(results))
+	}
+	if extraCalls != 0 {
+		t.Errorf("expected no POI/description calls for empty locations, got %d extra calls", extraCalls)
+	}
+}
+
+// =============================================================================
+// BraveProvider Context Tests
+// =============================================================================
+
+// TestBraveProvider_Context verifies that the Context method correctly calls
+// the /res/v1/llm/context endpoint, marshals the response, and returns a
+// ContextResult with the assembled context text and per-snippet provenance.
+func TestBraveProvider_Context(t *testing.T) {
+	t.Parallel()
+
+	var contextCalled int
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/res/v1/llm/context" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		contextCalled++
+
+		q := r.URL.Query()
+		if q.Get("q") == "" {
+			t.Error("expected non-empty q param")
+		}
+		if q.Get("max_tokens") != "8192" {
+			t.Errorf("max_tokens = %q, want %q", q.Get("max_tokens"), "8192")
+		}
+		if q.Get("threshold") != "balanced" {
+			t.Errorf("threshold = %q, want %q", q.Get("threshold"), "balanced")
+		}
+		// Verify API key is present.
+		if tok := r.Header.Get("X-Subscription-Token"); tok != "brave-ctx-key" {
+			t.Errorf("X-Subscription-Token = %q, want %q", tok, "brave-ctx-key")
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{
+			"context": "The capital of France is Paris, a major European city.",
+			"sources": [
+				{"title": "France - Wikipedia", "url": "https://en.wikipedia.org/wiki/France", "age": "2024-01-01", "chunk": "Paris is the capital of France."},
+				{"title": "Paris Guide",        "url": "https://example.com/paris",               "chunk": "Paris is a major European city."}
+			]
+		}`)
+	}))
+	defer ts.Close()
+
+	client := &http.Client{Transport: &rewriteTransport{baseURL: ts.URL, inner: http.DefaultTransport}}
+	deps := Deps{HTTPClient: client, Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	b := NewBraveProvider("brave-ctx-key", BraveConfig{}, deps)
+
+	result, err := b.Context(context.Background(), ContextParams{
+		Query:     "capital of France",
+		MaxTokens: 8192,
+		Threshold: "balanced",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if contextCalled != 1 {
+		t.Errorf("context endpoint called %d times, want 1", contextCalled)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	wantContext := "The capital of France is Paris, a major European city."
+	if result.Context != wantContext {
+		t.Errorf("Context = %q, want %q", result.Context, wantContext)
+	}
+	if result.Source != "brave" {
+		t.Errorf("Source = %q, want %q", result.Source, "brave")
+	}
+	if len(result.Snippets) != 2 {
+		t.Fatalf("Snippets len = %d, want 2", len(result.Snippets))
+	}
+	sn := result.Snippets[0]
+	if sn.Title != "France - Wikipedia" {
+		t.Errorf("Snippets[0].Title = %q, want %q", sn.Title, "France - Wikipedia")
+	}
+	if sn.URL != "https://en.wikipedia.org/wiki/France" {
+		t.Errorf("Snippets[0].URL = %q, want %q", sn.URL, "https://en.wikipedia.org/wiki/France")
+	}
+	if sn.Age != "2024-01-01" {
+		t.Errorf("Snippets[0].Age = %q, want %q", sn.Age, "2024-01-01")
+	}
+	if sn.Text != "Paris is the capital of France." {
+		t.Errorf("Snippets[0].Text = %q", sn.Text)
+	}
+	if sn.Source != "brave" {
+		t.Errorf("Snippets[0].Source = %q, want %q", sn.Source, "brave")
+	}
+	// Second snippet has no age — age field should be omitted/empty.
+	sn2 := result.Snippets[1]
+	if sn2.Age != "" {
+		t.Errorf("Snippets[1].Age = %q, want empty", sn2.Age)
+	}
+}
+
+// TestBraveProvider_Context_Error verifies that when the /res/v1/llm/context
+// endpoint returns a non-2xx status, Context() returns an error so the
+// search_and_scrape caller can fall through to normal scraping.
+func TestBraveProvider_Context_Error(t *testing.T) {
+	t.Parallel()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Simulate a 403 from a plan that does not include the endpoint.
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `{"error":"plan does not include LLM context"}`)
+	}))
+	defer ts.Close()
+
+	client := &http.Client{Transport: &rewriteTransport{baseURL: ts.URL, inner: http.DefaultTransport}}
+	deps := Deps{HTTPClient: client, Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	b := NewBraveProvider("brave-key", BraveConfig{}, deps)
+
+	result, err := b.Context(context.Background(), ContextParams{Query: "test"})
+	if err == nil {
+		t.Fatalf("expected error for 403 response, got nil (result=%+v)", result)
+	}
+}
+
+// TestBraveProvider_Context_OptionalParams verifies that when optional params
+// (country, language) are supplied they appear in the query string, and when
+// absent they are omitted (no empty-string params polluting the URL).
+func TestBraveProvider_Context_OptionalParams(t *testing.T) {
+	t.Parallel()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("country") != "US" {
+			t.Errorf("country = %q, want %q", q.Get("country"), "US")
+		}
+		if q.Get("lang") != "en" {
+			t.Errorf("lang = %q, want %q", q.Get("lang"), "en")
+		}
+		// No max_tokens or threshold when not set.
+		if q.Get("max_tokens") != "" {
+			t.Errorf("expected max_tokens absent, got %q", q.Get("max_tokens"))
+		}
+		if q.Get("threshold") != "" {
+			t.Errorf("expected threshold absent, got %q", q.Get("threshold"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"context":"ok","sources":[]}`)
+	}))
+	defer ts.Close()
+
+	client := &http.Client{Transport: &rewriteTransport{baseURL: ts.URL, inner: http.DefaultTransport}}
+	deps := Deps{HTTPClient: client, Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	b := NewBraveProvider("brave-key", BraveConfig{}, deps)
+
+	_, err := b.Context(context.Background(), ContextParams{
+		Query:    "test",
+		Country:  "US",
+		Language: "en",
+		// MaxTokens and Threshold intentionally left zero/empty.
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

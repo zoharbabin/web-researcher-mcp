@@ -65,6 +65,78 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 			return errResult, nil, nil
 		}
 
+		// Brave LLM Context fast-path (#257): when the resolved provider implements
+		// ContextSearcher, attempt server-side context assembly first. A single API
+		// call replaces N page scrapes and returns provenance-rich snippets.
+		// Falls through to normal search + scrape on any error or empty result.
+		if ctxSearcher, ok := provider.(search.ContextSearcher); ok {
+			ctxResult, ctxErr := ctxSearcher.Context(ctx, search.ContextParams{
+				Query:     input.Query,
+				MaxTokens: 8192,
+				Threshold: "balanced",
+			})
+			if ctxErr == nil && ctxResult != nil && ctxResult.Context != "" {
+				sources := make([]sourceOutput, 0, len(ctxResult.Snippets))
+				for _, sn := range ctxResult.Snippets {
+					src := sourceOutput{
+						URL:         sn.URL,
+						Title:       sn.Title,
+						Content:     sn.Text,
+						ContentType: "text/plain",
+						Trust:       untrustedContentTrust,
+					}
+					if input.Claim != "" {
+						if ev := content.ExtractClaimEvidence(sn.Text, input.Claim); len(ev.KeySentences) > 0 {
+							src.ClaimSignal = ev.Signal
+							src.KeySentences = ev.KeySentences
+						}
+					}
+					sources = append(sources, src)
+				}
+
+				combined := ctxResult.Context
+				if totalMaxLen > 0 && len(combined) > totalMaxLen {
+					combined = combined[:totalMaxLen]
+				}
+
+				output := map[string]any{
+					"query":           input.Query,
+					"status":          "complete",
+					"combinedContent": combined,
+					"trust":           untrustedContentTrust,
+					"_contextSource":  ctxResult.Source,
+					"summary": map[string]any{
+						"urlsSearched":     len(ctxResult.Snippets),
+						"urlsScraped":      len(ctxResult.Snippets),
+						"urlsFailed":       0,
+						"processingTimeMs": int(time.Since(start).Milliseconds()),
+					},
+					"sizeMetadata": map[string]any{
+						"totalLength":     len(combined),
+						"estimatedTokens": content.EstimateTokens(combined),
+						"sizeCategory":    content.SizeCategory(len(combined)),
+					},
+				}
+				if includeSources {
+					output["sources"] = sources
+				}
+
+				jsonBytes, _ := json.Marshal(output)
+				deps.Metrics.RecordToolCall("search_and_scrape", time.Since(start), nil, "", false)
+				auditToolCallQuery(ctx, deps, "search_and_scrape", time.Since(start), nil, "", input.Query,
+					map[string]any{"context_source": ctxResult.Source, "snippets": len(ctxResult.Snippets)})
+
+				if input.SessionID != "" {
+					trackSources(ctx, deps, input.SessionID, sourceOutputsToSources(sources))
+				}
+
+				summary := fmt.Sprintf("search_and_scrape (LLM context) results for %q — %d snippets, %s combined content",
+					input.Query, len(ctxResult.Snippets), humanBytes(len(combined)))
+				return largeResultOrInline(ctx, deps, jsonBytes, summary), nil, nil
+			}
+			// ctxErr != nil or empty result: fall through to normal search + scrape.
+		}
+
 		traceCtx, trace := search.NewRoutingTrace(ctx)
 		searchResults, err := provider.Web(traceCtx, search.WebSearchParams{
 			Query:      input.Query,

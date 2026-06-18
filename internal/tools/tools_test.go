@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -216,6 +217,58 @@ func (m *mockTrialProvider) Trials(_ context.Context, _ search.TrialSearchParams
 	return []search.TrialResult{{NCTID: "NCT00000000", Title: "Mock Trial", Status: "COMPLETED", Phases: []string{"PHASE1"}, Conditions: []string{"Covid19"}, Interventions: []string{"MockDrug"}, Sponsor: "Mock Sponsor", StartDate: "2024-01-01", HasResults: true, URL: "https://clinicaltrials.gov/study/NCT00000000", Source: "clinicaltrials"}}, nil
 }
 
+// mockContextSearcherProvider wraps mockProvider and additionally implements
+// ContextSearcher so the search_and_scrape tool exercises the fast-path branch.
+type mockContextSearcherProvider struct {
+	mockProvider
+	ctxResult *search.ContextResult
+	ctxErr    error
+}
+
+func (m *mockContextSearcherProvider) Context(_ context.Context, _ search.ContextParams) (*search.ContextResult, error) {
+	return m.ctxResult, m.ctxErr
+}
+
+// mockContextSearcherProviderWithURL extends mockProviderWithURL with a
+// ContextSearcher implementation that always returns an error, exercising the
+// fallback path in search_and_scrape.
+type mockContextSearcherProviderWithURL struct {
+	mockProviderWithURL
+	ctxErr error
+}
+
+func (m *mockContextSearcherProviderWithURL) Context(_ context.Context, _ search.ContextParams) (*search.ContextResult, error) {
+	return nil, m.ctxErr
+}
+
+// mockLocalProvider implements LocalProvider for local_search.
+type mockLocalProvider struct{}
+
+func (m *mockLocalProvider) Name() string { return "brave" }
+func (m *mockLocalProvider) Metadata() search.ProviderMeta {
+	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "paid", Description: "mock brave local"}
+}
+func (m *mockLocalProvider) Local(_ context.Context, _ search.LocalSearchParams) ([]search.LocalResult, error) {
+	openNow := true
+	return []search.LocalResult{{
+		ID:          "local-mock-001",
+		Name:        "Mock Coffee Shop",
+		Address:     "123 Main St, Seattle, WA 98101",
+		Lat:         47.6062,
+		Lon:         -122.3321,
+		Phone:       "+1-206-555-0100",
+		Website:     "https://mockcoffee.example.com",
+		Categories:  []string{"coffee shop", "cafe"},
+		Rating:      4.5,
+		RatingCount: 120,
+		PriceRange:  "$$",
+		OpenNow:     &openNow,
+		Hours:       []string{"Monday: 7AM-7PM"},
+		Description: "A cozy mock coffee shop in downtown Seattle.",
+		Source:      "brave",
+	}}, nil
+}
+
 func setupTestDeps() Dependencies {
 	synth := &mockSynthProvider{}
 	academic := &mockAcademicProvider{}
@@ -223,6 +276,7 @@ func setupTestDeps() Dependencies {
 	caseProv := &mockCaseProvider{}
 	econ := &mockEconProvider{}
 	trial := &mockTrialProvider{}
+	local := &mockLocalProvider{}
 	return Dependencies{
 		Cache:               cache.NewNoop(),
 		Search:              &mockProvider{},
@@ -233,6 +287,7 @@ func setupTestDeps() Dependencies {
 		CaseProviders:       map[string]search.CaseProvider{caseProv.Name(): caseProv},
 		EconProviders:       map[string]search.EconProvider{econ.Name(): econ},
 		TrialProviders:      map[string]search.TrialProvider{trial.Name(): trial},
+		LocalProviders:      map[string]search.LocalProvider{local.Name(): local},
 		Scraper:             scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2}),
 		Content:             content.NewProcessor(),
 		Sessions:            func() session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
@@ -1112,6 +1167,123 @@ func TestSearchAndScrapeEmptyQuery(t *testing.T) {
 	}
 	if !res.IsError {
 		t.Fatal("expected error for empty query")
+	}
+}
+
+// TestSearchAndScrape_ContextFastPath verifies that when the resolved search
+// provider implements ContextSearcher, search_and_scrape uses the server-side
+// context assembly path and returns a properly shaped output with
+// _contextSource, combinedContent, sources, and the trust marker.
+func TestSearchAndScrape_ContextFastPath(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	provider := &mockContextSearcherProvider{
+		ctxResult: &search.ContextResult{
+			Context: "Paris is the capital of France.",
+			Snippets: []search.ContextSnippet{
+				{Title: "France Wiki", URL: "https://en.wikipedia.org/wiki/France", Text: "Paris is the capital of France.", Source: "brave"},
+			},
+			Source: "brave",
+		},
+	}
+
+	deps := setupTestDeps()
+	deps.Search = provider
+	srv := createTestServer(deps)
+	sess := connectTestClient(ctx, t, srv)
+	defer sess.Close()
+
+	res, err := sess.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "search_and_scrape",
+		Arguments: map[string]any{"query": "capital of France"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("unexpected error: %v", res.Content)
+	}
+
+	var output map[string]any
+	if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &output); err != nil {
+		t.Fatalf("failed to parse output: %v", err)
+	}
+	if output["status"] != "complete" {
+		t.Fatalf("status = %v, want complete", output["status"])
+	}
+	if output["_contextSource"] != "brave" {
+		t.Fatalf("_contextSource = %v, want brave", output["_contextSource"])
+	}
+	if output["trust"] != "untrusted-external-content" {
+		t.Fatalf("trust = %v, want untrusted-external-content", output["trust"])
+	}
+	combined, _ := output["combinedContent"].(string)
+	if combined == "" {
+		t.Fatal("expected non-empty combinedContent from LLM context path")
+	}
+	if !strings.Contains(combined, "Paris") {
+		t.Fatalf("combinedContent does not contain expected text: %q", combined)
+	}
+	sources, _ := output["sources"].([]any)
+	if len(sources) != 1 {
+		t.Fatalf("expected 1 source, got %d", len(sources))
+	}
+}
+
+// TestSearchAndScrape_ContextFastPath_FallsBackOnError verifies that when the
+// ContextSearcher returns an error, search_and_scrape falls through to the
+// normal search + scrape path (i.e. still returns a valid result).
+func TestSearchAndScrape_ContextFastPath_FallsBackOnError(t *testing.T) {
+	t.Parallel()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<!DOCTYPE html><html><head><title>Fallback Page</title></head>` +
+			`<body><article><h1>Fallback Content</h1>` +
+			`<p>This content was fetched via the normal scrape path after the context endpoint failed.</p>` +
+			`<p>It confirms the graceful fallback behaviour works correctly.</p>` +
+			`</article></body></html>`))
+	}))
+	defer ts.Close()
+
+	ctx := context.Background()
+	providerWithURL := &mockContextSearcherProviderWithURL{
+		mockProviderWithURL: mockProviderWithURL{url: ts.URL},
+		ctxErr:              fmt.Errorf("403: plan does not include LLM context"),
+	}
+
+	deps := setupTestDeps()
+	deps.Search = providerWithURL
+	deps.Scraper = scraper.NewPipeline(scraper.PipelineConfig{
+		MaxConcurrency:  2,
+		AllowPrivateIPs: true,
+	})
+	srv := createTestServer(deps)
+	sess := connectTestClient(ctx, t, srv)
+	defer sess.Close()
+
+	res, err := sess.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "search_and_scrape",
+		Arguments: map[string]any{"query": "fallback test"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("unexpected error (should have fallen back): %v", res.Content)
+	}
+	var output map[string]any
+	if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &output); err != nil {
+		t.Fatalf("failed to parse output: %v", err)
+	}
+	// When the context fast-path falls back, _contextSource is NOT present.
+	if _, has := output["_contextSource"]; has {
+		t.Fatal("_contextSource should be absent on the fallback path")
+	}
+	combined, _ := output["combinedContent"].(string)
+	if !strings.Contains(combined, "Fallback Content") {
+		t.Fatalf("expected fallback scraped content, got: %q", combined)
 	}
 }
 

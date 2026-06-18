@@ -125,19 +125,20 @@ type AuditConfig struct {
 }
 
 type SearchConfig struct {
-	Provider         string
-	Routing          string
-	GoogleAPIKey     string
-	GoogleCX         string
-	BraveAPIKey      string
-	SerperAPIKey     string
-	SearchAPIKey     string
-	TavilyAPIKey     string
-	ExaAPIKey        string
-	SearXNGURL       string
-	SearXNGBasicAuth string            // raw "user:password" for a SearXNG behind HTTP Basic auth; "" => none (never logged)
-	SearXNGHeaders   map[string]string // validated static request headers for SearXNG; nil/empty => none
-	CustomLensesPath string
+	Provider           string
+	Routing            string
+	GoogleAPIKey       string
+	GoogleCX           string
+	BraveAPIKey        string
+	BraveExtraSnippets bool
+	SerperAPIKey       string
+	SearchAPIKey       string
+	TavilyAPIKey       string
+	ExaAPIKey          string
+	SearXNGURL         string
+	SearXNGBasicAuth   string            // raw "user:password" for a SearXNG behind HTTP Basic auth; "" => none (never logged)
+	SearXNGHeaders     map[string]string // validated static request headers for SearXNG; nil/empty => none
+	CustomLensesPath   string
 
 	// Patent-specific providers (optional, enables structured patent search)
 	USPTOAPIKey       string
@@ -215,6 +216,7 @@ func Load() (*Config, error) {
 	if provider == "brave" && braveKey == "" {
 		errs = append(errs, "BRAVE_API_KEY is required when SEARCH_PROVIDER=brave")
 	}
+	braveExtraSnippets := envBool("BRAVE_EXTRA_SNIPPETS", false)
 
 	serperKey := os.Getenv("SERPER_API_KEY")
 	if provider == "serper" && serperKey == "" {
@@ -332,6 +334,7 @@ func Load() (*Config, error) {
 			GoogleAPIKey:          googleKey,
 			GoogleCX:              googleCX,
 			BraveAPIKey:           braveKey,
+			BraveExtraSnippets:    braveExtraSnippets,
 			SerperAPIKey:          serperKey,
 			SearchAPIKey:          searchAPIKey,
 			TavilyAPIKey:          tavilyKey,

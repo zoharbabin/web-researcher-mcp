@@ -279,6 +279,16 @@ func main() {
 	// clinical_search is part of the default tool surface.
 	trialProviders := search.AvailableTrialProviders(searchDeps)
 
+	// Local place search (#259): Brave Local Search API. Requires BRAVE_API_KEY;
+	// local_search is registered only when the key is present.
+	localProviders := search.AvailableLocalProviders(cfg.Search.BraveAPIKey, searchDeps)
+
+	// LLM Context (#257): Brave's /res/v1/llm/context endpoint for server-side
+	// provenance-rich context assembly. Requires BRAVE_API_KEY and a Brave Data
+	// for AI plan that includes the endpoint; search_and_scrape uses it when
+	// available and falls through to normal scraping on failure or empty result.
+	contextProviders := search.AvailableContextProviders(cfg.Search.BraveAPIKey, searchDeps)
+
 	// Open-access enrichment (#45): resolves DOI-bearing academic results to OA
 	// PDFs via Unpaywall. nil when no email is configured — enrichment is then a
 	// no-op. Its own breaker isolates failures from the academic providers.
@@ -429,6 +439,8 @@ func main() {
 		CaseProviders:       caseProviders,
 		EconProviders:       econProviders,
 		TrialProviders:      trialProviders,
+		LocalProviders:      localProviders,
+		ContextProviders:    contextProviders,
 		AnswerProviders:     answerProviders,
 		StructuredProviders: structuredProviders,
 		OAResolver:          oaResolver,
@@ -492,6 +504,9 @@ func main() {
 	}
 	for name := range trialProviders {
 		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "clinical"})
+	}
+	for name := range localProviders {
+		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "local"})
 	}
 	for name := range answerProviders {
 		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "answer"})
@@ -772,6 +787,9 @@ func completionProviderNames(deps tools.Dependencies) []string {
 		add(name)
 	}
 	for name := range deps.TrialProviders {
+		add(name)
+	}
+	for name := range deps.LocalProviders {
 		add(name)
 	}
 	for name := range deps.AnswerProviders {
