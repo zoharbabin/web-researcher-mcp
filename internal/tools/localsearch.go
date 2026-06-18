@@ -20,13 +20,16 @@ import (
 // is not registered when no local provider is configured.
 
 type localSearchInput struct {
-	Query      string `json:"query" jsonschema:"Local place search query with intent and location (e.g. 'best coffee shops near downtown Seattle'). Must convey local intent to produce POI results.,required"`
-	Near       string `json:"near,omitempty" jsonschema:"Optional location bias — city, neighborhood, or region name (e.g. 'downtown Seattle'). Appended to the query when provided."`
-	Country    string `json:"country,omitempty" jsonschema:"Restrict results to a country using ISO 3166-1 alpha-2 code (e.g. 'US', 'GB')."`
-	Units      string `json:"units,omitempty" jsonschema:"Distance/measurement units: 'metric' or 'imperial'. Defaults to the provider's locale default."`
-	NumResults int    `json:"num_results,omitempty" jsonschema:"Number of places to return (1-20, default: 5)."`
-	Provider   string `json:"provider,omitempty" jsonschema:"Force a local-search provider: brave. Omit to use the configured one."`
-	SessionID  string `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. Sources are automatically recorded for recovery after context loss."`
+	Query      string   `json:"query" jsonschema:"Local place search query with intent and location (e.g. 'best coffee shops near downtown Seattle'). Must convey local intent to produce POI results.,required"`
+	Near       string   `json:"near,omitempty" jsonschema:"Optional free-text location bias — city, neighborhood, or region name (e.g. 'downtown Seattle'). Used as the location anchor when no latitude/longitude is given (Brave: sent as a location header, not appended to the query). Coordinates take precedence over this."`
+	Latitude   *float64 `json:"latitude,omitempty" jsonschema:"Optional WGS-84 latitude (-90 to 90) of the search anchor. When both latitude and longitude are given they take precedence over 'near', anchor the provider's place index to that point, and the returned places are distance-ranked nearest-first."`
+	Longitude  *float64 `json:"longitude,omitempty" jsonschema:"Optional WGS-84 longitude (-180 to 180) of the search anchor. Must be paired with latitude to take effect."`
+	Radius     float64  `json:"radius,omitempty" jsonschema:"Optional distance filter in meters, applied only when latitude/longitude are given. Places farther than this from the anchor are dropped. 0 (default) means no distance filter. Independent of the 'units' display setting."`
+	Country    string   `json:"country,omitempty" jsonschema:"Restrict results to a country using ISO 3166-1 alpha-2 code (e.g. 'US', 'GB')."`
+	Units      string   `json:"units,omitempty" jsonschema:"Distance/measurement units: 'metric' or 'imperial'. Defaults to the provider's locale default."`
+	NumResults int      `json:"num_results,omitempty" jsonschema:"Number of places to return (1-20, default: 5)."`
+	Provider   string   `json:"provider,omitempty" jsonschema:"Force a local-search provider: brave. Omit to use the configured one."`
+	SessionID  string   `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. Sources are automatically recorded for recovery after context loss."`
 }
 
 func registerLocal(srv *mcp.Server, deps Dependencies) {
@@ -54,6 +57,27 @@ func registerLocal(srv *mcp.Server, deps Dependencies) {
 			num = 20
 		}
 
+		// Coordinate anchoring is opt-in: both latitude and longitude must be
+		// supplied together, and each is validated at this boundary before it
+		// reaches the provider. A lone latitude (or longitude) is a malformed
+		// anchor — reject it rather than silently anchoring to 0 on one axis.
+		var lat, lon *float64
+		if (input.Latitude == nil) != (input.Longitude == nil) {
+			return toolError("latitude and longitude must be provided together"), nil, nil
+		}
+		if input.Latitude != nil && input.Longitude != nil {
+			if *input.Latitude < -90 || *input.Latitude > 90 {
+				return toolError("latitude must be between -90 and 90"), nil, nil
+			}
+			if *input.Longitude < -180 || *input.Longitude > 180 {
+				return toolError("longitude must be between -180 and 180"), nil, nil
+			}
+			lat, lon = input.Latitude, input.Longitude
+		}
+		if input.Radius < 0 {
+			return toolError("radius must not be negative"), nil, nil
+		}
+
 		searcher, providerName, errResult := resolveLocalSearcher(deps, input.Provider)
 		if errResult != nil {
 			return errResult, nil, nil
@@ -62,7 +86,7 @@ func registerLocal(srv *mcp.Server, deps Dependencies) {
 			return synthesisUnconfiguredError("local_search", search.SupportedLocalProviders), nil, nil
 		}
 
-		cacheKey := searchCacheKey("local", input.Query, input.Near, input.Country, input.Units, num, providerName)
+		cacheKey := searchCacheKey("local", input.Query, input.Near, input.Country, input.Units, num, providerName, coordCacheKey(lat, lon), input.Radius)
 		if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
 			recordToolCall(deps, "local_search", time.Since(start), nil, "", true)
 			auditToolCall(ctx, deps, "local_search", time.Since(start), nil, "")
@@ -75,6 +99,9 @@ func registerLocal(srv *mcp.Server, deps Dependencies) {
 			Country:    input.Country,
 			Units:      input.Units,
 			NumResults: num,
+			Latitude:   lat,
+			Longitude:  lon,
+			Radius:     input.Radius,
 		})
 		if err != nil {
 			errCode := "upstream_error"
@@ -115,6 +142,17 @@ func registerLocal(srv *mcp.Server, deps Dependencies) {
 
 		return structuredResult(jsonBytes), nil, nil
 	})
+}
+
+// coordCacheKey renders an optional lat/lon anchor as a stable cache-key
+// fragment. Pointers must not be hashed directly (searchCacheKey would hash the
+// address, not the value), and an unset anchor must hash distinctly from a
+// literal 0,0. Returns "none" when no coordinate is set.
+func coordCacheKey(lat, lon *float64) string {
+	if lat == nil || lon == nil {
+		return "none"
+	}
+	return fmt.Sprintf("%g,%g", *lat, *lon)
 }
 
 func resolveLocalSearcher(deps Dependencies, providerName string) (search.LocalSearcher, string, *mcp.CallToolResult) {

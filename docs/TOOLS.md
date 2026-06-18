@@ -446,13 +446,15 @@ type PipelineSummary struct {
 | Field | Type | Required | Default | Constraints |
 |-------|------|----------|---------|-------------|
 | `query` | string | yes | — | 1-500 chars |
-| `num_results` | int | no | 5 | 1-10 |
-| `size` | string | no | — | huge, icon, large, medium, small, xlarge, xxlarge |
-| `type` | string | no | — | clipart, face, lineart, stock, photo, animated |
-| `color_type` | string | no | — | color, gray, mono, trans |
-| `dominant_color` | string | no | — | black, blue, brown, gray, green, orange, pink, purple, red, teal, white, yellow |
-| `file_type` | string | no | — | jpg, gif, png, bmp, svg, webp |
-| `safe` | string | no | `medium` | off, medium, high |
+| `num_results` | int | no | 5 | 1-200 (Brave up to 200; Google up to 10) |
+| `size` | string | no | — | huge, icon, large, medium, small, xlarge, xxlarge. **Google/SearchAPI only** — Brave ignores it. |
+| `type` | string | no | — | clipart, face, lineart, stock, photo, animated. **Google/SearchAPI only** — Brave ignores it. |
+| `color_type` | string | no | — | color, gray, mono, trans. **Google/SearchAPI only** — Brave ignores it. |
+| `dominant_color` | string | no | — | black, blue, brown, gray, green, orange, pink, purple, red, teal, white, yellow. **Google/SearchAPI only** — Brave ignores it. |
+| `file_type` | string | no | — | jpg, gif, png, bmp, svg, webp. **Google/SearchAPI only** — Brave ignores it. |
+| `safe` | string | no | `medium` | off, medium, high. On **Brave images** only `off` and `strict` apply (any non-`off` maps to `strict`). |
+| `country` | string | no | — | ISO 3166-1 alpha-2 (e.g. `us`, `gb`). Honored by Brave and Google. |
+| `language` | string | no | — | BCP 47 / 2-letter code (e.g. `en`, `de`). Honored by Brave (`search_lang`) and Google (`lr`). |
 | `provider` | string | no | — | Force search provider |
 
 ### Output Schema
@@ -478,7 +480,7 @@ type ImageResult struct {
 ```
 
 ### Provider notes
-- Filters (`type`, `color_type`, `dominant_color`, `file_type`) are passed to the provider's image API. The `size` bucket is a hint the provider applies loosely — returned dimensions may not strictly match the requested bucket. Use the `width`/`height` fields to filter precisely when exact sizing matters.
+- `size`, `type`, `color_type`, `dominant_color`, and `file_type` are **Google/SearchAPI-only** filters — they are not documented Brave image params, so the Brave adapter never sends them (Brave would silently drop them). `country`, `language`, and `safe` are honored across providers. The `size` bucket is a hint the provider applies loosely — returned dimensions may not strictly match the requested bucket; use `width`/`height` to filter precisely when exact sizing matters.
 - `fileSize`, `contextLink`, `width`, and `height` are **optional and provider-dependent** — each is emitted only when the configured provider reports it and is omitted (never fabricated) otherwise. No currently-configured provider populates `fileSize`, so treat it as reserved/best-effort.
 
 ### Cache
@@ -494,10 +496,13 @@ type ImageResult struct {
 | Field | Type | Required | Default | Constraints |
 |-------|------|----------|---------|-------------|
 | `query` | string | yes | — | 1-500 chars |
-| `num_results` | int | no | 5 | 1-10 |
+| `num_results` | int | no | 5 | 1-50 (Brave up to 50; Google up to 10) |
 | `time_range` | string | no | `week` | hour, day, week, month, year |
-| `sort_by` | string | no | `relevance` | relevance, date |
-| `news_source` | string | no | — | Domain filter |
+| `sort_by` | string | no | `relevance` | relevance, date. **Google only** — Brave news has no sort param and ignores it. |
+| `news_source` | string | no | — | Domain filter (e.g. `reuters.com`). **Google only** — Brave news has no source filter and ignores it. |
+| `country` | string | no | — | ISO 3166-1 alpha-2 (e.g. `us`, `gb`). Honored by Brave news. |
+| `language` | string | no | — | BCP 47 / 2-letter code (e.g. `en`, `de`). Honored by Brave news (`search_lang`). |
+| `safe` | string | no | — | SafeSearch level: off, moderate, strict. Honored by Brave news. |
 | `provider` | string | no | — | Force search provider |
 | `sessionId` | string | no | — | Link results to a `sequential_search` session |
 
@@ -527,13 +532,14 @@ On a zero-result response, `hints` carries the same `ZeroResultHints` object as 
 
 1. Route to configured search provider's news endpoint.
 2. Apply `time_range` as date restriction.
-3. If `news_source` specified, add as domain filter.
-4. Sort by `sort_by`: `relevance` (default) uses the provider's native ranking; `date` requests newest-first ordering.
+3. If `news_source` specified, add as domain filter (Google only).
+4. Sort by `sort_by`: `relevance` (default) uses the provider's native ranking; `date` requests newest-first ordering (Google only).
 5. Return deduplicated articles.
 
 ### Provider notes
+- `sort_by` and `news_source` are **Google-only** controls — Brave's news API has no sort or single-source parameter, so the Brave adapter never sends them (the schema descriptions mark them provider-conditional rather than dropping the fields, since Google genuinely honors them). `country`, `language`, and `safe` are honored by Brave news.
 - `publishedAt` is **optional and provider-dependent**: populated when the provider exposes a publish timestamp (Google CSE via page metadata; Brave/Exa/Serper/SearchAPI/SearXNG/Tavily natively), omitted (not fabricated) when the provider supplies none — so treat it as best-effort. When present it is always normalized to **ISO-8601 (RFC3339 UTC)** regardless of the provider's raw format (RFC1123, relative ages like "3 days ago"/"2h", or bare dates), so values sort and compare consistently across providers; an unparseable timestamp is dropped rather than passed through.
-- `sort_by=date` maps to each provider's date-sort control; exact ordering and `time_range=hour` granularity depend on the provider's index and may be approximate. News providers may also surface high-ranking forum/aggregator pages — `news_source` narrows to a trusted outlet when that matters.
+- `sort_by=date` maps to Google's date-sort control; exact ordering and `time_range=hour` granularity depend on the provider's index and may be approximate. News providers may also surface high-ranking forum/aggregator pages — `news_source` narrows to a trusted outlet when that matters (Google).
 
 ### Cache
 - TTL: 15 minutes (news is time-sensitive)
@@ -1465,9 +1471,12 @@ Search for **physical places** (restaurants, cafes, shops, services, points of i
 | Field | Type | Required | Default | Constraints |
 |-------|------|----------|---------|-------------|
 | `query` | string | yes | — | Local intent query (e.g. `'best coffee shops near downtown Seattle'`) |
-| `near` | string | no | — | Optional location bias appended to the query (city, neighborhood, region) |
+| `near` | string | no | — | Free-text location bias (city, neighborhood, region). Used as the location anchor when no coordinates are given (Brave: sent as a location header, **not** appended to the query). Coordinates take precedence. |
+| `latitude` | number | no | — | WGS-84 latitude (−90…90) of the search anchor. With `longitude`, takes precedence over `near`, anchors the place index, and distance-ranks results nearest-first. |
+| `longitude` | number | no | — | WGS-84 longitude (−180…180). Must be paired with `latitude` to take effect. |
+| `radius` | number | no | 0 | Distance filter in **meters**, applied only when `latitude`/`longitude` are set. Drops places farther than this from the anchor. 0 = no filter. Independent of `units`. |
 | `country` | string | no | — | ISO 3166-1 alpha-2 country restriction (e.g. `US`, `GB`) |
-| `units` | string | no | — | `metric` or `imperial` |
+| `units` | string | no | — | `metric` or `imperial` (display only) |
 | `num_results` | int | no | 5 | 1–20 |
 | `provider` | string | no | — | Force a local-search provider: `brave` |
 | `sessionId` | string | no | — | Record results as sources on a `sequential_search` session |
@@ -1479,7 +1488,8 @@ Each `places[]` item: `id` (ephemeral), `name`, `address`, `lat`, `lon`, `phone`
 ### Behavior
 
 - **Provider honoring**: an explicit `provider` is used exclusively; an unknown or unconfigured provider returns a structured error (no silent fallback).
-- When `near` is provided it is appended to `query` before the API call; both forms influence the location-biased web search in step 1.
+- **Location anchoring** (Brave): when `latitude`/`longitude` are supplied they are sent as `X-Loc-Lat`/`X-Loc-Long` headers on the step-1 locations call (header values are never logged) and take precedence over `near`; otherwise `near`/`country` populate the `X-Loc-City`/`X-Loc-Country` text-fallback headers. The query is **not** suffixed with the location. Steps 2/3 (`local/pois`, `local/descriptions`) send no location headers, matching Brave's reference client.
+- **Distance ranking**: with an anchor coordinate present, returned POIs are sorted nearest-first by haversine distance; `radius` (meters) additionally drops places beyond that distance. Coordinates are optional and validated at the boundary — `latitude` and `longitude` must be given together and within range, and `radius` must be non-negative, else the call returns a structured validation error.
 - The descriptions step is best-effort: a failure there does not fail the whole call — results are returned without descriptions.
 - Returns an empty `places` array (with `hints`) when no location results match; never panics.
 

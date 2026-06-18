@@ -842,6 +842,64 @@ class LegalSearchResponse:
         )
 
 @dataclass
+class LocalSearchPlace:
+    address: Optional[str] = None
+    categories: list[str] = field(default_factory=list)
+    description: Optional[str] = None
+    hours: list[str] = field(default_factory=list)
+    id: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    rating: Optional[float] = None
+    ratingCount: Optional[int] = None
+    source: Optional[str] = None
+    website: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "LocalSearchPlace | None":
+        if d is None:
+            return None
+        return cls(
+            address=d.get('address'),
+            categories=list(d.get('categories') or []),
+            description=d.get('description'),
+            hours=list(d.get('hours') or []),
+            id=d.get('id'),
+            lat=d.get('lat'),
+            lon=d.get('lon'),
+            name=d.get('name'),
+            phone=d.get('phone'),
+            rating=d.get('rating'),
+            ratingCount=d.get('ratingCount'),
+            source=d.get('source'),
+            website=d.get('website'),
+        )
+
+@dataclass
+class LocalSearchResponse:
+    hints: dict[str, Any] = field(default_factory=dict)
+    places: list[LocalSearchPlace] = field(default_factory=list)
+    provider: Optional[str] = None
+    query: Optional[str] = None
+    resultCount: Optional[int] = None
+    trust: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "LocalSearchResponse | None":
+        if d is None:
+            return None
+        return cls(
+            hints=dict(d.get('hints') or {}),
+            places=[LocalSearchPlace.from_dict(i) for i in (d.get('places') or [])],
+            provider=d.get('provider'),
+            query=d.get('query'),
+            resultCount=d.get('resultCount'),
+            trust=d.get('trust'),
+        )
+
+@dataclass
 class MemoryRecallMemory:
     createdAt: Optional[str] = None
     id: Optional[str] = None

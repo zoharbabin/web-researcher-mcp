@@ -30,12 +30,22 @@ type LocalProvider interface {
 // intent (e.g. "best coffee shops near downtown Seattle"). Near is an optional
 // free-text location bias; Country is ISO 3166-1 alpha-2; Units is "metric" or
 // "imperial". NumResults is clamped to 1-20, defaulting to 5.
+//
+// Location anchoring (Brave): coordinates, when supplied, are sent as X-Loc-Lat/
+// X-Loc-Long headers on the step-1 locations call and take precedence over the
+// text fallback (Near → X-Loc-City). With an anchor coordinate present, returned
+// POIs are distance-ranked (nearest first) and optionally filtered by Radius.
+// Latitude/Longitude are pointers so an unset anchor is distinguishable from a
+// literal 0,0 (the Gulf of Guinea).
 type LocalSearchParams struct {
 	Query      string
-	Near       string // optional free-text location bias (city, neighborhood, region)
-	Country    string // ISO 3166-1 alpha-2
-	Units      string // "metric" or "imperial"
-	NumResults int    // 1-20, default 5
+	Near       string   // optional free-text location bias (city, neighborhood, region)
+	Country    string   // ISO 3166-1 alpha-2
+	Units      string   // "metric" or "imperial"
+	NumResults int      // 1-20, default 5
+	Latitude   *float64 // WGS-84 latitude; X-Loc-Lat on step 1; takes precedence over Near
+	Longitude  *float64 // WGS-84 longitude; X-Loc-Long on step 1
+	Radius     float64  // meters; optional post-rank distance filter (0 = no filter)
 }
 
 // LocalResult is one physical place from the POI index. Coordinates are

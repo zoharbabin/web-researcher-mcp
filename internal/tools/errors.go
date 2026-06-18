@@ -436,6 +436,23 @@ func routingMeta(d search.RoutingDecision, latency time.Duration, cacheHit bool)
 	return m
 }
 
+// withMoreResults merges a provider's `more_results_available` pagination
+// signal (F8, Brave's query.more_results_available) into the result's `_meta`
+// when the provider reported it. ok=false (no provider emitted the flag) leaves
+// the result untouched, so the key appears only when it is meaningful — a
+// deep-research caller can advance `offset` while this is true and stop when it
+// flips false. It is sibling-to-content provenance, never written to the body.
+func withMoreResults(result *mcp.CallToolResult, val, ok bool) *mcp.CallToolResult {
+	if result == nil || !ok {
+		return result
+	}
+	if result.Meta == nil {
+		result.Meta = mcp.Meta{}
+	}
+	result.Meta["more_results_available"] = val
+	return result
+}
+
 // withRoutingMeta merges a routing block into an existing result's `_meta`,
 // preserving any cache-freshness keys already present (it never clobbers the
 // cache block). A nil routing block leaves the result untouched. The merged

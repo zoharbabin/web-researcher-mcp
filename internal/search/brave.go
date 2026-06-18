@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +20,13 @@ import (
 var _ Provider = (*BraveProvider)(nil)
 var _ LocalProvider = (*BraveProvider)(nil)
 var _ ContextProvider = (*BraveProvider)(nil)
+
+// braveAPIVersion pins the Brave API schema version (header "Api-Version",
+// format YYYY-MM-DD). Brave gates backwards-incompatible response changes on
+// this header; omitting it silently opts into "latest", so a future Brave
+// change could break our parsing with no warning. Bump this constant
+// deliberately only after validating our parsers against the newer schema.
+const braveAPIVersion = "2023-01-01"
 
 // BraveConfig holds Brave-specific provider configuration knobs.
 type BraveConfig struct {
@@ -74,8 +83,10 @@ func (b *BraveProvider) doWebSearch(ctx context.Context, params WebSearchParams)
 	q.Set("q", buildQuery(params))
 	q.Set("count", strconv.Itoa(clamp(params.NumResults, 1, 20)))
 
+	// Brave's documented offset range is 0-9 (F8); clamp to avoid sending an
+	// out-of-range value Brave rejects/ignores.
 	if params.Offset > 0 {
-		q.Set("offset", strconv.Itoa(params.Offset))
+		q.Set("offset", strconv.Itoa(clamp(params.Offset, 0, 9)))
 	}
 	if params.Country != "" {
 		q.Set("country", params.Country)
@@ -88,8 +99,10 @@ func (b *BraveProvider) doWebSearch(ctx context.Context, params WebSearchParams)
 			q.Set("freshness", fs)
 		}
 	}
-	if params.Safe != "" && params.Safe != "off" {
-		q.Set("safesearch", "moderate")
+	// F8: Brave web accepts off/moderate/strict — preserve the caller's level
+	// instead of collapsing every non-off value to moderate.
+	if ss := mapBraveWebSafe(params.Safe); ss != "" {
+		q.Set("safesearch", ss)
 	}
 	if b.config.ExtraSnippets {
 		q.Set("extra_snippets", "1")
@@ -97,12 +110,20 @@ func (b *BraveProvider) doWebSearch(ctx context.Context, params WebSearchParams)
 	if params.ResultFilter != "" {
 		q.Set("result_filter", params.ResultFilter)
 	}
-	if params.GoggleURL != "" {
-		q.Set("goggles_id", params.GoggleURL)
+	// F1: the param is `goggles` (string|string[]); `goggles_id` is deprecated and
+	// on Brave's removal path. Append up to 3 as repeated params so lens stacking
+	// composes (q.Add, not q.Set).
+	for i, g := range params.Goggles {
+		if i >= 3 {
+			break
+		}
+		if g != "" {
+			q.Add("goggles", g)
+		}
 	}
 
 	apiURL := "https://api.search.brave.com/res/v1/web/search?" + q.Encode()
-	body, err := b.doRequest(ctx, apiURL)
+	body, err := b.doRequest(ctx, apiURL, withAPIVersion())
 	if err != nil {
 		return nil, err
 	}
@@ -111,6 +132,10 @@ func (b *BraveProvider) doWebSearch(ctx context.Context, params WebSearchParams)
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, fmt.Errorf("failed to parse brave response: %w", err)
 	}
+
+	// F8: surface Brave's pagination signal via the request-scoped result-meta
+	// side channel when the tool layer installed one (nil-safe otherwise).
+	resultMetaFromContext(ctx).setMoreResultsAvailable(resp.Query.MoreResultsAvailable)
 
 	var results []SearchResult
 	for _, r := range resp.Web.Results {
@@ -128,13 +153,21 @@ func (b *BraveProvider) doWebSearch(ctx context.Context, params WebSearchParams)
 func (b *BraveProvider) doImageSearch(ctx context.Context, params ImageSearchParams) ([]ImageResult, error) {
 	q := url.Values{}
 	q.Set("q", params.Query)
-	q.Set("count", strconv.Itoa(clamp(params.NumResults, 1, 10)))
+	// F6: Brave images allow up to 200 (we honor the project ceiling of 200);
+	// `size`/`type`/`color_type`/`dominant_color`/`file_type` are NOT documented
+	// Brave image params, so we deliberately do not emit them (Brave drops them).
+	// Those fields remain on ImageSearchParams for Google/SearchAPI, which honor them.
+	q.Set("count", strconv.Itoa(clamp(params.NumResults, 1, 200)))
 
-	if params.Size != "" {
-		q.Set("size", params.Size)
+	if params.Country != "" {
+		q.Set("country", params.Country)
 	}
-	if params.Type != "" {
-		q.Set("type", params.Type)
+	if params.Language != "" {
+		q.Set("search_lang", params.Language)
+	}
+	// F6: images have no `moderate` — map any non-off level to strict (Brave default).
+	if ss := mapBraveImageSafe(params.Safe); ss != "" {
+		q.Set("safesearch", ss)
 	}
 
 	apiURL := "https://api.search.brave.com/res/v1/images/search?" + q.Encode()
@@ -163,12 +196,35 @@ func (b *BraveProvider) doImageSearch(ctx context.Context, params ImageSearchPar
 func (b *BraveProvider) doNewsSearch(ctx context.Context, params NewsSearchParams) ([]NewsResult, error) {
 	q := url.Values{}
 	q.Set("q", params.Query)
-	q.Set("count", strconv.Itoa(clamp(params.NumResults, 1, 20)))
+	// F7: Brave news allows up to 50 (was silently clamped to 20).
+	q.Set("count", strconv.Itoa(clamp(params.NumResults, 1, 50)))
 
 	if params.Freshness != "" {
 		if fs := mapBraveFreshness(params.Freshness); fs != "" {
 			q.Set("freshness", fs)
 		}
+	}
+	// F7: localize + language-scope news (previously dropped). sort_by/news_source
+	// have no Brave backing, so they're honored only by Google and intentionally
+	// not emitted here.
+	if params.Country != "" {
+		q.Set("country", params.Country)
+	}
+	if params.Language != "" {
+		q.Set("search_lang", params.Language)
+	}
+	// Brave news accepts the full off|moderate|strict set (same as web).
+	if ss := mapBraveWebSafe(params.Safe); ss != "" {
+		q.Set("safesearch", ss)
+	}
+	// Brave news offset is 0–9, same as web (F8).
+	if params.Offset > 0 {
+		q.Set("offset", strconv.Itoa(clamp(params.Offset, 0, 9)))
+	}
+	// Gate extra_snippets behind the same config knob as web — the response side
+	// already surfaces braveNewsResponse.ExtraSnippets.
+	if b.config.ExtraSnippets {
+		q.Set("extra_snippets", "1")
 	}
 
 	apiURL := "https://api.search.brave.com/res/v1/news/search?" + q.Encode()
@@ -196,7 +252,47 @@ func (b *BraveProvider) doNewsSearch(ctx context.Context, params NewsSearchParam
 	return results, nil
 }
 
-func (b *BraveProvider) doRequest(ctx context.Context, apiURL string) ([]byte, error) {
+// braveReqOpt mutates an outbound Brave request before it is sent. It is the
+// header-injection seam (F4): per-call headers (X-Loc-*, Cache-Control) ride on
+// the request without disturbing the base Accept/token/Api-Version headers, and
+// existing call sites stay unchanged because doRequest is variadic.
+type braveReqOpt func(*http.Request)
+
+// withHeader sets a single request header when the value is non-empty. Empty
+// values are skipped so callers can pass through optional fields uniformly.
+//
+// Security: never use this to log header values — the subscription token and
+// X-Loc-* (PII-adjacent location) must never appear in logs or errors.
+func withHeader(k, v string) braveReqOpt {
+	return func(r *http.Request) {
+		if v != "" {
+			r.Header.Set(k, v)
+		}
+	}
+}
+
+// withLocation attaches Brave's X-Loc-* location headers derived from the
+// caller's coordinates or text fallback. Coordinates take precedence per the
+// Brave reference; when absent, the text headers (city/state/country) are sent
+// from Near/Country. This belongs on the step-1 web/search?result_filter=locations
+// call ONLY — Brave's reference client sends no X-Loc-* on /local/pois.
+func withLocation(p LocalSearchParams) braveReqOpt {
+	return func(r *http.Request) {
+		if p.Latitude != nil && p.Longitude != nil {
+			r.Header.Set("X-Loc-Lat", strconv.FormatFloat(*p.Latitude, 'f', -1, 64))
+			r.Header.Set("X-Loc-Long", strconv.FormatFloat(*p.Longitude, 'f', -1, 64))
+		} else if p.Near != "" {
+			// Text fallback: bias via the city header. The free-text Near can be a
+			// city/neighborhood/region; Brave treats x-loc-city as the textual anchor.
+			r.Header.Set("X-Loc-City", p.Near)
+		}
+		if p.Country != "" {
+			r.Header.Set("X-Loc-Country", p.Country)
+		}
+	}
+}
+
+func (b *BraveProvider) doRequest(ctx context.Context, apiURL string, opts ...braveReqOpt) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 	if err != nil {
 		return nil, err
@@ -205,6 +301,9 @@ func (b *BraveProvider) doRequest(ctx context.Context, apiURL string) ([]byte, e
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Accept-Encoding", "gzip")
 	req.Header.Set("X-Subscription-Token", b.apiKey)
+	for _, opt := range opts {
+		opt(req)
+	}
 
 	resp, err := b.deps.HTTPClient.Do(req)
 	if err != nil {
@@ -225,15 +324,86 @@ func (b *BraveProvider) doRequest(ctx context.Context, apiURL string) ([]byte, e
 		reader = gr
 	}
 
-	if resp.StatusCode == 429 {
-		return nil, fmt.Errorf("brave API rate limited")
-	}
 	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(io.LimitReader(reader, 1024))
-		return nil, fmt.Errorf("brave API error %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		body, _ := io.ReadAll(io.LimitReader(reader, 4096))
+		return nil, braveError(resp.StatusCode, body)
 	}
 
 	return io.ReadAll(io.LimitReader(reader, 5*1024*1024))
+}
+
+// withNoCache sets Cache-Control: no-cache to request a best-effort cache bypass
+// for freshness-critical calls (F10). Off by default — callers opt in.
+func withNoCache() braveReqOpt {
+	return withHeader("Cache-Control", "no-cache")
+}
+
+// withAPIVersion pins the Brave schema version (F10). It is scoped to the
+// web-search product ONLY: that product accepts (and gates schema changes on)
+// the Api-Version header, but the image, news, local (pois/descriptions), and
+// llm/context products reject any explicit value — images/news with 404
+// API_VERSION_NOT_FOUND, local/context with 422 — so the pin must NOT ride on
+// those calls. Apply it only to /web/search requests (including the local
+// pipeline's step-1 web/search?result_filter=locations call).
+func withAPIVersion() braveReqOpt {
+	return withHeader("Api-Version", braveAPIVersion)
+}
+
+// braveErrorResponse models Brave's structured error envelope (F10):
+//
+//	{ "type":"ErrorResponse",
+//	  "error": { "id","status","code","detail","meta": {
+//	      "plan","rate_limit","rate_current","quota_limit","quota_current","component" } },
+//	  "time": ... }
+//
+// We parse it so a 429 distinguishes a per-second throttle (component/rate_limit)
+// from monthly-quota exhaustion (quota_limit) instead of a generic "rate limited".
+type braveErrorResponse struct {
+	Type  string `json:"type"`
+	Error struct {
+		ID     string `json:"id"`
+		Status int    `json:"status"`
+		Code   string `json:"code"`
+		Detail string `json:"detail"`
+		Meta   struct {
+			Plan         string `json:"plan"`
+			RateLimit    int    `json:"rate_limit"`
+			RateCurrent  int    `json:"rate_current"`
+			QuotaLimit   int    `json:"quota_limit"`
+			QuotaCurrent int    `json:"quota_current"`
+			Component    string `json:"component"`
+		} `json:"meta"`
+	} `json:"error"`
+}
+
+// braveError builds an actionable error from an HTTP status + (optionally
+// structured) error body. The returned string always contains a token that
+// isRateLimitError keys on ("rate limited", "429", or "quota") for any 429 or
+// RATE_LIMITED code, so rate-limit classification survives the richer message.
+// Security: the body is Brave's own error envelope (no secrets) — the
+// subscription token is never echoed here.
+func braveError(status int, body []byte) error {
+	var er braveErrorResponse
+	_ = json.Unmarshal(body, &er) // best-effort; fall back to raw body below
+
+	if status == 429 || er.Error.Code == "RATE_LIMITED" {
+		m := er.Error.Meta
+		// Monthly quota exhaustion vs per-second throttle, when Brave tells us.
+		if m.QuotaLimit > 0 && m.QuotaCurrent >= m.QuotaLimit {
+			return fmt.Errorf("brave API monthly quota exhausted (plan=%s, quota %d/%d): rate limited",
+				m.Plan, m.QuotaCurrent, m.QuotaLimit)
+		}
+		if m.Component != "" || m.RateLimit > 0 {
+			return fmt.Errorf("brave API rate limited (component=%s, rate %d/%d per second, plan=%s)",
+				m.Component, m.RateCurrent, m.RateLimit, m.Plan)
+		}
+		return fmt.Errorf("brave API rate limited")
+	}
+
+	if er.Error.Code != "" || er.Error.Detail != "" {
+		return fmt.Errorf("brave API error %d [%s]: %s", status, er.Error.Code, er.Error.Detail)
+	}
+	return fmt.Errorf("brave API error %d: %s", status, strings.TrimSpace(string(body)))
 }
 
 func (b *BraveProvider) Metadata() ProviderMeta {
@@ -246,26 +416,54 @@ func (b *BraveProvider) Metadata() ProviderMeta {
 
 // Local implements LocalSearcher via Brave's three-call local pipeline:
 //  1. web/search?result_filter=locations to collect ephemeral location IDs
+//     (location anchored via X-Loc-* headers, NOT a query suffix — F2)
 //  2. local/pois?ids=… to fetch POI details (address, phone, rating, hours)
 //  3. local/descriptions?ids=… for AI-generated descriptions (best-effort)
 //
+// Steps 1+2 run inside the circuit breaker (F3); step 3 is best-effort and
+// stays outside so a descriptions outage neither fails the call nor trips the
+// breaker. When an anchor coordinate is supplied, POIs are distance-ranked
+// nearest-first and optionally filtered by Radius (F2).
+//
 // IDs are ephemeral — never persisted beyond the request lifecycle.
 func (b *BraveProvider) Local(ctx context.Context, params LocalSearchParams) ([]LocalResult, error) {
-	// Step 1: web search restricted to location results to collect ephemeral IDs.
-	query := params.Query
-	if params.Near != "" {
-		query = query + " near " + params.Near
+	var out []LocalResult
+	err := b.deps.Breaker.Execute(func() error {
+		ids, e := b.localIDs(ctx, params)
+		if e != nil {
+			return e
+		}
+		if len(ids) == 0 {
+			return nil
+		}
+		out, e = b.localPOIs(ctx, ids, params)
+		return e
+	})
+	if err != nil || len(out) == 0 {
+		if out == nil {
+			out = []LocalResult{}
+		}
+		return out, err
 	}
 
+	// Step 3 (best-effort, outside the breaker): enrich with AI descriptions.
+	b.attachDescriptions(ctx, out, params)
+
+	// F2: distance-rank against the anchor coordinate when present.
+	if params.Latitude != nil && params.Longitude != nil {
+		out = rankByHaversine(out, *params.Latitude, *params.Longitude, params.Radius)
+	}
+	return out, nil
+}
+
+// localIDs runs step 1: a location-filtered web search that returns Brave's
+// ephemeral location IDs. Location is anchored through X-Loc-* headers
+// (coordinates or text fallback) — the query is NOT suffixed with "near …",
+// which biases the text index rather than the POI geosystem (F2).
+func (b *BraveProvider) localIDs(ctx context.Context, params LocalSearchParams) ([]string, error) {
 	q := url.Values{}
-	q.Set("q", query)
-	n := params.NumResults
-	if n <= 0 {
-		n = 5
-	}
-	if n > 20 {
-		n = 20
-	}
+	q.Set("q", params.Query)
+	n := clampLocalCount(params.NumResults)
 	q.Set("count", strconv.Itoa(n))
 	q.Set("result_filter", "locations")
 	if params.Country != "" {
@@ -275,7 +473,11 @@ func (b *BraveProvider) Local(ctx context.Context, params LocalSearchParams) ([]
 		q.Set("units", params.Units)
 	}
 
-	webData, err := b.doRequest(ctx, "https://api.search.brave.com/res/v1/web/search?"+q.Encode())
+	// Location headers ride on the step-1 call ONLY (Brave's reference client
+	// sends no X-Loc-* on /local/pois). withLocation never logs header values.
+	webData, err := b.doRequest(ctx,
+		"https://api.search.brave.com/res/v1/web/search?"+q.Encode(),
+		withAPIVersion(), withLocation(params))
 	if err != nil {
 		return nil, err
 	}
@@ -297,33 +499,31 @@ func (b *BraveProvider) Local(ctx context.Context, params LocalSearchParams) ([]
 			ids = append(ids, r.ID)
 		}
 	}
-	if len(ids) == 0 {
-		return []LocalResult{}, nil
-	}
 	// The locations filter ignores `count` and returns far more IDs than
-	// requested, so cap to the caller's NumResults here (also keeps the
-	// POI request URL well under Brave's length limit). n is already
-	// clamped to 1-20 above.
+	// requested, so cap to the caller's NumResults here (also keeps the POI
+	// request URL well under Brave's length limit). n is clamped to 1-20.
 	if len(ids) > n {
 		ids = ids[:n]
 	}
+	return ids, nil
+}
 
-	// Brave requires each ID as its own repeated `ids=` query parameter
-	// (ids=a&ids=b). A single comma-joined value yields a null POI result.
-	idQuery := url.Values{}
+// localPOIs runs step 2: fetch POI details for the collected IDs. Only ids and
+// units (display) are valid here — no X-Loc-* and no country (Brave's reference
+// client omits both on /local/pois).
+func (b *BraveProvider) localPOIs(ctx context.Context, ids []string, params LocalSearchParams) ([]LocalResult, error) {
+	q := url.Values{}
 	for _, id := range ids {
-		idQuery.Add("ids", id)
+		q.Add("ids", id) // repeated ids=; a comma-joined value yields a null result
 	}
-	idParam := idQuery.Encode()
+	if params.Units != "" {
+		q.Set("units", params.Units)
+	}
 
-	// Step 2: fetch POI details for the collected IDs.
-	poisData, err := b.doRequest(ctx, "https://api.search.brave.com/res/v1/local/pois?"+idParam)
+	poisData, err := b.doRequest(ctx, "https://api.search.brave.com/res/v1/local/pois?"+q.Encode())
 	if err != nil {
 		return nil, err
 	}
-
-	// Step 3: fetch AI-generated descriptions (best-effort — don't fail the call).
-	descData, _ := b.doRequest(ctx, "https://api.search.brave.com/res/v1/local/descriptions?"+idParam)
 
 	var poisResp struct {
 		Results []struct {
@@ -352,31 +552,12 @@ func (b *BraveProvider) Local(ctx context.Context, params LocalSearchParams) ([]
 		return nil, fmt.Errorf("brave local: failed to parse POI details: %w", err)
 	}
 
-	// Build a description map from the best-effort descriptions response.
-	descMap := map[string]string{}
-	if descData != nil {
-		var descResp struct {
-			Results []struct {
-				ID          string `json:"id"`
-				Description string `json:"description"`
-			} `json:"results"`
-		}
-		if err := json.Unmarshal(descData, &descResp); err == nil {
-			for _, d := range descResp.Results {
-				if d.Description != "" {
-					descMap[d.ID] = d.Description
-				}
-			}
-		}
-	}
-
 	results := make([]LocalResult, 0, len(poisResp.Results))
 	for _, p := range poisResp.Results {
 		var lat, lon float64
 		if len(p.Coordinates) >= 2 {
 			lat, lon = p.Coordinates[0], p.Coordinates[1]
 		}
-
 		results = append(results, LocalResult{
 			ID:          p.ID,
 			Name:        p.Title,
@@ -389,11 +570,112 @@ func (b *BraveProvider) Local(ctx context.Context, params LocalSearchParams) ([]
 			Rating:      p.Rating.RatingValue,
 			RatingCount: p.Rating.ReviewCount,
 			Hours:       braveFormatHours(p.OpeningHours.CurrentDay, p.OpeningHours.Days),
-			Description: descMap[p.ID],
 			Source:      "brave",
 		})
 	}
 	return results, nil
+}
+
+// attachDescriptions runs step 3 (best-effort): fetch AI-generated descriptions
+// and merge them into the POIs by ID. Any failure is swallowed — descriptions
+// are enrichment, not core data, and must not fail the overall call or trip the
+// breaker (it runs outside Execute). Only ids are sent (no country, no X-Loc-*).
+func (b *BraveProvider) attachDescriptions(ctx context.Context, results []LocalResult, params LocalSearchParams) {
+	if len(results) == 0 {
+		return
+	}
+	q := url.Values{}
+	for _, r := range results {
+		if r.ID != "" {
+			q.Add("ids", r.ID)
+		}
+	}
+	if params.Units != "" {
+		q.Set("units", params.Units)
+	}
+
+	descData, err := b.doRequest(ctx, "https://api.search.brave.com/res/v1/local/descriptions?"+q.Encode())
+	if err != nil || descData == nil {
+		return
+	}
+	var descResp struct {
+		Results []struct {
+			ID          string `json:"id"`
+			Description string `json:"description"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(descData, &descResp); err != nil {
+		return
+	}
+	descMap := make(map[string]string, len(descResp.Results))
+	for _, d := range descResp.Results {
+		if d.Description != "" {
+			descMap[d.ID] = d.Description
+		}
+	}
+	for i := range results {
+		if desc, ok := descMap[results[i].ID]; ok {
+			results[i].Description = desc
+		}
+	}
+}
+
+// clampLocalCount normalizes NumResults to Brave's 1-20 local range (default 5).
+func clampLocalCount(n int) int {
+	if n <= 0 {
+		return 5
+	}
+	return clamp(n, 1, 20)
+}
+
+// rankByHaversine sorts POIs nearest-first relative to an anchor coordinate and,
+// when radiusMeters > 0, drops any POI farther than that radius. POIs missing
+// coordinates (Lat==0 && Lon==0) are treated as unrankable: they sort after all
+// ranked POIs and are excluded entirely when a radius filter is active (we can't
+// prove they fall inside it). Returns the filtered, ordered slice (F2).
+func rankByHaversine(results []LocalResult, lat, lon, radiusMeters float64) []LocalResult {
+	type ranked struct {
+		r      LocalResult
+		dist   float64
+		hasGeo bool
+	}
+	scored := make([]ranked, 0, len(results))
+	for _, r := range results {
+		hasGeo := r.Lat != 0 || r.Lon != 0
+		var d float64
+		if hasGeo {
+			d = haversineMeters(lat, lon, r.Lat, r.Lon)
+		}
+		if radiusMeters > 0 && (!hasGeo || d > radiusMeters) {
+			continue // outside the radius, or unprovable without coords
+		}
+		scored = append(scored, ranked{r: r, dist: d, hasGeo: hasGeo})
+	}
+	sort.SliceStable(scored, func(i, j int) bool {
+		// Geo-bearing POIs always precede coordinate-less ones; among geo POIs,
+		// nearest first. Stable sort preserves Brave's order within ties.
+		if scored[i].hasGeo != scored[j].hasGeo {
+			return scored[i].hasGeo
+		}
+		return scored[i].dist < scored[j].dist
+	})
+	out := make([]LocalResult, len(scored))
+	for i, s := range scored {
+		out[i] = s.r
+	}
+	return out
+}
+
+// haversineMeters returns the great-circle distance in meters between two
+// lat/lon points (decimal degrees). Stdlib math only — no new dependency.
+func haversineMeters(lat1, lon1, lat2, lon2 float64) float64 {
+	const earthRadiusM = 6371000.0
+	rad := math.Pi / 180
+	dLat := (lat2 - lat1) * rad
+	dLon := (lon2 - lon1) * rad
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+		math.Cos(lat1*rad)*math.Cos(lat2*rad)*math.Sin(dLon/2)*math.Sin(dLon/2)
+	return earthRadiusM * 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
 }
 
 // braveDayHours is one open segment for a single day in Brave's structured
@@ -431,19 +713,41 @@ func braveFormatHours(current []braveDayHours, days [][]braveDayHours) []string 
 // returns an error — the caller (search_and_scrape) falls through to normal
 // per-page scraping.
 func (b *BraveProvider) Context(ctx context.Context, params ContextParams) (*ContextResult, error) {
+	// F5: Brave's /llm/context param names differ from our old spellings —
+	// max_tokens/threshold/lang were silently dropped. Use the documented names.
 	q := url.Values{}
 	q.Set("q", params.Query)
 	if params.MaxTokens > 0 {
-		q.Set("max_tokens", strconv.Itoa(params.MaxTokens))
+		q.Set("maximum_number_of_tokens", strconv.Itoa(params.MaxTokens))
 	}
-	if params.Threshold != "" {
-		q.Set("threshold", params.Threshold)
+	if params.ThresholdMode != "" {
+		q.Set("context_threshold_mode", params.ThresholdMode)
 	}
 	if params.Country != "" {
 		q.Set("country", params.Country)
 	}
 	if params.Language != "" {
-		q.Set("lang", params.Language)
+		q.Set("search_lang", params.Language)
+	}
+	if params.Freshness != "" {
+		if fs := mapBraveFreshness(params.Freshness); fs != "" {
+			q.Set("freshness", fs)
+		}
+	}
+	if params.MaxURLs > 0 {
+		q.Set("maximum_number_of_urls", strconv.Itoa(params.MaxURLs))
+	}
+	if params.MaxSnippets > 0 {
+		q.Set("maximum_number_of_snippets", strconv.Itoa(params.MaxSnippets))
+	}
+	if params.MaxTokensPerURL > 0 {
+		q.Set("maximum_number_of_tokens_per_url", strconv.Itoa(params.MaxTokensPerURL))
+	}
+	if params.MaxSnippetsPerURL > 0 {
+		q.Set("maximum_number_of_snippets_per_url", strconv.Itoa(params.MaxSnippetsPerURL))
+	}
+	if params.EnableLocal != nil {
+		q.Set("enable_local", strconv.FormatBool(*params.EnableLocal))
 	}
 
 	var result *ContextResult
@@ -518,6 +822,38 @@ func (b *BraveProvider) Context(ctx context.Context, params ContextParams) (*Con
 	return result, err
 }
 
+// mapBraveWebSafe maps our safe-search level to Brave web's documented values
+// (off | moderate | strict). An empty input returns "" so the param is omitted
+// and Brave applies its own default. Unknown values fall back to moderate.
+func mapBraveWebSafe(safe string) string {
+	switch safe {
+	case "":
+		return ""
+	case "off":
+		return "off"
+	case "strict", "high":
+		return "strict"
+	case "moderate", "medium":
+		return "moderate"
+	default:
+		return "moderate"
+	}
+}
+
+// mapBraveImageSafe maps our safe-search level to Brave's IMAGE endpoint values.
+// Images have only off | strict (no moderate); any non-off value maps to strict,
+// matching the endpoint's stricter default. Empty returns "" to omit the param.
+func mapBraveImageSafe(safe string) string {
+	switch safe {
+	case "":
+		return ""
+	case "off":
+		return "off"
+	default:
+		return "strict"
+	}
+}
+
 func mapBraveFreshness(tr string) string {
 	// Custom date range: "YYYY-MM-DD..YYYY-MM-DD" → "YYYY-MM-DDtoYYYY-MM-DD"
 	if strings.Contains(tr, "..") {
@@ -546,6 +882,12 @@ func mapBraveFreshness(tr string) string {
 }
 
 type braveWebResponse struct {
+	// Query carries Brave's pagination signal (F8): more_results_available is
+	// true when offset can advance to fetch further results. Surfaced to the
+	// caller via result _meta, never the result body.
+	Query struct {
+		MoreResultsAvailable bool `json:"more_results_available"`
+	} `json:"query"`
 	Web struct {
 		Results []struct {
 			Title         string   `json:"title"`

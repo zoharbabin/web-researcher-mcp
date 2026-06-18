@@ -47,6 +47,7 @@ from web_researcher_mcp.models import (
     GetResearchSessionResponse,
     ImageSearchResponse,
     LegalSearchResponse,
+    LocalSearchResponse,
     MCPError,
     MemoryRecallResponse,
     MemorySaveResponse,
@@ -524,8 +525,10 @@ class WebResearcherClient:
         self,
         query: str,
         color_type: str = None,
+        country: str = None,
         dominant_color: str = None,
         file_type: str = None,
+        language: str = None,
         num_results: int = 5,
         provider: str = None,
         safe: str = None,
@@ -538,8 +541,10 @@ class WebResearcherClient:
             {
                 "query": query,
                 "color_type": color_type,
+                "country": country,
                 "dominant_color": dominant_color,
                 "file_type": file_type,
+                "language": language,
                 "num_results": num_results,
                 "provider": provider,
                 "safe": safe,
@@ -572,6 +577,36 @@ class WebResearcherClient:
             },
         )
         return LegalSearchResponse.from_dict(d)
+    async def local_search(
+        self,
+        query: str,
+        country: str = None,
+        latitude: Optional[float] = None,
+        longitude: Optional[float] = None,
+        near: str = None,
+        num_results: int = None,
+        provider: str = None,
+        radius: float = None,
+        sessionId: str = None,
+        units: str = None,
+    ) -> LocalSearchResponse:
+        """Search for physical places (restaurants, shops, services, points of interest) by local intent query"""
+        d = await self._call_tool(
+            "local_search",
+            {
+                "query": query,
+                "country": country,
+                "latitude": latitude,
+                "longitude": longitude,
+                "near": near,
+                "num_results": num_results,
+                "provider": provider,
+                "radius": radius,
+                "sessionId": sessionId,
+                "units": units,
+            },
+        )
+        return LocalSearchResponse.from_dict(d)
     async def memory_recall(
         self,
         limit: int = None,
@@ -607,9 +642,12 @@ class WebResearcherClient:
     async def news_search(
         self,
         query: str,
+        country: str = None,
+        language: str = None,
         news_source: str = None,
         num_results: int = 5,
         provider: str = None,
+        safe: str = None,
         sessionId: str = None,
         sort_by: str = None,
         time_range: str = None,
@@ -619,9 +657,12 @@ class WebResearcherClient:
             "news_search",
             {
                 "query": query,
+                "country": country,
+                "language": language,
                 "news_source": news_source,
                 "num_results": num_results,
                 "provider": provider,
+                "safe": safe,
                 "sessionId": sessionId,
                 "sort_by": sort_by,
                 "time_range": time_range,
@@ -1252,8 +1293,10 @@ class SyncWebResearcherClient:
         self,
         query: str,
         color_type: str = None,
+        country: str = None,
         dominant_color: str = None,
         file_type: str = None,
+        language: str = None,
         num_results: int = 5,
         provider: str = None,
         safe: str = None,
@@ -1264,8 +1307,10 @@ class SyncWebResearcherClient:
             self._async_client.image_search(
             query=query,
             color_type=color_type,
+            country=country,
             dominant_color=dominant_color,
             file_type=file_type,
+            language=language,
             num_results=num_results,
             provider=provider,
             safe=safe,
@@ -1292,6 +1337,33 @@ class SyncWebResearcherClient:
             num_results=num_results,
             provider=provider,
             sessionId=sessionId,
+            )
+        )
+    def local_search(
+        self,
+        query: str,
+        country: str = None,
+        latitude: Optional[float] = None,
+        longitude: Optional[float] = None,
+        near: str = None,
+        num_results: int = None,
+        provider: str = None,
+        radius: float = None,
+        sessionId: str = None,
+        units: str = None,
+    ) -> LocalSearchResponse:
+        return self._run(
+            self._async_client.local_search(
+            query=query,
+            country=country,
+            latitude=latitude,
+            longitude=longitude,
+            near=near,
+            num_results=num_results,
+            provider=provider,
+            radius=radius,
+            sessionId=sessionId,
+            units=units,
             )
         )
     def memory_recall(
@@ -1323,9 +1395,12 @@ class SyncWebResearcherClient:
     def news_search(
         self,
         query: str,
+        country: str = None,
+        language: str = None,
         news_source: str = None,
         num_results: int = 5,
         provider: str = None,
+        safe: str = None,
         sessionId: str = None,
         sort_by: str = None,
         time_range: str = None,
@@ -1333,9 +1408,12 @@ class SyncWebResearcherClient:
         return self._run(
             self._async_client.news_search(
             query=query,
+            country=country,
+            language=language,
             news_source=news_source,
             num_results=num_results,
             provider=provider,
+            safe=safe,
             sessionId=sessionId,
             sort_by=sort_by,
             time_range=time_range,
