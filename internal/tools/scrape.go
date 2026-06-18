@@ -164,6 +164,14 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 			output["structuredData"] = result.StructuredData
 		}
 
+		// Forum engagement signals (#247): upvotes, comments, credibility note for
+		// Reddit posts extracted from JSON-LD. Nil for non-Reddit URLs and any
+		// non-HTML extraction tier (markdown, browser, raw, youtube, twitter,
+		// document) — omitted so the key is absent rather than null.
+		if result.ForumSignals != nil {
+			output["forumSignals"] = result.ForumSignals
+		}
+
 		// Typed source classification (#62): source_type / authority_tier /
 		// domain_category, derived from the Schema.org/Highwire signals + the
 		// numeric authority score. Additive; no lens on scrape_page. Captured once
@@ -332,8 +340,9 @@ func scrapeCacheKey(url, mode string, maxLength int) string {
 	// (incl. via the shared Redis cache). v4 adds the typed classification fields
 	// (#62: sourceType/authorityTier/domainCategory). v5 adds the scholarly
 	// detectedDoi + retractionStatus fields (#199). v6 adds the extractionQuality
-	// (complete/partial) completeness signal (#240). Bump on any future shape change.
-	fmt.Fprintf(h, "scrape|v6|%s|%s|%d", url, mode, maxLength)
+	// (complete/partial) completeness signal (#240). v7 adds the forumSignals field
+	// (#247) for Reddit engagement metadata. Bump on any future shape change.
+	fmt.Fprintf(h, "scrape|v7|%s|%s|%d", url, mode, maxLength)
 	return "scrape:" + hex.EncodeToString(h.Sum(nil))[:32]
 }
 

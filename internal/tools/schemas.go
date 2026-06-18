@@ -206,6 +206,18 @@ var scrapePageOutputSchema = map[string]any{
 				"citation":  map[string]any{"type": "object"},
 			},
 		},
+		"forumSignals": map[string]any{
+			"type":        "object",
+			"description": "Reddit engagement signals extracted from JSON-LD (#247): upvotes, comment count, credibility note. Present only for Reddit posts where the HTML extraction tier ran; absent for all other URLs, raw mode, and non-HTML tiers.",
+			"properties": map[string]any{
+				"platform":        map[string]any{"type": "string", "description": "Forum platform (e.g. 'reddit')."},
+				"upvotes":         map[string]any{"type": "integer", "description": "Vote count (upvotes) from the JSON-LD interaction stats."},
+				"comments":        map[string]any{"type": "integer", "description": "Number of comments."},
+				"datePublished":   map[string]any{"type": "string", "description": "ISO 8601 publish date when available."},
+				"authorName":      map[string]any{"type": "string", "description": "Original poster name when available."},
+				"credibilityNote": map[string]any{"type": "string", "description": "Contextual note about the reliability of this forum signal (e.g. vote manipulation risk on Reddit)."},
+			},
+		},
 		"sourceType":     sourceTypeSchema,
 		"authorityTier":  authorityTierSchema,
 		"domainCategory": domainCategorySchema,

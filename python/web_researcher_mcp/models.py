@@ -574,6 +574,28 @@ class Formatted:
         )
 
 @dataclass
+class ForumSignals:
+    authorName: Optional[str] = None
+    comments: Optional[int] = None
+    credibilityNote: Optional[str] = None
+    datePublished: Optional[str] = None
+    platform: Optional[str] = None
+    upvotes: Optional[int] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "ForumSignals | None":
+        if d is None:
+            return None
+        return cls(
+            authorName=d.get('authorName'),
+            comments=d.get('comments'),
+            credibilityNote=d.get('credibilityNote'),
+            datePublished=d.get('datePublished'),
+            platform=d.get('platform'),
+            upvotes=d.get('upvotes'),
+        )
+
+@dataclass
 class GetMyAnalyticsResponse:
     analytics: Optional[Analytics] = None
     reason: Optional[str] = None
@@ -1053,6 +1075,7 @@ class ScrapePageResponse:
     estimatedTokens: Optional[int] = None
     extractedBy: Optional[str] = None
     extractionQuality: Optional[str] = None
+    forumSignals: Optional[ForumSignals] = None
     metadata: Optional[ScrapePageMetadata] = None
     raw: Optional[bool] = None
     retractionStatus: Optional[Any] = None
@@ -1078,6 +1101,7 @@ class ScrapePageResponse:
             estimatedTokens=d.get('estimatedTokens'),
             extractedBy=d.get('extractedBy'),
             extractionQuality=d.get('extractionQuality'),
+            forumSignals=ForumSignals.from_dict(d.get('forumSignals')) if d.get('forumSignals') else None,
             metadata=ScrapePageMetadata.from_dict(d.get('metadata')) if d.get('metadata') else None,
             raw=d.get('raw'),
             retractionStatus=d.get('retractionStatus') or None,
@@ -1470,9 +1494,34 @@ class VerifyRecommendationConflictOfInterest:
         )
 
 @dataclass
+class VerifyRecommendationCorroborationsearch:
+    agreeCount: Optional[int] = None
+    disagreeCount: Optional[int] = None
+    lens: Optional[str] = None
+    query: Optional[str] = None
+    resultCount: Optional[int] = None
+    silentCount: Optional[int] = None
+    topResults: list[Any] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "VerifyRecommendationCorroborationsearch | None":
+        if d is None:
+            return None
+        return cls(
+            agreeCount=d.get('agreeCount'),
+            disagreeCount=d.get('disagreeCount'),
+            lens=d.get('lens'),
+            query=d.get('query'),
+            resultCount=d.get('resultCount'),
+            silentCount=d.get('silentCount'),
+            topResults=list(d.get('topResults') or []),
+        )
+
+@dataclass
 class VerifyRecommendationRecommendation:
     author: Optional[str] = None
     conflictOfInterest: Optional[VerifyRecommendationConflictOfInterest] = None
+    corroborationSearches: list[VerifyRecommendationCorroborationsearch] = field(default_factory=list)
     domainReputation: dict[str, Any] = field(default_factory=dict)
     flags: list[str] = field(default_factory=list)
     httpStatus: Optional[int] = None
@@ -1489,6 +1538,7 @@ class VerifyRecommendationRecommendation:
         return cls(
             author=d.get('author'),
             conflictOfInterest=VerifyRecommendationConflictOfInterest.from_dict(d.get('conflictOfInterest')) if d.get('conflictOfInterest') else None,
+            corroborationSearches=[VerifyRecommendationCorroborationsearch.from_dict(i) for i in (d.get('corroborationSearches') or [])],
             domainReputation=dict(d.get('domainReputation') or {}),
             flags=list(d.get('flags') or []),
             httpStatus=d.get('httpStatus'),
@@ -1501,6 +1551,7 @@ class VerifyRecommendationRecommendation:
 
 @dataclass
 class VerifyRecommendationResponse:
+    aggregateFlags: list[str] = field(default_factory=list)
     itemCount: Optional[int] = None
     recommendations: list[VerifyRecommendationRecommendation] = field(default_factory=list)
     trust: Optional[str] = None
@@ -1510,6 +1561,7 @@ class VerifyRecommendationResponse:
         if d is None:
             return None
         return cls(
+            aggregateFlags=list(d.get('aggregateFlags') or []),
             itemCount=d.get('itemCount'),
             recommendations=[VerifyRecommendationRecommendation.from_dict(i) for i in (d.get('recommendations') or [])],
             trust=d.get('trust'),
