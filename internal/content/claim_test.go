@@ -176,12 +176,58 @@ func TestHasContrastCue(t *testing.T) {
 		t.Error("a sentence with 'no significant' should carry a contrast cue")
 	}
 	if !HasContrastCue([]string{"Plain sentence.", "However, the result did not replicate."}) {
-		t.Error("'did not' / 'however' should be detected")
+		t.Error("the negation cue 'did not' should be detected (the bare 'however' connective is intentionally NOT a cue — see #264)")
 	}
 	if HasContrastCue([]string{"The vaccine reduced infection rates substantially."}) {
 		t.Error("a plain supporting sentence should NOT carry a contrast cue")
 	}
 	if HasContrastCue(nil) {
 		t.Error("empty evidence should not signal contrast")
+	}
+}
+
+// TestHasContrastCueIgnoresDiscourseConnectives is the regression guard for #264:
+// bare discourse-contrast connectives (however/although/whereas/in contrast/
+// nevertheless/conversely/unlike/rather than) contrast two arbitrary things within a
+// sentence WITHOUT opposing the claim, so they must NOT raise a contrast cue.
+// Otherwise supporting sources get a false "may refute" heads-up (a trust-suite
+// false positive that trains users to ignore the signal).
+func TestHasContrastCueIgnoresDiscourseConnectives(t *testing.T) {
+	// The exact live-repro sentence from the LeCun/Bengio/Hinton Deep Learning
+	// abstract (DOI 10.1038/nature14539) that wrongly tripped contrastSignal.
+	lecun := "Deep convolutional nets have brought about breakthroughs in processing images, " +
+		"video, speech and audio, whereas recurrent nets have shone light on sequential data such as text and speech."
+	if HasContrastCue([]string{lecun}) {
+		t.Errorf("the LeCun 'whereas' sentence supports the claim and must NOT trip a contrast cue: %q", lecun)
+	}
+
+	// Each bare connective, in an otherwise-supporting sentence, must NOT trip.
+	benign := []string{
+		"However, the model improves accuracy on every benchmark tested.",
+		"Although widely studied, the method remains the standard approach.",
+		"In contrast to older systems, this one works reliably.",
+		"Nevertheless, the results confirm the original finding.",
+		"Conversely, larger models also improve.",
+		"Unlike convolutional nets, recurrent nets process sequences — both succeed.",
+		"It scales by adding layers rather than widening them.",
+	}
+	for _, s := range benign {
+		if HasContrastCue([]string{s}) {
+			t.Errorf("bare discourse connective without negation must NOT trip a contrast cue: %q", s)
+		}
+	}
+
+	// Genuine refutations MUST still trip — the surviving negation cues catch them
+	// even when a discourse connective is also present.
+	refutations := []string{
+		"However, the drug did not reduce mortality in the trial.",
+		"In contrast, no significant effect was found between the groups.",
+		"Although promising, the hypothesis was rejected by the data.",
+		"The replication failed to reproduce the original effect.",
+	}
+	for _, s := range refutations {
+		if !HasContrastCue([]string{s}) {
+			t.Errorf("a genuine refutation must still trip a contrast cue: %q", s)
+		}
 	}
 }
