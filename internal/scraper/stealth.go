@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/tls"
 	"io"
-	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -102,13 +101,13 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int)
 }
 
 func newStealthClient(allowPrivateIPs bool) *http.Client {
-	dialer := &net.Dialer{
-		Timeout:   10 * time.Second,
-		KeepAlive: 30 * time.Second,
-	}
+	// Build the DialContext first: when private IPs are disallowed, use the
+	// real SSRF-safe transport's dial function (IP validation before connect).
+	// A plain net.Dialer has no IP validation and must never be used here.
+	dialCtx := newSSRFSafeTransport(allowPrivateIPs).DialContext
 
 	transport := &http.Transport{
-		DialContext:           dialer.DialContext,
+		DialContext:           dialCtx,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ResponseHeaderTimeout: 15 * time.Second,
 		MaxIdleConns:          10,
@@ -118,10 +117,6 @@ func newStealthClient(allowPrivateIPs bool) *http.Client {
 			InsecureSkipVerify: false,
 		},
 		ForceAttemptHTTP2: true,
-	}
-
-	if !allowPrivateIPs {
-		transport.DialContext = newSSRFSafeDialer().DialContext
 	}
 
 	return &http.Client{
@@ -198,13 +193,6 @@ func bestText(sel *goquery.Selection) string {
 		return flat
 	}
 	return structured
-}
-
-func newSSRFSafeDialer() *net.Dialer {
-	return &net.Dialer{
-		Timeout:   10 * time.Second,
-		KeepAlive: 30 * time.Second,
-	}
 }
 
 func decompressBody(resp *http.Response) (io.Reader, error) {

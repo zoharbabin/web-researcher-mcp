@@ -393,6 +393,14 @@ func auditOneEntry(ctx context.Context, deps Dependencies, e content.BibEntry, r
 			if status != nil {
 				r.Retraction = status
 			}
+			// When no URL was supplied, try to derive one from the matched
+			// academic record so auditClaimCoverage can fetch content for the
+			// claim check (mirrors verifyByDOI in verify_citation).
+			if r.URL == "" {
+				if rec := lookupRecordByDOI(ctx, deps, r.DOI); rec != nil {
+					r.URL = bestClaimURL(rec, r.DOI)
+				}
+			}
 			return
 		}
 	}
@@ -410,7 +418,38 @@ func auditOneEntry(ctx context.Context, deps Dependencies, e content.BibEntry, r
 			// titleMatch. A "low" match is a weak coincidence, not corroboration, so
 			// the entry falls through to unchecked rather than being shown as verified
 			// (#225). The record is otherwise unused here, so a near-miss is dropped.
-			if referenceMatchConfidence(e.Title, rec) != "low" {
+			//
+			// For entries with neither a DOI nor a URL (classic books, reports, and
+			// other offline/non-indexed works), academic indices index journal
+			// articles predominantly — a medium-confidence title hit is more likely a
+			// coincidental near-neighbor sharing a few common words than a genuine
+			// match for the cited book. Require HIGH confidence for such entries so
+			// they correctly land in the unchecked bucket rather than being shown as
+			// corroborated.
+			conf := referenceMatchConfidence(e.Title, rec)
+			var confident bool
+			if e.DOI == "" && e.URL == "" {
+				// Title-only entry (book / offline work). Require a STRONG,
+				// BIDIRECTIONAL title match. referenceMatchConfidence is directional:
+				// it asks only whether the matched record's title tokens appear in the
+				// entry title, so a long fabricated title that merely CONTAINS a short
+				// real title scores "high" (e.g. record "Quantum dynamics on lattices"
+				// ⊂ entry "Quantum Hyperthermal Dynamics of Imaginary Lattices in
+				// Pre-Cambrian Folklore" — 3 shared words → 100% of the record's tokens
+				// → a false positive). Also require most of the ENTRY title's tokens to
+				// appear in the record (the reverse direction), which rejects that
+				// subset-containment match: the fabricated entry is the longer string,
+				// so its reverse coverage is low. Safe here because e.Title is a clean
+				// title (author/date/site are separate fields), so there is no
+				// citation-string author/journal noise to depress the reverse coverage —
+				// a genuine book cited by its short common title against a long official
+				// record title still covers all of its own tokens.
+				reverse := referenceMatchConfidence(rec.Title, &search.AcademicResult{Title: e.Title})
+				confident = conf == "high" && reverse == "high"
+			} else {
+				confident = conf == "high" || conf == "medium"
+			}
+			if confident {
 				t := true
 				r.Exists = &t
 				if rec.DOI != "" && deps.RetractionResolver != nil && r.Retraction == nil {

@@ -153,12 +153,14 @@ func classifyRawError(err error, url string) *ScrapeError {
 
 // botWallMaxBytes bounds how large extracted content can be and still be judged a
 // bot-wall interstitial. A real article is far larger; an interstitial ("Checking
-// your browser…", a CAPTCHA shell) is tiny. Keeping the check size-bounded means a
-// genuine page that merely mentions "captcha" in its body is never misclassified.
-const botWallMaxBytes = 600
+// your browser…", a CAPTCHA shell, or an Anubis PoW gate) is small. Set to 2048
+// to cover Anubis (~1075 B) while remaining well below any real article body.
+// The claim-fetch cap is 50KB so there is no risk of false-positives on real content.
+const botWallMaxBytes = 2048
 
 // botWallMarkers are phrases that, in SHORT extracted content, indicate a bot/JS
-// interstitial rather than the page itself.
+// interstitial rather than the page itself. Covers Cloudflare, CAPTCHA shells, and
+// Anubis/PoW proof-of-work gates (github.com/TecharoHQ/anubis) which return HTTP 200.
 var botWallMarkers = []string{
 	"checking your browser",
 	"enable javascript and cookies to continue",
@@ -176,6 +178,13 @@ var botWallMarkers = []string{
 	"please turn javascript on",
 	"javascript is disabled", // bot/JS-wall shell that renders no real content
 	"please enable javascript to view",
+	// Anubis / PoW anti-AI-scraping gates (github.com/TecharoHQ/anubis).
+	// These return HTTP 200 with a ~1075-byte interstitial — not detectable by
+	// status code alone. All three phrases appear in the Anubis default template.
+	"making sure you're not a bot",
+	"protect the server against the scourge of",
+	"anubis uses a proof-of-work scheme",
+	"this is a placeholder solution",
 }
 
 // looksLikeBotWall reports whether short extracted content is a bot/JS-wall

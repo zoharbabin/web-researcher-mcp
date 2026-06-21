@@ -48,6 +48,51 @@ func TestLooksLikeBotWall(t *testing.T) {
 	}
 }
 
+// TestLooksLikeBotWall_Anubis: regression guard for GitHub issue #263.
+// Anubis (github.com/TecharoHQ/anubis) returns HTTP 200 with a ~1075-byte PoW
+// interstitial. Before the fix, its phrases were absent from botWallMarkers AND
+// botWallMaxBytes=600 was smaller than the Anubis body, so both guards failed.
+func TestLooksLikeBotWall_Anubis(t *testing.T) {
+	t.Parallel()
+
+	// Representative Anubis interstitial body (~1075 bytes in production).
+	// Contains the three canonical Anubis template phrases.
+	anubisBody := `Making sure you're not a bot!
+Anubis is checking to make sure that you are actually a human,
+and to protect the server against the scourge of AI companies
+that scrape sites without regard for the wishes of the site owners.
+Anubis uses a Proof-of-Work scheme in the vein of Hashcash,
+a proposed proof-of-work scheme for reducing email spam.
+This is a placeholder solution so that more time can be spent
+on building better solutions to this problem.`
+
+	if !looksLikeBotWall(anubisBody) {
+		t.Error("Anubis PoW interstitial must be detected as a bot-wall")
+	}
+
+	// Each Anubis marker must trigger independently on a minimal short string.
+	anubisMarkers := []string{
+		"Making sure you're not a bot!",
+		"protect the server against the scourge of AI companies",
+		"Anubis uses a proof-of-work scheme in the vein of Hashcash",
+		"This is a placeholder solution so that more time can be spent",
+	}
+	for _, m := range anubisMarkers {
+		if !looksLikeBotWall(m) {
+			t.Errorf("Anubis marker must be detected as bot-wall: %q", m)
+		}
+	}
+
+	// A legitimate academic article ABOUT proof-of-work / anti-scraping that is
+	// long enough (> botWallMaxBytes) must NOT be flagged — size gate must hold.
+	longPoWArticle := "We study proof-of-work schemes for spam prevention. " +
+		"Anubis uses a proof-of-work scheme in the vein of Hashcash. " +
+		strings.Repeat("The methodology examines computational hardness assumptions and the trade-off between verifier cost and prover work in distributed systems. ", 20)
+	if looksLikeBotWall(longPoWArticle) {
+		t.Errorf("a long article about PoW (len=%d) must not be flagged as a bot-wall", len(longPoWArticle))
+	}
+}
+
 // TestClassifyHTTPStatus_NotFound: 404 and 410 are ErrNotFound (definite dead
 // link), not ErrNetwork (which would imply a retry).
 func TestClassifyHTTPStatus_NotFound(t *testing.T) {
@@ -142,5 +187,36 @@ func TestPipeline_BotWallTreatedAsBlocked(t *testing.T) {
 	se, ok := err.(*ScrapeError)
 	if !ok || se.Kind != ErrBlocked {
 		t.Errorf("bot-wall should be ErrBlocked, got %T kind=%v", err, err)
+	}
+}
+
+// TestPipeline_AnubisBotWallTreatedAsBlocked: regression guard for GitHub issue #263.
+// An HTTP-200 Anubis PoW interstitial (~1075 bytes) must surface as ErrBlocked so
+// its placeholder text is never fed into the claim-coverage pipeline as real evidence.
+func TestPipeline_AnubisBotWallTreatedAsBlocked(t *testing.T) {
+	anubisHTML := `<!DOCTYPE html><html><head><title>Making sure you're not a bot!</title></head><body>` +
+		`<p>Anubis is checking to make sure that you are actually a human, and to protect the server against the scourge of AI companies that scrape sites without regard for the wishes of the site owners.</p>` +
+		`<p>Anubis uses a Proof-of-Work scheme in the vein of Hashcash, a proposed proof-of-work scheme for reducing email spam.</p>` +
+		`<p>This is a placeholder solution so that more time can be spent on building better solutions to this problem.</p>` +
+		`</body></html>`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(anubisHTML))
+	}))
+	defer ts.Close()
+
+	orig := statFile
+	statFile = func(path string) (any, error) { return nil, fmt.Errorf("not found") }
+	defer func() { statFile = orig }()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	_, err := p.Scrape(testCtx(), ts.URL, 50000)
+	if err == nil {
+		t.Fatal("Anubis PoW interstitial returned HTTP 200: expected ErrBlocked, got success")
+	}
+	se, ok := err.(*ScrapeError)
+	if !ok || se.Kind != ErrBlocked {
+		t.Errorf("Anubis PoW interstitial should be ErrBlocked, got %T kind=%v", err, err)
 	}
 }
