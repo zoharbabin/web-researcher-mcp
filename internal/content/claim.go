@@ -36,18 +36,27 @@ var stanceMarkers = []string{
 	"randomized", "rct", "compared with", "compared to",
 }
 
-// contrastCues are negation/contrast terms that flip or oppose a claim's stance.
-// They are a deliberately narrow subset focused on contradiction (NOT the broad
-// stanceMarkers, which include supporting cues): a matched evidence sentence
-// carrying one of these may REFUTE the claim even though it shares the claim's
-// terms — the lexical "false-addressed" hole. We surface this as a neutral
-// "read this sentence yourself" signal, never as a refutes verdict.
+// contrastCues are NEGATION / REFUTATION terms that oppose a claim's stance: a
+// matched evidence sentence carrying one of these may REFUTE the claim even though
+// it shares the claim's terms — the lexical "false-addressed" hole. We surface this
+// as a neutral "read this sentence yourself" signal, never as a refutes verdict.
+//
+// CRITICAL — this list holds ONLY cues that encode opposition (an explicit negation
+// or a verb of contradiction). It deliberately EXCLUDES bare discourse-contrast
+// connectives ("however", "although", "whereas", "in contrast", "nevertheless",
+// "conversely", "unlike", "rather than"): those merely contrast two arbitrary things
+// within a sentence and do NOT oppose the claim, so they fire on supporting sources
+// (e.g. the LeCun et al. Deep Learning abstract's "…breakthroughs in processing
+// images … whereas recurrent nets …"), producing trust-suite false positives (#264).
+// A genuine refutation almost always carries an explicit negation alongside any such
+// connective ("However, the drug DID NOT reduce mortality" → "did not"; "In contrast,
+// NO SIGNIFICANT effect" → "no significant"), so the bare connectives add no recall.
+// Do NOT re-add them; they belong in stanceMarkers (relevance scoring), not here.
 var contrastCues = []string{
-	"not significant", "no significant", "however", "although", "contrary",
+	"not significant", "no significant", "contrary", "contrary to",
 	"contradict", "dispute", "refute", "disprove", "failed to", "did not",
 	"does not", "do not", "no evidence", "no association", "no difference",
-	"in contrast", "whereas", "nevertheless", "conversely", "unlike", "rather than",
-	"contrary to", "rejected", "no effect", "not associated", "not supported",
+	"rejected", "no effect", "not associated", "not supported",
 }
 
 // HasContrastCue reports whether any sentence in evidence contains a

@@ -115,14 +115,55 @@ func (o *OECDProvider) dataflowSearch(ctx context.Context, params EconSearchPara
 	if err != nil {
 		return nil, err
 	}
-	needle := strings.ToLower(strings.TrimSpace(params.Query))
+	rawNeedle := strings.TrimSpace(params.Query)
+	needle := strings.ToLower(rawNeedle)
+	rawWords := strings.Fields(rawNeedle)
 	words := strings.Fields(needle)
+	// acronymWord[i] is true when the original token looks like an acronym:
+	// all uppercase letters, length ≤ 5 (e.g. "CPI", "GDP", "HICP").
+	// OECD catalogue names spell these out ("Consumer price indices"), so
+	// acronym tokens don't appear verbatim and should be treated as optional.
+	acronymWord := make([]bool, len(rawWords))
+	for i, rw := range rawWords {
+		if len(rw) <= 5 && rw == strings.ToUpper(rw) && strings.IndexFunc(rw, func(r rune) bool {
+			return r < 'A' || r > 'Z'
+		}) < 0 {
+			acronymWord[i] = true
+		}
+	}
 	matchesFlow := func(name string) bool {
 		lower := strings.ToLower(name)
 		if len(words) <= 1 {
 			return strings.Contains(lower, needle)
 		}
+		// Strict AND: all tokens appear verbatim.
+		allMatch := true
 		for _, w := range words {
+			if !strings.Contains(lower, w) {
+				allMatch = false
+				break
+			}
+		}
+		if allMatch {
+			return true
+		}
+		// Relaxed AND: skip acronym tokens (all-caps, ≤5 chars) and require
+		// only the substantive spelled-out words to match. Only applies when
+		// there is at least one non-acronym token to anchor the match.
+		hasNonAcronym := false
+		for i := range words {
+			if !acronymWord[i] {
+				hasNonAcronym = true
+				break
+			}
+		}
+		if !hasNonAcronym {
+			return false
+		}
+		for i, w := range words {
+			if acronymWord[i] {
+				continue
+			}
 			if !strings.Contains(lower, w) {
 				return false
 			}
@@ -446,19 +487,31 @@ func oecdSeriesLabels(seriesKey string, dims []sdmxDimension) (title, units stri
 			break
 		}
 		vi := atoiSafe(part)
-		if vi < 0 || vi >= len(dims[d].Values) {
-			continue
+		var valName string
+		if vi >= 0 && vi < len(dims[d].Values) {
+			valName = dims[d].Values[vi].Name
+			if valName == "" {
+				valName = dims[d].Values[vi].ID
+			}
 		}
-		valName := dims[d].Values[vi].Name
-		if valName == "" {
-			valName = dims[d].Values[vi].ID
-		}
+		// UNIT_MEASURE / UNIT are handled before the skip check because they are
+		// also in oecdSeriesLabelSkip (kept there for reference), but must still
+		// be routed to units rather than silently dropped.
 		if dims[d].ID == "UNIT_MEASURE" || dims[d].ID == "UNIT" {
-			units = valName
+			if valName != "" {
+				units = valName
+			}
 			continue
 		}
-		if oecdSeriesLabelSkip[dims[d].ID] || valName == "" {
+		// TIME_PERIOD / TIME are the observation axis, not series facets — skip.
+		if oecdSeriesLabelSkip[dims[d].ID] {
 			continue
+		}
+		// When the index is out of range (sparse/mismatched structure response),
+		// fall back to the dimension ID so the title retains its subgroup slot
+		// rather than silently dropping it and collapsing all series to one label.
+		if valName == "" {
+			valName = dims[d].ID
 		}
 		labels = append(labels, valName)
 	}

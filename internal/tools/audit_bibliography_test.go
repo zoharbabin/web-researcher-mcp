@@ -236,6 +236,61 @@ func TestAuditBibliography_TitleOnlyConfidentMatchOK(t *testing.T) {
 	}
 }
 
+// subsetTitleAcademicProvider returns a short real title that is a strict token
+// SUBSET of a longer fabricated entry title — the live failure mode where a
+// nonsense citation ("Quantum Hyperthermal Dynamics of Imaginary Lattices in
+// Pre-Cambrian Folklore") matched the real paper "Quantum dynamics on lattices"
+// at "high" confidence because every token of the SHORT record title appears in
+// the LONG entry title. referenceMatchConfidence is directional, so this slips
+// through a one-directional gate.
+type subsetTitleAcademicProvider struct{}
+
+func (p *subsetTitleAcademicProvider) Name() string { return "openalex" }
+func (p *subsetTitleAcademicProvider) Metadata() search.ProviderMeta {
+	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "free", Description: "mock (subset)"}
+}
+func (p *subsetTitleAcademicProvider) Scholarly(_ context.Context, _ search.AcademicSearchParams) ([]search.AcademicResult, error) {
+	return []search.AcademicResult{
+		{Title: "Quantum dynamics on lattices", URL: "https://doi.org/10.70675/abc", DOI: "10.70675/abc", Source: "openalex"},
+	}, nil
+}
+func (p *subsetTitleAcademicProvider) Citations(_ context.Context, _ string, _ int) ([]search.AcademicResult, error) {
+	return nil, nil
+}
+func (p *subsetTitleAcademicProvider) References(_ context.Context, _ string, _ int) ([]search.AcademicResult, error) {
+	return nil, nil
+}
+
+func TestAuditBibliography_TitleOnlySubsetContainmentUnchecked(t *testing.T) {
+	// A title-only entry (no DOI, no URL) whose fabricated title merely CONTAINS a
+	// short real title must NOT be marked verified. The one-directional
+	// referenceMatchConfidence scores this "high" (all of the record's tokens are in
+	// the entry), so the audit additionally requires the reverse direction — most of
+	// the ENTRY's tokens present in the record. The long fabricated entry fails that,
+	// so it lands in unchecked rather than ok.
+	deps := setupTestDeps()
+	deps.AcademicProviders = map[string]search.AcademicProvider{"openalex": &subsetTitleAcademicProvider{}}
+	deps.LinkVerifier = scraper.NewLinkVerifier(scraper.LinkVerifierConfig{AllowPrivateIPs: true})
+
+	out, isErr := callAudit(t, deps, map[string]any{
+		"entries": []any{map[string]any{"title": "Quantum Hyperthermal Dynamics of Imaginary Lattices in Pre-Cambrian Folklore"}},
+	})
+	if isErr {
+		t.Fatal("unexpected tool error")
+	}
+	s := summaryOf(t, out)
+	if s["unchecked"].(float64) != 1 {
+		t.Errorf("a subset-containment title match must be unchecked, got %v", s)
+	}
+	if s["ok"].(float64) != 0 {
+		t.Errorf("a subset-containment title match must NOT be counted ok: %v", s)
+	}
+	e0 := out["entries"].([]any)[0].(map[string]any)
+	if e0["exists"] == true {
+		t.Errorf("a subset-containment title match must not set exists=true: %v", e0)
+	}
+}
+
 func TestAuditBibliography_NotFoundDOI(t *testing.T) {
 	// A DOI authoritatively absent from Crossref (404 → found=false) is not_found
 	// (a possible fabrication), distinct from unchecked.

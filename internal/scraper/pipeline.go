@@ -336,7 +336,7 @@ func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, max
 	for _, o := range outcomes {
 		switch {
 		case o.err != nil:
-			parts = append(parts, fmt.Sprintf("%s: %v", o.name, o.err))
+			parts = append(parts, fmt.Sprintf("%s: %s", o.name, sanitizeTierError(o.err)))
 			if se, ok := o.err.(*ScrapeError); ok {
 				// A pure-network failure leaves allNetwork true so a run where
 				// every tier merely timed out is still reported as retryable
@@ -704,4 +704,26 @@ func timeoutStat(path string) (any, error) {
 	case <-time.After(100 * time.Millisecond):
 		return nil, fmt.Errorf("stat timeout")
 	}
+}
+
+// sanitizeTierError returns a clean, single-line description of a per-tier
+// error for inclusion in the composite "no content extracted" detail string.
+// Browser-tier errors can include multi-line V8 stack traces and JS runtime
+// noise (e.g. ".apply is not a function" call stacks from page.Eval failures).
+// We keep only the first line and cap it so it stays concise in the message.
+func sanitizeTierError(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	// Keep only the first line — V8 stack traces start after the first newline.
+	if i := strings.IndexByte(msg, '\n'); i >= 0 {
+		msg = msg[:i]
+	}
+	msg = strings.TrimSpace(msg)
+	const maxLen = 120
+	if len(msg) > maxLen {
+		msg = msg[:maxLen] + "…"
+	}
+	return msg
 }
