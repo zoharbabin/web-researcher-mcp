@@ -325,7 +325,7 @@ Set `SEARCH_PROVIDER=<name>` and supply that provider's key. Every provider work
 | Exa | `exa` | `EXA_API_KEY` | [dashboard.exa.ai](https://dashboard.exa.ai/) |
 | Hacker News | `hackernews` | none | Built in — zero config (HN Algolia index) |
 
-> Each provider has its own free tier, signup flow, and capability mix (images, news, freshness). See **[docs/API_SETUP.md](docs/API_SETUP.md)** for step-by-step setup of every provider and a capability comparison. Set up more than one and the server fails over automatically — see [Search Providers](#search-providers).
+> Each provider has its own free tier, signup flow, and capability mix (images, news, freshness). See **[docs/PROVIDERS.md](docs/PROVIDERS.md)** for a full comparison (index classification, capability matrix, quick-pick guide) and **[docs/API_SETUP.md](docs/API_SETUP.md)** for step-by-step key setup. Set up more than one and the server fails over automatically — see [Search Providers](#search-providers).
 
 When `SEARCH_PROVIDER` is unset, the server uses Google if its keys are present and otherwise falls back to the zero-config DuckDuckGo provider — so it always works out of the box, with or without keys.
 
@@ -398,7 +398,7 @@ export SEARCH_ROUTING=brave,google,serper
 
 If Brave is down, it automatically tries Google. If Google is rate-limited, it falls through to Serper. Your research just works.
 
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#multi-provider-routing) for advanced routing options (per-topic routing, patent-specific providers, etc.).
+See **[docs/PROVIDERS.md](docs/PROVIDERS.md)** for a full provider comparison (index classification, capabilities, free tiers) and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#multi-provider-routing) for advanced routing options (per-topic routing, patent-specific providers, etc.).
 
 ### Single Provider
 

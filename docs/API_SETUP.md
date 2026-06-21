@@ -345,19 +345,9 @@ See [docs/DEPLOYMENT.md](DEPLOYMENT.md) for advanced routing configuration.
 
 ## Choosing a Provider
 
-| Provider | Best For | Limitations |
-|----------|----------|-------------|
-| **DuckDuckGo** | Zero-config start, no signup, fallback | Lower result quality, no image/news depth |
-| **Brave** | High-volume whole-web search, privacy | Newer service, smaller index |
-| **Google PSE** | Broadest index, image search, custom PSE engines | 100/day free, slower for news |
-| **Serper** | Google-identical results without PSE setup | One-time free credit only |
-| **SearXNG** | Air-gapped/private deployments, no vendor lock-in | Requires self-hosting |
-| **SearchAPI.io** | Multiple engine backends via unified API | Smaller free tier |
-| **Tavily** | AI-agent search; clean LLM-ready extracted content | Paid after free credits; no native image search |
-| **Exa** | Neural/semantic search; grounded answers, structured extraction, company entities | Paid per call; no native image search |
-| **Hacker News** | Zero-config HN discussion/submission search; tech community signal | Hacker News stories only, not general web; no image search |
+Not sure which provider to pick? See **[docs/PROVIDERS.md](PROVIDERS.md)** for a full comparison: index classification (own index vs. Google-backed vs. aggregator), capability matrix per tool, free-tier limits, and a quick-pick guide.
 
-**Recommendation**: Start with Brave (generous free tier, fast) and add Google as a fallback. Use `SEARCH_ROUTING=brave,google` for the best balance of speed and coverage.
+**Short recommendation**: Start with Brave (2,000/month free, own independent index) and add Google as a fallback. Use `SEARCH_ROUTING=brave,google` for a good balance of coverage and reliability.
 
 ---
 

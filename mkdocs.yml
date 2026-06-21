@@ -47,6 +47,7 @@ nav:
   - Examples: examples.md
   - Tools: tools.md
   - API Setup: api-setup.md
+  - Providers: providers.md
   - Deployment: deployment.md
   - Security: security.md
   - Security & Compliance: security-and-compliance.md

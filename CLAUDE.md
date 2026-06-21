@@ -215,4 +215,5 @@ Full security and compliance guidelines: see `docs/SECURITY_AND_COMPLIANCE.md`.
 | `docs/SECURITY.md` | Detailed technical security architecture (threat model, defense layers) |
 | `docs/DEPLOYMENT.md` | Docker, K8s, client configs, env vars, admin endpoints, scaling |
 | `docs/API_SETUP.md` | Getting API keys for each provider (step-by-step) |
+| `docs/PROVIDERS.md` | Provider comparison: index classification, capability matrix, free tiers, quick-pick guide |
 | `docs/EXAMPLES.md` | Example tool calls and expected response shapes |

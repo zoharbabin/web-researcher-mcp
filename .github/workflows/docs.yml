@@ -45,6 +45,7 @@ jobs:
                 -e 's|](docs/MIGRATION.md|](migration.md|g' \
                 -e 's|](docs/EXAMPLES.md|](examples.md|g' \
                 -e 's|](docs/API_SETUP.md|](api-setup.md|g' \
+                -e 's|](docs/PROVIDERS.md|](providers.md|g' \
                 -e 's|](docs/LESSONS_LEARNED.md|](lessons-learned.md|g' \
                 -e 's|](docs/BRAND_GUIDELINES.md|](brand-guidelines.md|g' \
                 -e 's|](docs/PRIVACY.md|](privacy.md|g' \
@@ -59,7 +60,7 @@ jobs:
           done
           mv site_src/readme.md site_src/index.md
           # Copy docs/ files with cross-link rewriting
-          for f in docs/TOOLS.md docs/DEPLOYMENT.md docs/SECURITY.md docs/SECURITY_AND_COMPLIANCE.md docs/MIGRATION.md docs/EXAMPLES.md docs/API_SETUP.md docs/LESSONS_LEARNED.md docs/BRAND_GUIDELINES.md docs/PRIVACY.md docs/SESSION_PERSISTENCE.md docs/ERROR_HANDLING.md; do
+          for f in docs/TOOLS.md docs/DEPLOYMENT.md docs/SECURITY.md docs/SECURITY_AND_COMPLIANCE.md docs/MIGRATION.md docs/EXAMPLES.md docs/API_SETUP.md docs/PROVIDERS.md docs/LESSONS_LEARNED.md docs/BRAND_GUIDELINES.md docs/PRIVACY.md docs/SESSION_PERSISTENCE.md docs/ERROR_HANDLING.md; do
             # Anchored to `](` for the same reason as the root loop above:
             # flatten only Markdown links, never inline code-span repo paths.
             # `](../SECURITY.md` and the root-policy link resolve to GitHub
@@ -75,6 +76,7 @@ jobs:
                 -e 's|](MIGRATION.md|](migration.md|g' \
                 -e 's|](EXAMPLES.md|](examples.md|g' \
                 -e 's|](API_SETUP.md|](api-setup.md|g' \
+                -e 's|](PROVIDERS.md|](providers.md|g' \
                 -e 's|](LESSONS_LEARNED.md|](lessons-learned.md|g' \
                 -e 's|](BRAND_GUIDELINES.md|](brand-guidelines.md|g' \
                 -e 's|](PRIVACY.md|](privacy.md|g' \
@@ -87,6 +89,7 @@ jobs:
           [ -f site_src/brand_guidelines.md ] && mv site_src/brand_guidelines.md site_src/brand-guidelines.md
           [ -f site_src/session_persistence.md ] && mv site_src/session_persistence.md site_src/session-persistence.md
           [ -f site_src/error_handling.md ] && mv site_src/error_handling.md site_src/error-handling.md
+          [ -f site_src/providers.md ] && mv site_src/providers.md site_src/providers.md
           [ -f site_src/security_and_compliance.md ] && mv site_src/security_and_compliance.md site_src/security-and-compliance.md
           # Publish pre-rendered decks as static assets (served verbatim, not
           # built as mkdocs pages). The rendered HTML/PDF are self-contained
