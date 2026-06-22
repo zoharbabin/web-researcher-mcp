@@ -189,7 +189,7 @@ jobs:
       # python-drift CI job is the primary gate, but a tag pushed directly off
       # main (bypassing a PR) could otherwise publish a stale client to PyPI.
       - name: Verify Python client is up-to-date
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - name: Check Python client drift
@@ -390,7 +390,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
