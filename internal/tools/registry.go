@@ -90,6 +90,9 @@ type Dependencies struct {
 	// Noop (no membership, no data). The workspace_contribute/workspace_read
 	// tools are registered only when a non-Noop store is present.
 	Workspaces workspace.Store
+	// BrandFetchAPIKey enables Tier 1 BrandFetch API lookups in brand_research.
+	// Empty → tool still registers and degrades gracefully to CSS+meta extraction.
+	BrandFetchAPIKey string
 }
 
 // Features mirrors config.FeatureConfig for the tool layer (kept local so the
@@ -191,6 +194,9 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 		registerWorkspaceContribute(srv, deps)
 		registerWorkspaceRead(srv, deps)
 	}
+	// brand_research — always registered; degrades gracefully without BRANDFETCH_API_KEY
+	// (uses CSS extraction + homepage meta + brand-page probe + optional web search).
+	registerBrandResearch(srv, deps)
 }
 
 // hasCitationProvider reports whether any configured academic provider supports

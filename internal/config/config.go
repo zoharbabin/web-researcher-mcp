@@ -163,6 +163,10 @@ type SearchConfig struct {
 	// credentials. Keyless SPN works without them; keys raise rate/reliability.
 	IAAccessKey string
 	IASecretKey string
+
+	// BrandFetch optional credentials for brand_research. Tool degrades gracefully when absent.
+	BrandFetchAPIKey   string // BRANDFETCH_API_KEY — Brand API + Context API
+	BrandFetchClientID string // BRANDFETCH_CLIENT_ID — logo CDN requests
 }
 
 type OAuthConfig struct {
@@ -358,6 +362,8 @@ func Load() (*Config, error) {
 			FREDAPIKey:            os.Getenv("FRED_API_KEY"),
 			IAAccessKey:           os.Getenv("IA_ACCESS_KEY"),
 			IASecretKey:           os.Getenv("IA_SECRET_KEY"),
+			BrandFetchAPIKey:      os.Getenv("BRANDFETCH_API_KEY"),
+			BrandFetchClientID:    os.Getenv("BRANDFETCH_CLIENT_ID"),
 		},
 		Port: port,
 		OAuth: OAuthConfig{

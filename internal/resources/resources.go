@@ -219,6 +219,112 @@ func registerDiagnostics(srv *mcp.Server, metricsCollector *metrics.Collector, h
 	})
 }
 
+func buildBrandStep1(company, depth string, includeTokens bool) string {
+	tokensStr := "false"
+	if includeTokens {
+		tokensStr = "true"
+	}
+	return "Research the brand identity for: " + company + "\n\n" +
+		"Step 1 — Gather brand data\n" +
+		"Call brand_research with:\n" +
+		"  url or company_name: " + company + "\n" +
+		"  depth: " + depth + "\n" +
+		"  include_design_tokens: " + tokensStr + "\n\n" +
+		"The tool returns colors, logos, typography, tone_of_voice, social handles, and a coverage object.\n" +
+		"Check coverage: if colors/logos/typography are \"none\", note the gap and work with what was found."
+}
+
+func buildBrandStep2(useCase string) string {
+	switch useCase {
+	case "landing_page":
+		return "Step 2 — Apply brand identity to a landing page\n\n" +
+			"Using the brand_research result:\n" +
+			"- Primary CTA button: use colors.primary as background; ensure AA contrast with white text (luminance > 0.18 passes).\n" +
+			"- Background: colors.background or white if absent.\n" +
+			"- Hero image overlay: colors.primary at 60% opacity.\n" +
+			"- Typography: heading.family for headlines; body.family for body copy. If heading is absent, use body for all.\n" +
+			"- Logo placement: logos.primary URL in the top-left nav. If SVG available, prefer it over PNG for sharp scaling.\n" +
+			"- Tone: match tone_of_voice.summary and attributes in all headline and subhead copy.\n\n" +
+			"Produce:\n" +
+			"1. Color palette table (name, hex, role, where used on page)\n" +
+			"2. Typography spec (heading and body font, weights, size scale if available)\n" +
+			"3. Sample headline + subhead that reflects the brand tone\n" +
+			"4. Component guidance: hero, nav, CTA, footer — what color/font/spacing each uses"
+	case "email":
+		return "Step 2 — Apply brand identity to an email template\n\n" +
+			"Using the brand_research result:\n" +
+			"- Header background: colors.primary. Header logo: logos.primary URL.\n" +
+			"- Body background: colors.background or #ffffff. Body text: colors.text or #222222.\n" +
+			"- CTA button: colors.primary background, white label.\n" +
+			"- Font stack: body.family with web-safe fallbacks (Arial, sans-serif).\n" +
+			"- Tone: tone_of_voice.summary guides subject line and preheader copy.\n\n" +
+			"Produce:\n" +
+			"1. Email color spec (header, body, CTA, footer background + text colors)\n" +
+			"2. Font stack (primary + fallbacks)\n" +
+			"3. Sample subject line + preheader in brand tone\n" +
+			"4. HTML inline-style snippet for the header block"
+	case "social_post":
+		return "Step 2 — Apply brand identity to social content\n\n" +
+			"Using the brand_research result:\n" +
+			"- Background fill: colors.primary or colors.accent for graphics.\n" +
+			"- Logo mark: logos.icon URL for small placements; logos.primary for full-width.\n" +
+			"- Tone: tone_of_voice.attributes drive caption voice (formal/conversational/bold/etc).\n" +
+			"- Dos and don'ts: if tone_of_voice.dos_and_donts is present, include it verbatim.\n\n" +
+			"Produce:\n" +
+			"1. Visual identity notes for the post graphic (colors, logo, typography)\n" +
+			"2. Three sample captions — Twitter/X, LinkedIn, Instagram — in brand tone\n" +
+			"3. Suggested hashtags derived from identity.industry and brand attributes"
+	case "video_brief":
+		return "Step 2 — Apply brand identity to a video production brief\n\n" +
+			"Using the brand_research result:\n" +
+			"- Color grade / lower-third colors: colors.primary + colors.secondary.\n" +
+			"- Logo bug: logos.icon URL; placement: lower-right at 8% width.\n" +
+			"- Motion titles: typography.heading.family if available.\n" +
+			"- Voiceover tone: tone_of_voice.summary + attributes.\n" +
+			"- Background music mood: derived from tone_of_voice attributes (e.g. \"innovative + professional\" → \"corporate-uplifting\").\n\n" +
+			"Produce:\n" +
+			"1. Brand color values for motion graphics and lower thirds\n" +
+			"2. Logo usage spec (size, placement, clearspace)\n" +
+			"3. Typography spec for title cards and lower thirds\n" +
+			"4. Voiceover tone direction (2–3 sentences)\n" +
+			"5. Music mood descriptor"
+	case "design_tokens":
+		return "Step 2 — Export brand identity as design tokens\n\n" +
+			"brand_research was called with include_design_tokens: true.\n" +
+			"The result includes a design_tokens object in W3C DTCG format ($value/$type per token).\n\n" +
+			"Produce:\n" +
+			"1. The design_tokens object formatted as a JSON code block ready to paste into Style Dictionary, Tokens Studio, or Figma Variables.\n" +
+			"2. A short mapping table: token name → role (e.g. color.brand → primary CTA).\n" +
+			"3. Any gaps (tokens that could not be derived because source data was absent)."
+	default: // full_guidelines
+		return "Step 2 — Produce comprehensive brand guidelines\n\n" +
+			"Using the brand_research result, produce a structured brand guidelines document:\n\n" +
+			"## Brand Identity\n" +
+			"- Company name, tagline, description (from identity fields)\n" +
+			"- Industry and founding context if available\n\n" +
+			"## Color System\n" +
+			"- Primary, secondary, accent, background, text colors with hex values\n" +
+			"- Full palette table (name, hex, role)\n" +
+			"- Usage rules: where each color appears\n\n" +
+			"## Logo & Icon\n" +
+			"- Logo URLs and formats (primary, dark variant if available, icon/favicon)\n" +
+			"- Usage guidance: preferred format, minimum size, clearspace\n\n" +
+			"## Typography\n" +
+			"- Heading and body typefaces with weights\n" +
+			"- Google Fonts URL if applicable\n" +
+			"- Type scale if available\n\n" +
+			"## Tone of Voice\n" +
+			"- Summary of brand voice\n" +
+			"- Attributes list\n" +
+			"- Dos and don'ts if available\n\n" +
+			"## Design Tokens\n" +
+			"- Only if design_tokens was returned: W3C DTCG JSON code block\n\n" +
+			"## Coverage Summary\n" +
+			"- Reflect the coverage object (full/partial/none per dimension)\n" +
+			"- Note any gaps and suggest how they might be filled"
+	}
+}
+
 func registerPrompts(srv *mcp.Server) {
 	srv.AddPrompt(&mcp.Prompt{
 		Name:        "comprehensive-research",
@@ -379,6 +485,39 @@ func registerPrompts(srv *mcp.Server) {
 					Role:    "user",
 					Content: &mcp.TextContent{Text: prompt},
 				},
+			},
+		}, nil
+	})
+
+	srv.AddPrompt(&mcp.Prompt{
+		Name:        "brand-guidelines",
+		Description: "Research a company's brand identity and produce use-case-specific brand-compliant guidance. Calls brand_research, interprets colors/logos/typography/tone, and returns actionable creative direction.",
+		Arguments: []*mcp.PromptArgument{
+			{Name: "company", Description: "Company name or domain to research (e.g. 'kaltura.com' or 'Kaltura')", Required: true},
+			{Name: "use_case", Description: "Target output: landing_page | email | social_post | video_brief | design_tokens | full_guidelines (default: full_guidelines)"},
+			{Name: "depth", Description: "Research depth passed to brand_research: quick | standard | full (default: standard)"},
+		},
+	}, func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+		company := req.Params.Arguments["company"]
+		useCase := req.Params.Arguments["use_case"]
+		depth := req.Params.Arguments["depth"]
+
+		if useCase == "" {
+			useCase = "full_guidelines"
+		}
+		if depth == "" {
+			depth = "standard"
+		}
+
+		includeTokens := useCase == "design_tokens"
+
+		step1 := buildBrandStep1(company, depth, includeTokens)
+		step2 := buildBrandStep2(useCase)
+
+		return &mcp.GetPromptResult{
+			Description: "Brand guidelines (" + useCase + "): " + company,
+			Messages: []*mcp.PromptMessage{
+				{Role: "user", Content: &mcp.TextContent{Text: step1 + "\n\n" + step2}},
 			},
 		}, nil
 	})

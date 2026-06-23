@@ -246,6 +246,110 @@ class AuditBibliographyResponse:
         )
 
 @dataclass
+class Body:
+    family: Optional[str] = None
+    origin: Optional[str] = None
+    origin_id: Optional[str] = None
+    weights: list[int] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "Body | None":
+        if d is None:
+            return None
+        return cls(
+            family=d.get('family'),
+            origin=d.get('origin'),
+            origin_id=d.get('origin_id'),
+            weights=list(d.get('weights') or []),
+        )
+
+@dataclass
+class BrandResearchPalette:
+    brightness: Optional[int] = None
+    hex: Optional[str] = None
+    name: Optional[str] = None
+    role: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "BrandResearchPalette | None":
+        if d is None:
+            return None
+        return cls(
+            brightness=d.get('brightness'),
+            hex=d.get('hex'),
+            name=d.get('name'),
+            role=d.get('role'),
+        )
+
+@dataclass
+class BrandResearchResponse:
+    cache_age: Optional[int] = None
+    colors: Optional[Colors] = None
+    coverage: Optional[Coverage] = None
+    design_tokens: dict[str, Any] = field(default_factory=dict)
+    guidelines_url: Optional[str] = None
+    identity: Optional[Identity] = None
+    logos: Optional[Logos] = None
+    social: Optional[Social] = None
+    sources: list[BrandResearchSource] = field(default_factory=list)
+    tone_of_voice: Optional[ToneOfVoice] = None
+    trust: Optional[str] = None
+    typography: Optional[Typography] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "BrandResearchResponse | None":
+        if d is None:
+            return None
+        return cls(
+            cache_age=d.get('cache_age'),
+            colors=Colors.from_dict(d.get('colors')) if d.get('colors') else None,
+            coverage=Coverage.from_dict(d.get('coverage')) if d.get('coverage') else None,
+            design_tokens=dict(d.get('design_tokens') or {}),
+            guidelines_url=d.get('guidelines_url'),
+            identity=Identity.from_dict(d.get('identity')) if d.get('identity') else None,
+            logos=Logos.from_dict(d.get('logos')) if d.get('logos') else None,
+            social=Social.from_dict(d.get('social')) if d.get('social') else None,
+            sources=[BrandResearchSource.from_dict(i) for i in (d.get('sources') or [])],
+            tone_of_voice=ToneOfVoice.from_dict(d.get('tone_of_voice')) if d.get('tone_of_voice') else None,
+            trust=d.get('trust'),
+            typography=Typography.from_dict(d.get('typography')) if d.get('typography') else None,
+        )
+
+@dataclass
+class BrandResearchScale:
+    font_size: Optional[str] = None
+    level: Optional[str] = None
+    line_height: Optional[str] = None
+    weight: Optional[int] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "BrandResearchScale | None":
+        if d is None:
+            return None
+        return cls(
+            font_size=d.get('font_size'),
+            level=d.get('level'),
+            line_height=d.get('line_height'),
+            weight=d.get('weight'),
+        )
+
+@dataclass
+class BrandResearchSource:
+    fields: list[str] = field(default_factory=list)
+    name: Optional[str] = None
+    url: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "BrandResearchSource | None":
+        if d is None:
+            return None
+        return cls(
+            fields=list(d.get('fields') or []),
+            name=d.get('name'),
+            url=d.get('url'),
+        )
+
+@dataclass
 class Citation:
     accessedDate: Optional[str] = None
     formatted: Optional[Formatted] = None
@@ -382,6 +486,32 @@ class ClinicalSearchTrial:
         )
 
 @dataclass
+class Colors:
+    accent: Optional[str] = None
+    background: Optional[str] = None
+    palette: list[BrandResearchPalette] = field(default_factory=list)
+    primary: Optional[str] = None
+    secondary: Optional[str] = None
+    surface: Optional[str] = None
+    text: Optional[str] = None
+    text_secondary: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "Colors | None":
+        if d is None:
+            return None
+        return cls(
+            accent=d.get('accent'),
+            background=d.get('background'),
+            palette=[BrandResearchPalette.from_dict(i) for i in (d.get('palette') or [])],
+            primary=d.get('primary'),
+            secondary=d.get('secondary'),
+            surface=d.get('surface'),
+            text=d.get('text'),
+            text_secondary=d.get('text_secondary'),
+        )
+
+@dataclass
 class ConflictOfInterest:
     authorAffiliation: Optional[str] = None
     citedEntityName: Optional[str] = None
@@ -405,24 +535,52 @@ class ConflictOfInterest:
 
 @dataclass
 class Coverage:
-    domainSpread: Optional[float] = None
-    dominantDomain: Optional[str] = None
-    gaps: list[str] = field(default_factory=list)
-    sourceCount: Optional[int] = None
-    sourceTypes: dict[str, Any] = field(default_factory=dict)
-    uniqueDomains: Optional[int] = None
+    colors: Optional[str] = None
+    logos: Optional[str] = None
+    tone_of_voice: Optional[str] = None
+    typography: Optional[str] = None
 
     @classmethod
     def from_dict(cls, d: dict[str, Any] | None) -> "Coverage | None":
         if d is None:
             return None
         return cls(
-            domainSpread=d.get('domainSpread'),
-            dominantDomain=d.get('dominantDomain'),
-            gaps=list(d.get('gaps') or []),
-            sourceCount=d.get('sourceCount'),
-            sourceTypes=dict(d.get('sourceTypes') or {}),
-            uniqueDomains=d.get('uniqueDomains'),
+            colors=d.get('colors'),
+            logos=d.get('logos'),
+            tone_of_voice=d.get('tone_of_voice'),
+            typography=d.get('typography'),
+        )
+
+@dataclass
+class Dark:
+    format: Optional[str] = None
+    height: Optional[int] = None
+    url: Optional[str] = None
+    width: Optional[int] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "Dark | None":
+        if d is None:
+            return None
+        return cls(
+            format=d.get('format'),
+            height=d.get('height'),
+            url=d.get('url'),
+            width=d.get('width'),
+        )
+
+@dataclass
+class DosAndDonts:
+    donts: list[str] = field(default_factory=list)
+    dos: list[str] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "DosAndDonts | None":
+        if d is None:
+            return None
+        return cls(
+            donts=list(d.get('donts') or []),
+            dos=list(d.get('dos') or []),
         )
 
 @dataclass
@@ -748,6 +906,30 @@ class GetResearchSessionStepindex:
         )
 
 @dataclass
+class Identity:
+    description: Optional[str] = None
+    domain: Optional[str] = None
+    founded: Optional[int] = None
+    industry: Optional[str] = None
+    location: Optional[Location] = None
+    name: Optional[str] = None
+    tagline: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "Identity | None":
+        if d is None:
+            return None
+        return cls(
+            description=d.get('description'),
+            domain=d.get('domain'),
+            founded=d.get('founded'),
+            industry=d.get('industry'),
+            location=Location.from_dict(d.get('location')) if d.get('location') else None,
+            name=d.get('name'),
+            tagline=d.get('tagline'),
+        )
+
+@dataclass
 class ImageSearchImage:
     contextLink: Optional[str] = None
     displayLink: Optional[str] = None
@@ -897,6 +1079,40 @@ class LocalSearchResponse:
             query=d.get('query'),
             resultCount=d.get('resultCount'),
             trust=d.get('trust'),
+        )
+
+@dataclass
+class Location:
+    city: Optional[str] = None
+    country_code: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "Location | None":
+        if d is None:
+            return None
+        return cls(
+            city=d.get('city'),
+            country_code=d.get('country_code'),
+        )
+
+@dataclass
+class Logos:
+    dark: Optional[Dark] = None
+    favicon: Optional[str] = None
+    icon: Optional[Dark] = None
+    og_image: Optional[str] = None
+    primary: Optional[Dark] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "Logos | None":
+        if d is None:
+            return None
+        return cls(
+            dark=Dark.from_dict(d.get('dark')) if d.get('dark') else None,
+            favicon=d.get('favicon'),
+            icon=Dark.from_dict(d.get('icon')) if d.get('icon') else None,
+            og_image=d.get('og_image'),
+            primary=Dark.from_dict(d.get('primary')) if d.get('primary') else None,
         )
 
 @dataclass
@@ -1298,6 +1514,28 @@ class SearchAndScrapeSource:
         )
 
 @dataclass
+class SequentialSearchCoverage:
+    domainSpread: Optional[float] = None
+    dominantDomain: Optional[str] = None
+    gaps: list[str] = field(default_factory=list)
+    sourceCount: Optional[int] = None
+    sourceTypes: dict[str, Any] = field(default_factory=dict)
+    uniqueDomains: Optional[int] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "SequentialSearchCoverage | None":
+        if d is None:
+            return None
+        return cls(
+            domainSpread=d.get('domainSpread'),
+            dominantDomain=d.get('dominantDomain'),
+            gaps=list(d.get('gaps') or []),
+            sourceCount=d.get('sourceCount'),
+            sourceTypes=dict(d.get('sourceTypes') or {}),
+            uniqueDomains=d.get('uniqueDomains'),
+        )
+
+@dataclass
 class SequentialSearchRefinementresult:
     error: Optional[str] = None
     query: Optional[str] = None
@@ -1318,7 +1556,7 @@ class SequentialSearchRefinementresult:
 @dataclass
 class SequentialSearchResponse:
     completedAt: Optional[str] = None
-    coverage: Optional[Coverage] = None
+    coverage: Optional[SequentialSearchCoverage] = None
     currentStep: Optional[int] = None
     depth: Optional[str] = None
     gaps: list[GetResearchSessionGap] = field(default_factory=list)
@@ -1345,7 +1583,7 @@ class SequentialSearchResponse:
             return None
         return cls(
             completedAt=d.get('completedAt'),
-            coverage=Coverage.from_dict(d.get('coverage')) if d.get('coverage') else None,
+            coverage=SequentialSearchCoverage.from_dict(d.get('coverage')) if d.get('coverage') else None,
             currentStep=d.get('currentStep'),
             depth=d.get('depth'),
             gaps=[GetResearchSessionGap.from_dict(i) for i in (d.get('gaps') or [])],
@@ -1397,6 +1635,28 @@ class SizeMetadata:
             estimatedTokens=d.get('estimatedTokens'),
             sizeCategory=d.get('sizeCategory'),
             totalLength=d.get('totalLength'),
+        )
+
+@dataclass
+class Social:
+    facebook: Optional[str] = None
+    github: Optional[str] = None
+    instagram: Optional[str] = None
+    linkedin: Optional[str] = None
+    twitter: Optional[str] = None
+    youtube: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "Social | None":
+        if d is None:
+            return None
+        return cls(
+            facebook=d.get('facebook'),
+            github=d.get('github'),
+            instagram=d.get('instagram'),
+            linkedin=d.get('linkedin'),
+            twitter=d.get('twitter'),
+            youtube=d.get('youtube'),
         )
 
 @dataclass
@@ -1481,6 +1741,42 @@ class Summary:
             urlsFailed=d.get('urlsFailed'),
             urlsScraped=d.get('urlsScraped'),
             urlsSearched=d.get('urlsSearched'),
+        )
+
+@dataclass
+class ToneOfVoice:
+    attributes: list[str] = field(default_factory=list)
+    dos_and_donts: Optional[DosAndDonts] = None
+    summary: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "ToneOfVoice | None":
+        if d is None:
+            return None
+        return cls(
+            attributes=list(d.get('attributes') or []),
+            dos_and_donts=DosAndDonts.from_dict(d.get('dos_and_donts')) if d.get('dos_and_donts') else None,
+            summary=d.get('summary'),
+        )
+
+@dataclass
+class Typography:
+    body: Optional[Body] = None
+    google_fonts_url: Optional[str] = None
+    heading: Optional[Body] = None
+    mono: Optional[Body] = None
+    scale: list[BrandResearchScale] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "Typography | None":
+        if d is None:
+            return None
+        return cls(
+            body=Body.from_dict(d.get('body')) if d.get('body') else None,
+            google_fonts_url=d.get('google_fonts_url'),
+            heading=Body.from_dict(d.get('heading')) if d.get('heading') else None,
+            mono=Body.from_dict(d.get('mono')) if d.get('mono') else None,
+            scale=[BrandResearchScale.from_dict(i) for i in (d.get('scale') or [])],
         )
 
 @dataclass

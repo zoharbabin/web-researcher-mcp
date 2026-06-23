@@ -38,6 +38,7 @@ from web_researcher_mcp.models import (
     AnswerResponse,
     ArchiveSourceResponse,
     AuditBibliographyResponse,
+    BrandResearchResponse,
     CitationGraphResponse,
     ClinicalSearchResponse,
     EconSearchResponse,
@@ -377,6 +378,26 @@ class WebResearcherClient:
             },
         )
         return AuditBibliographyResponse.from_dict(d)
+    async def brand_research(
+        self,
+        company_name: str = None,
+        depth: str = None,
+        include_design_tokens: bool = False,
+        sessionId: str = None,
+        url: str = None,
+    ) -> BrandResearchResponse:
+        """Research a company's complete brand identity — colors, logos, typography, tone of voice, and social handles — from any domain or company name"""
+        d = await self._call_tool(
+            "brand_research",
+            {
+                "company_name": company_name,
+                "depth": depth,
+                "include_design_tokens": include_design_tokens,
+                "sessionId": sessionId,
+                "url": url,
+            },
+        )
+        return BrandResearchResponse.from_dict(d)
     async def citation_graph(
         self,
         paper: str,
@@ -1164,6 +1185,23 @@ class SyncWebResearcherClient:
             entries=entries,
             format=format,
             sessionId=sessionId,
+            )
+        )
+    def brand_research(
+        self,
+        company_name: str = None,
+        depth: str = None,
+        include_design_tokens: bool = False,
+        sessionId: str = None,
+        url: str = None,
+    ) -> BrandResearchResponse:
+        return self._run(
+            self._async_client.brand_research(
+            company_name=company_name,
+            depth=depth,
+            include_design_tokens=include_design_tokens,
+            sessionId=sessionId,
+            url=url,
             )
         )
     def citation_graph(

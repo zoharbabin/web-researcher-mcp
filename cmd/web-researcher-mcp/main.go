@@ -457,10 +457,11 @@ func main() {
 			SourceRecommendations: cfg.Features.SourceRecommendations,
 			GenerativeUI:          cfg.Features.GenerativeUI,
 		},
-		Consent:       consentManager,
-		UserAnalytics: userAnalytics,
-		Memory:        memoryStore,
-		Workspaces:    workspaceStore,
+		Consent:          consentManager,
+		UserAnalytics:    userAnalytics,
+		Memory:           memoryStore,
+		Workspaces:       workspaceStore,
+		BrandFetchAPIKey: cfg.Search.BrandFetchAPIKey,
 	}
 
 	// Completion suppliers (#193): the live value sets the server can autocomplete

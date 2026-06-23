@@ -43,6 +43,7 @@ var expectedTools = []string{
 	"memory_recall",
 	"workspace_contribute",
 	"workspace_read",
+	"brand_research",
 }
 
 func listTools(t *testing.T) []*mcp.Tool {
@@ -261,6 +262,7 @@ func TestOutputSchemaMatchesResponse(t *testing.T) {
 		"econ_search":     {"series_id": "GDP"},
 		"clinical_search": {"condition": "covid-19"},
 		"local_search":    {"query": "coffee near me"},
+		"brand_research":  {"url": "example.com"},
 	}
 
 	tools := listTools(t)

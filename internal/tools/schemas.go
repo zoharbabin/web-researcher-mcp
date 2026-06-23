@@ -1031,3 +1031,131 @@ var localSearchOutputSchema = map[string]any{
 		},
 	},
 }
+
+var brandResearchOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"identity": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"name":        map[string]any{"type": "string"},
+				"domain":      map[string]any{"type": "string"},
+				"tagline":     map[string]any{"type": "string"},
+				"description": map[string]any{"type": "string"},
+				"industry":    map[string]any{"type": "string"},
+				"founded":     map[string]any{"type": "integer"},
+				"location": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"city":         map[string]any{"type": "string"},
+						"country_code": map[string]any{"type": "string"},
+					},
+				},
+			},
+		},
+		"colors": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"primary":        map[string]any{"type": "string"},
+				"secondary":      map[string]any{"type": "string"},
+				"accent":         map[string]any{"type": "string"},
+				"background":     map[string]any{"type": "string"},
+				"surface":        map[string]any{"type": "string"},
+				"text":           map[string]any{"type": "string"},
+				"text_secondary": map[string]any{"type": "string"},
+				"palette": map[string]any{
+					"type": "array",
+					"items": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"hex":        map[string]any{"type": "string"},
+							"name":       map[string]any{"type": "string"},
+							"role":       map[string]any{"type": "string"},
+							"brightness": map[string]any{"type": "integer"},
+						},
+					},
+				},
+			},
+		},
+		"logos": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"primary":  map[string]any{"type": "object", "properties": map[string]any{"url": map[string]any{"type": "string"}, "format": map[string]any{"type": "string"}, "width": map[string]any{"type": "integer"}, "height": map[string]any{"type": "integer"}}},
+				"dark":     map[string]any{"type": "object", "properties": map[string]any{"url": map[string]any{"type": "string"}, "format": map[string]any{"type": "string"}, "width": map[string]any{"type": "integer"}, "height": map[string]any{"type": "integer"}}},
+				"icon":     map[string]any{"type": "object", "properties": map[string]any{"url": map[string]any{"type": "string"}, "format": map[string]any{"type": "string"}, "width": map[string]any{"type": "integer"}, "height": map[string]any{"type": "integer"}}},
+				"favicon":  map[string]any{"type": "string"},
+				"og_image": map[string]any{"type": "string"},
+			},
+		},
+		"typography": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"heading":          map[string]any{"type": "object", "properties": map[string]any{"family": map[string]any{"type": "string"}, "weights": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}}, "origin": map[string]any{"type": "string"}, "origin_id": map[string]any{"type": "string"}}},
+				"body":             map[string]any{"type": "object", "properties": map[string]any{"family": map[string]any{"type": "string"}, "weights": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}}, "origin": map[string]any{"type": "string"}, "origin_id": map[string]any{"type": "string"}}},
+				"mono":             map[string]any{"type": "object", "properties": map[string]any{"family": map[string]any{"type": "string"}, "weights": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}}, "origin": map[string]any{"type": "string"}, "origin_id": map[string]any{"type": "string"}}},
+				"google_fonts_url": map[string]any{"type": "string"},
+				"scale": map[string]any{
+					"type": "array",
+					"items": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"level":       map[string]any{"type": "string"},
+							"font_size":   map[string]any{"type": "string"},
+							"weight":      map[string]any{"type": "integer"},
+							"line_height": map[string]any{"type": "string"},
+						},
+					},
+				},
+			},
+		},
+		"tone_of_voice": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"summary":    map[string]any{"type": "string"},
+				"attributes": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+				"dos_and_donts": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"dos":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+						"donts": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					},
+				},
+			},
+		},
+		"social": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"twitter":   map[string]any{"type": "string"},
+				"linkedin":  map[string]any{"type": "string"},
+				"github":    map[string]any{"type": "string"},
+				"youtube":   map[string]any{"type": "string"},
+				"facebook":  map[string]any{"type": "string"},
+				"instagram": map[string]any{"type": "string"},
+			},
+		},
+		"sources": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"name":   map[string]any{"type": "string"},
+					"url":    map[string]any{"type": "string"},
+					"fields": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+				},
+			},
+		},
+		"guidelines_url": map[string]any{"type": "string"},
+		"design_tokens":  map[string]any{"type": "object"},
+		"coverage": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"colors":        map[string]any{"type": "string"},
+				"logos":         map[string]any{"type": "string"},
+				"typography":    map[string]any{"type": "string"},
+				"tone_of_voice": map[string]any{"type": "string"},
+			},
+		},
+		"cache_age": map[string]any{"type": "integer"},
+		"trust":     trustUntrustedExternal,
+	},
+}

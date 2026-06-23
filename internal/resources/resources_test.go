@@ -595,3 +595,266 @@ func TestLensesCatalogResourceEmpty(t *testing.T) {
 		t.Error("lenses key missing from response")
 	}
 }
+
+// =============================================================================
+// Brand Guidelines Prompt Tests
+// =============================================================================
+
+// TestBrandGuidelinesPromptDefaultUseCase verifies that omitting use_case
+// falls back to full_guidelines and includes the expected guidance text.
+func TestBrandGuidelinesPromptDefaultUseCase(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "brand-guidelines",
+		Arguments: map[string]string{"company": "Kaltura"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	if len(result.Messages) == 0 {
+		t.Fatal("expected at least one message")
+	}
+	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	if !strings.Contains(msg, "full_guidelines") && !strings.Contains(msg, "comprehensive brand guidelines") {
+		t.Errorf("expected full_guidelines guidance text in default use_case prompt, got: %s", msg[:min(200, len(msg))])
+	}
+	if !strings.Contains(msg, "brand_research") {
+		t.Errorf("expected 'brand_research' in default use_case prompt, got: %s", msg[:min(200, len(msg))])
+	}
+}
+
+// TestBrandGuidelinesPromptLandingPage verifies landing_page use_case output.
+func TestBrandGuidelinesPromptLandingPage(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "brand-guidelines",
+		Arguments: map[string]string{"company": "Kaltura", "use_case": "landing_page"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	if len(result.Messages) == 0 {
+		t.Fatal("expected at least one message")
+	}
+	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	if !strings.Contains(msg, "CTA button") {
+		t.Errorf("expected 'CTA button' in landing_page prompt, got: %s", msg[:min(200, len(msg))])
+	}
+	if !strings.Contains(msg, "Color palette table") {
+		t.Errorf("expected 'Color palette table' in landing_page prompt, got: %s", msg[:min(200, len(msg))])
+	}
+	if !strings.Contains(msg, "Typography spec") {
+		t.Errorf("expected 'Typography spec' in landing_page prompt, got: %s", msg[:min(200, len(msg))])
+	}
+}
+
+// TestBrandGuidelinesPromptEmail verifies email use_case output.
+func TestBrandGuidelinesPromptEmail(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "brand-guidelines",
+		Arguments: map[string]string{"company": "Kaltura", "use_case": "email"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	if len(result.Messages) == 0 {
+		t.Fatal("expected at least one message")
+	}
+	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	if !strings.Contains(msg, "Font stack") {
+		t.Errorf("expected 'Font stack' in email prompt, got: %s", msg[:min(200, len(msg))])
+	}
+	if !strings.Contains(msg, "HTML inline-style") {
+		t.Errorf("expected 'HTML inline-style' in email prompt, got: %s", msg[:min(200, len(msg))])
+	}
+}
+
+// TestBrandGuidelinesPromptSocialPost verifies social_post use_case output.
+func TestBrandGuidelinesPromptSocialPost(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "brand-guidelines",
+		Arguments: map[string]string{"company": "Kaltura", "use_case": "social_post"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	if len(result.Messages) == 0 {
+		t.Fatal("expected at least one message")
+	}
+	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	if !strings.Contains(msg, "caption") {
+		t.Errorf("expected 'caption' in social_post prompt, got: %s", msg[:min(200, len(msg))])
+	}
+	if !strings.Contains(msg, "hashtag") {
+		t.Errorf("expected 'hashtag' in social_post prompt, got: %s", msg[:min(200, len(msg))])
+	}
+}
+
+// TestBrandGuidelinesPromptVideoBrief verifies video_brief use_case output.
+func TestBrandGuidelinesPromptVideoBrief(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "brand-guidelines",
+		Arguments: map[string]string{"company": "Kaltura", "use_case": "video_brief"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	if len(result.Messages) == 0 {
+		t.Fatal("expected at least one message")
+	}
+	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	if !strings.Contains(msg, "lower-third") {
+		t.Errorf("expected 'lower-third' in video_brief prompt, got: %s", msg[:min(200, len(msg))])
+	}
+	if !strings.Contains(msg, "Voiceover tone") {
+		t.Errorf("expected 'Voiceover tone' in video_brief prompt, got: %s", msg[:min(200, len(msg))])
+	}
+}
+
+// TestBrandGuidelinesPromptDesignTokens verifies design_tokens use_case output.
+func TestBrandGuidelinesPromptDesignTokens(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "brand-guidelines",
+		Arguments: map[string]string{"company": "Kaltura", "use_case": "design_tokens"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	if len(result.Messages) == 0 {
+		t.Fatal("expected at least one message")
+	}
+	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	if !strings.Contains(msg, "include_design_tokens") {
+		t.Errorf("expected 'include_design_tokens' in design_tokens prompt, got: %s", msg[:min(200, len(msg))])
+	}
+}
+
+// TestBrandGuidelinesPromptMentionsBrandResearch is a drift guard that verifies
+// every use_case branch includes a call to brand_research in the output.
+func TestBrandGuidelinesPromptMentionsBrandResearch(t *testing.T) {
+	t.Parallel()
+	useCases := []string{"landing_page", "email", "social_post", "video_brief", "design_tokens", "full_guidelines"}
+	for _, uc := range useCases {
+		uc := uc
+		t.Run(uc, func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			m := metrics.NewCollector()
+			s, _ := session.NewManager(session.Config{MaxSessions: 10})
+			srv := createTestServer(m, s)
+			cs := connectTestClient(ctx, t, srv)
+			defer cs.Close()
+
+			result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+				Name:      "brand-guidelines",
+				Arguments: map[string]string{"company": "Kaltura", "use_case": uc},
+			})
+			if err != nil {
+				t.Fatalf("GetPrompt failed for use_case=%s: %v", uc, err)
+			}
+			if len(result.Messages) == 0 {
+				t.Fatalf("expected at least one message for use_case=%s", uc)
+			}
+			msg := result.Messages[0].Content.(*mcp.TextContent).Text
+			if !strings.Contains(msg, "brand_research") {
+				t.Errorf("use_case=%s: expected 'brand_research' in prompt, got: %s", uc, msg[:min(200, len(msg))])
+			}
+		})
+	}
+}
+
+// TestBrandGuidelinesPromptDepthPassthrough verifies that a depth argument is
+// reflected in the prompt text.
+func TestBrandGuidelinesPromptDepthPassthrough(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "brand-guidelines",
+		Arguments: map[string]string{"company": "Kaltura", "depth": "full"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	if len(result.Messages) == 0 {
+		t.Fatal("expected at least one message")
+	}
+	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	if !strings.Contains(msg, "depth: full") {
+		t.Errorf("expected 'depth: full' in prompt text, got: %s", msg[:min(200, len(msg))])
+	}
+}
+
+// TestBrandGuidelinesPromptDescription verifies that the prompt Description
+// field contains the company name.
+func TestBrandGuidelinesPromptDescription(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "brand-guidelines",
+		Arguments: map[string]string{"company": "Kaltura"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	if !strings.Contains(result.Description, "Kaltura") {
+		t.Errorf("expected Description to contain 'Kaltura', got: %q", result.Description)
+	}
+}

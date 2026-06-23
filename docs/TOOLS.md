@@ -1575,6 +1575,69 @@ Capture a **fresh** Internet Archive (Wayback Machine) snapshot of a URL via Sav
 
 ---
 
+## Tool 29: `brand_research`
+
+### Purpose
+
+Research a company's complete brand identity — colors, logos, typography, tone of voice, social handles, and W3C design tokens — from any domain or company name. Returns structured JSON ready for AI content generation. Use this when you need grounded brand data instead of hallucinating colors or fonts.
+
+Use `brand_research` when you need structured brand JSON. Use `brand-guidelines` (MCP Prompt) when you want LLM interpretation for a specific use case (landing page, email, video brief).
+
+### When to use vs. other tools
+
+| Use case | Tool |
+|---|---|
+| Get raw brand data (colors, logos, fonts as JSON) | `brand_research` |
+| Generate brand-compliant content for a specific use case | `brand-guidelines` prompt |
+| Scrape the brand homepage | `scrape_page` |
+| Search for brand guidelines PDF | `search_and_scrape` |
+
+### Input Schema
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `url` | string | no* | — | Domain or URL (e.g. `kaltura.com`, `https://kaltura.com`). Preferred when both are supplied. |
+| `company_name` | string | no* | — | Company name used to resolve domain when `url` is omitted. |
+| `depth` | string | no | `standard` | `quick` (API+meta only, ~1–2s), `standard` (adds CSS+brand-page probe, ~3–6s), `full` (adds web search, ~8–15s). |
+| `include_design_tokens` | bool | no | false | When true, include W3C DTCG `design_tokens` object for Style Dictionary / Tokens Studio / Figma Variables. |
+| `sessionId` | string | no | — | Link to a `sequential_search` session. |
+
+\*At least one of `url` or `company_name` is required.
+
+### Output Schema
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `identity` | object | `name`, `domain`, `tagline`, `description`, `industry`, `founded`, `location` |
+| `colors` | object | `primary`, `secondary`, `accent`, `background`, `text` (hex strings) + `palette` array with `hex`, `name`, `role`, `brightness` |
+| `logos` | object | `primary`, `dark`, `icon` (each: `url`, `format`, `width`, `height`) + `favicon`, `og_image` |
+| `typography` | object | `heading`, `body`, `mono` (each: `family`, `weights`, `origin`, `origin_id`) + `google_fonts_url`, `scale` |
+| `tone_of_voice` | object | `summary`, `attributes` array, `dos_and_donts` object |
+| `social` | object | `twitter`, `linkedin`, `github`, `youtube`, `facebook`, `instagram` (URLs) |
+| `sources` | array | Which tiers contributed: `name` (`brandfetch_api`/`homepage_meta`/`css_extraction`/`brand_page`/`web_search`), `url`, `fields` |
+| `guidelines_url` | string | First discovered brand guidelines page URL |
+| `design_tokens` | object | W3C DTCG format (`$value`/`$type` per token) — only when `include_design_tokens: true` |
+| `coverage` | object | `colors`, `logos`, `typography`, `tone_of_voice` — each `full`/`partial`/`none` (or `found`/`inferred`/`none` for tone) |
+| `cache_age` | integer | Seconds since cache was written. `0` = live fetch. Cache TTL: 24 hours. |
+| `trust` | string | Always `untrusted-external-content` |
+
+### Behavior
+
+- **Five-tier extraction pipeline.** Tiers run concurrently: (1) BrandFetch API, (2) homepage structured-data + meta, (3) CSS extraction (up to 5 stylesheets, 200 KB each), (4) brand-page probe (concurrent HEAD requests, 24 patterns), (5) web search (depth=full only). Higher tiers never overwrite lower-tier values.
+- **Graceful degradation.** Works without `BRANDFETCH_API_KEY` — falls back to CSS + meta + brand-page probe. BrandFetch free tier: 100 req/month; the 24h cache keeps repeated lookups free.
+- **CSS extraction is regex-only** (Zero-Dependency Mandate). CSS custom properties (`--color-primary`) are the highest signal; direct color props are secondary. SPAs that inject styles at runtime may not expose brand tokens in static CSS.
+- **Logo CDN.** BrandFetch logo URLs are for hotlinking only. Programmatic download or re-hosting requires a BrandFetch paid agreement.
+- **Tone of voice** is reliably available only from BrandFetch Context API or a brand guidelines page — not inferrable from CSS.
+- **Brand-page probe** stops at the first URL returning HTTP 200 that doesn't redirect to the homepage.
+
+### Annotations
+- ReadOnly: true · Destructive: false · Idempotent: true · OpenWorld: true
+
+### Cache
+- TTL: 24 hours. Key: SHA-256 of domain + depth. `cache_age` field shows seconds since last fetch.
+
+---
+
 ## Cross-Cutting Concerns
 
 ### Timeouts
@@ -1715,6 +1778,7 @@ Every tool declares annotations for client consumption (`readOnlyAnnotations(ide
 | memory_recall | true | true | false |
 | workspace_contribute | **false (write)** | false | false |
 | workspace_read | true | true | false |
+| brand_research | true | true | true |
 
 Notes: `sequential_search` is non-idempotent because it writes session state to disk on every call. `memory_save`, `workspace_contribute`, and `archive_source` are the three **write** tools (`ReadOnly:false`). `memory_save` and `workspace_contribute` are non-idempotent (each call appends a new record); `archive_source` is idempotent (archiving the same URL twice is safe). `OpenWorld:false` marks tools that touch only local/server state (sessions, memory, analytics, workspaces, exports) rather than the open web. `Destructive` is uniformly false — no tool is annotated destructive.
 
@@ -1743,3 +1807,32 @@ These are upstream behaviors we cannot control — they reflect how the underlyi
 | HackerNews | `web_search` / `news_search` only (no Images); `dateRange` filter via Algolia `numericFilters`; `num_results` 1–100 (values outside that range reset to 10); no API key required (`SEARCH_PROVIDER=hackernews` or `provider: hackernews` per-call) | Algolia HN search index only; not a general-web index |
 
 These are not errors in web-researcher-mcp. The tool faithfully passes parameters to the upstream API and returns whatever the API provides.
+
+## MCP Prompts
+
+MCP Prompts are LLM-facing instruction handlers — they orchestrate tool calls and synthesis for a specific use case. Unlike tools (which return structured JSON), prompts return a natural-language instruction that tells the LLM *how* to use tool outputs.
+
+### `brand-guidelines`
+
+Research a company's brand identity and produce use-case-specific brand-compliant guidance. Calls `brand_research`, interprets the structured JSON, and produces actionable creative direction for the requested use case.
+
+**When to use vs. `brand_research` directly:** Call `brand_research` when you want the raw structured JSON (colors as hex, logos as URLs, fonts as names). Invoke the `brand-guidelines` prompt when you want an LLM to interpret that JSON and produce formatted creative guidance for a specific task.
+
+#### Arguments
+
+| Argument | Required | Default | Description |
+|---|---|---|---|
+| `company` | yes | — | Company name or domain (e.g. `kaltura.com` or `Kaltura`) |
+| `use_case` | no | `full_guidelines` | `landing_page`, `email`, `social_post`, `video_brief`, `design_tokens`, `full_guidelines` |
+| `depth` | no | `standard` | Passed to `brand_research`: `quick`, `standard`, `full` |
+
+#### Use cases
+
+| `use_case` | Produces |
+|---|---|
+| `landing_page` | Color palette table, typography spec, sample headline + subhead, component guidance |
+| `email` | Email color spec, font stack, sample subject line + preheader, HTML inline-style snippet |
+| `social_post` | Visual identity notes, three sample captions (Twitter/X, LinkedIn, Instagram), hashtag suggestions |
+| `video_brief` | Motion graphics color spec, logo bug placement, voiceover tone direction, music mood descriptor |
+| `design_tokens` | W3C DTCG JSON code block, token mapping table, gap analysis |
+| `full_guidelines` | Comprehensive brand doc: identity, color system, logo usage, typography, tone of voice, coverage summary |
