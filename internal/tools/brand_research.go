@@ -1357,10 +1357,12 @@ func extractBrandPageContent(content, domain string, result *brandResearchResult
 // ─── Tier 5: Web search ────────────────────────────────────────────────────
 
 // knownBrandHosts are third-party platforms that legitimately host brand portals.
+// github.com/github.io are intentionally excluded here — GitHub results are
+// only accepted when the query explicitly targets site:github.com.
 var knownBrandHosts = []string{
 	"brandfetch.io", "brand.ai", "frontify.com", "bynder.com",
 	"corebook.io", "marq.com", "lucidpress.com", "canto.com",
-	"canva.com", "figma.com", "github.com", "github.io",
+	"canva.com", "figma.com",
 }
 
 func searchBrandGuidelines(ctx context.Context, deps Dependencies, companyName, domain string, result *brandResearchResult, mu *sync.Mutex) *brandSource {
@@ -1394,7 +1396,8 @@ func searchBrandGuidelines(ctx context.Context, deps Dependencies, companyName, 
 				strings.HasSuffix(urlLower, "_templates") {
 				continue
 			}
-			// Only accept results from the company's own domain or known brand-portal hosts.
+			// Only accept results from the company's own domain, known brand-portal hosts,
+			// or GitHub when the query explicitly targets site:github.com.
 			if parsed, err := url.Parse(r.URL); err == nil {
 				host := strings.ToLower(parsed.Hostname())
 				ownDomain := !strings.Contains(domain, ".") || strings.HasSuffix(host, "."+domain) || host == domain
@@ -1405,7 +1408,9 @@ func searchBrandGuidelines(ctx context.Context, deps Dependencies, companyName, 
 						break
 					}
 				}
-				if !ownDomain && !knownHost {
+				githubOK := strings.Contains(q, "site:github.com") &&
+					(host == "github.com" || strings.HasSuffix(host, ".github.io"))
+				if !ownDomain && !knownHost && !githubOK {
 					continue
 				}
 			}
