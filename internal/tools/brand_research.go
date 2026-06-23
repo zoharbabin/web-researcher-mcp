@@ -1408,8 +1408,18 @@ func searchBrandGuidelines(ctx context.Context, deps Dependencies, companyName, 
 						break
 					}
 				}
-				githubOK := strings.Contains(q, "site:github.com") &&
-					(host == "github.com" || strings.HasSuffix(host, ".github.io"))
+				// For GitHub, also require the repo org to match the company's
+				// primary domain label (e.g. "vercel" in "vercel.com").
+				githubOK := false
+				if strings.Contains(q, "site:github.com") &&
+					(host == "github.com" || strings.HasSuffix(host, ".github.io")) {
+					domainLabel := strings.SplitN(domain, ".", 2)[0]
+					pathParts := strings.SplitN(strings.TrimPrefix(parsed.Path, "/"), "/", 3)
+					orgMatch := len(pathParts) > 0 && strings.EqualFold(pathParts[0], domainLabel)
+					// github.io repos are <org>.github.io — match the host label
+					hostLabel := strings.SplitN(host, ".", 2)[0]
+					githubOK = orgMatch || strings.EqualFold(hostLabel, domainLabel)
+				}
 				if !ownDomain && !knownHost && !githubOK {
 					continue
 				}

@@ -910,9 +910,11 @@ func TestBrandGuidelinesURLFilter(t *testing.T) {
 		// known brand hosts pass
 		{"https://figma.com/using-the-figma-brand/", "figma.com", true},
 		{"https://brand.something.frontify.com/", "otherdomain.com", true},
-		// github.com/github.io only allowed when query targets site:github.com (not tested here — query is not passed to isAllowed)
+		// github.com: rejected when not from site:github.com query (not modeled here — query context not passed)
 		{"https://somecompany.github.io/design-system", "somecompany.com", false},
 		{"https://github.com/somecompany/design", "somecompany.com", false},
+		// github.com: also rejected for unrelated org even from site:github.com query
+		{"https://github.com/voltagent/awesome-design-md", "notion.so", false},
 		// third-party template sites rejected
 		{"https://www.themarketingplot.com/notion-hub/the-brand-book-notion-template", "notion.so", false},
 		{"https://www.notion.com/templates/category/brand-guidelines", "notion.so", false},
