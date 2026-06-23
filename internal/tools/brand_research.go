@@ -274,7 +274,7 @@ func registerBrandResearch(srv *mcp.Server, deps Dependencies) {
 
 		// Tier 5: Web search (depth == full only)
 		if depth == "full" {
-			if src := searchBrandGuidelines(ctx, deps, companyName, result, &mu); src != nil {
+			if src := searchBrandGuidelines(ctx, deps, companyName, domain, result, &mu); src != nil {
 				mu.Lock()
 				result.Sources = append(result.Sources, *src)
 				mu.Unlock()
@@ -1356,7 +1356,14 @@ func extractBrandPageContent(content, domain string, result *brandResearchResult
 
 // ─── Tier 5: Web search ────────────────────────────────────────────────────
 
-func searchBrandGuidelines(ctx context.Context, deps Dependencies, companyName string, result *brandResearchResult, mu *sync.Mutex) *brandSource {
+// knownBrandHosts are third-party platforms that legitimately host brand portals.
+var knownBrandHosts = []string{
+	"brandfetch.io", "brand.ai", "frontify.com", "bynder.com",
+	"corebook.io", "marq.com", "lucidpress.com", "canto.com",
+	"canva.com", "figma.com", "github.com", "github.io",
+}
+
+func searchBrandGuidelines(ctx context.Context, deps Dependencies, companyName, domain string, result *brandResearchResult, mu *sync.Mutex) *brandSource {
 	queries := []string{
 		`"` + companyName + `" brand guidelines OR brand kit OR brand book -filetype:pdf`,
 		`"` + companyName + `" design system site:github.com`,
@@ -1380,8 +1387,27 @@ func searchBrandGuidelines(ctx context.Context, deps Dependencies, companyName s
 			if strings.Contains(urlLower, "/templates/") ||
 				strings.Contains(urlLower, "/template/") ||
 				strings.Contains(urlLower, "/category/") ||
-				strings.Contains(urlLower, "/tag/") {
+				strings.Contains(urlLower, "/tag/") ||
+				strings.HasSuffix(urlLower, "-template") ||
+				strings.HasSuffix(urlLower, "-templates") ||
+				strings.HasSuffix(urlLower, "_template") ||
+				strings.HasSuffix(urlLower, "_templates") {
 				continue
+			}
+			// Only accept results from the company's own domain or known brand-portal hosts.
+			if parsed, err := url.Parse(r.URL); err == nil {
+				host := strings.ToLower(parsed.Hostname())
+				ownDomain := !strings.Contains(domain, ".") || strings.HasSuffix(host, "."+domain) || host == domain
+				knownHost := false
+				for _, kh := range knownBrandHosts {
+					if strings.HasSuffix(host, kh) || host == kh {
+						knownHost = true
+						break
+					}
+				}
+				if !ownDomain && !knownHost {
+					continue
+				}
 			}
 			fields = append(fields, "guidelines_url")
 			mu.Lock()

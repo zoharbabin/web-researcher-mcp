@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -855,6 +856,76 @@ func TestBrandSignalVarRegex(t *testing.T) {
 		}
 		if got != c.want {
 			t.Errorf("reCSSBrandSignalVar on %q: got %q, want %q", c.css, got, c.want)
+		}
+	}
+}
+
+// TestBrandGuidelinesURLFilter verifies that the web-search tier rejects
+// third-party template/category pages and non-own-domain results.
+func TestBrandGuidelinesURLFilter(t *testing.T) {
+	t.Parallel()
+
+	isAllowed := func(rawURL, domain string) bool {
+		urlLower := strings.ToLower(rawURL)
+		// document extensions
+		if strings.HasSuffix(urlLower, ".pdf") || strings.HasSuffix(urlLower, ".docx") || strings.HasSuffix(urlLower, ".pptx") {
+			return false
+		}
+		// template/category slugs
+		if strings.Contains(urlLower, "/templates/") || strings.Contains(urlLower, "/template/") ||
+			strings.Contains(urlLower, "/category/") || strings.Contains(urlLower, "/tag/") ||
+			strings.HasSuffix(urlLower, "-template") || strings.HasSuffix(urlLower, "-templates") ||
+			strings.HasSuffix(urlLower, "_template") || strings.HasSuffix(urlLower, "_templates") {
+			return false
+		}
+		// own-domain or known brand host
+		parsed, err := url.Parse(rawURL)
+		if err != nil {
+			return false
+		}
+		host := strings.ToLower(parsed.Hostname())
+		ownDomain := !strings.Contains(domain, ".") || strings.HasSuffix(host, "."+domain) || host == domain
+		if ownDomain {
+			return true
+		}
+		for _, kh := range knownBrandHosts {
+			if strings.HasSuffix(host, kh) || host == kh {
+				return true
+			}
+		}
+		return false
+	}
+
+	type tc struct {
+		url     string
+		domain  string
+		allowed bool
+	}
+	cases := []tc{
+		// own-domain passes
+		{"https://stripe.com/press", "stripe.com", true},
+		{"https://press.stripe.com/", "stripe.com", true},
+		{"https://brand.kaltura.com", "kaltura.com", true},
+		{"https://vercel.com/geist/brands", "vercel.com", true},
+		// known brand hosts pass
+		{"https://figma.com/using-the-figma-brand/", "figma.com", true},
+		{"https://brand.something.frontify.com/", "otherdomain.com", true},
+		{"https://somecompany.github.io/design-system", "somecompany.com", true},
+		// third-party template sites rejected
+		{"https://www.themarketingplot.com/notion-hub/the-brand-book-notion-template", "notion.so", false},
+		{"https://www.notion.com/templates/category/brand-guidelines", "notion.so", false},
+		{"https://some-blog.com/how-to-use-brand-templates", "acme.com", false},
+		// document extensions rejected
+		{"https://kaltura.com/brand-guidelines.pdf", "kaltura.com", false},
+		{"https://stripe.com/brand.docx", "stripe.com", false},
+		// tag pages rejected
+		{"https://stripe.com/blog/tag/brand", "stripe.com", false},
+	}
+
+	for _, c := range cases {
+		got := isAllowed(c.url, c.domain)
+		if got != c.allowed {
+			t.Errorf("isAllowed(%q, %q) = %v, want %v", c.url, c.domain, got, c.allowed)
 		}
 	}
 }
