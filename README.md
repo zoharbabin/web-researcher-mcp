@@ -166,6 +166,7 @@ Works with Claude, Claude Desktop, Cursor, and any AI assistant that supports to
 | `legal_search` | Search US court opinions and dockets via CourtListener — real cases with real citations |
 | `econ_search` | Look up economic data — World Bank global development indicators, OECD economic indicators, Eurostat European statistics (all keyless), and FRED US macro series (GDP, CPI, unemployment, rates; requires FRED_API_KEY) |
 | `clinical_search` | Search ClinicalTrials.gov — clinical-trial registrations with status, phase, sponsor, and whether results are posted (discovery, not medical advice) |
+| `brand_research` | Research a company's complete brand identity — colors (hex), logos, typography, tone of voice, and social handles — from any domain or company name. Returns structured JSON for AI content generation. No API key required; BrandFetch key optional for richer data |
 | `verify_citation` | Check a citation before you rely on it — does it exist, match a real record, and is it retracted or a dead link? Evidence, not a verdict |
 | `audit_bibliography` | Audit a whole reference list in one pass — paste a CSL-JSON/RIS/BibTeX file (or a session) and get per-entry + corpus-level flags for retracted, dead-link, and unverifiable citations |
 | `verify_recommendation` | Audit an AI-generated recommendation list (listicle, product ranking) for self-promotion, author conflicts of interest, domain reputation, and dead links — catches GEO-gamed picks. Evidence, not a verdict |
@@ -189,6 +190,7 @@ The server also ships guided **prompt templates** your AI assistant can pull in 
 | `fact-check` | Verify a claim against multiple independent sources |
 | `competitive-analysis` | Size up a company and its market (news, patents, web) |
 | `literature-review` | Systematically review academic literature on a topic |
+| `brand-guidelines` | Research a brand and produce use-case-specific creative direction (landing page, email, video brief) — calls `brand_research` and interprets the structured JSON for you |
 
 In most AI apps these show up wherever you pick a prompt or "/" command. The server exposes live **status resources** (`stats://tools`, `stats://sessions`, `stats://rate-limits`, `stats://providers`), a lens catalog (`lenses://catalog`), diagnostics (`diagnostics://errors/recent`, `diagnostics://health`), and a large-payload artifact store (`research://artifact/{id}`) so you — or your AI — can check usage, limits, and which providers are active. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#mcp-resources--prompts) for the full list.
 

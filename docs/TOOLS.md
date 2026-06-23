@@ -1623,12 +1623,12 @@ Use `brand_research` when you need structured brand JSON. Use `brand-guidelines`
 
 ### Behavior
 
-- **Five-tier extraction pipeline.** Tiers run concurrently: (1) BrandFetch API, (2) homepage structured-data + meta, (3) CSS extraction (up to 5 stylesheets, 200 KB each), (4) brand-page probe (concurrent HEAD requests, 24 patterns), (5) web search (depth=full only). Higher tiers never overwrite lower-tier values.
+- **Five-tier extraction pipeline.** Tiers run concurrently: (1) BrandFetch API, (2) homepage structured-data + meta, (3) CSS extraction (up to 5 stylesheets, 200 KB each), (4) brand-page probe (concurrent HEAD requests, 26 patterns: 5 subdomains + 21 paths), (5) web search (depth=full only). Higher tiers never overwrite lower-tier values.
 - **Graceful degradation.** Works without `BRANDFETCH_API_KEY` — falls back to CSS + meta + brand-page probe. BrandFetch free tier: 100 req/month; the 24h cache keeps repeated lookups free.
 - **CSS extraction is regex-only** (Zero-Dependency Mandate). CSS custom properties (`--color-primary`) are the highest signal; direct color props are secondary. SPAs that inject styles at runtime may not expose brand tokens in static CSS.
 - **Logo CDN.** BrandFetch logo URLs are for hotlinking only. Programmatic download or re-hosting requires a BrandFetch paid agreement.
 - **Tone of voice** is reliably available only from BrandFetch Context API or a brand guidelines page — not inferrable from CSS.
-- **Brand-page probe** stops at the first URL returning HTTP 200 that doesn't redirect to the homepage.
+- **Brand-page probe** runs all 26 candidates concurrently and picks the highest-priority match (dedicated brand subdomains beat path matches); rejects redirects to the homepage or a different host.
 
 ### Annotations
 - ReadOnly: true · Destructive: false · Idempotent: true · OpenWorld: true
