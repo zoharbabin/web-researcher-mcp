@@ -166,7 +166,7 @@ var (
 	reGoogleFonts       = regexp.MustCompile(`fonts\.googleapis\.com/css[^"']*family=([^&"'\s]+)`)
 	reAdobeFonts        = regexp.MustCompile(`use\.typekit\.net/([a-z0-9]+)\.js`)
 	reHexColor          = regexp.MustCompile(`#[0-9a-fA-F]{6}\b`)
-	reToneHeading       = regexp.MustCompile(`(?i)(voice|tone|writing|language|personality)`)
+	reToneHeading       = regexp.MustCompile(`(?i)^(?:tone(?:\s+of\s+voice)?|brand\s+voice|writing\s+style|language\s+&\s+tone|voice\s+&\s+tone|brand\s+personality|our\s+voice|our\s+tone)[:\s]*$`)
 	reCSSVarFont        = regexp.MustCompile(`(?i)(--(?:font|typography|typeface)[-\w]*)\s*:\s*([^;}{]+)`)
 )
 
@@ -1370,11 +1370,17 @@ func searchBrandGuidelines(ctx context.Context, deps Dependencies, companyName s
 			continue
 		}
 		for _, r := range results {
-			// Skip PDF/document results — we want live brand portal pages.
+			// Skip PDF/document results and template/category pages — we want live brand portal pages.
 			urlLower := strings.ToLower(r.URL)
 			if strings.HasSuffix(urlLower, ".pdf") ||
 				strings.HasSuffix(urlLower, ".docx") ||
 				strings.HasSuffix(urlLower, ".pptx") {
+				continue
+			}
+			if strings.Contains(urlLower, "/templates/") ||
+				strings.Contains(urlLower, "/template/") ||
+				strings.Contains(urlLower, "/category/") ||
+				strings.Contains(urlLower, "/tag/") {
 				continue
 			}
 			fields = append(fields, "guidelines_url")

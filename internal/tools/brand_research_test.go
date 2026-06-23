@@ -792,6 +792,44 @@ func TestPickChromaticPrimaryAllNearNeutral(t *testing.T) {
 	}
 }
 
+// TestToneHeadingRegex verifies reToneHeading matches canonical brand-voice
+// headings and rejects prose lines that merely contain the word "voice".
+func TestToneHeadingRegex(t *testing.T) {
+	t.Parallel()
+	matches := []string{
+		"Tone of voice",
+		"Tone of Voice:",
+		"Brand Voice",
+		"brand voice",
+		"Writing Style",
+		"voice & tone",
+		"Voice & Tone",
+		"Language & Tone",
+		"Brand Personality",
+		"Our Voice",
+		"our tone",
+	}
+	rejects := []string{
+		"Charles C. Mann author of 1491: New Revelations",
+		"In his fresh and inimitable prose, Stewart Brand makes a striking case",
+		"Brand shows us why know-how and understanding how machines work really matter.",
+		"vocal performance was outstanding",
+		"personality type quiz",
+		"writing tools for teams",
+		"language learning app",
+	}
+	for _, s := range matches {
+		if !reToneHeading.MatchString(s) {
+			t.Errorf("reToneHeading should match %q but did not", s)
+		}
+	}
+	for _, s := range rejects {
+		if reToneHeading.MatchString(s) {
+			t.Errorf("reToneHeading should NOT match %q but did", s)
+		}
+	}
+}
+
 // TestBrandSignalVarRegex verifies reCSSBrandSignalVar matches design-system
 // variable patterns like --palette-bg-primary-core that reCSSVarColor would
 // miss (prefix not in its prefix list).
