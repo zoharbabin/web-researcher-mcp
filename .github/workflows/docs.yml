@@ -89,7 +89,6 @@ jobs:
           [ -f site_src/brand_guidelines.md ] && mv site_src/brand_guidelines.md site_src/brand-guidelines.md
           [ -f site_src/session_persistence.md ] && mv site_src/session_persistence.md site_src/session-persistence.md
           [ -f site_src/error_handling.md ] && mv site_src/error_handling.md site_src/error-handling.md
-          [ -f site_src/providers.md ] && mv site_src/providers.md site_src/providers.md
           [ -f site_src/security_and_compliance.md ] && mv site_src/security_and_compliance.md site_src/security-and-compliance.md
           # Publish pre-rendered decks as static assets (served verbatim, not
           # built as mkdocs pages). The rendered HTML/PDF are self-contained
