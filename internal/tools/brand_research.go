@@ -1207,37 +1207,44 @@ var brandPagePaths = []string{
 }
 
 func probeBrandPage(ctx context.Context, deps Dependencies, domain string, result *brandResearchResult, mu *sync.Mutex, depth string) *brandSource {
-	var candidates []string
-	for _, sub := range brandPageSubdomains {
-		candidates = append(candidates, "https://"+sub+"."+domain)
+	// Each candidate carries a priority so dedicated brand subdomains
+	// (brand.*, press.*) beat generic path matches even when the path URL
+	// responds faster.  Lower priority number = better match.
+	type candidate struct {
+		url      string
+		priority int
 	}
-	for _, path := range brandPagePaths {
-		candidates = append(candidates, "https://"+domain+path)
+
+	var candidates []candidate
+	for i, sub := range brandPageSubdomains {
+		candidates = append(candidates, candidate{"https://" + sub + "." + domain, i})
+	}
+	pathBase := len(brandPageSubdomains)
+	for i, path := range brandPagePaths {
+		candidates = append(candidates, candidate{"https://" + domain + path, pathBase + i})
 	}
 
 	client := scraper.NewSSRFSafeClient(false)
 	sem := make(chan struct{}, 8)
-	found := make(chan string, 1)
 	homepageURL := "https://" + domain + "/"
 
+	// Collect all valid matches; pick the best priority after all probes finish.
+	matches := make(chan candidate, len(candidates))
+
 	var pwg sync.WaitGroup
-	for _, candidate := range candidates {
+	for _, c := range candidates {
 		pwg.Add(1)
-		go func(u string) {
+		go func(c candidate) {
 			defer pwg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			select {
-			case <-found:
-				return // someone already found it
-			default:
-			}
-
-			req, err := http.NewRequestWithContext(ctx, "HEAD", u, nil)
+			req, err := http.NewRequestWithContext(ctx, "HEAD", c.url, nil)
 			if err != nil {
 				return
 			}
+			// Use a browser-like UA — some brand portals block bot UAs even on HEAD.
+			req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
 			resp, err := client.Do(req)
 			if err != nil {
 				return
@@ -1245,22 +1252,40 @@ func probeBrandPage(ctx context.Context, deps Dependencies, domain string, resul
 			resp.Body.Close()
 
 			if resp.StatusCode == 200 {
-				// Check it didn't redirect to homepage.
 				finalURL := resp.Request.URL.String()
-				if !hostsMatch(finalURL, homepageURL) && looksLikeBrandPage(ctx, client, u) {
-					select {
-					case found <- u:
-					default:
+				// Reject redirects back to the homepage.
+				if hostsMatch(finalURL, homepageURL) {
+					return
+				}
+				// Reject redirects that landed on a different host than the
+				// candidate (e.g. kaltura.com/media → kmc.kaltura.com is their
+				// legacy app, not a brand page). A path redirect on the same
+				// host is fine (brand.acme.com → brand.acme.com/en/).
+				if candidateParsed, err2 := url.Parse(c.url); err2 == nil {
+					if finalParsed, err3 := url.Parse(finalURL); err3 == nil {
+						if !strings.EqualFold(finalParsed.Hostname(), candidateParsed.Hostname()) {
+							return
+						}
 					}
 				}
+				if looksLikeBrandPage(ctx, client, c.url) {
+					matches <- c
+				}
 			}
-		}(candidate)
+		}(c)
 	}
 	pwg.Wait()
-	close(found)
+	close(matches)
 
-	guidelinesURL, ok := <-found
-	if !ok || guidelinesURL == "" {
+	// Pick the highest-priority (lowest number) valid match.
+	best := candidate{priority: len(candidates) + 1}
+	for m := range matches {
+		if m.priority < best.priority {
+			best = m
+		}
+	}
+	guidelinesURL := best.url
+	if guidelinesURL == "" {
 		return nil
 	}
 
@@ -1333,18 +1358,25 @@ func extractBrandPageContent(content, domain string, result *brandResearchResult
 
 func searchBrandGuidelines(ctx context.Context, deps Dependencies, companyName string, result *brandResearchResult, mu *sync.Mutex) *brandSource {
 	queries := []string{
-		`"` + companyName + `" brand guidelines filetype:pdf`,
+		`"` + companyName + `" brand guidelines OR brand kit OR brand book -filetype:pdf`,
 		`"` + companyName + `" design system site:github.com`,
 		`"` + companyName + `" figma brand kit`,
 	}
 
 	fields := []string{}
 	for _, q := range queries {
-		results, err := deps.Search.Web(ctx, search.WebSearchParams{Query: q, NumResults: 3})
+		results, err := deps.Search.Web(ctx, search.WebSearchParams{Query: q, NumResults: 5})
 		if err != nil || len(results) == 0 {
 			continue
 		}
 		for _, r := range results {
+			// Skip PDF/document results — we want live brand portal pages.
+			urlLower := strings.ToLower(r.URL)
+			if strings.HasSuffix(urlLower, ".pdf") ||
+				strings.HasSuffix(urlLower, ".docx") ||
+				strings.HasSuffix(urlLower, ".pptx") {
+				continue
+			}
 			fields = append(fields, "guidelines_url")
 			mu.Lock()
 			if result.GuidelinesURL == "" {
@@ -1825,7 +1857,20 @@ func resolveFontVar(value string, varMap map[string]string) string {
 
 // looksLikeBrandPage fetches the first 4KB of a URL and checks that it is a
 // genuine brand/press/design page rather than a soft-404, login screen, or redirect.
+// Brand subdomains (brand.*, press.*, newsroom.*) skip this check — their hostname
+// is sufficient evidence.
 func looksLikeBrandPage(ctx context.Context, client *http.Client, u string) bool {
+	// A dedicated brand/press/newsroom subdomain is self-evidently a brand page
+	// — skip the content check entirely.
+	if parsed, err := url.Parse(u); err == nil {
+		host := strings.ToLower(parsed.Hostname())
+		sub := strings.SplitN(host, ".", 2)[0]
+		switch sub {
+		case "brand", "press", "newsroom", "media-kit", "brandbook":
+			return true
+		}
+	}
+
 	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
 	if err != nil {
 		return false
@@ -1852,13 +1897,21 @@ func looksLikeBrandPage(ctx context.Context, client *http.Client, u string) bool
 		}
 	}
 	// Multi-word/specific signals are high-confidence on their own.
-	strongSignals := []string{"media kit", "guidelines", "design system", "style guide", "brand asset", "brand color", "brand colour", "brand font", "press kit", "download logo"}
+	strongSignals := []string{
+		"media kit", "brand kit", "brand book", "brandbook", "brand guide",
+		"brand portal", "brand hub", "brand center", "brand centre",
+		"guidelines", "design system", "style guide",
+		"brand asset", "brand color", "brand colour", "brand font",
+		"press kit", "download logo",
+	}
 	for _, s := range strongSignals {
 		if strings.Contains(body, s) {
 			return true
 		}
 	}
-	// Single-word signals require at least 2 co-occurring matches.
+	// Single-word signals require at least 3 co-occurring matches to avoid
+	// false positives from pages that merely mention "logo" or "color" in
+	// CSS class names or boilerplate (e.g. a generic app page with class="logo-img color-primary").
 	weakSignals := []string{"brand", "logo", "colour", "typeface", "typography", "color", "font", "press"}
 	count := 0
 	for _, s := range weakSignals {
@@ -1866,7 +1919,7 @@ func looksLikeBrandPage(ctx context.Context, client *http.Client, u string) bool
 			count++
 		}
 	}
-	return count >= 2
+	return count >= 3
 }
 
 // ─── URL helpers ───────────────────────────────────────────────────────────
