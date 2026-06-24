@@ -164,7 +164,7 @@ var (
 	reCSSColorProp      = regexp.MustCompile(`(?i)(?:^|[{;])\s*(?:color|background(?:-color)?|fill|stroke)\s*:\s*(#[0-9a-fA-F]{3,8})`)
 	reCSSFontFamily     = regexp.MustCompile(`(?i)font-family\s*:\s*([^;}{]+)`)
 	reGoogleFonts       = regexp.MustCompile(`fonts\.googleapis\.com/css[^"']*family=([^&"'\s]+)`)
-	reAdobeFonts        = regexp.MustCompile(`(?:https?:)?//use\.typekit\.net/([a-z0-9]+)\.js`)
+	reAdobeFonts        = regexp.MustCompile(`(?m)^(?:https?:)?//use\.typekit\.net/([a-z0-9]+)\.js(?:\?.*)?$`)
 	reHexColor          = regexp.MustCompile(`#[0-9a-fA-F]{6}\b`)
 	reToneHeading       = regexp.MustCompile(`(?i)^(?:tone(?:\s+of\s+voice)?|brand\s+voice|writing\s+style|language\s+&\s+tone|voice\s+&\s+tone|brand\s+personality|our\s+voice|our\s+tone)[:\s]*$`)
 	reCSSVarFont        = regexp.MustCompile(`(?i)(--(?:font|typography|typeface)[-\w]*)\s*:\s*([^;}{]+)`)
