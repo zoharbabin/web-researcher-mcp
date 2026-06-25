@@ -303,6 +303,26 @@ func TestBrandResearchBareIPRejected(t *testing.T) {
 	}
 }
 
+// TestBrandResearchNXDomainSubdomainNotAccepted verifies that a brand.* subdomain
+// that does not resolve (DNS NXDOMAIN) is NOT recorded as guidelines_url.
+// Regression: the probe goroutine used to accept brand.*/press.* on label alone
+// even when the HEAD request failed with "no such host".
+func TestBrandResearchNXDomainSubdomainNotAccepted(t *testing.T) {
+	t.Parallel()
+	deps := brandDepsWithPrivate()
+
+	// brand.this-domain-definitely-does-not-exist-xyzq123.com will NXDOMAIN.
+	domain := "this-domain-definitely-does-not-exist-xyzq123.com"
+	result, isErr := callBrandResearch(t, deps, map[string]any{"url": domain})
+	if isErr {
+		// A tool error is also acceptable (can't resolve homepage). Skip the rest.
+		return
+	}
+	if result["guidelines_url"] != nil && result["guidelines_url"] != "" {
+		t.Errorf("NXDOMAIN brand.* subdomain must not be accepted as guidelines_url, got: %v", result["guidelines_url"])
+	}
+}
+
 // ─── 10b. No BrandFetch key — company_name path succeeds ────────────────────
 // This tests that the tool handles a missing BrandFetchAPIKey on the
 // company_name-only resolution path without panicking or crashing.

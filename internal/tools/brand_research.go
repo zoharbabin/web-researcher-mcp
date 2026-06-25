@@ -704,6 +704,14 @@ func probeBrandPage(ctx context.Context, deps Dependencies, domain string, resul
 			req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
 			resp, err := client.Do(req)
 			if err != nil {
+				// DNS NXDOMAIN ("no such host") means the subdomain definitively does not
+				// exist — do NOT accept it on label alone, even for brand.* subdomains.
+				// Only fall back to looksLikeBrandPage for connection-level errors (TLS
+				// handshake refusals, timeouts, etc.) which indicate a live but
+				// bot-hostile Frontify/Canto SPA.
+				if strings.Contains(err.Error(), "no such host") {
+					return
+				}
 				// JS-heavy brand portals (e.g. Frontify SPAs) refuse plain HTTP
 				// connections — fall back to the browser tier for subdomain candidates
 				// where the hostname alone is strong evidence (brand.*, press.*, etc.).
@@ -1123,10 +1131,10 @@ func searchBrandGuidelines(ctx context.Context, deps Dependencies, companyName, 
 					continue
 				}
 			}
-			fields = append(fields, "guidelines_url")
 			mu.Lock()
 			if result.GuidelinesURL == "" {
 				result.GuidelinesURL = r.URL
+				fields = append(fields, "guidelines_url")
 			}
 			mu.Unlock()
 			break
