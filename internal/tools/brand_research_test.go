@@ -833,11 +833,11 @@ func TestBrandResearchPortalResource(t *testing.T) {
 
 	// Case 2: no portal — pre-seed result with Suggestion set.
 	noPortal := brandResearchResult{
-		Identity:  brandIdentity{Name: "NoCo", Domain: "noco.com"},
-		Sources:   []brandSource{},
-		Trust:     untrustedContentTrust,
+		Identity:   brandIdentity{Name: "NoCo", Domain: "noco.com"},
+		Sources:    []brandSource{},
+		Trust:      untrustedContentTrust,
 		Suggestion: "No brand portal found. Use scrape_page on https://noco.com to retrieve the fully rendered homepage.",
-		Coverage:  brandCoverage{Colors: "none", Logos: "none", Typography: "none", ToneOfVoice: "none"},
+		Coverage:   brandCoverage{Colors: "none", Logos: "none", Typography: "none", ToneOfVoice: "none"},
 	}
 	if b, err := json.Marshal(noPortal); err == nil {
 		deps.Cache.Set(context.Background(), brandCacheKey("noco.com", "standard"), b, 24*time.Hour)
@@ -875,11 +875,11 @@ func TestBrandResearchSuggestionOnQuickDepth(t *testing.T) {
 
 	// Pre-seed: no portal, suggestion set, depth=quick.
 	quickResult := brandResearchResult{
-		Identity:  brandIdentity{Name: "QuickCo", Domain: "quickco.com"},
-		Sources:   []brandSource{},
-		Trust:     untrustedContentTrust,
+		Identity:   brandIdentity{Name: "QuickCo", Domain: "quickco.com"},
+		Sources:    []brandSource{},
+		Trust:      untrustedContentTrust,
 		Suggestion: "No brand portal found. Use scrape_page on https://quickco.com to retrieve the fully rendered homepage.",
-		Coverage:  brandCoverage{Colors: "none", Logos: "none", Typography: "none", ToneOfVoice: "none"},
+		Coverage:   brandCoverage{Colors: "none", Logos: "none", Typography: "none", ToneOfVoice: "none"},
 	}
 	if b, err := json.Marshal(quickResult); err == nil {
 		deps.Cache.Set(context.Background(), brandCacheKey("quickco.com", "quick"), b, 24*time.Hour)
