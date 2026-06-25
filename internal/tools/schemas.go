@@ -1144,8 +1144,10 @@ var brandResearchOutputSchema = map[string]any{
 				},
 			},
 		},
-		"guidelines_url": map[string]any{"type": "string"},
-		"design_tokens":  map[string]any{"type": "object"},
+		"guidelines_url":       map[string]any{"type": "string"},
+		"brand_portal_resource": map[string]any{"type": "string", "description": "research://artifact/{id} URI — pass to read_resource to retrieve the full rendered brand portal text for AI analysis"},
+		"suggestion":           map[string]any{"type": "string", "description": "Guidance for the AI agent when no brand portal was found"},
+		"design_tokens":        map[string]any{"type": "object"},
 		"coverage": map[string]any{
 			"type": "object",
 			"properties": map[string]any{

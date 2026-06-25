@@ -185,6 +185,11 @@ var botWallMarkers = []string{
 	"protect the server against the scourge of",
 	"anubis uses a proof-of-work scheme",
 	"this is a placeholder solution",
+	// Frontify brand-portal login wall — returned with HTTP 200 when the portal
+	// requires viewer credentials. go-rod's headless fingerprint triggers this
+	// even on public portals; the pipeline must reject it and not cache it.
+	"please enter your viewer credentials",
+	"request access to the brand owner",
 }
 
 // looksLikeBotWall reports whether short extracted content is a bot/JS-wall

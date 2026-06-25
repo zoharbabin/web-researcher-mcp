@@ -31,6 +31,10 @@ func TestLooksLikeBotWall(t *testing.T) {
 		"Enable JavaScript and cookies to continue",
 		"Please verify that you're not a robot to continue.", // CourtListener-style
 		"JavaScript is disabled in your browser.",
+		// Frontify brand-portal login wall (returned with HTTP 200 when go-rod
+		// is fingerprinted as a bot on public portals).
+		"Please enter your viewer credentials or request access to the Brand Owner.",
+		"request access to the brand owner",
 	}
 	for _, c := range botWalls {
 		if !looksLikeBotWall(c) {
@@ -179,7 +183,7 @@ func TestPipeline_BotWallTreatedAsBlocked(t *testing.T) {
 	statFile = func(path string) (any, error) { return nil, fmt.Errorf("not found") }
 	defer func() { statFile = orig }()
 
-	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, ChromePath: chromeDisabled})
 	_, err := p.Scrape(testCtx(), ts.URL, 50000)
 	if err == nil {
 		t.Fatal("expected an error for a bot-wall interstitial, got success")
@@ -210,7 +214,7 @@ func TestPipeline_AnubisBotWallTreatedAsBlocked(t *testing.T) {
 	statFile = func(path string) (any, error) { return nil, fmt.Errorf("not found") }
 	defer func() { statFile = orig }()
 
-	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, ChromePath: chromeDisabled})
 	_, err := p.Scrape(testCtx(), ts.URL, 50000)
 	if err == nil {
 		t.Fatal("Anubis PoW interstitial returned HTTP 200: expected ErrBlocked, got success")

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-rod/rod/lib/proto"
+	"github.com/go-rod/stealth"
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 )
 
@@ -523,6 +525,69 @@ func (p *Pipeline) Close() {
 	closeBrowserPool()
 }
 
+// ExtractLinks renders rawURL in the browser tier and returns all absolute URLs
+// found in rendered <a href> elements. Returns nil when the browser is
+// unavailable or the page produces no links. Safe to call on SPA pages — the
+// browser executes JS before collecting hrefs.
+func (p *Pipeline) ExtractLinks(ctx context.Context, rawURL string) []string {
+	if err := validateScrapeURL(rawURL); err != nil {
+		return nil
+	}
+	if !p.browserEnabled() {
+		return nil
+	}
+	select {
+	case p.semaphore <- struct{}{}:
+		defer func() { <-p.semaphore }()
+	case <-ctx.Done():
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	bp := getBrowserPool(p.config.ChromePath, p.config.MaxConcurrency)
+	bp.mu.Lock()
+	browser := bp.browser
+	bp.mu.Unlock()
+	if browser == nil {
+		return nil
+	}
+
+	page, err := stealth.Page(browser)
+	if err != nil {
+		return nil
+	}
+	defer page.Close()
+	page = page.Context(ctx)
+
+	const stealthUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
+		"AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+	_ = page.SetUserAgent(&proto.NetworkSetUserAgentOverride{
+		UserAgent:      stealthUA,
+		AcceptLanguage: "en-US,en;q=0.9",
+		Platform:       "MacIntel",
+	})
+
+	if err := page.Navigate(rawURL); err != nil {
+		return nil
+	}
+
+	waitTime := 1500 * time.Millisecond
+	if isSPADomain(rawURL) {
+		waitTime = 3 * time.Second
+	}
+	loadCtx, loadCancel := context.WithTimeout(ctx, waitTime)
+	_ = page.Context(loadCtx).WaitLoad()
+	loadCancel()
+	stableCtx, stableCancel := context.WithTimeout(ctx, waitTime)
+	_ = page.Context(stableCtx).WaitStable(waitTime / 3)
+	stableCancel()
+
+	links, _ := extractPageLinks(page)
+	return links
+}
+
 // chromeDisabled is the sentinel CHROME_PATH value that turns the browser
 // rendering tier off entirely (no auto-download, no detection). Useful for
 // hardened/headless deployments and for deterministic tests.
@@ -642,11 +707,30 @@ var knownSPADomains = []string{
 	"trends.google.com", "youtube.com",
 	"linkedin.com", "facebook.com", "instagram.com",
 	"medium.com", "dev.to",
+	// Frontify-hosted brand portals are React SPAs; also match custom domains
+	// that Frontify serves (brand.*.com pattern) via knownBrandPortalPaths.
+	"frontify.com",
 }
 
-func isSPADomain(url string) bool {
+func isSPADomain(rawURL string) bool {
 	for _, domain := range knownSPADomains {
-		if hostnameMatches(url, domain) {
+		if hostnameMatches(rawURL, domain) {
+			return true
+		}
+	}
+	// Brand portals on custom subdomains (brand.*, press.*, newsroom.*) are
+	// typically Frontify/Figma/Bynder React SPAs served on company-owned hostnames
+	// that do not appear in knownSPADomains. Treat them as SPAs so they get the
+	// longer hydration wait in the browser tier.
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	// F18: extended prefix list covers Frontify/Bynder SPA portals on app.*, portal.*,
+	// design.*, and style.* subdomains. Omit media./cdn. (informational, not SPAs).
+	for _, prefix := range []string{"brand.", "press.", "newsroom.", "brandbook.", "identity.", "app.", "portal.", "design.", "style."} {
+		if strings.HasPrefix(host, prefix) {
 			return true
 		}
 	}
