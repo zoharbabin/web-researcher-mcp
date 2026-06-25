@@ -467,6 +467,21 @@ func TestLoadCacheEncryptionKeyValidation(t *testing.T) {
 	}
 }
 
+func TestLoadCacheEncryptionKeyNonHex64(t *testing.T) {
+	setRequiredEnv(t)
+	// 64 chars but not valid hex — would pass the old len()==64 check and
+	// silently fall through to plaintext storage at AES-GCM construction time.
+	t.Setenv("CACHE_ENCRYPTION_KEY", strings.Repeat("g", 64))
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for 64-char non-hex CACHE_ENCRYPTION_KEY")
+	}
+	if !strings.Contains(err.Error(), "CACHE_ENCRYPTION_KEY must be exactly 64 hex characters") {
+		t.Errorf("expected error about hex validation, got: %v", err)
+	}
+}
+
 func TestLoadCacheEncryptionKeyValid(t *testing.T) {
 	setRequiredEnv(t)
 	validKey := strings.Repeat("ab", 32) // 64 hex chars
