@@ -98,7 +98,7 @@ web-researcher-mcp/
 │   ├── server/                   # MCP server lifecycle (STDIO + HTTP)
 │   ├── tools/                    # Tool handlers (one file per tool)
 │   ├── search/                   # Pluggable providers + router + lens routing
-│   ├── scraper/                  # 4-tier pipeline + SSRF protection
+│   ├── scraper/                  # 4-tier pipeline (markdown → stealth → HTML → browser) + SPA fast-path + SSRF protection + optional Exa 5th tier
 │   ├── documents/                # PDF, DOCX, PPTX parsing
 │   ├── cache/                    # Hybrid cache (memory L1 + optional Redis L2 + disk L3)
 │   ├── auth/                     # OAuth 2.1 middleware (JWT/JWKS)
@@ -190,6 +190,8 @@ func (p *Pipeline) Scrape(ctx context.Context, url string, maxLength int) (*Scra
 ```
 
 The pipeline routes specialized content (YouTube, Hacker News threads, PDF/DOCX/PPTX) via early-return detection, then falls back through tiers in order: markdown → stealth → HTML → browser (go-rod). Each tier is a private method with the same signature; the pipeline tries each in sequence and promotes the first result that meets a quality threshold. When `EXA_API_KEY` is set, a fifth, **paid** tier (Exa `/contents`) is appended as the last resort — it runs only after every free tier fails, so the common path never incurs cost. The winning tier is surfaced to the caller as `extractedBy` (e.g. `stealth`, `exa:cached`).
+
+**SPA fast-path:** When the URL matches a known SPA domain (`isSPADomain` in `internal/scraper/`), the pipeline skips directly to the browser tier rather than spending time on the markdown/stealth/HTML tiers that would return JS shells. This avoids wasted round-trips and the associated latency for single-page apps.
 
 `Pipeline.ScrapeRaw()` is a separate, non-tiered path used by `scrape_page`'s `mode: raw`: it performs a single SSRF-checked fetch and returns the response body verbatim — no sanitization, no quality scoring, no tier fallback. Raw output is untrusted (it may contain injection payloads) and is cached under a distinct key so it never collides with the cleaned `full`/`preview` results.
 

@@ -609,7 +609,7 @@ func TestScrapeTool_SSRF_ReturnsBlockedError(t *testing.T) {
 	deps := Dependencies{
 		Cache:    cache.NewNoop(),
 		Search:   &mockProvider{},
-		Scraper:  scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: false}),
+		Scraper:  scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: false, ChromePath: scraper.ChromeDisabled}),
 		Content:  content.NewProcessor(),
 		Sessions: func() session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
 		Metrics:  metrics.NewCollector(),
