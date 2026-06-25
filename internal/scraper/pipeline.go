@@ -588,10 +588,13 @@ func (p *Pipeline) ExtractLinks(ctx context.Context, rawURL string) []string {
 	return links
 }
 
-// chromeDisabled is the sentinel CHROME_PATH value that turns the browser
+// ChromeDisabled is the sentinel ChromePath value that turns the browser
 // rendering tier off entirely (no auto-download, no detection). Useful for
 // hardened/headless deployments and for deterministic tests.
-const chromeDisabled = "disabled"
+const ChromeDisabled = "disabled"
+
+// chromeDisabled is the unexported alias kept for internal use.
+const chromeDisabled = ChromeDisabled
 
 // browserEnabled reports whether the browser (go-rod) scraping tier should run.
 // CHROME_PATH="disabled" forces it off; an explicit path forces it on; an empty
