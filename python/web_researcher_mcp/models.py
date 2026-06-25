@@ -283,6 +283,7 @@ class BrandResearchPalette:
 
 @dataclass
 class BrandResearchResponse:
+    brand_portal_resource: Optional[str] = None
     cache_age: Optional[int] = None
     colors: Optional[Colors] = None
     coverage: Optional[Coverage] = None
@@ -292,6 +293,7 @@ class BrandResearchResponse:
     logos: Optional[Logos] = None
     social: Optional[Social] = None
     sources: list[BrandResearchSource] = field(default_factory=list)
+    suggestion: Optional[str] = None
     tone_of_voice: Optional[ToneOfVoice] = None
     trust: Optional[str] = None
     typography: Optional[Typography] = None
@@ -301,6 +303,7 @@ class BrandResearchResponse:
         if d is None:
             return None
         return cls(
+            brand_portal_resource=d.get('brand_portal_resource'),
             cache_age=d.get('cache_age'),
             colors=Colors.from_dict(d.get('colors')) if d.get('colors') else None,
             coverage=Coverage.from_dict(d.get('coverage')) if d.get('coverage') else None,
@@ -310,6 +313,7 @@ class BrandResearchResponse:
             logos=Logos.from_dict(d.get('logos')) if d.get('logos') else None,
             social=Social.from_dict(d.get('social')) if d.get('social') else None,
             sources=[BrandResearchSource.from_dict(i) for i in (d.get('sources') or [])],
+            suggestion=d.get('suggestion'),
             tone_of_voice=ToneOfVoice.from_dict(d.get('tone_of_voice')) if d.get('tone_of_voice') else None,
             trust=d.get('trust'),
             typography=Typography.from_dict(d.get('typography')) if d.get('typography') else None,

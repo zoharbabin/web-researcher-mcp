@@ -1579,7 +1579,7 @@ Capture a **fresh** Internet Archive (Wayback Machine) snapshot of a URL via Sav
 
 ### Purpose
 
-Research a company's complete brand identity — colors, logos, typography, tone of voice, social handles, and W3C design tokens — from any domain or company name. Returns structured JSON ready for AI content generation. Use this when you need grounded brand data instead of hallucinating colors or fonts.
+Research a company's complete brand identity — colors, logos, typography, tone of voice, social handles, and W3C design tokens — from any domain or company name. Probes official brand portals and brand guideline pages; only returns high-confidence structured data found directly on those pages (empty fields = genuinely not found). When a brand portal is found, the fully rendered page text is stored as a resource (`brand_portal_resource`) that an AI agent can pass to `read_resource` to analyze colors, typography, and other details directly. When no brand portal is found, the `suggestion` field guides the AI agent to use `scrape_page` on the homepage instead.
 
 Use `brand_research` when you need structured brand JSON. Use `brand-guidelines` (MCP Prompt) when you want LLM interpretation for a specific use case (landing page, email, video brief).
 
@@ -1598,7 +1598,7 @@ Use `brand_research` when you need structured brand JSON. Use `brand-guidelines`
 |-------|------|----------|---------|-------------|
 | `url` | string | no* | — | Domain or URL (e.g. `kaltura.com`, `https://kaltura.com`). Preferred when both are supplied. |
 | `company_name` | string | no* | — | Company name used to resolve domain when `url` is omitted. |
-| `depth` | string | no | `standard` | `quick` (API+meta only, ~1–2s), `standard` (adds CSS+brand-page probe, ~3–6s), `full` (adds web search, ~8–15s). |
+| `depth` | string | no | `standard` | `quick` (meta only, ~1–2s), `standard` (adds brand-page probe, ~3–6s), `full` (adds web search, ~8–15s). |
 | `include_design_tokens` | bool | no | false | When true, include W3C DTCG `design_tokens` object for Style Dictionary / Tokens Studio / Figma Variables. |
 | `sessionId` | string | no | — | Link to a `sequential_search` session. |
 
@@ -1609,26 +1609,28 @@ Use `brand_research` when you need structured brand JSON. Use `brand-guidelines`
 | Field | Type | Description |
 |-------|------|-------------|
 | `identity` | object | `name`, `domain`, `tagline`, `description`, `industry`, `founded`, `location` |
-| `colors` | object | `primary`, `secondary`, `accent`, `background`, `text` (hex strings) + `palette` array with `hex`, `name`, `role`, `brightness` |
+| `colors` | object | `primary`, `secondary`, `accent`, `background`, `text`, `surface`, `text_secondary` (hex strings) + `palette` array with `hex`, `name`, `role`, `brightness` |
 | `logos` | object | `primary`, `dark`, `icon` (each: `url`, `format`, `width`, `height`) + `favicon`, `og_image` |
 | `typography` | object | `heading`, `body`, `mono` (each: `family`, `weights`, `origin`, `origin_id`) + `google_fonts_url`, `scale` |
 | `tone_of_voice` | object | `summary`, `attributes` array, `dos_and_donts` object |
 | `social` | object | `twitter`, `linkedin`, `github`, `youtube`, `facebook`, `instagram` (URLs) |
-| `sources` | array | Which tiers contributed: `name` (`brandfetch_api`/`homepage_meta`/`css_extraction`/`brand_page`/`web_search`), `url`, `fields` |
+| `sources` | array | Which tiers contributed: `name` (`homepage_meta`/`brand_page`/`web_search`), `url`, `fields` |
 | `guidelines_url` | string | First discovered brand guidelines page URL |
+| `brand_portal_resource` | string | `research://artifact/{id}` URI — pass to `read_resource` to retrieve the full rendered brand portal text for AI analysis |
+| `suggestion` | string | Guidance for the AI agent when no brand portal was found (recommends `scrape_page` on the homepage), OR when a portal URL was found but its content could not be extracted (recommends `scrape_page` on the portal URL) |
 | `design_tokens` | object | W3C DTCG format (`$value`/`$type` per token) — only when `include_design_tokens: true` |
-| `coverage` | object | `colors`, `logos`, `typography`, `tone_of_voice` — each `full`/`partial`/`none` (or `found`/`inferred`/`none` for tone) |
+| `coverage` | object | `colors`, `logos`, `typography` — each `full`/`partial`/`none`; `tone_of_voice` — `found`/`none` |
 | `cache_age` | integer | Seconds since cache was written. `0` = live fetch. Cache TTL: 24 hours. |
 | `trust` | string | Always `untrusted-external-content` |
 
 ### Behavior
 
-- **Five-tier extraction pipeline.** Tiers run concurrently: (1) BrandFetch API, (2) homepage structured-data + meta, (3) CSS extraction (up to 5 stylesheets, 200 KB each), (4) brand-page probe (concurrent HEAD requests, 26 patterns: 5 subdomains + 21 paths), (5) web search (depth=full only). Higher tiers never overwrite lower-tier values.
-- **Graceful degradation.** Works without `BRANDFETCH_API_KEY` — falls back to CSS + meta + brand-page probe. BrandFetch free tier: 100 req/month; the 24h cache keeps repeated lookups free.
-- **CSS extraction is regex-only** (Zero-Dependency Mandate). CSS custom properties (`--color-primary`) are the highest signal; direct color props are secondary. SPAs that inject styles at runtime may not expose brand tokens in static CSS.
-- **Logo CDN.** BrandFetch logo URLs are for hotlinking only. Programmatic download or re-hosting requires a BrandFetch paid agreement.
-- **Tone of voice** is reliably available only from BrandFetch Context API or a brand guidelines page — not inferrable from CSS.
-- **Brand-page probe** runs all 26 candidates concurrently and picks the highest-priority match (dedicated brand subdomains beat path matches); rejects redirects to the homepage or a different host.
+- **Three-tier extraction pipeline.** Tiers **(2)** homepage structured-data + meta and **(4)** brand-page probe (concurrent HEAD requests, 26 patterns: 5 subdomains + 21 paths) run concurrently via goroutines. Tier **(5)** web search (depth=full only) runs sequentially after they complete. Higher tiers never overwrite lower-tier values.
+- **Authoritative-data-first.** Only high-confidence data found explicitly on brand portal pages is returned. Empty fields mean genuinely not found — never inferred or guessed. No CSS heuristics.
+- **Brand-page probe** runs all 26 candidates concurrently, picks the highest-priority match (dedicated brand subdomains beat path matches), rejects redirects to the homepage or a different host. For dynamic SPA brand portals (e.g. Corebook.io), the page is rendered via browser tier and navigation links are extracted from the rendered DOM to find color/typography sub-pages.
+- **Brand portal resource.** When a brand portal is found, the full rendered page text (including any color sub-pages) is stored as an encrypted artifact (`research://artifact/{id}`, 30-min TTL) and returned in `brand_portal_resource`. Pass this URI to `read_resource` so an AI agent can analyze the raw rendered content for colors, typography, and other details.
+- **Fallback suggestion.** When no brand portal is found, `suggestion` is populated with guidance to use `scrape_page` on the homepage for fully rendered content analysis. When a portal URL was found but its content could not be extracted (e.g. a gated SPA), `suggestion` instead recommends `scrape_page` on the portal URL.
+- **Tone of voice** is only extracted from explicit brand guidelines pages — not inferrable from meta or CSS.
 
 ### Annotations
 - ReadOnly: true · Destructive: false · Idempotent: true · OpenWorld: true
