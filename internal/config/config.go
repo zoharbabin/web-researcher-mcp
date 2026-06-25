@@ -263,7 +263,7 @@ func Load() (*Config, error) {
 
 	port := envInt("PORT", 0)
 	encKey := os.Getenv("CACHE_ENCRYPTION_KEY")
-	if encKey != "" && len(encKey) != 64 {
+	if encKey != "" && !isHex64(encKey) {
 		errs = append(errs, "CACHE_ENCRYPTION_KEY must be exactly 64 hex characters")
 	}
 
