@@ -1617,7 +1617,7 @@ Use `brand_research` when you need structured brand JSON. Use `brand-guidelines`
 | `sources` | array | Which tiers contributed: `name` (`homepage_meta`/`brand_page`/`web_search`), `url`, `fields` |
 | `guidelines_url` | string | First discovered brand guidelines page URL |
 | `brand_portal_resource` | string | `research://artifact/{id}` URI — pass to `read_resource` to retrieve the full rendered brand portal text for AI analysis |
-| `suggestion` | string | Guidance for the AI agent when no brand portal was found (recommends `scrape_page` on the homepage) |
+| `suggestion` | string | Guidance for the AI agent when no brand portal was found (recommends `scrape_page` on the homepage), OR when a portal URL was found but its content could not be extracted (recommends `scrape_page` on the portal URL) |
 | `design_tokens` | object | W3C DTCG format (`$value`/`$type` per token) — only when `include_design_tokens: true` |
 | `coverage` | object | `colors`, `logos`, `typography` — each `full`/`partial`/`none`; `tone_of_voice` — `found`/`none` |
 | `cache_age` | integer | Seconds since cache was written. `0` = live fetch. Cache TTL: 24 hours. |
@@ -1625,11 +1625,11 @@ Use `brand_research` when you need structured brand JSON. Use `brand-guidelines`
 
 ### Behavior
 
-- **Three-tier extraction pipeline.** Tiers run concurrently: **(2)** homepage structured-data + meta, **(4)** brand-page probe (concurrent HEAD requests, 26 patterns: 5 subdomains + 21 paths), **(5)** web search (depth=full only). Higher tiers never overwrite lower-tier values.
+- **Three-tier extraction pipeline.** Tiers **(2)** homepage structured-data + meta and **(4)** brand-page probe (concurrent HEAD requests, 26 patterns: 5 subdomains + 21 paths) run concurrently via goroutines. Tier **(5)** web search (depth=full only) runs sequentially after they complete. Higher tiers never overwrite lower-tier values.
 - **Authoritative-data-first.** Only high-confidence data found explicitly on brand portal pages is returned. Empty fields mean genuinely not found — never inferred or guessed. No CSS heuristics.
 - **Brand-page probe** runs all 26 candidates concurrently, picks the highest-priority match (dedicated brand subdomains beat path matches), rejects redirects to the homepage or a different host. For dynamic SPA brand portals (e.g. Corebook.io), the page is rendered via browser tier and navigation links are extracted from the rendered DOM to find color/typography sub-pages.
 - **Brand portal resource.** When a brand portal is found, the full rendered page text (including any color sub-pages) is stored as an encrypted artifact (`research://artifact/{id}`, 30-min TTL) and returned in `brand_portal_resource`. Pass this URI to `read_resource` so an AI agent can analyze the raw rendered content for colors, typography, and other details.
-- **Fallback suggestion.** When no brand portal is found, `suggestion` is populated with guidance to use `scrape_page` on the homepage for fully rendered content analysis.
+- **Fallback suggestion.** When no brand portal is found, `suggestion` is populated with guidance to use `scrape_page` on the homepage for fully rendered content analysis. When a portal URL was found but its content could not be extracted (e.g. a gated SPA), `suggestion` instead recommends `scrape_page` on the portal URL.
 - **Tone of voice** is only extracted from explicit brand guidelines pages — not inferrable from meta or CSS.
 
 ### Annotations

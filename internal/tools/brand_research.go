@@ -489,7 +489,7 @@ func fetchHomepageMeta(ctx context.Context, deps Dependencies, domain string, re
 	if len(fields) == 0 {
 		return nil
 	}
-	return &brandSource{Name: "homepage_meta", URL: rawURL, Fields: fields}
+	return &brandSource{Name: "homepage_meta", URL: rawURL, Fields: deduplicateFields(fields)}
 }
 
 func extractMetaTags(doc *goquery.Document, domain string, result *brandResearchResult, fields *[]string) {
@@ -1232,6 +1232,22 @@ func buildDesignTokens(result *brandResearchResult) map[string]any {
 func brandCacheKey(domain, depth string) string {
 	h := sha256.Sum256([]byte("brand_research:" + domain + ":" + depth))
 	return fmt.Sprintf("%x", h)
+}
+
+// deduplicateFields removes duplicate entries from a fields slice while
+// preserving order. Used to prevent duplicate field names in source records
+// when multiple extraction passes (meta tags, structured data, fallback) all
+// touch the same field on the same result struct.
+func deduplicateFields(fields []string) []string {
+	seen := make(map[string]struct{}, len(fields))
+	out := make([]string, 0, len(fields))
+	for _, f := range fields {
+		if _, ok := seen[f]; !ok {
+			seen[f] = struct{}{}
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // ─── Color utilities ───────────────────────────────────────────────────────

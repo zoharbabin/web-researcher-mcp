@@ -1032,3 +1032,55 @@ func TestBrandGuidelinesURLFilter(t *testing.T) {
 		}
 	}
 }
+
+// ─── 30. deduplicateFields preserves order and removes duplicates ─────────────
+
+// TestDeduplicateFields verifies that deduplicateFields removes duplicate
+// entries (the Airbnb/Slack regression) while preserving insertion order.
+func TestDeduplicateFields(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name  string
+		input []string
+		want  []string
+	}{
+		{
+			name:  "no duplicates",
+			input: []string{"identity.name", "logos.icon", "logos.og_image"},
+			want:  []string{"identity.name", "logos.icon", "logos.og_image"},
+		},
+		{
+			name:  "duplicate identity.name at end",
+			input: []string{"identity.name", "logos.icon", "logos.og_image", "logos.primary", "identity.description", "identity.name"},
+			want:  []string{"identity.name", "logos.icon", "logos.og_image", "logos.primary", "identity.description"},
+		},
+		{
+			name:  "multiple duplicates",
+			input: []string{"identity.name", "identity.name", "logos.icon", "logos.icon"},
+			want:  []string{"identity.name", "logos.icon"},
+		},
+		{
+			name:  "empty slice",
+			input: []string{},
+			want:  []string{},
+		},
+		{
+			name:  "all same",
+			input: []string{"identity.name", "identity.name", "identity.name"},
+			want:  []string{"identity.name"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := deduplicateFields(tc.input)
+			if len(got) != len(tc.want) {
+				t.Fatalf("deduplicateFields length = %d, want %d (got %v, want %v)", len(got), len(tc.want), got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Errorf("deduplicateFields[%d] = %q, want %q", i, got[i], tc.want[i])
+				}
+			}
+		})
+	}
+}
