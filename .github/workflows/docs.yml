@@ -12,6 +12,8 @@ on:
       - "overrides/**"
       - "assets/logo-final-transparent.svg"
       - "assets/favicon.ico"
+      - "assets/demo.webm"
+      - "assets/demo.mp4"
       - "mkdocs.yml"
       - ".github/workflows/docs.yml"
 
@@ -92,13 +94,19 @@ jobs:
           [ -f site_src/session_persistence.md ] && mv site_src/session_persistence.md site_src/session-persistence.md
           [ -f site_src/error_handling.md ] && mv site_src/error_handling.md site_src/error-handling.md
           [ -f site_src/security_and_compliance.md ] && mv site_src/security_and_compliance.md site_src/security-and-compliance.md
-          # Self-host logo and favicon so the nav logo loads from the same
+          # Self-host logo, favicon, and demo video so they load from the same
           # origin (GitHub Pages) instead of raw.githubusercontent.com.
-          # This eliminates a cross-origin DNS + TLS round-trip on every cold
-          # load and is the primary fix for the LCP regression.
+          # This eliminates cross-origin DNS + TLS round-trips on every cold load.
           mkdir -p site_src/img
           cp assets/logo-final-transparent.svg site_src/img/logo.svg
           cp assets/favicon.ico               site_src/img/favicon.ico
+          mkdir -p site_src/assets
+          cp assets/demo.webm site_src/assets/demo.webm
+          cp assets/demo.mp4  site_src/assets/demo.mp4
+          # Rewrite the demo GIF markdown image to an autoplaying muted <video>
+          # (WebM + MP4 fallback). This replaces a 2.4 MB GIF with two ~750 KB
+          # videos and avoids blocking the main thread during decode.
+          sed -i 's|!\[web-researcher-mcp demo.*\](https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/demo.gif)|<video autoplay loop muted playsinline width="100%" style="max-width:800px"><source src="assets/demo.webm" type="video/webm"><source src="assets/demo.mp4" type="video/mp4"></video>|g' site_src/index.md
           # Publish pre-rendered decks as static assets (served verbatim, not
           # built as mkdocs pages). The rendered HTML/PDF are self-contained
           # (logo inlined as a data URI), so no asset rewriting is needed.
