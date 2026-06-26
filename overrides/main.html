@@ -9,16 +9,7 @@
 
 {% block extrahead %}
   <!-- Preconnect for cross-origin badge/asset origins -->
-  <link rel="preconnect" href="https://www.googletagmanager.com">
   <link rel="preconnect" href="https://raw.githubusercontent.com">
-  <!-- Google Analytics -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-P8TN6HBMMD"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'G-P8TN6HBMMD');
-  </script>
   <meta property="og:type" content="website" />
   <meta property="og:title" content="{{ page.title }} - Web Researcher MCP" />
   <meta property="og:description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust. Free, private, open source." />
@@ -37,6 +28,16 @@
       document.querySelectorAll('img[src$=".gif"], img[src$=".png"]').forEach(function(img) {
         if (!img.loading) img.loading = "lazy";
       });
+    });
+    window.addEventListener("load", function() {
+      var s = document.createElement("script");
+      s.src = "https://www.googletagmanager.com/gtag/js?id=G-P8TN6HBMMD";
+      s.async = true;
+      document.head.appendChild(s);
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag("js", new Date());
+      gtag("config", "G-P8TN6HBMMD");
     });
   </script>
 {% endblock %}
