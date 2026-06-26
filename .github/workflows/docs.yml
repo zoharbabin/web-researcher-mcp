@@ -114,4 +114,7 @@ jobs:
           cp decks/compliance/compliance-deck.html site_src/decks/compliance/index.html
           cp decks/compliance/compliance-deck.pdf  site_src/decks/compliance/compliance-deck.pdf
 
+      - name: Generate robots.txt
+        run: printf 'User-agent: *\nAllow: /\n\nSitemap: https://zoharbabin.github.io/web-researcher-mcp/sitemap.xml\n' > site_src/robots.txt
+
       - run: mkdocs gh-deploy --force
