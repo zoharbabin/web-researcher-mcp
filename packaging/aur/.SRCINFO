@@ -1,0 +1,16 @@
+pkgbase = web-researcher-mcp
+	pkgdesc = Your AI research assistant that cites real sources and stays honest
+	pkgver = 1.36.4
+	pkgrel = 1
+	url = https://github.com/zoharbabin/web-researcher-mcp
+	arch = x86_64
+	arch = aarch64
+	license = MIT
+	provides = web-researcher-mcp
+	conflicts = web-researcher-mcp-git
+	source_x86_64 = web-researcher-mcp-1.36.4-x86_64.tar.gz::https://github.com/zoharbabin/web-researcher-mcp/releases/download/v1.36.4/web-researcher-mcp_1.36.4_linux_amd64.tar.gz
+	sha256sums_x86_64 = d62f476818658b818cb732451d2ffb37fb8facb1b95f907c4f9116db6bede637
+	source_aarch64 = web-researcher-mcp-1.36.4-aarch64.tar.gz::https://github.com/zoharbabin/web-researcher-mcp/releases/download/v1.36.4/web-researcher-mcp_1.36.4_linux_arm64.tar.gz
+	sha256sums_aarch64 = a9d7319805b749516002936fc7fe9195fe7015f8e093f7c26a307a2e4c3cb9ee
+
+pkgname = web-researcher-mcp

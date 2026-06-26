@@ -1,0 +1,27 @@
+# Maintainer: Zohar Babin <zohar.babin@kaltura.com>
+pkgname=web-researcher-mcp
+pkgver=1.36.4
+pkgrel=1
+pkgdesc="Your AI research assistant that cites real sources and stays honest"
+arch=('x86_64' 'aarch64')
+url="https://github.com/zoharbabin/web-researcher-mcp"
+license=('MIT')
+depends=()
+optdepends=('chromium: JavaScript rendering for scrape_page')
+provides=('web-researcher-mcp')
+conflicts=('web-researcher-mcp-git')
+source_x86_64=("${pkgname}-${pkgver}-x86_64.tar.gz::https://github.com/zoharbabin/${pkgname}/releases/download/v${pkgver}/${pkgname}_${pkgver}_linux_amd64.tar.gz")
+source_aarch64=("${pkgname}-${pkgver}-aarch64.tar.gz::https://github.com/zoharbabin/${pkgname}/releases/download/v${pkgver}/${pkgname}_${pkgver}_linux_arm64.tar.gz")
+sha256sums_x86_64=('SKIP')
+sha256sums_aarch64=('SKIP')
+
+package() {
+    cd "${srcdir}"
+    install -Dm755 "web-researcher-mcp" "${pkgdir}/usr/bin/web-researcher-mcp"
+    install -Dm644 "README.md" "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+    # Lens files enable site-restricted search; install them alongside the binary.
+    if [ -d "lenses" ]; then
+        install -dm755 "${pkgdir}/usr/share/${pkgname}/lenses"
+        install -Dm644 lenses/*.json "${pkgdir}/usr/share/${pkgname}/lenses/"
+    fi
+}

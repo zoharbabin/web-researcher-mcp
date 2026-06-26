@@ -229,6 +229,37 @@ INSTALL_DIR=/opt/tools curl -fsSL https://raw.githubusercontent.com/zoharbabin/w
 <details>
 <summary><strong>Other install methods</strong></summary>
 
+**AUR (Arch Linux):**
+```bash
+# Using any AUR helper (yay, paru, etc.)
+yay -S web-researcher-mcp
+```
+Or manually: `git clone https://aur.archlinux.org/web-researcher-mcp.git && cd web-researcher-mcp && makepkg -si`
+
+**Nix / NixOS:**
+```bash
+# Run without installing
+nix run github:zoharbabin/web-researcher-mcp
+
+# Add to your flake inputs
+nix profile install github:zoharbabin/web-researcher-mcp
+```
+See [`packaging/nix/flake.nix`](packaging/nix/flake.nix) for NixOS module usage.
+
+**Continue.dev:**  
+Add to your Continue `~/.continue/config.json`:
+```json
+{
+  "mcpServers": {
+    "web-researcher": {
+      "command": "uvx",
+      "args": ["web-researcher-mcp"]
+    }
+  }
+}
+```
+Or copy [`packaging/continue/config.json`](packaging/continue/config.json) as a starting point.
+
 **WinGet (Windows):**
 ```powershell
 winget install zoharbabin.web-researcher-mcp
