@@ -8,6 +8,11 @@
 {% endblock %}
 
 {% block extrahead %}
+  <!-- Resource hints: preconnect to shave ~300ms off cross-origin round-trips -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://www.googletagmanager.com">
+  <link rel="preconnect" href="https://raw.githubusercontent.com">
   <!-- Google Analytics -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-P8TN6HBMMD"></script>
   <script>
@@ -25,4 +30,17 @@
   <meta name="twitter:title" content="{{ page.title }} - Web Researcher MCP" />
   <meta name="twitter:description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust. Free, private, open source." />
   <meta name="twitter:image" content="https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/social-preview.png" />
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script>
+    /* Add loading="lazy" to any GIF/PNG not already lazy-loaded — prevents
+       the demo GIF (2.5 MB) from blocking LCP on the homepage. */
+    document.addEventListener("DOMContentLoaded", function() {
+      document.querySelectorAll('img[src$=".gif"], img[src$=".png"]').forEach(function(img) {
+        if (!img.loading) img.loading = "lazy";
+      });
+    });
+  </script>
 {% endblock %}
