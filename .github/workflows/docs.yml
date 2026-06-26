@@ -106,7 +106,7 @@ jobs:
           # Rewrite the demo GIF markdown image to an autoplaying muted <video>
           # (WebM + MP4 fallback). This replaces a 2.4 MB GIF with two ~750 KB
           # videos and avoids blocking the main thread during decode.
-          sed -i 's|!\[web-researcher-mcp demo.*\](https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/demo.gif)|<video autoplay loop muted playsinline width="100%" style="max-width:800px"><source src="assets/demo.webm" type="video/webm"><source src="assets/demo.mp4" type="video/mp4"></video>|g' site_src/index.md
+          sed -i 's|!\[web-researcher-mcp demo.*\](https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/demo.gif)|<video autoplay loop muted playsinline preload="none" width="100%" style="max-width:800px"><source src="assets/demo.webm" type="video/webm"><source src="assets/demo.mp4" type="video/mp4"></video>|g' site_src/index.md
           # Publish pre-rendered decks as static assets (served verbatim, not
           # built as mkdocs pages). The rendered HTML/PDF are self-contained
           # (logo inlined as a data URI), so no asset rewriting is needed.
