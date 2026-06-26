@@ -2,6 +2,66 @@
 
 This guide covers how to build, configure, and run web-researcher-mcp — whether locally on your machine or deployed to a server. Most users only need the Quick Start in the README; this doc is for production deployments and advanced configuration.
 
+## Package Manager Distribution
+
+### AUR (Arch Linux)
+
+```bash
+yay -S web-researcher-mcp         # or paru, trizen, etc.
+```
+
+Manual install:
+
+```bash
+git clone https://aur.archlinux.org/web-researcher-mcp.git
+cd web-researcher-mcp
+makepkg -si
+```
+
+The `PKGBUILD` and `.SRCINFO` in [`packaging/aur/`](../packaging/aur/) are updated automatically on every release by the `update-packaging` CI job. To update a manual install: `yay -Syu web-researcher-mcp`.
+
+### Nix / NixOS
+
+**Run without installing:**
+
+```bash
+nix run github:zoharbabin/web-researcher-mcp
+```
+
+**Add to a flake:**
+
+```nix
+inputs.web-researcher-mcp.url = "github:zoharbabin/web-researcher-mcp";
+
+# In your environment packages:
+packages = [ inputs.web-researcher-mcp.packages.${system}.default ];
+```
+
+**Profile install:**
+
+```bash
+nix profile install github:zoharbabin/web-researcher-mcp
+```
+
+The flake in [`packaging/nix/flake.nix`](../packaging/nix/flake.nix) ships pre-built binaries for `x86_64-linux`, `aarch64-linux`, `x86_64-darwin`, and `aarch64-darwin`. Hashes are updated automatically on every release.
+
+### Continue.dev
+
+Continue.dev does not have a package marketplace; configure the server via your `~/.continue/config.json`:
+
+```json
+{
+  "mcpServers": {
+    "web-researcher": {
+      "command": "uvx",
+      "args": ["web-researcher-mcp"]
+    }
+  }
+}
+```
+
+A ready-to-copy snippet is in [`packaging/continue/config.json`](../packaging/continue/config.json).
+
 ## Build
 
 ```bash

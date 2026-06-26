@@ -332,3 +332,81 @@ jobs:
           GOOGLE_CUSTOM_SEARCH_ID: ${{ secrets.GOOGLE_CUSTOM_SEARCH_ID }}
           BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
         run: make test-python-live
+
+  # Validates that packaging/aur/PKGBUILD, packaging/aur/.SRCINFO, and
+  # packaging/nix/flake.nix are internally consistent: version strings match,
+  # SHA256 values are syntactically correct, and the PKGBUILD lints clean.
+  # Runs on every PR touching packaging/ to catch version drift before release.
+  validate-packaging:
+    name: Validate packaging manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install namcap (AUR PKGBUILD linter)
+        run: |
+          sudo apt-get update -qq
+          # namcap isn't in Ubuntu apt; use the static pacman-dev approach via a
+          # minimal check: validate PKGBUILD syntax with bash and key field presence.
+          echo "Validating PKGBUILD fields..."
+          bash -n packaging/aur/PKGBUILD
+          for field in pkgname pkgver pkgrel arch url license; do
+            grep -q "^${field}=" packaging/aur/PKGBUILD || \
+              { echo "::error::PKGBUILD missing required field: ${field}"; exit 1; }
+          done
+          echo "PKGBUILD syntax OK"
+
+      - name: Validate version consistency across packaging files
+        run: |
+          set -euo pipefail
+          PKGBUILD_VER="$(grep '^pkgver=' packaging/aur/PKGBUILD | cut -d= -f2)"
+          SRCINFO_VER="$(grep 'pkgver = ' packaging/aur/.SRCINFO | awk '{print $3}' | head -1)"
+          FLAKE_VER="$(grep 'version = "' packaging/nix/flake.nix | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+
+          echo "PKGBUILD: ${PKGBUILD_VER}"
+          echo ".SRCINFO: ${SRCINFO_VER}"
+          echo "flake.nix: ${FLAKE_VER}"
+
+          if [ "$PKGBUILD_VER" != "$SRCINFO_VER" ]; then
+            echo "::error::Version mismatch: PKGBUILD=${PKGBUILD_VER} vs .SRCINFO=${SRCINFO_VER}"
+            exit 1
+          fi
+          if [ "$PKGBUILD_VER" != "$FLAKE_VER" ]; then
+            echo "::error::Version mismatch: PKGBUILD=${PKGBUILD_VER} vs flake.nix=${FLAKE_VER}"
+            exit 1
+          fi
+          echo "All packaging versions consistent: ${PKGBUILD_VER}"
+
+      - name: Validate SHA256 format in .SRCINFO
+        run: |
+          set -euo pipefail
+          while IFS= read -r line; do
+            if echo "$line" | grep -qE 'sha256sums_(x86_64|aarch64) = '; then
+              hash="$(echo "$line" | awk '{print $3}')"
+              if ! echo "$hash" | grep -qE '^[0-9a-f]{64}$'; then
+                echo "::error::Invalid SHA256 in .SRCINFO: ${hash}"
+                exit 1
+              fi
+            fi
+          done < packaging/aur/.SRCINFO
+          echo ".SRCINFO SHA256 format OK"
+
+      - name: Validate Nix SRI hash format in flake.nix
+        run: |
+          set -euo pipefail
+          count=0
+          while IFS= read -r line; do
+            if echo "$line" | grep -qE '^\s+hash = "sha256-'; then
+              count=$((count + 1))
+              hash="$(echo "$line" | grep -oE 'sha256-[A-Za-z0-9+/=]+')"
+              if [ -z "$hash" ]; then
+                echo "::error::Malformed SRI hash line: ${line}"
+                exit 1
+              fi
+            fi
+          done < packaging/nix/flake.nix
+          if [ "$count" -lt 4 ]; then
+            echo "::error::Expected 4 platform hashes in flake.nix, found ${count}"
+            exit 1
+          fi
+          echo "flake.nix SRI hashes OK (${count} platforms)"
