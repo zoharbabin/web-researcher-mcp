@@ -8,21 +8,9 @@
 {% endblock %}
 
 {% block extrahead %}
-  <!-- Preconnect for cross-origin resources -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Preconnect for cross-origin badge/asset origins -->
   <link rel="preconnect" href="https://www.googletagmanager.com">
   <link rel="preconnect" href="https://raw.githubusercontent.com">
-  <!-- Load Google Fonts asynchronously (non-blocking) — theme.font:false
-       disables Material's blocking <link>; we reload with media trick instead -->
-  <link rel="preload" as="style"
-        href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=swap">
-  <link rel="stylesheet" media="print" onload="this.media='all'"
-        href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=swap">
-  <noscript>
-    <link rel="stylesheet"
-          href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=swap">
-  </noscript>
   <!-- Google Analytics -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-P8TN6HBMMD"></script>
   <script>
@@ -45,8 +33,6 @@
 {% block scripts %}
   {{ super() }}
   <script>
-    /* Add loading="lazy" to any GIF/PNG not already lazy-loaded — prevents
-       the demo GIF (2.5 MB) from blocking LCP on the homepage. */
     document.addEventListener("DOMContentLoaded", function() {
       document.querySelectorAll('img[src$=".gif"], img[src$=".png"]').forEach(function(img) {
         if (!img.loading) img.loading = "lazy";
