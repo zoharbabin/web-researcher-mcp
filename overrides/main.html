@@ -8,11 +8,21 @@
 {% endblock %}
 
 {% block extrahead %}
-  <!-- Resource hints: preconnect to shave ~300ms off cross-origin round-trips -->
+  <!-- Preconnect for cross-origin resources -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://www.googletagmanager.com">
   <link rel="preconnect" href="https://raw.githubusercontent.com">
+  <!-- Load Google Fonts asynchronously (non-blocking) — theme.font:false
+       disables Material's blocking <link>; we reload with media trick instead -->
+  <link rel="preload" as="style"
+        href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=swap">
+  <link rel="stylesheet" media="print" onload="this.media='all'"
+        href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=swap">
+  <noscript>
+    <link rel="stylesheet"
+          href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=swap">
+  </noscript>
   <!-- Google Analytics -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-P8TN6HBMMD"></script>
   <script>
