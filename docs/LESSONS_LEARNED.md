@@ -18,7 +18,7 @@ Myself and collaborators spent three versions (v6.2.0 through v6.4.0) building i
 
 ### Google Discontinuing "Entire Web" Search (Issue #107)
 
-Google announced it would be discontinuing support for Programmable Search Engines configured to search the "entire web." The project was named `google-researcher-mcp` — the dependency on a single search provider was an foundational risk.
+Google announced it would be discontinuing support for Programmable Search Engines configured to search the "entire web." The project was named `google-researcher-mcp` — the dependency on a single search provider was a foundational risk.
 
 **Go fix**: A clean provider interface that lets you swap search backends freely, plus a routing layer that automatically switches to the next provider when one fails.
 
@@ -58,7 +58,7 @@ The project had 100+ source files but a tightly coupled `shared/` directory with
 
 ### 1. Don't Fight Your Runtime
 
-Node.js process management is fundamentally fragile for long-lived servers launched via npx. The runtime doesn't support robust parent-death detection, and the nested process tree (npx → node → worker) makes signal propagation unreliable. We spent three versions building increasingly complex orphan detection. Go's single binary eliminated the entire category of problems.
+Node.js process management is fundamentally fragile for long-lived servers launched via npx. The runtime has no reliable parent-death detection, and the nested process tree (npx → node → worker) makes signal propagation unreliable. We spent three versions building increasingly complex orphan detection. Go's single binary eliminated the entire category of problems.
 
 **Takeaway**: If you're spending significant engineering effort working around your runtime's limitations, that's a signal to evaluate whether the runtime fits the problem.
 

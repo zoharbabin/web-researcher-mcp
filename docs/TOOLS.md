@@ -1174,6 +1174,7 @@ Export a completed `sequential_search` session as a shareable deliverable — a 
 |-------|------|----------|---------|-------------|
 | `sessionId` | string | yes | — | The `sequential_search` session to export |
 | `format` | string | no | `markdown` | `markdown` (readable report) or `json` (full structured session) |
+| `verify_links` | bool | no | `false` | When true, check each source URL is still live and attach a Wayback snapshot for any dead link. Adds latency. Best-effort — failures leave a source unverified, never error. |
 
 ### Output Fields
 
@@ -1194,6 +1195,7 @@ Export a completed `sequential_search` session as a shareable deliverable — a 
 - **Markdown report** contains: research-goal heading, a metadata block (session id, started, step/source counts), every step with its reasoning/confidence/rejected-approaches/timestamp (revisions and branches are labeled in the step heading), an Open Questions section (knowledge gaps), a numbered Sources list, and a provenance footer (export time, tenant).
 - Deterministic: same session → byte-identical output aside from the `exportedAt` stamp (idempotency).
 - Sessions are private to their owning `(tenant, user)`; a leaked sessionId is honored only for its owner.
+- **`verify_links=true`**: runs a batched SSRF-safe liveness check on every recorded source URL and attaches a Wayback Machine snapshot URL for any dead link. Best-effort — a URL that can't be checked is left unverified, never an error. Off by default (adds latency proportional to source count).
 
 ### Annotations
 - ReadOnly: true · Idempotent: true · OpenWorld: false (reads internal session state)

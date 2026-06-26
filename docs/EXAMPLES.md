@@ -399,7 +399,7 @@ Before filing a brief or submitting a paper, audit the whole reference list in o
 }
 ```
 
-You can also pass an explicit `entries` list or a `sequential_search` `sessionId` instead of a document. The response carries a `summary` (`{total, retracted, deadLink, notFound, unchecked, mischaracterized, ok}`) plus per-entry `entries[]` with `exists`, `retractionStatus`, `linkLive`/`httpStatus`, an `archivedUrl` (Wayback) for dead links, `flags`, and a `reason` explaining any flagged entry. The flags distinguish a **possible fabrication** (`not_found` — a DOI Crossref doesn't have) from a source that simply **couldn't be checked** (`unchecked` — e.g. a book or paywalled report; absence of evidence, not proof it's fake). It is **evidence, not a verdict** — you decide what to fix. The audit is capped at 200 entries per call (overflow is reported in `skipped`). Use `verify_citation` for a single citation and `format_bibliography` to produce the list.
+You can also pass an explicit `entries` list or a `sequential_search` `sessionId` instead of a document. The response carries a `summary` (`{total, retracted, deadLink, notFound, unchecked, mischaracterized, ok}`) plus per-entry `entries[]` with `exists`, `retractionStatus`, `linkLive`/`httpStatus`, an `archivedUrl` (Wayback) for dead links, `flags`, and a `reason` explaining any flagged entry. The flags distinguish a **possible fabrication** (`not_found` — a DOI Crossref doesn't have) from a source that **couldn't be checked** (`unchecked` — e.g. a book or paywalled report; absence of evidence, not proof it's fake). It is **evidence, not a verdict** — you decide what to fix. The audit is capped at 200 entries per call (overflow is reported in `skipped`). Use `verify_citation` for a single citation and `format_bibliography` to produce the list.
 
 To also check that a source **actually says what it's cited for** (mischaracterization), add a `claim` to an explicit entry:
 
@@ -420,13 +420,237 @@ To also check that a source **actually says what it's cited for** (mischaracteri
 
 The source page is fetched (live, or its Wayback snapshot if the link is dead) and checked for whether it addresses the claim. `claimSupport` reports **coverage, not a stance**: `addressed` (claim-relevant sentences found — returned in `claimEvidence` so you judge whether they support or contradict), `partially_addressed` (some overlap — evidence shown but not flagged; ambiguous, you judge), `not_addressed` (the source doesn't mention the claim → flagged `mischaracterized`), or `source_unavailable`. It never asserts "supports"/"refutes" — you read the evidence and decide.
 
-## Combining Tools for Deep Research
+## Verifying a Citation (verify_citation)
 
-A typical research workflow combines multiple tools:
+Before you cite a source, verify it exists, hasn't been retracted, and actually says what it's cited for.
 
-1. **web_search** with a lens to find relevant sources
-2. **scrape_page** on the most promising URLs to get full content
-3. **academic_search** or **news_search** for domain-specific depth
-4. **sequential_search** to track progress across multiple steps
+```json
+{
+  "tool": "verify_citation",
+  "arguments": {
+    "citation": "10.1056/NEJMoa2007764",
+    "claim": "remdesivir shortened recovery time in hospitalized patients"
+  }
+}
+```
 
-The AI assistant orchestrates these tools automatically based on the research question — you don't need to call them manually.
+`citation` accepts a DOI, a URL, or a free-text reference string — the tool detects which. **Response** carries: `exists` (boolean), `matchedRecord` (the real bibliographic record from Crossref/academic sources, with a `matchConfidence`), `titleMatch` (does the title you supplied match the real record — catches swapped DOIs), `retractionStatus` (from Crossref Retraction Watch), and link-liveness (`linkLive`, `httpStatus`, `archivedUrl`). When you add a `claim`, you also get `claimCoverage` (`addressed` / `partially_addressed` / `not_addressed` → flagged `mischaracterized`), `claimEvidence` (claim-relevant sentences from the source), and a `contrastSignal` if the source contradicts the claim. This is evidence, not a verdict — you decide whether to cite. Use `audit_bibliography` to check an entire reference list at once.
+
+---
+
+## Checking a Recommendation List (verify_recommendation)
+
+Got a listicle or AI-generated product/service recommendation? Check it for self-promotion, conflicts of interest, and independent corroboration.
+
+```json
+{
+  "tool": "verify_recommendation",
+  "arguments": {
+    "recommendations": [
+      { "title": "Stripe", "url": "https://stripe.com", "author": "John Smith", "authorBio": "VP of Sales at Stripe" },
+      { "title": "Square", "url": "https://squareup.com" }
+    ],
+    "claim": "best payment processors for small businesses"
+  }
+}
+```
+
+**Response** carries per-item signals: `selfPromotionSignal` (is the author promoting their own product?), `conflictOfInterest` (does the author bio signal a financial relationship?), `domainReputation` (is this a known trustworthy source?), `linkLive` (is the URL still up?), and — when `claim` is set — `corroborationSearches` (what independent journalism and tech sources say about this recommendation). The `flags` field summarizes any concerns, including `no_independent_corroboration` when no outside source agrees. This is evidence, not a verdict — you decide whether the list is genuinely helpful or gaming you.
+
+---
+
+## Archiving a Source (archive_source)
+
+Lock in a timestamped snapshot before you cite a page that might change or disappear.
+
+```json
+{
+  "tool": "archive_source",
+  "arguments": {
+    "url": "https://www.bbc.com/news/technology-example"
+  }
+}
+```
+
+This is the only **write tool** in the suite — it asks the Internet Archive's Save Page Now to capture a fresh snapshot. **Response** carries: `status` (`archived` = fresh capture confirmed, `existing` = no new capture made but a recent snapshot exists, `pending` = capture in-flight), `snapshotUrl` (the permanent Wayback URL), `capturedAt` (timestamp), and `provenance`. Run `verify_citation` first to see whether a link is already dead or already archived before capturing.
+
+---
+
+## Tracing Citation Networks (citation_graph)
+
+Map the academic neighborhood of a paper — the works it references and the works that cite it.
+
+```json
+{
+  "tool": "citation_graph",
+  "arguments": {
+    "paper": "10.1038/nature12373",
+    "direction": "both",
+    "num_results": 10,
+    "influential_only": false
+  }
+}
+```
+
+`paper` accepts a DOI or an exact title. `direction` is `cited_by` (forward — works that cite the seed), `references` (backward — works the seed cites), or `both` (default). **Response** carries: `seed` (the resolved seed record), `citedBy` and `references` arrays (each with `title`, `doi`, `authors`, `year`, `citationCount`, `isInfluential`, `citationIntents`), and `provider`. Requires at least one academic provider (Semantic Scholar or OpenAlex). Use alongside `academic_search` to discover papers and `verify_citation` to check individual ones.
+
+---
+
+## Brand Identity Research (brand_research)
+
+Pull a company's colors, logo, typography, and tone of voice from its official brand portals and guidelines.
+
+```json
+{
+  "tool": "brand_research",
+  "arguments": {
+    "url": "stripe.com"
+  }
+}
+```
+
+You can pass a `url` (domain or full URL) or a `company_name` — `url` takes precedence when both are set. **Response** carries a structured `identity` object with `name`, `domain`, `colors` (hex values with their roles), `fonts`, `logo` URLs, `socialHandles`, `toneOfVoice`, and `guidelinesUrl`. Empty fields mean the data wasn't found — not that it doesn't exist. When a brand portal is found, `brand_portal_resource` carries a `research://artifact/{id}` URI — pass it to `read_resource` to get the full rendered portal text for deeper analysis. When no portal is found, the `suggestion` field tells you what to do next. Results are cached for 24 hours; `cache_age` tells you how fresh they are.
+
+---
+
+## Local Place Search (local_search)
+
+Find places near a location — restaurants, services, venues — with distance ranking and coordinate support. Requires `BRAVE_API_KEY`.
+
+```json
+{
+  "tool": "local_search",
+  "arguments": {
+    "query": "best coffee shops near downtown Seattle",
+    "near": "downtown Seattle",
+    "num_results": 5
+  }
+}
+```
+
+For precise radius filtering, pass `latitude`, `longitude`, and `radius` (in meters) instead of `near`. **Response** carries `places` (array with `name`, `address`, `phone`, `rating`, `categories`, `url`, `distance`) and `resultCount`. Filter by `country` (ISO 3166-1 alpha-2) and set `units` to `metric` or `imperial`.
+
+---
+
+## Synthesized Answer (answer)
+
+Get a single synthesized answer with citations — the provider searches the live web and distills it for you. Requires a provider that supports synthesis (e.g., Exa).
+
+```json
+{
+  "tool": "answer",
+  "arguments": {
+    "query": "What is the current federal funds rate?"
+  }
+}
+```
+
+**Response** carries: `answer` (the synthesized text), `citations` (sources backing the answer), and `provider`. Use this for quick factual lookups; use `sequential_search` + `scrape_page` for deep investigation.
+
+---
+
+## Structured Entity Search (structured_search)
+
+Extract structured data about entities — companies, people, papers — from search results. Requires a provider that supports structured extraction (e.g., Exa).
+
+```json
+{
+  "tool": "structured_search",
+  "arguments": {
+    "query": "Stripe",
+    "category": "company",
+    "num_results": 3,
+    "schema": {
+      "type": "object",
+      "properties": {
+        "founded": { "type": "string" },
+        "headquarters": { "type": "string" },
+        "ceo": { "type": "string" }
+      }
+    }
+  }
+}
+```
+
+**Response** carries `results` (each with `title`, `url`, `highlights` — verbatim source snippets, and `summary` — JSON conforming to your schema if supplied). The `schema` field is optional; omit it for plain text summaries. Extraction is best-effort — treat `highlights` as the authoritative payload and `summary` as a convenience. Provider-specific limits on schema complexity apply.
+
+---
+
+## Exporting a Research Session (research_export)
+
+Turn a `sequential_search` session into a shareable report.
+
+```json
+{
+  "tool": "research_export",
+  "arguments": {
+    "sessionId": "abc123-from-earlier",
+    "format": "markdown",
+    "verify_links": true
+  }
+}
+```
+
+`format` is `markdown` (readable write-up with goal, steps, gaps, and sources) or `json` (full structured session for machine use). When `verify_links` is `true`, each source URL is checked for liveness and dead links get a Wayback snapshot attached — adds latency but ensures your report's sources stay verifiable. Pair with `format_bibliography` to produce a formatted citations list.
+
+---
+
+## Formatting a Bibliography (format_bibliography)
+
+Format your sources as APA, MLA, BibTeX, RIS, or CSL-JSON — straight from a session or an explicit list.
+
+```json
+{
+  "tool": "format_bibliography",
+  "arguments": {
+    "sessionId": "abc123-from-earlier",
+    "style": "bibtex"
+  }
+}
+```
+
+Or pass an explicit `sources` list:
+
+```json
+{
+  "tool": "format_bibliography",
+  "arguments": {
+    "style": "apa",
+    "sources": [
+      {
+        "url": "https://www.nejm.org/doi/full/10.1056/NEJMoa2007764",
+        "title": "Remdesivir for the Treatment of Covid-19",
+        "author": "Beigel, J.H. et al.",
+        "site": "New England Journal of Medicine",
+        "date": "2020",
+        "doi": "10.1056/NEJMoa2007764"
+      }
+    ]
+  }
+}
+```
+
+`style` is `apa` (default), `mla`, `bibtex`, `ris`, or `csl-json`. `apa`/`mla` are human-readable; `bibtex`/`ris`/`csl-json` are reference-manager interchange formats. Each source needs at least a `url`; add `doi` so reference managers keep the persistent ID.
+
+---
+
+## Cross-Tool Trust Workflow
+
+A full trust-verification pass for academic or legal research:
+
+1. **academic_search** — discover relevant papers
+2. **citation_graph** — trace influential references and citing works
+3. **verify_citation** with `claim` — confirm each key citation exists, hasn't been retracted, and actually addresses the claim
+4. **archive_source** — lock in a Wayback snapshot for any sources you intend to cite
+5. **audit_bibliography** — batch-check your full reference list for retracted, dead, or possibly fabricated entries
+6. **research_export** with `verify_links: true` — produce a final report with source liveness confirmed
+
+A general discovery-to-report workflow:
+
+1. **web_search** with a `lens` — find sources in a curated domain
+2. **search_and_scrape** with `claim` — get full text with claim evidence surfaced
+3. **news_search** or **academic_search** — add domain-specific depth
+4. **sequential_search** — track progress across steps with recoverable session state
+5. **format_bibliography** or **research_export** — produce the final output
+
+The AI assistant orchestrates these tools based on the research question. You don't need to call them manually.

@@ -188,13 +188,14 @@ Rate limited (google). Wait 60 seconds and retry, or try a different provider.
 
 | Function | File | Purpose |
 |----------|------|---------|
-| `structuredError(msg, ToolError)` | errors.go | Builds dual-format error response |
-| `scrapeErrorResponse(err, url)` | scrape.go | Maps ScrapeError → structured response |
-| `upstreamErrorResponse(toolName, err)` | search.go | Maps provider errors → structured response |
-| `resolveProvider()` | search.go | Returns structured error for unknown providers |
-| `resolvePatentSearcher()` | search.go | Same for patent providers |
-| `resolveAcademicSearcher()` | academic.go | Same for academic providers |
-| `toolError(msg)` | search.go | Plain-text validation errors (no JSON block) |
+| `structuredError(msg, ToolError)` | `internal/tools/errors.go` | Builds dual-format error response |
+| `scrapeErrorResponse(err, url)` | `internal/tools/scrape.go` | Maps ScrapeError → structured response |
+| `upstreamErrorResponse(toolName, err)` | `internal/tools/search.go` | Maps provider errors → structured response |
+| `toolError(msg)` | `internal/tools/search.go` | Plain-text validation errors (no JSON block) |
+| `structuredResult(jsonBytes)` | `internal/tools/search.go` | Wraps success payloads as MCP result |
+| `resolveProvider()` | `internal/tools/search.go` | Returns structured error for unknown providers |
+| `resolvePatentSearcher()` | `internal/tools/search.go` | Same for patent providers |
+| `resolveAcademicSearcher()` | `internal/tools/academic.go` | Same for academic providers |
 
 ### Validation Errors
 
@@ -314,7 +315,8 @@ The GitHub issue link appears in exactly two places (`scrapeErrorResponse` cases
 
 - `TestAllToolsHaveAnnotations` — CI verifies every tool has proper MCP annotations
 - `internal/tools/scrape_errors_test.go` — integration tests for each error kind → LLM message mapping
-- `internal/scraper/scraper_test.go` — unit tests for error classification, composite errors, tier propagation
+- `internal/scraper/errors_test.go` — unit tests for HTTP status classification and raw error classification
+- `internal/scraper/scraper_test.go` — unit tests for composite error assembly and tier propagation
 
 ---
 
@@ -370,6 +372,7 @@ if input.Query == "" {
 | `internal/tools/scrape.go` | `scrapeErrorResponse()`, negative cache helpers |
 | `internal/session/outcomes.go` | Session-level outcome log + `AggregateOutcomes()`, kind→remediation map, `ErrorPatternMinCount` |
 | `internal/tools/sourcetracker.go` | `trackOutcome()` / `trackScrapeOutcome()` — record per-call outcomes onto a session |
-| `internal/tools/search.go` | `upstreamErrorResponse()`, `toolError()`, `rateLimitError()`, resolver functions, `allSupportedProviders()` |
+| `internal/tools/search.go` | `upstreamErrorResponse()`, `toolError()`, `rateLimitError()`, `structuredResult()`, resolver functions, `allSupportedProviders()` |
 | `internal/tools/scrape_errors_test.go` | Integration tests for error → response mapping |
-| `internal/scraper/scraper_test.go` | Unit tests for error classification |
+| `internal/scraper/errors_test.go` | Unit tests for HTTP status classification and raw error classification |
+| `internal/scraper/scraper_test.go` | Unit tests for composite error assembly and tier propagation |

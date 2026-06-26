@@ -277,6 +277,7 @@ Note: Google keys are validated as required only when you explicitly select `SEA
 | `SEARCH_PROVIDER` | Primary provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews | `google` (variable default); at runtime, when `google` is selected but no Google key is set, the server falls back to the zero-config `duckduckgo` provider |
 | `SEARCH_ROUTING` | Multi-provider routing (see below) | — |
 | `BRAVE_API_KEY` | Brave Search API key | — |
+| `BRAVE_EXTRA_SNIPPETS` | Return up to 5 extra snippets per Brave result | `false` |
 | `SERPER_API_KEY` | Serper.dev API key | — |
 | `SEARCHAPI_API_KEY` | SearchAPI.io API key | — |
 | `TAVILY_API_KEY` | Tavily API key (AI-agent search; sent as a Bearer token) | — |
@@ -329,9 +330,18 @@ These enable dedicated structured-research tools. Each provider is independent. 
 
 Each structured-domain provider gets an independent circuit breaker and uses the SSRF-safe HTTP client. `filing_search` returns XBRL company facts (with `facts=true`); `econ_search` returns observations passed through exactly as the source provides them — no rounding; `clinical_search` returns trial metadata for discovery (not medical advice).
 
+### BrandFetch (Optional)
+
+These enable the Tier 1 BrandFetch API for `brand_research`. The tool always works without them — it falls back to CSS extraction, homepage meta, and web search.
+
+| Variable | Description |
+|----------|-------------|
+| `BRANDFETCH_API_KEY` | BrandFetch Brand + Context API key (`pk_*`). Free tier: 100 req/month. Never logged | 
+| `BRANDFETCH_CLIENT_ID` | BrandFetch logo CDN client ID. Free tier: 500K req/month |
+
 ### Multi-Provider Routing
 
-When `SEARCH_ROUTING` is set, the server uses all configured providers with intelligent fallback:
+When `SEARCH_ROUTING` is set, the server uses all configured providers with priority-ordered fallback:
 
 ```bash
 # Simple: comma-separated priority list (applies to all operations)
@@ -412,7 +422,7 @@ The per-tenant, global, and per-IP limits below apply **only in HTTP mode** (whe
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `MAX_CALLS_PER_DAY` | Total tool calls per day (STDIO + HTTP). Transport-agnostic hard cap. | — (disabled) |
+| `MAX_CALLS_PER_DAY` | Tool calls per day per `(tenant, user)` pair (STDIO + HTTP). In-process denial-of-wallet backstop; resets at UTC midnight. | — (disabled) |
 | `RATE_LIMIT_PER_TENANT` | Requests per minute per tenant | `120` |
 | `RATE_LIMIT_GLOBAL` | Total requests per second | `1000` |
 | `DAILY_QUOTA_PER_TENANT` | Max API calls per tenant per day | `5000` |
@@ -854,7 +864,7 @@ The admin key is stateless — rotating it is a single env-var change:
 2. Update `ADMIN_API_KEY` in your deployment and restart (or rolling-restart) the pods.
 3. Update any operational scripts/dashboards that send `X-Admin-Key`.
 
-There is no stored state encrypted under the admin key, so no migration is needed. In a rolling deployment, in-flight admin calls against an old pod simply use that pod's old key until it cycles; admin endpoints are operational, not user-facing, so a brief overlap is harmless.
+There is no stored state encrypted under the admin key, so no migration is needed. In a rolling deployment, in-flight admin calls against an old pod use that pod's old key until it cycles; admin endpoints are operational, not user-facing, so a brief overlap is harmless.
 
 ### Encryption key (`CACHE_ENCRYPTION_KEY`) — zero-downtime re-encryption
 
@@ -862,7 +872,7 @@ Disk-persisted data (cache, sessions, and any encrypted `persist.Store` namespac
 
 1. Move the current key to `CACHE_ENCRYPTION_KEY_PREV` and set a new 64-hex `CACHE_ENCRYPTION_KEY` (generate with `openssl rand -hex 32`).
 2. Restart. On every read, data sealed with the previous key is **decrypt-fall-back** decrypted and **lazily re-encrypted** with the new key — so hot data migrates automatically with no flush and no downtime.
-3. After at least one full data lifetime (e.g. `SESSION_TTL` for sessions, the cache TTL for cache) has elapsed, remove `CACHE_ENCRYPTION_KEY_PREV`. Any still-unread blobs from before the rotation simply expire.
+3. After at least one full data lifetime (e.g. `SESSION_TTL` for sessions, the cache TTL for cache) has elapsed, remove `CACHE_ENCRYPTION_KEY_PREV`. Any still-unread blobs from before the rotation expire naturally.
 
 To force immediate re-encryption rather than waiting for natural reads, flush the affected store (`DELETE /admin/cache`, `DELETE /admin/sessions`) after step 2 — data repopulates under the new key on demand.
 

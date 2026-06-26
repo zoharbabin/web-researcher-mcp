@@ -568,3 +568,18 @@ export IA_SECRET_KEY=your-ia-secret-key
 ```
 
 **Notes**: Both keys are required together — set neither or both. Values are never logged or included in error messages. Keyless SPN is sufficient for occasional archiving; keys are recommended for production deployments that archive frequently.
+
+### BrandFetch (Brand Research — Optional)
+
+Backs `brand_research`. Works **keyless** — the tool always runs and extracts brand identity from CSS, meta tags, and homepage content. A BrandFetch API key adds structured brand-color, font, logo, and slogan data from the BrandFetch Brand API.
+
+**Step 1**: (Optional) Sign up at [brandfetch.com](https://brandfetch.com) and copy your API key from the dashboard.
+
+**Step 2**: Configure (both are optional)
+
+```bash
+export BRANDFETCH_API_KEY=pk_your-key          # Brand + Context API; free tier: 100 req/month
+export BRANDFETCH_CLIENT_ID=your-client-id     # Logo CDN requests; free tier: 500K req/month
+```
+
+**Notes**: `BRANDFETCH_API_KEY` format is `pk_*`. The key is never logged. Without it, `brand_research` degrades gracefully to CSS extraction, homepage meta scraping, and web search — useful for most tasks.

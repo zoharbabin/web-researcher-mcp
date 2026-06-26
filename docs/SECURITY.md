@@ -122,7 +122,7 @@ Scope enforcement is opt-in via `ENFORCE_SCOPES=true` and remains permissive by 
 - `ENFORCE_SCOPES=true`, token carries **no** scope claim — allowed (backward-compatible: tokens issued before scopes existed keep working).
 - `ENFORCE_SCOPES=true`, token **carries** a scope claim — the caller must hold one of `tool:*` (wildcard), `tool:<toolName>` (exact), or the coarse-grained `research` scope; AND every entry in `REQUIRED_SCOPES` (if configured) must be present. Otherwise the call is rejected.
 
-This fails closed only for present-but-insufficient scopes — it never silently downgrades a token that simply predates scope issuance. The gate is wired as an SDK receiving-middleware (registered in `main.go`) inside the HTTP-mode block only; STDIO is unaffected.
+This fails closed only for present-but-insufficient scopes — it never silently downgrades a token that predates scope issuance. The gate is wired as an SDK receiving-middleware (registered in `main.go`) inside the HTTP-mode block only; STDIO is unaffected.
 
 ---
 
@@ -393,8 +393,8 @@ It never reflects the literal `*` together with credentials. The default is secu
 
 Two HTTP-mode subsystems durably persist state across restarts through a single `persist.Store` interface (`internal/persist/store.go`):
 
-- **Token revocation (H2)** — revoked JTIs are written through to the store with a TTL matching natural token expiry, so a revoked token stays revoked across restarts. The in-memory set remains authoritative; the store is consulted as an additional source of truth (a JTI is revoked if present in **either** layer — fail-closed).
-- **Daily quota counters (H7)** — enabled by `RATE_LIMIT_PERSIST=true`, so per-tenant daily quotas survive restarts.
+- **Token revocation (Layer 2 — Auth)** — revoked JTIs are written through to the store with a TTL matching natural token expiry, so a revoked token stays revoked across restarts. The in-memory set remains authoritative; the store is consulted as an additional source of truth (a JTI is revoked if present in **either** layer — fail-closed).
+- **Daily quota counters (Layer 5 — Rate Limiting)** — enabled by `RATE_LIMIT_PERSIST=true`, so per-tenant daily quotas survive restarts.
 
 The default implementation is the encrypted-disk pattern generalized from the session store: AES-256-GCM, atomic temp-file-and-rename writes, `0600` permissions, an 8-byte big-endian expiry prefix, SHA-256-hashed filenames, and key-bound GCM AAD. Local (memory) and disk backends behave identically — no drift between STDIO and HTTP. In HTTP mode, setting `REDIS_URL` swaps in a `RedisStore` that satisfies the same interface for cross-pod shared state; Redis-stored values are AES-256-GCM encrypted before write (so `REDIS_URL` requires `CACHE_ENCRYPTION_KEY`). All Redis code is confined to `internal/redisbackend` (the sole importer of the Redis client), constructed in one gated place in `main.go`; STDIO never reaches it.
 
