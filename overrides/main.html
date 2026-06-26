@@ -8,8 +8,9 @@
 {% endblock %}
 
 {% block extrahead %}
-  <!-- Preconnect for cross-origin badge/asset origins -->
+  <!-- Preconnect for cross-origin origins used on every page load -->
   <link rel="preconnect" href="https://raw.githubusercontent.com">
+  <link rel="preconnect" href="https://api.github.com">
   <meta property="og:type" content="website" />
   <meta property="og:title" content="{{ page.title }} - Web Researcher MCP" />
   <meta property="og:description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust. Free, private, open source." />
