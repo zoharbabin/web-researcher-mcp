@@ -341,6 +341,8 @@ Swap in any provider from the [Configuration](#configuration) table by setting `
 
 ## Configuration
 
+![30+ providers across web, academic, patent, legal, economic, and clinical domains — with automatic failover and STDIO/HTTP·Docker deployment](assets/ph-gallery-3-providers.png)
+
 **No API key required.** DuckDuckGo is the built-in zero-config fallback — install and go. To raise result quality and unlock image/news search, add **any one** of the providers below. They're all optional and interchangeable — pick whichever you already use or prefer; the server treats them equally.
 
 ### Search providers
