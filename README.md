@@ -1,6 +1,6 @@
 <!-- mcp-name: io.github.zoharbabin/web-researcher-mcp -->
 <p align="center">
-  <img src="assets/logo-final.svg" width="120" alt="web-researcher-mcp logo">
+  <img src="assets/logo-final.svg" width="120" height="120" alt="web-researcher-mcp logo">
 </p>
 <h1 align="center">web-researcher-mcp</h1>
 <p align="center">
@@ -14,15 +14,15 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/zoharbabin/web-researcher-mcp/actions/workflows/ci.yml"><img src="https://github.com/zoharbabin/web-researcher-mcp/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://goreportcard.com/report/github.com/zoharbabin/web-researcher-mcp"><img src="https://goreportcard.com/badge/github.com/zoharbabin/web-researcher-mcp" alt="Go Report Card"></a>
-  <a href="https://pkg.go.dev/github.com/zoharbabin/web-researcher-mcp"><img src="https://pkg.go.dev/badge/github.com/zoharbabin/web-researcher-mcp.svg" alt="Go Reference"></a>
-  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
-  <a href="https://github.com/zoharbabin/web-researcher-mcp/releases"><img src="https://img.shields.io/github/v/release/zoharbabin/web-researcher-mcp" alt="Release"></a>
-  <a href="https://hub.docker.com/r/zoharbabin/web-researcher-mcp"><img src="https://img.shields.io/docker/pulls/zoharbabin/web-researcher-mcp?cacheSeconds=3600" alt="Docker"></a>
-  <a href="https://pypi.org/project/web-researcher-mcp/"><img src="https://img.shields.io/pypi/v/web-researcher-mcp?label=PyPI" alt="PyPI"></a>
-  <a href="https://glama.ai/mcp/servers/zoharbabin/web-researcher-mcp"><img src="https://glama.ai/mcp/servers/zoharbabin/web-researcher-mcp/badges/score.svg" alt="web-researcher-mcp MCP server"></a>
-  <a href="https://github.com/zoharbabin/web-researcher-mcp/stargazers"><img src="https://img.shields.io/github/stars/zoharbabin/web-researcher-mcp?style=social" alt="GitHub Stars"></a>
+  <a href="https://github.com/zoharbabin/web-researcher-mcp/actions/workflows/ci.yml"><img src="https://github.com/zoharbabin/web-researcher-mcp/actions/workflows/ci.yml/badge.svg" height="20" alt="CI"></a>
+  <a href="https://goreportcard.com/report/github.com/zoharbabin/web-researcher-mcp"><img src="https://goreportcard.com/badge/github.com/zoharbabin/web-researcher-mcp" height="20" alt="Go Report Card"></a>
+  <a href="https://pkg.go.dev/github.com/zoharbabin/web-researcher-mcp"><img src="https://pkg.go.dev/badge/github.com/zoharbabin/web-researcher-mcp.svg" height="20" alt="Go Reference"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" height="20" alt="License: MIT"></a>
+  <a href="https://github.com/zoharbabin/web-researcher-mcp/releases"><img src="https://img.shields.io/github/v/release/zoharbabin/web-researcher-mcp" height="20" alt="Release"></a>
+  <a href="https://hub.docker.com/r/zoharbabin/web-researcher-mcp"><img src="https://img.shields.io/docker/pulls/zoharbabin/web-researcher-mcp?cacheSeconds=3600" height="20" alt="Docker"></a>
+  <a href="https://pypi.org/project/web-researcher-mcp/"><img src="https://img.shields.io/pypi/v/web-researcher-mcp?label=PyPI" height="20" alt="PyPI"></a>
+  <a href="https://glama.ai/mcp/servers/zoharbabin/web-researcher-mcp"><img src="https://glama.ai/mcp/servers/zoharbabin/web-researcher-mcp/badges/score.svg" height="20" alt="web-researcher-mcp MCP server"></a>
+  <a href="https://github.com/zoharbabin/web-researcher-mcp/stargazers"><img src="https://img.shields.io/github/stars/zoharbabin/web-researcher-mcp?style=social" height="20" alt="GitHub Stars"></a>
 </p>
 
 ### Get started in 30 seconds
@@ -761,7 +761,7 @@ Contributions are welcome. Please see [CONTRIBUTING.md](CONTRIBUTING.md) for cod
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/chart?repos=zoharbabin/web-researcher-mcp&type=date&legend=top-left)](https://www.star-history.com/?repos=zoharbabin%2Fweb-researcher-mcp&type=date&legend=top-left)
+<a href="https://www.star-history.com/?repos=zoharbabin%2Fweb-researcher-mcp&type=date&legend=top-left"><img src="https://api.star-history.com/chart?repos=zoharbabin/web-researcher-mcp&type=date&legend=top-left" width="800" height="450" alt="Star History Chart"></a>
 
 ---
 
