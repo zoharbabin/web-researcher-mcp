@@ -281,16 +281,19 @@ user-controlled deletion.
 
 ### Right to Erasure
 
-For HTTP multi-tenant deployments: admin endpoints allow per-tenant data
-purging (sessions, cache entries, rate state, analytics). For STDIO: data is
-local to your machine — delete the cache directory. Any feature that stores
-data beyond the request lifecycle provides a deletion mechanism.
+For HTTP multi-tenant deployments: the `DELETE /admin/data` endpoint erases
+all personal data for a `(tenant_id, user_id)` subject across every registered
+store (sessions, analytics, memory, workspace) and simultaneously withdraws
+consent so processing cannot silently resume. `GET /admin/data` exports the
+same scope for portability. For STDIO: data is local to your machine — delete
+the cache directory. Any feature that stores data beyond the request lifecycle
+provides a deletion mechanism.
 
 ### User Insights Without Surveillance
 
-The project may offer features that help users understand their own research
-patterns (search trends, topic analysis, session history). These are designed
-as **user-owned insights, not profiling**:
+The project offers features that help you understand your own research
+patterns — which tools you used, how often, and when (opt-in, consent-gated).
+These are designed as **user-owned insights, not profiling**:
 
 - Data belongs to the user/tenant and is never shared across boundaries
 - The user can view, export, and delete their own data at any time

@@ -50,20 +50,22 @@ Understanding what backs each provider helps you reason about result overlap and
 
 Which tools each web search provider enables. `—` means the provider returns empty (no error) for that capability — image-capable providers in `SEARCH_ROUTING` will handle the fallback automatically.
 
-| Provider | `web_search` | `image_search` | `news_search` | `answer` | `structured_search` | Scrape fallback tier |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| **[DuckDuckGo](https://duckduckgo.com/)** | ✓ | ✓ | ✓ | — | — | — |
-| **[Google PSE](https://programmablesearchengine.google.com/)** | ✓ | ✓ | ✓ | — | — | — |
-| **[Serper](https://serper.dev/)** | ✓ | ✓ | ✓ | — | — | — |
-| **[SearchAPI.io](https://www.searchapi.io/)** | ✓ | ✓ | ✓ | — | — | — |
-| **[Brave](https://brave.com/search/api/)** | ✓ | ✓ | ✓ | — | — | — |
-| **[Exa](https://exa.ai/)** | ✓ | — | ✓ | ✓ | ✓ | ✓ (paid, last-resort) |
-| **[Tavily](https://app.tavily.com/)** | ✓ | — | ✓ | — | — | — |
-| **[SearXNG](https://docs.searxng.org/)** | ✓ | ✓ | ✓ | — | — | — |
-| **[HackerNews](https://hn.algolia.com/)** | ✓ | — | ✓ | — | — | — |
+| Provider | `web_search` | `image_search` | `news_search` | `answer` | `structured_search` | `local_search` | Scrape fallback tier |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **[DuckDuckGo](https://duckduckgo.com/)** | ✓ | ✓ | ✓ | — | — | — | — |
+| **[Google PSE](https://programmablesearchengine.google.com/)** | ✓ | ✓ | ✓ | — | — | — | — |
+| **[Serper](https://serper.dev/)** | ✓ | ✓ | ✓ | — | — | — | — |
+| **[SearchAPI.io](https://www.searchapi.io/)** | ✓ | ✓ | ✓ | — | — | — | — |
+| **[Brave](https://brave.com/search/api/)** | ✓ | ✓ | ✓ | — | — | ✓ | — |
+| **[Exa](https://exa.ai/)** | ✓ | — | ✓ | ✓ | ✓ | — | ✓ (paid, last-resort) |
+| **[Tavily](https://app.tavily.com/)** | ✓ | — | ✓ | — | — | — | — |
+| **[SearXNG](https://docs.searxng.org/)** | ✓ | ✓ | ✓ | — | — | — | — |
+| **[HackerNews](https://hn.algolia.com/)** | ✓ | — | ✓ | — | — | — | — |
 
 **Notes:**
 - `answer` and `structured_search` are provider-independent tools, but Exa is the only web provider that backs them with its native API. They remain unavailable if no Exa key is set.
+- `local_search` is Brave-only — it requires `BRAVE_API_KEY`. No other web provider supports the three-call local pipeline (locations → POIs → descriptions).
+- Brave also exposes a LLM context endpoint (`/res/v1/llm/context`) consumed by `search_and_scrape` as a fast-path for RAG/grounding workflows. When Brave is the active provider, `search_and_scrape` tries the server-assembled context first; if that fails, it falls back to the standard search-then-scrape pipeline. Requires `BRAVE_DATA_FOR_AI` plan access.
 - Exa's scrape fallback tier (`/contents`) fires only when all four free tiers (markdown → stealth → HTML → browser) have failed. It charges an Exa credit per call.
 - Tavily's time-range filter is aggressive on web search — for recent content, `news_search` works better; `web_search` may return nothing for narrow windows.
 
@@ -110,7 +112,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 
 **[Serper](https://serper.dev/) and [SearchAPI.io](https://www.searchapi.io/)** — Google results without the PSE setup overhead. Serper is the simpler option; SearchAPI.io supports multiple engine backends beyond Google. Both draw from Google — no coverage difference between them or vs. Google PSE.
 
-**[Brave](https://brave.com/search/api/)** — Own crawler, own index, privacy-first. Best all-purpose choice when you want index independence from Google/Bing and a generous free tier. Supports web, image, news, and Goggles-based custom result weighting. Also exposes local/map results via `local_search`.
+**[Brave](https://brave.com/search/api/)** — Own crawler, own index, privacy-first. Best all-purpose choice when you want index independence from Google/Bing and a generous free tier. Supports web, image, news, and Goggles-based custom result weighting. Also exposes local/map results via `local_search` (the only provider that does) and a LLM context endpoint used by `search_and_scrape` for faster grounding when you're on Brave's Data for AI plan.
 
 **[Exa](https://exa.ai/)** — Neural/semantic index. Results are ranked by embedding similarity, not just keyword match — better for conceptual or research queries. The only provider that backs `answer` (grounded synthesis with citations) and `structured_search` (schema-defined entity extraction). Also provides a paid `/contents` scrape tier as a last-resort fallback for `scrape_page`. Most expensive per-call but uniquely capable.
 
@@ -130,13 +132,15 @@ Which tools each web search provider enables. `—` means the provider returns e
 |---|:---:|:---:|:---:|:---:|:---:|---|
 | **[OpenAlex](https://openalex.org/)** | ✓ | ✓ | ✓ | via Unpaywall | — | No (email for polite pool) |
 | **[CrossRef](https://www.crossref.org/)** | ✓ | ✓ (authoritative) | — | — | — | No (email for polite pool) |
-| **[Semantic Scholar](https://www.semanticscholar.org/)** | ✓ | ✓ | ✓ (rich edges) | — | ✓ (tldr) | No (key raises limits) |
+| **[Semantic Scholar](https://www.semanticscholar.org/)** | ✓ | — | ✓ (rich edges) | — | ✓ (tldr) | No (key raises limits) |
 | **[PubMed](https://pubmed.ncbi.nlm.nih.gov/)** | ✓ | — | — | — | — | No (key raises limits) |
+| **[Exa](https://exa.ai/)** | ✓ | — | — | — | — | Yes (`EXA_API_KEY`) |
 
 **Notes:**
 - CrossRef is the official DOI registration agency — the authoritative source for DOI metadata. Every DOI-registered work appears here.
-- Semantic Scholar enriches results with AI-generated `tldr` summaries and citation intent/influence edges, which power `citation_graph`.
-- OpenAlex and CrossRef both support the `DOIResolver` interface (exact-entity lookup). Semantic Scholar also implements it. PubMed does not.
+- Semantic Scholar enriches results with AI-generated `tldr` summaries and citation intent/influence edges, which power `citation_graph`. OpenAlex also implements `citation_graph` support with citation-count edges as a fallback.
+- Only OpenAlex implements the `DOIResolver` interface (exact-entity lookup via `/works/doi:{doi}`). CrossRef, Semantic Scholar, and PubMed do not.
+- Exa routes academic queries using its `research-paper` category — useful when its neural index surfaces papers the bibliographic databases miss.
 - [Unpaywall](https://unpaywall.org/) OA enrichment runs as a post-processing step on any DOI-bearing result — not a separate provider to select.
 
 ### Coverage
@@ -147,6 +151,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 | **[CrossRef](https://www.crossref.org/)** | 140M+ DOI-registered works | Peer-reviewed literature; authoritative DOI metadata |
 | **[Semantic Scholar](https://www.semanticscholar.org/)** | 200M+ papers | Broad; strong on CS, medicine, biology |
 | **[PubMed](https://pubmed.ncbi.nlm.nih.gov/)** | 35M+ citations | Biomedical and life science only |
+| **[Exa](https://exa.ai/)** | Neural web index | Research-paper category; surfaces papers outside bibliographic DBs |
 
 ### Academic Routing
 
@@ -169,9 +174,11 @@ If no academic providers are configured, `academic_search` automatically falls b
 | **[EPO OPS](https://developers.epo.org/)** | ✓ | ✓ | ✓ | ✓ (100M+ docs, all major offices) | Yes (free registration) |
 | **[The Lens](https://www.lens.org/)** | ✓ | ✓ | ✓ | ✓ (100+ jurisdictions) | Yes (free, request access) |
 | **[USPTO](https://data.uspto.gov/)** | ✓ | — | — | — | Yes (free) |
+| **[SearchAPI.io](https://www.searchapi.io/)** | ✓ | ✓ | ✓ | ✓ (Google Patents via SerpAPI) | Yes (`SEARCHAPI_API_KEY`) |
 
 **Notes:**
-- EPO OPS and The Lens both cover worldwide jurisdictions; USPTO covers US patents only.
+- EPO OPS and The Lens cover worldwide jurisdictions; USPTO covers US patents only.
+- SearchAPI.io wraps Google Patents via SerpAPI — good for quick coverage when you already have a SearchAPI key.
 - The Lens uniquely links patents to citing academic papers.
 - Without any patent provider configured, `patent_search` falls back to site-restricted web discovery.
 - The `patent_office` parameter enables intelligent routing — a search restricted to `EP` automatically skips USPTO.

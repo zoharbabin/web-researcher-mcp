@@ -13,7 +13,58 @@ One of:
 - OR Docker installed
 - OR Go (version per `go.mod`) installed
 
-## Option A: Binary Install (recommended)
+## Option A: uvx (no compile, any OS)
+
+Install [`uv`](https://docs.astral.sh/uv/) first if you don't have it:
+
+```bash
+# macOS/Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# Windows
+winget install astral-sh.uv
+```
+
+Then add to your MCP client configuration:
+
+**Claude Code** (run in terminal):
+```bash
+claude mcp add --scope user web-researcher -- uvx web-researcher-mcp
+```
+
+**Cursor / VS Code / Cline / other clients** (Settings > MCP Servers):
+```json
+{
+  "mcpServers": {
+    "web-researcher": {
+      "command": "uvx",
+      "args": ["web-researcher-mcp"],
+      "env": {
+        "GOOGLE_CUSTOM_SEARCH_API_KEY": "YOUR_API_KEY",
+        "GOOGLE_CUSTOM_SEARCH_ID": "YOUR_SEARCH_ENGINE_ID"
+      }
+    }
+  }
+}
+```
+
+`uvx` fetches the right prebuilt binary for your platform — no Go, no compile, no manual PATH setup. The `env` block is optional; omit it to run zero-config with DuckDuckGo.
+
+## Option B: One-command install (macOS/Linux)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/install.sh | sh
+```
+
+Windows:
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/install.ps1 | iex"
+```
+
+Downloads the binary, verifies its SHA-256 checksum, puts it on your PATH, and registers it with Claude Code automatically when the `claude` CLI is present.
+
+Then add to other MCP clients as in Option A (replacing `"command": "uvx", "args": ["web-researcher-mcp"]` with `"command": "web-researcher-mcp"`).
+
+## Option C: Download binary manually
 
 1. Download the latest release for your platform:
    ```text
@@ -23,52 +74,9 @@ One of:
 
 2. Extract and place the binary in your PATH (e.g., `~/.local/bin/` or `/usr/local/bin/`)
 
-3. Add to your MCP client configuration. The `env` block is optional — omit it entirely to run zero-config with the DuckDuckGo fallback, or add a provider key for better results:
+3. Configure as in Option A (use `"command": "web-researcher-mcp"` instead of uvx).
 
-**Claude Code** (`~/.claude.json`):
-```json
-{
-  "mcpServers": {
-    "web-researcher": {
-      "command": "web-researcher-mcp",
-      "env": {
-        "GOOGLE_CUSTOM_SEARCH_API_KEY": "YOUR_API_KEY",
-        "GOOGLE_CUSTOM_SEARCH_ID": "YOUR_SEARCH_ENGINE_ID"
-      }
-    }
-  }
-}
-```
-
-**Cursor** (Settings > MCP Servers):
-```json
-{
-  "web-researcher": {
-    "command": "web-researcher-mcp",
-    "env": {
-      "GOOGLE_CUSTOM_SEARCH_API_KEY": "YOUR_API_KEY",
-      "GOOGLE_CUSTOM_SEARCH_ID": "YOUR_SEARCH_ENGINE_ID"
-    }
-  }
-}
-```
-
-**Cline** (MCP Settings):
-```json
-{
-  "mcpServers": {
-    "web-researcher": {
-      "command": "web-researcher-mcp",
-      "env": {
-        "GOOGLE_CUSTOM_SEARCH_API_KEY": "YOUR_API_KEY",
-        "GOOGLE_CUSTOM_SEARCH_ID": "YOUR_SEARCH_ENGINE_ID"
-      }
-    }
-  }
-}
-```
-
-## Option B: Docker
+## Option D: Docker
 
 ```json
 {
@@ -85,15 +93,15 @@ One of:
 }
 ```
 
-The Docker image bundles Chromium (with `CHROME_PATH` preset), so JavaScript-heavy pages render out of the box with no extra download.
+The Docker image bundles Chromium (with `CHROME_PATH` preset), so JavaScript-heavy pages render without an extra download.
 
-## Option C: Go Install
+## Option E: Go Install
 
 ```bash
 go install github.com/zoharbabin/web-researcher-mcp/cmd/web-researcher-mcp@latest
 ```
 
-Then configure as in Option A.
+Then configure as in Option C.
 
 ## Environment Variables
 
@@ -101,11 +109,11 @@ Then configure as in Option A.
 
 ## Available Tools
 
-The differentiator is the **trust suite**: `verify_citation` checks whether one citation actually exists, matches a real record, has been retracted (live Crossref / Retraction Watch), and still resolves — evidence, never a verdict. `audit_bibliography` runs those same checks over a whole reference list (CSL-JSON / RIS / BibTeX / a session) and flags retracted, dead, fabricated (`not_found`), or mischaracterized entries. `archive_source` captures a source to the Internet Archive (Wayback / Save Page Now) so a link you cite can't quietly rot.
+The differentiator is the **trust suite**: `verify_citation` checks whether one citation actually exists, matches a real record, has been retracted (live Crossref / Retraction Watch), and still resolves — evidence, never a verdict. `audit_bibliography` runs those same checks over a whole reference list (CSL-JSON / RIS / BibTeX / a session) and flags retracted, dead, fabricated (`not_found`), or mischaracterized entries. `archive_source` captures a source to the Internet Archive (Wayback / Save Page Now) so a link you cite can't quietly rot. `verify_recommendation` checks a recommended source for self-promotion, conflicts of interest, domain reputation, and dead links before you trust it.
 
-Alongside those, the always-on core tools include web search, full-page/document scraping (`mode: raw` for verbatim source), combined search-and-scrape with quality ranking, image and news search, academic search (real DOIs) and citation-graph traversal, patent search (US/EP/WO/JP/CN/KR), SEC filing search (`filing_search`, EDGAR — including XBRL company facts), US case-law search (`legal_search`, CourtListener), economic data (`econ_search`, FRED + World Bank + OECD + Eurostat), clinical-trial search (`clinical_search`, ClinicalTrials.gov), grounded `answer` and `structured_search`, research-session export and bibliography formatting (APA/MLA/BibTeX/RIS/CSL-JSON), and multi-step `sequential_search` with recoverable sessions.
+Alongside those, the always-on core tools include web search, full-page/document scraping (`mode: raw` for verbatim source), combined search-and-scrape with quality ranking, image and news search, academic search (real DOIs) and citation-graph traversal, patent search (US/EP/WO/JP/CN/KR), SEC filing search (`filing_search`, EDGAR — including XBRL company facts), US case-law search (`legal_search`, CourtListener), economic data (`econ_search`, FRED + World Bank + OECD + Eurostat), clinical-trial search (`clinical_search`, ClinicalTrials.gov), grounded `answer` and `structured_search`, research-session export and bibliography formatting (APA/MLA/BibTeX/RIS/CSL-JSON), multi-step `sequential_search` with recoverable sessions, and `brand_research` for structured brand identity data (colors, logos, typography, social handles) from any domain or company name.
 
-Optional keys `EDGAR_CONTACT_EMAIL`, `COURTLISTENER_API_TOKEN`, and `FRED_API_KEY` enrich the filing/legal/economic tools — `legal_search` works with no key, `filing_search` needs a contact email (falls back to `OPENALEX_EMAIL`), and `econ_search` is always registered (World Bank, OECD, and Eurostat are keyless); `FRED_API_KEY` adds FRED US macro series to it.
+Optional keys `EDGAR_CONTACT_EMAIL`, `COURTLISTENER_API_TOKEN`, and `FRED_API_KEY` enrich the filing/legal/economic tools — `legal_search` works with no key, `filing_search` needs a contact email (falls back to `OPENALEX_EMAIL`), and `econ_search` is always registered (World Bank, OECD, and Eurostat are keyless); `FRED_API_KEY` adds FRED US macro series to it. `local_search` (place/business search) registers only when `BRAVE_API_KEY` is set.
 
 Operators can additionally enable opt-in, consent-gated tools (per-user analytics, long-term memory, shared workspaces) that register only when their feature is turned on.
 
@@ -126,3 +134,4 @@ The assistant should invoke `news_search` and return results with real, clickabl
 - **"invalid API key"** — Verify your Google API key is enabled for Custom Search API
 - **No results** — Check that your Search Engine ID (cx) is configured to search the entire web
 - **Timeout errors** — Each scrape tier has its own bounded timeout (a few seconds up to ~30s for browser rendering); slow or JavaScript-heavy sites may hit these and fall through to the next tier
+- **Scraping private/internal URLs** — By default the server blocks private IP ranges (SSRF protection). Set `ALLOW_PRIVATE_IPS=true` to permit internal network URLs

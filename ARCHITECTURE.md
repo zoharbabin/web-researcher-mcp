@@ -14,7 +14,7 @@ This is the architecture reference for web-researcher-mcp — the tool that give
 
 1. **Explicit over implicit** — No magic. Dependencies injected, not imported globally.
 2. **Fail loud, fail fast** — Return errors, don't swallow them. Validate at boundaries.
-3. **Zero global state** — All state lives in structs passed via `context.Context` or constructor injection.
+3. **Zero global state** — All deps flow through the `tools.Dependencies` struct (constructed in `main.go` and injected at registration time). Request-scoped state (tenant ID, trace) travels in `context.Context`.
 4. **Interface-driven** — Every external dependency (search API, cache, browser) is behind an interface for testing and swapping.
 5. **Bounded concurrency** — Goroutines are cheap, but external APIs are not. Explicit semaphores everywhere.
 6. **Defense in depth** — SSRF, rate limiting, content sanitization, session isolation at every layer.
@@ -98,7 +98,7 @@ web-researcher-mcp/
 │   ├── server/                   # MCP server lifecycle (STDIO + HTTP)
 │   ├── tools/                    # Tool handlers (one file per tool)
 │   ├── search/                   # Pluggable providers + router + lens routing
-│   ├── scraper/                  # 4-tier pipeline (markdown → stealth → HTML → browser) + SPA fast-path + SSRF protection + optional Exa 5th tier
+│   ├── scraper/                  # Tiered pipeline (markdown → stealth → HTML → browser) + SPA fast-path + SSRF protection + optional paid Exa final tier
 │   ├── documents/                # PDF, DOCX, PPTX parsing
 │   ├── cache/                    # Hybrid cache (memory L1 + optional Redis L2 + disk L3)
 │   ├── auth/                     # OAuth 2.1 middleware (JWT/JWKS)
@@ -106,7 +106,7 @@ web-researcher-mcp/
 │   ├── session/                  # Per-tenant session persistence — Manager interface (memory+disk or Redis)
 │   ├── content/                  # Sanitize, dedup, truncate, quality, typed source classification, claim evidence, citation extraction, bibliography read/write (APA/MLA/BibTeX/RIS/CSL-JSON round-trip), recommendations + auto-formatted components
 │   ├── metrics/                  # Prometheus metrics + per-tenant aggregate analytics
-│   ├── ratelimit/                # Three-tier rate limiting + optional atomic cross-pod daily quota
+│   ├── ratelimit/                # Four-tier rate limiting (per-IP, per-tenant, global, daily quota) + optional atomic cross-pod daily quota
 │   ├── circuit/                  # Circuit breaker
 │   ├── persist/                  # TTL key/value store (memory or AES-256-GCM disk) backing token revocation + rate quotas
 │   ├── redisbackend/             # Sole go-redis importer: Redis impls of cache/persist/session (opt-in, HTTP-only, encrypted)
@@ -189,7 +189,7 @@ type Pipeline struct {
 func (p *Pipeline) Scrape(ctx context.Context, url string, maxLength int) (*ScrapeResult, error)
 ```
 
-The pipeline routes specialized content (YouTube, Hacker News threads, PDF/DOCX/PPTX) via early-return detection, then falls back through tiers in order: markdown → stealth → HTML → browser (go-rod). Each tier is a private method with the same signature; the pipeline tries each in sequence and promotes the first result that meets a quality threshold. When `EXA_API_KEY` is set, a fifth, **paid** tier (Exa `/contents`) is appended as the last resort — it runs only after every free tier fails, so the common path never incurs cost. The winning tier is surfaced to the caller as `extractedBy` (e.g. `stealth`, `exa:cached`).
+The pipeline routes specialized content (YouTube, Hacker News threads, PDF/DOCX/PPTX) via early-return detection, then falls back through tiers in order: markdown → stealth → HTML → browser (go-rod). Each tier is a private method with the same signature; the pipeline tries each in sequence and promotes the first result that meets a quality threshold. When `EXA_API_KEY` is set, a **paid** final tier (Exa `/contents`) is appended as the last resort — it runs only after every preceding tier fails to extract more than 100 bytes, so the common path never incurs cost. The winning tier is surfaced to the caller as `extractedBy` (e.g. `stealth`, `exa:cached`).
 
 **SPA fast-path:** When the URL matches a known SPA domain (`isSPADomain` in `internal/scraper/`), the pipeline skips directly to the browser tier rather than spending time on the markdown/stealth/HTML tiers that would return JS shells. This avoids wasted round-trips and the associated latency for single-page apps.
 
@@ -206,8 +206,8 @@ Every request carries a `context.Context` with deadline. Session and tenant IDs 
 ### 6. Concurrency Model
 
 - **Per-tool timeout**: Context with deadline on every tool call
-- **Bounded parallelism**: Semaphore channel for concurrent scrapes (max 5)
-- **Per-client backpressure**: Rate limiter per session, reject with 429
+- **Bounded parallelism**: Semaphore channel for concurrent scrapes (default 5, configurable via `MAX_SCRAPE_CONCURRENCY`)
+- **Per-client backpressure**: Rate limiter per tenant (+ per-IP pre-auth), reject with 429
 - **Graceful shutdown**: Context cancellation propagates, in-flight requests drain
 
 ### 7. Operator Observability
@@ -250,7 +250,7 @@ For exact versions, see `go.mod`. All dependencies use MIT, Apache 2.0, or BSD l
 | Scrape (browser) | 2-10s | go-rod headless, bounded to MaxConcurrency |
 | YouTube transcript | 1-5s | 3-strategy: captions → timedtext API → description |
 | Hacker News item/list/user | 200-700ms | Native HN Firebase REST; story + top comments fetched in parallel |
-| search_and_scrape | 2-15s | Parallel scrape (semaphore=5) |
+| search_and_scrape | 2-15s | Parallel scrape (semaphore, default 5) |
 
 ## Concurrency Limits
 

@@ -8,10 +8,10 @@ An MCP server in Go that gives AI assistants web search, content extraction, and
 go build -o web-researcher-mcp ./cmd/web-researcher-mcp    # Build
 go test ./...                                               # Unit + integration tests
 go test -race ./...                                         # Race detector
-go test -v ./tests/e2e/...                                  # E2E (needs API keys)
+go test -tags=e2e -count=1 ./tests/e2e/...                  # E2E (needs e2e build tag)
 go tool golangci-lint run                                   # Lint (pinned version)
 go tool govulncheck ./...                                    # Vulnerability scan (pinned version)
-make verify                                                  # fmt-check + vet + lint + gosec + vuln + validate-lenses + test-race + test-e2e + check-python-drift + test-python + build (CI gate; `make all` aliases it)
+make verify                                                  # fmt-check + vet + lint + sec + vuln + validate-lenses + test-race + test-e2e + check-python-drift + test-python + build (CI gate; `make all` aliases it)
 make test-python                                             # Python SDK unit + integration tests (no binary; mock HTTP server)
 make test-python-live                                        # Python SDK live E2E tests (builds Go binary; needs internet)
 ```
@@ -81,13 +81,13 @@ Registry/manifest files (root, each read by a different external tool): `server.
 ## Design Rules
 
 1. **Zero global state** — all deps flow through `tools.Dependencies` struct (constructed in `main.go`)
-2. **Interface-driven** — `cache.Cache`, `search.Provider`, `audit.Auditor` are interfaces; swap implementations without touching callers. Specialized capability interfaces (each a `…Searcher` + `…Provider` pair): `search.PatentSearcher`/`PatentProvider`, `search.AcademicSearcher`/`AcademicProvider`, `search.CitationSearcher` (on academic providers), `search.AnswerSearcher`/`AnswerProvider`, `search.StructuredSearcher`/`StructuredProvider`, and the structured-domain set `search.FilingSearcher`/`FilingProvider`, `search.CaseSearcher`/`CaseProvider`, `search.EconSearcher`/`EconProvider`, `search.TrialSearcher`/`TrialProvider` (`internal/search/structured_domains.go`). Enrichment resolver interfaces: `search.DOIResolver` (exact-entity DOI lookup, `domain.go`), `search.OAResolver` (Unpaywall open-access enrichment, `unpaywall.go`), `search.RetractionResolver` (Crossref retraction status, `retraction.go`)
+2. **Interface-driven** — `cache.Cache`, `search.Provider`, `audit.Auditor` are interfaces; swap implementations without touching callers. Specialized capability interfaces (each a `…Searcher` + `…Provider` pair): `search.PatentSearcher`/`PatentProvider`, `search.AcademicSearcher`/`AcademicProvider`, `search.CitationSearcher` (on academic providers), `search.AnswerSearcher`/`AnswerProvider`, `search.StructuredSearcher`/`StructuredProvider`, and the structured-domain set `search.FilingSearcher`/`FilingProvider`, `search.CaseSearcher`/`CaseProvider`, `search.EconSearcher`/`EconProvider`, `search.TrialSearcher`/`TrialProvider` (`internal/search/structured_domains.go`). Enrichment resolver interfaces: `search.DOIRegistry` (cross-registrar DOI existence check, `doi_registry.go`), `search.DOIResolver` (exact-entity DOI lookup, `domain.go`), `search.OAResolver` (Unpaywall open-access enrichment, `unpaywall.go`), `search.RetractionResolver` (Crossref retraction status, `retraction.go`)
 3. **Errors are values** — tool handlers return `toolError("message")` which sets `IsError: true` on the MCP result; never panic. Upstream errors use `upstreamErrorResponse()`. Scrape errors use typed `ScrapeError{Kind}`. Full error architecture: see `docs/ERROR_HANDLING.md`
 4. **Bounded concurrency** — scraping semaphore (5 slots), mutex-serialized browser, per-tenant rate limits
 5. **Lens routing** — if `lens` is set, `site:` operators are injected and routed to the configured provider; lenses with a dedicated `cx` route directly to that Google PSE engine
 6. **Multi-provider routing** — when `SEARCH_ROUTING` is set, the Router wraps all available providers with per-provider circuit breakers and priority-ordered fallback; transparent to tools via the `search.Provider` interface
 7. **Explicit provider honoring** — when a user explicitly requests a provider via the `provider` field, that provider is used exclusively; if it returns empty results (e.g., USPTO for non-US patents), the tool returns empty — no silent fallback
-8. **Provider maps** — `deps.SearchProviders`, `deps.PatentProviders`, `deps.AcademicProviders`, `deps.AnswerProviders`, `deps.StructuredProviders` hold all configured providers by name; built at startup via `Available…Providers()`, independent of routing config
+8. **Provider maps** — `deps.SearchProviders`, `deps.PatentProviders`, `deps.AcademicProviders`, `deps.AnswerProviders`, `deps.StructuredProviders`, `deps.FilingProviders`, `deps.CaseProviders`, `deps.EconProviders`, `deps.TrialProviders`, `deps.LocalProviders`, `deps.ContextProviders` hold all configured providers by name; built at startup via `Available…Providers()`, independent of routing config
 
 ## How to Add a Tool
 
@@ -118,7 +118,7 @@ Registry/manifest files (root, each read by a different external tool): `server.
 - **Audit**: every tool call logs `audit.AuditEvent{ToolName, Duration, Success, Metadata, ...}` via `deps.Auditor.Log()`
 - **SSRF protection**: `scraper.NewSSRFSafeClient()` validates all resolved IPs before connecting
 - **Content pipeline**: raw HTML → sanitize (bluemonday) → dedup (paragraph hashing) → truncate (sentence boundary) → quality score
-- **Tool annotations**: read tools use `readOnlyAnnotations(idempotent, openWorld)`; the rare write tool uses `writeAnnotations(idempotent)` (never destructive) — both enforced by `TestAllToolsHaveAnnotations` in CI
+- **Tool annotations**: read tools use `readOnlyAnnotations(idempotent, openWorld)`; write tools (`memory_save`, `archive_source`, `workspace_contribute`) use `writeAnnotations(idempotent)` (never destructive) — both enforced by `TestAllToolsHaveAnnotations` in CI
 - **Consent gate (regulated tools)**: `deps.Consent.HasConsent(ctx, consent.PurposeMemory|PurposeAnalytics|PurposeWorkspace)` is fail-closed; subject identity comes from `auth.UserIDFromContext`/`auth.TenantIDFromContext`, never a tool param
 - **Data-subject rights**: per-user stores register an `Exporter`/`Eraser` in `internal/datasubject` (keyed `(tenantID,userID)`) so `/admin/data` export+erasure reaches them
 - **Redis isolation**: `internal/redisbackend` is the ONLY package importing go-redis; constructed in one gated place in `main.go` (`Port>0 && REDIS_URL!=""`), fail-fast, encryption-mandatory
@@ -145,7 +145,7 @@ Push a `v*` tag → CI runs GoReleaser → cross-platform binaries + Docker mult
 
 ## Documentation Guidelines
 
-**TOP RULE — accuracy above all:** every doc (file *and* inline comment) must reflect the current codebase exactly. No drift, no hallucinations, no stale claims. Every feature, config, architecture flow, and business workflow must be documented, easy to start with, easy to follow, and easy to extend. Never include secrets, private data, or real keys — placeholders only.
+**TOP RULE — accuracy above all:** every doc (file *and* inline comment) must reflect the current codebase exactly. No drift, no hallucinations, no stale claims. Every feature, config, architecture flow, and business workflow must be documented — quick to start, clear to follow, and built to extend. Never include secrets, private data, or real keys — placeholders only.
 
 ### Write docs for an agent (structure):
 1. **One-line description** at the top — the reader knows what this is without reading further
@@ -198,7 +198,7 @@ Non-negotiable rules for all code changes (human or AI agent):
 8. **Constant-time comparison for secrets** — use `subtle.ConstantTimeCompare()`, never `==` for auth tokens/keys.
 9. **Encrypt sensitive persistent data** — reuse existing AES-256-GCM disk infrastructure when storing to disk: `cache.DiskCache` for cached responses, `persist.DiskStore` for TTL key/value state (token revocation, rate quotas), `session` store for research sessions.
 10. **Minimal dependencies** — prefer Go stdlib. Each new dependency is a supply chain risk. Justify in PR.
-11. **Annotate all tools** — every tool must declare `readOnlyAnnotations(idempotent, openWorld)`. CI test enforces this.
+11. **Annotate all tools** — every tool must declare `readOnlyAnnotations(idempotent, openWorld)` or `writeAnnotations(idempotent)` as appropriate. CI test enforces this.
 
 Security-sensitive changes (auth, SSRF, cache keys, Dockerfile, CI) require focused review.  
 Full security and compliance guidelines: see `docs/SECURITY_AND_COMPLIANCE.md`.

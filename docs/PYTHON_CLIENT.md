@@ -92,6 +92,8 @@ result: ScrapePageResponse = await client.scrape_page(
 )
 ```
 
+See [`docs/TOOLS.md`](TOOLS.md) for the full parameter schema.
+
 ### `search_and_scrape`
 
 ```python
@@ -195,7 +197,7 @@ result: VerifyRecommendationResponse = await client.verify_recommendation([
 
 ### `sequential_search`
 
-The three positional arguments are required; the following shows common optional keyword arguments (note the camelCase names — they match the JSON field names exactly). See [`docs/TOOLS.md`](TOOLS.md) for the complete list.
+The three required arguments are positional; the following shows common optional keyword arguments (the camelCase names match the JSON field names exactly). See [`docs/TOOLS.md`](TOOLS.md) for the complete list.
 
 ```python
 result: SequentialSearchResponse = await client.sequential_search(
@@ -210,12 +212,27 @@ result: SequentialSearchResponse = await client.sequential_search(
     branchId=None,
     knowledgeGap=None,
     researchGoal=None,
+    confidence=None,       # "low" | "medium" | "high"
+    depth=None,            # "shallow" | "standard" | "deep"
+    reasoning=None,
+    responseMode=None,
+    sessionSummary=None,
+    rejectedApproaches=None,
 )
 ```
 
+### Synthesis tools
+
+```python
+ans:  AnswerResponse          = await client.answer(query, provider=None)
+srch: StructuredSearchResponse = await client.structured_search(query, provider=None, ...)
+```
+
+See [`docs/TOOLS.md`](TOOLS.md) for the full parameter schema.
+
 ### Structured-domain searches
 
-`patent_search`, `econ_search`, `legal_search`, `clinical_search`, and `filing_search` follow the same shape — all keyword arguments, all optional, returning their typed `<Name>Response`. The exact parameters are documented per-tool in [`docs/TOOLS.md`](TOOLS.md):
+`patent_search`, `econ_search`, `legal_search`, `clinical_search`, `filing_search`, and `local_search` follow the same shape — all keyword arguments, all optional, returning their typed `<Name>Response`. The exact parameters are documented per-tool in [`docs/TOOLS.md`](TOOLS.md):
 
 ```python
 patents:  PatentSearchResponse   = await client.patent_search(query="mRNA vaccine", patent_office="USPTO")
@@ -223,19 +240,49 @@ econ:     EconSearchResponse     = await client.econ_search(series_id="GDP", dat
 cases:    LegalSearchResponse    = await client.legal_search(query="fair use", jurisdiction="ca9")
 trials:   ClinicalSearchResponse = await client.clinical_search(condition="melanoma", status="recruiting")
 filings:  FilingSearchResponse   = await client.filing_search(ticker="AAPL", form_type="10-K")
+local:    LocalSearchResponse    = await client.local_search(query="coffee shops", near="Seattle, WA")
+```
+
+### Brand research
+
+```python
+result: BrandResearchResponse = await client.brand_research(
+    company_name=None,        # company name to look up
+    url=None,                 # brand homepage URL (alternative to company_name)
+    depth=None,               # "shallow" | "standard" | "deep"
+    include_design_tokens=False,
+    sessionId=None,
+)
+```
+
+### Regulated / opt-in tools
+
+These tools register only when the matching feature is enabled on the server (see `MEMORY_ENABLED`, `USER_ANALYTICS_ENABLED`, `WORKSPACES_ENABLED` in [`.env.example`](../.env.example)).
+
+```python
+# Long-term memory (requires MEMORY_ENABLED=true + consent)
+await client.memory_save(note, tags=None, topic=None, url=None)
+await client.memory_recall(limit=None, topic=None)
+
+# Per-user analytics (requires USER_ANALYTICS_ENABLED=true + consent)
+await client.get_my_analytics()
+
+# Shared workspaces (requires WORKSPACES_ENABLED=true + consent, HTTP mode only)
+await client.workspace_contribute(workspace_id, note, tags=None, url=None)
+await client.workspace_read(workspace_id)
 ```
 
 ### Session / bibliography helpers
 
 ```python
 session: GetResearchSessionResponse = await client.get_research_session(sessionId, stepId=None)
-export:  ResearchExportResponse     = await client.research_export(sessionId, format="markdown")
+export:  ResearchExportResponse     = await client.research_export(sessionId, format=None, verify_links=False)
 biblio:  FormatBibliographyResponse = await client.format_bibliography(sessionId=None, sources=None, style=None)
 graph:   CitationGraphResponse      = await client.citation_graph(paper, direction=None, influential_only=False,
                                                                    num_results=None, provider=None, sessionId=None)
 ```
 
-`citation_graph`'s `paper` is a DOI or title; `format_bibliography` takes either a `sessionId` or an explicit `sources` list (pass `style="apa"` to control the output format).
+`citation_graph`'s `paper` is a DOI or title; `format_bibliography` takes either a `sessionId` or an explicit `sources` list (pass `style="apa"` to control the output format); `research_export`'s `format` defaults to `"markdown"` server-side when omitted.
 
 ### Generic passthrough
 
@@ -285,6 +332,7 @@ class ScrapePageResponse:
     citation: Optional[Citation]
     metadata: Optional[ScrapePageMetadata]
     structuredData: Optional[StructuredData]
+    forumSignals: Optional[ForumSignals]  # present on forum/discussion pages
     sourceType: Optional[str]
     authorityTier: Optional[str]
     domainCategory: Optional[str]
@@ -402,9 +450,9 @@ async with WebResearcherClient(server_env={"GOOGLE_CUSTOM_SEARCH_API_KEY": "..."
 ## Testing
 
 ```bash
-make test-python                              # pytest tests/python/ --ignore=tests/python/test_live_e2e.py -v
-python3 -m pytest tests/python/ -v           # direct
-python3 -m unittest tests.python.test_client # stdlib runner
+make test-python                                                                        # pytest (falls back to unittest discover)
+python3 -m pytest tests/python/ --ignore=tests/python/test_live_e2e.py -v             # direct pytest
+python3 -m unittest discover -s tests/python -v                                        # stdlib runner (no pytest needed)
 ```
 
 Tests use a stdlib `HTTPServer` mock — no API keys, no binary, no network required.

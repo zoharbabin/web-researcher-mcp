@@ -71,7 +71,7 @@ The index is rebuilt from disk on server startup — so even a full restart (ser
 
 ### 3. Sources are tracked server-side (not by the LLM)
 
-When search tools (`web_search`, `scrape_page`, `search_and_scrape`, `news_search`, `academic_search`, `patent_search`, `citation_graph`, `filing_search`, `legal_search`, `clinical_search`) are called with a `sessionId` parameter, the server automatically records discovered URLs and titles as session sources. This happens server-side — no LLM relay needed.
+When search tools (`web_search`, `scrape_page`, `search_and_scrape`, `news_search`, `academic_search`, `patent_search`, `citation_graph`, `filing_search`, `legal_search`, `local_search`, `clinical_search`) are called with a `sessionId` parameter, the server automatically records discovered URLs and titles as session sources. This happens server-side — no LLM relay needed.
 
 Why this matters: if the LLM were responsible for reporting sources back to the session, it could hallucinate URLs, forget to record some, or lose them during compaction. By recording at the server level — where the actual API responses are — the source list is always accurate and complete.
 
@@ -163,7 +163,7 @@ Summary mode returns:
 
 This is typically 5-10 KB — enough to continue coherently without overwhelming the window.
 
-The AI can override this with `responseMode: "full"` to skip the synthesized summary and receive the step index directly. To retrieve full details of a specific earlier step, the AI uses `get_research_session` with a `stepId`.
+The AI can override this on any `sequential_search` call by passing `responseMode: "full"` to receive the step index directly. To retrieve full details of a specific earlier step, the AI calls `get_research_session` with a `stepId`.
 
 ### Why per-tenant isolation?
 

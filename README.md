@@ -166,6 +166,7 @@ Works with Claude, Claude Desktop, Cursor, and any AI assistant that supports to
 | `legal_search` | Search US court opinions and dockets via CourtListener — real cases with real citations |
 | `econ_search` | Look up economic data — World Bank global development indicators, OECD economic indicators, Eurostat European statistics (all keyless), and FRED US macro series (GDP, CPI, unemployment, rates; requires FRED_API_KEY) |
 | `clinical_search` | Search ClinicalTrials.gov — clinical-trial registrations with status, phase, sponsor, and whether results are posted (discovery, not medical advice) |
+| `local_search` | Search for physical places (restaurants, shops, services, points of interest) by local intent query — structured POI details and descriptions. Requires `BRAVE_API_KEY` |
 | `brand_research` | Research a company's complete brand identity — colors (hex), logos, typography, tone of voice, and social handles — from any domain or company name. Returns structured JSON for AI content generation. No API key required; BrandFetch key optional for richer data |
 | `verify_citation` | Check a citation before you rely on it — does it exist, match a real record, and is it retracted or a dead link? Evidence, not a verdict |
 | `audit_bibliography` | Audit a whole reference list in one pass — paste a CSL-JSON/RIS/BibTeX file (or a session) and get per-entry + corpus-level flags for retracted, dead-link, and unverifiable citations |
@@ -178,7 +179,7 @@ Works with Claude, Claude Desktop, Cursor, and any AI assistant that supports to
 | `research_export` | Export a research session as a shareable report (markdown or JSON), with full per-step provenance |
 | `format_bibliography` | Turn collected sources into a formatted bibliography — APA, MLA, BibTeX, RIS, or CSL-JSON (Zotero/EndNote/Mendeley-ready) |
 
-Most tools above are always available. A few activate only when the right provider or config is present: `citation_graph` requires a citation-capable academic provider (OpenAlex or Semantic Scholar); `filing_search` requires `EDGAR_CONTACT_EMAIL`; `answer` and `structured_search` require a provider that supports those capabilities (e.g. Exa). Operators can also enable opt-in, consent-gated tools (per-user analytics, long-term memory, shared workspaces) that appear only when their feature is turned on — see [`docs/TOOLS.md`](docs/TOOLS.md) for the authoritative, CI-verified tool list and full schemas.
+Most tools above are always available. A few activate only when the right provider or config is present: `citation_graph` requires a citation-capable academic provider (OpenAlex or Semantic Scholar); `filing_search` requires `EDGAR_CONTACT_EMAIL`; `local_search` requires `BRAVE_API_KEY`; `answer` and `structured_search` require a provider that supports those capabilities (e.g. Exa). Operators can also enable opt-in, consent-gated tools (per-user analytics, long-term memory, shared workspaces) that appear only when their feature is turned on — see [`docs/TOOLS.md`](docs/TOOLS.md) for the authoritative, CI-verified tool list and full schemas.
 
 ### Ready-made research templates
 
@@ -464,6 +465,7 @@ Search lenses let you control which websites your AI is allowed to search. Inste
 | `security` | CVEs, advisories, vulnerability research |
 | `journalism` | Public records, corporate filings, FOIA |
 | `programming` | Code docs, tutorials, Q&A |
+| `programming-goggle` | Developer-first results re-ranked by Brave's Programming Goggle — surfaces docs, repos, and authoritative technical content (requires Brave) |
 | `devops` | Infrastructure and operations — Kubernetes, Docker, Terraform, cloud, CI/CD |
 | `news` | Current events, journalism |
 | `tech` | Technology industry |
@@ -484,7 +486,7 @@ Your AI uses lenses automatically when you ask it to. For example: *"Search for 
 <details>
 <summary><strong>Creating Your Own Lens</strong></summary>
 
-Add a JSON file to the `lenses/` directory with the sites you trust:
+Create a directory for your custom lenses and add a JSON file for each one:
 
 ```json
 {
@@ -500,7 +502,13 @@ Add a JSON file to the `lenses/` directory with the sites you trust:
 }
 ```
 
-That's it. Now your AI will only search those sites when you use this lens. You can add up to ~10 domains per lens.
+Then point the server to your lens directory:
+
+```bash
+export CUSTOM_LENSES_PATH=/path/to/my-lenses
+```
+
+Your AI will now have `my-industry` as an available lens. Custom lenses load after the built-in set — a custom lens with the same `name` as a built-in one overrides it. You can add up to ~10 domains per lens.
 
 **Advanced options** (optional — most users can ignore these):
 - **cx** — If you have a Google Programmable Search Engine with up to 5,000 domains, put the engine ID here

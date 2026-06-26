@@ -1,8 +1,8 @@
 # Contributing to web-researcher-mcp
 
-Thank you for your interest in contributing to web-researcher-mcp! This project aims to provide reliable, high-quality research tools for AI assistants via the Model Context Protocol, and we welcome contributions from everyone.
+Thanks for contributing to web-researcher-mcp! We build reliable research tools for AI assistants via the Model Context Protocol, and every contribution makes a difference.
 
-Whether you're fixing a typo, adding a search provider, improving documentation, or proposing a new tool — your help makes this project better.
+Whether you're fixing a typo, adding a search provider, improving docs, or proposing a new tool — your help matters.
 
 ## Table of Contents
 
@@ -82,11 +82,13 @@ go test ./...
 # With race detector (recommended before submitting)
 go test -race ./...
 
-# E2E tests (requires API keys)
-go test -v ./tests/e2e/...
+# E2E tests (requires API keys and the e2e build tag)
+go test -tags=e2e -count=1 -v ./tests/e2e/...
 
-# Benchmarks
-go test -bench=. ./tests/benchmark/
+# Benchmarks (with memory allocation stats)
+make test-bench
+# Or directly:
+go test -bench=. -benchmem ./tests/benchmark/
 
 # Specific package
 go test ./internal/scraper/...
@@ -369,7 +371,7 @@ Most tools are read-only. For the rare tool that mutates server-side state (e.g.
 Web search providers implement the `search.Provider` interface (`Web`, `Images`, `News`, `Name`) — the core extension path.
 
 1. **Implement** `search.Provider` in `internal/search/<name>.go` (add a `var _ Provider = (*XProvider)(nil)` assertion; return `(nil, nil)` from any unsupported sub-capability such as `Images` — never an error, which would trip the breaker).
-2. **Wire the factory** — add a `case` to both `NewProvider()` and `NewProviderByName()` in `internal/search/provider.go`. The credential check lives in the `NewProviderByName()` case (return the provider only when its key is set).
+2. **Wire the factory** — add a `case` to both `NewProvider()` and `NewProviderByName()` in `internal/search/provider.go`. These are separate switch statements, so both need a new case. The credential check lives in the `NewProviderByName()` case (return the provider only when its key is set).
 3. **Add the credential/config** env var to `internal/config/config.go` and document it in `.env.example`.
 4. **Make it discoverable** — add the name to `search.SupportedProviders`. `AvailableProviders()` ranges over that list (constructing each via `NewProviderByName()`), so no edit there — the Router picks it up automatically.
 
@@ -415,7 +417,7 @@ func (p *MyProvider) Patents(ctx context.Context, params PatentSearchParams) ([]
 }
 ```
 
-2. **Register it** — add a case to `NewPatentProviderByName()` in `internal/search/domain.go` and add the env var to `internal/config/config.go`.
+2. **Register it** — add a case to `NewPatentProviderByName()` in `internal/search/domain.go` and add the provider name to `SupportedPatentProviders` in the same file. `AvailablePatentProviders()` iterates that slice, so both edits are required. Add the env var to `internal/config/config.go`.
 
 3. **Add tests** — create `internal/search/<provider>_test.go` with httptest mocks and a `_live_test.go` that skips without credentials.
 
@@ -428,7 +430,7 @@ The `ProviderMeta.Regions` field controls intelligent routing — set it to the 
 New structured-research domains (financial filings, case law, economic data, …) follow one repeatable pattern, proven by the SEC EDGAR / CourtListener / FRED trio in `internal/search/structured_domains.go`. Unlike web providers, these are **not** Router-routed — they resolve directly from the `Dependencies` maps in the tool layer, like the synthesis tools.
 
 1. **Define the capability** in `internal/search/structured_domains.go` (or a sibling file): a `…Searcher` interface (the method), a `…Provider` interface (`…Searcher` + `Name()` + `Metadata()`), the `…SearchParams` / `…Result` structs, a `…ProviderConfig`, a `Supported…Providers` slice, a `New…ProviderByName()` factory, and an `Available…Providers()` constructor (it gives each provider its own `circuit.New(...)` breaker — copy the EDGAR/FRED shape exactly).
-2. **Implement the provider** in `internal/search/<name>.go` with the usual `Deps{HTTPClient, Breaker}`, a `SetBaseURL` test hook, typed 429/404/4xx handling, `io.LimitReader`-bounded reads, and a `var _ …Provider = (*XProvider)(nil)` assertion. Mirror `edgar.go` / `courtlistener.go` / `fred.go`.
+2. **Implement the provider** in `internal/search/<name>.go` with the usual `Deps{HTTPClient, Breaker}`, a `SetBaseURL` (or `SetBaseURLs` for providers with multiple base URLs, as in `edgar.go`) test hook, typed 429/404/4xx handling, `io.LimitReader`-bounded reads, and a `var _ …Provider = (*XProvider)(nil)` assertion. Mirror `edgar.go` / `courtlistener.go` / `fred.go`.
 3. **Add the tool** in `internal/tools/<name>.go`: a typed input struct (use `omitempty` + in-handler validation for "provide X or Y" inputs — a `,required` jsonschema tag is enforced by the SDK *before* your handler runs), a `resolve…Searcher` helper, `structuredResult`, `readOnlyAnnotations(true, true)`, the `untrusted-external-content` trust marker, audit + metrics, and an output schema in `internal/tools/schemas.go`. Register it conditionally in `RegisterAll()` (`internal/tools/registry.go`) and add a provider map to the `Dependencies` struct.
 4. **Wire it** in `cmd/web-researcher-mcp/main.go` (construct the config + `Available…Providers` map) and add the credential/contact env var to `internal/config/config.go` + `.env.example`.
 5. **Test + document** — `httptest` unit tests + a `//go:build live` test that skips without credentials; add the tool to `expectedTools`, `setupTestDeps`, and the trust-marker/output-schema maps in `metadata_test.go`; write a `## Tool N:` section in `docs/TOOLS.md` and a setup section in `docs/API_SETUP.md`.
