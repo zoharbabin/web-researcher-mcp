@@ -312,6 +312,10 @@ Please include:
 
 This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. To report unacceptable behavior, see the confidential reporting instructions in [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md#reporting-concerns).
 
+## When to use which extension point
+
+Not sure whether your idea should be a Tool, Provider, Lens, Enrichment Resolver, Prompt, or Resource? See [docs/EXTENSION_GUIDE.md](docs/EXTENSION_GUIDE.md) for a decision path and canonical examples.
+
 ## Adding a New Tool
 
 Adding a tool requires:

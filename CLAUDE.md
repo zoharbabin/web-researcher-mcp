@@ -185,6 +185,7 @@ Every doc and inline comment must reflect the current codebase exactly. No drift
 | File | When to read |
 |---|---|
 | `ARCHITECTURE.md` | Design decisions, tech stack, concurrency model |
+| `docs/EXTENSION_GUIDE.md` | When to add a tool vs. provider vs. lens vs. enrichment vs. prompt vs. resource |
 | `CONTRIBUTING.md` | Code style, commit format, PR process, adding tools/providers |
 | `docs/TOOLS.md` | Tool parameter schemas and behavior contracts |
 | `docs/ERROR_HANDLING.md` | Error taxonomy, LLM-facing messages, contributor patterns |
