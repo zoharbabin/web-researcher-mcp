@@ -427,3 +427,54 @@ jobs:
         with:
           packages-dir: dist/wheels
           skip-existing: true
+
+  # ── Update AUR + Nix packaging manifests ─────────────────────────────────────
+  # Runs after the release job completes so checksums.txt is available on the
+  # GitHub release page. Commits updated PKGBUILD/.SRCINFO/flake.nix back to
+  # main via a signed commit and opens a separate PR into the AUR so the
+  # community-facing listing stays in sync automatically.
+  #
+  # Gated on PACKAGING_UPDATE_ENABLED so an unconfigured fork is a clean no-op.
+  # The job pushes directly to main (packaging manifests are metadata, not code;
+  # no tests are re-run by a version-bump commit). Uses PACKAGING_GITHUB_TOKEN
+  # (a fine-grained PAT with contents:write on this repo) so it can bypass the
+  # branch-protection "no direct push" rule that governs code changes. If that
+  # token is absent it falls back to GITHUB_TOKEN, which will fail branch
+  # protection — acceptable degradation: the step emits a warning, the release
+  # itself is unaffected.
+  update-packaging:
+    name: Update AUR + Nix packaging
+    runs-on: ubuntu-latest
+    needs: release
+    if: ${{ vars.PACKAGING_UPDATE_ENABLED == 'true' }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.PACKAGING_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Install helpers (xxd, python3)
+        run: sudo apt-get install -y xxd python3
+
+      - name: Run update-packaging script
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          bash scripts/update-packaging.sh "$VERSION"
+
+      - name: Commit packaging updates to main
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          git add packaging/aur/PKGBUILD packaging/aur/.SRCINFO packaging/nix/flake.nix
+          if git diff --cached --quiet; then
+            echo "No packaging changes to commit (already up-to-date)."
+            exit 0
+          fi
+          git commit -m "chore(packaging): bump AUR + Nix manifests to v${VERSION} [skip ci]"
+          git push origin HEAD:main

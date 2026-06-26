@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "web-researcher": {
+      "command": "uvx",
+      "args": ["web-researcher-mcp"],
+      "env": {}
+    }
+  }
+}
