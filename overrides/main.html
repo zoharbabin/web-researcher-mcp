@@ -1,6 +1,10 @@
 {% extends "base.html" %}
 
 {% block announce %}
+  <!-- Google Tag Manager (noscript) -->
+  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-P225W69C"
+  height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+  <!-- End Google Tag Manager (noscript) -->
   <a href="https://github.com/zoharbabin/web-researcher-mcp" style="display:inline-flex;align-items:center;gap:.4em;">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25z"/></svg>
     Star us on GitHub
@@ -8,6 +12,13 @@
 {% endblock %}
 
 {% block extrahead %}
+  <!-- Google Tag Manager -->
+  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+  })(window,document,'script','dataLayer','GTM-P225W69C');</script>
+  <!-- End Google Tag Manager -->
   <!-- Preconnect for cross-origin origins used on every page load -->
   <link rel="preconnect" href="https://raw.githubusercontent.com">
   <link rel="preconnect" href="https://api.github.com">
@@ -29,16 +40,6 @@
       document.querySelectorAll('img[src$=".gif"], img[src$=".png"]').forEach(function(img) {
         if (!img.loading) img.loading = "lazy";
       });
-    });
-    window.addEventListener("load", function() {
-      var s = document.createElement("script");
-      s.src = "https://www.googletagmanager.com/gtag/js?id=G-P8TN6HBMMD";
-      s.async = true;
-      document.head.appendChild(s);
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag("js", new Date());
-      gtag("config", "G-P8TN6HBMMD");
     });
   </script>
 {% endblock %}
