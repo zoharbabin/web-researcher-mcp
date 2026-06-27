@@ -396,8 +396,8 @@ See `docs/DEPLOYMENT.md` for the table of every variable, its default, and its e
 
 > **Prefer slides?** The same story — how architecture, not paperwork, keeps
 > this project aligned with 23 standards — is captured in a short visual deck:
-> **[Compliance as Architecture](https://zoharbabin.github.io/web-researcher-mcp/decks/compliance/)**
-> ([PDF](https://zoharbabin.github.io/web-researcher-mcp/decks/compliance/compliance-deck.pdf) ·
+> **[Compliance as Architecture](https://zoharbabin.com/web-researcher-mcp/decks/compliance/)**
+> ([PDF](https://zoharbabin.com/web-researcher-mcp/decks/compliance/compliance-deck.pdf) ·
 > [source](https://github.com/zoharbabin/web-researcher-mcp/blob/main/decks/compliance/compliance-deck.md)).
 > Each technical claim names the file that backs it — open any one and check.
 

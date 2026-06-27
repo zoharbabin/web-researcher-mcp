@@ -116,6 +116,6 @@ jobs:
 
       - name: Generate robots.txt
         run: |
-          printf 'User-agent: *\nAllow: /\n\nSitemap: https://zoharbabin.github.io/web-researcher-mcp/sitemap.xml\n' > site_src/robots.txt
+          printf 'User-agent: *\nAllow: /\n\nSitemap: https://zoharbabin.com/web-researcher-mcp/sitemap.xml\n' > site_src/robots.txt
 
       - run: mkdocs gh-deploy --force
