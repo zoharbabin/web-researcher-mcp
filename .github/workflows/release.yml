@@ -515,18 +515,26 @@ jobs:
             exit 0
           fi
 
-          git checkout -b "$BRANCH"
+          # Create or reset the branch (idempotent on re-run).
+          git checkout -B "$BRANCH"
           git commit -m "chore(packaging): bump AUR + Nix manifests to v${VERSION} [skip ci]"
-          git push origin "$BRANCH"
+          git push --force-with-lease origin "$BRANCH"
 
           PR_BODY=$(printf 'Automated packaging bump for v%s.\n\nUpdates:\n- packaging/aur/PKGBUILD — version + SHA256 checksums\n- packaging/aur/.SRCINFO — version + SHA256 checksums\n- packaging/nix/flake.nix — version + SRI hashes (all 4 platforms)\n\nTriggered by the release workflow after checksums.txt was published to the GitHub release page.' "${VERSION}")
 
-          PR_URL=$(gh pr create \
-            --title "chore(packaging): bump AUR + Nix manifests to v${VERSION}" \
-            --body "$PR_BODY" \
-            --base main \
-            --head "$BRANCH")
-          echo "Opened packaging PR: $PR_URL"
+          # Reuse an existing open PR if the branch was already pushed on a prior run.
+          EXISTING_PR=$(gh pr list --head "$BRANCH" --state open --json url --jq '.[0].url' 2>/dev/null || true)
+          if [ -n "$EXISTING_PR" ]; then
+            PR_URL="$EXISTING_PR"
+            echo "Reusing existing packaging PR: $PR_URL"
+          else
+            PR_URL=$(gh pr create \
+              --title "chore(packaging): bump AUR + Nix manifests to v${VERSION}" \
+              --body "$PR_BODY" \
+              --base main \
+              --head "$BRANCH")
+            echo "Opened packaging PR: $PR_URL"
+          fi
 
           # Auto-merge once the validate-packaging CI job passes. --admin bypasses
           # the review requirement (the packaging files are metadata, not code).
