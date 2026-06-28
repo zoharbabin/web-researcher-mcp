@@ -59,6 +59,7 @@ nav:
   - Our Story: lessons-learned.md
   - Session Persistence: session-persistence.md
   - Migration: migration.md
+  - CI/CD Guide: cicd.md
 
 markdown_extensions:
   - admonition
