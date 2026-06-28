@@ -15,16 +15,18 @@ Every push / PR                         v* tag push
  │  (merge gate)     │             │  (publish pipeline)  │
  └─────────┬─────────┘             └──────────┬───────────┘
            │                                  │
-    change detector                 🏗️ GoReleaser · Build & Publish
-    ┌───────┴────────────────────────────────────────────────────┐
-    │ always-run (every PR)     code-only (skipped on docs PRs)  │
-    │ ─────────────────         ─────────────────────────────    │
-    │ 🧹 lint                   🧪 test (race detector)          │
-    │ 📄 docs-drift             🔬 e2e (STDIO + HTTP + OAuth)    │
-    │ 🐍 python-drift           🐳 docker-smoke                  │
-    │ 🧪 test-python            🏗️ build (5 platforms)           │
-    │ 📦 validate-packaging     🛡️ security (vuln + gosec)       │
-    └────────────────────────────────────────────────────────────┘
+    change detector (code / packaging flags)
+    ┌──────────────────┬──────────────────────┬────────────────────────┐
+    │ packaging-only   │ docs/human (no code) │ code change            │
+    │ ──────────────   │ ────────────────      │ ──────────────────     │
+    │ 📦 validate-pkg  │ 📄 docs-drift        │ 🧹 lint                │
+    │                  │ 🐍 python-drift      │ 🧪 test (race+coverage)│
+    │                  │ 🧪 test-python       │ 🔬 e2e (STDIO+HTTP+OAuth│
+    │                  │ 📦 validate-pkg      │ 🐳 docker-smoke        │
+    │                  │                      │ 🏗️ build (5 platforms) │
+    │                  │                      │ 🛡️ security (vuln+gosec│
+    └──────────────────┴──────────────────────┴────────────────────────┘
+                                              🏗️ GoReleaser · Build & Publish
                                           │
                            ┌──────────────┼────────────────────┐
                            ▼              ▼                     ▼
@@ -57,29 +59,31 @@ There is also a fourth file, `codeql.yml`, that runs GitHub's CodeQL deep static
 
 ### 🔍 Change detector (`changes` job)
 
-The first job classifies every PR. It reads the list of changed files and outputs `code=true` or `code=false`.
+The first job classifies every PR. It reads the list of changed files and outputs two flags:
 
-**Harmless files** (skip heavy CI):
+- `code=true` — at least one file outside the harmless/packaging allowlist changed → full CI runs
+- `packaging=true` — every changed file is under `packaging/**` → packaging-only mode (only `validate-packaging` runs)
+
+**Harmless files** (skip heavy CI, not packaging-only):
 - `*.md`, `docs/**`, `decks/**`, `assets/**`
 - `LICENSE`, `.gitignore`, `mkdocs.yml`, `overrides/**`
-- `packaging/**` (version-bump PRs don't need a full Go test run)
 - `.github/**_TEMPLATE*`, `.github/ISSUE_TEMPLATE/**`
 
-Anything else → `code=true` → full CI runs.
+Anything else outside `packaging/**` → `code=true` → full CI runs.
 
-> **Why?** Branch protection marks skipped *required* checks as passing. A docs-only PR goes green in seconds without getting stuck on checks that legitimately have nothing to test.
+> **Why?** Branch protection marks skipped *required* checks as passing. A docs-only PR goes green in seconds without getting stuck on checks that legitimately have nothing to test. A machine-generated packaging PR only runs `validate-packaging` — the one check that actually matters.
 
-### 🔒 Always-run jobs (every PR, regardless of what changed)
+### 🔒 Always-run jobs (every PR except packaging-only)
 
-These never skip. They catch cross-cutting drift that a change detector can't safely filter:
+These run on every PR — except packaging-only ones, which can't cause the drift they detect:
 
-| Job | What it catches |
-|-----|----------------|
-| **🧹 lint** | `gofmt -s` + `golangci-lint` — formatting and static analysis |
-| **📄 docs-drift** | `docs/TOOLS.md` ↔ registry drift; tool annotation coverage |
-| **🐍 python-drift** | Python client (`models.py`/`client.py`) not regenerated after Go schema change |
-| **🧪 test-python** | Python SDK unit + integration tests (mock HTTP, no binary needed) |
-| **📦 validate-packaging** | `PKGBUILD` / `.SRCINFO` / `flake.nix` version + hash consistency |
+| Job | What it catches | Skipped on packaging-only? |
+|-----|----------------|---------------------------|
+| **🧹 lint** | `gofmt -s` + `golangci-lint` — formatting and static analysis | No (gated on `code=true`) |
+| **📄 docs-drift** | `docs/TOOLS.md` ↔ registry drift; tool annotation coverage | Yes |
+| **🐍 python-drift** | Python client (`models.py`/`client.py`) not regenerated after Go schema change | Yes |
+| **🧪 test-python** | Python SDK unit + integration tests (mock HTTP, no binary needed) | Yes |
+| **📦 validate-packaging** | `PKGBUILD` / `.SRCINFO` / `flake.nix` version + hash consistency | No — this is the only job that runs on packaging-only PRs |
 
 > **Rule:** If you change a Go tool schema, run `make gen-python-client` before pushing. If you change `docs/TOOLS.md`, the matching tool definition must change in the same commit (or vice versa). These jobs enforce both.
 
@@ -273,9 +277,9 @@ Runs GitHub's CodeQL engine with `security-extended,security-and-quality` query 
 
 ### Adding a job to ci.yml
 
-1. If the job must run on every PR (e.g., a new drift gate): add it **without** a `needs: changes` dependency.
-2. If the job is only relevant when Go code changes: gate it on `needs.changes.outputs.code == 'true'` and add `needs: [changes, lint]` (so formatting failures fast-fail first).
-3. Add `packaging/**` to the `changes` allowlist if the new job should not run on packaging PRs.
+1. **Runs on every non-packaging PR** (e.g., a new drift gate): add `needs: changes` and `if: needs.changes.outputs.packaging != 'true'`.
+2. **Only relevant when Go code changes**: gate it on `needs.changes.outputs.code == 'true'` and add `needs: [changes, lint]` (so formatting failures fast-fail first).
+3. **Must run even on packaging PRs**: omit the `packaging` guard and add `needs: changes` only if you need the outputs. Only `validate-packaging` falls into this category.
 
 ### Adding a post-release distribution channel
 
