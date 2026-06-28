@@ -31,6 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      packaging: ${{ steps.filter.outputs.packaging }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -49,24 +50,32 @@ jobs:
           if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
             echo "No usable diff base; running full CI."
             echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "packaging=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           files=$(git diff --name-only "$base" HEAD)
           echo "Changed files:"; echo "$files"
           # A file is "harmless" if it matches the allowlist; if ANY changed
           # file is not harmless, run full CI (code=true).
+          # A PR is "packaging-only" if every changed file is under packaging/.
           code=false
+          packaging=true
           while IFS= read -r f; do
             [ -z "$f" ] && continue
             case "$f" in
-              *.md|docs/*|decks/*|assets/*|LICENSE|.gitignore|mkdocs.yml|overrides/*|packaging/**|.github/*_TEMPLATE*|.github/ISSUE_TEMPLATE/*)
-                : ;;                       # harmless — keep checking
+              packaging/*) : ;;            # packaging — keep checking both flags
+              *.md|docs/*|decks/*|assets/*|LICENSE|.gitignore|mkdocs.yml|overrides/*|.github/*_TEMPLATE*|.github/ISSUE_TEMPLATE/*)
+                packaging=false ;;         # harmless but not packaging-only
               *)
-                code=true; break ;;        # anything else → full CI
+                code=true; packaging=false; break ;;  # anything else → full CI
             esac
           done <<< "$files"
+          # Edge case: empty diff (e.g. workflow_dispatch with no changes)
+          # is not a packaging-only PR.
+          [ -z "$files" ] && packaging=false
           echo "code=$code" >> "$GITHUB_OUTPUT"
-          echo "Decision: code=$code"
+          echo "packaging=$packaging" >> "$GITHUB_OUTPUT"
+          echo "Decision: code=$code packaging=$packaging"
 
   # ── Always-run gates (every PR, even docs-only) ───────────────────────────────
   # These never skip. They catch cross-cutting drift that a change detector can't
@@ -101,11 +110,13 @@ jobs:
           version: v2.12
           args: --timeout=5m
 
-  # 📄 Docs drift — docs/TOOLS.md ↔ registry drift. Runs on EVERY PR including
-  # docs-only ones: a docs-only change could introduce registry drift and the
-  # gated `test` job would never catch it.
+  # 📄 Docs drift — docs/TOOLS.md ↔ registry drift. Runs on every PR except
+  # packaging-only ones: a machine-generated packaging bump cannot cause
+  # docs/registry drift, so skipping saves ~2 min on every release cycle.
   docs-drift:
     name: 📄 Docs ↔ Registry Drift
+    needs: changes
+    if: needs.changes.outputs.packaging != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -120,10 +131,12 @@ jobs:
             ./internal/tools/...
 
   # 🐍 Python client drift — regenerated client must match live Go schemas.
-  # Runs on every PR so a schema change without `make gen-python-client` is caught
-  # even on code-only PRs that skip the docs gate.
+  # Runs on every PR except packaging-only ones: a packaging bump cannot change
+  # Go tool schemas.
   python-drift:
     name: 🐍 Python Client Drift
+    needs: changes
+    if: needs.changes.outputs.packaging != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -138,8 +151,11 @@ jobs:
         run: make check-python-drift
 
   # 🧪 Python SDK tests — unit + integration tests (mock HTTP, no binary needed).
+  # Skipped on packaging-only PRs — a packaging bump cannot break the Python SDK.
   test-python:
     name: 🧪 Test · Python SDK
+    needs: changes
+    if: needs.changes.outputs.packaging != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
