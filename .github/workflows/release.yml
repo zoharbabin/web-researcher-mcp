@@ -519,16 +519,11 @@ jobs:
           git commit -m "chore(packaging): bump AUR + Nix manifests to v${VERSION} [skip ci]"
           git push origin "$BRANCH"
 
+          PR_BODY=$(printf 'Automated packaging bump for v%s.\n\nUpdates:\n- packaging/aur/PKGBUILD — version + SHA256 checksums\n- packaging/aur/.SRCINFO — version + SHA256 checksums\n- packaging/nix/flake.nix — version + SRI hashes (all 4 platforms)\n\nTriggered by the release workflow after checksums.txt was published to the GitHub release page.' "${VERSION}")
+
           PR_URL=$(gh pr create \
             --title "chore(packaging): bump AUR + Nix manifests to v${VERSION}" \
-            --body "Automated packaging bump for v${VERSION}.
-
-  Updates:
-  - \`packaging/aur/PKGBUILD\` — version + SHA256 checksums
-  - \`packaging/aur/.SRCINFO\` — version + SHA256 checksums
-  - \`packaging/nix/flake.nix\` — version + SRI hashes (all 4 platforms)
-
-  Triggered by the release workflow after \`checksums.txt\` was published to the GitHub release page." \
+            --body "$PR_BODY" \
             --base main \
             --head "$BRANCH")
           echo "Opened packaging PR: $PR_URL"
