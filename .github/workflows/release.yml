@@ -517,7 +517,7 @@ jobs:
 
           # Create or reset the branch (idempotent on re-run).
           git checkout -B "$BRANCH"
-          git commit -m "chore(packaging): bump AUR + Nix manifests to v${VERSION} [skip ci]"
+          git commit -m "chore(packaging): bump AUR + Nix manifests to v${VERSION}"
           git push --force-with-lease origin "$BRANCH"
 
           PR_BODY=$(printf 'Automated packaging bump for v%s.\n\nUpdates:\n- packaging/aur/PKGBUILD — version + SHA256 checksums\n- packaging/aur/.SRCINFO — version + SHA256 checksums\n- packaging/nix/flake.nix — version + SRI hashes (all 4 platforms)\n\nTriggered by the release workflow after checksums.txt was published to the GitHub release page.' "${VERSION}")
@@ -541,6 +541,6 @@ jobs:
           # correct here because the only required check is validate-packaging,
           # which passes on these metadata files.
           gh pr merge "$PR_URL" --squash --auto \
-            --subject "chore(packaging): bump AUR + Nix manifests to v${VERSION} [skip ci]" \
+            --subject "chore(packaging): bump AUR + Nix manifests to v${VERSION}" \
             --body "Automated squash-merge of packaging bump for v${VERSION}."
           echo "Auto-merge enabled on $PR_URL"
