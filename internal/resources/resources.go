@@ -3,6 +3,9 @@ package resources
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
+	"unicode"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -527,16 +530,23 @@ func registerPrompts(srv *mcp.Server) {
 		Description: "Multi-phase OSINT recon: certificate transparency, DNS/infrastructure, archive mining, analytics correlation, and business intelligence for a target company or domain. Returns a cited, confidence-tiered intelligence report.",
 		Arguments: []*mcp.PromptArgument{
 			{Name: "target", Description: "Company name, domain, or both — e.g. 'Acme Corp acme.com'", Required: true},
-			{Name: "depth", Description: "quick (phases 1+6+8) | standard (phases 1-4+6-9) | deep (all 9 phases) — default: standard"},
-			{Name: "focus", Description: "sales_intel | security | due_diligence | brand_protection — adjusts phase ordering and emphasis"},
+			{Name: "depth", Description: "quick (phases 1+6+8+9) | standard (phases 1-4+6-9) | deep (all 9 phases) — default: standard"},
+			{Name: "focus", Description: "sales_intel | security | due_diligence | brand_protection — adjusts emphasis in phase instructions"},
 		},
 	}, func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
-		target := req.Params.Arguments["target"]
-		depth := req.Params.Arguments["depth"]
-		focus := req.Params.Arguments["focus"]
-		if depth == "" {
-			depth = "standard"
+		target := sanitizePromptArg(req.Params.Arguments["target"], 512)
+		if strings.TrimSpace(target) == "" {
+			return nil, fmt.Errorf("target is required")
 		}
+		rawDepth := req.Params.Arguments["depth"]
+		switch rawDepth {
+		case "quick", "standard", "deep":
+			// valid
+		default:
+			rawDepth = "standard"
+		}
+		depth := rawDepth
+		focus := req.Params.Arguments["focus"]
 		prompt := buildCompanyReconPrompt(target, depth, focus)
 		return &mcp.GetPromptResult{
 			Description: "Company OSINT recon: " + target,
@@ -547,17 +557,39 @@ func registerPrompts(srv *mcp.Server) {
 	})
 }
 
+// sanitizePromptArg strips control characters and newlines from a user-supplied
+// prompt argument and caps it to maxLen runes to prevent prompt injection.
+func sanitizePromptArg(s string, maxLen int) string {
+	s = strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\r' || unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, s)
+	runes := []rune(s)
+	if len(runes) > maxLen {
+		runes = runes[:maxLen]
+	}
+	return strings.TrimSpace(string(runes))
+}
+
 // buildCompanyReconPrompt constructs the multi-phase OSINT recon prompt for a
-// target company or domain. Phases are filtered by depth; focus adjusts ordering
-// and emphasis in the instructions.
+// target company or domain. Phases are filtered by depth; focus adjusts emphasis
+// in the instructions.
 func buildCompanyReconPrompt(target, depth, focus string) string {
 	phaseSet := companyReconPhaseSet(depth)
 	focusGuidance := companyReconFocusGuidance(focus)
 
 	p := "Run a multi-phase OSINT intelligence recon on: " + target + "\n" +
 		"Depth: " + depth + " | Focus: " + focusGuidance + "\n\n" +
+		"NOTE: Throughout these instructions {domain} means the bare domain extracted from the target above " +
+		"(e.g. if target is \"Acme Corp acme.com\", {domain} = \"acme.com\"). " +
+		"{analytics_id} is a placeholder for an analytics ID you will discover at runtime during the analytics correlation phase — " +
+		"do not substitute it before you have found the ID.\n\n" +
 		"Available tools: web_search, scrape_page, search_and_scrape, news_search, filing_search, research_export.\n" +
-		"Use the osint lens (lens: osint) for web_search calls that target OSINT data sources.\n\n"
+		"Use the osint lens (lens: osint) for web_search calls that target OSINT data sources. " +
+		"If the osint lens is unavailable or returns no results, apply site: operators directly: " +
+		"crt.sh, securitytrails.com, censys.io, publicwww.com, github.com.\n\n"
 
 	if phaseSet["phase1"] {
 		p += "=== Phase 1 — Company Profiling ===\n" +
@@ -594,7 +626,7 @@ func buildCompanyReconPrompt(target, depth, focus string) string {
 			"web_search lens=osint: site:github.com \"{domain}\"\n" +
 			"web_search: \"{domain}\" filetype:yaml OR filetype:json site:github.com\n" +
 			"Goal: find SDK usage, third-party integrations, config leaks, and developer tooling references in public repos.\n" +
-			"Note: results are limited to indexed/public GitHub pages — GitHub Code Search (if separately available) gives higher recall.\n\n"
+			"Note: the filetype:yaml/json operator is honored only by Google CSE — omit it when using another provider (DDG, Brave, Serper, Tavily, Exa, SearXNG silently ignore it). GitHub Code Search gives higher recall than web_search on github.com; use it if separately available.\n\n"
 	}
 
 	if phaseSet["phase6"] {
@@ -607,10 +639,11 @@ func buildCompanyReconPrompt(target, depth, focus string) string {
 
 	if phaseSet["phase7"] {
 		p += "=== Phase 7 — Analytics / Tracker Correlation ===\n" +
-			"First, find the target's analytics IDs by scraping their homepage or using web_search for their GTM/UA tags.\n" +
+			"First, find the target's analytics IDs by scraping https://{domain} (replace {domain} with the target domain) or using web_search for their GTM/UA tags.\n" +
 			"For UA-XXXXXX or GTM-XXXXXX IDs found:\n" +
 			"  scrape_page: https://hackertarget.com/reverse-analytics-search/?q={analytics_id}\n" +
 			"  web_search: \"{analytics_id}\" site:publicwww.com\n" +
+			"If no UA-XXXXXX or GTM-XXXXXX IDs are found, skip the reverse-analytics lookup and note the limitation in the Phase 9 report.\n" +
 			"IMPORTANT: GA4 IDs (G-XXXXXX) are NOT correlatable via reverse-analytics lookup — only Universal Analytics (UA-XXXXXX) and Google Tag Manager (GTM-XXXXXX) IDs work for finding co-deployed sites.\n" +
 			"Goal: identify other domains sharing the same analytics account — signals subsidiaries, partner networks, or acquired properties.\n\n"
 	}
@@ -619,33 +652,42 @@ func buildCompanyReconPrompt(target, depth, focus string) string {
 		p += "=== Phase 8 — Business Intelligence ===\n" +
 			"web_search: \"" + target + " customers case studies\"\n" +
 			"web_search: \"" + target + "\" site:g2.com OR site:trustradius.com\n" +
-			"filing_search: search for SEC 10-K/10-Q filings if the company is publicly traded\n" +
+			"filing_search: search for SEC 10-K/10-Q filings if the company is publicly traded (Note: filing_search requires EDGAR_CONTACT_EMAIL to be configured — skip if the tool is unavailable)\n" +
 			"news_search: \"" + target + "\" acquisitions funding partnerships\n" +
 			"Goal: identify customers, revenue signals, strategic partnerships, and corporate structure.\n\n"
 	}
 
 	if phaseSet["phase9"] {
+		reportSections := "  - Company profile summary\n"
+		if phaseSet["phase2"] {
+			reportSections += "  - Certificate transparency findings\n"
+		}
+		if phaseSet["phase3"] {
+			reportSections += "  - Discovered infrastructure (subdomains, IPs, ASN)\n"
+		}
+		if phaseSet["phase4"] {
+			reportSections += "  - Archive URL patterns of interest\n"
+		}
+		reportSections += "  - Business intelligence (customers, partners, filings)\n" +
+			"  - Confidence-tiered findings table\n" +
+			"  - Known limitations for this run (e.g. GA4 correlation gap, Censys/BuiltWith depth without API keys)\n"
+
 		p += "=== Phase 9 — Confidence Scoring + Report ===\n" +
-			"For each discovered customer, partner, or subsidiary, assign a confidence tier:\n" +
+			"For each finding — including subdomains, infrastructure, URL patterns, business relationships, and co-deployed domains — assign a confidence tier:\n" +
 			"  CONFIRMED — press release, case study, or official SEC filing\n" +
 			"  STRONG    — multiple independent credible sources\n" +
 			"  MODERATE  — single credible source, not independently confirmed\n" +
-			"  WEAK      — inferred from analytics/embed correlation only; not independently verified\n\n" +
+			"  WEAK      — inferred from analytics/embed correlation or subdomain enumeration only; not independently verified\n\n" +
 			"Call research_export to consolidate all findings into a structured report.\n" +
-			"The report must include:\n" +
-			"  - Company profile summary\n" +
-			"  - Discovered infrastructure (subdomains, IPs, ASN)\n" +
-			"  - Certificate transparency findings\n" +
-			"  - Archive URL patterns of interest\n" +
-			"  - Business intelligence (customers, partners, filings)\n" +
-			"  - Confidence-tiered findings table\n" +
-			"  - Known limitations for this run (e.g. GA4 correlation gap, Shodan/Censys depth without API keys)\n\n"
+			"The report must include (omit sections for phases that were not active for this depth):\n" +
+			reportSections + "\n"
 	}
 
 	p += "Known limitations:\n" +
 		"- GA4 (G-XXXXXX) analytics IDs cannot be reverse-correlated — only UA-XXXXXX and GTM-XXXXXX work\n" +
 		"- Live JavaScript inspection requires a browser (Playwright MCP if available); fall back to static source-code search\n" +
-		"- Shodan and BuiltWith depth is limited without API keys — infrastructure data comes from web-searchable pages only\n" +
+		"- Censys and BuiltWith depth is limited without API keys — infrastructure data comes from web-searchable pages only\n" +
+		"- filing_search (SEC EDGAR) is only available when EDGAR_CONTACT_EMAIL is configured — skip Phase 8 SEC lookup if the tool is not in your active tool list\n" +
 		"- GitHub Code Search gives higher recall than web_search on github.com; use it if separately available\n"
 
 	return p
@@ -681,7 +723,7 @@ func companyReconFocusGuidance(focus string) string {
 	case "sales_intel":
 		return "sales_intel — prioritise customer discovery (Phase 8), analytics correlation (Phase 7), and business intelligence"
 	case "security":
-		return "security — prioritise certificate transparency (Phase 2), DNS/infrastructure (Phase 3), archive mining (Phase 4), and code/config search (Phase 5)"
+		return "security — prioritise certificate transparency (Phase 2), DNS/infrastructure (Phase 3), archive mining (Phase 4), and code/config search (Phase 5 — requires depth=deep)"
 	case "due_diligence":
 		return "due_diligence — prioritise company profiling (Phase 1), business intelligence (Phase 8), SEC filings, and corporate structure"
 	case "brand_protection":

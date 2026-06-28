@@ -1853,7 +1853,7 @@ No new Go dependencies — all data comes from free, publicly accessible endpoin
 |---|---|---|---|
 | `target` | yes | — | Company name, domain, or both — e.g. `"Acme Corp acme.com"` |
 | `depth` | no | `standard` | `quick` (phases 1+6+8+9), `standard` (phases 1–4+6–9), `deep` (all 9 phases) |
-| `focus` | no | general | `sales_intel`, `security`, `due_diligence`, `brand_protection` — adjusts phase emphasis |
+| `focus` | no | (omit for balanced coverage) | `sales_intel`, `security`, `due_diligence`, `brand_protection` — adjusts emphasis in phase instructions |
 
 #### Phase map
 
@@ -1873,5 +1873,6 @@ No new Go dependencies — all data comes from free, publicly accessible endpoin
 
 - **GA4 analytics IDs (`G-XXXXXX`) cannot be reverse-correlated** — only Universal Analytics (`UA-XXXXXX`) and Google Tag Manager (`GTM-XXXXXX`) IDs work via HackerTarget/PublicWWW reverse-analytics lookup.
 - **Live JavaScript inspection** requires a Playwright MCP (if available); the prompt falls back to static source-code search.
-- **Shodan and Censys depth** is limited without API keys — infrastructure data comes from web-searchable pages only.
+- **Censys and BuiltWith depth** is limited without API keys — infrastructure data comes from web-searchable pages only.
 - **GitHub Code Search** gives higher recall than `web_search` on `github.com`; use it if separately available.
+- **`filing_search` is only available when `EDGAR_CONTACT_EMAIL` is set** — without it, the tool is not registered and Phase 8 SEC filing lookup should be skipped.

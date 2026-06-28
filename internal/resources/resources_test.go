@@ -591,7 +591,7 @@ func TestLensesCatalogResourceEmpty(t *testing.T) {
 	}
 	// nil slice marshals as JSON null — that is acceptable; just verify no panic
 	// and the key is present.
-	if _, ok := json.Marshal(body.Lenses); ok != nil {
+	if _, err := json.Marshal(body.Lenses); err != nil {
 		t.Error("lenses key missing from response")
 	}
 }
@@ -861,6 +861,16 @@ func TestBrandGuidelinesPromptDescription(t *testing.T) {
 
 // ── company-recon prompt tests ────────────────────────────────────────────────
 
+// requireFirstMessageText asserts the result has at least one message and returns
+// the text of the first one, failing the test immediately if not.
+func requireFirstMessageText(t *testing.T, result *mcp.GetPromptResult) string {
+	t.Helper()
+	if len(result.Messages) == 0 {
+		t.Fatal("expected at least one message")
+	}
+	return result.Messages[0].Content.(*mcp.TextContent).Text
+}
+
 func TestCompanyReconPromptRegistered(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -878,6 +888,12 @@ func TestCompanyReconPromptRegistered(t *testing.T) {
 	for _, pr := range prompts.Prompts {
 		if pr.Name == "company-recon" {
 			found = true
+			if !strings.Contains(pr.Description, "OSINT") {
+				t.Errorf("expected static Description to contain 'OSINT', got: %q", pr.Description)
+			}
+			if !strings.Contains(pr.Description, "recon") {
+				t.Errorf("expected static Description to contain 'recon', got: %q", pr.Description)
+			}
 			break
 		}
 	}
@@ -904,18 +920,15 @@ func TestCompanyReconPromptDefaultDepth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetPrompt failed: %v", err)
 	}
-	if len(result.Messages) == 0 {
-		t.Fatal("expected at least one message")
-	}
-	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	msg := requireFirstMessageText(t, result)
 
 	// Standard depth: phases 1,2,3,4,6,7,8,9 — NOT phase 5
 	for _, want := range []string{
-		"Phase 1", "Phase 2", "Phase 3", "Phase 4",
-		"Phase 6", "Phase 7", "Phase 8", "Phase 9",
+		"=== Phase 1", "=== Phase 2", "=== Phase 3", "=== Phase 4",
+		"=== Phase 6", "=== Phase 7", "=== Phase 8", "=== Phase 9",
 		"Acme Corp acme.com",
 		"standard",
-		"osint",
+		"lens: osint",
 	} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("standard depth: expected %q in prompt, not found", want)
@@ -943,14 +956,14 @@ func TestCompanyReconPromptQuickDepth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetPrompt failed: %v", err)
 	}
-	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	msg := requireFirstMessageText(t, result)
 
 	for _, want := range []string{"Phase 1", "Phase 6", "Phase 8", "Phase 9", "quick"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("quick depth: expected %q in prompt", want)
 		}
 	}
-	for _, absent := range []string{"Phase 2", "Phase 3", "Phase 4", "Phase 5", "Phase 7"} {
+	for _, absent := range []string{"=== Phase 2", "=== Phase 3", "=== Phase 4", "=== Phase 5", "=== Phase 7"} {
 		if strings.Contains(msg, absent) {
 			t.Errorf("quick depth: %q should NOT appear", absent)
 		}
@@ -974,7 +987,7 @@ func TestCompanyReconPromptDeepDepth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetPrompt failed: %v", err)
 	}
-	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	msg := requireFirstMessageText(t, result)
 
 	for i := 1; i <= 9; i++ {
 		phase := fmt.Sprintf("Phase %d", i)
@@ -1001,7 +1014,7 @@ func TestCompanyReconPromptFocusSalesIntel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetPrompt failed: %v", err)
 	}
-	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	msg := requireFirstMessageText(t, result)
 	if !strings.Contains(msg, "sales_intel") {
 		t.Errorf("expected 'sales_intel' focus label in prompt")
 	}
@@ -1027,7 +1040,7 @@ func TestCompanyReconPromptFocusSecurity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetPrompt failed: %v", err)
 	}
-	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	msg := requireFirstMessageText(t, result)
 	if !strings.Contains(msg, "security") {
 		t.Errorf("expected 'security' in focus guidance")
 	}
@@ -1053,7 +1066,7 @@ func TestCompanyReconPromptFocusDueDiligence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetPrompt failed: %v", err)
 	}
-	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	msg := requireFirstMessageText(t, result)
 	if !strings.Contains(msg, "due_diligence") {
 		t.Errorf("expected 'due_diligence' in focus guidance")
 	}
@@ -1079,7 +1092,7 @@ func TestCompanyReconPromptFocusBrandProtection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetPrompt failed: %v", err)
 	}
-	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	msg := requireFirstMessageText(t, result)
 	if !strings.Contains(msg, "brand_protection") {
 		t.Errorf("expected 'brand_protection' in focus guidance")
 	}
@@ -1105,7 +1118,7 @@ func TestCompanyReconPromptContainsOsintLens(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetPrompt failed: %v", err)
 	}
-	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	msg := requireFirstMessageText(t, result)
 	if !strings.Contains(msg, "lens: osint") {
 		t.Errorf("expected 'lens: osint' reference in prompt")
 	}
@@ -1128,7 +1141,7 @@ func TestCompanyReconPromptMentionsCrtSh(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetPrompt failed: %v", err)
 	}
-	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	msg := requireFirstMessageText(t, result)
 	if !strings.Contains(msg, "crt.sh") {
 		t.Errorf("expected 'crt.sh' endpoint in prompt for standard depth")
 	}
@@ -1151,7 +1164,7 @@ func TestCompanyReconPromptMentionsWayback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetPrompt failed: %v", err)
 	}
-	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	msg := requireFirstMessageText(t, result)
 	if !strings.Contains(msg, "web.archive.org") {
 		t.Errorf("expected 'web.archive.org' CDX endpoint in prompt")
 	}
@@ -1179,7 +1192,7 @@ func TestCompanyReconPromptGA4LimitationDocumented(t *testing.T) {
 			if err != nil {
 				t.Fatalf("GetPrompt failed: %v", err)
 			}
-			msg := result.Messages[0].Content.(*mcp.TextContent).Text
+			msg := requireFirstMessageText(t, result)
 			if !strings.Contains(msg, "GA4") {
 				t.Errorf("depth=%s: expected GA4 limitation documented in prompt", depth)
 			}
@@ -1187,28 +1200,35 @@ func TestCompanyReconPromptGA4LimitationDocumented(t *testing.T) {
 	}
 }
 
-// TestCompanyReconPromptConfidenceTiersIncluded verifies CONFIRMED/STRONG/MODERATE/WEAK tiers.
+// TestCompanyReconPromptConfidenceTiersIncluded verifies CONFIRMED/STRONG/MODERATE/WEAK tiers
+// appear at every depth (phase 9 is active for all depths).
 func TestCompanyReconPromptConfidenceTiersIncluded(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
-	m := metrics.NewCollector()
-	s, _ := session.NewManager(session.Config{MaxSessions: 10})
-	srv := createTestServer(m, s)
-	cs := connectTestClient(ctx, t, srv)
-	defer cs.Close()
+	for _, depth := range []string{"quick", "standard", "deep"} {
+		depth := depth
+		t.Run(depth, func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			m := metrics.NewCollector()
+			s, _ := session.NewManager(session.Config{MaxSessions: 10})
+			srv := createTestServer(m, s)
+			cs := connectTestClient(ctx, t, srv)
+			defer cs.Close()
 
-	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
-		Name:      "company-recon",
-		Arguments: map[string]string{"target": "Acme Corp acme.com", "depth": "standard"},
-	})
-	if err != nil {
-		t.Fatalf("GetPrompt failed: %v", err)
-	}
-	msg := result.Messages[0].Content.(*mcp.TextContent).Text
-	for _, tier := range []string{"CONFIRMED", "STRONG", "MODERATE", "WEAK"} {
-		if !strings.Contains(msg, tier) {
-			t.Errorf("expected confidence tier %q in prompt", tier)
-		}
+			result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+				Name:      "company-recon",
+				Arguments: map[string]string{"target": "Acme Corp acme.com", "depth": depth},
+			})
+			if err != nil {
+				t.Fatalf("GetPrompt failed: %v", err)
+			}
+			msg := requireFirstMessageText(t, result)
+			for _, tier := range []string{"CONFIRMED", "STRONG", "MODERATE", "WEAK"} {
+				if !strings.Contains(msg, tier) {
+					t.Errorf("depth=%s: expected confidence tier %q in prompt", depth, tier)
+				}
+			}
+		})
 	}
 }
 
@@ -1229,7 +1249,7 @@ func TestCompanyReconPromptResearchExportMentioned(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetPrompt failed: %v", err)
 	}
-	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	msg := requireFirstMessageText(t, result)
 	if !strings.Contains(msg, "research_export") {
 		t.Errorf("expected 'research_export' tool referenced in prompt")
 	}
@@ -1330,6 +1350,10 @@ func TestCompanyReconFocusGuidanceAllValues(t *testing.T) {
 		}
 		seen[got] = true
 	}
+	if companyReconFocusGuidance("") != companyReconFocusGuidance("unknown") {
+		t.Errorf("expected \"\" and \"unknown\" to return the same default guidance, got %q vs %q",
+			companyReconFocusGuidance(""), companyReconFocusGuidance("unknown"))
+	}
 }
 
 // TestCompanyReconPromptMentionsFilingSearch verifies filing_search is referenced for BI.
@@ -1349,7 +1373,7 @@ func TestCompanyReconPromptMentionsFilingSearch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetPrompt failed: %v", err)
 	}
-	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	msg := requireFirstMessageText(t, result)
 	if !strings.Contains(msg, "filing_search") {
 		t.Errorf("expected 'filing_search' referenced in prompt for business intelligence phase")
 	}
@@ -1372,8 +1396,90 @@ func TestCompanyReconPromptMentionsHackerTarget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetPrompt failed: %v", err)
 	}
-	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	msg := requireFirstMessageText(t, result)
 	if !strings.Contains(msg, "hackertarget.com") {
 		t.Errorf("expected 'hackertarget.com' referenced in DNS phase")
+	}
+}
+
+// TestCompanyReconPromptMentionsAllRequiredTools verifies all 6 spec-required tool names
+// appear in a standard-depth prompt.
+func TestCompanyReconPromptMentionsAllRequiredTools(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "company-recon",
+		Arguments: map[string]string{"target": "Acme Corp acme.com", "depth": "standard"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	msg := requireFirstMessageText(t, result)
+	for _, tool := range []string{"web_search", "scrape_page", "search_and_scrape", "news_search", "filing_search", "research_export"} {
+		if !strings.Contains(msg, tool) {
+			t.Errorf("expected required tool %q in prompt", tool)
+		}
+	}
+}
+
+// TestCompanyReconPromptEmptyTarget verifies that an empty target returns an error.
+func TestCompanyReconPromptEmptyTarget(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	_, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "company-recon",
+		Arguments: map[string]string{"target": ""},
+	})
+	if err == nil {
+		t.Error("expected error for empty target, got nil")
+	}
+}
+
+// TestCompanyReconPromptFocusUnknown verifies unknown focus falls back to "general" guidance.
+func TestCompanyReconPromptFocusUnknown(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "company-recon",
+		Arguments: map[string]string{"target": "TestCo test.com", "focus": "bogus"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	msg := requireFirstMessageText(t, result)
+	if !strings.Contains(msg, "general") {
+		t.Errorf("expected 'general' fallback guidance for unknown focus, got: %.200s", msg)
+	}
+}
+
+// TestBuildCompanyReconPromptUnit is a direct unit test for buildCompanyReconPrompt.
+func TestBuildCompanyReconPromptUnit(t *testing.T) {
+	t.Parallel()
+	got := buildCompanyReconPrompt("acme.com", "standard", "")
+	if got == "" {
+		t.Fatal("expected non-empty prompt")
+	}
+	for _, want := range []string{"=== Phase", "Known limitations", "research_export"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q in prompt output", want)
+		}
 	}
 }
