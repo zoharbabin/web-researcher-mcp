@@ -16,7 +16,7 @@
       let
         pkgs = import nixpkgs { inherit system; };
 
-        version = "1.37.1";
+        version = "1.37.2";
 
         # Pre-built binaries per platform — matches GoReleaser archive names.
         # Update hashes by running: nix-prefetch-url --unpack <url>
