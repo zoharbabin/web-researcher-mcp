@@ -16,26 +16,26 @@
       let
         pkgs = import nixpkgs { inherit system; };
 
-        version = "1.36.4";
+        version = "1.37.0";
 
         # Pre-built binaries per platform — matches GoReleaser archive names.
         # Update hashes by running: nix-prefetch-url --unpack <url>
         platformMap = {
           "x86_64-linux" = {
             url = "https://github.com/zoharbabin/web-researcher-mcp/releases/download/v${version}/web-researcher-mcp_${version}_linux_amd64.tar.gz";
-            hash = "sha256-1i9HaBhli4GMtzJFHS/7N/uPrLG5X5B8T5EW22vt5jc=";
+            hash = "sha256-47fFrls8neO3PH39pt4CfK49YauwQPVlfjd8NsVRyhY=";
           };
           "aarch64-linux" = {
             url = "https://github.com/zoharbabin/web-researcher-mcp/releases/download/v${version}/web-researcher-mcp_${version}_linux_arm64.tar.gz";
-            hash = "sha256-qdcxmAW3SVFgApNvx/6Rlf5wFfjgk/fCajB6Lkw8ue4=";
+            hash = "sha256-0rM7An9fxekAP66Ln9XNPkHc08gRPYhGLvUJW7FRqb4=";
           };
           "x86_64-darwin" = {
             url = "https://github.com/zoharbabin/web-researcher-mcp/releases/download/v${version}/web-researcher-mcp_${version}_darwin_amd64.tar.gz";
-            hash = "sha256-J+GzQVIS0255nQe8/pzJlL00Uhn3vYxxvU6te3Nb/7c=";
+            hash = "sha256-oy/3UzoppcTg9YapQRT2gsS3vY77FnOpos5jWbHBesA=";
           };
           "aarch64-darwin" = {
             url = "https://github.com/zoharbabin/web-researcher-mcp/releases/download/v${version}/web-researcher-mcp_${version}_darwin_arm64.tar.gz";
-            hash = "sha256-uKv7noDb44hbJ/Qhp4ZGIEvakSGBi4dybAQzIr8OueA=";
+            hash = "sha256-8kt8OmpSv1+iK77IPbksJ6w8r7jzlq6UssbMQB4bj2k=";
           };
         };
 
