@@ -430,18 +430,13 @@ jobs:
 
   # ── Update AUR + Nix packaging manifests ─────────────────────────────────────
   # Runs after the release job completes so checksums.txt is available on the
-  # GitHub release page. Commits updated PKGBUILD/.SRCINFO/flake.nix back to
-  # main via a signed commit and opens a separate PR into the AUR so the
-  # community-facing listing stays in sync automatically.
+  # GitHub release page. Opens a PR to bump PKGBUILD/.SRCINFO/flake.nix so the
+  # change goes through branch protection like all other commits, then
+  # auto-merges it with --admin once CI on the packaging PR passes.
   #
   # Gated on PACKAGING_UPDATE_ENABLED so an unconfigured fork is a clean no-op.
-  # The job pushes directly to main (packaging manifests are metadata, not code;
-  # no tests are re-run by a version-bump commit). Uses PACKAGING_GITHUB_TOKEN
-  # (a fine-grained PAT with contents:write on this repo) so it can bypass the
-  # branch-protection "no direct push" rule that governs code changes. If that
-  # token is absent it falls back to GITHUB_TOKEN, which will fail branch
-  # protection — acceptable degradation: the step emits a warning, the release
-  # itself is unaffected.
+  # No special bypass token is needed — the PR flow is fully compatible with
+  # branch-protection rules that require PRs.
   update-packaging:
     name: Update AUR + Nix packaging
     runs-on: ubuntu-latest
@@ -449,11 +444,12 @@ jobs:
     if: ${{ vars.PACKAGING_UPDATE_ENABLED == 'true' }}
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          token: ${{ secrets.PACKAGING_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure git
         run: |
@@ -468,13 +464,41 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           bash scripts/update-packaging.sh "$VERSION"
 
-      - name: Commit packaging updates to main
+      - name: Open PR for packaging update
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
+          BRANCH="chore/packaging-v${VERSION}"
+
           git add packaging/aur/PKGBUILD packaging/aur/.SRCINFO packaging/nix/flake.nix
           if git diff --cached --quiet; then
-            echo "No packaging changes to commit (already up-to-date)."
+            echo "No packaging changes — manifests already up-to-date for v${VERSION}."
             exit 0
           fi
+
+          git checkout -b "$BRANCH"
           git commit -m "chore(packaging): bump AUR + Nix manifests to v${VERSION} [skip ci]"
-          git push origin HEAD:main
+          git push origin "$BRANCH"
+
+          PR_URL=$(gh pr create \
+            --title "chore(packaging): bump AUR + Nix manifests to v${VERSION}" \
+            --body "Automated packaging bump for v${VERSION}.
+
+  Updates:
+  - \`packaging/aur/PKGBUILD\` — version + SHA256 checksums
+  - \`packaging/aur/.SRCINFO\` — version + SHA256 checksums
+  - \`packaging/nix/flake.nix\` — version + SRI hashes (all 4 platforms)
+
+  Triggered by the release workflow after \`checksums.txt\` was published to the GitHub release page." \
+            --base main \
+            --head "$BRANCH")
+          echo "Opened packaging PR: $PR_URL"
+
+          # Auto-merge once the validate-packaging CI job passes. --admin bypasses
+          # the review requirement (the packaging files are metadata, not code).
+          gh pr merge "$PR_URL" --squash --admin --auto \
+            --subject "chore(packaging): bump AUR + Nix manifests to v${VERSION} [skip ci]" \
+            --body "Automated squash-merge of packaging bump for v${VERSION}."
+          echo "Auto-merge enabled on $PR_URL"

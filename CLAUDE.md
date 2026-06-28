@@ -195,4 +195,5 @@ Every doc and inline comment must reflect the current codebase exactly. No drift
 | `docs/API_SETUP.md` | Getting API keys for each provider |
 | `docs/PROVIDERS.md` | Provider comparison: capability matrix, free tiers, quick-pick guide |
 | `docs/EXAMPLES.md` | Example tool calls and expected response shapes |
+| `docs/CICD.md` | CI/CD pipeline overview, job graph, release steps, debugging |
 | `.github/workflows/release.yml` + `.goreleaser.yml` | Cutting a release |
