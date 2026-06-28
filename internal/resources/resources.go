@@ -521,4 +521,172 @@ func registerPrompts(srv *mcp.Server) {
 			},
 		}, nil
 	})
+
+	srv.AddPrompt(&mcp.Prompt{
+		Name:        "company-recon",
+		Description: "Multi-phase OSINT recon: certificate transparency, DNS/infrastructure, archive mining, analytics correlation, and business intelligence for a target company or domain. Returns a cited, confidence-tiered intelligence report.",
+		Arguments: []*mcp.PromptArgument{
+			{Name: "target", Description: "Company name, domain, or both — e.g. 'Acme Corp acme.com'", Required: true},
+			{Name: "depth", Description: "quick (phases 1+6+8) | standard (phases 1-4+6-9) | deep (all 9 phases) — default: standard"},
+			{Name: "focus", Description: "sales_intel | security | due_diligence | brand_protection — adjusts phase ordering and emphasis"},
+		},
+	}, func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+		target := req.Params.Arguments["target"]
+		depth := req.Params.Arguments["depth"]
+		focus := req.Params.Arguments["focus"]
+		if depth == "" {
+			depth = "standard"
+		}
+		prompt := buildCompanyReconPrompt(target, depth, focus)
+		return &mcp.GetPromptResult{
+			Description: "Company OSINT recon: " + target,
+			Messages: []*mcp.PromptMessage{
+				{Role: "user", Content: &mcp.TextContent{Text: prompt}},
+			},
+		}, nil
+	})
+}
+
+// buildCompanyReconPrompt constructs the multi-phase OSINT recon prompt for a
+// target company or domain. Phases are filtered by depth; focus adjusts ordering
+// and emphasis in the instructions.
+func buildCompanyReconPrompt(target, depth, focus string) string {
+	phaseSet := companyReconPhaseSet(depth)
+	focusGuidance := companyReconFocusGuidance(focus)
+
+	p := "Run a multi-phase OSINT intelligence recon on: " + target + "\n" +
+		"Depth: " + depth + " | Focus: " + focusGuidance + "\n\n" +
+		"Available tools: web_search, scrape_page, search_and_scrape, news_search, filing_search, research_export.\n" +
+		"Use the osint lens (lens: osint) for web_search calls that target OSINT data sources.\n\n"
+
+	if phaseSet["phase1"] {
+		p += "=== Phase 1 — Company Profiling ===\n" +
+			"web_search: \"" + target + " about founded CEO headquarters\"\n" +
+			"search_and_scrape: company homepage, LinkedIn, Crunchbase\n" +
+			"news_search: recent news about the company (last 90 days)\n" +
+			"Goal: establish company identity, leadership, HQ, core products, and recent developments.\n\n"
+	}
+
+	if phaseSet["phase2"] {
+		p += "=== Phase 2 — Certificate Transparency ===\n" +
+			"scrape_page: https://crt.sh/?q=%25.{domain}&output=json  (replace {domain} with the target domain)\n" +
+			"Parse the JSON array: extract name_value fields, deduplicate subdomains, note wildcard SANs.\n" +
+			"Note: crt.sh is a free, public CT log aggregator — no API key required.\n\n"
+	}
+
+	if phaseSet["phase3"] {
+		p += "=== Phase 3 — DNS / Infrastructure ===\n" +
+			"web_search lens=osint: site:securitytrails.com \"{domain}\" DNS history\n" +
+			"web_search lens=osint: site:censys.io \"{domain}\"\n" +
+			"scrape_page: https://hackertarget.com/find-dns-host-records/?q={domain}\n" +
+			"Goal: map IP blocks, ASN, name servers, historical DNS changes, and cloud providers in use.\n\n"
+	}
+
+	if phaseSet["phase4"] {
+		p += "=== Phase 4 — Archive Mining ===\n" +
+			"scrape_page: https://web.archive.org/cdx/search/cdx?url={domain}/*&output=json&collapse=urlkey&limit=500&fl=original,timestamp,statuscode\n" +
+			"Analyze the returned URL list for patterns: login pages (/login, /signin, /auth), API endpoints (/api/, /v1/, /graphql), admin paths (/admin, /dashboard), JS bundles, staging subdomains.\n" +
+			"Note: Wayback CDX API is free and does not require authentication.\n\n"
+	}
+
+	if phaseSet["phase5"] {
+		p += "=== Phase 5 — Code / Config Search ===\n" +
+			"web_search lens=osint: site:github.com \"{domain}\"\n" +
+			"web_search: \"{domain}\" filetype:yaml OR filetype:json site:github.com\n" +
+			"Goal: find SDK usage, third-party integrations, config leaks, and developer tooling references in public repos.\n" +
+			"Note: results are limited to indexed/public GitHub pages — GitHub Code Search (if separately available) gives higher recall.\n\n"
+	}
+
+	if phaseSet["phase6"] {
+		p += "=== Phase 6 — Web / Content Discovery ===\n" +
+			"search_and_scrape: \"{domain}\" inurl:login\n" +
+			"search_and_scrape: site:{domain} -www\n" +
+			"web_search lens=osint: \"{domain}\" archive OR leaked OR exposed\n" +
+			"Goal: surface exposed login surfaces, forgotten subdomains, and any indexed sensitive paths.\n\n"
+	}
+
+	if phaseSet["phase7"] {
+		p += "=== Phase 7 — Analytics / Tracker Correlation ===\n" +
+			"First, find the target's analytics IDs by scraping their homepage or using web_search for their GTM/UA tags.\n" +
+			"For UA-XXXXXX or GTM-XXXXXX IDs found:\n" +
+			"  scrape_page: https://hackertarget.com/reverse-analytics-search/?q={analytics_id}\n" +
+			"  web_search: \"{analytics_id}\" site:publicwww.com\n" +
+			"IMPORTANT: GA4 IDs (G-XXXXXX) are NOT correlatable via reverse-analytics lookup — only Universal Analytics (UA-XXXXXX) and Google Tag Manager (GTM-XXXXXX) IDs work for finding co-deployed sites.\n" +
+			"Goal: identify other domains sharing the same analytics account — signals subsidiaries, partner networks, or acquired properties.\n\n"
+	}
+
+	if phaseSet["phase8"] {
+		p += "=== Phase 8 — Business Intelligence ===\n" +
+			"web_search: \"" + target + " customers case studies\"\n" +
+			"web_search: \"" + target + "\" site:g2.com OR site:trustradius.com\n" +
+			"filing_search: search for SEC 10-K/10-Q filings if the company is publicly traded\n" +
+			"news_search: \"" + target + "\" acquisitions funding partnerships\n" +
+			"Goal: identify customers, revenue signals, strategic partnerships, and corporate structure.\n\n"
+	}
+
+	if phaseSet["phase9"] {
+		p += "=== Phase 9 — Confidence Scoring + Report ===\n" +
+			"For each discovered customer, partner, or subsidiary, assign a confidence tier:\n" +
+			"  CONFIRMED — press release, case study, or official SEC filing\n" +
+			"  STRONG    — multiple independent credible sources\n" +
+			"  MODERATE  — single credible source, not independently confirmed\n" +
+			"  WEAK      — inferred from analytics/embed correlation only; not independently verified\n\n" +
+			"Call research_export to consolidate all findings into a structured report.\n" +
+			"The report must include:\n" +
+			"  - Company profile summary\n" +
+			"  - Discovered infrastructure (subdomains, IPs, ASN)\n" +
+			"  - Certificate transparency findings\n" +
+			"  - Archive URL patterns of interest\n" +
+			"  - Business intelligence (customers, partners, filings)\n" +
+			"  - Confidence-tiered findings table\n" +
+			"  - Known limitations for this run (e.g. GA4 correlation gap, Shodan/Censys depth without API keys)\n\n"
+	}
+
+	p += "Known limitations:\n" +
+		"- GA4 (G-XXXXXX) analytics IDs cannot be reverse-correlated — only UA-XXXXXX and GTM-XXXXXX work\n" +
+		"- Live JavaScript inspection requires a browser (Playwright MCP if available); fall back to static source-code search\n" +
+		"- Shodan and BuiltWith depth is limited without API keys — infrastructure data comes from web-searchable pages only\n" +
+		"- GitHub Code Search gives higher recall than web_search on github.com; use it if separately available\n"
+
+	return p
+}
+
+// companyReconPhaseSet returns which phases are active for the given depth.
+func companyReconPhaseSet(depth string) map[string]bool {
+	switch depth {
+	case "quick":
+		return map[string]bool{
+			"phase1": true,
+			"phase6": true,
+			"phase8": true,
+			"phase9": true,
+		}
+	case "deep":
+		return map[string]bool{
+			"phase1": true, "phase2": true, "phase3": true, "phase4": true,
+			"phase5": true, "phase6": true, "phase7": true, "phase8": true,
+			"phase9": true,
+		}
+	default: // standard
+		return map[string]bool{
+			"phase1": true, "phase2": true, "phase3": true, "phase4": true,
+			"phase6": true, "phase7": true, "phase8": true, "phase9": true,
+		}
+	}
+}
+
+// companyReconFocusGuidance returns a short label and emphasis note for the focus.
+func companyReconFocusGuidance(focus string) string {
+	switch focus {
+	case "sales_intel":
+		return "sales_intel — prioritise customer discovery (Phase 8), analytics correlation (Phase 7), and business intelligence"
+	case "security":
+		return "security — prioritise certificate transparency (Phase 2), DNS/infrastructure (Phase 3), archive mining (Phase 4), and code/config search (Phase 5)"
+	case "due_diligence":
+		return "due_diligence — prioritise company profiling (Phase 1), business intelligence (Phase 8), SEC filings, and corporate structure"
+	case "brand_protection":
+		return "brand_protection — prioritise certificate transparency (Phase 2) for look-alike domains, web/content discovery (Phase 6), and analytics correlation (Phase 7)"
+	default:
+		return "general — balanced coverage across all active phases"
+	}
 }

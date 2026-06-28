@@ -1,0 +1,18 @@
+{
+  "name": "osint",
+  "description": "Open-source intelligence: certificate transparency, DNS history, domain/URL archives, code hosting, and internet-scanner indexes",
+  "domains": [
+    "crt.sh",
+    "web.archive.org",
+    "index.commoncrawl.org",
+    "urlscan.io",
+    "dnsdumpster.com",
+    "securitytrails.com",
+    "censys.io",
+    "publicwww.com",
+    "github.com",
+    "opencorporates.com"
+  ],
+  "cx": "",
+  "routing": ""
+}

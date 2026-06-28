@@ -1840,3 +1840,38 @@ Research a company's brand identity and produce use-case-specific brand-complian
 | `video_brief` | Motion graphics color spec, logo bug placement, voiceover tone direction, music mood descriptor |
 | `design_tokens` | W3C DTCG JSON code block, token mapping table, gap analysis |
 | `full_guidelines` | Comprehensive brand doc: identity, color system, logo usage, typography, tone of voice, coverage summary |
+
+### `company-recon`
+
+Multi-phase OSINT recon over a target company or domain. Orchestrates existing tools (`web_search`, `scrape_page`, `search_and_scrape`, `news_search`, `filing_search`, `research_export`) across up to 9 phases to produce a cited, confidence-tiered intelligence report. Uses the `osint` lens for web_search calls targeting OSINT data sources.
+
+No new Go dependencies — all data comes from free, publicly accessible endpoints (`crt.sh` JSON API, Wayback CDX API, HackerTarget, PublicWWW, etc.).
+
+#### Arguments
+
+| Argument | Required | Default | Description |
+|---|---|---|---|
+| `target` | yes | — | Company name, domain, or both — e.g. `"Acme Corp acme.com"` |
+| `depth` | no | `standard` | `quick` (phases 1+6+8+9), `standard` (phases 1–4+6–9), `deep` (all 9 phases) |
+| `focus` | no | general | `sales_intel`, `security`, `due_diligence`, `brand_protection` — adjusts phase emphasis |
+
+#### Phase map
+
+| Phase | Depth | Tools | Goal |
+|---|---|---|---|
+| 1 — Company Profiling | all | `web_search`, `search_and_scrape`, `news_search` | Identity, leadership, recent news |
+| 2 — Certificate Transparency | standard+deep | `scrape_page` (crt.sh JSON API) | Subdomain discovery via CT logs |
+| 3 — DNS / Infrastructure | standard+deep | `web_search` (osint lens), `scrape_page` (HackerTarget) | IP blocks, ASN, DNS history |
+| 4 — Archive Mining | standard+deep | `scrape_page` (Wayback CDX API) | URL patterns: login, API, admin, JS bundles |
+| 5 — Code / Config Search | deep only | `web_search` (osint lens, github.com) | SDK usage, config leaks in public repos |
+| 6 — Web / Content Discovery | all | `search_and_scrape`, `web_search` (osint lens) | Exposed login surfaces, forgotten subdomains |
+| 7 — Analytics Correlation | standard+deep | `scrape_page` (HackerTarget), `web_search` (PublicWWW) | Co-deployed sites via UA/GTM tags |
+| 8 — Business Intelligence | all | `web_search`, `news_search`, `filing_search` | Customers, filings, partnerships |
+| 9 — Confidence Scoring + Report | all | `research_export` | Consolidated report with CONFIRMED/STRONG/MODERATE/WEAK tiers |
+
+#### Known limitations
+
+- **GA4 analytics IDs (`G-XXXXXX`) cannot be reverse-correlated** — only Universal Analytics (`UA-XXXXXX`) and Google Tag Manager (`GTM-XXXXXX`) IDs work via HackerTarget/PublicWWW reverse-analytics lookup.
+- **Live JavaScript inspection** requires a Playwright MCP (if available); the prompt falls back to static source-code search.
+- **Shodan and Censys depth** is limited without API keys — infrastructure data comes from web-searchable pages only.
+- **GitHub Code Search** gives higher recall than `web_search` on `github.com`; use it if separately available.

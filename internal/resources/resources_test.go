@@ -858,3 +858,522 @@ func TestBrandGuidelinesPromptDescription(t *testing.T) {
 		t.Errorf("expected Description to contain 'Kaltura', got: %q", result.Description)
 	}
 }
+
+// ── company-recon prompt tests ────────────────────────────────────────────────
+
+func TestCompanyReconPromptRegistered(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	prompts, err := cs.ListPrompts(ctx, &mcp.ListPromptsParams{})
+	if err != nil {
+		t.Fatalf("ListPrompts failed: %v", err)
+	}
+	found := false
+	for _, pr := range prompts.Prompts {
+		if pr.Name == "company-recon" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected 'company-recon' in prompt list")
+	}
+}
+
+// TestCompanyReconPromptDefaultDepth verifies that the default depth is
+// "standard" and the prompt includes the expected phases.
+func TestCompanyReconPromptDefaultDepth(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "company-recon",
+		Arguments: map[string]string{"target": "Acme Corp acme.com"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	if len(result.Messages) == 0 {
+		t.Fatal("expected at least one message")
+	}
+	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+
+	// Standard depth: phases 1,2,3,4,6,7,8,9 — NOT phase 5
+	for _, want := range []string{
+		"Phase 1", "Phase 2", "Phase 3", "Phase 4",
+		"Phase 6", "Phase 7", "Phase 8", "Phase 9",
+		"Acme Corp acme.com",
+		"standard",
+		"osint",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("standard depth: expected %q in prompt, not found", want)
+		}
+	}
+	if strings.Contains(msg, "Phase 5") {
+		t.Error("standard depth: Phase 5 should NOT appear (deep only)")
+	}
+}
+
+// TestCompanyReconPromptQuickDepth verifies quick depth includes only phases 1, 6, 8, 9.
+func TestCompanyReconPromptQuickDepth(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "company-recon",
+		Arguments: map[string]string{"target": "TestCo", "depth": "quick"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+
+	for _, want := range []string{"Phase 1", "Phase 6", "Phase 8", "Phase 9", "quick"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("quick depth: expected %q in prompt", want)
+		}
+	}
+	for _, absent := range []string{"Phase 2", "Phase 3", "Phase 4", "Phase 5", "Phase 7"} {
+		if strings.Contains(msg, absent) {
+			t.Errorf("quick depth: %q should NOT appear", absent)
+		}
+	}
+}
+
+// TestCompanyReconPromptDeepDepth verifies deep depth includes all 9 phases.
+func TestCompanyReconPromptDeepDepth(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "company-recon",
+		Arguments: map[string]string{"target": "DeepCo deep.io", "depth": "deep"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+
+	for i := 1; i <= 9; i++ {
+		phase := fmt.Sprintf("Phase %d", i)
+		if !strings.Contains(msg, phase) {
+			t.Errorf("deep depth: expected %q in prompt", phase)
+		}
+	}
+}
+
+// TestCompanyReconPromptFocusSalesIntel verifies sales_intel focus guidance.
+func TestCompanyReconPromptFocusSalesIntel(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "company-recon",
+		Arguments: map[string]string{"target": "Vendor Inc vendor.com", "focus": "sales_intel"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	if !strings.Contains(msg, "sales_intel") {
+		t.Errorf("expected 'sales_intel' focus label in prompt")
+	}
+	if !strings.Contains(msg, "customer discovery") {
+		t.Errorf("expected 'customer discovery' guidance for sales_intel focus")
+	}
+}
+
+// TestCompanyReconPromptFocusSecurity verifies security focus guidance.
+func TestCompanyReconPromptFocusSecurity(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "company-recon",
+		Arguments: map[string]string{"target": "SecTarget sec.io", "focus": "security"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	if !strings.Contains(msg, "security") {
+		t.Errorf("expected 'security' in focus guidance")
+	}
+	if !strings.Contains(msg, "certificate transparency") {
+		t.Errorf("expected 'certificate transparency' emphasis for security focus")
+	}
+}
+
+// TestCompanyReconPromptFocusDueDiligence verifies due_diligence focus guidance.
+func TestCompanyReconPromptFocusDueDiligence(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "company-recon",
+		Arguments: map[string]string{"target": "Target Inc", "focus": "due_diligence"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	if !strings.Contains(msg, "due_diligence") {
+		t.Errorf("expected 'due_diligence' in focus guidance")
+	}
+	if !strings.Contains(msg, "SEC") {
+		t.Errorf("expected 'SEC' mentioned for due_diligence focus")
+	}
+}
+
+// TestCompanyReconPromptFocusBrandProtection verifies brand_protection focus.
+func TestCompanyReconPromptFocusBrandProtection(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "company-recon",
+		Arguments: map[string]string{"target": "BrandCo brand.com", "focus": "brand_protection"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	if !strings.Contains(msg, "brand_protection") {
+		t.Errorf("expected 'brand_protection' in focus guidance")
+	}
+	if !strings.Contains(msg, "look-alike") {
+		t.Errorf("expected 'look-alike' domain guidance for brand_protection focus")
+	}
+}
+
+// TestCompanyReconPromptContainsOsintLens verifies the osint lens is referenced.
+func TestCompanyReconPromptContainsOsintLens(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "company-recon",
+		Arguments: map[string]string{"target": "Widget Co widget.io"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	if !strings.Contains(msg, "lens: osint") {
+		t.Errorf("expected 'lens: osint' reference in prompt")
+	}
+}
+
+// TestCompanyReconPromptMentionsCrtSh verifies crt.sh CT endpoint is included.
+func TestCompanyReconPromptMentionsCrtSh(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "company-recon",
+		Arguments: map[string]string{"target": "Example Co example.com", "depth": "standard"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	if !strings.Contains(msg, "crt.sh") {
+		t.Errorf("expected 'crt.sh' endpoint in prompt for standard depth")
+	}
+}
+
+// TestCompanyReconPromptMentionsWayback verifies Wayback CDX endpoint is included.
+func TestCompanyReconPromptMentionsWayback(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "company-recon",
+		Arguments: map[string]string{"target": "Example Co example.com", "depth": "standard"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	if !strings.Contains(msg, "web.archive.org") {
+		t.Errorf("expected 'web.archive.org' CDX endpoint in prompt")
+	}
+}
+
+// TestCompanyReconPromptGA4LimitationDocumented verifies the GA4 limitation is noted
+// for every depth value.
+func TestCompanyReconPromptGA4LimitationDocumented(t *testing.T) {
+	t.Parallel()
+	for _, depth := range []string{"quick", "standard", "deep"} {
+		depth := depth
+		t.Run(depth, func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			m := metrics.NewCollector()
+			s, _ := session.NewManager(session.Config{MaxSessions: 10})
+			srv := createTestServer(m, s)
+			cs := connectTestClient(ctx, t, srv)
+			defer cs.Close()
+
+			result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+				Name:      "company-recon",
+				Arguments: map[string]string{"target": "TestCo test.com", "depth": depth},
+			})
+			if err != nil {
+				t.Fatalf("GetPrompt failed: %v", err)
+			}
+			msg := result.Messages[0].Content.(*mcp.TextContent).Text
+			if !strings.Contains(msg, "GA4") {
+				t.Errorf("depth=%s: expected GA4 limitation documented in prompt", depth)
+			}
+		})
+	}
+}
+
+// TestCompanyReconPromptConfidenceTiersIncluded verifies CONFIRMED/STRONG/MODERATE/WEAK tiers.
+func TestCompanyReconPromptConfidenceTiersIncluded(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "company-recon",
+		Arguments: map[string]string{"target": "Acme Corp acme.com", "depth": "standard"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	for _, tier := range []string{"CONFIRMED", "STRONG", "MODERATE", "WEAK"} {
+		if !strings.Contains(msg, tier) {
+			t.Errorf("expected confidence tier %q in prompt", tier)
+		}
+	}
+}
+
+// TestCompanyReconPromptResearchExportMentioned verifies research_export is referenced.
+func TestCompanyReconPromptResearchExportMentioned(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "company-recon",
+		Arguments: map[string]string{"target": "Acme Corp acme.com"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	if !strings.Contains(msg, "research_export") {
+		t.Errorf("expected 'research_export' tool referenced in prompt")
+	}
+}
+
+// TestCompanyReconPromptDescription verifies the prompt Description contains the target.
+func TestCompanyReconPromptDescription(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "company-recon",
+		Arguments: map[string]string{"target": "TargetCo target.io"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	if !strings.Contains(result.Description, "TargetCo target.io") {
+		t.Errorf("expected Description to contain target name, got: %q", result.Description)
+	}
+}
+
+// TestCompanyReconPhaseSetQuick is a unit test for companyReconPhaseSet.
+func TestCompanyReconPhaseSetQuick(t *testing.T) {
+	t.Parallel()
+	ps := companyReconPhaseSet("quick")
+	for _, must := range []string{"phase1", "phase6", "phase8", "phase9"} {
+		if !ps[must] {
+			t.Errorf("quick: expected %s to be active", must)
+		}
+	}
+	for _, absent := range []string{"phase2", "phase3", "phase4", "phase5", "phase7"} {
+		if ps[absent] {
+			t.Errorf("quick: expected %s to be inactive", absent)
+		}
+	}
+}
+
+// TestCompanyReconPhaseSetStandard is a unit test for companyReconPhaseSet.
+func TestCompanyReconPhaseSetStandard(t *testing.T) {
+	t.Parallel()
+	ps := companyReconPhaseSet("standard")
+	for _, must := range []string{"phase1", "phase2", "phase3", "phase4", "phase6", "phase7", "phase8", "phase9"} {
+		if !ps[must] {
+			t.Errorf("standard: expected %s to be active", must)
+		}
+	}
+	if ps["phase5"] {
+		t.Error("standard: phase5 should be inactive")
+	}
+}
+
+// TestCompanyReconPhaseSetDeep is a unit test for companyReconPhaseSet.
+func TestCompanyReconPhaseSetDeep(t *testing.T) {
+	t.Parallel()
+	ps := companyReconPhaseSet("deep")
+	for i := 1; i <= 9; i++ {
+		key := fmt.Sprintf("phase%d", i)
+		if !ps[key] {
+			t.Errorf("deep: expected %s to be active", key)
+		}
+	}
+}
+
+// TestCompanyReconPhaseSetDefault verifies unknown depth falls back to standard.
+func TestCompanyReconPhaseSetDefault(t *testing.T) {
+	t.Parallel()
+	ps := companyReconPhaseSet("unknown")
+	// Should match standard: phases 1-4, 6-9 active; 5 absent
+	for _, must := range []string{"phase1", "phase2", "phase3", "phase4", "phase6", "phase7", "phase8", "phase9"} {
+		if !ps[must] {
+			t.Errorf("default: expected %s to be active", must)
+		}
+	}
+	if ps["phase5"] {
+		t.Error("default: phase5 should be inactive")
+	}
+}
+
+// TestCompanyReconFocusGuidanceAllValues verifies every known focus value returns
+// a non-empty, distinct string.
+func TestCompanyReconFocusGuidanceAllValues(t *testing.T) {
+	t.Parallel()
+	focuses := []string{"sales_intel", "security", "due_diligence", "brand_protection", "", "unknown"}
+	seen := make(map[string]bool)
+	for _, f := range focuses {
+		got := companyReconFocusGuidance(f)
+		if got == "" {
+			t.Errorf("focus=%q returned empty guidance", f)
+		}
+		if seen[got] && f != "" && f != "unknown" {
+			t.Errorf("focus=%q returned duplicate guidance string", f)
+		}
+		seen[got] = true
+	}
+}
+
+// TestCompanyReconPromptMentionsFilingSearch verifies filing_search is referenced for BI.
+func TestCompanyReconPromptMentionsFilingSearch(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "company-recon",
+		Arguments: map[string]string{"target": "PublicCo pub.com", "depth": "standard"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	if !strings.Contains(msg, "filing_search") {
+		t.Errorf("expected 'filing_search' referenced in prompt for business intelligence phase")
+	}
+}
+
+// TestCompanyReconPromptMentionsHackerTarget verifies HackerTarget DNS endpoint is referenced.
+func TestCompanyReconPromptMentionsHackerTarget(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "company-recon",
+		Arguments: map[string]string{"target": "Example example.com", "depth": "standard"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	msg := result.Messages[0].Content.(*mcp.TextContent).Text
+	if !strings.Contains(msg, "hackertarget.com") {
+		t.Errorf("expected 'hackertarget.com' referenced in DNS phase")
+	}
+}
