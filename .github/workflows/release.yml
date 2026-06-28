@@ -1,4 +1,4 @@
-name: Release
+name: 🚀 Release
 
 on:
   push:
@@ -11,53 +11,86 @@ permissions:
   actions: read
 
 jobs:
+  # ── 🏗️ Core release ──────────────────────────────────────────────────────────
+  # Runs GoReleaser: cross-compiles, signs, notarizes, pushes Docker images,
+  # updates package-manager taps/manifests, publishes the GitHub Release, then
+  # attaches the SBOM, cosign signature, and .mcpb bundles.
+  #
+  # Fast-fail order (cheapest checks first):
+  #   Python drift → macOS chain → Choco CLI → Docker logins → GoReleaser → post-steps
   release:
-    name: Release
+    name: 🏗️ GoReleaser · Build & Publish
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@v6
+      - name: Set up Go
+        uses: actions/setup-go@v6
         with:
           go-version: "1.25.11"
           cache: true
 
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v4
+      # ── Fast-fail gates (before any slow or authenticated steps) ──────────────
+
+      # Verify the Python client was regenerated after the last schema change.
+      # The PR-based python-drift CI job is the primary gate; this is the final
+      # backstop for a tag pushed directly off main (bypassing a PR).
+      - name: Set up Python (for drift check)
+        uses: actions/setup-python@v6
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          python-version: "3.11"
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v4
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Verify Python client is up-to-date
+        run: make check-python-drift
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+      # Guard against the #204 regression: AMFI SIGKILLs a darwin binary whose
+      # Developer ID signature carries an UNSATISFIABLE designated requirement,
+      # which happens when the signing p12 lacks the full Apple chain (leaf-only
+      # → quill emits `certificate root[...]` instead of `certificate 1[...]`).
+      # The release runs on Linux (no codesign), so we verify the p12 STRUCTURE
+      # here with openssl and fail fast if the intermediate ("Developer ID
+      # Certification Authority") or the Apple Root CA is missing — before
+      # GoReleaser signs+notarizes+publishes a binary that would die on launch.
+      # Self-gates on MACOS_SIGN_P12 (no-op for runs without the cert).
+      - name: Verify macOS signing chain (fail fast on #204 regression)
+        env:
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          # Self-gate: no cert configured → skip cleanly (unsigned darwin build, as before).
+          if [ -z "${MACOS_SIGN_P12:-}" ]; then
+            echo "MACOS_SIGN_P12 unset — skipping chain check (darwin binaries ship unsigned)."
+            exit 0
+          fi
+          echo "$MACOS_SIGN_P12" | base64 -d > /tmp/devid.p12
+          subjects="$(openssl pkcs12 -in /tmp/devid.p12 -nokeys -legacy \
+            -passin "pass:$MACOS_SIGN_PASSWORD" 2>/dev/null \
+            | openssl crl2pkcs7 -nocrl -certfile /dev/stdin 2>/dev/null \
+            | openssl pkcs7 -print_certs -noout 2>/dev/null \
+            | grep '^subject' || true)"
+          rm -f /tmp/devid.p12
+          echo "Certificates in MACOS_SIGN_P12:"
+          echo "$subjects"
+          missing=0
+          echo "$subjects" | grep -q "Developer ID Application" \
+            || { echo "::error::MACOS_SIGN_P12 is missing the Developer ID Application leaf cert"; missing=1; }
+          echo "$subjects" | grep -q "Developer ID Certification Authority" \
+            || { echo "::error::MACOS_SIGN_P12 is missing the 'Developer ID Certification Authority' intermediate — AMFI will SIGKILL the binary (#204). Re-export the p12 with the full chain."; missing=1; }
+          echo "$subjects" | grep -q "Apple Root CA" \
+            || { echo "::error::MACOS_SIGN_P12 is missing the Apple Root CA — AMFI will SIGKILL the binary (#204). Re-export the p12 with the full chain."; missing=1; }
+          [ "$missing" -eq 0 ] && echo "macOS signing chain OK: leaf + intermediate + root all present."
+          exit "$missing"
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-        with:
-          platforms: linux/amd64,linux/arm64
-
-      - name: Install cosign
-        uses: sigstore/cosign-installer@v3
-
-      - name: Install Syft
-        uses: anchore/sbom-action/download-syft@v0
-
-      # ── Chocolatey publishing prerequisite ──────────────────────────────────
+      # ── Chocolatey publishing prerequisite ────────────────────────────────────
       # GoReleaser's `chocolateys` pipe shells out to the `choco` CLI to build the
       # .nupkg, which isn't present on the Linux runner. We install it (under mono)
       # ONLY when CHOCOLATEY_API_KEY is configured; otherwise we tell GoReleaser to
       # skip the chocolatey pipe so the release never fails for an unset secret
       # (mirrors the AZURE_SIGNING_ENABLED / MACOS_SIGN_P12 gating philosophy).
-      - name: Set up Chocolatey (only when key is configured)
+      - name: Set up Chocolatey CLI (only when key is configured)
         id: choco
         env:
           CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
@@ -146,54 +179,36 @@ jobs:
 
           echo "skip_choco=$skip" >> "$GITHUB_OUTPUT"
 
-      # Guard against the #204 regression: AMFI SIGKILLs a darwin binary whose
-      # Developer ID signature carries an UNSATISFIABLE designated requirement,
-      # which happens when the signing p12 lacks the full Apple chain (leaf-only
-      # → quill emits `certificate root[...]` instead of `certificate 1[...]`).
-      # The release runs on Linux (no codesign), so we verify the p12 STRUCTURE
-      # here with openssl and fail fast if the intermediate ("Developer ID
-      # Certification Authority") or the Apple Root CA is missing — before
-      # GoReleaser signs+notarizes+publishes a binary that would die on launch.
-      # Self-gates on MACOS_SIGN_P12 (no-op for runs without the cert).
-      - name: Verify macOS signing chain (fail fast on #204 regression)
-        env:
-          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
-          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
-        run: |
-          set -euo pipefail
-          # Self-gate: no cert configured → skip cleanly (unsigned darwin build, as before).
-          if [ -z "${MACOS_SIGN_P12:-}" ]; then
-            echo "MACOS_SIGN_P12 unset — skipping chain check (darwin binaries ship unsigned)."
-            exit 0
-          fi
-          echo "$MACOS_SIGN_P12" | base64 -d > /tmp/devid.p12
-          subjects="$(openssl pkcs12 -in /tmp/devid.p12 -nokeys -legacy \
-            -passin "pass:$MACOS_SIGN_PASSWORD" 2>/dev/null \
-            | openssl crl2pkcs7 -nocrl -certfile /dev/stdin 2>/dev/null \
-            | openssl pkcs7 -print_certs -noout 2>/dev/null \
-            | grep '^subject' || true)"
-          rm -f /tmp/devid.p12
-          echo "Certificates in MACOS_SIGN_P12:"
-          echo "$subjects"
-          missing=0
-          echo "$subjects" | grep -q "Developer ID Application" \
-            || { echo "::error::MACOS_SIGN_P12 is missing the Developer ID Application leaf cert"; missing=1; }
-          echo "$subjects" | grep -q "Developer ID Certification Authority" \
-            || { echo "::error::MACOS_SIGN_P12 is missing the 'Developer ID Certification Authority' intermediate — AMFI will SIGKILL the binary (#204). Re-export the p12 with the full chain."; missing=1; }
-          echo "$subjects" | grep -q "Apple Root CA" \
-            || { echo "::error::MACOS_SIGN_P12 is missing the Apple Root CA — AMFI will SIGKILL the binary (#204). Re-export the p12 with the full chain."; missing=1; }
-          [ "$missing" -eq 0 ] && echo "macOS signing chain OK: leaf + intermediate + root all present."
-          exit "$missing"
+      # ── Registry auth + build infrastructure ─────────────────────────────────
 
-      # Verify the Python client was regenerated before tagging. The PR-based
-      # python-drift CI job is the primary gate, but a tag pushed directly off
-      # main (bypassing a PR) could otherwise publish a stale client to PyPI.
-      - name: Verify Python client is up-to-date
-        uses: actions/setup-python@v6
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
         with:
-          python-version: "3.11"
-      - name: Check Python client drift
-        run: make check-python-drift
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Set up QEMU (arm64 cross-compile)
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: linux/amd64,linux/arm64
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Install Syft (SBOM generation)
+        uses: anchore/sbom-action/download-syft@v0
+
+      # ── GoReleaser — the core release step ────────────────────────────────────
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
@@ -238,9 +253,9 @@ jobs:
       # builds[].hooks.post wrapper (scripts/sign-windows.sh), so the signed .exe
       # is the one GoReleaser archives, checksums, and publishes to Scoop/WinGet/
       # Cask — eliminating the old post-GoReleaser re-zip + checksum-rewrite step
-      # and the manifest hash drift it caused. The Azure secrets +
-      # AZURE_SIGNING_ENABLED are threaded into the "Run GoReleaser" step's env
-      # above; the wrapper self-gates (no-op for non-windows / when disabled).
+      # and the manifest hash drift it caused.
+
+      # ── Post-release artifact attachment ─────────────────────────────────────
 
       - name: Build .mcpb bundles
         run: |
@@ -265,45 +280,55 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload ${{ github.ref_name }} sbom-web-researcher-mcp.spdx.json --clobber
+          gh release upload "${{ github.ref_name }}" sbom-web-researcher-mcp.spdx.json --clobber
 
-      - name: Sign release artifacts with cosign
-        run: |
-          for asset in dist/checksums.txt; do
-            if [ -f "$asset" ]; then
-              cosign sign-blob --yes "$asset" --output-signature "${asset}.sig" --output-certificate "${asset}.pem"
-              gh release upload ${{ github.ref_name }} "${asset}.sig" "${asset}.pem" --clobber
-            fi
-          done
+      - name: Sign checksums.txt with cosign (keyless OIDC)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          CHECKSUM_FILE="dist/checksums.txt"
+          if [ ! -f "$CHECKSUM_FILE" ]; then
+            echo "::error::dist/checksums.txt not found — GoReleaser may have failed"
+            exit 1
+          fi
+          cosign sign-blob --yes "$CHECKSUM_FILE" \
+            --output-signature "${CHECKSUM_FILE}.sig" \
+            --output-certificate "${CHECKSUM_FILE}.pem"
+          gh release upload "${{ github.ref_name }}" \
+            "${CHECKSUM_FILE}.sig" "${CHECKSUM_FILE}.pem" --clobber
 
       # Persist the cross-compiled (and signed/notarized) binaries so the
       # downstream publish-pypi job can wrap them into wheels WITHOUT re-running
-      # GoReleaser. Positioned LAST and continue-on-error so a missing-glob (e.g. a
+      # GoReleaser. Positioned last and continue-on-error so a missing-glob (e.g. a
       # future GOAMD64 dist-dir rename) can never abort the core release's
       # cosign/SBOM/.mcpb steps — the wheels just don't publish that run.
-      - name: Upload dist binaries for wheel build
+      # if-no-files-found: warn matches the continue-on-error intent (degrade,
+      # don't fail — the file list is GoReleaser's output, not ours).
+      - name: Upload dist binaries artifact (for PyPI wheel build)
         if: ${{ vars.PYPI_PUBLISH_ENABLED == 'true' }}
         continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: dist-binaries
           retention-days: 1
-          if-no-files-found: error
+          if-no-files-found: warn
           path: |
             dist/web-researcher-mcp_*/web-researcher-mcp
             dist/web-researcher-mcp_*/web-researcher-mcp.exe
 
+  # ── 🐳 Docker image signing ───────────────────────────────────────────────────
+  # Fetches the image digest from GHCR and signs it with cosign using GitHub's
+  # OIDC identity, creating a publicly verifiable Sigstore signature.
   docker-sign:
-    name: Sign Docker Images
+    name: 🐳 Sign Docker Images
     runs-on: ubuntu-latest
     needs: release
     steps:
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
 
-      - name: Login to GitHub Container Registry
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -316,14 +341,19 @@ jobs:
           DIGEST=$(docker buildx imagetools inspect "$IMAGE" --format '{{json .Manifest}}' | jq -r '.digest')
           cosign sign --yes "ghcr.io/zoharbabin/web-researcher-mcp@${DIGEST}"
 
+  # ── 📋 MCP Registry ───────────────────────────────────────────────────────────
+  # Re-syncs the version string and publishes to the MCP Registry via
+  # mcp-publisher + GitHub OIDC authentication. Depends on `release` (not
+  # `docker-sign`) — the registry needs the GitHub Release to exist, not the
+  # Docker signature, so there's no reason to wait for the signing job.
   publish-mcp-registry:
-    name: Publish to MCP Registry
+    name: 📋 Publish → MCP Registry
     runs-on: ubuntu-latest
-    needs: docker-sign
+    needs: release
     steps:
       - uses: actions/checkout@v7
 
-      - name: Sync version references for publish
+      - name: Sync version for publish
         run: |
           echo "${GITHUB_REF_NAME#v}" > VERSION
           bash scripts/sync-version.sh
@@ -337,20 +367,21 @@ jobs:
         run: ./mcp-publisher login github-oidc
 
       - name: Publish to MCP Registry
-        run: ./mcp-publisher publish || echo "MCP Registry publish failed (may already exist)"
+        run: |
+          ./mcp-publisher publish \
+            || echo "::warning::MCP Registry publish failed — check registry manually (may already exist or OIDC expired)"
 
+  # ── 🔨 Smithery ───────────────────────────────────────────────────────────────
+  # Publishes the .mcpb bundle to Smithery. Downloads the bundle that was already
+  # built and uploaded by the `release` job — no need to rebuild from source.
+  # Gated on SMITHERY_ENABLED so an unconfigured fork is a clean no-op.
   publish-smithery:
-    name: Publish to Smithery
+    name: 🔨 Publish → Smithery
     runs-on: ubuntu-latest
     needs: release
     if: ${{ vars.SMITHERY_ENABLED == 'true' }}
     steps:
       - uses: actions/checkout@v7
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version: "1.25.11"
-          cache: true
 
       - uses: actions/setup-node@v6
         with:
@@ -359,10 +390,15 @@ jobs:
       - name: Install Smithery CLI
         run: npm install -g @smithery/cli
 
-      - name: Build .mcpb bundle
+      - name: Download .mcpb bundle from release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          sudo apt-get install -y jq zip
-          bash scripts/build-mcpb.sh "${GITHUB_REF_NAME}"
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p dist/mcpb
+          gh release download "${GITHUB_REF_NAME}" \
+            --pattern "web-researcher-mcp_${VERSION}_linux_amd64.mcpb" \
+            --dir dist/mcpb
 
       - name: Publish to Smithery
         env:
@@ -372,15 +408,16 @@ jobs:
           mkdir -p "$HOME/.config/smithery"
           echo "{\"apiKey\":\"${SMITHERY_API_KEY}\"}" > "$HOME/.config/smithery/settings.json"
           smithery mcp publish "dist/mcpb/web-researcher-mcp_${VERSION}_linux_amd64.mcpb" \
-            -n web-researcher-mcp/web-researcher-mcp || echo "Smithery publish failed (non-fatal)"
+            -n web-researcher-mcp/web-researcher-mcp \
+            || echo "::warning::Smithery publish failed (may already exist or API key expired)"
 
-  # PyPI platform wheels for uvx/uv/pip (#160). A SEPARATE downstream job, off the
-  # release job's critical path: a PyPI hiccup can never abort the cosign/SBOM/.mcpb
-  # post-steps (the hard-won release-pipeline lesson). Gated on the repo var so an
-  # unconfigured repo is a clean no-op; publishes via Trusted Publishing (OIDC),
-  # no token secret. skip-existing tolerates a partial-failure re-run.
+  # ── 🐍 PyPI platform wheels ───────────────────────────────────────────────────
+  # Wraps the cross-compiled binaries (built by the `release` job) into platform
+  # wheels for uvx/uv/pip. Publishes via Trusted Publishing (OIDC — no token
+  # secret). skip-existing tolerates partial-failure re-runs.
+  # Gated on PYPI_PUBLISH_ENABLED so an unconfigured fork is a clean no-op.
   publish-pypi:
-    name: Publish to PyPI
+    name: 🐍 Publish → PyPI
     runs-on: ubuntu-latest
     needs: release
     if: ${{ vars.PYPI_PUBLISH_ENABLED == 'true' }}
@@ -394,7 +431,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Download dist binaries
+      - name: Download dist binaries from release job
         uses: actions/download-artifact@v8
         with:
           name: dist-binaries
@@ -403,7 +440,7 @@ jobs:
       - name: Build platform wheels
         run: python3 scripts/build_wheels.py "${GITHUB_REF_NAME#v}" --dist dist --out dist/wheels
 
-      - name: Smoke-test one wheel (import check)
+      - name: Smoke-test manylinux wheel (import check)
         run: |
           # Install the linux/amd64 (manylinux) wheel and verify the package is
           # importable with its full public API surface — catches wheel assembly
@@ -428,17 +465,17 @@ jobs:
           packages-dir: dist/wheels
           skip-existing: true
 
-  # ── Update AUR + Nix packaging manifests ─────────────────────────────────────
-  # Runs after the release job completes so checksums.txt is available on the
-  # GitHub release page. Opens a PR to bump PKGBUILD/.SRCINFO/flake.nix so the
-  # change goes through branch protection like all other commits, then
-  # auto-merges it with --admin once CI on the packaging PR passes.
+  # ── 📦 AUR + Nix packaging manifests ─────────────────────────────────────────
+  # Runs after `release` so checksums.txt is available on the GitHub Release.
+  # Opens a PR to bump PKGBUILD/.SRCINFO/flake.nix so the change goes through
+  # branch protection like all other commits, then auto-merges it with --admin
+  # once the validate-packaging CI job passes.
   #
   # Gated on PACKAGING_UPDATE_ENABLED so an unconfigured fork is a clean no-op.
-  # No special bypass token is needed — the PR flow is fully compatible with
+  # No special bypass token needed — the PR flow is fully compatible with
   # branch-protection rules that require PRs.
   update-packaging:
-    name: Update AUR + Nix packaging
+    name: 📦 Update Packaging Manifests
     runs-on: ubuntu-latest
     needs: release
     if: ${{ vars.PACKAGING_UPDATE_ENABLED == 'true' }}
@@ -451,7 +488,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Configure git
+      - name: Configure git identity
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -464,7 +501,7 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           bash scripts/update-packaging.sh "$VERSION"
 
-      - name: Open PR for packaging update
+      - name: Open PR and enable auto-merge
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

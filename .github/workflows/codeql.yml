@@ -1,4 +1,4 @@
-name: CodeQL
+name: 🔍 CodeQL Security Analysis
 
 on:
   push:
@@ -25,18 +25,18 @@ permissions:
   security-events: write
 
 jobs:
+  # ── 🔍 CodeQL ─────────────────────────────────────────────────────────────────
+  # Runs GitHub's CodeQL engine with `security-extended,security-and-quality`
+  # query suites. Results appear in Security → Code scanning. Findings must be
+  # addressed or dismissed before they accumulate.
   analyze:
-    name: Analyze
+    name: 🔍 CodeQL · Go
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        language: [go]
-
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v6
+      - name: Set up Go
+        uses: actions/setup-go@v6
         with:
           go-version: "1.25.11"
           cache: true
@@ -44,7 +44,7 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
-          languages: ${{ matrix.language }}
+          languages: go
           queries: security-extended,security-and-quality
 
       - name: Autobuild
@@ -53,4 +53,4 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
         with:
-          category: "/language:${{ matrix.language }}"
+          category: "/language:go"

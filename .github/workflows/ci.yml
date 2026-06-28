@@ -1,4 +1,4 @@
-name: CI
+name: ⚙️ CI
 
 on:
   push:
@@ -19,18 +19,15 @@ permissions:
   contents: read
 
 jobs:
-  # Detects whether this push/PR touches anything that needs the heavy Go jobs
-  # (build, test, e2e, security, docker). Docs/meta-only changes set code=false
-  # so those jobs skip — a skipped *required* job reports as "skipped", which
-  # branch protection counts as passing, so docs PRs go green in seconds without
-  # getting stuck on never-reported required checks.
-  #
-  # Allowlist semantics: a change skips heavy CI ONLY when EVERY changed file
-  # matches a known-harmless pattern. Anything unrecognized (any .go, go.mod,
-  # Dockerfile, Makefile, workflow, lenses/**, etc.) defaults to code=true →
-  # full CI. Safer to over-run than to skip a security scan on real code.
+  # ── 🔍 Change detector ────────────────────────────────────────────────────────
+  # Classifies each push/PR as "code change" (full CI) or "harmless"
+  # (docs/assets/packaging only → skip heavy Go jobs so those PRs go green fast).
+  # Allowlist: ALL changed files must match to skip. One unrecognised file
+  # (.go, Dockerfile, Makefile, workflow, lenses/) triggers code=true.
+  # A skipped *required* check reports "skipped" — branch protection counts it as
+  # passing, so docs PRs are never stuck on checks that have nothing to run.
   changes:
-    name: Detect changes
+    name: 🔍 Detect Changed Files
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.filter.outputs.code }}
@@ -56,8 +53,8 @@ jobs:
           fi
           files=$(git diff --name-only "$base" HEAD)
           echo "Changed files:"; echo "$files"
-          # A file is "harmless" if it matches the allowlist below; if ANY
-          # changed file is not harmless, run full CI (code=true).
+          # A file is "harmless" if it matches the allowlist; if ANY changed
+          # file is not harmless, run full CI (code=true).
           code=false
           while IFS= read -r f; do
             [ -z "$f" ] && continue
@@ -71,8 +68,15 @@ jobs:
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "Decision: code=$code"
 
+  # ── Always-run gates (every PR, even docs-only) ───────────────────────────────
+  # These never skip. They catch cross-cutting drift that a change detector can't
+  # safely filter: docs/code drift, Python client drift, packaging consistency.
+
+  # 🧹 Lint — fast formatting + static analysis gate. Gates test and security.
   lint:
-    name: Lint
+    name: 🧹 Lint
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -97,50 +101,11 @@ jobs:
           version: v2.12
           args: --timeout=5m
 
-  test:
-    name: Test (Go ${{ matrix.go-version }})
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        go-version: ["1.25.11"]
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version: ${{ matrix.go-version }}
-          cache: true
-
-      - name: Run tests with race detector and coverage
-        run: go test -race -coverprofile=coverage.out -covermode=atomic -count=1 ./...
-
-      - name: Upload coverage to Codecov
-        if: matrix.go-version == '1.25.11'
-        uses: codecov/codecov-action@v7
-        with:
-          files: ./coverage.out
-          flags: unittests
-          fail_ci_if_error: false
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-
-      - name: Upload coverage artifact
-        if: matrix.go-version == '1.25.11'
-        uses: actions/upload-artifact@v7
-        with:
-          name: coverage
-          path: coverage.out
-          retention-days: 7
-
-  # Always-run doc/annotation drift gate. The full `test` job is skipped on
-  # docs-only PRs (code=false), which would let a docs/TOOLS.md edit drift from
-  # the registry undetected. This narrow, fast job runs on EVERY PR — including
-  # docs-only ones — so docs↔code drift always fails CI.
+  # 📄 Docs drift — docs/TOOLS.md ↔ registry drift. Runs on EVERY PR including
+  # docs-only ones: a docs-only change could introduce registry drift and the
+  # gated `test` job would never catch it.
   docs-drift:
-    name: Docs drift gate
+    name: 📄 Docs ↔ Registry Drift
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -154,12 +119,11 @@ jobs:
             -run 'TestToolsDocMatchesRegistry|TestOutputSchemaMatchesResponse|TestToolDescriptionQuality|TestAllToolsHaveAnnotations|TestAllToolsRegistered|TestAllToolsHaveOutputSchema|TestExternalContentToolsCarryTrustMarker' \
             ./internal/tools/...
 
-  # Always-run Python client drift gate. Regenerates the Python client from the
-  # live Go schemas and fails if the committed files would change.  Runs on every
-  # PR so a Go schema change that was not followed by `make gen-python-client`
-  # is caught even on code-only PRs that skip the docs gate.
+  # 🐍 Python client drift — regenerated client must match live Go schemas.
+  # Runs on every PR so a schema change without `make gen-python-client` is caught
+  # even on code-only PRs that skip the docs gate.
   python-drift:
-    name: Python client drift gate
+    name: 🐍 Python Client Drift
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -173,10 +137,9 @@ jobs:
       - name: Verify Python client matches Go schemas
         run: make check-python-drift
 
-  # Always-run Python test suite. Runs on every PR so Python regressions are
-  # caught even on code-only PRs that skip the docs gate.
+  # 🧪 Python SDK tests — unit + integration tests (mock HTTP, no binary needed).
   test-python:
-    name: Python SDK tests
+    name: 🧪 Test · Python SDK
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -188,167 +151,16 @@ jobs:
       - name: Run Python SDK tests
         run: python3 -m pytest tests/python/ --ignore=tests/python/test_live_e2e.py -v
 
-  e2e:
-    name: E2E (STDIO, network-free)
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version: "1.25.11"
-          cache: true
-
-      # The security + lifecycle e2e tests are network-free (they assert on
-      # blocked schemes, private IPs, schema validation, session crypto,
-      # secrets masking, the HTTP transport boundary, and the OAuth/scope gate)
-      # so they run deterministically without API keys (DuckDuckGo is the
-      # zero-config search fallback). Live-provider e2e tests self-skip when
-      # keys are absent.
-      #
-      # The -run alternation MUST match the new test name prefixes
-      # (TestHTTP_/TestOAuth_) or they pass locally but never run here — a silent
-      # coverage gap. Enforced by naming convention.
-      - name: Run E2E security + lifecycle suite (STDIO + HTTP + OAuth)
-        run: go test -race -tags=e2e -count=1 -run 'TestSecurity_STDIO|TestMCPLifecycle|TestHTTP_|TestOAuth_' ./tests/e2e/...
-
-  docker-smoke:
-    name: Docker HTTP smoke
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # Builds the shipped image and drives MCP over HTTP end-to-end
-      # (initialize + web_search) with PORT set and NO stdin attached — the
-      # regression guard for the HTTP-lifecycle fix (a container must not exit
-      # on stdin EOF) and for the keyless zero-config startup path. No API keys:
-      # DuckDuckGo is the zero-config search fallback. The image bakes in
-      # Chromium but the smoke does not exercise the browser tier (deterministic,
-      # fast). The script dumps `docker logs` on any failure for diagnosability.
-      - name: Build image and smoke-test HTTP transport
-        run: make docker-smoke
-
-  build:
-    name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        goos: [linux, darwin, windows]
-        goarch: [amd64, arm64]
-        exclude:
-          - goos: windows
-            goarch: arm64
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version: "1.25.11"
-          cache: true
-
-      - name: Build binary
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: "0"
-        run: |
-          EXTENSION=""
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            EXTENSION=".exe"
-          fi
-          go build \
-            -ldflags="-s -w -X main.version=${{ github.sha }}" \
-            -o "web-researcher-mcp-${{ matrix.goos }}-${{ matrix.goarch }}${EXTENSION}" \
-            ./cmd/web-researcher-mcp
-
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: binary-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: web-researcher-mcp-*
-          retention-days: 7
-
-  security:
-    name: Security
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version: "1.25.11"
-          cache: true
-
-      # govulncheck + gosec are pinned as go.mod tool directives, so versions
-      # are identical to what contributors run locally via `make vuln` / `make sec`.
-      - name: Run govulncheck
-        run: go tool govulncheck ./...
-
-      # gosec: Go security scanner (injection, weak crypto, SSRF sinks, unsafe
-      # file ops). Tuned signal-only (G104 covered by golangci-lint errcheck;
-      # tests excluded). Genuinely-safe sites carry inline `// #nosec` reasons.
-      - name: Run gosec
-        run: go tool gosec -exclude=G104 -exclude-dir=tests -quiet ./...
-
-  # Manual-dispatch Python SDK live E2E tests. Builds the Go binary from source
-  # and drives the SDK against real external APIs. Keyless providers (DuckDuckGo,
-  # PubMed, World Bank, ClinicalTrials.gov) run unconditionally; keyed providers
-  # skip when the relevant secret is absent. NOT part of the required CI gate —
-  # opt-in only via workflow_dispatch to avoid flaky failures on rate-limits.
-  python-live-e2e:
-    name: Python SDK live E2E
-    runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_python_live == 'true' }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version: "1.25.11"
-          cache: true
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
-      - name: Install pytest
-        run: python3 -m pip install --upgrade pytest
-
-      - name: Run Python SDK live E2E tests
-        env:
-          GOOGLE_CUSTOM_SEARCH_API_KEY: ${{ secrets.GOOGLE_CUSTOM_SEARCH_API_KEY }}
-          GOOGLE_CUSTOM_SEARCH_ID: ${{ secrets.GOOGLE_CUSTOM_SEARCH_ID }}
-          BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
-        run: make test-python-live
-
-  # Validates that packaging/aur/PKGBUILD, packaging/aur/.SRCINFO, and
-  # packaging/nix/flake.nix are internally consistent: version strings match,
-  # SHA256 values are syntactically correct, and the PKGBUILD lints clean.
-  # Runs on every PR touching packaging/ to catch version drift before release.
+  # 📦 Packaging validation — PKGBUILD / .SRCINFO / flake.nix version + hash
+  # consistency. Catches drift before it ships in a release.
   validate-packaging:
-    name: Validate packaging manifests
+    name: 📦 Validate Packaging
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install namcap (AUR PKGBUILD linter)
+      - name: Validate PKGBUILD syntax and required fields
         run: |
-          sudo apt-get update -qq
-          # namcap isn't in Ubuntu apt; use the static pacman-dev approach via a
-          # minimal check: validate PKGBUILD syntax with bash and key field presence.
-          echo "Validating PKGBUILD fields..."
           bash -n packaging/aur/PKGBUILD
           for field in pkgname pkgver pkgrel arch url license; do
             grep -q "^${field}=" packaging/aur/PKGBUILD || \
@@ -410,3 +222,190 @@ jobs:
             exit 1
           fi
           echo "flake.nix SRI hashes OK (${count} platforms)"
+
+  # ── Code-only jobs (skipped on docs/packaging/assets PRs) ────────────────────
+
+  # 🧪 Go tests — unit + integration with race detector.
+  # Waits for lint so a formatting failure doesn't waste test compute.
+  test:
+    name: 🧪 Test · Go ${{ matrix.go-version }}
+    needs: [changes, lint]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: ["1.25.11"]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true
+
+      - name: Run tests with race detector and coverage
+        run: go test -race -coverprofile=coverage.out -covermode=atomic -count=1 ./...
+
+      - name: Upload coverage to Codecov
+        if: matrix.go-version == '1.25.11'
+        uses: codecov/codecov-action@v7
+        with:
+          files: ./coverage.out
+          flags: unittests
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage artifact
+        if: matrix.go-version == '1.25.11'
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: coverage.out
+          retention-days: 7
+
+  # 🔬 E2E — security + lifecycle tests (STDIO + HTTP + OAuth). Network-free:
+  # tests assert on blocked schemes, private IPs, schema validation, session
+  # crypto, secrets masking, and the OAuth/scope gate. Waits for unit tests
+  # so a basic test failure doesn't spin up the E2E suite unnecessarily.
+  e2e:
+    name: 🔬 E2E · Security + Lifecycle
+    needs: [changes, test]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.11"
+          cache: true
+
+      # The -run alternation MUST match the test name prefixes (TestHTTP_/TestOAuth_)
+      # or they pass locally but never run here — a silent coverage gap.
+      - name: Run E2E security + lifecycle suite (STDIO + HTTP + OAuth)
+        run: go test -race -tags=e2e -count=1 -run 'TestSecurity_STDIO|TestMCPLifecycle|TestHTTP_|TestOAuth_' ./tests/e2e/...
+
+  # 🐳 Docker smoke — builds the shipped image and drives MCP over HTTP
+  # end-to-end (initialize + web_search). The regression guard for the
+  # HTTP-lifecycle fix (container must not exit on stdin EOF). Waits for
+  # unit tests so a test failure doesn't spin up a full Docker build.
+  docker-smoke:
+    name: 🐳 Docker Smoke Test
+    needs: [changes, test]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image and smoke-test HTTP transport
+        run: make docker-smoke
+
+  # 🏗️ Build — cross-compile for all platforms. Runs in parallel with test/lint
+  # so cross-compilation failures surface quickly alongside other CI feedback.
+  build:
+    name: 🏗️ Build · ${{ matrix.goos }}/${{ matrix.goarch }}
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+        exclude:
+          - goos: windows
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.11"
+          cache: true
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          EXTENSION=""
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            EXTENSION=".exe"
+          fi
+          go build \
+            -ldflags="-s -w -X main.version=${{ github.sha }}" \
+            -o "web-researcher-mcp-${{ matrix.goos }}-${{ matrix.goarch }}${EXTENSION}" \
+            ./cmd/web-researcher-mcp
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: binary-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: web-researcher-mcp-*
+          retention-days: 7
+
+  # 🛡️ Security scan — govulncheck + gosec. Waits for lint so a formatting
+  # failure doesn't waste the AST scan. govulncheck and gosec are pinned as
+  # go.mod tool directives (same versions as `make vuln` / `make sec` locally).
+  security:
+    name: 🛡️ Security Scan
+    needs: [changes, lint]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.11"
+          cache: true
+
+      # govulncheck: known CVEs in module dependencies.
+      - name: Run govulncheck
+        run: go tool govulncheck ./...
+
+      # gosec: injection, weak crypto, SSRF sinks, unsafe file ops.
+      # G104 excluded (covered by golangci-lint errcheck); tests excluded.
+      - name: Run gosec
+        run: go tool gosec -exclude=G104 -exclude-dir=tests -quiet ./...
+
+  # ── Manual-dispatch only ──────────────────────────────────────────────────────
+
+  # 🐍 Python live E2E — hits real external APIs. Keyless providers
+  # (DuckDuckGo, PubMed, World Bank, ClinicalTrials.gov) run unconditionally;
+  # keyed providers self-skip when secrets are absent. NOT a required gate —
+  # opt-in only via workflow_dispatch to avoid flaky failures on rate limits.
+  # Waits for Python SDK tests and drift gate so we don't waste live API calls
+  # on a broken SDK build.
+  python-live-e2e:
+    name: 🐍 Live E2E · Python SDK
+    needs: [test-python, python-drift]
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_python_live == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.11"
+          cache: true
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install pytest
+        run: python3 -m pip install --upgrade pytest
+
+      - name: Run Python SDK live E2E tests
+        env:
+          GOOGLE_CUSTOM_SEARCH_API_KEY: ${{ secrets.GOOGLE_CUSTOM_SEARCH_API_KEY }}
+          GOOGLE_CUSTOM_SEARCH_ID: ${{ secrets.GOOGLE_CUSTOM_SEARCH_ID }}
+          BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
+        run: make test-python-live
