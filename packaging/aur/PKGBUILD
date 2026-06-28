@@ -1,6 +1,6 @@
 # Maintainer: Zohar Babin <zohar.babin@kaltura.com>
 pkgname=web-researcher-mcp
-pkgver=1.36.4
+pkgver=1.37.0
 pkgrel=1
 pkgdesc="Your AI research assistant that cites real sources and stays honest"
 arch=('x86_64' 'aarch64')
