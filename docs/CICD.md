@@ -1,40 +1,38 @@
 # CI/CD Guide
 
-One-stop reference for the three workflow files that govern every code change, release, and docs update in this repo. Read this when you're debugging a failed run, adding a new job, or preparing a release.
+One-stop reference for the four workflow files that govern every code change, release, and docs update in this repo. Read this when you're debugging a failed run, adding a new job, or preparing a release.
 
 ---
 
 ## 🗺️ At a glance
 
 ```
-Every push / PR                     v* tag push
-       │                                  │
-       ▼                                  ▼
- ┌──────────────┐                ┌──────────────────┐
- │   ci.yml     │                │   release.yml    │
- │  (gate)      │                │  (publish)       │
- └──────┬───────┘                └────────┬─────────┘
-        │                                 │
-  change detector                    [release job]
-  ┌─────┴──────────────────────────────────────────────┐
-  │ always-run              code-only                  │
-  │ ─────────               ─────────                  │
-  │ • lint                  • test (race)               │
-  │ • docs-drift            • e2e (STDIO + HTTP + OAuth)│
-  │ • python-drift          • docker-smoke              │
-  │ • test-python           • build (5 platforms)       │
-  │ • validate-packaging    • security (vuln + gosec)   │
-  └────────────────────────────────────────────────────┘
-                                         │
-                          ┌──────────────┼──────────────────┐
-                          ▼              ▼                   ▼
-                   docker-sign    publish-mcp-registry  (after docker-sign)
-                   publish-smithery
-                   publish-pypi
-                   update-packaging   ← 🆕 now fully automated via PR
+Every push / PR                         v* tag push
+       │                                     │
+       ▼                                     ▼
+ ┌───────────────────┐             ┌──────────────────────┐
+ │  ⚙️ ci.yml         │             │  🚀 release.yml       │
+ │  (merge gate)     │             │  (publish pipeline)  │
+ └─────────┬─────────┘             └──────────┬───────────┘
+           │                                  │
+    change detector                 🏗️ GoReleaser · Build & Publish
+    ┌───────┴────────────────────────────────────────────────────┐
+    │ always-run (every PR)     code-only (skipped on docs PRs)  │
+    │ ─────────────────         ─────────────────────────────    │
+    │ 🧹 lint                   🧪 test (race detector)          │
+    │ 📄 docs-drift             🔬 e2e (STDIO + HTTP + OAuth)    │
+    │ 🐍 python-drift           🐳 docker-smoke                  │
+    │ 🧪 test-python            🏗️ build (5 platforms)           │
+    │ 📦 validate-packaging     🛡️ security (vuln + gosec)       │
+    └────────────────────────────────────────────────────────────┘
+                                          │
+                           ┌──────────────┼────────────────────┐
+                           ▼              ▼                     ▼
+                  🐳 docker-sign   📋 mcp-registry   🔨 smithery
+                  🐍 pypi          📦 packaging      (all parallel)
 ```
 
-There is also a fourth file, `codeql.yml`, that runs GitHub's static analysis separately on push-to-main and a weekly schedule.
+There is also a fourth file, `codeql.yml`, that runs GitHub's CodeQL deep static analysis separately on push-to-main and a weekly schedule.
 
 ---
 
@@ -49,15 +47,15 @@ There is also a fourth file, `codeql.yml`, that runs GitHub's static analysis se
 
 ---
 
-## 🔀 ci.yml — The merge gate
+## ⚙️ ci.yml — The merge gate
 
 ### 📡 Triggers
 
 - Every pull request targeting `main`
 - Every push to `main`
-- Manual: `Actions → CI → Run workflow` (add `run_python_live=true` to run live SDK tests)
+- Manual: `Actions → ⚙️ CI → Run workflow` (add `run_python_live=true` to run live SDK tests)
 
-### ⚡ Change detector (`changes` job)
+### 🔍 Change detector (`changes` job)
 
 The first job classifies every PR. It reads the list of changed files and outputs `code=true` or `code=false`.
 
@@ -73,33 +71,46 @@ Anything else → `code=true` → full CI runs.
 
 ### 🔒 Always-run jobs (every PR, regardless of what changed)
 
-These four jobs never skip. They catch cross-cutting drift that a change detector can't safely filter:
+These never skip. They catch cross-cutting drift that a change detector can't safely filter:
 
 | Job | What it catches |
 |-----|----------------|
-| **lint** | `gofmt -s` + `golangci-lint` — formatting and static analysis |
-| **docs-drift** | `docs/TOOLS.md` ↔ registry drift; tool annotation coverage |
-| **python-drift** | Python client (`models.py`/`client.py`) not regenerated after Go schema change |
-| **test-python** | Python SDK unit + integration tests (mock HTTP, no binary needed) |
-| **validate-packaging** | `PKGBUILD` / `.SRCINFO` / `flake.nix` version + hash consistency |
+| **🧹 lint** | `gofmt -s` + `golangci-lint` — formatting and static analysis |
+| **📄 docs-drift** | `docs/TOOLS.md` ↔ registry drift; tool annotation coverage |
+| **🐍 python-drift** | Python client (`models.py`/`client.py`) not regenerated after Go schema change |
+| **🧪 test-python** | Python SDK unit + integration tests (mock HTTP, no binary needed) |
+| **📦 validate-packaging** | `PKGBUILD` / `.SRCINFO` / `flake.nix` version + hash consistency |
 
 > **Rule:** If you change a Go tool schema, run `make gen-python-client` before pushing. If you change `docs/TOOLS.md`, the matching tool definition must change in the same commit (or vice versa). These jobs enforce both.
+
+### ⚡ Fast-fail ordering in the code path
+
+```
+🔍 changes ─► 🧹 lint ─► 🧪 test ─► 🔬 e2e
+                      └──────────────► 🐳 docker-smoke
+              └──────► 🛡️ security
+🔍 changes ─► 🏗️ build   (parallel, independent of test)
+```
+
+- `lint` gates both `test` and `security` — a formatting error surfaces before expensive compute starts.
+- `e2e` and `docker-smoke` wait for `test` — a unit test failure blocks the heavier suites.
+- `build` runs in parallel with everything else — cross-compilation failures surface alongside test feedback without waiting.
 
 ### 🧪 Code-only jobs (skipped on docs/packaging PRs)
 
 | Job | What it runs |
 |-----|-------------|
-| **test** | `go test -race` — unit + integration tests with race detector |
-| **e2e** | Security + lifecycle E2E suite (STDIO, HTTP, OAuth) — network-free |
-| **docker-smoke** | Builds the Docker image and drives MCP over HTTP end-to-end |
-| **build** | Cross-compile for Linux/Darwin/Windows × amd64/arm64 |
-| **security** | `govulncheck` + `gosec` — vulnerability and security scanning |
+| **🧪 test** | `go test -race` — unit + integration tests with race detector |
+| **🔬 e2e** | Security + lifecycle E2E suite (STDIO, HTTP, OAuth) — network-free |
+| **🐳 docker-smoke** | Builds the Docker image and drives MCP over HTTP end-to-end |
+| **🏗️ build** | Cross-compile for Linux/Darwin/Windows × amd64/arm64 |
+| **🛡️ security** | `govulncheck` + `gosec` — vulnerability and security scanning |
 
 ### 🐍 Manual-dispatch only
 
 | Job | How to trigger |
 |-----|---------------|
-| **python-live-e2e** | `Actions → CI → Run workflow` with `run_python_live=true` |
+| **🐍 python-live-e2e** | `Actions → ⚙️ CI → Run workflow` with `run_python_live=true` |
 
 Hits real external APIs. Not part of the required gate — too flaky on rate limits.
 
@@ -139,67 +150,72 @@ git push origin v1.38.0
 ### 📦 Job dependency graph
 
 ```
-[release] ──────────────────────────────────────────────────────────┐
-     │                                                               │
-     ├──► [docker-sign] ──► [publish-mcp-registry]                  │
-     │                                                               │
-     ├──► [publish-smithery]   (if SMITHERY_ENABLED)                 │
-     │                                                               │
-     ├──► [publish-pypi]       (if PYPI_PUBLISH_ENABLED)             │
-     │                                                               │
-     └──► [update-packaging]   (if PACKAGING_UPDATE_ENABLED)  ◄──────┘
+[🏗️ GoReleaser · Build & Publish]
+     │
+     ├──► [🐳 Sign Docker Images]
+     │
+     ├──► [📋 Publish → MCP Registry]   (independent of docker-sign)
+     │
+     ├──► [🔨 Publish → Smithery]       (if SMITHERY_ENABLED)
+     │
+     ├──► [🐍 Publish → PyPI]           (if PYPI_PUBLISH_ENABLED)
+     │
+     └──► [📦 Update Packaging Manifests] (if PACKAGING_UPDATE_ENABLED)
 ```
 
-All downstream jobs run in parallel after `release` completes. A failure in `publish-smithery` or `publish-pypi` does not block the others.
+All downstream jobs run in parallel after the core release job completes. A failure in any one job does not block the others.
 
-### 🔬 [release] — Core release job (27 steps)
+### ⚡ Fast-fail ordering inside the core release job
+
+Steps run in cheapest-first order so an early misconfiguration surfaces before slow Docker builds start:
 
 ```
-1. Checkout (full history)
-2. Setup Go
-3. Login → Docker Hub + GHCR
-4. Setup Docker Buildx + QEMU (arm64 cross-compile)
-5. Install cosign (Sigstore signing)
-6. Install Syft (SBOM generation)
-7. Install Chocolatey CLI (only if CHOCOLATEY_API_KEY set)
-8. Verify macOS signing chain (fail fast on AMFI regression)
-9. Check Python client drift (blocks if gen-python-client was not run)
-10. Run GoReleaser:
-    - Cross-compiles 5 platform binaries
-    - Signs + notarizes macOS binaries (if certs configured)
-    - Signs Windows .exe via jsign / Azure Trusted Signing (if enabled)
-    - Pushes Docker multi-arch images (GHCR + Docker Hub)
-    - Updates Homebrew tap, Scoop bucket, WinGet (via separate tokens)
-    - Builds + pushes Chocolatey .nupkg (if key configured)
-    - Publishes GitHub Release with all binaries + checksums
-11. Build .mcpb bundles (MCP bundle format)
-12. Upload .mcpb bundles to the release
-13. Generate SBOM (SPDX JSON via Syft)
-14. Attach SBOM to the release
-15. Sign checksums.txt with cosign (keyless, OIDC)
-16. Upload cosign .sig + .pem to the release
-17. Upload dist binaries artifact (for PyPI wheel build)
+1. Set up Go
+2. Set up Python + verify Python client drift  ← fast fail
+3. Verify macOS signing chain                  ← fast fail
+4. Set up Chocolatey CLI (only if key set)     ← fast fail
+5. Log in to Docker Hub + GHCR
+6. Set up Docker Buildx + QEMU
+7. Install cosign + Syft
+8. Run GoReleaser  ← the slow step (cross-compile, sign, push)
+9. Build + upload .mcpb bundles
+10. Generate + attach SBOM
+11. Sign checksums.txt with cosign (keyless OIDC)
+12. Upload dist binaries artifact (for PyPI)
 ```
+
+### 🔬 Core release steps in detail
+
+| Step | What it does |
+|------|-------------|
+| Verify Python client drift | Fails fast if `make gen-python-client` was not run before tagging |
+| Verify macOS signing chain | Checks p12 contains leaf + intermediate + Apple Root CA (prevents AMFI SIGKILL on launch) |
+| Set up Chocolatey CLI | Installs `choco` under mono; `push` subcommand is non-fatal (Chocolatey moderation can 403) |
+| Run GoReleaser | Cross-compiles 5 platforms; signs macOS (quill+notarize); signs Windows (jsign/Azure); pushes Docker multi-arch; updates Homebrew/Scoop/WinGet; publishes GitHub Release |
+| Build .mcpb bundles | Assembles MCP bundle archives for Smithery + MCPB registries |
+| Generate SBOM | Syft produces a full SPDX JSON; attached to the release |
+| Sign checksums.txt | Cosign keyless OIDC signature; `.sig` + `.pem` attached to the release |
+| Upload dist binaries | Artifact for the PyPI job to wrap into wheels without re-running GoReleaser |
 
 ### 🐳 [docker-sign] — Sign Docker images
 
-After `release` completes, fetches the image digest from GHCR and signs it with cosign using GitHub's OIDC identity. This creates a publicly verifiable Sigstore signature.
+Fetches the image digest from GHCR and signs it with cosign using GitHub's OIDC identity. Creates a publicly verifiable Sigstore signature.
 
 ### 📋 [publish-mcp-registry] — MCP Registry
 
-After `docker-sign` completes, re-syncs the version and publishes to the [MCP Registry](https://github.com/modelcontextprotocol/registry) via `mcp-publisher` + GitHub OIDC authentication.
+Depends on `release` directly (not `docker-sign`) — the registry only needs the GitHub Release to exist, not the Docker signature. Re-syncs the version string and publishes via `mcp-publisher` + GitHub OIDC authentication.
 
 ### 🔨 [publish-smithery] — Smithery
 
-Parallel with `docker-sign`. Builds a `.mcpb` bundle and publishes to [Smithery](https://smithery.ai). Gated on `vars.SMITHERY_ENABLED == 'true'`.
+Downloads the `.mcpb` bundle that was already built and uploaded by the `release` job (no re-build from source). Publishes to [Smithery](https://smithery.ai). Gated on `vars.SMITHERY_ENABLED == 'true'`.
 
 ### 🐍 [publish-pypi] — PyPI platform wheels
 
-Parallel with `docker-sign`. Downloads the cross-compiled binaries from the `release` job artifact, wraps them into platform wheels, smoke-tests the manylinux wheel, then publishes via Trusted Publishing (OIDC — no token secret). Gated on `vars.PYPI_PUBLISH_ENABLED == 'true'`.
+Downloads the cross-compiled binaries from the `release` job artifact, wraps them into platform wheels, smoke-tests the manylinux wheel (import check), then publishes via Trusted Publishing (OIDC — no token secret). Gated on `vars.PYPI_PUBLISH_ENABLED == 'true'`.
 
 ### 📦 [update-packaging] — AUR + Nix auto-PR
 
-Parallel with `docker-sign`. **Fully automated — no manual steps needed.**
+**Fully automated — no manual steps needed.**
 
 ```
 1. Checkout main
@@ -233,10 +249,10 @@ Push to `main` touching any of:
 ### Steps
 
 1. Checkout
-2. Install `mkdocs-material`
+2. Install `mkdocs-material` (pinned version)
 3. Assemble `site_src/` from root + `docs/` files (with cross-link rewriting)
-4. Inject `robots.txt`
-5. Deploy to GitHub Pages via `mkdocs gh-deploy --force`
+4. Generate `robots.txt`
+5. Deploy to GitHub Pages via `mkdocs gh-deploy --force --remote-branch gh-pages`
 
 > All `docs/*.md` links are rewritten from `](docs/FOO.md` → `](foo.md` so the published site URLs are clean. Root policy files (`SECURITY.md`, `CODE_OF_CONDUCT.md`) point to GitHub because they are not published to the site.
 
@@ -258,14 +274,14 @@ Runs GitHub's CodeQL engine with `security-extended,security-and-quality` query 
 ### Adding a job to ci.yml
 
 1. If the job must run on every PR (e.g., a new drift gate): add it **without** a `needs: changes` dependency.
-2. If the job is only relevant when Go code changes: gate it on `needs.changes.outputs.code == 'true'`.
-3. Update `packaging/**` in the `changes` allowlist if the new job should not run on packaging PRs.
+2. If the job is only relevant when Go code changes: gate it on `needs.changes.outputs.code == 'true'` and add `needs: [changes, lint]` (so formatting failures fast-fail first).
+3. Add `packaging/**` to the `changes` allowlist if the new job should not run on packaging PRs.
 
 ### Adding a post-release distribution channel
 
 1. Add a new job to `release.yml` with `needs: release`.
 2. Gate it on a repo var (e.g., `vars.MY_CHANNEL_ENABLED == 'true'`) so an unconfigured fork is a clean no-op.
-3. Make the job non-blocking: a publish failure must not cancel other downstream jobs (they run in parallel and are independent).
+3. Use `|| echo "::warning::..."` for non-fatal publish failures so a channel hiccup doesn't block the overall release.
 4. Document the required secret/var in the table above.
 
 ### Cutting a release
@@ -300,9 +316,13 @@ git push origin v1.38.0
 | `python-drift` failure | Run `make gen-python-client`, stage + commit the regenerated files |
 | `validate-packaging` failure | Version mismatch across PKGBUILD / .SRCINFO / flake.nix — run `scripts/update-packaging.sh <version>` |
 | GoReleaser failure | Check secrets are set; check `.goreleaser.yml` template syntax |
+| Python drift fails during release | Tag pushed before `make gen-python-client` — rebuild on a new patch tag |
+| macOS chain verify fails | Re-export the signing p12 with full chain (leaf + intermediate + Apple Root CA) |
 | `update-packaging` PR not created | Check `vars.PACKAGING_UPDATE_ENABLED == 'true'`; check job logs |
 | PyPI publish failure | Check `pypi` environment is configured with Trusted Publishing OIDC |
 | Docker sign failure | Check GHCR image exists; check cosign OIDC token permissions |
+| MCP Registry warning | Non-fatal; check `mcp-publisher` OIDC credentials, may already be published |
+| Smithery warning | Non-fatal; check `SMITHERY_API_KEY` secret, may already be published |
 
 ---
 
