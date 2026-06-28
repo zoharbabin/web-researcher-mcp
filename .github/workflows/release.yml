@@ -536,9 +536,11 @@ jobs:
             echo "Opened packaging PR: $PR_URL"
           fi
 
-          # Auto-merge once the validate-packaging CI job passes. --admin bypasses
-          # the review requirement (the packaging files are metadata, not code).
-          gh pr merge "$PR_URL" --squash --admin --auto \
+          # Auto-merge once the validate-packaging CI job passes.
+          # --auto and --admin are mutually exclusive in gh CLI; --auto alone is
+          # correct here because the only required check is validate-packaging,
+          # which passes on these metadata files.
+          gh pr merge "$PR_URL" --squash --auto \
             --subject "chore(packaging): bump AUR + Nix manifests to v${VERSION} [skip ci]" \
             --body "Automated squash-merge of packaging bump for v${VERSION}."
           echo "Auto-merge enabled on $PR_URL"
