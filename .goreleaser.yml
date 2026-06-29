@@ -346,6 +346,7 @@ release:
     name: web-researcher-mcp
   draft: false
   prerelease: auto
+  replace_existing_artifacts: true
   name_template: "{{.ProjectName}} v{{.Version}}"
   header: |
     ## What's Changed
