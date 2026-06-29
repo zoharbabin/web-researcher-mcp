@@ -545,7 +545,7 @@ jobs:
           echo "Attached PKGBUILD, .SRCINFO, flake.nix to v${VERSION} release"
 
       - name: Push to AUR
-        if: ${{ secrets.AUR_SSH_KEY != '' }}
+        if: env.AUR_SSH_KEY != ''
         env:
           AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
         run: |
