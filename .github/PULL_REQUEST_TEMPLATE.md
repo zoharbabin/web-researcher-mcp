@@ -37,7 +37,7 @@ Closes #
 
 - [ ] My code follows the project's code style
 - [ ] I have added/updated tests for new functionality
-- [ ] `make verify` is green (fmt + vet + lint + gosec + govulncheck + validate-lenses + race tests + e2e + python-drift + python tests + build)
+- [ ] `make verify` is green (fmt-check + vet + lint + sec + vuln + validate-lenses + test-race + test-e2e + check-python-drift + test-python + build)
 - [ ] I have updated documentation if needed (docs reflect the code exactly — no drift)
 - [ ] My changes generate no new warnings
 - [ ] I have checked for potential security implications

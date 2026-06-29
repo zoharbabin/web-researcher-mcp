@@ -41,5 +41,5 @@ npx @marp-team/marp-cli@latest <name>-deck.md --pdf --allow-local-files -o <name
 
 `docs.yml` copies each deck's rendered `*.html` (as `index.html`) and `*.pdf`
 into `site_src/decks/<name>/`, so they serve at
-`https://zoharbabin.github.io/web-researcher-mcp/decks/<name>/`. Add a new deck's
+`https://zoharbabin.com/web-researcher-mcp/decks/<name>/`. Add a new deck's
 copy lines to that workflow's assemble step.

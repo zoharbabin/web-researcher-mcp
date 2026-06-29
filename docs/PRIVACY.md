@@ -1,7 +1,7 @@
 # Privacy Policy
 
 **Effective Date:** May 26, 2026  
-**Last Updated:** June 16, 2026
+**Last Updated:** June 28, 2026
 
 ## Overview
 
@@ -62,6 +62,7 @@ When you search, your query goes directly to whichever provider you configured. 
 | Eurostat | Your economic query / indicator code (keyless) | [ec.europa.eu/info/privacy-policy](https://ec.europa.eu/info/privacy-policy_en) |
 | PubMed (NCBI) | Your academic query; your optional contact email if `PUBMED_EMAIL` is set | [nlm.nih.gov/web_policies.html](https://www.nlm.nih.gov/web_policies.html) |
 | ClinicalTrials.gov | Your clinical-trial query (keyless) | [clinicaltrials.gov/about-site/privacy-policy](https://clinicaltrials.gov/about-site/privacy-policy) |
+| BrandFetch | Company name or domain (only when `BRANDFETCH_API_KEY` is set; used for `brand_research` domain resolution) | [brandfetch.com/privacy](https://brandfetch.com/privacy) |
 
 These are public-data APIs queried only when you call the matching tool (`academic_search`/`citation_graph`, `filing_search`, `legal_search`, `econ_search`, `clinical_search`). Only the search term, identifier, and any configured key/contact email are sent — no personal data beyond what you put in the query. EDGAR's contact email is a deliberate disclosure the SEC requires for automated access.
 

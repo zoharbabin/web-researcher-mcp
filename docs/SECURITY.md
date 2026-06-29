@@ -68,7 +68,7 @@ Matched case-insensitively as an exact hostname or a dot-bounded suffix, so `svc
 
 **Configuration:**
 - `ALLOW_PRIVATE_IPS=true` — Disable for local development only
-- `ALLOWED_DOMAINS=a.com,b.com` — Whitelist mode for enterprise
+- `ALLOWED_DOMAINS=a.com,b.com` — Allowlist mode for enterprise
 
 ---
 

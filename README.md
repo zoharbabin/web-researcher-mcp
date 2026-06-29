@@ -192,6 +192,7 @@ The server also ships guided **prompt templates** your AI assistant can pull in 
 | `competitive-analysis` | Size up a company and its market (news, patents, web) |
 | `literature-review` | Systematically review academic literature on a topic |
 | `brand-guidelines` | Research a brand and produce use-case-specific creative direction (landing page, email, video brief) — calls `brand_research` and interprets the structured JSON for you |
+| `company-recon` | Deep OSINT reconnaissance on a company — maps infrastructure, filings, personnel, and public footprint |
 
 In most AI apps these show up wherever you pick a prompt or "/" command. The server exposes live **status resources** (`stats://tools`, `stats://sessions`, `stats://rate-limits`, `stats://providers`), a lens catalog (`lenses://catalog`), diagnostics (`diagnostics://errors/recent`, `diagnostics://health`), and a large-payload artifact store (`research://artifact/{id}`) so you — or your AI — can check usage, limits, and which providers are active. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#mcp-resources--prompts) for the full list.
 
@@ -507,6 +508,7 @@ Search lenses let you control which websites your AI is allowed to search. Inste
 | `finance` | Markets, filings |
 | `science` | Research, papers |
 | `government` | Policy, regulations |
+| `osint` | Open-source intelligence — public records, corporate registries, social footprint, infrastructure |
 
 You can also [create your own lenses](#search-lenses) for any field — just list the domains you trust.
 

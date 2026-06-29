@@ -43,7 +43,7 @@ There is also a fourth file, `codeql.yml`, that runs GitHub's CodeQL deep static
 | File | Trigger | Purpose |
 |------|---------|---------|
 | `.github/workflows/ci.yml` | push to `main`, any PR, `workflow_dispatch` | Gate: prevents broken code from merging |
-| `.github/workflows/release.yml` | push of a `v*` tag | Publish: builds, signs, and ships a release |
+| `.github/workflows/release.yml` | push of a `v*` tag, `workflow_dispatch` (manual re-run) | Publish: builds, signs, and ships a release |
 | `.github/workflows/docs.yml` | push to `main` (docs paths only) | Deploy: builds the mkdocs site to GitHub Pages |
 | `.github/workflows/codeql.yml` | push to `main`, weekly | Security: deep static analysis via GitHub CodeQL |
 
@@ -145,7 +145,6 @@ git push origin v1.38.0
 | `MACOS_NOTARY_ISSUER_ID` / `MACOS_NOTARY_KEY_ID` / `MACOS_NOTARY_KEY` | Secret | Notarization |
 | `AZURE_TENANT_ID` / `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` | Secret | Windows Authenticode (jsign) |
 | `SMITHERY_API_KEY` | Secret | Smithery publish |
-| `CODECOV_TOKEN` | Secret | Coverage upload (non-blocking) |
 | `AZURE_SIGNING_ENABLED` | Var | `"true"` to enable Windows signing |
 | `SMITHERY_ENABLED` | Var | `"true"` to enable Smithery job |
 | `PYPI_PUBLISH_ENABLED` | Var | `"true"` to enable PyPI wheels |
@@ -177,6 +176,7 @@ All downstream jobs run in parallel after the core release job completes. A fail
 Steps run in cheapest-first order so an early misconfiguration surfaces before slow Docker builds start:
 
 ```
+0. Resolve tag ref (override for manual dispatch) — resolves RELEASE_TAG for workflow_dispatch runs
 1. Set up Go
 2. Set up Python + verify Python client drift  ← fast fail
 3. Verify macOS signing chain                  ← fast fail
@@ -184,6 +184,7 @@ Steps run in cheapest-first order so an early misconfiguration surfaces before s
 5. Log in to Docker Hub + GHCR
 6. Set up Docker Buildx + QEMU
 7. Install cosign + Syft
+7a. Clear existing release assets (idempotent re-run) — deletes existing assets so GoReleaser can re-upload on workflow_dispatch retrigger
 8. Run GoReleaser  ← the slow step (cross-compile, sign, push)
 9. Build + upload .mcpb bundles
 10. Generate + attach SBOM
@@ -316,7 +317,7 @@ git push origin v1.38.0
 |---------|--------------|
 | `gofmt` failure | Run `make fmt` locally, push again |
 | `golangci-lint` failure | Run `go tool golangci-lint run` locally |
-| `docs-drift` failure | `docs/TOOLS.md` section out of sync — update it or run `make gen-python-client` |
+| `docs-drift` failure | `docs/TOOLS.md` section out of sync with the Go tool registry — update the matching `## Tool N: \`name\`` section in `docs/TOOLS.md` (or update the tool definition to match the doc) |
 | `python-drift` failure | Run `make gen-python-client`, stage + commit the regenerated files |
 | `validate-packaging` failure | Version mismatch across PKGBUILD / .SRCINFO / flake.nix — run `scripts/update-packaging.sh <version>` |
 | GoReleaser failure | Check secrets are set; check `.goreleaser.yml` template syntax |

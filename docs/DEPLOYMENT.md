@@ -963,3 +963,5 @@ To force immediate re-encryption rather than waiting for natural reads, flush th
 | `fact-check` | Verify a claim from multiple sources | `claim` |
 | `competitive-analysis` | Research competitors in a market | `company` |
 | `literature-review` | Systematic academic literature review | `topic` |
+| `brand-guidelines` | Extract and document a company's brand identity | `company` |
+| `company-recon` | OSINT company reconnaissance profile | `company` |
