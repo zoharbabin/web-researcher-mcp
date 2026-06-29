@@ -37,7 +37,7 @@ internal/
 ├── search/       # Provider interface + adapters + Router (multi-provider fallback); DOI enrichment: open-access (Unpaywall) + retraction status (Crossref Retraction Watch); custom/validated lenses
 ├── scraper/      # 4-tier pipeline by default (markdown → stealth → HTML → browser/go-rod), optional 5th Exa tier when EXA_API_KEY is set; SSRF-safe client; link verifier (liveness + Wayback archive)
 ├── documents/    # PDF, DOCX, PPTX extraction
-├── cache/        # Cache interface + hybrid impl (memory + AES-encrypted disk)
+├── cache/        # Cache interface + hybrid impl (memory L1 + optional Redis L2 + AES-encrypted disk L3)
 ├── persist/      # Generic TTL key/value Store (memory or AES-256-GCM disk) — backs token revocation + rate-quota durability
 ├── redisbackend/ # SOLE go-redis importer: Redis impls of cache/persist/session for HTTP distributed state — gated, fail-fast, encrypted (opt-in via REDIS_URL)
 ├── content/      # Sanitize, dedup, truncate, quality score, typed source classification + domain-reputation signal, claim-evidence extraction, citation extraction + bibliography read/write (APA/MLA/BibTeX/RIS/CSL-JSON round-trip), content recommendations + auto-formatted components
@@ -52,7 +52,7 @@ internal/
 ├── memory/       # Opt-in consent-gated long-term cross-session memory (Store + Noop, retention TTL)
 ├── workspace/    # Opt-in shared research workspaces — server enforces data-plane + isolation, host owns membership (Store + Noop)
 ├── metrics/      # Prometheus counters/histograms per tool + per-tenant aggregate analytics + bounded recent-errors ring (diagnostics://errors/recent)
-├── ratelimit/    # Token bucket (per-tenant + global) + optional atomic cross-pod daily quota (Redis)
+├── ratelimit/    # Token bucket (per-IP pre-auth + per-tenant + global) + optional atomic cross-pod daily quota (Redis)
 ├── circuit/      # Circuit breaker for external APIs
 └── resources/    # MCP Resources (stats:// + diagnostics:// errors/health + lenses://catalog + research://artifact/{id}) + Prompts (research templates) + completion/complete handler (lens/provider/enum arg autocompletion, DI suppliers)
 lenses/           # JSON files defining domain lists for site-restricted search (CANONICAL source; go:embed'd into the binary via internal/search/lenses_embed/ — keep in sync with `make sync-lenses`, guarded by TestEmbeddedLensesMatchRoot)

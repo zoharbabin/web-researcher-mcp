@@ -370,7 +370,8 @@ if input.Query == "" {
 | `internal/scraper/errors.go` | `ScrapeError` type, scraper `ErrorKind` enum, helper constructors, classifiers |
 | `internal/scraper/pipeline.go` | Composite error assembly (per-tier diagnostics) |
 | `internal/tools/scrape.go` | `scrapeErrorResponse()`, negative cache helpers |
-| `internal/session/outcomes.go` | Session-level outcome log + `AggregateOutcomes()`, kind→remediation map, `ErrorPatternMinCount` |
+| `internal/session/outcomes.go` | Session-level outcome log + `AggregateOutcomes()`, kind→remediation map |
+| `internal/session/types.go` | `ErrorPatternMinCount` constant (defined here; referenced by outcomes.go) |
 | `internal/tools/sourcetracker.go` | `trackOutcome()` / `trackScrapeOutcome()` — record per-call outcomes onto a session |
 | `internal/tools/search.go` | `upstreamErrorResponse()`, `toolError()`, `rateLimitError()`, `structuredResult()`, resolver functions, `allSupportedProviders()` |
 | `internal/tools/scrape_errors_test.go` | Integration tests for error → response mapping |

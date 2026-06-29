@@ -205,11 +205,13 @@ These providers back dedicated tools and are independent of the web search provi
 | `econ_search` | **[FRED](https://fred.stlouisfed.org/)** | 800K+ US macro series (GDP, CPI, unemployment, rates) | Yes (free) |
 | `clinical_search` | **[ClinicalTrials.gov](https://clinicaltrials.gov/)** | 400K+ NIH-registered clinical trials | No |
 | `archive_source` | **[Internet Archive SPN](https://web.archive.org/save/)** | Save Page Now capture | No (keys raise reliability/limits) |
+| `brand_research` | **[BrandFetch](https://brandfetch.com/)** | Brand colors, fonts, logos, slogans (degrades to CSS+meta scraping without key) | No (`BRANDFETCH_API_KEY` optional) |
 
 **Notes:**
 - World Bank, OECD, Eurostat, ClinicalTrials.gov, and CourtListener are always available — no configuration required.
 - SEC EDGAR and FRED activate on their respective env vars (`EDGAR_CONTACT_EMAIL` / `FRED_API_KEY`). `EDGAR_CONTACT_EMAIL` falls back to `OPENALEX_EMAIL`.
-- `archive_source` is the only write tool in the suite — it triggers a live internet capture, not a cache lookup.
+- `brand_research` is always available — without `BRANDFETCH_API_KEY` it falls back to CSS/meta scraping.
+- `archive_source`, `memory_save`, and `workspace_contribute` are the write tools in the suite. `archive_source` triggers a live internet capture; `memory_save` and `workspace_contribute` are opt-in regulated features.
 
 ---
 

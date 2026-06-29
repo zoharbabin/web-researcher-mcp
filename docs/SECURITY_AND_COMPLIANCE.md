@@ -627,7 +627,9 @@ non-negotiable and enforced in code review.
 
 5. **Encrypt sensitive data at rest.**  
    Any new persistent storage of potentially-sensitive data must use the
-   existing encryption infrastructure (`cache.DiskCache` with GCM).
+   existing encryption infrastructure (`cache.DiskCache` for cached responses,
+   `persist.DiskStore` for TTL key/value state, or the session store for
+   research sessions — all AES-256-GCM).
 
 6. **Respect tenant boundaries.**  
    Any new feature touching shared state must consider multi-tenant isolation.
@@ -733,7 +735,7 @@ if provided == expected { // timing attack!
 - [ ] No `http.DefaultClient` usage for external URLs
 - [ ] No raw SQL or shell command construction from user input
 - [ ] `go test -race ./...` passes
-- [ ] `golangci-lint run` passes
+- [ ] `make lint` (or `go tool golangci-lint run`) passes
 - [ ] New tools have annotations + tests
 
 ---

@@ -472,7 +472,7 @@ Lock in a timestamped snapshot before you cite a page that might change or disap
 }
 ```
 
-This is the only **write tool** in the suite — it asks the Internet Archive's Save Page Now to capture a fresh snapshot. **Response** carries: `status` (`archived` = fresh capture confirmed, `existing` = no new capture made but a recent snapshot exists, `pending` = capture in-flight), `snapshotUrl` (the permanent Wayback URL), `capturedAt` (timestamp), and `provenance`. Run `verify_citation` first to see whether a link is already dead or already archived before capturing.
+This is one of three **write tools** in the suite (the others, `memory_save` and `workspace_contribute`, are opt-in regulated features) — it asks the Internet Archive's Save Page Now to capture a fresh snapshot. **Response** carries: `status` (`archived` = fresh capture confirmed, `existing` = no new capture made but a recent snapshot exists, `pending` = capture in-flight), `snapshotUrl` (the permanent Wayback URL), `capturedAt` (timestamp), and `provenance`. Run `verify_citation` first to see whether a link is already dead or already archived before capturing.
 
 ---
 

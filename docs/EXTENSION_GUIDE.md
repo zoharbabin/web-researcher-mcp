@@ -107,7 +107,7 @@ A Lens is a JSON domain allowlist. When a caller sets the `lens` parameter on `w
 - You need structured output specific to the domain (e.g. case docket metadata, clinical trial phases) → use **Tool** + **Provider**
 - The new capability requires a different API entirely, not just filtered web search → use **Tool**
 
-**Hard case — legal research:** A lens can restrict searches to `courtlistener.com`, `law.cornell.edu`, etc. But a `legal_search` tool with typed docket fields, citation numbers, and jurisdiction metadata cannot be expressed as filtered web search results. Both exist: `legal_search` (Tool + CourtListener Provider) for structured case law, and `legal` / `legal-proceedings` lenses for unstructured site-restricted research.
+**Hard case — legal research:** A lens can restrict searches to `courtlistener.com`, `law.cornell.edu`, etc. But a `legal_search` tool with typed docket fields, citation numbers, and jurisdiction metadata cannot be expressed as filtered web search results. Both exist: `legal_search` (Tool + CourtListener Provider) for structured case law, and the `legal` lens for unstructured site-restricted research.
 
 **Integration checklist:**
 1. `lenses/<name>.json` — `{"name":"…","description":"…","domains":[…]}` (optionally `"cx":"…"` or `"goggle":"…"`)
@@ -159,7 +159,7 @@ An MCP Prompt is a pre-built research workflow the model invokes by name. It ret
 - It's just a search with different parameters → use a **Lens**
 
 **Integration checklist:**
-1. `internal/resources/prompts.go` — add a `mcp.Prompt` entry to the registered prompt list
+1. `internal/resources/resources.go` — add a `mcp.Prompt` entry to the `registerPrompts()` function
 2. No schema drift test covers prompts; keep descriptions current manually
 
 ---
