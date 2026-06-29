@@ -281,6 +281,25 @@ jobs:
           path: coverage.out
           retention-days: 7
 
+  # Gate job: always reports under the exact name required by branch protection.
+  # When code=true the matrix job ran; when code=false it was skipped (docs PR).
+  # Either way this job passes so auto-merge isn't stuck.
+  test-gate:
+    name: 🧪 Test · Go 1.25.11
+    needs: [changes, test]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pass if tests succeeded or were not needed
+        run: |
+          result="${{ needs.test.result }}"
+          if [ "$result" = "success" ] || [ "$result" = "skipped" ]; then
+            echo "Tests: $result — gate passes."
+          else
+            echo "Tests: $result — gate fails."
+            exit 1
+          fi
+
   # 🔬 E2E — security + lifecycle tests (STDIO + HTTP + OAuth). Network-free:
   # tests assert on blocked schemes, private IPs, schema validation, session
   # crypto, secrets masking, and the OAuth/scope gate. Waits for unit tests
