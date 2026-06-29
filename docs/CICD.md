@@ -305,7 +305,7 @@ git push origin HEAD  # via PR
 git tag v1.38.0
 git push origin v1.38.0
 # → release.yml starts automatically
-# → update-packaging job opens and auto-merges chore/packaging-v1.38.0
+# → update-packaging job generates PKGBUILD/.SRCINFO/flake.nix and attaches them to the release
 ```
 
 ---
@@ -329,6 +329,7 @@ git push origin v1.38.0
 | Docker sign failure | Check GHCR image exists; check cosign OIDC token permissions |
 | MCP Registry warning | Non-fatal; check `mcp-publisher` OIDC credentials, may already be published |
 | Smithery warning | Non-fatal; check `SMITHERY_API_KEY` secret, may already be published |
+| Release workflow didn't fire on tag push | GitHub infrastructure glitch — use `Actions → 🚀 Release → Run workflow` and supply the tag (e.g. `v1.37.5`) to retrigger manually |
 
 ---
 
