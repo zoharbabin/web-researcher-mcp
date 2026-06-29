@@ -296,16 +296,19 @@ jobs:
       # ── Post-release artifact attachment ─────────────────────────────────────
 
       - name: Build .mcpb bundles
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           sudo apt-get install -y jq zip
-          bash scripts/build-mcpb.sh "${GITHUB_REF_NAME}"
+          bash scripts/build-mcpb.sh "${RELEASE_TAG}"
 
       - name: Upload .mcpb bundles to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           for f in dist/mcpb/*.mcpb; do
-            gh release upload "${GITHUB_REF_NAME}" "$f" --clobber
+            gh release upload "${RELEASE_TAG}" "$f" --clobber
           done
 
       - name: Generate SBOM
@@ -317,12 +320,14 @@ jobs:
       - name: Attach SBOM to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
-          gh release upload "${GITHUB_REF_NAME}" sbom-web-researcher-mcp.spdx.json --clobber
+          gh release upload "${RELEASE_TAG}" sbom-web-researcher-mcp.spdx.json --clobber
 
       - name: Sign checksums.txt with cosign (keyless OIDC)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
           CHECKSUM_FILE="dist/checksums.txt"
@@ -333,7 +338,7 @@ jobs:
           cosign sign-blob --yes "$CHECKSUM_FILE" \
             --output-signature "${CHECKSUM_FILE}.sig" \
             --output-certificate "${CHECKSUM_FILE}.pem"
-          gh release upload "${GITHUB_REF_NAME}" \
+          gh release upload "${RELEASE_TAG}" \
             "${CHECKSUM_FILE}.sig" "${CHECKSUM_FILE}.pem" --clobber
 
       # Persist the cross-compiled (and signed/notarized) binaries so the
