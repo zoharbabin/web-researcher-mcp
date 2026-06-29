@@ -368,9 +368,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: release
     steps:
-      - name: Resolve tag ref (override for manual dispatch)
-        if: github.event_name == 'workflow_dispatch'
-        run: echo "GITHUB_REF_NAME=${{ inputs.tag }}" >> "$GITHUB_ENV"
+      - name: Set release tag
+        run: echo "RELEASE_TAG=${{ inputs.tag || github.ref_name }}" >> "$GITHUB_ENV"
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
@@ -384,7 +383,7 @@ jobs:
 
       - name: Sign GHCR image
         run: |
-          IMAGE="ghcr.io/zoharbabin/web-researcher-mcp:${GITHUB_REF_NAME#v}"
+          IMAGE="ghcr.io/zoharbabin/web-researcher-mcp:${RELEASE_TAG#v}"
           DIGEST=$(docker buildx imagetools inspect "$IMAGE" --format '{{json .Manifest}}' | jq -r '.digest')
           cosign sign --yes "ghcr.io/zoharbabin/web-researcher-mcp@${DIGEST}"
 
@@ -398,15 +397,14 @@ jobs:
     runs-on: ubuntu-latest
     needs: release
     steps:
-      - name: Resolve tag ref (override for manual dispatch)
-        if: github.event_name == 'workflow_dispatch'
-        run: echo "GITHUB_REF_NAME=${{ inputs.tag }}" >> "$GITHUB_ENV"
+      - name: Set release tag
+        run: echo "RELEASE_TAG=${{ inputs.tag || github.ref_name }}" >> "$GITHUB_ENV"
 
       - uses: actions/checkout@v7
 
       - name: Sync version for publish
         run: |
-          echo "${GITHUB_REF_NAME#v}" > VERSION
+          echo "${RELEASE_TAG#v}" > VERSION
           bash scripts/sync-version.sh
 
       - name: Install mcp-publisher
@@ -432,9 +430,8 @@ jobs:
     needs: release
     if: ${{ vars.SMITHERY_ENABLED == 'true' }}
     steps:
-      - name: Resolve tag ref (override for manual dispatch)
-        if: github.event_name == 'workflow_dispatch'
-        run: echo "GITHUB_REF_NAME=${{ inputs.tag }}" >> "$GITHUB_ENV"
+      - name: Set release tag
+        run: echo "RELEASE_TAG=${{ inputs.tag || github.ref_name }}" >> "$GITHUB_ENV"
 
       - uses: actions/checkout@v7
 
@@ -449,9 +446,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${RELEASE_TAG#v}"
           mkdir -p dist/mcpb
-          gh release download "${GITHUB_REF_NAME}" \
+          gh release download "${RELEASE_TAG}" \
             --pattern "web-researcher-mcp_${VERSION}_linux_amd64.mcpb" \
             --dir dist/mcpb
 
@@ -459,7 +456,7 @@ jobs:
         env:
           SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${RELEASE_TAG#v}"
           mkdir -p "$HOME/.config/smithery"
           echo "{\"apiKey\":\"${SMITHERY_API_KEY}\"}" > "$HOME/.config/smithery/settings.json"
           smithery mcp publish "dist/mcpb/web-researcher-mcp_${VERSION}_linux_amd64.mcpb" \
@@ -480,9 +477,8 @@ jobs:
     permissions:
       id-token: write   # mandatory for PyPI Trusted Publishing; job-scoped
     steps:
-      - name: Resolve tag ref (override for manual dispatch)
-        if: github.event_name == 'workflow_dispatch'
-        run: echo "GITHUB_REF_NAME=${{ inputs.tag }}" >> "$GITHUB_ENV"
+      - name: Set release tag
+        run: echo "RELEASE_TAG=${{ inputs.tag || github.ref_name }}" >> "$GITHUB_ENV"
 
       - uses: actions/checkout@v7
 
@@ -497,7 +493,7 @@ jobs:
           path: dist
 
       - name: Build platform wheels
-        run: python3 scripts/build_wheels.py "${GITHUB_REF_NAME#v}" --dist dist --out dist/wheels
+        run: python3 scripts/build_wheels.py "${RELEASE_TAG#v}" --dist dist --out dist/wheels
 
       - name: Smoke-test manylinux wheel (import check)
         run: |
@@ -544,9 +540,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Resolve tag ref (override for manual dispatch)
-        if: github.event_name == 'workflow_dispatch'
-        run: echo "GITHUB_REF_NAME=${{ inputs.tag }}" >> "$GITHUB_ENV"
+      - name: Set release tag
+        run: echo "RELEASE_TAG=${{ inputs.tag || github.ref_name }}" >> "$GITHUB_ENV"
 
       - uses: actions/checkout@v7
         with:
@@ -557,7 +552,7 @@ jobs:
 
       - name: Generate packaging manifests
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${RELEASE_TAG#v}"
           bash scripts/update-packaging.sh "$VERSION"
           echo "Generated manifests for v${VERSION}"
 
@@ -565,7 +560,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${RELEASE_TAG#v}"
           # Upload the three generated files as release assets.
           # These are the canonical versioned manifests — AUR/Nix consumers
           # download them directly from the release page.
@@ -582,7 +577,7 @@ jobs:
           AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${RELEASE_TAG#v}"
 
           # Write the SSH key
           mkdir -p ~/.ssh
