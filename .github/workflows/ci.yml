@@ -127,7 +127,7 @@ jobs:
       - name: Verify tool docs/annotations match the registry
         run: |
           go test -count=1 \
-            -run 'TestToolsDocMatchesRegistry|TestOutputSchemaMatchesResponse|TestToolDescriptionQuality|TestAllToolsHaveAnnotations|TestAllToolsRegistered|TestAllToolsHaveOutputSchema|TestExternalContentToolsCarryTrustMarker' \
+            -run 'TestToolsDocMatchesRegistry|TestOutputSchemaMatchesResponse|TestToolDescriptionQuality|TestAllToolsHaveAnnotations|TestAllToolsRegistered|TestAllToolsHaveOutputSchema|TestExternalContentToolsCarryTrustMarker|TestAnnotationsStableUnderConcurrency' \
             ./internal/tools/...
 
   # 🐍 Python client drift — regenerated client must match live Go schemas.
@@ -320,7 +320,7 @@ jobs:
       # The -run alternation MUST match the test name prefixes (TestHTTP_/TestOAuth_)
       # or they pass locally but never run here — a silent coverage gap.
       - name: Run E2E security + lifecycle suite (STDIO + HTTP + OAuth)
-        run: go test -race -tags=e2e -count=1 -run 'TestSecurity_STDIO|TestMCPLifecycle|TestHTTP_|TestOAuth_' ./tests/e2e/...
+        run: go test -race -tags=e2e -count=1 -run 'TestSecurity_STDIO|TestMCPLifecycle|TestHTTP_|TestOAuth_|TestScrapeErrors_E2E' ./tests/e2e/...
 
   # 🐳 Docker smoke — builds the shipped image and drives MCP over HTTP
   # end-to-end (initialize + web_search). The regression guard for the
