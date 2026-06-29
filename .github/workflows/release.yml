@@ -467,13 +467,16 @@ jobs:
 
   # ── 📦 AUR + Nix packaging manifests ─────────────────────────────────────────
   # Runs after `release` so checksums.txt is available on the GitHub Release.
-  # Opens a PR to bump PKGBUILD/.SRCINFO/flake.nix so the change goes through
-  # branch protection like all other commits, then auto-merges it with --admin
-  # once the validate-packaging CI job passes.
+  #
+  # What it does:
+  #   1. Generates PKGBUILD/.SRCINFO/flake.nix with correct version + hashes
+  #   2. Attaches them as release artifacts (source of truth, no repo commit needed)
+  #   3. Pushes directly to AUR via SSH (gated on AUR_SSH_KEY secret)
+  #
+  # No PR to this repo — the generated files never need to live in main.
+  # Checksums only exist after GoReleaser runs, so this must run post-release.
   #
   # Gated on PACKAGING_UPDATE_ENABLED so an unconfigured fork is a clean no-op.
-  # No special bypass token needed — the PR flow is fully compatible with
-  # branch-protection rules that require PRs.
   update-packaging:
     name: 📦 Update Packaging Manifests
     runs-on: ubuntu-latest
@@ -481,66 +484,65 @@ jobs:
     if: ${{ vars.PACKAGING_UPDATE_ENABLED == 'true' }}
     permissions:
       contents: write
-      pull-requests: write
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure git identity
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Install helpers (xxd, python3)
         run: sudo apt-get install -y xxd python3
 
-      - name: Run update-packaging script
+      - name: Generate packaging manifests
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           bash scripts/update-packaging.sh "$VERSION"
+          echo "Generated manifests for v${VERSION}"
 
-      - name: Open PR and enable auto-merge
+      - name: Attach manifests to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          # Upload the three generated files as release assets.
+          # These are the canonical versioned manifests — AUR/Nix consumers
+          # download them directly from the release page.
+          gh release upload "v${VERSION}" \
+            packaging/aur/PKGBUILD \
+            packaging/aur/.SRCINFO \
+            packaging/nix/flake.nix \
+            --clobber
+          echo "Attached PKGBUILD, .SRCINFO, flake.nix to v${VERSION} release"
+
+      - name: Push to AUR
+        if: ${{ secrets.AUR_SSH_KEY != '' }}
+        env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+        run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
-          BRANCH="chore/packaging-v${VERSION}"
 
-          git add packaging/aur/PKGBUILD packaging/aur/.SRCINFO packaging/nix/flake.nix
-          if git diff --cached --quiet; then
-            echo "No packaging changes — manifests already up-to-date for v${VERSION}."
-            exit 0
-          fi
+          # Write the SSH key
+          mkdir -p ~/.ssh
+          printf '%s\n' "$AUR_SSH_KEY" > ~/.ssh/aur_key
+          chmod 600 ~/.ssh/aur_key
+          ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts 2>/dev/null
 
-          # Create or reset the branch (idempotent on re-run).
-          git checkout -B "$BRANCH"
-          git commit -m "chore(packaging): bump AUR + Nix manifests to v${VERSION}"
-          git push --force-with-lease origin "$BRANCH"
+          # Clone the AUR package repo
+          GIT_SSH_COMMAND="ssh -i ~/.ssh/aur_key -o StrictHostKeyChecking=yes" \
+            git clone ssh://aur@aur.archlinux.org/web-researcher-mcp.git /tmp/aur-pkg
 
-          PR_BODY=$(printf 'Automated packaging bump for v%s.\n\nUpdates:\n- packaging/aur/PKGBUILD — version + SHA256 checksums\n- packaging/aur/.SRCINFO — version + SHA256 checksums\n- packaging/nix/flake.nix — version + SRI hashes (all 4 platforms)\n\nTriggered by the release workflow after checksums.txt was published to the GitHub release page.' "${VERSION}")
+          # Drop in the generated files
+          cp packaging/aur/PKGBUILD  /tmp/aur-pkg/PKGBUILD
+          cp packaging/aur/.SRCINFO  /tmp/aur-pkg/.SRCINFO
 
-          # Reuse an existing open PR if the branch was already pushed on a prior run.
-          EXISTING_PR=$(gh pr list --head "$BRANCH" --state open --json url --jq '.[0].url' 2>/dev/null || true)
-          if [ -n "$EXISTING_PR" ]; then
-            PR_URL="$EXISTING_PR"
-            echo "Reusing existing packaging PR: $PR_URL"
-          else
-            PR_URL=$(gh pr create \
-              --title "chore(packaging): bump AUR + Nix manifests to v${VERSION}" \
-              --body "$PR_BODY" \
-              --base main \
-              --head "$BRANCH")
-            echo "Opened packaging PR: $PR_URL"
-          fi
+          # Commit and push
+          git -C /tmp/aur-pkg config user.name  "web-researcher-mcp-bot"
+          git -C /tmp/aur-pkg config user.email "github-actions@users.noreply.github.com"
+          git -C /tmp/aur-pkg add PKGBUILD .SRCINFO
+          git -C /tmp/aur-pkg diff --cached --quiet && \
+            echo "AUR already up-to-date for v${VERSION}" && exit 0
+          git -C /tmp/aur-pkg commit -m "Update to v${VERSION}"
+          GIT_SSH_COMMAND="ssh -i ~/.ssh/aur_key -o StrictHostKeyChecking=yes" \
+            git -C /tmp/aur-pkg push
+          echo "Pushed v${VERSION} to AUR"
 
-          # Auto-merge once the validate-packaging CI job passes.
-          # --auto and --admin are mutually exclusive in gh CLI; --auto alone is
-          # correct here because the only required check is validate-packaging,
-          # which passes on these metadata files.
-          gh pr merge "$PR_URL" --squash --auto \
-            --subject "chore(packaging): bump AUR + Nix manifests to v${VERSION}" \
-            --body "Automated squash-merge of packaging bump for v${VERSION}."
-          echo "Auto-merge enabled on $PR_URL"
+          # Scrub key from disk
+          rm -f ~/.ssh/aur_key

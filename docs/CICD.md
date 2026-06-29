@@ -149,7 +149,8 @@ git push origin v1.38.0
 | `AZURE_SIGNING_ENABLED` | Var | `"true"` to enable Windows signing |
 | `SMITHERY_ENABLED` | Var | `"true"` to enable Smithery job |
 | `PYPI_PUBLISH_ENABLED` | Var | `"true"` to enable PyPI wheels |
-| `PACKAGING_UPDATE_ENABLED` | Var | `"true"` to enable AUR/Nix auto-PR |
+| `AUR_SSH_KEY` | Secret | SSH private key for AUR push (optional — skips gracefully if absent) |
+| `PACKAGING_UPDATE_ENABLED` | Var | `"true"` to enable AUR/Nix manifest generation + upload |
 
 ### 📦 Job dependency graph
 
@@ -165,6 +166,8 @@ git push origin v1.38.0
      ├──► [🐍 Publish → PyPI]           (if PYPI_PUBLISH_ENABLED)
      │
      └──► [📦 Update Packaging Manifests] (if PACKAGING_UPDATE_ENABLED)
+               └─ attaches PKGBUILD/.SRCINFO/flake.nix to release
+               └─ pushes to AUR via SSH (if AUR_SSH_KEY set)
 ```
 
 All downstream jobs run in parallel after the core release job completes. A failure in any one job does not block the others.
@@ -217,26 +220,23 @@ Downloads the `.mcpb` bundle that was already built and uploaded by the `release
 
 Downloads the cross-compiled binaries from the `release` job artifact, wraps them into platform wheels, smoke-tests the manylinux wheel (import check), then publishes via Trusted Publishing (OIDC — no token secret). Gated on `vars.PYPI_PUBLISH_ENABLED == 'true'`.
 
-### 📦 [update-packaging] — AUR + Nix auto-PR
+### 📦 [update-packaging] — AUR + Nix publishing
 
 **Fully automated — no manual steps needed.**
 
 ```
-1. Checkout main
-2. Run scripts/update-packaging.sh <VERSION>
+1. Run scripts/update-packaging.sh <VERSION>
    └─ Fetches checksums.txt from the new release
-   └─ Updates packaging/aur/PKGBUILD    (version)
-   └─ Updates packaging/aur/.SRCINFO    (version + hex SHA256)
-   └─ Updates packaging/nix/flake.nix   (version + SRI hashes, 4 platforms)
-3. Push to branch: chore/packaging-vX.Y.Z
-4. Open PR with gh pr create
-5. Enable auto-merge (--squash --admin) so the PR merges itself
-   once validate-packaging CI passes
+   └─ Generates packaging/aur/PKGBUILD    (version + hex SHA256)
+   └─ Generates packaging/aur/.SRCINFO    (version + hex SHA256)
+   └─ Generates packaging/nix/flake.nix   (version + SRI hashes, 4 platforms)
+2. Attach PKGBUILD, .SRCINFO, flake.nix to the GitHub Release as assets
+3. Push PKGBUILD + .SRCINFO to AUR via SSH (gated on AUR_SSH_KEY secret)
 ```
 
-Gated on `vars.PACKAGING_UPDATE_ENABLED == 'true'`. If the manifests are already up-to-date (e.g., a re-run), the job exits cleanly with no PR.
+Gated on `vars.PACKAGING_UPDATE_ENABLED == 'true'`. The AUR push step is additionally gated on the `AUR_SSH_KEY` secret — absent key means the step skips cleanly, manifests are still attached to the release.
 
-> **Why a PR instead of a direct push?** Branch protection requires PRs for all changes, including metadata bumps. The auto-merge flag means the PR merges itself within minutes — no human action needed.
+> **No PR to this repo.** Checksums only exist after GoReleaser builds the binaries, so the manifest generation must happen post-release. The generated files are published directly — as release artifacts and to AUR — without needing to land in `main`. Nix flake users pin to a release tag (`github:zoharbabin/web-researcher-mcp/vX.Y.Z`) and get the correct `flake.nix` from that tag's checkout automatically.
 
 ---
 
@@ -322,7 +322,9 @@ git push origin v1.38.0
 | GoReleaser failure | Check secrets are set; check `.goreleaser.yml` template syntax |
 | Python drift fails during release | Tag pushed before `make gen-python-client` — rebuild on a new patch tag |
 | macOS chain verify fails | Re-export the signing p12 with full chain (leaf + intermediate + Apple Root CA) |
-| `update-packaging` PR not created | Check `vars.PACKAGING_UPDATE_ENABLED == 'true'`; check job logs |
+| `update-packaging` assets not attached | Check `vars.PACKAGING_UPDATE_ENABLED == 'true'`; check job logs |
+| AUR push skipped | Expected when `AUR_SSH_KEY` secret is absent — add the secret to enable |
+| AUR push fails | Verify SSH key is registered on aur.archlinux.org; check package name matches |
 | PyPI publish failure | Check `pypi` environment is configured with Trusted Publishing OIDC |
 | Docker sign failure | Check GHCR image exists; check cosign OIDC token permissions |
 | MCP Registry warning | Non-fatal; check `mcp-publisher` OIDC credentials, may already be published |
