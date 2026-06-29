@@ -221,6 +221,28 @@ jobs:
 
       # ── GoReleaser — the core release step ────────────────────────────────────
 
+      # When re-running via workflow_dispatch for an existing tag (e.g. to
+      # complete a partial run that failed mid-way), GoReleaser errors with
+      # "already_exists" on each asset. This step pre-deletes all existing
+      # assets on the release so GoReleaser can re-upload cleanly.
+      - name: Clear existing release assets (idempotent re-run)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          RELEASE_ID=$(gh api "repos/zoharbabin/web-researcher-mcp/releases/tags/${GITHUB_REF_NAME}" --jq '.id' 2>/dev/null || true)
+          if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
+            echo "No existing release found for ${GITHUB_REF_NAME} — nothing to clear."
+            exit 0
+          fi
+          echo "Clearing assets for release ID ${RELEASE_ID} (${GITHUB_REF_NAME})..."
+          gh api "repos/zoharbabin/web-researcher-mcp/releases/${RELEASE_ID}/assets" --jq '.[].id' | while read -r asset_id; do
+            gh api -X DELETE "repos/zoharbabin/web-researcher-mcp/releases/assets/${asset_id}" \
+              && echo "  deleted asset ${asset_id}"
+          done
+          echo "Done clearing assets."
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
