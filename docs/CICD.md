@@ -150,6 +150,8 @@ git push origin v1.38.0
 | `PYPI_PUBLISH_ENABLED` | Var | `"true"` to enable PyPI wheels |
 | `AUR_SSH_KEY` | Secret | SSH private key for AUR push (optional — skips gracefully if absent) |
 | `PACKAGING_UPDATE_ENABLED` | Var | `"true"` to enable AUR/Nix manifest generation + upload |
+| `NIXPKGS_FORK_GITHUB_TOKEN` | Secret | PAT (repo scope) used to push branch to the NixOS/nixpkgs fork and open the PR |
+| `NIXPKGS_ENABLED` | Var | `"true"` to enable the nixpkgs submission job |
 
 ### 📦 Job dependency graph
 
@@ -164,9 +166,11 @@ git push origin v1.38.0
      │
      ├──► [🐍 Publish → PyPI]           (if PYPI_PUBLISH_ENABLED)
      │
-     └──► [📦 Update Packaging Manifests] (if PACKAGING_UPDATE_ENABLED)
-               └─ attaches PKGBUILD/.SRCINFO/flake.nix to release
-               └─ pushes to AUR via SSH (if AUR_SSH_KEY set)
+     ├──► [📦 Update Packaging Manifests] (if PACKAGING_UPDATE_ENABLED)
+     │         └─ attaches PKGBUILD/.SRCINFO/flake.nix/package.nix to release
+     │         └─ pushes to AUR via SSH (if AUR_SSH_KEY set)
+     │
+     └──► [🐧 Submit → nixpkgs proper]   (if NIXPKGS_ENABLED)
 ```
 
 All downstream jobs run in parallel after the core release job completes. A failure in any one job does not block the others.
@@ -228,16 +232,40 @@ Downloads the cross-compiled binaries from the `release` job artifact, wraps the
 ```
 1. Run scripts/update-packaging.sh <VERSION>
    └─ Fetches checksums.txt from the new release
-   └─ Generates packaging/aur/PKGBUILD    (version + hex SHA256)
-   └─ Generates packaging/aur/.SRCINFO    (version + hex SHA256)
-   └─ Generates packaging/nix/flake.nix   (version + SRI hashes, 4 platforms)
-2. Attach PKGBUILD, .SRCINFO, flake.nix to the GitHub Release as assets
+   └─ Generates packaging/aur/PKGBUILD         (version + hex SHA256)
+   └─ Generates packaging/aur/.SRCINFO         (version + hex SHA256)
+   └─ Generates packaging/nix/flake.nix        (version + SRI hashes, 4 platforms)
+   └─ Updates packaging/nixpkgs/package.nix    (version string only — hashes via nix)
+2. Attach PKGBUILD, .SRCINFO, flake.nix, package.nix to the GitHub Release as assets
 3. Push PKGBUILD + .SRCINFO to AUR via SSH (gated on AUR_SSH_KEY secret)
 ```
 
 Gated on `vars.PACKAGING_UPDATE_ENABLED == 'true'`. The AUR push step is additionally gated on the `AUR_SSH_KEY` secret — absent key means the step skips cleanly, manifests are still attached to the release.
 
 > **No PR to this repo.** Checksums only exist after GoReleaser builds the binaries, so the manifest generation must happen post-release. The generated files are published directly — as release artifacts and to AUR — without needing to land in `main`. Nix flake users pin to a release tag (`github:zoharbabin/web-researcher-mcp/vX.Y.Z`) and get the correct `flake.nix` from that tag's checkout automatically.
+
+### 🐧 [submit-nixpkgs-pr] — nixpkgs proper
+
+**Initial submission is automated; future bumps are handled by the nixpkgs-update bot.**
+
+This is what gets `nix profile install nixpkgs#web-researcher-mcp` working for users — no flake, no pinning to this repo. Two modes, chosen automatically per run:
+
+- **Package not yet in nixpkgs** → installs nix, computes `src` hash and `vendorHash` (using `lib.fakeHash` trick — build with empty hash, extract real hash from the error, repeat for vendor), forks `NixOS/nixpkgs`, pushes the derivation in the correct `pkgs/by-name/we/web-researcher-mcp/` path, opens a PR against `NixOS/nixpkgs` master.
+- **Package already merged** → no-op; the `passthru.updateScript = nix-update-script {}` in the derivation signals the `nixpkgs-update` bot to open version-bump PRs automatically on every new release tag — zero maintenance.
+
+```
+1. Check if pkgs/by-name/we/web-researcher-mcp/package.nix exists in NixOS/nixpkgs
+   └─ If yes → exit 0 (nixpkgs-update handles future bumps)
+2. Install nix via DeterminateSystems/nix-installer-action
+3. Compute real src hash  (nix-build with lib.fakeHash → parse error output)
+4. Compute real vendorHash (same trick with src hash known)
+5. Patch packaging/nixpkgs/package.nix with both hashes
+6. Fork NixOS/nixpkgs (gh repo fork — idempotent)
+7. Clone fork, create branch nixpkgs-web-researcher-mcp-<VERSION>, commit, push
+8. Open PR: zoharbabin:nixpkgs-web-researcher-mcp-<VERSION> → NixOS/nixpkgs master
+```
+
+Gated on `vars.NIXPKGS_ENABLED == 'true'` + `secrets.NIXPKGS_FORK_GITHUB_TOKEN`.
 
 ---
 

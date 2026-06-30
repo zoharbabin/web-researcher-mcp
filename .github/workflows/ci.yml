@@ -184,16 +184,18 @@ jobs:
           done
           echo "PKGBUILD syntax OK"
 
-      - name: Validate version consistency across packaging files
+      - name: Validate version consistency across all packaging files
         run: |
           set -euo pipefail
           PKGBUILD_VER="$(grep '^pkgver=' packaging/aur/PKGBUILD | cut -d= -f2)"
           SRCINFO_VER="$(grep 'pkgver = ' packaging/aur/.SRCINFO | awk '{print $3}' | head -1)"
           FLAKE_VER="$(grep 'version = "' packaging/nix/flake.nix | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+          NIXPKGS_VER="$(grep 'version = "' packaging/nixpkgs/package.nix | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
 
-          echo "PKGBUILD: ${PKGBUILD_VER}"
-          echo ".SRCINFO: ${SRCINFO_VER}"
-          echo "flake.nix: ${FLAKE_VER}"
+          echo "PKGBUILD:        ${PKGBUILD_VER}"
+          echo ".SRCINFO:        ${SRCINFO_VER}"
+          echo "flake.nix:       ${FLAKE_VER}"
+          echo "nixpkgs/pkg.nix: ${NIXPKGS_VER}"
 
           if [ "$PKGBUILD_VER" != "$SRCINFO_VER" ]; then
             echo "::error::Version mismatch: PKGBUILD=${PKGBUILD_VER} vs .SRCINFO=${SRCINFO_VER}"
@@ -201,6 +203,10 @@ jobs:
           fi
           if [ "$PKGBUILD_VER" != "$FLAKE_VER" ]; then
             echo "::error::Version mismatch: PKGBUILD=${PKGBUILD_VER} vs flake.nix=${FLAKE_VER}"
+            exit 1
+          fi
+          if [ "$PKGBUILD_VER" != "$NIXPKGS_VER" ]; then
+            echo "::error::Version mismatch: PKGBUILD=${PKGBUILD_VER} vs nixpkgs/package.nix=${NIXPKGS_VER}"
             exit 1
           fi
           echo "All packaging versions consistent: ${PKGBUILD_VER}"
@@ -238,6 +244,30 @@ jobs:
             exit 1
           fi
           echo "flake.nix SRI hashes OK (${count} platforms)"
+
+      - name: Validate nixpkgs derivation syntax and required fields
+        run: |
+          set -euo pipefail
+          PKG="packaging/nixpkgs/package.nix"
+          # Verify the file exists and has the minimum structural fields nixpkgs CI requires.
+          for field in pname version src vendorHash ldflags meta; do
+            grep -q "${field}" "${PKG}" || \
+              { echo "::error::${PKG} missing required field: ${field}"; exit 1; }
+          done
+          # Verify passthru.updateScript is present (required for nixpkgs-update automation).
+          grep -q "updateScript" "${PKG}" || \
+            { echo "::error::${PKG} missing passthru.updateScript — nixpkgs-update bot cannot auto-bump"; exit 1; }
+          # Verify meta.license, meta.homepage, meta.mainProgram
+          for meta_field in license homepage mainProgram; do
+            grep -q "${meta_field}" "${PKG}" || \
+              { echo "::error::${PKG} missing meta.${meta_field}"; exit 1; }
+          done
+          # Verify the pkgs/by-name path matches the package name (we/web-researcher-mcp)
+          PNAME="$(grep 'pname = ' "${PKG}" | head -1 | grep -oE '"[^"]+"' | tr -d '"')"
+          echo "pname: ${PNAME}"
+          [ "${PNAME}" = "web-researcher-mcp" ] || \
+            { echo "::error::pname mismatch: expected web-researcher-mcp, got ${PNAME}"; exit 1; }
+          echo "nixpkgs package.nix validation OK"
 
   # ── Code-only jobs (skipped on docs/packaging/assets PRs) ────────────────────
 
