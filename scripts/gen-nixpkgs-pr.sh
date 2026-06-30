@@ -132,9 +132,19 @@ sed \
 log "Wrote ${PKG_DIR}/package.nix"
 grep -E 'version|hash|vendorHash' "${NIXPKGS}/${PKG_DIR}/package.nix"
 
-# ── 8. Commit and push ───────────────────────────────────────────────────────
+# ── 8. Add maintainer entry + commit ─────────────────────────────────────────
 git -C "${NIXPKGS}" config user.name  "web-researcher-mcp-bot"
 git -C "${NIXPKGS}" config user.email "github-actions@users.noreply.github.com"
+
+# Add zoharbabin to maintainers/maintainer-list.nix if not already present.
+# Entries are alphabetical; zoharbabin sorts between zohl and zookatron.
+MLIST="${NIXPKGS}/maintainers/maintainer-list.nix"
+if ! grep -q 'zoharbabin' "${MLIST}"; then
+  perl -i -0pe 's|(  zookatron = \{)|  zoharbabin = \{\n    email = "zohar\@zoharbabin.com";\n    github = "zoharbabin";\n    githubId = 150514;\n    name = "Zohar Babin";\n  };\n  $1|' "${MLIST}"
+  git -C "${NIXPKGS}" add maintainers/maintainer-list.nix
+  log "Added zoharbabin to maintainers/maintainer-list.nix"
+fi
+
 git -C "${NIXPKGS}" add "${PKG_DIR}/package.nix"
 git -C "${NIXPKGS}" commit -m "web-researcher-mcp: init at ${VERSION}"
 
@@ -182,6 +192,7 @@ research with verifiable citations.
 - [x] `meta.changelog` set
 - [x] Uses `buildGoModule` (not pre-built binary) per nixpkgs guidelines
 - [x] In `pkgs/by-name/we/web-researcher-mcp/package.nix` per by-name convention
+- [x] Maintainer entry added to `maintainers/maintainer-list.nix`
 EOF
 )")"
 
