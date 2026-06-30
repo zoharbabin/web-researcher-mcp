@@ -8,7 +8,7 @@
 
 buildGoModule (finalAttrs: {
   pname = "web-researcher-mcp";
-  version = "1.37.5";
+  version = "1.37.3";
 
   src = fetchFromGitHub {
     owner = "zoharbabin";
