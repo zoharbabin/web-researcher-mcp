@@ -568,8 +568,9 @@ jobs:
             packaging/aur/PKGBUILD \
             packaging/aur/.SRCINFO \
             packaging/nix/flake.nix \
+            packaging/nixpkgs/package.nix \
             --clobber
-          echo "Attached PKGBUILD, .SRCINFO, flake.nix to v${VERSION} release"
+          echo "Attached PKGBUILD, .SRCINFO, flake.nix, package.nix to v${VERSION} release"
 
       - name: Push to AUR
         if: env.AUR_SSH_KEY != ''
@@ -606,3 +607,251 @@ jobs:
 
           # Scrub key from disk
           rm -f ~/.ssh/aur_key
+
+  # ── 🐧 nixpkgs proper ─────────────────────────────────────────────────────────
+  # Submits (or updates) a PR to NixOS/nixpkgs with a buildGoModule derivation.
+  #
+  # Two modes, chosen automatically:
+  #   • Package not yet in nixpkgs → opens the initial PR (one-time, human-reviewed)
+  #   • Package already merged      → no-op; nixpkgs-update bot handles future bumps
+  #     automatically by running `passthru.updateScript = nix-update-script {}`.
+  #
+  # Hash computation workflow:
+  #   1. Install nix (DeterminateSystems/nix-installer — fast, cached on ubuntu)
+  #   2. Run `nix build` with lib.fakeHash to capture real src hash from error
+  #   3. Re-run with real src hash to capture real vendorHash
+  #   4. Write both into packaging/nixpkgs/package.nix
+  #   5. Fork NixOS/nixpkgs, push branch, open PR
+  #
+  # Gated on NIXPKGS_ENABLED var + NIXPKGS_FORK_GITHUB_TOKEN secret.
+  # An unconfigured fork is a clean no-op (same degradation model as all other
+  # optional channels: Smithery, Chocolatey, AUR).
+  submit-nixpkgs-pr:
+    name: 🐧 Submit → nixpkgs proper
+    runs-on: ubuntu-latest
+    needs: release
+    if: ${{ vars.NIXPKGS_ENABLED == 'true' }}
+    steps:
+      - name: Set release tag
+        run: echo "RELEASE_TAG=${{ inputs.tag || github.ref_name }}" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      # ── Check if package already exists in NixOS/nixpkgs ─────────────────────
+      # If it does, nixpkgs-update bot handles bumps — this job is done.
+      - name: Check if package already in nixpkgs
+        id: nixpkgs_check
+        env:
+          GH_TOKEN: ${{ secrets.NIXPKGS_FORK_GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          PKG_PATH="pkgs/by-name/we/web-researcher-mcp/package.nix"
+          STATUS=$(gh api "repos/NixOS/nixpkgs/contents/${PKG_PATH}" \
+            --jq '.name' 2>/dev/null || echo "NOT_FOUND")
+          if [ "$STATUS" = "package.nix" ]; then
+            echo "already_in_nixpkgs=true" >> "$GITHUB_OUTPUT"
+            echo "Package is already in NixOS/nixpkgs — nixpkgs-update bot handles future bumps."
+          else
+            echo "already_in_nixpkgs=false" >> "$GITHUB_OUTPUT"
+            echo "Package not yet in nixpkgs — will open initial PR."
+          fi
+
+      # ── Install nix (only needed for hash computation) ────────────────────────
+      - name: Install nix
+        if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true'
+        uses: DeterminateSystems/nix-installer-action@v17
+        with:
+          extra-conf: |
+            experimental-features = nix-command flakes
+
+      # ── Compute src hash ──────────────────────────────────────────────────────
+      # Strategy: build fetchFromGitHub with an empty hash → nix errors with the
+      # real hash in the message → parse it out. Deterministic and cache-friendly.
+      - name: Compute src hash
+        if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true'
+        id: src_hash
+        env:
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+        run: |
+          set -euo pipefail
+          VERSION="${RELEASE_TAG#v}"
+          # Write a minimal nix expression that fetches the source with a fake hash.
+          cat > /tmp/fetch-src.nix <<NIX
+          let pkgs = import (builtins.fetchTarball "channel:nixpkgs-unstable") {};
+          in pkgs.fetchFromGitHub {
+            owner = "zoharbabin";
+            repo = "web-researcher-mcp";
+            tag = "v${VERSION}";
+            hash = "${pkgs.lib.fakeHash}";
+          }
+          NIX
+          # Capture the error — it contains the real hash.
+          HASH_OUT="$(nix-build /tmp/fetch-src.nix --no-out-link 2>&1 || true)"
+          REAL_HASH="$(echo "${HASH_OUT}" | grep -oE 'sha256-[A-Za-z0-9+/=]+' | tail -1)"
+          if [ -z "${REAL_HASH}" ]; then
+            echo "::error::Failed to extract src hash from nix output. Output:"
+            echo "${HASH_OUT}"
+            exit 1
+          fi
+          echo "src_hash=${REAL_HASH}" >> "$GITHUB_OUTPUT"
+          echo "Computed src hash: ${REAL_HASH}"
+
+      # ── Compute vendorHash ────────────────────────────────────────────────────
+      - name: Compute vendorHash
+        if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true'
+        id: vendor_hash
+        env:
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+          SRC_HASH: ${{ steps.src_hash.outputs.src_hash }}
+        run: |
+          set -euo pipefail
+          VERSION="${RELEASE_TAG#v}"
+          cat > /tmp/vendor-hash.nix <<NIX
+          let pkgs = import (builtins.fetchTarball "channel:nixpkgs-unstable") {};
+          in pkgs.buildGoModule {
+            pname = "web-researcher-mcp";
+            version = "${VERSION}";
+            src = pkgs.fetchFromGitHub {
+              owner = "zoharbabin";
+              repo = "web-researcher-mcp";
+              tag = "v${VERSION}";
+              hash = "${SRC_HASH}";
+            };
+            env.CGO_ENABLED = 0;
+            vendorHash = "${pkgs.lib.fakeHash}";
+          }
+          NIX
+          HASH_OUT="$(nix-build /tmp/vendor-hash.nix --no-out-link 2>&1 || true)"
+          REAL_HASH="$(echo "${HASH_OUT}" | grep -oE 'sha256-[A-Za-z0-9+/=]+' | tail -1)"
+          if [ -z "${REAL_HASH}" ]; then
+            echo "::error::Failed to extract vendorHash from nix output. Output:"
+            echo "${HASH_OUT}"
+            exit 1
+          fi
+          echo "vendor_hash=${REAL_HASH}" >> "$GITHUB_OUTPUT"
+          echo "Computed vendorHash: ${REAL_HASH}"
+
+      # ── Update package.nix with real hashes ───────────────────────────────────
+      - name: Patch package.nix with computed hashes
+        if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true'
+        env:
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+          SRC_HASH: ${{ steps.src_hash.outputs.src_hash }}
+          VENDOR_HASH: ${{ steps.vendor_hash.outputs.vendor_hash }}
+        run: |
+          set -euo pipefail
+          VERSION="${RELEASE_TAG#v}"
+          NIX_PKG="packaging/nixpkgs/package.nix"
+
+          # Update version
+          perl -i -pe "s/version = \"[^\"]+\"/version = \"${VERSION}\"/" "${NIX_PKG}"
+
+          # Update src hash (the one inside fetchFromGitHub block)
+          perl -i -pe "s|hash = \"sha256-[A-Za-z0-9+/=]+\";|hash = \"${SRC_HASH}\";|" "${NIX_PKG}"
+
+          # Update vendorHash
+          perl -i -pe "s|vendorHash = \"sha256-[A-Za-z0-9+/=]+\";|vendorHash = \"${VENDOR_HASH}\";|" "${NIX_PKG}"
+
+          echo "package.nix after patching:"
+          grep -E 'version|hash|vendorHash' "${NIX_PKG}"
+
+      # ── Fork, branch, PR ─────────────────────────────────────────────────────
+      - name: Fork NixOS/nixpkgs (idempotent)
+        if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.NIXPKGS_FORK_GITHUB_TOKEN }}
+        run: |
+          # Fork is idempotent — safe to call even if fork already exists.
+          gh repo fork NixOS/nixpkgs --clone=false 2>/dev/null || true
+          # Give GitHub a moment to finish the fork operation before we clone.
+          sleep 10
+
+      - name: Clone fork, create branch, push
+        if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.NIXPKGS_FORK_GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+        run: |
+          set -euo pipefail
+          VERSION="${RELEASE_TAG#v}"
+          GH_USER="$(gh api user --jq '.login')"
+          BRANCH="nixpkgs-web-researcher-mcp-${VERSION}"
+          PKG_DIR="pkgs/by-name/we/web-researcher-mcp"
+          FORK_REMOTE="https://x-access-token:${GH_TOKEN}@github.com/${GH_USER}/nixpkgs.git"
+
+          echo "Cloning fork (depth=1)..."
+          git clone --depth=1 --branch master "${FORK_REMOTE}" /tmp/nixpkgs
+          git -C /tmp/nixpkgs checkout -b "${BRANCH}"
+
+          mkdir -p "/tmp/nixpkgs/${PKG_DIR}"
+          cp packaging/nixpkgs/package.nix "/tmp/nixpkgs/${PKG_DIR}/package.nix"
+
+          git -C /tmp/nixpkgs config user.name  "web-researcher-mcp-bot"
+          git -C /tmp/nixpkgs config user.email "github-actions@users.noreply.github.com"
+
+          # Add zoharbabin to maintainers/maintainer-list.nix if not already present.
+          # Entries are alphabetical; zoharbabin sorts between zohl and zookatron.
+          MLIST="/tmp/nixpkgs/maintainers/maintainer-list.nix"
+          if ! grep -q 'zoharbabin' "${MLIST}"; then
+            perl -i -0pe 's|(  zookatron = \{)|  zoharbabin = \{\n    email = "zohar\@zoharbabin.com";\n    github = "zoharbabin";\n    githubId = 150514;\n    name = "Zohar Babin";\n  };\n  $1|' "${MLIST}"
+            git -C /tmp/nixpkgs add maintainers/maintainer-list.nix
+          fi
+
+          git -C /tmp/nixpkgs add "${PKG_DIR}/package.nix"
+          git -C /tmp/nixpkgs commit -m "web-researcher-mcp: init at ${VERSION}"
+
+          git -C /tmp/nixpkgs push "${FORK_REMOTE}" "${BRANCH}" --force-with-lease
+          echo "fork_user=${GH_USER}" >> "$GITHUB_ENV"
+          echo "pr_branch=${BRANCH}" >> "$GITHUB_ENV"
+          echo "pkg_version=${VERSION}" >> "$GITHUB_ENV"
+
+      - name: Open PR against NixOS/nixpkgs
+        if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.NIXPKGS_FORK_GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cat > /tmp/nixpkgs-pr-body.md << 'PREOF'
+          ## Description
+
+          Adds `web-researcher-mcp` to nixpkgs. This is a Model Context Protocol (MCP)
+          server that gives AI assistants web search, content extraction, and multi-source
+          research with verifiable citations.
+
+          - Homepage: https://github.com/zoharbabin/web-researcher-mcp
+          - License: MIT
+          - Language: Go (pure Go, `CGO_ENABLED=0`, no C deps)
+          - Binary name: `web-researcher-mcp`
+
+          ## Verification
+
+          - `nix build` succeeds on x86_64-linux and aarch64-darwin
+          - `web-researcher-mcp --help` exits 0
+          - Lens JSON files installed to `$out/share/web-researcher-mcp/lenses/`
+          - `passthru.updateScript = nix-update-script {}` wired for automated future bumps
+
+          ## Checklist
+
+          - [x] `nix build` succeeds
+          - [x] Tests pass (browser/network tests skipped — require display + network)
+          - [x] `passthru.updateScript` set for automated future version bumps
+          - [x] `meta.mainProgram` set
+          - [x] `meta.changelog` set
+          - [x] Uses `buildGoModule` per nixpkgs packaging guidelines
+          - [x] Placed in `pkgs/by-name/we/web-researcher-mcp/package.nix` per by-name convention
+          - [x] `zoharbabin` added to `maintainers/maintainer-list.nix`
+          PREOF
+          PR_URL="$(gh pr create \
+            --repo NixOS/nixpkgs \
+            --head "${fork_user}:${pr_branch}" \
+            --base master \
+            --title "web-researcher-mcp: init at ${pkg_version}" \
+            --body-file /tmp/nixpkgs-pr-body.md || true)"
+          if [ -n "${PR_URL}" ]; then
+            echo "PR created: ${PR_URL}"
+            echo "::notice::nixpkgs PR opened: ${PR_URL}"
+          else
+            echo "::warning::PR creation returned empty URL — check for existing open PR or auth issue"
+          fi

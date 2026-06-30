@@ -95,6 +95,22 @@ print("Nix hashes updated.")
 PYEOF
 echo "Updated ${FLAKE}"
 
+# ── nixpkgs derivation (version string only) ─────────────────────────────────
+# Only update the version string in packaging/nixpkgs/package.nix.
+# The src hash and vendorHash are computed by nix itself and require a working
+# nix store — that happens inside the submit-nixpkgs-pr CI job. The placeholder
+# "AAAA..." hashes in the committed file are intentional: the derivation is not
+# meant to be built directly from this repo; it is submitted to NixOS/nixpkgs
+# where nixpkgs infrastructure computes and verifies the hashes. Locally the
+# file serves as a human-readable template and the single source of truth for
+# the maintainer block, meta fields, and ldflags.
+NIXPKGS_DRV="${REPO_ROOT}/packaging/nixpkgs/package.nix"
+if [ -f "${NIXPKGS_DRV}" ]; then
+  OLD_NIX_VERSION="$(grep 'version = "' "${NIXPKGS_DRV}" | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+  SED_INPLACE "s/version = \"${OLD_NIX_VERSION}\"/version = \"${VERSION}\"/" "${NIXPKGS_DRV}"
+  echo "Updated ${NIXPKGS_DRV} (version → ${VERSION}; hashes updated by CI)"
+fi
+
 echo ""
 echo "Done. Packaging updated to v${VERSION}."
-echo "Verify: grep -n 'version\|sha256\|hash' packaging/aur/PKGBUILD packaging/aur/.SRCINFO packaging/nix/flake.nix"
+echo "Verify: grep -n 'version\|sha256\|hash' packaging/aur/PKGBUILD packaging/aur/.SRCINFO packaging/nix/flake.nix packaging/nixpkgs/package.nix"
