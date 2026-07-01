@@ -108,6 +108,41 @@ func TestNewsSearchZeroResultHints(t *testing.T) {
 	})
 }
 
+// TestImageSearchZeroResultHints (#357): image_search's zero-result branch
+// (`if len(results) == 0 { output["hints"] = buildZeroResultHints(...) }`)
+// had no covering test — no test drove image_search with a provider
+// returning zero results, so a regression dropping the hints field or its
+// epistemicWarning would not be caught.
+func TestImageSearchZeroResultHints(t *testing.T) {
+	t.Run("emits hints on zero results", func(t *testing.T) {
+		deps := setupTestDeps()
+		deps.Search = &emptyWebProvider{}
+		out := callToolJSON(t, deps, "image_search", map[string]any{"query": "asdkjhqweh"})
+
+		if out["resultCount"].(float64) != 0 {
+			t.Fatalf("expected 0 results, got %v", out["resultCount"])
+		}
+		hints, ok := out["hints"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected hints object on zero results, got %v", out["hints"])
+		}
+		if hints["epistemicWarning"] != epistemicZeroResultWarning {
+			t.Errorf("expected epistemicWarning %q, got %v", epistemicZeroResultWarning, hints["epistemicWarning"])
+		}
+	})
+
+	t.Run("no hints when results present", func(t *testing.T) {
+		deps := setupTestDeps() // default mockProvider returns one image result
+		out := callToolJSON(t, deps, "image_search", map[string]any{"query": "cats"})
+		if out["resultCount"].(float64) == 0 {
+			t.Fatal("precondition: expected non-zero results from mockProvider")
+		}
+		if _, present := out["hints"]; present {
+			t.Errorf("hints must be absent on non-empty results, got %v", out["hints"])
+		}
+	})
+}
+
 // TestHealthyAlternativesExcludesUsed checks the alternatives helper omits the
 // provider that was just used and returns a deterministic order (issue #100).
 func TestHealthyAlternativesExcludesUsed(t *testing.T) {

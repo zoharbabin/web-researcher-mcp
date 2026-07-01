@@ -271,9 +271,13 @@ func TestLocalFilterMap(t *testing.T) {
 	})
 
 	t.Run("lone coordinate is not included", func(t *testing.T) {
-		got := localFilterMap(localSearchInput{}, nil, nil)
+		lat := 47.6062
+		got := localFilterMap(localSearchInput{}, &lat, nil)
 		if _, present := got["latitude"]; present {
 			t.Errorf("latitude must not appear without both lat and lon, got %v", got)
+		}
+		if _, present := got["longitude"]; present {
+			t.Errorf("longitude must not appear without both lat and lon, got %v", got)
 		}
 	})
 

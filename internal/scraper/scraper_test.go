@@ -3072,3 +3072,52 @@ func TestStampSparsity_WordCountBoundary(t *testing.T) {
 
 	stampSparsity(nil) // must not panic
 }
+
+// TestStampSparsity_CJKContentNotMisflagged is a regression test: a complete
+// CJK article has no ASCII whitespace, so strings.Fields would count it as
+// ~1 "word" and fire a false SparsityWarning even though nothing is missing.
+// stampSparsity must use a script-aware word count instead.
+func TestStampSparsity_CJKContentNotMisflagged(t *testing.T) {
+	t.Parallel()
+	// A genuine, complete Chinese paragraph repeated to be unambiguously long —
+	// zero ASCII spaces, well over sparseWordThreshold (150) runes.
+	content := strings.Repeat("这是一段完整的中文新闻内容用于测试提取质量与字数统计逻辑是否正确处理非拉丁语言的文本", 4)
+	r := &ScrapeResult{Content: content}
+	stampSparsity(r)
+	if r.WordCount < sparseWordThreshold {
+		t.Errorf("expected CJK content's script-aware word count to clear sparseWordThreshold, got WordCount=%d", r.WordCount)
+	}
+	if r.SparsityWarning != "" {
+		t.Errorf("expected no SparsityWarning for complete CJK content, got %q", r.SparsityWarning)
+	}
+}
+
+// TestLooksLikePartialShell_CJKContentNotMisflagged is a regression test for
+// the same strings.Fields defect in the rawHTMLBytes==0 branch: a complete
+// CJK/Thai/Lao article must not be misclassified as a partial shell.
+func TestLooksLikePartialShell_CJKContentNotMisflagged(t *testing.T) {
+	t.Parallel()
+	content := strings.Repeat("这是一段完整的中文新闻内容用于测试提取质量与字数统计逻辑是否正确处理非拉丁语言的文本", 3)
+	r := &ScrapeResult{Content: content, rawHTMLBytes: 0}
+	if looksLikePartialShell(r) {
+		t.Errorf("expected complete CJK content (rawHTMLBytes==0) to NOT be flagged as a partial shell")
+	}
+}
+
+// TestLooksLikePartialShell_BrowserTierExempt is a regression test: the
+// browser tier already executed JS, so a short browser-tier result is a
+// genuinely short page, not a shell to keep escalating past — there is
+// nothing further to render. Only the browser tier gets this exemption;
+// other rawHTMLBytes==0 tiers (markdown) still use the word-count check.
+func TestLooksLikePartialShell_BrowserTierExempt(t *testing.T) {
+	t.Parallel()
+	short := &ScrapeResult{Content: "cookie banner accept all", rawHTMLBytes: 0, Tier: "browser"}
+	if looksLikePartialShell(short) {
+		t.Error("expected a short browser-tier result to NOT be flagged as a partial shell")
+	}
+	// Same content, markdown tier: still flagged (unchanged behavior).
+	markdown := &ScrapeResult{Content: "cookie banner accept all", rawHTMLBytes: 0, Tier: "markdown"}
+	if !looksLikePartialShell(markdown) {
+		t.Error("expected the same short markdown-tier result to still be flagged as a partial shell")
+	}
+}

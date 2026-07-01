@@ -73,7 +73,10 @@ func claimCoverageFromContent(body, fetchURL, claim string) claimCoverageResult 
 	// judges). Strong overlap → addressed.
 	matched, total := content.ClaimTermCoverageWindowed(body, claim, 0)
 	ev := content.ExtractClaimEvidence(body, claim)
-	wordCount := len(strings.Fields(body))
+	// content.WordCount, not strings.Fields: CJK/Thai/Lao/Khmer/Myanmar text has
+	// no inter-word spaces, so a complete non-Latin-script source would otherwise
+	// collapse to a handful of "words" and trip a false SparsityNote.
+	wordCount := content.WordCount(body)
 	out := claimCoverageResult{
 		Evidence:  ev.KeySentences,
 		SourceURL: fetchURL,

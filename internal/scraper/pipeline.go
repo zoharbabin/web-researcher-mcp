@@ -78,8 +78,10 @@ type ScrapeResult struct {
 	// caller can see whether content came from a free tier or the paid Exa
 	// fallback. Empty for results from tiers that predate this field.
 	Tier string
-	// WordCount is len(strings.Fields(Content)) — a cheap, deterministic proxy
-	// for how much prose was actually extracted. Populated by Scrape for every
+	// WordCount is content.WordCount(Content) — a cheap, deterministic,
+	// script-aware proxy for how much prose was actually extracted (plain
+	// whitespace splitting alone undercounts CJK/Thai/Lao/Khmer/Myanmar text,
+	// which has no inter-word spaces). Populated by Scrape for every
 	// successful result (0 for ScrapeRaw, which returns an unprocessed body).
 	WordCount int
 	// SparsityWarning is non-empty when WordCount falls below
@@ -262,11 +264,15 @@ const sparseWordThreshold = 150
 // Deliberately called once, at the single point every scrape path (direct
 // router or tiered fallback) converges back into Scrape, so every caller
 // gets the signal regardless of which tier produced the result.
+//
+// WordCount uses content.WordCount, not strings.Fields, so CJK/Thai/Lao/Khmer
+// articles (which have no inter-word spaces) don't collapse to a handful of
+// "words" and trip a false SparsityWarning on genuinely complete content.
 func stampSparsity(r *ScrapeResult) {
 	if r == nil {
 		return
 	}
-	r.WordCount = len(strings.Fields(r.Content))
+	r.WordCount = content.WordCount(r.Content)
 	if r.WordCount < sparseWordThreshold {
 		r.SparsityWarning = fmt.Sprintf("Extracted content is thin (%d words); claim checks against this source may be unreliable.", r.WordCount)
 	}
@@ -449,6 +455,14 @@ const (
 // only, word count is the sole available signal: a markdown-tier stub with
 // fewer than shellMaxWords words (e.g. a nav/cookie-banner sliver from a
 // JS-rendered page) is escalation-worthy even though rawHTMLBytes is zero.
+// The browser tier is exempted from this word-count check: it already
+// executed JS, so a short browser-tier result is a genuinely short page, not
+// a shell to escalate past — there is nothing further to render.
+//
+// The word count itself uses content.WordCount, not strings.Fields: CJK,
+// Thai, Lao, Khmer, and Myanmar text has no inter-word spaces, so a complete
+// article in one of those scripts would otherwise collapse to a handful of
+// whitespace-delimited "words" and be misclassified as a shell.
 //
 // For tiers that DID parse raw HTML (rawHTMLBytes > 0), the ratio check is the
 // sole arbiter — the test is purely structural and uses only bytes the tier
@@ -470,7 +484,10 @@ func looksLikePartialShell(r *ScrapeResult) bool {
 	// loop never calls this on content that short anyway (it requires > 100
 	// bytes before checking), so there is nothing here to escalate past.
 	if r.rawHTMLBytes == 0 {
-		return r.Content != "" && len(strings.Fields(r.Content)) < shellMaxWords
+		if r.Tier == "browser" {
+			return false
+		}
+		return r.Content != "" && content.WordCount(r.Content) < shellMaxWords
 	}
 	textLen := len(r.Content)
 	if textLen == 0 || textLen > shellMaxTextBytes {

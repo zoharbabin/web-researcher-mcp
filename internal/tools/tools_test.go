@@ -1259,6 +1259,15 @@ func TestSearchAndScrapeZeroResults(t *testing.T) {
 	if _, ok := output["sizeMetadata"].(map[string]any); !ok {
 		t.Fatalf("zero-results must include sizeMetadata block, got %v", output["sizeMetadata"])
 	}
+	// #357: the zero-search-results path must also carry epistemic hints, same
+	// as web_search/news_search/etc.
+	hints, ok := output["hints"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected hints object on zero results, got %v", output["hints"])
+	}
+	if hints["epistemicWarning"] != epistemicZeroResultWarning {
+		t.Errorf("expected epistemicWarning %q, got %v", epistemicZeroResultWarning, hints["epistemicWarning"])
+	}
 }
 
 func TestSearchAndScrapeEmptyQuery(t *testing.T) {

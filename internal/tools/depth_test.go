@@ -147,6 +147,35 @@ func TestDepthThoroughWarnsOnZeroResults(t *testing.T) {
 	}
 }
 
+// TestDepthThoroughWarnsOnRefinementSearchError (#357): a refinement round
+// that errors (not just returns zero results) must also count toward
+// zeroCount/refinementWarning, and the entry must carry the "search failed"
+// marker. No existing test drives this branch since emptyWebProvider returns
+// nil error with an empty slice, never a non-nil error.
+func TestDepthThoroughWarnsOnRefinementSearchError(t *testing.T) {
+	deps := setupTestDeps()
+	deps.Search = &genericErrorProvider{}
+	_, out := startSession(t, deps, "thorough")
+
+	rr, ok := out["refinementResults"].([]any)
+	if !ok || len(rr) == 0 {
+		t.Fatalf("thorough depth should auto-run refinement searches, got %v", out["refinementResults"])
+	}
+	first, _ := rr[0].(map[string]any)
+	if first["error"] != "search failed" {
+		t.Errorf("expected refinementResults[0].error = %q, got %v", "search failed", first["error"])
+	}
+
+	warning, ok := out["refinementWarning"].(string)
+	if !ok || warning == "" {
+		t.Fatalf("expected refinementWarning when refinement rounds error out, got %v", out["refinementWarning"])
+	}
+	want := fmt.Sprintf("%d of %d refinement searches returned no results; gaps in coverage may persist and do not confirm absence", len(rr), len(rr))
+	if warning != want {
+		t.Errorf("refinementWarning = %q, want %q", warning, want)
+	}
+}
+
 func TestDepthUnknownTreatedAsQuick(t *testing.T) {
 	_, out := startSession(t, setupTestDeps(), "ludicrous")
 	if _, ok := out["coverage"]; ok {
