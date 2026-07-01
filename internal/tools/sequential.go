@@ -58,21 +58,29 @@ func applyDepth(ctx context.Context, deps Dependencies, input sequentialSearchIn
 	}
 
 	refined := make([]map[string]any, 0, len(rounds))
+	zeroCount := 0
 	for _, q := range rounds {
 		results, err := deps.Search.Web(ctx, search.WebSearchParams{Query: q, NumResults: 5})
 		entry := map[string]any{"query": q}
 		if err != nil {
 			entry["error"] = "search failed"
+			zeroCount++
 			trackOutcome(ctx, deps, sessionID, deps.Search.Name(), false, "upstream_error", "")
 		} else {
 			entry["results"] = searchResultsToMaps(results)
 			entry["resultCount"] = len(results)
+			if len(results) == 0 {
+				zeroCount++
+			}
 			trackSources(ctx, deps, sessionID, searchResultsToSources(results))
 			trackOutcome(ctx, deps, sessionID, deps.Search.Name(), len(results) > 0, "", "")
 		}
 		refined = append(refined, entry)
 	}
 	output["refinementResults"] = refined
+	if zeroCount > 0 {
+		output["refinementWarning"] = fmt.Sprintf("%d of %d refinement searches returned no results; gaps in coverage may persist and do not confirm absence", zeroCount, len(rounds))
+	}
 }
 
 // sourcesToCoverage reduces recorded session sources to coverage inputs.
@@ -139,11 +147,15 @@ func refinementQueries(idx *session.SessionIndex, cov content.Coverage) []string
 func searchResultsToMaps(results []search.SearchResult) []map[string]any {
 	out := make([]map[string]any, 0, len(results))
 	for _, r := range results {
-		out = append(out, map[string]any{
+		m := map[string]any{
 			"title":   r.Title,
 			"url":     r.URL,
 			"snippet": r.Snippet,
-		})
+		}
+		if r.PublishedAt != "" {
+			m["publishedAt"] = r.PublishedAt
+		}
+		out = append(out, m)
 	}
 	return out
 }

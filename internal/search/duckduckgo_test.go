@@ -77,6 +77,10 @@ func TestDDGProvider_ParseResults(t *testing.T) {
 	if results[2].URL != "https://github.com/golang/go" {
 		t.Errorf("unexpected URL[2]: %s", results[2].URL)
 	}
+	// #356: DuckDuckGo provider does not populate PublishedAt
+	if results[0].PublishedAt != "" {
+		t.Errorf("expected empty PublishedAt, got %q", results[0].PublishedAt)
+	}
 }
 
 func TestDDGProvider_MaxResults(t *testing.T) {

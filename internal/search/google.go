@@ -93,6 +93,7 @@ func (g *GoogleProvider) doWebSearch(ctx context.Context, params WebSearchParams
 			URL:         item.Link,
 			Snippet:     item.Snippet,
 			DisplayLink: item.DisplayLink,
+			PublishedAt: normalizePublishedAt(item.publishedAt(), time.Now()),
 		})
 	}
 	return results, nil

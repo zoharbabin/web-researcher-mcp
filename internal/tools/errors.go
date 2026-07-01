@@ -220,6 +220,7 @@ type ZeroResultHints struct {
 	ProvidersAttempted []string          `json:"providersAttempted,omitempty"`
 	FiltersApplied     map[string]string `json:"filtersApplied,omitempty"`
 	SuggestedActions   []HintAction      `json:"suggestedActions,omitempty"`
+	EpistemicWarning   string            `json:"epistemicWarning,omitempty"`
 }
 
 // HintAction is a suggested recovery action for zero-result or failed queries.
@@ -233,7 +234,8 @@ type HintAction struct {
 // buildZeroResultHints constructs hints explaining why a search returned nothing.
 func buildZeroResultHints(provider string, params map[string]string, alternatives []string) *ZeroResultHints {
 	hints := &ZeroResultHints{
-		Reason: "no_match",
+		Reason:           "no_match",
+		EpistemicWarning: "Zero results do not confirm absence. The queried fact may exist and be unreachable by the current query or provider. Do not assert non-existence from this result.",
 	}
 	if provider != "" {
 		hints.ProvidersAttempted = []string{provider}

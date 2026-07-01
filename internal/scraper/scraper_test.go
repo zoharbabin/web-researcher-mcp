@@ -2749,6 +2749,30 @@ func TestScrapeHTML_HTMLContent_NotRerouted(t *testing.T) {
 
 func TestLooksLikePartialShell(t *testing.T) {
 	t.Parallel()
+	// wordsOfLen returns a space-separated string of single-char "words" whose
+	// total length is exactly targetBytes, giving well over shellMaxWords
+	// words for any targetBytes used below — isolating the ratio branch under
+	// test from the new word-count branch.
+	wordsOfLen := func(targetBytes int) string {
+		if targetBytes <= 0 {
+			return ""
+		}
+		// "x x x...x": odd positions are spaces, so length targetBytes needs
+		// (targetBytes+1)/2 "x" chars.
+		var b strings.Builder
+		for b.Len() < targetBytes {
+			if b.Len() > 0 {
+				b.WriteByte(' ')
+			}
+			b.WriteByte('x')
+		}
+		s := b.String()
+		if len(s) > targetBytes {
+			s = s[:targetBytes]
+		}
+		return s
+	}
+
 	tests := []struct {
 		name         string
 		content      string
@@ -2757,37 +2781,37 @@ func TestLooksLikePartialShell(t *testing.T) {
 	}{
 		{
 			name:         "spa shell: short text, huge HTML",
-			content:      strings.Repeat("x", 120), // > 100 floor, <= 2048 cap
-			rawHTMLBytes: 120 * 60,                 // 60:1 ratio
+			content:      wordsOfLen(120), // > 100 floor, <= 2048 cap, >= 30 words
+			rawHTMLBytes: 120 * 60,        // 60:1 ratio
 			want:         true,
 		},
 		{
 			name:         "short but complete: little text, little HTML",
-			content:      strings.Repeat("x", 120),
+			content:      wordsOfLen(120),
 			rawHTMLBytes: 120 * 3, // 3:1 ratio — a real short page
 			want:         false,
 		},
 		{
 			name:         "substantial article never flagged regardless of ratio",
-			content:      strings.Repeat("x", shellMaxTextBytes+1),
+			content:      wordsOfLen(shellMaxTextBytes + 1),
 			rawHTMLBytes: (shellMaxTextBytes + 1) * 100,
 			want:         false,
 		},
 		{
-			name:         "non-HTML tier (rawHTMLBytes==0) never flagged",
-			content:      strings.Repeat("x", 120),
+			name:         "non-HTML tier (rawHTMLBytes==0) never flagged when word count is sufficient",
+			content:      wordsOfLen(120),
 			rawHTMLBytes: 0,
 			want:         false,
 		},
 		{
 			name:         "exactly at the ratio threshold is a shell",
-			content:      strings.Repeat("x", 100),
+			content:      wordsOfLen(100),
 			rawHTMLBytes: 100 * shellMinHTMLRatio,
 			want:         true,
 		},
 		{
 			name:         "just under the ratio threshold is not a shell",
-			content:      strings.Repeat("x", 100),
+			content:      wordsOfLen(100),
 			rawHTMLBytes: 100*shellMinHTMLRatio - 1,
 			want:         false,
 		},
@@ -2797,6 +2821,18 @@ func TestLooksLikePartialShell(t *testing.T) {
 			rawHTMLBytes: 50000,
 			want:         false,
 		},
+		{
+			name:         "sparse word count flags markdown-tier stub with zero rawHTMLBytes",
+			content:      "cookie banner accept all",
+			rawHTMLBytes: 0,
+			want:         true,
+		},
+		{
+			name:         "sparse word count flags even with a low HTML ratio",
+			content:      "just a few words here",
+			rawHTMLBytes: 6, // ratio well under shellMinHTMLRatio
+			want:         true,
+		},
 	}
 	for _, tt := range tests {
 		tt := tt
@@ -2804,8 +2840,8 @@ func TestLooksLikePartialShell(t *testing.T) {
 			t.Parallel()
 			r := &ScrapeResult{Content: tt.content, rawHTMLBytes: tt.rawHTMLBytes}
 			if got := looksLikePartialShell(r); got != tt.want {
-				t.Errorf("looksLikePartialShell() = %v, want %v (text=%d html=%d)",
-					got, tt.want, len(tt.content), tt.rawHTMLBytes)
+				t.Errorf("looksLikePartialShell() = %v, want %v (text=%d html=%d words=%d)",
+					got, tt.want, len(tt.content), tt.rawHTMLBytes, len(strings.Fields(tt.content)))
 			}
 		})
 	}

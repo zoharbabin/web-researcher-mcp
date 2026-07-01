@@ -54,6 +54,32 @@ func TestHNProviderWeb(t *testing.T) {
 	}
 }
 
+// TestHNProviderPublishedAtNotInSnippet (#356): created_at must populate
+// PublishedAt (normalized to RFC3339) and no longer be embedded in Snippet.
+func TestHNProviderPublishedAtNotInSnippet(t *testing.T) {
+	t.Parallel()
+	const body = `{"hits":[
+		{"objectID":"34179426","story_id":34179426,"author":"user1","title":"Go 1.22","url":"https://go.dev/blog/go1.22","points":500,"num_comments":100,"created_at":"2024-02-06T00:00:00Z"}
+	],"nbHits":1}`
+	p := newHNTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(body))
+	})
+	results, err := p.Web(context.Background(), WebSearchParams{Query: "golang", NumResults: 1})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("want 1 result, got %d", len(results))
+	}
+	if results[0].PublishedAt != "2024-02-06T00:00:00Z" {
+		t.Errorf("PublishedAt = %q, want normalized created_at", results[0].PublishedAt)
+	}
+	if strings.Contains(results[0].Snippet, "2024-02-06") {
+		t.Errorf("Snippet must no longer embed the date, got %q", results[0].Snippet)
+	}
+}
+
 func TestHNProviderImages(t *testing.T) {
 	t.Parallel()
 	// newHNTestProvider requires a non-nil handler; use a no-op — Images never calls the server.
@@ -86,6 +112,9 @@ func TestHNProviderNews(t *testing.T) {
 	}
 	if results[0].Source != "hackernews" {
 		t.Errorf("results[0].Source = %q, want hackernews", results[0].Source)
+	}
+	if results[0].PublishedAt != "2024-02-06T00:00:00Z" {
+		t.Errorf("News() must propagate PublishedAt from Web(), got %q", results[0].PublishedAt)
 	}
 }
 

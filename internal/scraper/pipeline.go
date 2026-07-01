@@ -78,6 +78,18 @@ type ScrapeResult struct {
 	// caller can see whether content came from a free tier or the paid Exa
 	// fallback. Empty for results from tiers that predate this field.
 	Tier string
+	// WordCount is len(strings.Fields(Content)) — a cheap, deterministic proxy
+	// for how much prose was actually extracted. Populated by Scrape for every
+	// successful result (0 for ScrapeRaw, which returns an unprocessed body).
+	WordCount int
+	// SparsityWarning is non-empty when WordCount falls below
+	// sparseWordThreshold, flagging that claim checks against this content may
+	// be unreliable. This is a CONTENT-VOLUME signal, orthogonal to Partial
+	// (which flags TIER EXHAUSTION): a non-Partial result from the confident
+	// fast path can still be thin, and a Partial fallback can still clear the
+	// threshold. Callers (verify_citation, audit_bibliography, search_and_scrape)
+	// surface this alongside — never instead of — Partial.
+	SparsityWarning string
 	// StructuredData holds machine-readable page metadata (JSON-LD, Open Graph,
 	// citation_* tags) extracted by the HTML-extraction tiers (#46) — scrapeStealth
 	// and scrapeHTML, the only tiers that parse a goquery.Document. The remaining
@@ -237,7 +249,27 @@ func (p *Pipeline) Scrape(ctx context.Context, rawURL string, maxLength int) (*S
 	if err != nil {
 		return nil, classifyRawError(err, url)
 	}
+	stampSparsity(result)
 	return result, nil
+}
+
+// sparseWordThreshold is the WordCount below which SparsityWarning fires.
+// 150 words is roughly one short paragraph — below a real article's lede,
+// above the placeholder text a bot-wall or stub page typically ships.
+const sparseWordThreshold = 150
+
+// stampSparsity populates WordCount and SparsityWarning from r.Content.
+// Deliberately called once, at the single point every scrape path (direct
+// router or tiered fallback) converges back into Scrape, so every caller
+// gets the signal regardless of which tier produced the result.
+func stampSparsity(r *ScrapeResult) {
+	if r == nil {
+		return
+	}
+	r.WordCount = len(strings.Fields(r.Content))
+	if r.WordCount < sparseWordThreshold {
+		r.SparsityWarning = fmt.Sprintf("Extracted content is thin (%d words); claim checks against this source may be unreliable.", r.WordCount)
+	}
 }
 
 func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, maxLength int) (*ScrapeResult, error) {
@@ -397,6 +429,12 @@ const (
 	// of text; a real short page ships little HTML AND little text. 20:1 cleanly
 	// separates the two (sentra.app/research was ~50:1; a short static page is <5:1).
 	shellMinHTMLRatio = 20
+	// shellMaxWords is the word-count ceiling for the tier-agnostic shell check.
+	// Unlike the HTML-ratio check, this branch has no rawHTMLBytes precondition,
+	// so it also catches markdown-tier stubs (rawHTMLBytes==0) that the ratio
+	// check can never see — e.g. a markdown extractor that returns nothing but
+	// a nav/cookie-banner sliver from a JS-rendered page.
+	shellMaxWords = 30
 )
 
 // looksLikePartialShell reports whether a tier result is most likely a
@@ -410,10 +448,23 @@ const (
 //   - the raw HTML is at least shellMinHTMLRatio times larger than the text.
 //
 // rawHTMLBytes is zero for tiers that don't parse raw HTML (markdown, browser,
-// document, …); those can never be flagged, which is correct — the browser tier
-// already executed JS, so its short output is final, not a shell to escalate past.
+// document, …); those can never be flagged by the ratio check — the browser
+// tier already executed JS, so its short output is final, not a shell to
+// escalate past. The word-count branch below has no such precondition: an
+// extremely thin result (< shellMaxWords) is escalation-worthy regardless of
+// which tier produced it, since a markdown-tier stub can be just as hollow as
+// an HTML shell without ever populating rawHTMLBytes.
 func looksLikePartialShell(r *ScrapeResult) bool {
-	if r == nil || r.rawHTMLBytes == 0 {
+	if r == nil {
+		return false
+	}
+	// r.Content != "" excludes the truly-empty edge case: the tiered-fallback
+	// loop never calls this on content that short anyway (it requires > 100
+	// bytes before checking), so there is nothing here to escalate past.
+	if r.Content != "" && len(strings.Fields(r.Content)) < shellMaxWords {
+		return true
+	}
+	if r.rawHTMLBytes == 0 {
 		return false
 	}
 	textLen := len(r.Content)

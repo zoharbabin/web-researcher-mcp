@@ -59,6 +59,7 @@ func (s *SearXNGProvider) Web(ctx context.Context, params WebSearchParams) ([]Se
 			URL:         r.URL,
 			Snippet:     r.Content,
 			DisplayLink: r.URL,
+			PublishedAt: normalizePublishedAt(r.PublishedDate, time.Now()),
 		})
 	}
 	return results, nil

@@ -53,7 +53,7 @@ type webSearchInput struct {
 func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "web_search",
-		Description:  "Search the web and get a list of relevant pages with titles and snippets — without reading the full page content. Narrow results to one domain with the site parameter, or apply a search lens to restrict to trusted sites in a field (see the lens parameter for the full list). Use search_and_scrape if you need full page text, news_search for current events, or academic_search for research papers. Results stay fresh for 30 minutes; use time_range to get more recent results.",
+		Description:  "Search the web and get a list of relevant pages with titles and snippets — without reading the full page content. Narrow results to one domain with the site parameter, or apply a search lens to restrict to trusted sites in a field (see the lens parameter for the full list). Use search_and_scrape if you need full page text, news_search for current events, or academic_search for research papers. Results stay fresh for 30 minutes; use time_range to get more recent results. Snippets are not the full source — use scrape_page before asserting a claim. Zero results do not confirm a fact is false.",
 		Annotations:  readOnlyAnnotations(true, true),
 		OutputSchema: webSearchOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input webSearchInput) (*mcp.CallToolResult, any, error) {
@@ -197,8 +197,9 @@ func searchCacheKey(toolName string, parts ...any) string {
 	// post-upgrade cache hit can never serve a blob missing a new field. v2
 	// added the "trust" untrusted-content marker to every search-family output;
 	// v3 added the optional zero-result "hints" object to web_search/news_search
-	// (#100); v4 added sourceReputation to every web_search result (#198).
-	h.Write([]byte("|v4"))
+	// (#100); v4 added sourceReputation to every web_search result (#198); v5
+	// added publishedAt to every web_search result (#356).
+	h.Write([]byte("|v5"))
 	for _, p := range parts {
 		fmt.Fprintf(h, "|%v", p)
 	}

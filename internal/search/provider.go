@@ -54,6 +54,11 @@ type SearchResult struct {
 	Snippet       string   `json:"snippet"`
 	DisplayLink   string   `json:"displayLink"`
 	ExtraSnippets []string `json:"extraSnippets,omitempty"`
+	// PublishedAt (#356) is an RFC3339 timestamp normalized by
+	// normalizePublishedAt, populated only by providers whose web response
+	// carries a date (Google, Tavily, Exa, SearXNG, HackerNews). Empty when
+	// the provider has no date signal — never guessed from snippet/title text.
+	PublishedAt string `json:"publishedAt,omitempty"`
 }
 
 type ImageResult struct {

@@ -173,6 +173,43 @@ func TestGoogleProvider_WebSearch_WithSiteAndTimeRange(t *testing.T) {
 	}
 }
 
+// TestGoogleProvider_WebSearch_PublishedAt (#356): a pagemap metatag carrying
+// a publish date must populate SearchResult.PublishedAt, normalized to RFC3339.
+func TestGoogleProvider_WebSearch_PublishedAt(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := googleResponse{
+			Items: []googleItem{
+				{
+					Title: "Dated", Link: "https://example.com/1", Snippet: "s", DisplayLink: "example.com",
+					PageMap: &googlePageMap{MetaTags: []map[string]string{{"article:published_time": "2026-05-01T12:00:00Z"}}},
+				},
+				{Title: "Undated", Link: "https://example.com/2", Snippet: "s", DisplayLink: "example.com"},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer ts.Close()
+
+	client := &http.Client{Transport: &rewriteTransport{baseURL: ts.URL, inner: http.DefaultTransport}}
+	deps := Deps{HTTPClient: client, Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	g := NewGoogleProvider("test-key", "test-cx", deps)
+
+	results, err := g.Web(context.Background(), WebSearchParams{Query: "test", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+	if results[0].PublishedAt != "2026-05-01T12:00:00Z" {
+		t.Errorf("expected normalized PublishedAt, got %q", results[0].PublishedAt)
+	}
+	if results[1].PublishedAt != "" {
+		t.Errorf("expected empty PublishedAt when no pagemap date, got %q", results[1].PublishedAt)
+	}
+}
+
 func TestGoogleProvider_ImageSearch(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
@@ -350,6 +387,10 @@ func TestBraveProvider_WebSearch(t *testing.T) {
 	if results[0].Title != "Brave Result" {
 		t.Errorf("expected title 'Brave Result', got %q", results[0].Title)
 	}
+	// #356: Brave provider does not populate PublishedAt
+	if results[0].PublishedAt != "" {
+		t.Errorf("expected empty PublishedAt, got %q", results[0].PublishedAt)
+	}
 }
 
 func TestBraveProvider_RateLimited(t *testing.T) {
@@ -414,6 +455,10 @@ func TestSerperProvider_WebSearch(t *testing.T) {
 	}
 	if results[0].Title != "Serper Result" {
 		t.Errorf("expected title 'Serper Result', got %q", results[0].Title)
+	}
+	// #356: Serper provider does not populate PublishedAt
+	if results[0].PublishedAt != "" {
+		t.Errorf("expected empty PublishedAt, got %q", results[0].PublishedAt)
 	}
 }
 
@@ -486,6 +531,39 @@ func TestSearXNGProvider_WebSearch(t *testing.T) {
 	}
 	if results[0].Title != "SearXNG Result" {
 		t.Errorf("expected title 'SearXNG Result', got %q", results[0].Title)
+	}
+}
+
+// TestSearXNGProvider_WebSearch_PublishedAt (#356): a result's publishedDate
+// must populate SearchResult.PublishedAt, normalized to RFC3339.
+func TestSearXNGProvider_WebSearch_PublishedAt(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := searxngResponse{
+			Results: []searxngResult{
+				{Title: "Dated", URL: "https://example.com/sx", Content: "c", PublishedDate: "2026-05-01T12:00:00Z"},
+				{Title: "Undated", URL: "https://example.com/sy", Content: "c"},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer ts.Close()
+
+	deps := Deps{HTTPClient: ts.Client(), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	s := NewSearXNGProvider(ts.URL, "", nil, deps)
+
+	results, err := s.Web(context.Background(), WebSearchParams{Query: "test", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+	if results[0].PublishedAt != "2026-05-01T12:00:00Z" {
+		t.Errorf("expected normalized PublishedAt, got %q", results[0].PublishedAt)
+	}
+	if results[1].PublishedAt != "" {
+		t.Errorf("expected empty PublishedAt when absent, got %q", results[1].PublishedAt)
 	}
 }
 
@@ -1161,6 +1239,10 @@ func TestSearchAPIProvider_WebSearch(t *testing.T) {
 	}
 	if results[0].URL != "https://example.com/searchapi" {
 		t.Errorf("expected URL 'https://example.com/searchapi', got %q", results[0].URL)
+	}
+	// #356: SearchAPI provider does not populate PublishedAt
+	if results[0].PublishedAt != "" {
+		t.Errorf("expected empty PublishedAt, got %q", results[0].PublishedAt)
 	}
 }
 
@@ -2230,6 +2312,30 @@ func TestTavilyProvider_WebSearch_WithSiteOperator(t *testing.T) {
 	tv := NewTavilyProvider("k", deps)
 	if _, err := tv.Web(context.Background(), WebSearchParams{Query: "test", Site: "example.com", NumResults: 5}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestTavilyProvider_WebSearch_PublishedAt (#356): the web-search response's
+// published_date must populate SearchResult.PublishedAt, normalized to RFC3339.
+func TestTavilyProvider_WebSearch_PublishedAt(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"results":[{"title":"Dated","url":"https://example.com/d","content":"c","published_date":"Fri, 29 May 2026 12:00:00 GMT"}]}`)
+	}))
+	defer ts.Close()
+
+	deps := Deps{HTTPClient: tavilyTestClient(ts), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	tv := NewTavilyProvider("k", deps)
+
+	results, err := tv.Web(context.Background(), WebSearchParams{Query: "test", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].PublishedAt != "2026-05-29T12:00:00Z" {
+		t.Errorf("expected normalized PublishedAt, got %q", results[0].PublishedAt)
 	}
 }
 

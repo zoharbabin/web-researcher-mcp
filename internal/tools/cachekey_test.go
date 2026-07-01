@@ -1,6 +1,11 @@
 package tools
 
-import "testing"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"testing"
+)
 
 // TestSearchCacheKey_Deterministic verifies the key is a pure function of its
 // inputs: identical parts → identical key (so legitimate cache hits work).
@@ -70,6 +75,24 @@ func TestScrapeCacheKey_VariesByModeAndMaxLength(t *testing.T) {
 	// Determinism: identical inputs → identical key.
 	if scrapeCacheKey("https://example.com", "full", 50000) != base {
 		t.Error("scrape cache key must be deterministic for identical inputs")
+	}
+}
+
+// TestWebSearchCacheKeyBumped (#356): the cache key's version segment must be
+// "|v5" (publishedAt added to every web_search result) so a pre-upgrade cache
+// entry can never be served without the new field. Reimplements the same hash
+// independently rather than calling an internal helper, so it fails loudly if
+// searchCacheKey's version segment regresses to v4 or is bumped without this
+// test being updated.
+func TestWebSearchCacheKeyBumped(t *testing.T) {
+	t.Parallel()
+	h := sha256.New()
+	h.Write([]byte("web"))
+	h.Write([]byte("|v5"))
+	fmt.Fprintf(h, "|%v", "query")
+	want := "search:" + hex.EncodeToString(h.Sum(nil))[:32]
+	if got := searchCacheKey("web", "query"); got != want {
+		t.Errorf("searchCacheKey version segment is not v5: got %s, want %s", got, want)
 	}
 }
 

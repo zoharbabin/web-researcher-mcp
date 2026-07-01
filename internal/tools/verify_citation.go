@@ -23,7 +23,7 @@ import (
 
 type verifyCitationInput struct {
 	Citation string `json:"citation" jsonschema:"A citation to verify: a DOI (e.g. 10.1038/nature12373), a URL, or a free-text reference string (title/author/year). The tool detects which.,required"`
-	Claim    string `json:"claim,omitempty" jsonschema:"Optional: the assertion this citation is cited for. When set, the source (live URL or its Internet-Archive snapshot) is fetched and checked for whether it actually addresses the claim — surfacing evidence sentences and flagging mischaracterization (claim absent from the source). Coverage + evidence, never a support/refute verdict. Off unless provided; adds a fetch."`
+	Claim    string `json:"claim,omitempty" jsonschema:"Optional: the assertion this citation is cited for. When set, the source (live URL or its Internet-Archive snapshot) is fetched and checked for whether it actually addresses the claim — surfacing evidence sentences and flagging mischaracterization (claim absent from the source). Coverage + evidence, never a support/refute verdict. Off unless provided; adds a fetch. Without this parameter, the tool checks existence and retraction only — mischaracterization (whether the source supports what it is cited for) is not checked."`
 }
 
 // doiPattern matches a bare or doi.org-prefixed DOI (10.<registrant>/<suffix>).
@@ -52,6 +52,10 @@ func registerVerifyCitation(srv *mcp.Server, deps Dependencies) {
 		// cited for? Clamped once at the boundary; "" disables the check entirely so the
 		// default output stays byte-identical to a no-claim call.
 		claim := clampClaim(input.Claim)
+		if claim == "" {
+			out["claimCheckSkipped"] = true
+			out["claimCheckSkippedReason"] = "No claim was provided. Pass the 'claim' parameter to check whether the source actually addresses what it is cited for."
+		}
 
 		doi := detectDOI(citation)
 		isURL := doi == "" && looksLikeURL(citation)
@@ -115,6 +119,10 @@ func emitClaimCoverageResult(cc claimCoverageResult, claim string, out map[strin
 	}
 	if cc.Contrast {
 		out["contrastSignal"] = true
+	}
+	if cc.SparsityNote != "" {
+		out["contentWords"] = cc.ContentWords
+		out["sparsityNote"] = cc.SparsityNote
 	}
 }
 

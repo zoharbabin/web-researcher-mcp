@@ -181,8 +181,10 @@ class ArchiveSourceResponse:
 class AuditBibliographyEntry:
     archivedUrl: Optional[str] = None
     claim: Optional[str] = None
+    claimContentWords: Optional[int] = None
     claimEvidence: list[str] = field(default_factory=list)
     claimSourceUrl: Optional[str] = None
+    claimSparsityNote: Optional[str] = None
     claimSupport: Optional[str] = None
     contrastSignal: Optional[bool] = None
     doi: Optional[str] = None
@@ -203,8 +205,10 @@ class AuditBibliographyEntry:
         return cls(
             archivedUrl=d.get('archivedUrl'),
             claim=d.get('claim'),
+            claimContentWords=d.get('claimContentWords'),
             claimEvidence=list(d.get('claimEvidence') or []),
             claimSourceUrl=d.get('claimSourceUrl'),
+            claimSparsityNote=d.get('claimSparsityNote'),
             claimSupport=d.get('claimSupport'),
             contrastSignal=d.get('contrastSignal'),
             doi=d.get('doi'),
@@ -229,6 +233,7 @@ class AuditBibliographyResponse:
     source: Optional[str] = None
     summary: Optional[AuditBibliographySummary] = None
     trust: Optional[str] = None
+    warning: Optional[str] = None
 
     @classmethod
     def from_dict(cls, d: dict[str, Any] | None) -> "AuditBibliographyResponse | None":
@@ -243,6 +248,7 @@ class AuditBibliographyResponse:
             source=d.get('source'),
             summary=AuditBibliographySummary.from_dict(d.get('summary')) if d.get('summary') else AuditBibliographySummary(),
             trust=d.get('trust'),
+            warning=d.get('warning'),
         )
 
 @dataclass
@@ -341,6 +347,7 @@ class BrandResearchScale:
 class BrandResearchSource:
     fields: list[str] = field(default_factory=list)
     name: Optional[str] = None
+    scrapeQuality: Optional[str] = None
     url: Optional[str] = None
 
     @classmethod
@@ -350,6 +357,7 @@ class BrandResearchSource:
         return cls(
             fields=list(d.get('fields') or []),
             name=d.get('name'),
+            scrapeQuality=d.get('scrapeQuality'),
             url=d.get('url'),
         )
 
@@ -961,6 +969,7 @@ class ImageSearchImage:
 
 @dataclass
 class ImageSearchResponse:
+    hints: dict[str, Any] = field(default_factory=dict)
     images: list[ImageSearchImage] = field(default_factory=list)
     query: Optional[str] = None
     resultCount: Optional[int] = None
@@ -971,6 +980,7 @@ class ImageSearchResponse:
         if d is None:
             return None
         return cls(
+            hints=dict(d.get('hints') or {}),
             images=[ImageSearchImage.from_dict(i) for i in (d.get('images') or [])],
             query=d.get('query'),
             resultCount=d.get('resultCount'),
@@ -1359,10 +1369,12 @@ class ScrapePageResponse:
     retractionStatus: Optional[Any] = None
     sizeCategory: Optional[str] = None
     sourceType: Optional[str] = None
+    sparsityWarning: Optional[str] = None
     structuredData: Optional[StructuredData] = None
     truncated: Optional[bool] = None
     trust: Optional[str] = None
     url: Optional[str] = None
+    wordCount: Optional[int] = None
 
     @classmethod
     def from_dict(cls, d: dict[str, Any] | None) -> "ScrapePageResponse | None":
@@ -1385,10 +1397,12 @@ class ScrapePageResponse:
             retractionStatus=d.get('retractionStatus') or None,
             sizeCategory=d.get('sizeCategory'),
             sourceType=d.get('sourceType'),
+            sparsityWarning=d.get('sparsityWarning'),
             structuredData=StructuredData.from_dict(d.get('structuredData')) if d.get('structuredData') else None,
             truncated=d.get('truncated'),
             trust=d.get('trust'),
             url=d.get('url'),
+            wordCount=d.get('wordCount'),
         )
 
 @dataclass
@@ -1437,6 +1451,7 @@ class SearchAndScrapeRecommendation:
 class SearchAndScrapeResponse:
     combinedContent: Optional[str] = None
     components: list[SearchAndScrapeComponent] = field(default_factory=list)
+    hints: dict[str, Any] = field(default_factory=dict)
     note: Optional[str] = None
     query: Optional[str] = None
     recommendations: list[SearchAndScrapeRecommendation] = field(default_factory=list)
@@ -1454,6 +1469,7 @@ class SearchAndScrapeResponse:
         return cls(
             combinedContent=d.get('combinedContent'),
             components=[SearchAndScrapeComponent.from_dict(i) for i in (d.get('components') or [])],
+            hints=dict(d.get('hints') or {}),
             note=d.get('note'),
             query=d.get('query'),
             recommendations=[SearchAndScrapeRecommendation.from_dict(i) for i in (d.get('recommendations') or [])],
@@ -1492,12 +1508,15 @@ class SearchAndScrapeSource:
     content: Optional[str] = None
     contentType: Optional[str] = None
     domainCategory: Optional[str] = None
+    extractionQuality: Optional[str] = None
     keySentences: list[str] = field(default_factory=list)
+    publishedAt: Optional[str] = None
     scores: dict[str, Any] = field(default_factory=dict)
     sourceType: Optional[str] = None
     title: Optional[str] = None
     trust: Optional[str] = None
     url: Optional[str] = None
+    wordCount: Optional[int] = None
 
     @classmethod
     def from_dict(cls, d: dict[str, Any] | None) -> "SearchAndScrapeSource | None":
@@ -1509,12 +1528,15 @@ class SearchAndScrapeSource:
             content=d.get('content'),
             contentType=d.get('contentType'),
             domainCategory=d.get('domainCategory'),
+            extractionQuality=d.get('extractionQuality'),
             keySentences=list(d.get('keySentences') or []),
+            publishedAt=d.get('publishedAt'),
             scores=dict(d.get('scores') or {}),
             sourceType=d.get('sourceType'),
             title=d.get('title'),
             trust=d.get('trust'),
             url=d.get('url'),
+            wordCount=d.get('wordCount'),
         )
 
 @dataclass
@@ -1569,6 +1591,7 @@ class SequentialSearchResponse:
     refinementNote: Optional[str] = None
     refinementQueries: list[str] = field(default_factory=list)
     refinementResults: list[SequentialSearchRefinementresult] = field(default_factory=list)
+    refinementWarning: Optional[str] = None
     researchGoal: Optional[str] = None
     responseMode: Optional[str] = None
     sessionId: Optional[str] = None
@@ -1596,6 +1619,7 @@ class SequentialSearchResponse:
             refinementNote=d.get('refinementNote'),
             refinementQueries=list(d.get('refinementQueries') or []),
             refinementResults=[SequentialSearchRefinementresult.from_dict(i) for i in (d.get('refinementResults') or [])],
+            refinementWarning=d.get('refinementWarning'),
             researchGoal=d.get('researchGoal'),
             responseMode=d.get('responseMode'),
             sessionId=d.get('sessionId'),
@@ -1732,6 +1756,7 @@ class StructuredSearchResult:
 @dataclass
 class Summary:
     processingTimeMs: Optional[int] = None
+    sparseSources: Optional[int] = None
     urlsFailed: Optional[int] = None
     urlsScraped: Optional[int] = None
     urlsSearched: Optional[int] = None
@@ -1742,6 +1767,7 @@ class Summary:
             return None
         return cls(
             processingTimeMs=d.get('processingTimeMs'),
+            sparseSources=d.get('sparseSources'),
             urlsFailed=d.get('urlsFailed'),
             urlsScraped=d.get('urlsScraped'),
             urlsSearched=d.get('urlsSearched'),
@@ -1787,10 +1813,13 @@ class Typography:
 class VerifyCitationResponse:
     archivedUrl: Optional[str] = None
     claim: Optional[str] = None
+    claimCheckSkipped: Optional[bool] = None
+    claimCheckSkippedReason: Optional[str] = None
     claimEvidence: list[str] = field(default_factory=list)
     claimSourceUrl: Optional[str] = None
     claimSupport: Optional[str] = None
     conflictOfInterest: Optional[ConflictOfInterest] = None
+    contentWords: Optional[int] = None
     contrastSignal: Optional[bool] = None
     detectedDoi: Optional[str] = None
     exists: Optional[bool] = None
@@ -1801,6 +1830,7 @@ class VerifyCitationResponse:
     matchedRecord: Optional[Any] = None
     provenance: list[str] = field(default_factory=list)
     retractionStatus: Optional[RetractionStatus] = None
+    sparsityNote: Optional[str] = None
     titleMatch: Optional[str] = None
     trust: Optional[str] = None
 
@@ -1811,10 +1841,13 @@ class VerifyCitationResponse:
         return cls(
             archivedUrl=d.get('archivedUrl'),
             claim=d.get('claim'),
+            claimCheckSkipped=d.get('claimCheckSkipped'),
+            claimCheckSkippedReason=d.get('claimCheckSkippedReason'),
             claimEvidence=list(d.get('claimEvidence') or []),
             claimSourceUrl=d.get('claimSourceUrl'),
             claimSupport=d.get('claimSupport'),
             conflictOfInterest=ConflictOfInterest.from_dict(d.get('conflictOfInterest')) if d.get('conflictOfInterest') else None,
+            contentWords=d.get('contentWords'),
             contrastSignal=d.get('contrastSignal'),
             detectedDoi=d.get('detectedDoi'),
             exists=d.get('exists'),
@@ -1825,6 +1858,7 @@ class VerifyCitationResponse:
             matchedRecord=d.get('matchedRecord') or None,
             provenance=list(d.get('provenance') or []),
             retractionStatus=RetractionStatus.from_dict(d.get('retractionStatus')) if d.get('retractionStatus') else None,
+            sparsityNote=d.get('sparsityNote'),
             titleMatch=d.get('titleMatch'),
             trust=d.get('trust'),
         )
@@ -1951,6 +1985,7 @@ class WebSearchResponse:
 class WebSearchResult:
     claimSignal: Optional[str] = None
     displayLink: Optional[str] = None
+    publishedAt: Optional[str] = None
     snippet: Optional[str] = None
     title: Optional[str] = None
     url: Optional[str] = None
@@ -1962,6 +1997,7 @@ class WebSearchResult:
         return cls(
             claimSignal=d.get('claimSignal'),
             displayLink=d.get('displayLink'),
+            publishedAt=d.get('publishedAt'),
             snippet=d.get('snippet'),
             title=d.get('title'),
             url=d.get('url'),

@@ -82,6 +82,7 @@ func (t *TavilyProvider) doWebSearch(ctx context.Context, params WebSearchParams
 			URL:         r.URL,
 			Snippet:     r.Content,
 			DisplayLink: r.URL,
+			PublishedAt: normalizePublishedAt(r.PublishedDate, time.Now()),
 		})
 	}
 	return results, nil

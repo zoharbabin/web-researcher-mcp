@@ -83,6 +83,26 @@ func TestDepthThoroughAutoExecutes(t *testing.T) {
 	}
 }
 
+// TestSequentialSearchMapsPublishedAt (#356): searchResultsToMaps must not
+// silently drop a SearchResult's PublishedAt field.
+func TestSequentialSearchMapsPublishedAt(t *testing.T) {
+	deps := setupTestDeps()
+	_, out := startSession(t, deps, "thorough")
+	rr, ok := out["refinementResults"].([]any)
+	if !ok || len(rr) == 0 {
+		t.Fatalf("thorough depth should auto-run refinement searches, got %v", out["refinementResults"])
+	}
+	first, _ := rr[0].(map[string]any)
+	results, _ := first["results"].([]any)
+	if len(results) == 0 {
+		t.Fatalf("expected mapped results, got %v", first["results"])
+	}
+	r0, _ := results[0].(map[string]any)
+	if r0["publishedAt"] != "2026-05-01T12:00:00Z" {
+		t.Errorf("expected publishedAt to be mapped, got %v", r0["publishedAt"])
+	}
+}
+
 func TestDepthUnknownTreatedAsQuick(t *testing.T) {
 	_, out := startSession(t, setupTestDeps(), "ludicrous")
 	if _, ok := out["coverage"]; ok {

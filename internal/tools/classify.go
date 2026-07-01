@@ -64,6 +64,9 @@ func enrichResultsWithReputation(results []search.SearchResult, claim string) []
 			"snippet":     r.Snippet,
 			"displayLink": r.DisplayLink,
 		}
+		if r.PublishedAt != "" {
+			m["publishedAt"] = r.PublishedAt
+		}
 		if rep := reputationForURL(r.URL); rep != nil {
 			m["sourceReputation"] = rep
 		}
