@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -195,6 +196,82 @@ func TestBrandResearchCoverageNone(t *testing.T) {
 	if cov.ToneOfVoice != "none" {
 		t.Errorf("ToneOfVoice = %q, want none", cov.ToneOfVoice)
 	}
+}
+
+// ─── 7b. Coverage — extraction_blocked (#358) ────────────────────────────────
+// TestBrandResearchCoverageExtractionBlocked verifies that computeBrandCoverage
+// reports "extraction_blocked" (not "none") for colors/typography/tone_of_voice
+// when the brand page was found but too thin to read — and that logos (sourced
+// from the homepage meta tier, unaffected by brand-page thinness) stays "none".
+// Regression: a revert of the blockedOrNone branch would silently fall back to
+// "none" and this test would fail.
+func TestBrandResearchCoverageExtractionBlocked(t *testing.T) {
+	t.Parallel()
+	result := &brandResearchResult{brandPageThin: true}
+	cov := computeBrandCoverage(result)
+	if cov.Colors != "extraction_blocked" {
+		t.Errorf("Colors = %q, want extraction_blocked", cov.Colors)
+	}
+	if cov.Typography != "extraction_blocked" {
+		t.Errorf("Typography = %q, want extraction_blocked", cov.Typography)
+	}
+	if cov.ToneOfVoice != "extraction_blocked" {
+		t.Errorf("ToneOfVoice = %q, want extraction_blocked", cov.ToneOfVoice)
+	}
+	if cov.Logos != "none" {
+		t.Errorf("Logos = %q, want none (logos are unaffected by brand-page thinness)", cov.Logos)
+	}
+
+	// A field that was actually populated still wins over the blocked signal.
+	result2 := &brandResearchResult{
+		brandPageThin: true,
+		Colors: &brandColors{Palette: []brandColor{
+			{Hex: "#0066ff"}, {Hex: "#ff6600"}, {Hex: "#00ff66"},
+		}},
+	}
+	cov2 := computeBrandCoverage(result2)
+	if cov2.Colors != "full" {
+		t.Errorf("Colors = %q, want full (populated data overrides extraction_blocked)", cov2.Colors)
+	}
+}
+
+// ─── 7c. markBrandPageThin — mutex-guarded sparsity signal (#358) ────────────
+// TestBrandResearchMarkPageThin verifies the mutex-guarded write that flags a
+// brand page as "thin" when its scraped content falls below
+// sparseWordThreshold, and that it leaves both signals untouched otherwise.
+// Regression: a broken threshold comparison or a dropped mutex-guarded write
+// here would silently disable the "extraction_blocked" coverage signal.
+func TestBrandResearchMarkPageThin(t *testing.T) {
+	t.Parallel()
+
+	t.Run("thin content sets both signals", func(t *testing.T) {
+		t.Parallel()
+		result := &brandResearchResult{}
+		src := &brandSource{Name: "brand_page", URL: "https://example.com/brand"}
+		var mu sync.Mutex
+		markBrandPageThin("only a few words here", src, result, &mu)
+		if src.ScrapeQuality != "thin" {
+			t.Errorf("ScrapeQuality = %q, want thin", src.ScrapeQuality)
+		}
+		if !result.brandPageThin {
+			t.Error("brandPageThin = false, want true for sparse content")
+		}
+	})
+
+	t.Run("sufficient content leaves both signals unset", func(t *testing.T) {
+		t.Parallel()
+		result := &brandResearchResult{}
+		src := &brandSource{Name: "brand_page", URL: "https://example.com/brand"}
+		var mu sync.Mutex
+		content := strings.Repeat("word ", sparseWordThreshold+1)
+		markBrandPageThin(content, src, result, &mu)
+		if src.ScrapeQuality != "" {
+			t.Errorf("ScrapeQuality = %q, want empty for content above the threshold", src.ScrapeQuality)
+		}
+		if result.brandPageThin {
+			t.Error("brandPageThin = true, want false for content above the threshold")
+		}
+	})
 }
 
 // ─── 8. Coverage — full ──────────────────────────────────────────────────────

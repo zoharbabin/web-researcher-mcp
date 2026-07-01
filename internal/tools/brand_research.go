@@ -917,13 +917,23 @@ func probeBrandPage(ctx context.Context, deps Dependencies, domain string, resul
 	// "extraction_blocked" instead of "none" for fields this page would have
 	// populated.
 	src := &brandSource{Name: "brand_page", URL: guidelinesURL, Fields: fields}
-	if wc := len(strings.Fields(allPageContent.String())); wc < sparseWordThreshold {
+	markBrandPageThin(allPageContent.String(), src, result, mu)
+	return src
+}
+
+// markBrandPageThin records the sparsity signal (#358) for a brand-page probe:
+// ScrapeQuality:"thin" on src plus the mutex-guarded brandPageThin flag on
+// result, when content falls below sparseWordThreshold. Extracted from
+// probeBrandPage as a pure function (no behavior change) so the mutex-guarded
+// write and the threshold comparison are directly unit-testable without a
+// live HTTP probe.
+func markBrandPageThin(content string, src *brandSource, result *brandResearchResult, mu *sync.Mutex) {
+	if wc := len(strings.Fields(content)); wc < sparseWordThreshold {
 		src.ScrapeQuality = "thin"
 		mu.Lock()
 		result.brandPageThin = true
 		mu.Unlock()
 	}
-	return src
 }
 
 // rePrimarySection matches section headings that introduce a primary color palette.

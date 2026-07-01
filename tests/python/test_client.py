@@ -147,6 +147,8 @@ _SAMPLE_AUDIT_RESULT: dict[str, Any] = {
         "unchecked": 0,
         "mischaracterized": 0,
         "ok": 1,
+        "claimCheckSkippedCount": 0,
+        "thinContentCount": 0,
     },
     "entries": [
         {
@@ -502,6 +504,8 @@ class TestModels(unittest.TestCase):
         self.assertEqual(r.summary.total, 1)
         self.assertEqual(r.summary.ok, 1)
         self.assertEqual(r.summary.retracted, 0)
+        self.assertEqual(r.summary.claimCheckSkippedCount, 0)
+        self.assertEqual(r.summary.thinContentCount, 0)
         self.assertEqual(len(r.entries), 1)
         entry = r.entries[0]
         self.assertIsInstance(entry, BibEntryAudit)
@@ -511,6 +515,16 @@ class TestModels(unittest.TestCase):
         self.assertEqual(entry.flags, [])
         self.assertEqual(r.skipped, 0)
         self.assertEqual(r.checkedAt, "2024-01-15T10:00:00Z")
+
+    def test_audit_bibliography_summary_epistemic_signals(self) -> None:
+        # Regression: claimCheckSkippedCount/thinContentCount (#358/#359) must survive
+        # the AuditBibliographySummary.from_dict conversion, not just live in the raw dict.
+        r = AuditBibliographyResult.from_dict({
+            **_SAMPLE_AUDIT_RESULT,
+            "summary": {**_SAMPLE_AUDIT_RESULT["summary"], "claimCheckSkippedCount": 3, "thinContentCount": 2},
+        })
+        self.assertEqual(r.summary.claimCheckSkippedCount, 3)
+        self.assertEqual(r.summary.thinContentCount, 2)
 
     def test_audit_bibliography_null_summary(self) -> None:
         r = AuditBibliographyResult.from_dict({"source": "test", "entryCount": 0, "summary": None, "entries": [], "skipped": None, "checkedAt": ""})

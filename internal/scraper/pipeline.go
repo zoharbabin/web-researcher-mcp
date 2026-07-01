@@ -429,11 +429,12 @@ const (
 	// of text; a real short page ships little HTML AND little text. 20:1 cleanly
 	// separates the two (sentra.app/research was ~50:1; a short static page is <5:1).
 	shellMinHTMLRatio = 20
-	// shellMaxWords is the word-count ceiling for the tier-agnostic shell check.
-	// Unlike the HTML-ratio check, this branch has no rawHTMLBytes precondition,
-	// so it also catches markdown-tier stubs (rawHTMLBytes==0) that the ratio
-	// check can never see — e.g. a markdown extractor that returns nothing but
-	// a nav/cookie-banner sliver from a JS-rendered page.
+	// shellMaxWords is the word-count ceiling for the no-raw-HTML shell check
+	// (rawHTMLBytes==0), where the ratio check has no denominator to work
+	// with. It catches markdown-tier stubs — e.g. a markdown extractor that
+	// returns nothing but a nav/cookie-banner sliver from a JS-rendered page.
+	// It is NOT consulted when rawHTMLBytes > 0: a short result with a low
+	// HTML:text ratio is a genuinely short but complete page, not a shell.
 	shellMaxWords = 30
 )
 
@@ -443,17 +444,24 @@ const (
 // complete page. It is the deterministic gate that lets the pipeline keep
 // escalating to the JS-executing browser tier instead of accepting the shell.
 //
-// The test is purely structural and uses only bytes the tier already read:
+// rawHTMLBytes is zero for tiers that don't parse raw HTML (markdown, browser,
+// document, …), so the ratio check below can never see them. For those tiers
+// only, word count is the sole available signal: a markdown-tier stub with
+// fewer than shellMaxWords words (e.g. a nav/cookie-banner sliver from a
+// JS-rendered page) is escalation-worthy even though rawHTMLBytes is zero.
+//
+// For tiers that DID parse raw HTML (rawHTMLBytes > 0), the ratio check is the
+// sole arbiter — the test is purely structural and uses only bytes the tier
+// already read:
 //   - the extracted text is short (<= shellMaxTextBytes), AND
 //   - the raw HTML is at least shellMinHTMLRatio times larger than the text.
 //
-// rawHTMLBytes is zero for tiers that don't parse raw HTML (markdown, browser,
-// document, …); those can never be flagged by the ratio check — the browser
-// tier already executed JS, so its short output is final, not a shell to
-// escalate past. The word-count branch below has no such precondition: an
-// extremely thin result (< shellMaxWords) is escalation-worthy regardless of
-// which tier produced it, since a markdown-tier stub can be just as hollow as
-// an HTML shell without ever populating rawHTMLBytes.
+// Word count is deliberately NOT consulted when rawHTMLBytes > 0: a short
+// result with a LOW HTML:text ratio (little HTML, little text) is a
+// genuinely short but complete page — a tweet, a dictionary entry, a short
+// Q&A answer — not a shell, regardless of how few words it contains. Flagging
+// on word count alone would misclassify that content as Partial even though
+// it was already fully and correctly extracted.
 func looksLikePartialShell(r *ScrapeResult) bool {
 	if r == nil {
 		return false
@@ -461,11 +469,8 @@ func looksLikePartialShell(r *ScrapeResult) bool {
 	// r.Content != "" excludes the truly-empty edge case: the tiered-fallback
 	// loop never calls this on content that short anyway (it requires > 100
 	// bytes before checking), so there is nothing here to escalate past.
-	if r.Content != "" && len(strings.Fields(r.Content)) < shellMaxWords {
-		return true
-	}
 	if r.rawHTMLBytes == 0 {
-		return false
+		return r.Content != "" && len(strings.Fields(r.Content)) < shellMaxWords
 	}
 	textLen := len(r.Content)
 	if textLen == 0 || textLen > shellMaxTextBytes {

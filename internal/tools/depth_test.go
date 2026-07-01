@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -100,6 +101,49 @@ func TestSequentialSearchMapsPublishedAt(t *testing.T) {
 	r0, _ := results[0].(map[string]any)
 	if r0["publishedAt"] != "2026-05-01T12:00:00Z" {
 		t.Errorf("expected publishedAt to be mapped, got %v", r0["publishedAt"])
+	}
+
+	// Regression guard: sequentialSearchOutputSchema's nested
+	// refinementResults[].results[] item schema must declare every key the
+	// response actually emits. TestOutputSchemaMatchesResponse only checks
+	// top-level response keys and never drives depth=thorough, so it cannot
+	// catch drift in this nested schema on its own.
+	props, _ := sequentialSearchOutputSchema["properties"].(map[string]any)
+	rrSchema, _ := props["refinementResults"].(map[string]any)
+	rrItems, _ := rrSchema["items"].(map[string]any)
+	rrProps, _ := rrItems["properties"].(map[string]any)
+	resultsSchema, _ := rrProps["results"].(map[string]any)
+	resultsItems, _ := resultsSchema["items"].(map[string]any)
+	resultsProps, _ := resultsItems["properties"].(map[string]any)
+	for key := range r0 {
+		if _, declared := resultsProps[key]; !declared {
+			t.Errorf("refinementResults[].results[] field %q not declared in sequentialSearchOutputSchema", key)
+		}
+	}
+}
+
+// TestDepthThoroughWarnsOnZeroResults (#357): when a thorough-depth
+// refinement round returns zero results, the response must surface a
+// refinementWarning naming exactly how many of the rounds came back empty.
+// No existing test drives zeroCount > 0 because the default mockProvider
+// always returns a non-empty result, so this exercises that path directly.
+func TestDepthThoroughWarnsOnZeroResults(t *testing.T) {
+	deps := setupTestDeps()
+	deps.Search = &emptyWebProvider{}
+	_, out := startSession(t, deps, "thorough")
+
+	rr, ok := out["refinementResults"].([]any)
+	if !ok || len(rr) == 0 {
+		t.Fatalf("thorough depth should auto-run refinement searches, got %v", out["refinementResults"])
+	}
+
+	warning, ok := out["refinementWarning"].(string)
+	if !ok || warning == "" {
+		t.Fatalf("expected refinementWarning when all refinement rounds return zero results, got %v", out["refinementWarning"])
+	}
+	want := fmt.Sprintf("%d of %d refinement searches returned no results; gaps in coverage may persist and do not confirm absence", len(rr), len(rr))
+	if warning != want {
+		t.Errorf("refinementWarning = %q, want %q", warning, want)
 	}
 }
 

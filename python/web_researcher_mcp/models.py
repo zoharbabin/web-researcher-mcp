@@ -1635,6 +1635,7 @@ class SequentialSearchResponse:
 
 @dataclass
 class SequentialSearchResult:
+    publishedAt: Optional[str] = None
     snippet: Optional[str] = None
     title: Optional[str] = None
     url: Optional[str] = None
@@ -1644,6 +1645,7 @@ class SequentialSearchResult:
         if d is None:
             return None
         return cls(
+            publishedAt=d.get('publishedAt'),
             snippet=d.get('snippet'),
             title=d.get('title'),
             url=d.get('url'),
@@ -2120,6 +2122,8 @@ class AuditBibliographySummary:
     unchecked: int = 0
     mischaracterized: int = 0
     ok: int = 0
+    claimCheckSkippedCount: int = 0
+    thinContentCount: int = 0
 
     @classmethod
     def from_dict(cls, d: "dict[str, Any] | None") -> "AuditBibliographySummary":
@@ -2133,6 +2137,8 @@ class AuditBibliographySummary:
             unchecked=d.get("unchecked") or 0,
             mischaracterized=d.get("mischaracterized") or 0,
             ok=d.get("ok") or 0,
+            claimCheckSkippedCount=d.get("claimCheckSkippedCount") or 0,
+            thinContentCount=d.get("thinContentCount") or 0,
         )
 
 

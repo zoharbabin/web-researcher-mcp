@@ -55,6 +55,11 @@ func TestWebSearchZeroResultHints(t *testing.T) {
 		if _, ok := hints["filtersApplied"].(map[string]any)["site"]; !ok {
 			t.Errorf("expected site in filtersApplied, got %v", hints["filtersApplied"])
 		}
+		// #357: every zero-result hint must carry the fixed epistemic warning so
+		// callers never assert non-existence from an empty result set.
+		if hints["epistemicWarning"] != epistemicZeroResultWarning {
+			t.Errorf("expected epistemicWarning %q, got %v", epistemicZeroResultWarning, hints["epistemicWarning"])
+		}
 	})
 
 	t.Run("no hints when results present", func(t *testing.T) {
@@ -87,6 +92,10 @@ func TestNewsSearchZeroResultHints(t *testing.T) {
 		filters, _ := hints["filtersApplied"].(map[string]any)
 		if filters["freshness"] != "week" {
 			t.Errorf("expected default freshness=week surfaced as a filter, got %v", filters)
+		}
+		// #357: news_search must carry the same fixed epistemic warning as web_search.
+		if hints["epistemicWarning"] != epistemicZeroResultWarning {
+			t.Errorf("expected epistemicWarning %q, got %v", epistemicZeroResultWarning, hints["epistemicWarning"])
 		}
 	})
 
@@ -161,6 +170,138 @@ func TestHintProviderName(t *testing.T) {
 	if got := hintProviderName(nil); got != "" {
 		t.Errorf("nil provider should map to empty, got %q", got)
 	}
+}
+
+// TestBuildZeroResultHints_EpistemicWarning verifies the shared constructor
+// (issue #357) always populates EpistemicWarning with the fixed, documented
+// literal — regardless of provider/filters/alternatives — since every one of
+// the 11 zero-result-hint call sites (web/news/academic/patent/image/
+// search_and_scrape/filing/case/econ/trial/local search) funnels through this
+// single function and must stay byte-identical.
+func TestBuildZeroResultHints_EpistemicWarning(t *testing.T) {
+	cases := []struct {
+		name         string
+		provider     string
+		params       map[string]string
+		alternatives []string
+	}{
+		{name: "no provider, no filters, no alternatives"},
+		{name: "provider only", provider: "brave"},
+		{name: "filters present", provider: "brave", params: map[string]string{"site": "example.com"}},
+		{name: "alternatives present", provider: "brave", alternatives: []string{"serper"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			hints := buildZeroResultHints(tc.provider, tc.params, tc.alternatives)
+			if hints.EpistemicWarning != epistemicZeroResultWarning {
+				t.Errorf("expected EpistemicWarning %q, got %q", epistemicZeroResultWarning, hints.EpistemicWarning)
+			}
+		})
+	}
+}
+
+// emptyEconProvider implements search.EconProvider and always returns zero
+// results, so econ_search's zero-result hints branch (buildZeroResultHints +
+// econFilterMap, issue #357) can be exercised in a test.
+type emptyEconProvider struct{}
+
+func (m *emptyEconProvider) Name() string { return "fred" }
+func (m *emptyEconProvider) Metadata() search.ProviderMeta {
+	return search.ProviderMeta{Regions: []string{"US"}, RateClass: "free", Description: "empty fred"}
+}
+func (m *emptyEconProvider) Econ(_ context.Context, _ search.EconSearchParams) ([]search.EconResult, error) {
+	return []search.EconResult{}, nil
+}
+
+// TestEconSearchZeroResultHints guards issue #357's explicit requirement that
+// econ_search stop passing buildZeroResultHints(providerName, nil, nil) and
+// instead surface the filters that were actually set (via econFilterMap) so a
+// caller can see which one to remove. Without this test, econFilterMap
+// regressing to omit a set filter (or the call reverting to nil, nil) would
+// not be caught by any test.
+func TestEconSearchZeroResultHints(t *testing.T) {
+	t.Run("emits hints with applied filters on zero results", func(t *testing.T) {
+		deps := setupTestDeps()
+		deps.EconProviders = map[string]search.EconProvider{"fred": &emptyEconProvider{}}
+		out := callToolJSON(t, deps, "econ_search", map[string]any{
+			"query":   "asdkjhqweh",
+			"country": "US",
+			"units":   "pch",
+		})
+
+		if out["resultCount"].(float64) != 0 {
+			t.Fatalf("expected 0 results, got %v", out["resultCount"])
+		}
+		hints, ok := out["hints"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected hints object on zero results, got %v", out["hints"])
+		}
+		if hints["reason"] != "filters_too_restrictive" {
+			t.Errorf("expected reason filters_too_restrictive (country/units set), got %v", hints["reason"])
+		}
+		filters, ok := hints["filtersApplied"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected filtersApplied object, got %v", hints["filtersApplied"])
+		}
+		if filters["country"] != "US" {
+			t.Errorf("expected country in filtersApplied, got %v", filters)
+		}
+		if filters["units"] != "pch" {
+			t.Errorf("expected units in filtersApplied, got %v", filters)
+		}
+		if hints["epistemicWarning"] != epistemicZeroResultWarning {
+			t.Errorf("expected epistemicWarning %q, got %v", epistemicZeroResultWarning, hints["epistemicWarning"])
+		}
+	})
+
+	t.Run("no hints when results present", func(t *testing.T) {
+		deps := setupTestDeps() // default mockEconProvider returns one series
+		out := callToolJSON(t, deps, "econ_search", map[string]any{"query": "gdp"})
+		if out["resultCount"].(float64) == 0 {
+			t.Fatal("precondition: expected non-zero results from mockEconProvider")
+		}
+		if _, present := out["hints"]; present {
+			t.Errorf("hints must be absent on non-empty results, got %v", out["hints"])
+		}
+	})
+}
+
+// TestEconFilterMap verifies econFilterMap surfaces exactly the filterable
+// econ_search params that were set (issue #357), so a regression that silently
+// drops a field (e.g. Country) would fail this test directly.
+func TestEconFilterMap(t *testing.T) {
+	t.Run("no filters set", func(t *testing.T) {
+		m := econFilterMap(econSearchInput{Query: "gdp"})
+		if len(m) != 0 {
+			t.Errorf("expected empty map, got %v", m)
+		}
+	})
+
+	t.Run("all filters set", func(t *testing.T) {
+		m := econFilterMap(econSearchInput{
+			Query:     "gdp",
+			Country:   "US",
+			DateFrom:  "2020-01-01",
+			DateTo:    "2021-01-01",
+			Frequency: "q",
+			Units:     "pch",
+		})
+		want := map[string]string{
+			"country":   "US",
+			"date_from": "2020-01-01",
+			"date_to":   "2021-01-01",
+			"frequency": "q",
+			"units":     "pch",
+		}
+		if len(m) != len(want) {
+			t.Fatalf("expected %d filters, got %v", len(want), m)
+		}
+		for k, v := range want {
+			if m[k] != v {
+				t.Errorf("expected %s=%q, got %q", k, v, m[k])
+			}
+		}
+	})
 }
 
 // TestHealthyAlternativesEmpty returns nil when no other provider is configured.

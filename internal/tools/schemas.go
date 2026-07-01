@@ -547,9 +547,10 @@ var sequentialSearchOutputSchema = map[string]any{
 						"items": map[string]any{
 							"type": "object",
 							"properties": map[string]any{
-								"title":   map[string]any{"type": "string"},
-								"url":     map[string]any{"type": "string"},
-								"snippet": map[string]any{"type": "string"},
+								"title":       map[string]any{"type": "string"},
+								"url":         map[string]any{"type": "string"},
+								"snippet":     map[string]any{"type": "string"},
+								"publishedAt": map[string]any{"type": "string", "description": "Present when the provider returns a publication date for this result."},
 							},
 						},
 					},

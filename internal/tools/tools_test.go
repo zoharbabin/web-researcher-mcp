@@ -1087,6 +1087,12 @@ func TestScrapePageSparsityWarning(t *testing.T) {
 	if warning == "" {
 		t.Fatal("expected non-empty sparsityWarning for thin content")
 	}
+	// The sparsity signal must be orthogonal to extractionQuality: this page's
+	// content is genuinely short, not a tier-exhaustion partial extraction, so
+	// extractionQuality must stay "complete" even though sparsityWarning fires.
+	if quality, _ := output["extractionQuality"].(string); quality != "complete" {
+		t.Fatalf("expected extractionQuality \"complete\" for a short-but-complete page, got %v", output["extractionQuality"])
+	}
 }
 
 func TestSearchAndScrapeTool(t *testing.T) {

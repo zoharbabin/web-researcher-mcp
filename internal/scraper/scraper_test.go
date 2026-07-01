@@ -2828,9 +2828,21 @@ func TestLooksLikePartialShell(t *testing.T) {
 			want:         true,
 		},
 		{
-			name:         "sparse word count flags even with a low HTML ratio",
+			name:         "short but complete page is not flagged despite low word count when rawHTMLBytes>0",
 			content:      "just a few words here",
-			rawHTMLBytes: 6, // ratio well under shellMinHTMLRatio
+			rawHTMLBytes: 6, // ratio well under shellMinHTMLRatio — a genuinely short complete page
+			want:         false,
+		},
+		{
+			name:         "real short tweet-style article with low HTML ratio is not a shell",
+			content:      "Just launched our new thing today after months of work. Excited to finally ship it and see what people think. Feedback welcome!",
+			rawHTMLBytes: 250, // ~1.9:1 ratio, well under shellMinHTMLRatio — genuinely short & complete
+			want:         false,
+		},
+		{
+			name:         "short HTML-tier result is flagged when the HTML:text ratio is high (an actual shell)",
+			content:      "just a few words here",
+			rawHTMLBytes: 21 * shellMinHTMLRatio, // ratio at threshold — a real SPA shell
 			want:         true,
 		},
 	}
@@ -2967,4 +2979,96 @@ func TestPipeline_ShortCompletePageShortCircuits(t *testing.T) {
 	if got := requestCount.Load(); got != 2 {
 		t.Errorf("expected short-circuit at stealth (2 requests), got %d", got)
 	}
+}
+
+func TestPipeline_ShortUnder30WordsCompletePageShortCircuits(t *testing.T) {
+	// Regression test for a bug where looksLikePartialShell's word-count branch
+	// fired on ANY tier result under shellMaxWords (30) words, with no
+	// rawHTMLBytes/ratio precondition — misclassifying genuinely short but
+	// complete real-world pages (tweets, dictionary entries, short Q&A
+	// answers) as SPA shells and forcing full tier escalation plus
+	// Partial:true. This content is a real tweet-style post: 22 words, little
+	// HTML, low HTML:text ratio — a genuinely short but complete page, not a
+	// shell. It must short-circuit at the stealth tier with Partial:false.
+	body := "Just launched our new thing today after months of work. Excited to finally ship it and see what people think. Feedback welcome!"
+	html := `<!DOCTYPE html><html><head><title>Post</title></head><body><article><p>` +
+		body + `</p></article></body></html>`
+
+	var requestCount atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		if strings.Contains(r.Header.Get("Accept"), "text/markdown") {
+			w.WriteHeader(406)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(html))
+	}))
+	defer ts.Close()
+
+	orig := statFile
+	statFile = func(path string) (any, error) { return nil, fmt.Errorf("not found") }
+	defer func() { statFile = orig }()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, ChromePath: chromeDisabled})
+	result, err := p.Scrape(context.Background(), ts.URL, 50000)
+	if err != nil {
+		t.Fatalf("expected success, got error: %v", err)
+	}
+	if result == nil || !strings.Contains(result.Content, "Just launched our new thing") {
+		t.Fatalf("expected short page content, got: %+v", result)
+	}
+	if result.Tier != "stealth" {
+		t.Errorf("expected stealth tier to win without escalating to html, got tier %q", result.Tier)
+	}
+	if result.Partial {
+		t.Error("expected Partial=false for a genuinely short but complete page under 30 words")
+	}
+	// markdown (406) + stealth = 2 requests; html tier must NOT have been hit.
+	if got := requestCount.Load(); got != 2 {
+		t.Errorf("expected short-circuit at stealth (2 requests), got %d", got)
+	}
+}
+
+func TestStampSparsity_WordCountBoundary(t *testing.T) {
+	t.Parallel()
+	// Regression test for the exact sparseWordThreshold (150) boundary: the
+	// contract is strictly "< 150 triggers SparsityWarning", so 150 words must
+	// NOT warn, while 149 and 151 pin down the boundary on either side. No
+	// existing fixture in the suite lands at 149/150/151 words, so an off-by-one
+	// (e.g. "<" flipped to "<=") would pass every other test silently.
+	words := func(n int) string {
+		w := make([]string, n)
+		for i := range w {
+			w[i] = "word"
+		}
+		return strings.Join(w, " ")
+	}
+
+	tests := []struct {
+		name      string
+		wordCount int
+		wantWarn  bool
+	}{
+		{"149 words is sparse", 149, true},
+		{"exactly 150 words is not sparse", 150, false},
+		{"151 words is not sparse", 151, false},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := &ScrapeResult{Content: words(tt.wordCount)}
+			stampSparsity(r)
+			if r.WordCount != tt.wordCount {
+				t.Fatalf("WordCount = %d, want %d", r.WordCount, tt.wordCount)
+			}
+			gotWarn := r.SparsityWarning != ""
+			if gotWarn != tt.wantWarn {
+				t.Errorf("SparsityWarning set = %v (value %q), want set=%v", gotWarn, r.SparsityWarning, tt.wantWarn)
+			}
+		})
+	}
+
+	stampSparsity(nil) // must not panic
 }
