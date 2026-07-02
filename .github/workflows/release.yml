@@ -795,7 +795,7 @@ jobs:
           # Entries are alphabetical; zoharbabin sorts between zohl and zookatron.
           MLIST="/tmp/nixpkgs/maintainers/maintainer-list.nix"
           if ! grep -q 'zoharbabin' "${MLIST}"; then
-            perl -i -0pe 's|(  zookatron = \{)|  zoharbabin = \{\n    email = "zohar\@zoharbabin.com";\n    github = "zoharbabin";\n    githubId = 150514;\n    name = "Zohar Babin";\n  };\n  $1|' "${MLIST}"
+            perl -i -0pe 's|(  zookatron = \{)|  zoharbabin = \{\n    email = "zohar\@zoharbabin.com";\n    github = "zoharbabin";\n    githubId = 150514;\n    name = "Zohar Babin";\n  };\n$1|' "${MLIST}"
             git -C /tmp/nixpkgs add maintainers/maintainer-list.nix
           fi
 
