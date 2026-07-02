@@ -99,15 +99,12 @@ func (p *HNProvider) Web(ctx context.Context, params WebSearchParams) ([]SearchR
 		if itemURL == "" {
 			itemURL = fmt.Sprintf("https://news.ycombinator.com/item?id=%d", h.StoryID)
 		}
-		date := h.CreatedAt
-		if len(date) > 10 {
-			date = date[:10]
-		}
 		results = append(results, SearchResult{
 			Title:       h.Title,
 			URL:         itemURL,
-			Snippet:     fmt.Sprintf("%d pts · %d comments · by %s · %s", h.Points, h.NumComments, h.Author, date),
+			Snippet:     fmt.Sprintf("%d pts · %d comments · by %s", h.Points, h.NumComments, h.Author),
 			DisplayLink: "news.ycombinator.com",
+			PublishedAt: normalizePublishedAt(h.CreatedAt, time.Now()),
 		})
 	}
 	return results, nil
@@ -130,10 +127,11 @@ func (p *HNProvider) News(ctx context.Context, params NewsSearchParams) ([]NewsR
 	news := make([]NewsResult, 0, len(results))
 	for _, r := range results {
 		news = append(news, NewsResult{
-			Title:   r.Title,
-			URL:     r.URL,
-			Source:  "hackernews",
-			Snippet: r.Snippet,
+			Title:       r.Title,
+			URL:         r.URL,
+			Source:      "hackernews",
+			PublishedAt: r.PublishedAt,
+			Snippet:     r.Snippet,
 		})
 	}
 	return news, nil

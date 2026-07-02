@@ -143,6 +143,18 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 			output["extractionQuality"] = "complete"
 		}
 
+		// Content-volume signal (#358), orthogonal to extractionQuality above:
+		// extractionQuality reflects PIPELINE TIER EXHAUSTION, while wordCount/
+		// sparsityWarning reflect how much prose was actually extracted — a
+		// paywall/bot-wall stub can clear every tier check and still be too thin
+		// for a caller to run a reliable claim check against. Both may be present
+		// at once. wordCount is always emitted; sparsityWarning is omitted
+		// (zero-value "") when content is not thin.
+		output["wordCount"] = result.WordCount
+		if result.SparsityWarning != "" {
+			output["sparsityWarning"] = result.SparsityWarning
+		}
+
 		if result.Title != "" {
 			output["metadata"] = map[string]any{
 				"title":  result.Title,
@@ -341,8 +353,9 @@ func scrapeCacheKey(url, mode string, maxLength int) string {
 	// (#62: sourceType/authorityTier/domainCategory). v5 adds the scholarly
 	// detectedDoi + retractionStatus fields (#199). v6 adds the extractionQuality
 	// (complete/partial) completeness signal (#240). v7 adds the forumSignals field
-	// (#247) for Reddit engagement metadata. Bump on any future shape change.
-	fmt.Fprintf(h, "scrape|v7|%s|%s|%d", url, mode, maxLength)
+	// (#247) for Reddit engagement metadata. v8 adds wordCount/sparsityWarning
+	// (#358) — the content-volume signal. Bump on any future shape change.
+	fmt.Fprintf(h, "scrape|v8|%s|%s|%d", url, mode, maxLength)
 	return "scrape:" + hex.EncodeToString(h.Sum(nil))[:32]
 }
 

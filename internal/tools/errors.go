@@ -220,6 +220,7 @@ type ZeroResultHints struct {
 	ProvidersAttempted []string          `json:"providersAttempted,omitempty"`
 	FiltersApplied     map[string]string `json:"filtersApplied,omitempty"`
 	SuggestedActions   []HintAction      `json:"suggestedActions,omitempty"`
+	EpistemicWarning   string            `json:"epistemicWarning,omitempty"`
 }
 
 // HintAction is a suggested recovery action for zero-result or failed queries.
@@ -230,10 +231,18 @@ type HintAction struct {
 	Value     string `json:"value,omitempty"`
 }
 
+// epistemicZeroResultWarning is the single, fixed reminder (#357) surfaced on
+// every ZeroResultHints across all zero-result-hint call sites: zero results
+// do not confirm absence, so callers must never assert non-existence from an
+// empty result set. Defined once here so every construction of
+// ZeroResultHints is byte-identical — see TestBuildZeroResultHints_EpistemicWarning.
+const epistemicZeroResultWarning = "Zero results do not confirm absence. The queried fact may exist and be unreachable by the current query or provider. Do not assert non-existence from this result."
+
 // buildZeroResultHints constructs hints explaining why a search returned nothing.
 func buildZeroResultHints(provider string, params map[string]string, alternatives []string) *ZeroResultHints {
 	hints := &ZeroResultHints{
-		Reason: "no_match",
+		Reason:           "no_match",
+		EpistemicWarning: epistemicZeroResultWarning,
 	}
 	if provider != "" {
 		hints.ProvidersAttempted = []string{provider}

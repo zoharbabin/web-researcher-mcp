@@ -2749,6 +2749,30 @@ func TestScrapeHTML_HTMLContent_NotRerouted(t *testing.T) {
 
 func TestLooksLikePartialShell(t *testing.T) {
 	t.Parallel()
+	// wordsOfLen returns a space-separated string of single-char "words" whose
+	// total length is exactly targetBytes, giving well over shellMaxWords
+	// words for any targetBytes used below — isolating the ratio branch under
+	// test from the new word-count branch.
+	wordsOfLen := func(targetBytes int) string {
+		if targetBytes <= 0 {
+			return ""
+		}
+		// "x x x...x": odd positions are spaces, so length targetBytes needs
+		// (targetBytes+1)/2 "x" chars.
+		var b strings.Builder
+		for b.Len() < targetBytes {
+			if b.Len() > 0 {
+				b.WriteByte(' ')
+			}
+			b.WriteByte('x')
+		}
+		s := b.String()
+		if len(s) > targetBytes {
+			s = s[:targetBytes]
+		}
+		return s
+	}
+
 	tests := []struct {
 		name         string
 		content      string
@@ -2757,37 +2781,37 @@ func TestLooksLikePartialShell(t *testing.T) {
 	}{
 		{
 			name:         "spa shell: short text, huge HTML",
-			content:      strings.Repeat("x", 120), // > 100 floor, <= 2048 cap
-			rawHTMLBytes: 120 * 60,                 // 60:1 ratio
+			content:      wordsOfLen(120), // > 100 floor, <= 2048 cap, >= 30 words
+			rawHTMLBytes: 120 * 60,        // 60:1 ratio
 			want:         true,
 		},
 		{
 			name:         "short but complete: little text, little HTML",
-			content:      strings.Repeat("x", 120),
+			content:      wordsOfLen(120),
 			rawHTMLBytes: 120 * 3, // 3:1 ratio — a real short page
 			want:         false,
 		},
 		{
 			name:         "substantial article never flagged regardless of ratio",
-			content:      strings.Repeat("x", shellMaxTextBytes+1),
+			content:      wordsOfLen(shellMaxTextBytes + 1),
 			rawHTMLBytes: (shellMaxTextBytes + 1) * 100,
 			want:         false,
 		},
 		{
-			name:         "non-HTML tier (rawHTMLBytes==0) never flagged",
-			content:      strings.Repeat("x", 120),
+			name:         "non-HTML tier (rawHTMLBytes==0) never flagged when word count is sufficient",
+			content:      wordsOfLen(120),
 			rawHTMLBytes: 0,
 			want:         false,
 		},
 		{
 			name:         "exactly at the ratio threshold is a shell",
-			content:      strings.Repeat("x", 100),
+			content:      wordsOfLen(100),
 			rawHTMLBytes: 100 * shellMinHTMLRatio,
 			want:         true,
 		},
 		{
 			name:         "just under the ratio threshold is not a shell",
-			content:      strings.Repeat("x", 100),
+			content:      wordsOfLen(100),
 			rawHTMLBytes: 100*shellMinHTMLRatio - 1,
 			want:         false,
 		},
@@ -2797,6 +2821,30 @@ func TestLooksLikePartialShell(t *testing.T) {
 			rawHTMLBytes: 50000,
 			want:         false,
 		},
+		{
+			name:         "sparse word count flags markdown-tier stub with zero rawHTMLBytes",
+			content:      "cookie banner accept all",
+			rawHTMLBytes: 0,
+			want:         true,
+		},
+		{
+			name:         "short but complete page is not flagged despite low word count when rawHTMLBytes>0",
+			content:      "just a few words here",
+			rawHTMLBytes: 6, // ratio well under shellMinHTMLRatio — a genuinely short complete page
+			want:         false,
+		},
+		{
+			name:         "real short tweet-style article with low HTML ratio is not a shell",
+			content:      "Just launched our new thing today after months of work. Excited to finally ship it and see what people think. Feedback welcome!",
+			rawHTMLBytes: 250, // ~1.9:1 ratio, well under shellMinHTMLRatio — genuinely short & complete
+			want:         false,
+		},
+		{
+			name:         "short HTML-tier result is flagged when the HTML:text ratio is high (an actual shell)",
+			content:      "just a few words here",
+			rawHTMLBytes: 21 * shellMinHTMLRatio, // ratio at threshold — a real SPA shell
+			want:         true,
+		},
 	}
 	for _, tt := range tests {
 		tt := tt
@@ -2804,8 +2852,8 @@ func TestLooksLikePartialShell(t *testing.T) {
 			t.Parallel()
 			r := &ScrapeResult{Content: tt.content, rawHTMLBytes: tt.rawHTMLBytes}
 			if got := looksLikePartialShell(r); got != tt.want {
-				t.Errorf("looksLikePartialShell() = %v, want %v (text=%d html=%d)",
-					got, tt.want, len(tt.content), tt.rawHTMLBytes)
+				t.Errorf("looksLikePartialShell() = %v, want %v (text=%d html=%d words=%d)",
+					got, tt.want, len(tt.content), tt.rawHTMLBytes, len(strings.Fields(tt.content)))
 			}
 		})
 	}
@@ -2930,5 +2978,146 @@ func TestPipeline_ShortCompletePageShortCircuits(t *testing.T) {
 	// markdown (406) + stealth = 2 requests; html tier must NOT have been hit.
 	if got := requestCount.Load(); got != 2 {
 		t.Errorf("expected short-circuit at stealth (2 requests), got %d", got)
+	}
+}
+
+func TestPipeline_ShortUnder30WordsCompletePageShortCircuits(t *testing.T) {
+	// Regression test for a bug where looksLikePartialShell's word-count branch
+	// fired on ANY tier result under shellMaxWords (30) words, with no
+	// rawHTMLBytes/ratio precondition — misclassifying genuinely short but
+	// complete real-world pages (tweets, dictionary entries, short Q&A
+	// answers) as SPA shells and forcing full tier escalation plus
+	// Partial:true. This content is a real tweet-style post: 22 words, little
+	// HTML, low HTML:text ratio — a genuinely short but complete page, not a
+	// shell. It must short-circuit at the stealth tier with Partial:false.
+	body := "Just launched our new thing today after months of work. Excited to finally ship it and see what people think. Feedback welcome!"
+	html := `<!DOCTYPE html><html><head><title>Post</title></head><body><article><p>` +
+		body + `</p></article></body></html>`
+
+	var requestCount atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		if strings.Contains(r.Header.Get("Accept"), "text/markdown") {
+			w.WriteHeader(406)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(html))
+	}))
+	defer ts.Close()
+
+	orig := statFile
+	statFile = func(path string) (any, error) { return nil, fmt.Errorf("not found") }
+	defer func() { statFile = orig }()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, ChromePath: chromeDisabled})
+	result, err := p.Scrape(context.Background(), ts.URL, 50000)
+	if err != nil {
+		t.Fatalf("expected success, got error: %v", err)
+	}
+	if result == nil || !strings.Contains(result.Content, "Just launched our new thing") {
+		t.Fatalf("expected short page content, got: %+v", result)
+	}
+	if result.Tier != "stealth" {
+		t.Errorf("expected stealth tier to win without escalating to html, got tier %q", result.Tier)
+	}
+	if result.Partial {
+		t.Error("expected Partial=false for a genuinely short but complete page under 30 words")
+	}
+	// markdown (406) + stealth = 2 requests; html tier must NOT have been hit.
+	if got := requestCount.Load(); got != 2 {
+		t.Errorf("expected short-circuit at stealth (2 requests), got %d", got)
+	}
+}
+
+func TestStampSparsity_WordCountBoundary(t *testing.T) {
+	t.Parallel()
+	// Regression test for the exact sparseWordThreshold (150) boundary: the
+	// contract is strictly "< 150 triggers SparsityWarning", so 150 words must
+	// NOT warn, while 149 and 151 pin down the boundary on either side. No
+	// existing fixture in the suite lands at 149/150/151 words, so an off-by-one
+	// (e.g. "<" flipped to "<=") would pass every other test silently.
+	words := func(n int) string {
+		w := make([]string, n)
+		for i := range w {
+			w[i] = "word"
+		}
+		return strings.Join(w, " ")
+	}
+
+	tests := []struct {
+		name      string
+		wordCount int
+		wantWarn  bool
+	}{
+		{"149 words is sparse", 149, true},
+		{"exactly 150 words is not sparse", 150, false},
+		{"151 words is not sparse", 151, false},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := &ScrapeResult{Content: words(tt.wordCount)}
+			stampSparsity(r)
+			if r.WordCount != tt.wordCount {
+				t.Fatalf("WordCount = %d, want %d", r.WordCount, tt.wordCount)
+			}
+			gotWarn := r.SparsityWarning != ""
+			if gotWarn != tt.wantWarn {
+				t.Errorf("SparsityWarning set = %v (value %q), want set=%v", gotWarn, r.SparsityWarning, tt.wantWarn)
+			}
+		})
+	}
+
+	stampSparsity(nil) // must not panic
+}
+
+// TestStampSparsity_CJKContentNotMisflagged is a regression test: a complete
+// CJK article has no ASCII whitespace, so strings.Fields would count it as
+// ~1 "word" and fire a false SparsityWarning even though nothing is missing.
+// stampSparsity must use a script-aware word count instead.
+func TestStampSparsity_CJKContentNotMisflagged(t *testing.T) {
+	t.Parallel()
+	// A genuine, complete Chinese paragraph repeated to be unambiguously long —
+	// zero ASCII spaces, well over sparseWordThreshold (150) runes.
+	content := strings.Repeat("这是一段完整的中文新闻内容用于测试提取质量与字数统计逻辑是否正确处理非拉丁语言的文本", 4)
+	r := &ScrapeResult{Content: content}
+	stampSparsity(r)
+	if r.WordCount < sparseWordThreshold {
+		t.Errorf("expected CJK content's script-aware word count to clear sparseWordThreshold, got WordCount=%d", r.WordCount)
+	}
+	if r.SparsityWarning != "" {
+		t.Errorf("expected no SparsityWarning for complete CJK content, got %q", r.SparsityWarning)
+	}
+}
+
+// TestLooksLikePartialShell_CJKContentNotMisflagged is a regression test for
+// the same strings.Fields defect in the rawHTMLBytes==0 branch: a complete
+// CJK/Thai/Lao article must not be misclassified as a partial shell.
+func TestLooksLikePartialShell_CJKContentNotMisflagged(t *testing.T) {
+	t.Parallel()
+	content := strings.Repeat("这是一段完整的中文新闻内容用于测试提取质量与字数统计逻辑是否正确处理非拉丁语言的文本", 3)
+	r := &ScrapeResult{Content: content, rawHTMLBytes: 0}
+	if looksLikePartialShell(r) {
+		t.Errorf("expected complete CJK content (rawHTMLBytes==0) to NOT be flagged as a partial shell")
+	}
+}
+
+// TestLooksLikePartialShell_BrowserTierExempt is a regression test: the
+// browser tier already executed JS, so a short browser-tier result is a
+// genuinely short page, not a shell to keep escalating past — there is
+// nothing further to render. Only the browser tier gets this exemption;
+// other rawHTMLBytes==0 tiers (markdown) still use the word-count check.
+func TestLooksLikePartialShell_BrowserTierExempt(t *testing.T) {
+	t.Parallel()
+	short := &ScrapeResult{Content: "cookie banner accept all", rawHTMLBytes: 0, Tier: "browser"}
+	if looksLikePartialShell(short) {
+		t.Error("expected a short browser-tier result to NOT be flagged as a partial shell")
+	}
+	// Same content, markdown tier: still flagged (unchanged behavior).
+	markdown := &ScrapeResult{Content: "cookie banner accept all", rawHTMLBytes: 0, Tier: "markdown"}
+	if !looksLikePartialShell(markdown) {
+		t.Error("expected the same short markdown-tier result to still be flagged as a partial shell")
 	}
 }

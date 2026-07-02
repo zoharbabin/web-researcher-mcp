@@ -125,6 +125,28 @@ func TestVerifyCitation_ClaimContrastSignal(t *testing.T) {
 	}
 }
 
+// TestVerifyCitationSparseClaim (#358): a thin paywall/bot-wall stub (< 150
+// words) still clears the pipeline's >100-byte admission gate and produces a
+// claimSupport verdict, but must be annotated with sparsityNote + contentWords
+// so a caller knows the check ran against a stub, not the full document.
+func TestVerifyCitationSparseClaim(t *testing.T) {
+	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><article><p>Please subscribe to continue reading this article about vaccine efficacy.</p></article></body></html>`))
+	}))
+	defer page.Close()
+
+	out := callVerifyClaim(t, verifyClaimDeps(t), page.URL, "vaccine efficacy reduced infection")
+	note, _ := out["sparsityNote"].(string)
+	if note == "" {
+		t.Fatal("expected non-empty sparsityNote for thin source content")
+	}
+	words, ok := out["contentWords"].(float64)
+	if !ok || words >= 150 {
+		t.Fatalf("expected contentWords < 150, got %v", out["contentWords"])
+	}
+}
+
 // TestVerifyCitation_ClaimWaybackFallback: dead origin + Wayback snapshot → claim checked against the snapshot URL.
 func TestVerifyCitation_ClaimWaybackFallback(t *testing.T) {
 	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(404) }))
@@ -631,6 +653,66 @@ func TestVerifyCitation_URLScholarlyClaim(t *testing.T) {
 	}
 	if out["claimSourceUrl"] != page.URL {
 		t.Errorf("claimSourceUrl = %v, want %s", out["claimSourceUrl"], page.URL)
+	}
+}
+
+// TestVerifyCitationClaimMismatch (#359 Test A): a DOI that resolves to a real
+// academic record, whose open-access URL serves content addressing NONE of the
+// claim's terms → claimSupport must be not_addressed (the mischaracterization
+// signal). verify_citation has no generic `flags` array (that's
+// audit_bibliography's shape) — claimSupport IS the mischaracterization signal
+// here, so that is what this test asserts.
+func TestVerifyCitationClaimMismatch(t *testing.T) {
+	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><article><p>This paper discusses medieval architecture and cathedral construction in twelfth-century France.</p></article></body></html>`))
+	}))
+	defer page.Close()
+
+	deps := verifyClaimDeps(t)
+	deps.AcademicProviders = map[string]search.AcademicProvider{
+		"openalex": &mockOAURLProvider{oaURL: page.URL},
+	}
+
+	out := callVerifyClaim(t, deps, "10.1234/oa-test", "vaccine efficacy reduced infection rates")
+	if out["exists"] != true {
+		t.Errorf("exists = %v, want true (DOI resolves to a real record)", out["exists"])
+	}
+	if out["claimSupport"] != "not_addressed" {
+		t.Errorf("claimSupport = %v, want not_addressed", out["claimSupport"])
+	}
+}
+
+// TestVerifyCitationNoClaimSkipSignal (#359 Test B): calling without a claim
+// must surface claimCheckSkipped:true and must NOT emit claimSupport.
+func TestVerifyCitationNoClaimSkipSignal(t *testing.T) {
+	out := callVerify(t, setupTestDeps(), "10.1234/x")
+	if out["claimCheckSkipped"] != true {
+		t.Errorf("claimCheckSkipped = %v, want true", out["claimCheckSkipped"])
+	}
+	if _, present := out["claimSupport"]; present {
+		t.Errorf("claimSupport must not be present when the claim check was skipped, got %v", out["claimSupport"])
+	}
+	if _, present := out["claimCheckSkippedReason"]; !present {
+		t.Error("claimCheckSkippedReason should accompany claimCheckSkipped")
+	}
+}
+
+// TestVerifyCitationFabricatedFreeTextRef (#359 Test E): a free-text reference
+// with a plausible-looking title that resolves to NO academic record. Unlike the
+// DOI paths, verify_citation's reference path reports this as exists:false +
+// matchConfidence:"none" — there is no `flags` field on verify_citation (that
+// shape belongs to audit_bibliography), so those are the fields asserted here.
+func TestVerifyCitationFabricatedFreeTextRef(t *testing.T) {
+	deps := setupTestDeps()
+	deps.AcademicProviders = nil // force no academic match
+	deps.Search = nil
+	out := callVerify(t, deps, "A Totally Fabricated Study of Nonexistent Phenomena, Smith J, 2023")
+	if out["exists"] != false {
+		t.Errorf("exists = %v, want false (no academic match for a fabricated reference)", out["exists"])
+	}
+	if out["matchConfidence"] != "none" {
+		t.Errorf("matchConfidence = %v, want none", out["matchConfidence"])
 	}
 }
 

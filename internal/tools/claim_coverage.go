@@ -16,6 +16,15 @@ type claimCoverageResult struct {
 	Evidence  []string // ExtractClaimEvidence.KeySentences (claim-relevant sentences)
 	SourceURL string   // the URL actually fetched ("" when unavailable)
 	Contrast  bool     // a matched sentence carries a negation/contrast cue (read it yourself)
+	// ContentWords and SparsityNote (#358) annotate — never change — Support.
+	// A thin source (e.g. a paywall/bot-wall stub) can still show lexical term
+	// overlap with the claim and land on addressed/partially_addressed; this
+	// flags that the coverage result may not reflect the full document.
+	// ContentWords is 0 and SparsityNote is "" when Support is
+	// claimSourceUnavailable (no content was fetched to count) or when the
+	// fetched content clears the sparse-word threshold.
+	ContentWords int
+	SparsityNote string
 }
 
 // claimCoverageFor fetches fetchURL and runs the lexical, model-free claim-coverage
@@ -40,6 +49,13 @@ func claimCoverageFor(ctx context.Context, deps Dependencies, fetchURL, claim st
 	return claimCoverageFromContent(res.Content, fetchURL, claim)
 }
 
+// sparseWordThreshold mirrors scraper's content-volume floor (#358): below this
+// many words, a claim-coverage result is annotated as unreliable. Kept as an
+// independent constant (not imported from internal/scraper) because the two
+// packages' thresholds are conceptually related but not contractually coupled —
+// each package owns its own quality-signal cutoff.
+const sparseWordThreshold = 150
+
 // claimCoverageFromContent runs the lexical, model-free coverage check against
 // already-fetched content — no scrape. It lets a caller that already has the
 // page body (e.g. verify_citation's URL path, which fetches once to detect a DOI)
@@ -57,13 +73,21 @@ func claimCoverageFromContent(body, fetchURL, claim string) claimCoverageResult 
 	// judges). Strong overlap → addressed.
 	matched, total := content.ClaimTermCoverageWindowed(body, claim, 0)
 	ev := content.ExtractClaimEvidence(body, claim)
+	// content.WordCount, not strings.Fields: CJK/Thai/Lao/Khmer/Myanmar text has
+	// no inter-word spaces, so a complete non-Latin-script source would otherwise
+	// collapse to a handful of "words" and trip a false SparsityNote.
+	wordCount := content.WordCount(body)
 	out := claimCoverageResult{
 		Evidence:  ev.KeySentences,
 		SourceURL: fetchURL,
 		// A matched evidence sentence carrying a negation/contrast cue may REFUTE the
 		// claim while sharing its terms (the lexical "false-addressed" hole). Surface
 		// it as a neutral "read this yourself" signal — never as a refutes verdict.
-		Contrast: content.HasContrastCue(ev.KeySentences),
+		Contrast:     content.HasContrastCue(ev.KeySentences),
+		ContentWords: wordCount,
+	}
+	if wordCount < sparseWordThreshold {
+		out.SparsityNote = "Source content was thin (<150 words); coverage result may not reflect the full document."
 	}
 	switch {
 	case total == 0:

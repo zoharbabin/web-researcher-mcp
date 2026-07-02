@@ -103,7 +103,7 @@ func registerEconSearch(srv *mcp.Server, deps Dependencies) {
 			output["country"] = input.Country
 		}
 		if len(items) == 0 {
-			output["hints"] = buildZeroResultHints(providerName, nil, nil)
+			output["hints"] = buildZeroResultHints(providerName, econFilterMap(input), nil)
 		}
 
 		jsonBytes, _ := json.Marshal(output)
@@ -115,6 +115,29 @@ func registerEconSearch(srv *mcp.Server, deps Dependencies) {
 
 		return structuredResult(jsonBytes), nil, nil
 	})
+}
+
+// econFilterMap collects the filterable econ_search params that were
+// actually set, so zero-result hints can suggest removing a real culprit
+// instead of emitting a bare, unactionable reason.
+func econFilterMap(input econSearchInput) map[string]string {
+	m := map[string]string{}
+	if input.Country != "" {
+		m["country"] = input.Country
+	}
+	if input.DateFrom != "" {
+		m["date_from"] = input.DateFrom
+	}
+	if input.DateTo != "" {
+		m["date_to"] = input.DateTo
+	}
+	if input.Frequency != "" {
+		m["frequency"] = input.Frequency
+	}
+	if input.Units != "" {
+		m["units"] = input.Units
+	}
+	return m
 }
 
 func resolveEconSearcher(deps Dependencies, providerName string) (search.EconSearcher, string, *mcp.CallToolResult) {

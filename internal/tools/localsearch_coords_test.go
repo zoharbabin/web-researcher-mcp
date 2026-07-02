@@ -33,6 +33,25 @@ func localDepsWithCapture() (Dependencies, *capturingLocalProvider) {
 	return deps, cap
 }
 
+// emptyLocalProvider returns no places, to exercise local_search's zero-result
+// hints branch (the localFilterMap(input, lat, lon) call, issue #357).
+type emptyLocalProvider struct{}
+
+func (m *emptyLocalProvider) Name() string { return "brave" }
+func (m *emptyLocalProvider) Metadata() search.ProviderMeta {
+	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "paid", Description: "empty local"}
+}
+func (m *emptyLocalProvider) Local(_ context.Context, _ search.LocalSearchParams) ([]search.LocalResult, error) {
+	return []search.LocalResult{}, nil
+}
+
+// localDepsWithEmpty wires a zero-result provider as the sole local provider.
+func localDepsWithEmpty() Dependencies {
+	deps := setupTestDeps()
+	deps.LocalProviders = map[string]search.LocalProvider{"brave": &emptyLocalProvider{}}
+	return deps
+}
+
 func callLocal(ctx context.Context, t *testing.T, deps Dependencies, args map[string]any) *mcp.CallToolResult {
 	t.Helper()
 	srv := createTestServer(deps)
@@ -162,6 +181,112 @@ func TestLocalSearch_ResultShapeUnchanged(t *testing.T) {
 	if _, ok := body["places"]; !ok {
 		t.Error("missing places")
 	}
+}
+
+// TestLocalSearch_ZeroResultHints asserts local_search attaches a
+// ZeroResultHints object whose filtersApplied is built from the caller's
+// actual filters (near/country/latitude/longitude/radius) via
+// localFilterMap, not a bare nil,nil (issue #357).
+func TestLocalSearch_ZeroResultHints(t *testing.T) {
+	t.Run("emits hints with lat/lon/radius on zero results", func(t *testing.T) {
+		deps := localDepsWithEmpty()
+		res := callLocal(context.Background(), t, deps, map[string]any{
+			"query":     "coffee",
+			"latitude":  47.6062,
+			"longitude": -122.3321,
+			"radius":    5000.0,
+			"country":   "US",
+		})
+		if res.IsError {
+			t.Fatalf("unexpected tool error: %s", res.Content[0].(*mcp.TextContent).Text)
+		}
+		var body map[string]any
+		if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &body); err != nil {
+			t.Fatalf("parse content: %v", err)
+		}
+		if body["resultCount"].(float64) != 0 {
+			t.Fatalf("expected 0 results, got %v", body["resultCount"])
+		}
+		hints, ok := body["hints"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected hints object on zero results, got %v", body["hints"])
+		}
+		filters, ok := hints["filtersApplied"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected filtersApplied map, got %v", hints["filtersApplied"])
+		}
+		for _, key := range []string{"latitude", "longitude", "radius", "country"} {
+			if _, present := filters[key]; !present {
+				t.Errorf("filtersApplied missing %q, got %v", key, filters)
+			}
+		}
+	})
+
+	t.Run("no hints when results present", func(t *testing.T) {
+		deps, _ := localDepsWithCapture()
+		res := callLocal(context.Background(), t, deps, map[string]any{"query": "coffee"})
+		if res.IsError {
+			t.Fatalf("unexpected tool error: %s", res.Content[0].(*mcp.TextContent).Text)
+		}
+		var body map[string]any
+		if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &body); err != nil {
+			t.Fatalf("parse content: %v", err)
+		}
+		if _, present := body["hints"]; present {
+			t.Errorf("hints must be absent on non-empty results, got %v", body["hints"])
+		}
+	})
+}
+
+// TestLocalFilterMap asserts localFilterMap collects only the filters the
+// caller actually set (issue #357: zero-result hints must reflect the real
+// culprit, not a bare unactionable reason from nil,nil).
+func TestLocalFilterMap(t *testing.T) {
+	t.Run("empty input yields empty map", func(t *testing.T) {
+		got := localFilterMap(localSearchInput{}, nil, nil)
+		if len(got) != 0 {
+			t.Errorf("expected empty map, got %v", got)
+		}
+	})
+
+	t.Run("collects all set filters", func(t *testing.T) {
+		lat, lon := 47.6062, -122.3321
+		input := localSearchInput{Near: "Seattle", Country: "US", Radius: 5000}
+		got := localFilterMap(input, &lat, &lon)
+		want := map[string]string{
+			"near":      "Seattle",
+			"country":   "US",
+			"latitude":  "47.6062",
+			"longitude": "-122.3321",
+			"radius":    "5000",
+		}
+		for k, v := range want {
+			if got[k] != v {
+				t.Errorf("filter[%q] = %q want %q", k, got[k], v)
+			}
+		}
+		if len(got) != len(want) {
+			t.Errorf("got %v want keys %v", got, want)
+		}
+	})
+
+	t.Run("lone coordinate is not included", func(t *testing.T) {
+		lat := 47.6062
+		got := localFilterMap(localSearchInput{}, &lat, nil)
+		if _, present := got["latitude"]; present {
+			t.Errorf("latitude must not appear without both lat and lon, got %v", got)
+		}
+		if _, present := got["longitude"]; present {
+			t.Errorf("longitude must not appear without both lat and lon, got %v", got)
+		}
+	})
+
+	t.Run("zero radius is not included", func(t *testing.T) {
+		got := localFilterMap(localSearchInput{Radius: 0}, nil, nil)
+		if _, present := got["radius"]; present {
+			t.Errorf("radius=0 must not be treated as a set filter, got %v", got)
+		}
+	})
 }
 
 // TestCoordCacheKey asserts the cache-key fragment distinguishes an unset anchor

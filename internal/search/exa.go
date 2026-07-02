@@ -146,6 +146,7 @@ func (e *ExaProvider) doWebSearch(ctx context.Context, params WebSearchParams) (
 			URL:         r.URL,
 			Snippet:     r.snippet(),
 			DisplayLink: extractDisplayLink(r.URL),
+			PublishedAt: normalizePublishedAt(r.PublishedDate, time.Now()),
 		})
 	}
 	return results, nil

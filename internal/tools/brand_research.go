@@ -18,6 +18,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
@@ -47,6 +48,12 @@ type brandResearchResult struct {
 	Coverage            brandCoverage    `json:"coverage"`
 	CacheAge            int              `json:"cache_age"`
 	Trust               string           `json:"trust"`
+	// brandPageThin (#358) records whether the guidelines-page scrape (Tier 4)
+	// yielded WordCount < sparseWordThreshold — a brand page was FOUND (HEAD
+	// probe succeeded) but its content couldn't be read (JS-SPA skeleton,
+	// bot-wall). computeBrandCoverage uses this to report "extraction_blocked"
+	// instead of "none" for fields normally sourced from that page.
+	brandPageThin bool `json:"-"`
 }
 
 type brandIdentity struct {
@@ -143,6 +150,10 @@ type brandSource struct {
 	Name   string   `json:"name"`
 	URL    string   `json:"url,omitempty"`
 	Fields []string `json:"fields"`
+	// ScrapeQuality (#358) is "thin" when the page this source drew from had
+	// WordCount below sparseWordThreshold — a content-volume signal, not an
+	// error: the source may still have contributed real fields above.
+	ScrapeQuality string `json:"scrapeQuality,omitempty"`
 }
 
 type brandCoverage struct {
@@ -901,7 +912,32 @@ func probeBrandPage(ctx context.Context, deps Dependencies, domain string, resul
 		}
 	}
 
-	return &brandSource{Name: "brand_page", URL: guidelinesURL, Fields: fields}
+	// scrapeQuality (#358): a brand page was FOUND (HEAD probe matched) but its
+	// content was too thin to read reliably — distinct from never finding a
+	// page at all. computeBrandCoverage uses brandPageThin to report
+	// "extraction_blocked" instead of "none" for fields this page would have
+	// populated.
+	src := &brandSource{Name: "brand_page", URL: guidelinesURL, Fields: fields}
+	markBrandPageThin(allPageContent.String(), src, result, mu)
+	return src
+}
+
+// markBrandPageThin records the sparsity signal (#358) for a brand-page probe:
+// ScrapeQuality:"thin" on src plus the mutex-guarded brandPageThin flag on
+// result, when content falls below sparseWordThreshold. Extracted from
+// probeBrandPage as a pure function (no behavior change) so the mutex-guarded
+// write and the threshold comparison are directly unit-testable without a
+// live HTTP probe. Uses content.WordCount, not strings.Fields: CJK/Thai/Lao/
+// Khmer/Myanmar text has no inter-word spaces, so strings.Fields would
+// undercount it and falsely flag a fully extracted non-Latin brand page as
+// thin.
+func markBrandPageThin(pageContent string, src *brandSource, result *brandResearchResult, mu *sync.Mutex) {
+	if wc := content.WordCount(pageContent); wc < sparseWordThreshold {
+		src.ScrapeQuality = "thin"
+		mu.Lock()
+		result.brandPageThin = true
+		mu.Unlock()
+	}
 }
 
 // rePrimarySection matches section headings that introduce a primary color palette.
@@ -1150,7 +1186,16 @@ func searchBrandGuidelines(ctx context.Context, deps Dependencies, companyName, 
 // ─── Coverage + Design Tokens ──────────────────────────────────────────────
 
 func computeBrandCoverage(result *brandResearchResult) brandCoverage {
-	cov := brandCoverage{Colors: "none", Logos: "none", Typography: "none", ToneOfVoice: "none"}
+	// none/absent (#358): a brand page was found (Tier 4 HEAD probe matched)
+	// but its scrape was too thin to populate this field — distinct from
+	// never finding a candidate page at all. Only colors/typography/tone_of_voice
+	// are ever sourced from the brand page (extractBrandPageContent); logos come
+	// from the homepage meta tier and are unaffected by brand-page thinness.
+	blockedOrNone := "none"
+	if result.brandPageThin {
+		blockedOrNone = "extraction_blocked"
+	}
+	cov := brandCoverage{Colors: blockedOrNone, Logos: "none", Typography: blockedOrNone, ToneOfVoice: blockedOrNone}
 
 	if result.Colors != nil {
 		if len(result.Colors.Palette) >= 3 {

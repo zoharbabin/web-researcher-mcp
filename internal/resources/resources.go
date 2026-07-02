@@ -369,6 +369,7 @@ func registerPrompts(srv *mcp.Server) {
 			"- If errors include retryable:true, respect retryAfterSeconds before retrying.\n" +
 			"- Cross-reference findings across multiple sources for accuracy.\n" +
 			"- Verify citations before presenting them; never cite a source you haven't confirmed exists.\n" +
+			"- Check wordCount per source in search_and_scrape results; low-word sources may be paywalls or bot-walls.\n" +
 			"- End with a summary including citations from scrape_page results.\n"
 
 		return &mcp.GetPromptResult{
@@ -405,6 +406,7 @@ func registerPrompts(srv *mcp.Server) {
 			"- Evaluate source authority and recency.\n" +
 			"- Run verify_citation on any source you intend to cite — a real-looking citation may be fabricated or retracted.\n" +
 			"- If search_and_scrape returns status:'partial', check scrapeFailures for context.\n" +
+			"- If a source has sparsityWarning set or scores.contentQuality < 0.2, treat it as inconclusive — do not cite it as supporting or contradicting a claim.\n" +
 			"- Report confidence level (high/medium/low) with reasoning and cited, verified sources.\n"
 
 		return &mcp.GetPromptResult{
@@ -479,6 +481,7 @@ func registerPrompts(srv *mcp.Server) {
 			"- Use scrape_page on paper URLs to get abstracts and key findings (returns APA/MLA citations).\n" +
 			"- Identify major themes, methodologies, and gaps in the literature.\n" +
 			"- Before finalizing, run audit_bibliography on your reference list — a systematic review must not cite a retracted or fabricated study.\n" +
+			"- If audit_bibliography returns thinContentCount > 0, those entries' claimSupport values are unreliable — check those sources via scrape_page with a browser-capable setup.\n" +
 			"- If academic_search returns a hints object, follow its suggestions to broaden coverage.\n"
 
 		return &mcp.GetPromptResult{

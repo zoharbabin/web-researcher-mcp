@@ -68,6 +68,7 @@ type SearchResult struct {
     URL              string            `json:"url"`
     Snippet          string            `json:"snippet"`
     DisplayLink      string            `json:"displayLink"`
+    PublishedAt      string            `json:"publishedAt,omitempty"`      // RFC3339 UTC; present only when the provider's response carried a date (#356)
     SourceReputation *DomainReputation `json:"sourceReputation,omitempty"` // present when host is in the reputation dataset (#198); omitted for unknown hosts
     ClaimSignal      string            `json:"claimSignal"`                // most claim-relevant snippet sentence; present on EVERY result whenever `claim` is set (empty string when no snippet sentence matched) — uniform shape (#66, #235)
 }
@@ -75,7 +76,9 @@ type SearchResult struct {
 
 `sourceReputation` is a descriptive signal (same shape as `scrape_page`/`search_and_scrape`) indicating the host's known reliability tier (`high`, `low`, `mixed`) with a `basis` note. It is omitted for hosts not in the dataset — absence means unknown, not bad. When `claim` is set, every result carries a `claimSignal` holding the most claim-relevant snippet sentence to help triage which links to read — it is the empty string (not absent) when no snippet sentence matched, so the field's shape is uniform across results and downstream null-checking stays simple (#235). For full-text claim evidence use `search_and_scrape` with `claim`.
 
-On a zero-result response, `hints` carries a `ZeroResultHints` object (the same shape `academic_search` and `patent_search` emit) explaining why nothing matched and how to recover: `reason` (`no_match` | `filters_too_restrictive`), `filtersApplied` (the constraints that may have eliminated results — `site`, `lens`, `time_range`, `country`, `language`, `exact_terms`, `exclude_terms`), and `suggestedActions` (remove-filter / try-different-provider). Suggested alternative providers are limited to those **configured and currently healthy**. On any non-empty result set the field is omitted.
+`publishedAt` (#356) is **optional and provider-dependent**, populated only by providers whose web response carries a date signal (Google via pagemap metadata, Tavily, Exa, SearXNG, HackerNews) and omitted (never guessed from snippet/title text) for providers that don't (Brave, Serper, DuckDuckGo, SearchAPI). When present it is normalized to RFC3339 UTC regardless of the provider's raw format.
+
+On a zero-result response, `hints` carries a `ZeroResultHints` object (the same shape `academic_search` and `patent_search` emit) explaining why nothing matched and how to recover: `reason` (`no_match` | `filters_too_restrictive`), `filtersApplied` (the constraints that may have eliminated results — `site`, `lens`, `time_range`, `country`, `language`, `exact_terms`, `exclude_terms`), `suggestedActions` (remove-filter / try-different-provider), and `epistemicWarning` (#357: a fixed reminder that zero results do not confirm absence — the fact may exist and simply be unreachable by the current query/provider; never assert non-existence from an empty result set). Suggested alternative providers are limited to those **configured and currently healthy**. On any non-empty result set the field is omitted.
 
 ### Behavior
 
@@ -128,6 +131,8 @@ type ScrapeOutput struct {
     Raw             bool      `json:"raw,omitempty"`  // true only in raw mode; omitted otherwise
     ExtractedBy     string    `json:"extractedBy,omitempty"` // extraction tier: markdown|stealth|html|browser|exa:cached|exa:crawled; omitted when unknown
     ExtractionQuality string  `json:"extractionQuality,omitempty"` // complete when the pipeline returned a confident extraction; partial when every tier was exhausted and the best-quality candidate was returned instead. Never an error. Omitted in raw mode.
+    WordCount         int     `json:"wordCount,omitempty"`         // words in the extracted content (#358); orthogonal to ExtractionQuality — a "complete" extraction can still be a thin paywall/bot-wall stub. Omitted in raw mode.
+    SparsityWarning   string  `json:"sparsityWarning,omitempty"`   // present only when WordCount is below ~150 — the content may be too thin for a reliable claim check (#358). Omitted in raw mode and whenever content is not thin.
     Metadata        *Metadata `json:"metadata,omitempty"` // present only when a title was extracted (full/preview only)
     StructuredData  *StructuredData `json:"structuredData,omitempty"` // page-embedded machine-readable metadata; present only when found (full/preview, HTML pages)
     ForumSignals    *ForumSignals   `json:"forumSignals,omitempty"`   // Reddit engagement metadata extracted from JSON-LD; present only for Reddit posts where the HTML tier ran (#247)
@@ -197,6 +202,8 @@ In `raw` mode the output additionally carries `"raw": true`, and `contentType` i
 **Structured data (#46).** When the page embeds machine-readable metadata, the response carries a `structuredData` object alongside `content`: `jsonLd` (each `<script type="application/ld+json">` block, kept verbatim — invalid JSON is skipped, never failing the scrape), `openGraph` (`og:*`/`article:*` meta, keys keep their prefix), and `citation` (Highwire `citation_*` meta — DOI, authors, journal). The whole object is omitted when no such markup is present, and each sub-field is omitted when empty. It is produced by the HTML-extraction tiers only (absent for `raw` mode, PDFs, YouTube, and markdown-tier results), is independently size-bounded so a pathological page cannot blow the response budget, and is **untrusted external data** under the same trust boundary as `content`.
 
 **Extraction provenance (`extractedBy`).** When known, the response names the tier that produced the content: `markdown`, `stealth`, `html`, `browser`, or — for the paid Exa fallback — `exa:cached` / `exa:crawled`. It lets a caller see whether content came from a free local tier or the metered Exa `/contents` API (Tier 5, present only when `EXA_API_KEY` is set). Omitted when unknown (e.g. document/YouTube routes).
+
+**Content-volume signal (#358).** `wordCount` is emitted for every non-raw scrape and is a cheap, deterministic proxy for how much prose was actually extracted — it is **orthogonal** to `extractionQuality`, which reflects pipeline tier exhaustion, not content volume: a `complete` extraction can still be a thin paywall/bot-wall stub (a few sentences behind a subscribe wall) if that stub was returned confidently by an early tier. When `wordCount` falls below ~150, `sparsityWarning` is added with a human-readable note that claim checks against this source may be unreliable. Both fields are omitted in raw mode. `verify_citation`, `audit_bibliography`, and `search_and_scrape` surface the same signal (see their sections below) so a caller can tell a thin stub from a genuinely well-supported claim check.
 
 **Typed source classification (#62).** Every scrape response (full and raw) carries three categorical fields alongside the numeric content: `sourceType` (the kind of source — derived from Schema.org `@type` / Highwire `citation_*` meta when present, else a domain heuristic, else `unknown`), `authorityTier` (`high`/`medium`/`low`, a banding of the internal authority score), and `domainCategory` (`academic`/`legal`/`medical`/`financial`/`technical`/`general`, from a domain heuristic). They let the model hedge in natural language by source type. They are best-effort hints derived from untrusted page data — treat them as signals, not guarantees. (In raw mode, with no structured-data extraction, `sourceType` falls back to the host heuristic.)
 
@@ -350,6 +357,7 @@ type SearchAndScrapeOutput struct {
     SizeMetadata    SizeMetadata    `json:"sizeMetadata"`
     Recommendations []Recommendation `json:"recommendations,omitempty"` // advisory; see below
     Components      []Component      `json:"components,omitempty"`      // mcp-auto-formatted (deterministic, no LLM); see below
+    Hints           *ZeroResultHints `json:"hints,omitempty"`            // present only when the search phase itself returned zero results (#357); same shape as web_search, including epistemicWarning
 }
 
 // Recommendation is an advisory pointer to a higher-quality source already in
@@ -380,17 +388,20 @@ type Component struct {
 }
 
 type SourceResult struct {
-    URL            string        `json:"url"`
-    Title          string        `json:"title,omitempty"`
-    Content        string        `json:"content"`
-    ContentType    string        `json:"contentType"`
-    Trust          string        `json:"trust"`        // "untrusted-external-content" (see top-level Trust)
-    Scores         *QualityScore `json:"scores,omitempty"`
-    SourceType     string        `json:"sourceType,omitempty"`     // typed classification (#62): peer_reviewed|official_docs|government|news_publication|blog|forum|wiki|social_media|unknown
-    AuthorityTier  string        `json:"authorityTier,omitempty"`  // high|medium|low
-    DomainCategory string        `json:"domainCategory,omitempty"` // academic|legal|medical|financial|technical|general
-    ClaimSignal    string        `json:"claimSignal,omitempty"`    // strongest claim-relevant sentence; present only when `claim` is set and matched (#66)
-    KeySentences   []string      `json:"keySentences,omitempty"`   // top claim-relevant sentences in document order; present only with `claim`
+    URL               string        `json:"url"`
+    Title             string        `json:"title,omitempty"`
+    PublishedAt       string        `json:"publishedAt,omitempty"`       // RFC3339 UTC, carried over from the discovery search result (#356); present only when that provider's response carried a date
+    Content           string        `json:"content"`
+    ContentType       string        `json:"contentType"`
+    Trust             string        `json:"trust"`        // "untrusted-external-content" (see top-level Trust)
+    Scores            *QualityScore `json:"scores,omitempty"`
+    SourceType        string        `json:"sourceType,omitempty"`        // typed classification (#62): peer_reviewed|official_docs|government|news_publication|blog|forum|wiki|social_media|unknown
+    AuthorityTier     string        `json:"authorityTier,omitempty"`     // high|medium|low
+    DomainCategory    string        `json:"domainCategory,omitempty"`    // academic|legal|medical|financial|technical|general
+    ExtractionQuality string        `json:"extractionQuality,omitempty"` // complete or partial — tier exhaustion, not content volume; see WordCount for that (#358)
+    WordCount         int           `json:"wordCount,omitempty"`         // words extracted from this source (#358); below ~150 the source may be a paywall/bot-wall stub — see the summary's SparseSources count
+    ClaimSignal       string        `json:"claimSignal,omitempty"`       // strongest claim-relevant sentence; present only when `claim` is set and matched (#66)
+    KeySentences      []string      `json:"keySentences,omitempty"`      // top claim-relevant sentences in document order; present only with `claim`
 }
 
 type FailureInfo struct {
@@ -413,6 +424,7 @@ type PipelineSummary struct {
     URLsSearched     int `json:"urlsSearched"`
     URLsScraped      int `json:"urlsScraped"`
     URLsFailed       int `json:"urlsFailed"`
+    SparseSources    int `json:"sparseSources"`    // sources with wordCount < ~150 (#358) — a paywall/bot-wall stub can still count toward URLsScraped; counted before `filter_by_query` removes any source, so it stays accurate even when filtering strips the thin ones
     ProcessingTimeMs int `json:"processingTimeMs"`
 }
 ```
@@ -461,10 +473,11 @@ type PipelineSummary struct {
 
 ```go
 type ImageSearchOutput struct {
-    Images      []ImageResult `json:"images"`
-    Query       string        `json:"query"`
-    ResultCount int           `json:"resultCount"`
-    Trust       string        `json:"trust"`   // "untrusted-external-content"
+    Images      []ImageResult    `json:"images"`
+    Query       string           `json:"query"`
+    ResultCount int              `json:"resultCount"`
+    Hints       *ZeroResultHints `json:"hints,omitempty"` // present ONLY on zero-result responses (#357); same shape as web_search, including epistemicWarning
+    Trust       string           `json:"trust"`   // "untrusted-external-content"
 }
 
 type ImageResult struct {
@@ -526,7 +539,7 @@ type NewsArticle struct {
 }
 ```
 
-On a zero-result response, `hints` carries the same `ZeroResultHints` object as `web_search`/`academic_search`/`patent_search`. The active `freshness` window (default `week`) and any `news_source` are surfaced in `filtersApplied`, since an over-narrow recency window is the most common reason news returns nothing; suggested alternative providers are limited to those configured and healthy. Omitted on any non-empty result set.
+On a zero-result response, `hints` carries the same `ZeroResultHints` object as `web_search`/`academic_search`/`patent_search`, including its fixed `epistemicWarning` (#357 — see `web_search` above for the full field list). The active `freshness` window (default `week`) and any `news_source` are surfaced in `filtersApplied`, since an over-narrow recency window is the most common reason news returns nothing; suggested alternative providers are limited to those configured and healthy. Omitted on any non-empty result set.
 
 ### Behavior
 
@@ -752,8 +765,9 @@ An optional iteration-assist level (#67). The server stays **infrastructure, not
 
 - `coverage` — `{ sourceCount, uniqueDomains, domainSpread, dominantDomain?, sourceTypes, gaps[] }`. Descriptive coverage signals (domain spread, source-type balance, thin-coverage flags) computed from the session's recorded sources. Never an answer.
 - `refinementQueries` — suggested follow-up search strings derived from knowledge gaps + coverage gaps. The caller's AI decides whether to act on them.
-- `refinementResults` (`thorough` only) — array of `{ query, resultCount, results[] }` (or `{ query, error }`), one per auto-run query. Raw web results tagged with the originating query; **not** synthesized. Each result is `{ title, url, snippet }`.
+- `refinementResults` (`thorough` only) — array of `{ query, resultCount, results[] }` (or `{ query, error }`), one per auto-run query. Raw web results tagged with the originating query; **not** synthesized. Each result is `{ title, url, snippet, publishedAt? }` (`publishedAt` (#356) present only when the underlying provider's response carried a date).
 - `refinementNote` (`thorough` only) — present when more than 3 queries were suggested and the auto-run was bounded.
+- `refinementWarning` (`thorough` only, #357) — present when at least one auto-run refinement search returned zero results: coverage gaps may persist and are **not confirmed absent** by an empty search.
 
 `thorough` searches respect the same rate limits and circuit breakers as `web_search`, record their sources into the session, and contribute to session `providerStats`.
 
@@ -1024,6 +1038,8 @@ Membership is host-owned via admin endpoints (not MCP tools): `POST /admin/works
 ### Purpose
 
 Ask a factual question and get one grounded, synthesized answer with source citations. Unlike `web_search` (a list of links) or `search_and_scrape` (raw page text), this returns a direct written answer plus the URLs it relied on. The backing provider is pluggable — set `provider` to choose one when several are configured. The result names the answering provider, and `costUsd` reports the per-call estimate for metered providers (0 for free ones).
+
+**Epistemic caveat (#357).** The synthesized answer may be incomplete or outdated — verify the cited URLs before asserting the answer as fact. An empty or unusually short answer does not confirm the fact's absence; it may reflect a provider gap rather than a true negative.
 
 ### Input Schema
 
@@ -1367,11 +1383,11 @@ Verify a single citation before relying on it — confirm it **exists**, matches
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `citation` | string | yes | A DOI (`10.1038/nature12373`), a URL, or a free-text reference string. The tool auto-detects which. |
-| `claim` | string | no | The assertion this citation is cited for. When set, the source (the live URL, or its Wayback snapshot when dead) is fetched and checked for whether it actually addresses the claim — surfacing evidence sentences and flagging mischaracterization. Coverage + evidence, never a support/refute verdict. Off unless provided; adds one fetch. |
+| `claim` | string | no | The assertion this citation is cited for. When set, the source (the live URL, or its Wayback snapshot when dead) is fetched and checked for whether it actually addresses the claim — surfacing evidence sentences and flagging mischaracterization. Coverage + evidence, never a support/refute verdict. Off unless provided; adds one fetch. Omitting it leaves mischaracterization unchecked — the response flags this via `claimCheckSkipped` (#359). |
 
 ### Output Schema
 
-`input`, `inputType` (`doi`\|`url`\|`reference`), `exists` (bool), `matchedRecord` (the academic record — for a DOI input it is **only** the work whose DOI exactly equals the input, never a near-neighbor, and is omitted when no exact record exists or `exists:false`), `matchConfidence` (`high`\|`medium`\|`low`\|`none`), `detectedDoi` (for a URL input that resolves to a scholarly article: the DOI extracted from the page — `citation_doi` meta, the URL path, or references-safe front matter — which then drives the retraction + title-match checks just like a DOI input; omitted when no scholarly DOI was found), `titleMatch` (`match`\|`mismatch`\|`not_checked`: whether a title — text supplied alongside a DOI, or a scholarly page's own title for a URL input — matches the matched record's actual title; `mismatch` means ≥2 substantive title tokens are absent from the record — the caller may have cited the wrong paper; `not_checked` when there is no title text or only a bare DOI), `retractionStatus` (Crossref integrity status when retracted/corrected; omitted when clean), `httpStatus` + `archivedUrl` (for URL inputs — live status and a Wayback snapshot for dead links; `exists:true` with a 403/429/503 `httpStatus` means the server is reachable but refused the verifier — the resource exists, it is not a dead link), `provenance` (how each piece of evidence was obtained), and the `trust` marker. When a `claim` was supplied: `claim` (echo), `claimSupport` (`addressed`\|`partially_addressed`\|`not_addressed`\|`source_unavailable`), `claimEvidence` (claim-relevant source sentences), `claimSourceUrl` (the URL actually fetched), and `contrastSignal` (`true` only — a negation/contrast cue, read the evidence yourself).
+`input`, `inputType` (`doi`\|`url`\|`reference`), `exists` (bool), `matchedRecord` (the academic record — for a DOI input it is **only** the work whose DOI exactly equals the input, never a near-neighbor, and is omitted when no exact record exists or `exists:false`), `matchConfidence` (`high`\|`medium`\|`low`\|`none`), `detectedDoi` (for a URL input that resolves to a scholarly article: the DOI extracted from the page — `citation_doi` meta, the URL path, or references-safe front matter — which then drives the retraction + title-match checks just like a DOI input; omitted when no scholarly DOI was found), `titleMatch` (`match`\|`mismatch`\|`not_checked`: whether a title — text supplied alongside a DOI, or a scholarly page's own title for a URL input — matches the matched record's actual title; `mismatch` means ≥2 substantive title tokens are absent from the record — the caller may have cited the wrong paper; `not_checked` when there is no title text or only a bare DOI), `retractionStatus` (Crossref integrity status when retracted/corrected; omitted when clean), `httpStatus` + `archivedUrl` (for URL inputs — live status and a Wayback snapshot for dead links; `exists:true` with a 403/429/503 `httpStatus` means the server is reachable but refused the verifier — the resource exists, it is not a dead link), `provenance` (how each piece of evidence was obtained), and the `trust` marker. When no `claim` was supplied, `claimCheckSkipped` (`true`) and `claimCheckSkippedReason` explain that existence/retraction were checked but mischaracterization was not (#359). When a `claim` was supplied: `claim` (echo), `claimSupport` (`addressed`\|`partially_addressed`\|`not_addressed`\|`source_unavailable`), `claimEvidence` (claim-relevant source sentences), `claimSourceUrl` (the URL actually fetched), `contrastSignal` (`true` only — a negation/contrast cue, read the evidence yourself), and — only when the fetched source was thin — `contentWords` (word count) and `sparsityNote` (#358: the claim check ran against a paywall/bot-wall stub; annotates `claimSupport`, never changes it).
 
 ### Behavior
 
@@ -1524,7 +1540,7 @@ Precedence when more than one is supplied: `entries` → `bibliography` → `ses
 
 ### Output Schema
 
-`source` (where entries came from: `entries` / `bibliography:<format>` / `session`), `entryCount`, `summary` (`{total, retracted, deadLink, notFound, unchecked, mischaracterized, ok}`), and `entries[]` — per entry: `index`, `title`, `doi`, `url`, `exists` (bool), `retractionStatus` (when retracted/corrected), `linkLive` + `httpStatus`, `archivedUrl` (Wayback snapshot for a dead link), `flags` (`retracted` / `dead_link` / `not_found` / `unchecked` / `mischaracterized`; empty = clean), `reason` (a human-readable explanation for a flagged entry), and — when a `claim` was given — `claim`, `claimSupport` (`addressed` / `partially_addressed` / `not_addressed` / `source_unavailable`), `claimEvidence` (relevant source sentences), and `claimSourceUrl` (the URL actually fetched). Plus `checkedAt` (RFC 3339 point-in-time stamp), the `trust` marker, and — only when the per-call cap is exceeded — `skipped` + `skippedNote`.
+`source` (where entries came from: `entries` / `bibliography:<format>` / `session`), `entryCount`, `summary` (`{total, retracted, deadLink, notFound, unchecked, mischaracterized, ok, claimCheckSkippedCount, thinContentCount}` — `claimCheckSkippedCount` counts entries with no `claim` provided (#359: existence/retraction checked, mischaracterization not); `thinContentCount` counts entries whose claim check ran against thin content, <150 words (#358) — their `claimSupport` may not reflect the full document), and `entries[]` — per entry: `index`, `title`, `doi`, `url`, `exists` (bool), `retractionStatus` (when retracted/corrected), `linkLive` + `httpStatus`, `archivedUrl` (Wayback snapshot for a dead link), `flags` (`retracted` / `dead_link` / `not_found` / `unchecked` / `mischaracterized`; empty = clean), `reason` (a human-readable explanation for a flagged entry), and — when a `claim` was given — `claim`, `claimSupport` (`addressed` / `partially_addressed` / `not_addressed` / `source_unavailable`), `claimEvidence` (relevant source sentences), `claimSourceUrl` (the URL actually fetched), and — only when the fetched source was thin — `claimContentWords` (word count) and `claimSparsityNote` (#358: annotates `claimSupport`, never changes it). Plus `checkedAt` (RFC 3339 point-in-time stamp), the `trust` marker, `warning` (#359: present only when **no** entry in the corpus carried a claim — the audit checked existence and retraction only, across the whole corpus, not just one entry), and — only when the per-call cap is exceeded — `skipped` + `skippedNote`.
 
 ### Behavior
 
@@ -1616,12 +1632,12 @@ Use `brand_research` when you need structured brand JSON. Use `brand-guidelines`
 | `typography` | object | `heading`, `body`, `mono` (each: `family`, `weights`, `origin`, `origin_id`) + `google_fonts_url`, `scale` |
 | `tone_of_voice` | object | `summary`, `attributes` array, `dos_and_donts` object |
 | `social` | object | `twitter`, `linkedin`, `github`, `youtube`, `facebook`, `instagram` (URLs) |
-| `sources` | array | Which tiers contributed: `name` (`homepage_meta`/`brand_page`/`web_search`), `url`, `fields` |
+| `sources` | array | Which tiers contributed: `name` (`homepage_meta`/`brand_page`/`web_search`), `url`, `fields`, `scrapeQuality` (`"thin"` when that page's content was below ~150 words (#358) — a content-volume signal, not an error; the source may still have contributed real fields) |
 | `guidelines_url` | string | First discovered brand guidelines page URL |
 | `brand_portal_resource` | string | `research://artifact/{id}` URI — pass to `read_resource` to retrieve the full rendered brand portal text for AI analysis |
 | `suggestion` | string | Guidance for the AI agent when no brand portal was found (recommends `scrape_page` on the homepage), OR when a portal URL was found but its content could not be extracted (recommends `scrape_page` on the portal URL) |
 | `design_tokens` | object | W3C DTCG format (`$value`/`$type` per token) — only when `include_design_tokens: true` |
-| `coverage` | object | `colors`, `logos`, `typography` — each `full`/`partial`/`none`; `tone_of_voice` — `found`/`none` |
+| `coverage` | object | `colors`, `logos`, `typography` — each `full`/`partial`/`none`/`extraction_blocked` (#358: a brand page was found but its content was too thin to read — a JS-SPA skeleton or bot-wall, distinct from `none` which means no page was found at all); `tone_of_voice` — `found`/`none` |
 | `cache_age` | integer | Seconds since cache was written. `0` = live fetch. Cache TTL: 24 hours. |
 | `trust` | string | Always `untrusted-external-content` |
 

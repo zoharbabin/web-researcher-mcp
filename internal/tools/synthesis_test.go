@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -43,6 +44,31 @@ func TestAnswerTool(t *testing.T) {
 	}
 	if out["trust"] != "untrusted-external-content" {
 		t.Errorf("missing trust marker: %v", out["trust"])
+	}
+}
+
+// TestAnswerToolDescriptionHasEpistemicWarning guards against a future wording
+// pass on registerAnswer's Description silently dropping the epistemic-warning
+// sentence that tells callers not to trust an empty/short answer as proof of
+// absence and to verify cited URLs before asserting the result.
+func TestAnswerToolDescriptionHasEpistemicWarning(t *testing.T) {
+	var desc string
+	for _, tool := range listTools(t) {
+		if tool.Name == "answer" {
+			desc = tool.Description
+			break
+		}
+	}
+	if desc == "" {
+		t.Fatal("answer tool not found")
+	}
+	for _, phrase := range []string{
+		"may be incomplete or outdated",
+		"does not confirm absence",
+	} {
+		if !strings.Contains(desc, phrase) {
+			t.Errorf("answer tool description missing epistemic-warning phrase %q; got: %s", phrase, desc)
+		}
 	}
 }
 

@@ -109,6 +109,7 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 						"urlsSearched":     len(ctxResult.Snippets),
 						"urlsScraped":      len(ctxResult.Snippets),
 						"urlsFailed":       0,
+						"sparseSources":    0, // server-assembled context, not a per-source scrape; nothing to flag
 						"processingTimeMs": int(time.Since(start).Milliseconds()),
 					},
 					"sizeMetadata": map[string]any{
@@ -169,6 +170,7 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 					"urlsSearched":     0,
 					"urlsScraped":      0,
 					"urlsFailed":       0,
+					"sparseSources":    0,
 					"processingTimeMs": int(time.Since(start).Milliseconds()),
 				},
 				"sizeMetadata": map[string]any{
@@ -176,6 +178,7 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 					"estimatedTokens": 0,
 					"sizeCategory":    content.SizeCategory(0),
 				},
+				"hints": buildZeroResultHints(hintProviderName(provider), nil, nil),
 			}
 			jsonBytes, _ := json.Marshal(output)
 			// Record metrics + audit like every other success path, so
@@ -186,7 +189,7 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 		}
 
 		results := parallelScrape(ctx, deps, searchResults, maxLenPerSource)
-		sources, combinedParts, scraped, structuredFailures := buildSourcesStructured(results, input.Query, input.Claim, input.FilterByQuery)
+		sources, combinedParts, scraped, sparseSources, structuredFailures := buildSourcesStructured(results, input.Query, input.Claim, input.FilterByQuery)
 		combined := assembleCombined(combinedParts, deduplicate, totalMaxLen)
 
 		// Phase 1B: top-level status field
@@ -208,6 +211,7 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 				"urlsSearched":     len(searchResults),
 				"urlsScraped":      scraped,
 				"urlsFailed":       len(structuredFailures),
+				"sparseSources":    sparseSources,
 				"processingTimeMs": int(time.Since(start).Milliseconds()),
 			},
 			"sizeMetadata": map[string]any{
@@ -262,12 +266,15 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 }
 
 type scrapeResult struct {
-	url        string
-	title      string
-	content    string
-	cType      string
-	structured *scraper.StructuredData
-	err        error
+	url         string
+	title       string
+	publishedAt string
+	content     string
+	cType       string
+	structured  *scraper.StructuredData
+	partial     bool
+	wordCount   int
+	err         error
 }
 
 type sourceOutput struct {
@@ -285,6 +292,16 @@ type sourceOutput struct {
 	// the source contained relevant sentences. Evidence, not a verdict.
 	ClaimSignal  string   `json:"claimSignal,omitempty"`
 	KeySentences []string `json:"keySentences,omitempty"`
+	// ExtractionQuality/WordCount (#358) mirror scrape_page's per-source signals:
+	// ExtractionQuality reflects pipeline TIER EXHAUSTION ("partial"/"complete");
+	// WordCount is the content-volume signal used to compute the summary's
+	// sparseSources count. Both additive; omitempty keeps a non-thin,
+	// non-partial source's shape unchanged.
+	ExtractionQuality string `json:"extractionQuality,omitempty"`
+	WordCount         int    `json:"wordCount,omitempty"`
+	// PublishedAt (#356) mirrors the originating search.SearchResult's date
+	// signal — set only by providers whose response carried one.
+	PublishedAt string `json:"publishedAt,omitempty"`
 }
 
 // scoredSourcesFrom adapts the tool's sourceOutput slice to the content
@@ -323,32 +340,36 @@ func parallelScrape(ctx context.Context, deps Dependencies, searchResults []sear
 
 	for i, sr := range searchResults {
 		wg.Add(1)
-		go func(idx int, url, title string) {
+		go func(idx int, url, title, publishedAt string) {
 			defer wg.Done()
 			result, err := deps.Scraper.Scrape(ctx, url, maxLen)
 			if err != nil {
-				results[idx] = scrapeResult{url: url, title: title, err: err}
+				results[idx] = scrapeResult{url: url, title: title, publishedAt: publishedAt, err: err}
 				return
 			}
 			processedContent, _ := deps.Content.Process(result.Content, maxLen)
 			results[idx] = scrapeResult{
-				url:        url,
-				title:      title,
-				content:    processedContent,
-				cType:      result.ContentType,
-				structured: result.StructuredData,
+				url:         url,
+				title:       title,
+				publishedAt: publishedAt,
+				content:     processedContent,
+				cType:       result.ContentType,
+				structured:  result.StructuredData,
+				partial:     result.Partial,
+				wordCount:   result.WordCount,
 			}
-		}(i, sr.URL, sr.Title)
+		}(i, sr.URL, sr.Title, sr.PublishedAt)
 	}
 	wg.Wait()
 	return results
 }
 
-func buildSourcesStructured(results []scrapeResult, query, claim string, filterByQuery bool) ([]sourceOutput, []string, int, []FailureInfo) {
+func buildSourcesStructured(results []scrapeResult, query, claim string, filterByQuery bool) ([]sourceOutput, []string, int, int, []FailureInfo) {
 	var sources []sourceOutput
 	var combinedParts []string
 	var failures []FailureInfo
 	scraped := 0
+	sparseSources := 0
 
 	for _, r := range results {
 		if r.err != nil || r.content == "" {
@@ -358,6 +379,15 @@ func buildSourcesStructured(results []scrapeResult, query, claim string, filterB
 			continue
 		}
 		scraped++
+		// Counted here, before the filterByQuery cut below: thin content
+		// mechanically depresses scoreRelevance (little text to match query
+		// keywords against), so filterByQuery disproportionately drops the very
+		// sources sparseSources exists to flag. Counting pre-filter keeps
+		// sparseSources aligned with `scraped` (also counted pre-filter) instead
+		// of silently going to 0 whenever filterByQuery removes thin sources.
+		if r.wordCount > 0 && r.wordCount < sparseWordThreshold {
+			sparseSources++
+		}
 
 		score := content.ScoreQuality(content.QualityInput{
 			Content: r.content,
@@ -384,6 +414,13 @@ func buildSourcesStructured(results []scrapeResult, query, claim string, filterB
 			SourceType:     cls.SourceType,
 			AuthorityTier:  cls.AuthorityTier,
 			DomainCategory: cls.DomainCategory,
+			WordCount:      r.wordCount,
+			PublishedAt:    r.publishedAt,
+		}
+		if r.partial {
+			src.ExtractionQuality = "partial"
+		} else {
+			src.ExtractionQuality = "complete"
 		}
 
 		// Claim evidence (#66) — only when a claim was supplied and matched.
@@ -398,7 +435,7 @@ func buildSourcesStructured(results []scrapeResult, query, claim string, filterB
 		combinedParts = append(combinedParts, r.content)
 	}
 
-	return sources, combinedParts, scraped, failures
+	return sources, combinedParts, scraped, sparseSources, failures
 }
 
 func assembleCombined(parts []string, deduplicate bool, totalMaxLen int) string {

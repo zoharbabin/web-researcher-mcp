@@ -126,7 +126,7 @@ func registerLocal(srv *mcp.Server, deps Dependencies) {
 			"trust":       untrustedContentTrust,
 		}
 		if len(places) == 0 {
-			output["hints"] = buildZeroResultHints(providerName, nil, nil)
+			output["hints"] = buildZeroResultHints(providerName, localFilterMap(input, lat, lon), nil)
 		}
 
 		jsonBytes, _ := json.Marshal(output)
@@ -153,6 +153,27 @@ func coordCacheKey(lat, lon *float64) string {
 		return "none"
 	}
 	return fmt.Sprintf("%g,%g", *lat, *lon)
+}
+
+// localFilterMap collects the filterable local_search params that were
+// actually set, so zero-result hints can suggest removing a real culprit
+// instead of emitting a bare, unactionable reason.
+func localFilterMap(input localSearchInput, lat, lon *float64) map[string]string {
+	m := map[string]string{}
+	if input.Near != "" {
+		m["near"] = input.Near
+	}
+	if input.Country != "" {
+		m["country"] = input.Country
+	}
+	if lat != nil && lon != nil {
+		m["latitude"] = fmt.Sprintf("%g", *lat)
+		m["longitude"] = fmt.Sprintf("%g", *lon)
+	}
+	if input.Radius > 0 {
+		m["radius"] = fmt.Sprintf("%g", input.Radius)
+	}
+	return m
 }
 
 func resolveLocalSearcher(deps Dependencies, providerName string) (search.LocalSearcher, string, *mcp.CallToolResult) {

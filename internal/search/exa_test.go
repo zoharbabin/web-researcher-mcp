@@ -102,6 +102,31 @@ func TestExaWebSearchClampAndSite(t *testing.T) {
 	}
 }
 
+// TestExaWebSearch_PublishedAt (#356): a result's publishedDate must populate
+// SearchResult.PublishedAt, normalized to RFC3339.
+func TestExaWebSearch_PublishedAt(t *testing.T) {
+	p, _ := newExaTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"results":[
+			{"title":"Dated","url":"https://a.example/x","publishedDate":"2026-05-01T12:00:00.000Z","highlights":["h"]},
+			{"title":"Undated","url":"https://b.example/y","highlights":["h"]}
+		]}`))
+	})
+
+	results, err := p.Web(context.Background(), WebSearchParams{Query: "golang", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("want 2 results, got %d", len(results))
+	}
+	if results[0].PublishedAt != "2026-05-01T12:00:00Z" {
+		t.Errorf("expected normalized PublishedAt, got %q", results[0].PublishedAt)
+	}
+	if results[1].PublishedAt != "" {
+		t.Errorf("expected empty PublishedAt when absent, got %q", results[1].PublishedAt)
+	}
+}
+
 func TestExaNewsSearch(t *testing.T) {
 	var gotBody map[string]any
 	p, _ := newExaTestServer(t, func(w http.ResponseWriter, r *http.Request) {

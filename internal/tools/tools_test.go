@@ -35,7 +35,7 @@ type mockProvider struct{}
 
 func (m *mockProvider) Web(_ context.Context, params search.WebSearchParams) ([]search.SearchResult, error) {
 	return []search.SearchResult{
-		{Title: "Test Result", URL: "https://example.com", Snippet: "A test snippet"},
+		{Title: "Test Result", URL: "https://example.com", Snippet: "A test snippet", PublishedAt: "2026-05-01T12:00:00Z"},
 	}, nil
 }
 
@@ -1039,6 +1039,62 @@ func TestScrapePageRawVsFullDistinctCache(t *testing.T) {
 	}
 }
 
+// TestScrapePageSparsityWarning (#358): a page whose extracted content clears
+// the pipeline's >100-byte admission gate but stays under the 150-word
+// sparsity floor must surface wordCount + sparsityWarning — the content-volume
+// signal is orthogonal to extractionQuality (still "complete" here: no tier
+// was exhausted, the page is just genuinely short).
+func TestScrapePageSparsityWarning(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<!DOCTYPE html><html><head><title>Thin</title></head><body><article>
+<p>Please subscribe to continue reading this article. Access is limited to subscribers only at this time.</p>
+</article></body></html>`))
+	}))
+	defer ts.Close()
+
+	ctx := context.Background()
+	deps := setupTestDeps()
+	deps.Scraper = scraper.NewPipeline(scraper.PipelineConfig{
+		MaxConcurrency:  2,
+		AllowPrivateIPs: true,
+	})
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "scrape_page",
+		Arguments: map[string]any{"url": ts.URL},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("unexpected tool error: %s", res.Content[0].(*mcp.TextContent).Text)
+	}
+
+	var output map[string]any
+	if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &output); err != nil {
+		t.Fatalf("failed to parse output: %v", err)
+	}
+
+	wc, ok := output["wordCount"].(float64)
+	if !ok || wc >= 150 {
+		t.Fatalf("expected wordCount < 150, got %v", output["wordCount"])
+	}
+	warning, _ := output["sparsityWarning"].(string)
+	if warning == "" {
+		t.Fatal("expected non-empty sparsityWarning for thin content")
+	}
+	// The sparsity signal must be orthogonal to extractionQuality: this page's
+	// content is genuinely short, not a tier-exhaustion partial extraction, so
+	// extractionQuality must stay "complete" even though sparsityWarning fires.
+	if quality, _ := output["extractionQuality"].(string); quality != "complete" {
+		t.Fatalf("expected extractionQuality \"complete\" for a short-but-complete page, got %v", output["extractionQuality"])
+	}
+}
+
 func TestSearchAndScrapeTool(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -1104,6 +1160,117 @@ func TestSearchAndScrapeTool(t *testing.T) {
 	}
 }
 
+// TestSearchAndScrapeSparseSources (#358): every scraped source is a thin
+// (< 150 word) paywall/bot-wall stub — each source must carry its own
+// wordCount and the summary must count them via sparseSources.
+func TestSearchAndScrapeSparseSources(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<!DOCTYPE html><html><head><title>Thin</title></head><body><article>
+<p>Please subscribe to continue reading this article. Access is limited to subscribers only at this time.</p>
+</article></body></html>`))
+	}))
+	defer ts.Close()
+
+	ctx := context.Background()
+	deps := setupTestDeps()
+	deps.Search = &mockProviderWithURL{url: ts.URL}
+	deps.Scraper = scraper.NewPipeline(scraper.PipelineConfig{
+		MaxConcurrency:  2,
+		AllowPrivateIPs: true,
+	})
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "search_and_scrape",
+		Arguments: map[string]any{"query": "test topic"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("unexpected tool error: %s", res.Content[0].(*mcp.TextContent).Text)
+	}
+
+	var output map[string]any
+	if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &output); err != nil {
+		t.Fatalf("failed to parse output: %v", err)
+	}
+
+	sources, _ := output["sources"].([]any)
+	if len(sources) == 0 {
+		t.Fatal("expected at least one source")
+	}
+	for i, s := range sources {
+		src, _ := s.(map[string]any)
+		wc, ok := src["wordCount"].(float64)
+		if !ok || wc >= 150 {
+			t.Fatalf("source %d expected wordCount < 150, got %v", i, src["wordCount"])
+		}
+	}
+	summary := output["summary"].(map[string]any)
+	sparse, ok := summary["sparseSources"].(float64)
+	if !ok || sparse == 0 {
+		t.Fatalf("expected summary.sparseSources > 0, got %v", summary["sparseSources"])
+	}
+}
+
+// TestSearchAndScrapeSparseSourcesWithFilterByQuery guards against a
+// regression where sparseSources was counted from the post-filter sources
+// slice: thin content mechanically depresses scoreRelevance (little text to
+// match query keywords against), so filter_by_query=true would silently drop
+// the exact sources sparseSources exists to flag, reporting 0 even though
+// every scraped source was a paywall stub.
+func TestSearchAndScrapeSparseSourcesWithFilterByQuery(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<!DOCTYPE html><html><head><title>Thin</title></head><body><article>
+<p>Please subscribe to continue reading this article. Access is limited to subscribers only at this time.</p>
+</article></body></html>`))
+	}))
+	defer ts.Close()
+
+	ctx := context.Background()
+	deps := setupTestDeps()
+	deps.Search = &mockProviderWithURL{url: ts.URL}
+	deps.Scraper = scraper.NewPipeline(scraper.PipelineConfig{
+		MaxConcurrency:  2,
+		AllowPrivateIPs: true,
+	})
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "search_and_scrape",
+		Arguments: map[string]any{
+			"query":           "quantum computing breakthroughs",
+			"filter_by_query": true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("unexpected tool error: %s", res.Content[0].(*mcp.TextContent).Text)
+	}
+
+	var output map[string]any
+	if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &output); err != nil {
+		t.Fatalf("failed to parse output: %v", err)
+	}
+
+	// filter_by_query is expected to strip the thin, off-topic source from
+	// `sources` — but sparseSources must still reflect what was scraped.
+	summary := output["summary"].(map[string]any)
+	sparse, ok := summary["sparseSources"].(float64)
+	if !ok || sparse == 0 {
+		t.Fatalf("expected summary.sparseSources > 0 even with filter_by_query=true, got %v", summary["sparseSources"])
+	}
+}
+
 // TestSearchAndScrapeZeroResults exercises the len(searchResults)==0 success
 // branch: it must still carry the contract fields (status, trust) and mirror
 // the normal success shape (summary + sizeMetadata).
@@ -1145,6 +1312,15 @@ func TestSearchAndScrapeZeroResults(t *testing.T) {
 	}
 	if _, ok := output["sizeMetadata"].(map[string]any); !ok {
 		t.Fatalf("zero-results must include sizeMetadata block, got %v", output["sizeMetadata"])
+	}
+	// #357: the zero-search-results path must also carry epistemic hints, same
+	// as web_search/news_search/etc.
+	hints, ok := output["hints"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected hints object on zero results, got %v", output["hints"])
+	}
+	if hints["epistemicWarning"] != epistemicZeroResultWarning {
+		t.Errorf("expected epistemicWarning %q, got %v", epistemicZeroResultWarning, hints["epistemicWarning"])
 	}
 }
 
@@ -1404,6 +1580,28 @@ func TestWebSearchClaimSignalUniform(t *testing.T) {
 	// The non-matching result must carry an empty signal, not be missing the key.
 	if got := enriched[1]["claimSignal"]; got != "" {
 		t.Errorf("non-matching result claimSignal = %q, want empty string", got)
+	}
+}
+
+// TestWebSearchEnrichPreservesPublishedAt (#356): enrichResultsWithReputation
+// rebuilds every web_search result as a fresh map — it must carry PublishedAt
+// through rather than silently dropping it, and must omit the key entirely
+// when the provider left it empty (never emit an empty publishedAt string).
+func TestWebSearchEnrichPreservesPublishedAt(t *testing.T) {
+	t.Parallel()
+	results := []search.SearchResult{
+		{Title: "Dated", URL: "https://example.org/a", Snippet: "has a date", PublishedAt: "2026-05-01T12:00:00Z"},
+		{Title: "Undated", URL: "https://example.org/b", Snippet: "no date"},
+	}
+	enriched := enrichResultsWithReputation(results, "")
+	if len(enriched) != 2 {
+		t.Fatalf("want 2 results, got %d", len(enriched))
+	}
+	if enriched[0]["publishedAt"] != "2026-05-01T12:00:00Z" {
+		t.Errorf("publishedAt = %v, want 2026-05-01T12:00:00Z", enriched[0]["publishedAt"])
+	}
+	if _, ok := enriched[1]["publishedAt"]; ok {
+		t.Errorf("publishedAt key must be omitted when the provider left it empty, got %v", enriched[1]["publishedAt"])
 	}
 }
 

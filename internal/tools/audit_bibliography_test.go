@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -503,6 +504,49 @@ func TestAuditBibliography_ClaimNotAddressed(t *testing.T) {
 	}
 }
 
+func TestAuditBibliographyThinContentCount(t *testing.T) {
+	// 3 of 5 entries fetch thin (<150 word) pages; the other 2 fetch a full article.
+	thin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><article><p>Please subscribe to continue reading this article.</p></article></body></html>`))
+	}))
+	defer thin.Close()
+	full := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><article><p>` + strings.Repeat("The randomized controlled trial showed a significant reduction in symptoms across the treatment group. ", 20) + `</p></article></body></html>`))
+	}))
+	defer full.Close()
+
+	entries := []any{
+		map[string]any{"url": thin.URL, "title": "Thin 1", "claim": "reduction in symptoms"},
+		map[string]any{"url": thin.URL, "title": "Thin 2", "claim": "reduction in symptoms"},
+		map[string]any{"url": thin.URL, "title": "Thin 3", "claim": "reduction in symptoms"},
+		map[string]any{"url": full.URL, "title": "Full 1", "claim": "reduction in symptoms"},
+		map[string]any{"url": full.URL, "title": "Full 2", "claim": "reduction in symptoms"},
+	}
+	out, isErr := callAudit(t, auditClaimDeps(t), map[string]any{"entries": entries})
+	if isErr {
+		t.Fatal("unexpected tool error")
+	}
+	s := summaryOf(t, out)
+	if s["thinContentCount"].(float64) != 3 {
+		t.Errorf("thinContentCount = %v, want 3", s["thinContentCount"])
+	}
+	resultEntries := out["entries"].([]any)
+	for i := 0; i < 3; i++ {
+		e := resultEntries[i].(map[string]any)
+		if e["claimSparsityNote"] == nil || e["claimSparsityNote"] == "" {
+			t.Errorf("entry %d expected claimSparsityNote: %v", i, e)
+		}
+	}
+	for i := 3; i < 5; i++ {
+		e := resultEntries[i].(map[string]any)
+		if e["claimSparsityNote"] != nil {
+			t.Errorf("entry %d should not carry claimSparsityNote: %v", i, e)
+		}
+	}
+}
+
 func TestAuditBibliography_ClaimSourceUnavailable(t *testing.T) {
 	// A claim but no fetchable source (no URL) → source_unavailable, not a false flag.
 	out, isErr := callAudit(t, auditClaimDeps(t), map[string]any{
@@ -656,6 +700,74 @@ func TestAuditBibliography_ClaimAllStopwords(t *testing.T) {
 		if f == "mischaracterized" {
 			t.Error("an all-stopword claim must NOT be flagged mischaracterized")
 		}
+	}
+}
+
+// TestAuditBibliographyMischaracterization (#359 Test C): a 3-entry corpus
+// where only the middle entry's claim mismatches its source content. Asserts
+// entry 2 (index 1) carries the mischaracterized flag and summary.mischaracterized == 1.
+func TestAuditBibliographyMischaracterization(t *testing.T) {
+	addressed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><article><p>The randomized trial showed that the vaccine significantly reduced infection rates.</p></article></body></html>`))
+	}))
+	defer addressed.Close()
+	mismatched := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><article><p>This article discusses medieval architecture and cathedral construction in twelfth-century France.</p></article></body></html>`))
+	}))
+	defer mismatched.Close()
+
+	out, isErr := callAudit(t, auditClaimDeps(t), map[string]any{
+		"entries": []any{
+			map[string]any{"url": addressed.URL, "title": "Entry 1", "claim": "vaccine efficacy reduced infection"},
+			map[string]any{"url": mismatched.URL, "title": "Entry 2", "claim": "quantum entanglement teleportation bandwidth"},
+			map[string]any{"url": addressed.URL, "title": "Entry 3", "claim": "vaccine efficacy reduced infection"},
+		},
+	})
+	if isErr {
+		t.Fatal("unexpected tool error")
+	}
+	entries := out["entries"].([]any)
+	e1 := entries[1].(map[string]any)
+	found := false
+	for _, f := range e1["flags"].([]any) {
+		if f == "mischaracterized" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("entry 2 (index 1) should be flagged mischaracterized: %v", e1)
+	}
+	if summaryOf(t, out)["mischaracterized"].(float64) != 1 {
+		t.Errorf("summary.mischaracterized should be 1, got %v", out["summary"])
+	}
+}
+
+// TestAuditBibliographyNoClaimsWarning (#359 Test D): a 3-entry corpus with no
+// claims on any entry — summary.claimCheckSkippedCount must equal 3 and a
+// top-level warning must be present.
+func TestAuditBibliographyNoClaimsWarning(t *testing.T) {
+	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(200) }))
+	defer page.Close()
+
+	out, isErr := callAudit(t, auditClaimDeps(t), map[string]any{
+		"entries": []any{
+			map[string]any{"url": page.URL, "title": "Entry 1"},
+			map[string]any{"url": page.URL, "title": "Entry 2"},
+			map[string]any{"url": page.URL, "title": "Entry 3"},
+		},
+	})
+	if isErr {
+		t.Fatal("unexpected tool error")
+	}
+	s := summaryOf(t, out)
+	if s["claimCheckSkippedCount"].(float64) != 3 {
+		t.Errorf("summary.claimCheckSkippedCount = %v, want 3", s["claimCheckSkippedCount"])
+	}
+	warning, present := out["warning"]
+	if !present || warning == "" {
+		t.Error("a top-level warning should be present when ALL entries lack claims")
 	}
 }
 

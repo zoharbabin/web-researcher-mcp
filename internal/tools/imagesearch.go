@@ -93,6 +93,10 @@ func registerImageSearch(srv *mcp.Server, deps Dependencies) {
 			"trust":       untrustedContentTrust,
 		}
 
+		if len(results) == 0 {
+			output["hints"] = buildZeroResultHints(hintProviderName(provider), nil, nil)
+		}
+
 		jsonBytes, _ := json.Marshal(output)
 		deps.Cache.Set(ctx, cacheKey, jsonBytes, 30*time.Minute)
 		deps.Metrics.RecordToolCall("image_search", time.Since(start), nil, "", false)
