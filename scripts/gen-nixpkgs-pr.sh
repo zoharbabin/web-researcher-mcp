@@ -137,10 +137,11 @@ git -C "${NIXPKGS}" config user.name  "web-researcher-mcp-bot"
 git -C "${NIXPKGS}" config user.email "github-actions@users.noreply.github.com"
 
 # Add zoharbabin to maintainers/maintainer-list.nix if not already present.
-# Entries are alphabetical; zoharbabin sorts between zohl and zookatron.
+# Entries are alphabetical; "zoharbabin" < "zohl" (4th char 'a' < 'l'),
+# so it sorts immediately before zohl, not before zookatron.
 MLIST="${NIXPKGS}/maintainers/maintainer-list.nix"
 if ! grep -q 'zoharbabin' "${MLIST}"; then
-  perl -i -0pe 's|(  zookatron = \{)|  zoharbabin = \{\n    email = "zohar\@zoharbabin.com";\n    github = "zoharbabin";\n    githubId = 150514;\n    name = "Zohar Babin";\n  };\n  $1|' "${MLIST}"
+  perl -i -0pe 's|(  zohl = \{)|  zoharbabin = \{\n    email = "zohar\@zoharbabin.com";\n    github = "zoharbabin";\n    githubId = 150514;\n    name = "Zohar Babin";\n  };\n$1|' "${MLIST}"
   git -C "${NIXPKGS}" add maintainers/maintainer-list.nix
   log "Added zoharbabin to maintainers/maintainer-list.nix"
 fi
@@ -154,7 +155,10 @@ if [ "${DRY_RUN}" = "--dry-run" ]; then
   exit 0
 fi
 
-git -C "${NIXPKGS}" push "${FORK_REMOTE}" "${BRANCH}" --force-with-lease
+# Plain --force, not --force-with-lease: this is a shallow, fresh clone that
+# never fetched ${BRANCH}, so there's no local tracking ref to lease against.
+# The bot fully owns this branch and always intends to overwrite it.
+git -C "${NIXPKGS}" push "${FORK_REMOTE}" "${BRANCH}" --force
 info "Branch pushed: ${GH_USER}/nixpkgs:${BRANCH}"
 
 # ── 9. Open the PR ───────────────────────────────────────────────────────────
