@@ -802,7 +802,12 @@ jobs:
           git -C /tmp/nixpkgs add "${PKG_DIR}/package.nix"
           git -C /tmp/nixpkgs commit -m "web-researcher-mcp: init at ${VERSION}"
 
-          git -C /tmp/nixpkgs push "${FORK_REMOTE}" "${BRANCH}" --force-with-lease
+          # Plain --force, not --force-with-lease: this is a shallow, fresh clone
+          # that never fetched ${BRANCH}, so there's no local tracking ref to lease
+          # against — git treats the branch as "expected absent" and rejects the
+          # push as stale on any re-run once the branch already exists on the fork.
+          # The bot fully owns this branch and always intends to overwrite it.
+          git -C /tmp/nixpkgs push "${FORK_REMOTE}" "${BRANCH}" --force
           echo "fork_user=${GH_USER}" >> "$GITHUB_ENV"
           echo "pr_branch=${BRANCH}" >> "$GITHUB_ENV"
           echo "pkg_version=${VERSION}" >> "$GITHUB_ENV"
