@@ -7,6 +7,8 @@
 }:
 
 buildGoModule (finalAttrs: {
+  __structuredAttrs = true;
+
   pname = "web-researcher-mcp";
   version = "1.37.3";
 
