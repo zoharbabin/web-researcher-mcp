@@ -272,6 +272,25 @@ func TestBrandResearchMarkPageThin(t *testing.T) {
 			t.Error("brandPageThin = true, want false for content above the threshold")
 		}
 	})
+
+	t.Run("dense-script CJK content above threshold leaves both signals unset", func(t *testing.T) {
+		t.Parallel()
+		result := &brandResearchResult{}
+		src := &brandSource{Name: "brand_page", URL: "https://example.com/brand"}
+		var mu sync.Mutex
+		// A genuine, complete article-length Chinese paragraph (well over 150
+		// characters, zero ASCII whitespace). strings.Fields would collapse
+		// this to a single "word" and falsely flag it as thin; the CJK-aware
+		// content.WordCount must not.
+		article := strings.Repeat("这是一段完整的中文新闻内容用于测试提取质量与字数统计逻辑是否正确处理非拉丁语言的文本", 4)
+		markBrandPageThin(article, src, result, &mu)
+		if src.ScrapeQuality != "" {
+			t.Errorf("ScrapeQuality = %q, want empty for a genuinely long CJK article", src.ScrapeQuality)
+		}
+		if result.brandPageThin {
+			t.Error("brandPageThin = true, want false for a genuinely long CJK article")
+		}
+	})
 }
 
 // ─── 8. Coverage — full ──────────────────────────────────────────────────────

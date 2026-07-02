@@ -18,6 +18,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
@@ -926,9 +927,12 @@ func probeBrandPage(ctx context.Context, deps Dependencies, domain string, resul
 // result, when content falls below sparseWordThreshold. Extracted from
 // probeBrandPage as a pure function (no behavior change) so the mutex-guarded
 // write and the threshold comparison are directly unit-testable without a
-// live HTTP probe.
-func markBrandPageThin(content string, src *brandSource, result *brandResearchResult, mu *sync.Mutex) {
-	if wc := len(strings.Fields(content)); wc < sparseWordThreshold {
+// live HTTP probe. Uses content.WordCount, not strings.Fields: CJK/Thai/Lao/
+// Khmer/Myanmar text has no inter-word spaces, so strings.Fields would
+// undercount it and falsely flag a fully extracted non-Latin brand page as
+// thin.
+func markBrandPageThin(pageContent string, src *brandSource, result *brandResearchResult, mu *sync.Mutex) {
+	if wc := content.WordCount(pageContent); wc < sparseWordThreshold {
 		src.ScrapeQuality = "thin"
 		mu.Lock()
 		result.brandPageThin = true

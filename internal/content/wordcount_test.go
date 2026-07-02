@@ -27,7 +27,7 @@ func TestWordCount(t *testing.T) {
 // to a handful of whitespace-delimited chunks (the strings.Fields bug this
 // helper replaces).
 func TestWordCount_DenseScripts(t *testing.T) {
-	// 12 Han characters, no spaces.
+	// 11 Han characters, no spaces.
 	chinese := "这是一段完整的中文内容"
 	if got := WordCount(chinese); got != 11 {
 		t.Errorf("WordCount(chinese) = %d, want 11 (rune count)", got)
