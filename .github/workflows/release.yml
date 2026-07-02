@@ -684,7 +684,7 @@ jobs:
             owner = "zoharbabin";
             repo = "web-researcher-mcp";
             tag = "v${VERSION}";
-            hash = "${pkgs.lib.fakeHash}";
+            hash = "\${pkgs.lib.fakeHash}";
           }
           NIX
           # Capture the error — it contains the real hash.
@@ -720,7 +720,7 @@ jobs:
               hash = "${SRC_HASH}";
             };
             env.CGO_ENABLED = 0;
-            vendorHash = "${pkgs.lib.fakeHash}";
+            vendorHash = "\${pkgs.lib.fakeHash}";
           }
           NIX
           HASH_OUT="$(nix-build /tmp/vendor-hash.nix --no-out-link 2>&1 || true)"
