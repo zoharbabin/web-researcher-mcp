@@ -1217,6 +1217,60 @@ func TestSearchAndScrapeSparseSources(t *testing.T) {
 	}
 }
 
+// TestSearchAndScrapeSparseSourcesWithFilterByQuery guards against a
+// regression where sparseSources was counted from the post-filter sources
+// slice: thin content mechanically depresses scoreRelevance (little text to
+// match query keywords against), so filter_by_query=true would silently drop
+// the exact sources sparseSources exists to flag, reporting 0 even though
+// every scraped source was a paywall stub.
+func TestSearchAndScrapeSparseSourcesWithFilterByQuery(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<!DOCTYPE html><html><head><title>Thin</title></head><body><article>
+<p>Please subscribe to continue reading this article. Access is limited to subscribers only at this time.</p>
+</article></body></html>`))
+	}))
+	defer ts.Close()
+
+	ctx := context.Background()
+	deps := setupTestDeps()
+	deps.Search = &mockProviderWithURL{url: ts.URL}
+	deps.Scraper = scraper.NewPipeline(scraper.PipelineConfig{
+		MaxConcurrency:  2,
+		AllowPrivateIPs: true,
+	})
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "search_and_scrape",
+		Arguments: map[string]any{
+			"query":           "quantum computing breakthroughs",
+			"filter_by_query": true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("unexpected tool error: %s", res.Content[0].(*mcp.TextContent).Text)
+	}
+
+	var output map[string]any
+	if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &output); err != nil {
+		t.Fatalf("failed to parse output: %v", err)
+	}
+
+	// filter_by_query is expected to strip the thin, off-topic source from
+	// `sources` — but sparseSources must still reflect what was scraped.
+	summary := output["summary"].(map[string]any)
+	sparse, ok := summary["sparseSources"].(float64)
+	if !ok || sparse == 0 {
+		t.Fatalf("expected summary.sparseSources > 0 even with filter_by_query=true, got %v", summary["sparseSources"])
+	}
+}
+
 // TestSearchAndScrapeZeroResults exercises the len(searchResults)==0 success
 // branch: it must still carry the contract fields (status, trust) and mirror
 // the normal success shape (summary + sizeMetadata).

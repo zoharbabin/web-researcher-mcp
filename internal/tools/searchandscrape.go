@@ -189,7 +189,7 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 		}
 
 		results := parallelScrape(ctx, deps, searchResults, maxLenPerSource)
-		sources, combinedParts, scraped, structuredFailures := buildSourcesStructured(results, input.Query, input.Claim, input.FilterByQuery)
+		sources, combinedParts, scraped, sparseSources, structuredFailures := buildSourcesStructured(results, input.Query, input.Claim, input.FilterByQuery)
 		combined := assembleCombined(combinedParts, deduplicate, totalMaxLen)
 
 		// Phase 1B: top-level status field
@@ -198,13 +198,6 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 			status = "failed"
 		} else if len(structuredFailures) > 0 {
 			status = "partial"
-		}
-
-		sparseSources := 0
-		for _, s := range sources {
-			if s.WordCount > 0 && s.WordCount < sparseWordThreshold {
-				sparseSources++
-			}
 		}
 
 		output := map[string]any{
@@ -371,11 +364,12 @@ func parallelScrape(ctx context.Context, deps Dependencies, searchResults []sear
 	return results
 }
 
-func buildSourcesStructured(results []scrapeResult, query, claim string, filterByQuery bool) ([]sourceOutput, []string, int, []FailureInfo) {
+func buildSourcesStructured(results []scrapeResult, query, claim string, filterByQuery bool) ([]sourceOutput, []string, int, int, []FailureInfo) {
 	var sources []sourceOutput
 	var combinedParts []string
 	var failures []FailureInfo
 	scraped := 0
+	sparseSources := 0
 
 	for _, r := range results {
 		if r.err != nil || r.content == "" {
@@ -385,6 +379,15 @@ func buildSourcesStructured(results []scrapeResult, query, claim string, filterB
 			continue
 		}
 		scraped++
+		// Counted here, before the filterByQuery cut below: thin content
+		// mechanically depresses scoreRelevance (little text to match query
+		// keywords against), so filterByQuery disproportionately drops the very
+		// sources sparseSources exists to flag. Counting pre-filter keeps
+		// sparseSources aligned with `scraped` (also counted pre-filter) instead
+		// of silently going to 0 whenever filterByQuery removes thin sources.
+		if r.wordCount > 0 && r.wordCount < sparseWordThreshold {
+			sparseSources++
+		}
 
 		score := content.ScoreQuality(content.QualityInput{
 			Content: r.content,
@@ -432,7 +435,7 @@ func buildSourcesStructured(results []scrapeResult, query, claim string, filterB
 		combinedParts = append(combinedParts, r.content)
 	}
 
-	return sources, combinedParts, scraped, failures
+	return sources, combinedParts, scraped, sparseSources, failures
 }
 
 func assembleCombined(parts []string, deduplicate bool, totalMaxLen int) string {

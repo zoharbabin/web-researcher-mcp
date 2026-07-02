@@ -424,7 +424,7 @@ type PipelineSummary struct {
     URLsSearched     int `json:"urlsSearched"`
     URLsScraped      int `json:"urlsScraped"`
     URLsFailed       int `json:"urlsFailed"`
-    SparseSources    int `json:"sparseSources"`    // sources with wordCount < ~150 (#358) — a paywall/bot-wall stub can still count toward URLsScraped
+    SparseSources    int `json:"sparseSources"`    // sources with wordCount < ~150 (#358) — a paywall/bot-wall stub can still count toward URLsScraped; counted before `filter_by_query` removes any source, so it stays accurate even when filtering strips the thin ones
     ProcessingTimeMs int `json:"processingTimeMs"`
 }
 ```
