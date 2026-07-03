@@ -24,6 +24,9 @@
   <a href="https://glama.ai/mcp/servers/zoharbabin/web-researcher-mcp"><img src="https://glama.ai/mcp/servers/zoharbabin/web-researcher-mcp/badges/score.svg" height="20" alt="web-researcher-mcp MCP server"></a>
   <a href="https://github.com/zoharbabin/web-researcher-mcp/stargazers"><img src="https://img.shields.io/github/stars/zoharbabin/web-researcher-mcp?style=social" height="20" alt="GitHub Stars"></a>
 </p>
+<p align="center">
+  Built by <a href="https://zoharbabin.com">Zohar Babin</a>
+</p>
 
 ### Get started in 30 seconds
 
