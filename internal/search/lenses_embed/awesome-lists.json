@@ -1,0 +1,18 @@
+{
+  "name": "awesome-lists",
+  "description": "Community-curated awesome-* lists on GitHub — PR-reviewed tool and resource collections covering every domain from AI to security to design",
+  "domains": [
+    "github.com/sindresorhus/awesome",
+    "github.com/topics/awesome-list",
+    "github.com/topics/awesome-lists",
+    "project-awesome.org",
+    "awesomeopensource.com",
+    "awesomerank.github.io",
+    "www.trackawesomelist.com",
+    "awesomelists.io",
+    "awesome.ecosyste.ms",
+    "awesomelists.top"
+  ],
+  "cx": "",
+  "routing": ""
+}
