@@ -661,7 +661,7 @@ jobs:
       # ── Install nix (only needed for hash computation) ────────────────────────
       - name: Install nix
         if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true'
-        uses: DeterminateSystems/nix-installer-action@v17
+        uses: DeterminateSystems/nix-installer-action@v22
         with:
           extra-conf: |
             experimental-features = nix-command flakes
