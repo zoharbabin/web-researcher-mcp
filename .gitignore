@@ -50,3 +50,6 @@ docs/internal/
 # Python bytecode (scripts/build_wheels.py)
 __pycache__/
 *.pyc
+
+# Harness run output (see issue #354) — regression-gate script logs, never committed
+/.harness-out/
