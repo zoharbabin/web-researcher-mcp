@@ -218,6 +218,24 @@ Each `trials` item carries `{nctId, title, status, phases, conditions, intervent
 
 ---
 
+## Awesome List Discovery (awesome_list_search)
+
+Find community-curated "awesome list" collections on a topic — good for scouting an unfamiliar ecosystem or checking whether a niche already has a maintained resource list. Backed by **[ecosyste.ms](https://ecosyste.ms/)** (keyless).
+
+```json
+{
+  "tool": "awesome_list_search",
+  "arguments": {
+    "topic": "osint",
+    "num_results": 5
+  }
+}
+```
+
+**Response** contains: `query`, `resultCount`, `provider`, `trust`, and `lists` (array with `name`, `fullName`, `url`, `description`, `stars`, `projectsCount`, `topics`, `lastSyncedAt`, `archived`, `source`). Archived lists are excluded automatically. Filter with `min_stars` or `min_projects` to cut noise from small/abandoned lists, and `sort_by` (`stars` (default), `projects`, or `updated`) to change ranking. Pass `query` instead of `topic` for a free-text search when you don't know the exact topic tag.
+
+---
+
 ## News Monitoring
 
 Search recent news with freshness controls and source filtering.

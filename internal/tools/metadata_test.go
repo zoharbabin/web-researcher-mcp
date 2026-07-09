@@ -447,6 +447,76 @@ func TestToolsDocMatchesRegistry(t *testing.T) {
 	}
 }
 
+// structuredDomainDocTools is the canonical set of tools that docs/PROVIDERS.md's
+// "Structured-Domain Providers" table must document — each backed by its own
+// dedicated, always/keyless-registered provider (structured_domains.go's
+// Filing/Case/Econ/Trial capabilities, plus AwesomeListProvider, plus the two
+// single-purpose tools archive_source and brand_research). Mirrors expectedTools
+// in spirit: adding a tool here (e.g. a new capability under structured_domains.go)
+// means adding its row to docs/PROVIDERS.md in the same change, exactly like
+// adding to expectedTools means adding a docs/TOOLS.md section.
+var structuredDomainDocTools = map[string]bool{
+	"filing_search":       true,
+	"legal_search":        true,
+	"econ_search":         true,
+	"clinical_search":     true,
+	"awesome_list_search": true,
+	"archive_source":      true,
+	"brand_research":      true,
+}
+
+// TestProvidersDocStructuredDomainTable is a doc-drift guard for docs/PROVIDERS.md's
+// "Structured-Domain Providers" table: it fails CI if that table's tool column
+// diverges from structuredDomainDocTools, or if it lists a tool that isn't
+// actually registered (stale doc). This is what would have caught
+// awesome_list_search shipping (#375) without a matching PROVIDERS.md row.
+func TestProvidersDocStructuredDomainTable(t *testing.T) {
+	docPath := filepath.Join(repoRoot(t), "docs", "PROVIDERS.md")
+	data, err := os.ReadFile(docPath) // #nosec G304 -- fixed in-repo doc path, not user input
+	if err != nil {
+		t.Fatalf("read PROVIDERS.md: %v", err)
+	}
+
+	const marker = "## Structured-Domain Providers"
+	start := strings.Index(string(data), marker)
+	if start == -1 {
+		t.Fatal("docs/PROVIDERS.md missing '## Structured-Domain Providers' section")
+	}
+	section := string(data)[start:]
+	if end := strings.Index(section, "\n## "); end != -1 {
+		section = section[:end]
+	}
+
+	re := regexp.MustCompile("(?m)^\\|\\s*`([a-z_]+)`\\s*\\|")
+	matches := re.FindAllStringSubmatch(section, -1)
+	documented := make(map[string]bool, len(matches))
+	for _, m := range matches {
+		documented[m[1]] = true
+	}
+	if len(documented) == 0 {
+		t.Fatal("no tool rows found in docs/PROVIDERS.md's Structured-Domain Providers table")
+	}
+
+	registered := make(map[string]bool)
+	for _, tool := range listTools(t) {
+		registered[tool.Name] = true
+	}
+
+	for name := range structuredDomainDocTools {
+		if !documented[name] {
+			t.Errorf("tool %q belongs in docs/PROVIDERS.md's Structured-Domain Providers table but is missing", name)
+		}
+		if !registered[name] {
+			t.Errorf("structuredDomainDocTools lists %q but it is NOT registered (stale test expectation)", name)
+		}
+	}
+	for name := range documented {
+		if !structuredDomainDocTools[name] {
+			t.Errorf("docs/PROVIDERS.md documents tool %q not in structuredDomainDocTools — update the test's expected set if this is intentional", name)
+		}
+	}
+}
+
 func TestAnnotationsStableUnderConcurrency(t *testing.T) {
 	ctx := context.Background()
 	deps := setupTestDeps()
