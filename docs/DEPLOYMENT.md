@@ -415,7 +415,6 @@ SEARCH_ROUTING='{"web":"brave,google","news":"brave,serper","images":"google,bra
 - Requests route to the first healthy provider in the priority list
 - If a provider fails (timeout, rate limit, 5xx), the next provider is tried automatically
 - Each provider gets an independent circuit breaker. The routing-layer breakers that govern fallback (web, patent, and academic alike) open after 3 consecutive failures and reset after 30s (`internal/search/router.go`). Domain providers additionally wrap their own upstream HTTP calls in an inner breaker (5 failures / 60s, `internal/search/domain.go`) — a separate, deeper layer, not the effective routing breaker. See those files for the authoritative values.
-- Lenses can override routing via the `"routing"` field in their JSON definition
 
 **Operation types:** `web`, `images`, `news`, `academic`, `patents`, `default`. The `academic` and `patents` lists are filtered to providers that implement the academic/patent interface — `academic` accepts `openalex`, `crossref`, `pubmed`, `semanticscholar`, `exa`; `patents` accepts `searchapi`, `epo`, `lens`, `uspto`. Names that don't implement the interface are silently dropped, so use the example values above.
 
