@@ -23,8 +23,10 @@
 #   scripts/rebuild-local.sh --keep-build-cache  # skip `go clean -cache`
 #
 # Env overrides:
-#   INSTALL_PATH      target binary path (default: resolve `web-researcher-mcp`
-#                     on PATH, else /opt/homebrew/bin on macOS, /usr/local/bin else)
+#   INSTALL_PATH      target binary path (default: the path configured in
+#                     ~/.claude.json's mcpServers.web-researcher.command, if
+#                     present; else resolve `web-researcher-mcp` on PATH;
+#                     else /opt/homebrew/bin on macOS, /usr/local/bin else)
 #   CACHE_DIR         MCP cache root (default: matches the server's own default —
 #                     ~/Library/Caches/web-researcher-mcp on macOS,
 #                     ~/.cache/web-researcher-mcp on Linux)
@@ -67,27 +69,52 @@ default_cache_dir() {
   fi
 }
 
+# claude_json_install_path reads the exact binary path Claude Code's own MCP
+# config points at (~/.claude.json's mcpServers.web-researcher.command). On a
+# machine with multiple installed copies (pyenv shim, homebrew, ~/.local/bin,
+# ...), `command -v` picks whichever is first on $PATH — not necessarily the
+# one the running MCP client actually loads. This is the authoritative source
+# when it's present.
+claude_json_install_path() {
+  local cfg="$HOME/.claude.json"
+  [ -f "$cfg" ] || return 1
+  command -v jq >/dev/null 2>&1 || return 1
+  jq -er '.mcpServers["web-researcher"].command // empty' "$cfg" 2>/dev/null
+}
+
+# default_install_path prints "<path>\t<source>". Both are printed (rather
+# than one set as a side-effect variable) because this runs via command
+# substitution, which forks a subshell — any plain variable assignment inside
+# would be invisible to the caller.
 default_install_path() {
-  # Prefer wherever the binary is already installed, so we replace the one the
-  # MCP client actually loads.
+  local from_config
+  if from_config="$(claude_json_install_path)" && [ -n "$from_config" ]; then
+    printf '%s\t%s\n' "$from_config" "~/.claude.json"
+    return
+  fi
+  # Fall back to wherever the binary is already installed on PATH.
   if command -v "$BINARY" >/dev/null 2>&1; then
-    command -v "$BINARY"
+    printf '%s\t%s\n' "$(command -v "$BINARY")" "PATH"
     return
   fi
   if [ "$UNAME" = "Darwin" ] && [ -d /opt/homebrew/bin ]; then
-    echo "/opt/homebrew/bin/$BINARY"
+    printf '%s\t%s\n' "/opt/homebrew/bin/$BINARY" "default"
   else
-    echo "/usr/local/bin/$BINARY"
+    printf '%s\t%s\n' "/usr/local/bin/$BINARY" "default"
   fi
 }
 
 CACHE_DIR="${CACHE_DIR:-$(default_cache_dir)}"
-INSTALL_PATH="${INSTALL_PATH:-$(default_install_path)}"
+if [ -n "${INSTALL_PATH:-}" ]; then
+  INSTALL_PATH_SOURCE="INSTALL_PATH env"
+else
+  IFS=$'\t' read -r INSTALL_PATH INSTALL_PATH_SOURCE <<< "$(default_install_path)"
+fi
 
 echo "==> web-researcher-mcp local rebuild"
 echo "    repo:    $REPO_ROOT"
 echo "    cache:   $CACHE_DIR"
-echo "    install: $INSTALL_PATH"
+echo "    install: $INSTALL_PATH (source: $INSTALL_PATH_SOURCE)"
 echo
 
 # --- 1. clear caches --------------------------------------------------------
