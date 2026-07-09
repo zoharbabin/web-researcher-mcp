@@ -65,8 +65,10 @@ func TestEcosystemsAwesomeSendsMailtoWhenConfigured(t *testing.T) {
 }
 
 func TestEcosystemsAwesomeSendsDescriptiveUserAgent(t *testing.T) {
-	// ecosyste.ms's edge WAF 429s Go's default "Go-http-client/*" User-Agent
-	// regardless of quota remaining; a descriptive UA is required to pass.
+	// ecosyste.ms hard-blocks the literal string "Go-http-client/*" with a
+	// 429 regardless of rate-limit tier or quota remaining (confirmed via
+	// direct curl A/B testing); any other User-Agent, descriptive or not,
+	// passes this specific gate.
 	var gotUA string
 	p := newEcosystemsTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 		gotUA = r.Header.Get("User-Agent")
@@ -77,6 +79,26 @@ func TestEcosystemsAwesomeSendsDescriptiveUserAgent(t *testing.T) {
 	}
 	if !strings.HasPrefix(gotUA, "web-researcher-mcp/") {
 		t.Errorf("User-Agent = %q, want a descriptive UA (not Go's default)", gotUA)
+	}
+}
+
+func TestEcosystemsAwesomeEmbedsEmailInUserAgentWhenConfigured(t *testing.T) {
+	// ecosyste.ms's APISIX tier classifier detects an email in the mailto
+	// param OR the User-Agent header. mailto is already sent (see
+	// TestEcosystemsAwesomeSendsMailtoWhenConfigured) and is sufficient on
+	// its own for polite-tier classification; mirroring it into the UA too
+	// matches ecosyste.ms's own documented example verbatim ("User-Agent:
+	// MyApp/1.0 (contact: user@example.com)") as a redundant second signal.
+	var gotUA string
+	p := newEcosystemsTestProviderWithAuth(t, "", "you@example.com", func(w http.ResponseWriter, r *http.Request) {
+		gotUA = r.Header.Get("User-Agent")
+		w.Write([]byte(`[]`))
+	})
+	if _, err := p.AwesomeLists(context.Background(), AwesomeListSearchParams{Topic: "x"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(gotUA, "you@example.com") {
+		t.Errorf("User-Agent = %q, want it to contain the configured email", gotUA)
 	}
 }
 
