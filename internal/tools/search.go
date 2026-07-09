@@ -35,19 +35,20 @@ const (
 )
 
 type webSearchInput struct {
-	Query        string `json:"query" jsonschema:"The search query text (1-500 chars). Be specific with key terms and qualifiers for better results.,required"`
-	NumResults   int    `json:"num_results,omitempty" jsonschema:"Number of results to return (1-10). Default: 5. Higher values increase latency."`
-	TimeRange    string `json:"time_range,omitempty" jsonschema:"Restrict to a time period: day, week, month, or year. Omit for all-time results."`
-	Safe         string `json:"safe,omitempty" jsonschema:"SafeSearch level: off, medium (default), or high."`
-	Language     string `json:"language,omitempty" jsonschema:"Filter by language using ISO 639-1 code (e.g. en, fr, de)."`
-	Site         string `json:"site,omitempty" jsonschema:"Restrict to a single domain (e.g. stackoverflow.com). Cannot combine with lens."`
-	ExactTerms   string `json:"exact_terms,omitempty" jsonschema:"Phrase that must appear verbatim in results."`
-	ExcludeTerms string `json:"exclude_terms,omitempty" jsonschema:"Terms to exclude from results (space-separated)."`
-	Country      string `json:"country,omitempty" jsonschema:"Restrict to a country using ISO 3166-1 alpha-2 code (e.g. US, GB)."`
-	Lens         string `json:"lens,omitempty" jsonschema:"Focus your search on trusted sites in a specific field: docs, academic, academic-extended, clinical, security, journalism, programming, devops, news, tech, legal, medical, finance, science, government, awesome-lists. Only one lens can be active at a time (overrides the site parameter)."`
-	Provider     string `json:"provider,omitempty" jsonschema:"Choose which search engine to use for this query: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews. Leave empty to use the default. Returns an error if the chosen provider isn't set up."`
-	SessionID    string `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. Sources are automatically recorded in the session for recovery after context loss."`
-	Claim        string `json:"claim,omitempty" jsonschema:"Optional claim to evaluate against each result's snippet. When set, each result gains a claimSignal (the most claim-relevant snippet sentence) to help triage which links to read; for full-text evidence use search_and_scrape with claim. Evidence only — the server never decides supports/contradicts."`
+	Query        string   `json:"query" jsonschema:"The search query text (1-500 chars). Be specific with key terms and qualifiers for better results.,required"`
+	NumResults   int      `json:"num_results,omitempty" jsonschema:"Number of results to return (1-10). Default: 5. Higher values increase latency."`
+	TimeRange    string   `json:"time_range,omitempty" jsonschema:"Restrict to a time period: day, week, month, or year. Omit for all-time results."`
+	Safe         string   `json:"safe,omitempty" jsonschema:"SafeSearch level: off, medium (default), or high."`
+	Language     string   `json:"language,omitempty" jsonschema:"Filter by language using ISO 639-1 code (e.g. en, fr, de)."`
+	Site         string   `json:"site,omitempty" jsonschema:"Restrict to a single domain (e.g. stackoverflow.com). Cannot combine with sites."`
+	Sites        []string `json:"sites,omitempty" jsonschema:"Restrict to a set of domains (up to 10, OR-joined), e.g. [\"stackoverflow.com\", \"github.com\"]. Cannot combine with site."`
+	ExactTerms   string   `json:"exact_terms,omitempty" jsonschema:"Phrase that must appear verbatim in results."`
+	ExcludeTerms string   `json:"exclude_terms,omitempty" jsonschema:"Terms to exclude from results (space-separated)."`
+	Country      string   `json:"country,omitempty" jsonschema:"Restrict to a country using ISO 3166-1 alpha-2 code (e.g. US, GB)."`
+	Lens         string   `json:"lens,omitempty" jsonschema:"Focus your search on trusted sites in a specific field: docs, academic, academic-extended, clinical, security, journalism, programming, devops, news, tech, legal, medical, finance, science, government, awesome-lists. Only one lens can be active at a time (overrides the site/sites parameters)."`
+	Provider     string   `json:"provider,omitempty" jsonschema:"Choose which search engine to use for this query: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews. Leave empty to use the default. Returns an error if the chosen provider isn't set up."`
+	SessionID    string   `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. Sources are automatically recorded in the session for recovery after context loss."`
+	Claim        string   `json:"claim,omitempty" jsonschema:"Optional claim to evaluate against each result's snippet. When set, each result gains a claimSignal (the most claim-relevant snippet sentence) to help triage which links to read; for full-text evidence use search_and_scrape with claim. Evidence only — the server never decides supports/contradicts."`
 }
 
 func registerWebSearch(srv *mcp.Server, deps Dependencies) {
@@ -66,6 +67,19 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 		if len(input.Query) > 500 {
 			return toolError("query must be 500 characters or less"), nil, nil
 		}
+		if input.Site != "" && len(input.Sites) > 0 {
+			return toolError("site and sites cannot be combined — use one or the other"), nil, nil
+		}
+		if len(input.Sites) > 0 {
+			if len(input.Sites) > search.MaxSiteDomains {
+				return toolError(fmt.Sprintf("sites accepts at most %d domains", search.MaxSiteDomains)), nil, nil
+			}
+			for i, d := range input.Sites {
+				if err := search.ValidateSiteDomain(d); err != nil {
+					return toolError(fmt.Sprintf("sites[%d]: %s", i, err)), nil, nil
+				}
+			}
+		}
 
 		numResults := input.NumResults
 		if numResults <= 0 {
@@ -79,7 +93,7 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 		// importantly the provider, so two providers queried with the same terms
 		// do not collide and serve each other's cached results (idempotency +
 		// consistency across calls).
-		cacheKey := searchCacheKey("web", input.Query, numResults, input.TimeRange, input.Safe, input.Language, input.Site, input.Lens, input.Provider, input.ExactTerms, input.ExcludeTerms, input.Country, input.Claim)
+		cacheKey := searchCacheKey("web", input.Query, numResults, input.TimeRange, input.Safe, input.Language, input.Site, strings.Join(input.Sites, ","), input.Lens, input.Provider, input.ExactTerms, input.ExcludeTerms, input.Country, input.Claim)
 		if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("web_search", time.Since(start), nil, "", true)
 			rt := routingMeta(search.RoutingDecision{}, time.Since(start), true)
@@ -95,6 +109,7 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 			Language:     input.Language,
 			Country:      input.Country,
 			Site:         input.Site,
+			Sites:        input.Sites,
 			ExactTerms:   input.ExactTerms,
 			ExcludeTerms: input.ExcludeTerms,
 		}
@@ -106,13 +121,14 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 				return toolError(fmt.Sprintf("unknown lens: %s. Available: %v", input.Lens, registry.List())), nil, nil
 			}
 
-			// A lens OVERRIDES the site parameter (per the schema contract): the
-			// lens already scopes the search to its own domain set, so a sibling
-			// site: filter would AND with it and over-constrain to nothing. Clear
-			// it on BOTH paths — the CX engine is itself the scope, the Goggle
-			// re-ranks server-side at Brave, and the operator-injection path bakes
-			// the lens domains into the query.
+			// A lens OVERRIDES the site/sites parameters (per the schema contract):
+			// the lens already scopes the search to its own domain set, so a
+			// sibling site: filter would AND with it and over-constrain to nothing.
+			// Clear both on BOTH paths — the CX engine is itself the scope, the
+			// Goggle re-ranks server-side at Brave, and the operator-injection path
+			// bakes the lens domains into the query.
 			params.Site = ""
+			params.Sites = nil
 			if lensData.CX != "" {
 				params.Query = input.Query
 			} else {

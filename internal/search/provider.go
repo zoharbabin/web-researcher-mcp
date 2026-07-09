@@ -16,6 +16,7 @@ type WebSearchParams struct {
 	Language     string
 	Country      string
 	Site         string
+	Sites        []string // ad hoc multi-domain scoping, OR-joined into site: operators by buildQuery (#374); mutually exclusive with Site at the tool boundary
 	ExactTerms   string
 	ExcludeTerms string
 	Offset       int      // pagination offset (provider-specific, ignored when 0)

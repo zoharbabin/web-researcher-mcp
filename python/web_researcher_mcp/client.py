@@ -894,6 +894,7 @@ class WebResearcherClient:
         safe: str = None,
         sessionId: str = None,
         site: str = None,
+        sites: Optional[list] = None,
         time_range: str = None,
     ) -> WebSearchResponse:
         """Search the web and get a list of relevant pages with titles and snippets — without reading the full page content"""
@@ -912,6 +913,7 @@ class WebResearcherClient:
                 "safe": safe,
                 "sessionId": sessionId,
                 "site": site,
+                "sites": sites,
                 "time_range": time_range,
             },
         )
@@ -1637,6 +1639,7 @@ class SyncWebResearcherClient:
         safe: str = None,
         sessionId: str = None,
         site: str = None,
+        sites: Optional[list] = None,
         time_range: str = None,
     ) -> WebSearchResponse:
         return self._run(
@@ -1653,6 +1656,7 @@ class SyncWebResearcherClient:
             safe=safe,
             sessionId=sessionId,
             site=site,
+            sites=sites,
             time_range=time_range,
             )
         )

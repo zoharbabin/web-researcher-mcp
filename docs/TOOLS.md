@@ -42,11 +42,12 @@ Perform a web search and return structured result URLs with metadata.
 | `time_range` | string | no | — | `day`, `week`, `month`, `year` |
 | `safe` | string | no | `medium` | `off`, `medium`, `high` |
 | `language` | string | no | — | ISO 639-1 code |
-| `site` | string | no | — | Domain restriction (cannot combine with `lens`) |
+| `site` | string | no | — | Single-domain restriction (cannot combine with `sites`) |
+| `sites` | []string | no | — | Multi-domain restriction, OR-joined into `site:` operators (up to 10; cannot combine with `site`) |
 | `exact_terms` | string | no | — | Exact phrase match |
 | `exclude_terms` | string | no | — | Terms to exclude |
 | `country` | string | no | — | ISO 3166-1 alpha-2 |
-| `lens` | string | no | — | Domain lens (overrides `site`). See `lenses/` directory for available lenses |
+| `lens` | string | no | — | Domain lens (overrides `site`/`sites`). See `lenses/` directory for available lenses |
 | `provider` | string | no | — | Force search provider. Returns error listing available providers if unknown |
 | `sessionId` | string | no | — | Link results to a `sequential_search` session |
 | `claim` | string | no | — | Optional claim to evaluate against each result's snippet; when set, each result gains a `claimSignal` (#66). Evidence only — never a verdict |
@@ -78,15 +79,16 @@ type SearchResult struct {
 
 `publishedAt` (#356) is **optional and provider-dependent**, populated only by providers whose web response carries a date signal (Google via pagemap metadata, Tavily, Exa, SearXNG, HackerNews) and omitted (never guessed from snippet/title text) for providers that don't (Brave, Serper, DuckDuckGo, SearchAPI). When present it is normalized to RFC3339 UTC regardless of the provider's raw format.
 
-On a zero-result response, `hints` carries a `ZeroResultHints` object (the same shape `academic_search` and `patent_search` emit) explaining why nothing matched and how to recover: `reason` (`no_match` | `filters_too_restrictive`), `filtersApplied` (the constraints that may have eliminated results — `site`, `lens`, `time_range`, `country`, `language`, `exact_terms`, `exclude_terms`), `suggestedActions` (remove-filter / try-different-provider), and `epistemicWarning` (#357: a fixed reminder that zero results do not confirm absence — the fact may exist and simply be unreachable by the current query/provider; never assert non-existence from an empty result set). Suggested alternative providers are limited to those **configured and currently healthy**. On any non-empty result set the field is omitted.
+On a zero-result response, `hints` carries a `ZeroResultHints` object (the same shape `academic_search` and `patent_search` emit) explaining why nothing matched and how to recover: `reason` (`no_match` | `filters_too_restrictive`), `filtersApplied` (the constraints that may have eliminated results — `site`, `sites`, `lens`, `time_range`, `country`, `language`, `exact_terms`, `exclude_terms`), `suggestedActions` (remove-filter / try-different-provider), and `epistemicWarning` (#357: a fixed reminder that zero results do not confirm absence — the fact may exist and simply be unreachable by the current query/provider; never assert non-existence from an empty result set). Suggested alternative providers are limited to those **configured and currently healthy**. On any non-empty result set the field is omitted.
 
 ### Behavior
 
 1. If `SEARCH_ROUTING` is set, route through the multi-provider Router (priority-ordered fallback with per-provider circuit breakers).
 2. If `lens` is specified and has a dedicated `cx`, route directly to that Google PSE engine.
 3. If `lens` is specified without `cx`, inject `site:` operators and route to the configured provider.
-4. Apply `time_range` as date restriction parameter.
-5. Return deduplicated URLs and full result objects.
+4. `site` and `sites` are mutually exclusive — combining them returns an error. `sites` entries are validated (bare host, optional path prefix — no scheme, no whitespace) and OR-joined into a single `site:` group, capped at 10 domains; exceeding the cap returns an error rather than silently truncating. A `lens` overrides both.
+5. Apply `time_range` as date restriction parameter.
+6. Return deduplicated URLs and full result objects.
 
 ### Cache
 - Key: SHA-256 of (provider + query + all params)

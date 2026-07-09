@@ -285,10 +285,17 @@ type googleImage struct {
 	Height        int    `json:"height"`
 }
 
+// buildQuery is the single chokepoint that turns Site/Sites into query-text
+// site: operators for every provider that funnels its query through it
+// (google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa).
+// Site and Sites are mutually exclusive by the time params reaches here (the
+// tool layer enforces it), so at most one branch ever fires.
 func buildQuery(params WebSearchParams) string {
 	query := params.Query
 	if params.Site != "" {
 		query += " site:" + params.Site
+	} else if len(params.Sites) > 0 {
+		query = BuildSitesQuery(query, params.Sites)
 	}
 	return query
 }
