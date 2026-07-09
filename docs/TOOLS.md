@@ -1660,6 +1660,43 @@ Use `brand_research` when you need structured brand JSON. Use `brand-guidelines`
 
 ---
 
+## Tool 30: `awesome_list_search`
+
+Search the **ecosyste.ms Awesome API** for community-curated "awesome-\*" lists on a GitHub topic — structured, filterable coverage of the awesome-list ecosystem beyond what the `web_search` awesome-lists lens offers via free-text search alone. ecosyste.ms is keyless, so this tool is always registered.
+
+### Input Schema
+
+| Field | Type | Required | Default | Constraints |
+|-------|------|----------|---------|-------------|
+| `topic` | string | yes* | — | GitHub topic slug (e.g. `osint`, `go`, `machine-learning`). *Provide at least one of `topic`/`query` |
+| `query` | string | yes* | — | Free-text fallback used when `topic` is empty or doesn't resolve to a known topic. *Provide at least one of `topic`/`query` |
+| `min_stars` | int | no | — | Minimum GitHub stars on the list's repository |
+| `min_projects` | int | no | — | Minimum number of curated entries in the list |
+| `sort_by` | string | no | `stars` | `stars`, `projects`, or `updated` |
+| `num_results` | int | no | 10 | 1–100 |
+| `provider` | string | no | — | Force an awesome-list provider: `ecosystems` |
+| `sessionId` | string | no | — | Record results as sources on a `sequential_search` session |
+
+### Output Fields
+
+Each `lists[]` item: `name`, `fullName` (owner/repo of the list's source repository), `url` (list page; `scrape_page` for the full curated list), `description`, `projectsCount` (curated-entry count), `stars`, `topics` (array), `lastSyncedAt` (when ecosyste.ms last synced this list from its repository), `source`. Plus `query`, `resultCount`, `provider`, `hints` (when empty), and `trust` (`untrusted-external-content`).
+
+### Behavior
+- Provide `topic` and/or `query` — at least one is required. `query` feeds the same underlying topic match when `topic` is empty.
+- Archived source repositories are excluded from results.
+- `min_stars`/`min_projects` filter by the list repository's stars and curated-entry count; results are sorted (descending) by `sort_by`, default `stars`.
+- **Provider honoring**: an explicit `provider` is used exclusively; otherwise the first configured provider answers. An error/empty returns a structured zero-result with hints (no silent fallback).
+- A `404`/no-match from the API is an empty result, never a panic.
+- **Auth**: keyless — ecosyste.ms needs no API key (5,000 req/hour anonymous rate limit).
+
+### Annotations
+- ReadOnly: true · Idempotent: true · OpenWorld: true (queries the live ecosyste.ms API)
+
+### Cache
+- TTL: 6 hours (only for non-empty results)
+
+---
+
 ## Cross-Cutting Concerns
 
 ### Timeouts

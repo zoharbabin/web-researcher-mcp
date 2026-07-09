@@ -38,6 +38,7 @@ from web_researcher_mcp.models import (
     AnswerResponse,
     ArchiveSourceResponse,
     AuditBibliographyResponse,
+    AwesomeListSearchResponse,
     BrandResearchResponse,
     CitationGraphResponse,
     ClinicalSearchResponse,
@@ -378,6 +379,32 @@ class WebResearcherClient:
             },
         )
         return AuditBibliographyResponse.from_dict(d)
+    async def awesome_list_search(
+        self,
+        min_projects: int = None,
+        min_stars: int = None,
+        num_results: int = None,
+        provider: str = None,
+        query: str = None,
+        sessionId: str = None,
+        sort_by: str = None,
+        topic: str = None,
+    ) -> AwesomeListSearchResponse:
+        """Search the ecosyste"""
+        d = await self._call_tool(
+            "awesome_list_search",
+            {
+                "min_projects": min_projects,
+                "min_stars": min_stars,
+                "num_results": num_results,
+                "provider": provider,
+                "query": query,
+                "sessionId": sessionId,
+                "sort_by": sort_by,
+                "topic": topic,
+            },
+        )
+        return AwesomeListSearchResponse.from_dict(d)
     async def brand_research(
         self,
         company_name: str = None,
@@ -1187,6 +1214,29 @@ class SyncWebResearcherClient:
             entries=entries,
             format=format,
             sessionId=sessionId,
+            )
+        )
+    def awesome_list_search(
+        self,
+        min_projects: int = None,
+        min_stars: int = None,
+        num_results: int = None,
+        provider: str = None,
+        query: str = None,
+        sessionId: str = None,
+        sort_by: str = None,
+        topic: str = None,
+    ) -> AwesomeListSearchResponse:
+        return self._run(
+            self._async_client.awesome_list_search(
+            min_projects=min_projects,
+            min_stars=min_stars,
+            num_results=num_results,
+            provider=provider,
+            query=query,
+            sessionId=sessionId,
+            sort_by=sort_by,
+            topic=topic,
             )
         )
     def brand_research(

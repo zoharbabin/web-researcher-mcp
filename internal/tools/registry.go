@@ -34,6 +34,10 @@ type Dependencies struct {
 	// AvailableTrialProviders always builds it and clinical_search is always
 	// registered. Empty ⇒ the tool is not registered.
 	TrialProviders map[string]search.TrialProvider
+	// AwesomeListProviders back awesome_list_search (ecosyste.ms, #375). Keyless,
+	// so AvailableAwesomeListProviders always builds it and awesome_list_search
+	// is always registered. Empty ⇒ the tool is not registered.
+	AwesomeListProviders map[string]search.AwesomeListProvider
 	// LocalProviders back local_search (#259). Brave is the sole provider today;
 	// requires BRAVE_API_KEY. Empty ⇒ the tool is not registered.
 	LocalProviders map[string]search.LocalProvider
@@ -165,6 +169,12 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	// AvailableTrialProviders always builds it and the tool is always registered.
 	if len(deps.TrialProviders) > 0 {
 		registerClinicalSearch(srv, deps)
+	}
+	// awesome_list_search (#375) — ecosyste.ms is keyless, so
+	// AvailableAwesomeListProviders always builds it and the tool is always
+	// registered.
+	if len(deps.AwesomeListProviders) > 0 {
+		registerAwesomeListSearch(srv, deps)
 	}
 	// local_search (#259) — Brave Local Search API; requires BRAVE_API_KEY.
 	if len(deps.LocalProviders) > 0 {

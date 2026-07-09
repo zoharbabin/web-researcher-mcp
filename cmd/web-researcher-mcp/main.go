@@ -278,6 +278,9 @@ func main() {
 	// Clinical trials (ClinicalTrials.gov, #165): keyless, so always built —
 	// clinical_search is part of the default tool surface.
 	trialProviders := search.AvailableTrialProviders(searchDeps)
+	// Awesome lists (ecosyste.ms, #375): keyless, so always built —
+	// awesome_list_search is part of the default tool surface.
+	awesomeListProviders := search.AvailableAwesomeListProviders(searchDeps)
 
 	// Local place search (#259): Brave Local Search API. Requires BRAVE_API_KEY;
 	// local_search is registered only when the key is present.
@@ -430,29 +433,30 @@ func main() {
 	defer auditor.Close()
 
 	toolDeps := tools.Dependencies{
-		Cache:               cacheStore,
-		Search:              searchProvider,
-		SearchProviders:     allProviders,
-		PatentProviders:     patentProviders,
-		AcademicProviders:   academicProviders,
-		FilingProviders:     filingProviders,
-		CaseProviders:       caseProviders,
-		EconProviders:       econProviders,
-		TrialProviders:      trialProviders,
-		LocalProviders:      localProviders,
-		ContextProviders:    contextProviders,
-		AnswerProviders:     answerProviders,
-		StructuredProviders: structuredProviders,
-		OAResolver:          oaResolver,
-		RetractionResolver:  retractionResolver,
-		DOIRegistry:         doiRegistry,
-		LinkVerifier:        linkVerifier,
-		Scraper:             scraperPipeline,
-		Content:             contentProcessor,
-		Sessions:            sessionManager,
-		Metrics:             metricsCollector,
-		Auditor:             auditor,
-		Logger:              logger,
+		Cache:                cacheStore,
+		Search:               searchProvider,
+		SearchProviders:      allProviders,
+		PatentProviders:      patentProviders,
+		AcademicProviders:    academicProviders,
+		FilingProviders:      filingProviders,
+		CaseProviders:        caseProviders,
+		EconProviders:        econProviders,
+		TrialProviders:       trialProviders,
+		AwesomeListProviders: awesomeListProviders,
+		LocalProviders:       localProviders,
+		ContextProviders:     contextProviders,
+		AnswerProviders:      answerProviders,
+		StructuredProviders:  structuredProviders,
+		OAResolver:           oaResolver,
+		RetractionResolver:   retractionResolver,
+		DOIRegistry:          doiRegistry,
+		LinkVerifier:         linkVerifier,
+		Scraper:              scraperPipeline,
+		Content:              contentProcessor,
+		Sessions:             sessionManager,
+		Metrics:              metricsCollector,
+		Auditor:              auditor,
+		Logger:               logger,
 		Features: tools.Features{
 			SourceRecommendations: cfg.Features.SourceRecommendations,
 			GenerativeUI:          cfg.Features.GenerativeUI,
@@ -788,6 +792,9 @@ func completionProviderNames(deps tools.Dependencies) []string {
 		add(name)
 	}
 	for name := range deps.TrialProviders {
+		add(name)
+	}
+	for name := range deps.AwesomeListProviders {
 		add(name)
 	}
 	for name := range deps.LocalProviders {
