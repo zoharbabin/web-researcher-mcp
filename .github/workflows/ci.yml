@@ -110,9 +110,10 @@ jobs:
           version: v2.12
           args: --timeout=5m
 
-  # 📄 Docs drift — docs/TOOLS.md ↔ registry drift. Runs on every PR except
-  # packaging-only ones: a machine-generated packaging bump cannot cause
-  # docs/registry drift, so skipping saves ~2 min on every release cycle.
+  # 📄 Docs drift — docs/TOOLS.md + docs/PROVIDERS.md ↔ registry drift. Runs on
+  # every PR except packaging-only ones: a machine-generated packaging bump
+  # cannot cause docs/registry drift, so skipping saves ~2 min on every release
+  # cycle.
   docs-drift:
     name: 📄 Docs ↔ Registry Drift
     needs: changes
@@ -127,7 +128,7 @@ jobs:
       - name: Verify tool docs/annotations match the registry
         run: |
           go test -count=1 \
-            -run 'TestToolsDocMatchesRegistry|TestOutputSchemaMatchesResponse|TestToolDescriptionQuality|TestAllToolsHaveAnnotations|TestAllToolsRegistered|TestAllToolsHaveOutputSchema|TestExternalContentToolsCarryTrustMarker|TestAnnotationsStableUnderConcurrency' \
+            -run 'TestToolsDocMatchesRegistry|TestProvidersDocStructuredDomainTable|TestOutputSchemaMatchesResponse|TestToolDescriptionQuality|TestAllToolsHaveAnnotations|TestAllToolsRegistered|TestAllToolsHaveOutputSchema|TestExternalContentToolsCarryTrustMarker|TestAnnotationsStableUnderConcurrency' \
             ./internal/tools/...
 
   # 🐍 Python client drift — regenerated client must match live Go schemas.

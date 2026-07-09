@@ -21,7 +21,7 @@ The codebase has six extension points. They are not interchangeable — each map
 
 Start here. Work down until you hit a match.
 
-1. **Does it produce output that fits an existing search interface** (web, image, news, academic, patent, answer, structured, filing, case, econ, trial, local)?
+1. **Does it produce output that fits an existing search interface** (web, image, news, academic, patent, answer, structured, filing, case, econ, trial, awesome-list, local)?
    - Yes → **Provider** (new backend, existing tool surface, no schema change)
    - No → continue
 
@@ -76,7 +76,7 @@ See `CLAUDE.md → How to Add a Tool` for the full step-by-step.
 A Provider is a new backend for a capability the codebase already knows how to surface. The tool layer doesn't change — it just gets a new option in the provider map.
 
 **When to use:**
-- A new search engine or data source whose results fit `web_search`, `academic_search`, `patent_search`, `answer`, `structured_search`, `filing_search`, `legal_search`, `econ_search`, `clinical_search`, or `local_search`
+- A new search engine or data source whose results fit `web_search`, `academic_search`, `patent_search`, `answer`, `structured_search`, `filing_search`, `legal_search`, `econ_search`, `clinical_search`, `awesome_list_search`, or `local_search`
 - Adding a second source for an existing capability (e.g. a second clinical-trial registry alongside ClinicalTrials.gov)
 
 **When NOT to use:**
