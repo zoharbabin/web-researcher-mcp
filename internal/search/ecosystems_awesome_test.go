@@ -12,9 +12,14 @@ import (
 
 func newEcosystemsTestProvider(t *testing.T, handler http.HandlerFunc) *EcosystemsAwesomeProvider {
 	t.Helper()
+	return newEcosystemsTestProviderWithAuth(t, "", "", handler)
+}
+
+func newEcosystemsTestProviderWithAuth(t *testing.T, apiKey, email string, handler http.HandlerFunc) *EcosystemsAwesomeProvider {
+	t.Helper()
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	p := NewEcosystemsAwesomeProvider(Deps{
+	p := NewEcosystemsAwesomeProvider(apiKey, email, Deps{
 		HTTPClient: srv.Client(),
 		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
 	})
@@ -23,11 +28,51 @@ func newEcosystemsTestProvider(t *testing.T, handler http.HandlerFunc) *Ecosyste
 }
 
 func TestEcosystemsAwesomeKeyless(t *testing.T) {
-	if p := NewAwesomeListProviderByName("ecosystems", Deps{}); p == nil {
+	if p := NewAwesomeListProviderByName("ecosystems", AwesomeListProviderConfig{}, Deps{}); p == nil {
 		t.Error("ecosystems should construct without any key")
 	}
-	if p := NewAwesomeListProviderByName("unknown", Deps{}); p != nil {
+	if p := NewAwesomeListProviderByName("unknown", AwesomeListProviderConfig{}, Deps{}); p != nil {
 		t.Error("unknown awesome-list provider should be nil")
+	}
+}
+
+func TestEcosystemsAwesomeSendsKeyWhenConfigured(t *testing.T) {
+	var gotAuth string
+	p := newEcosystemsTestProviderWithAuth(t, "secret-key", "", func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.Write([]byte(`[]`))
+	})
+	if _, err := p.AwesomeLists(context.Background(), AwesomeListSearchParams{Topic: "x"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotAuth != "Bearer secret-key" {
+		t.Errorf("Authorization header = %q, want %q", gotAuth, "Bearer secret-key")
+	}
+}
+
+func TestEcosystemsAwesomeSendsMailtoWhenConfigured(t *testing.T) {
+	var gotMailto string
+	p := newEcosystemsTestProviderWithAuth(t, "", "you@example.com", func(w http.ResponseWriter, r *http.Request) {
+		gotMailto = r.URL.Query().Get("mailto")
+		w.Write([]byte(`[]`))
+	})
+	if _, err := p.AwesomeLists(context.Background(), AwesomeListSearchParams{Topic: "x"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotMailto != "you@example.com" {
+		t.Errorf("mailto param = %q, want %q", gotMailto, "you@example.com")
+	}
+}
+
+func TestEcosystemsAwesomeOmitsMailtoWhenUnset(t *testing.T) {
+	p := newEcosystemsTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Has("mailto") {
+			t.Errorf("mailto should be omitted when email is unset, got %q", r.URL.Query().Get("mailto"))
+		}
+		w.Write([]byte(`[]`))
+	})
+	if _, err := p.AwesomeLists(context.Background(), AwesomeListSearchParams{Topic: "x"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

@@ -279,8 +279,14 @@ func main() {
 	// clinical_search is part of the default tool surface.
 	trialProviders := search.AvailableTrialProviders(searchDeps)
 	// Awesome lists (ecosyste.ms, #375): keyless, so always built —
-	// awesome_list_search is part of the default tool surface.
-	awesomeListProviders := search.AvailableAwesomeListProviders(searchDeps)
+	// awesome_list_search is part of the default tool surface. An optional
+	// contact email opts into the "polite pool" (verified rate-limit
+	// increase); the optional API key is a no-op on ecosyste.ms's Free plan
+	// (only paid plans activate key auth) but sent for forward compatibility.
+	awesomeListProviders := search.AvailableAwesomeListProviders(search.AwesomeListProviderConfig{
+		EcosystemsAPIKey: cfg.Search.EcosystemsAPIKey,
+		EcosystemsEmail:  cfg.Search.EcosystemsEmail,
+	}, searchDeps)
 
 	// Local place search (#259): Brave Local Search API. Requires BRAVE_API_KEY;
 	// local_search is registered only when the key is present.
@@ -509,6 +515,9 @@ func main() {
 	}
 	for name := range trialProviders {
 		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "clinical"})
+	}
+	for name := range awesomeListProviders {
+		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "awesome"})
 	}
 	for name := range localProviders {
 		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "local"})

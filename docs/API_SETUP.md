@@ -554,6 +554,22 @@ Backs `clinical_search`. Works **keyless** — `clinical_search` is always avail
 
 **Notes**: Queries the ClinicalTrials.gov v2 API (NIH registry of 400K+ studies). Returns trial registrations as typed data (status, phase, sponsor, conditions, interventions, results availability); read the full record via `scrape_page` on the returned `url`. Discovery + primary-source retrieval only — not medical advice.
 
+### ecosyste.ms (Awesome-List Discovery)
+
+Backs `awesome_list_search`. Works **keyless** — the tool is always available at a shared "anonymous" rate-limit tier. Setting a contact email opts into ecosyste.ms's "polite pool" — a real rate-limit increase, free, no registration.
+
+**Step 1**: No sign-up needed. Set a contact email to join the polite pool.
+
+**Step 2**: Configure (optional)
+
+```bash
+export ECOSYSTEMS_EMAIL=you@example.com
+```
+
+Falls back to `OPENALEX_EMAIL` when unset. You can also register a free API key at [ecosyste.ms/login](https://ecosyste.ms/login) and set `ECOSYSTEMS_API_KEY` — it's sent as an `Authorization: Bearer` header and never logged — but per ecosyste.ms's published pricing, key-based auth only raises your rate-limit tier on their paid Develop/Scale plans, not the free self-service keys issued at login. `ECOSYSTEMS_EMAIL` is the mechanism that actually raises your limit today.
+
+**Notes**: Without either set, `awesome_list_search` works exactly the same — just at the shared anonymous rate limit.
+
 ### Internet Archive — Save Page Now (Optional, for `archive_source`)
 
 The `archive_source` tool triggers an Internet Archive Save Page Now (SPN) capture. It works **keyless** by default — no registration is required. An optional S3-style key pair raises the rate limit and improves capture reliability for high-volume use.

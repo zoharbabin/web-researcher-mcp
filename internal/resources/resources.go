@@ -124,7 +124,7 @@ func registerResources(srv *mcp.Server, metricsCollector *metrics.Collector, ses
 	srv.AddResource(&mcp.Resource{
 		URI:         "stats://providers",
 		Name:        "Configured Providers",
-		Description: "Every provider currently configured and available, with its capability type (web, patent, academic, filing, legal, econ, clinical, answer, structured)",
+		Description: "Every provider currently configured and available, with its capability type (web, patent, academic, filing, legal, econ, clinical, awesome, local, answer, structured)",
 		MIMEType:    "application/json",
 	}, func(_ context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 		jsonBytes, _ := json.MarshalIndent(map[string]any{"providers": providers}, "", "  ")

@@ -54,12 +54,23 @@ type AwesomeListResult struct {
 // provider names.
 var SupportedAwesomeListProviders = []string{"ecosystems"}
 
+// AwesomeListProviderConfig holds awesome-list provider auth.
+type AwesomeListProviderConfig struct {
+	// EcosystemsAPIKey is optional; sent for forward compatibility, but per
+	// ecosyste.ms's published pricing it's a no-op on the Free plan (key auth
+	// only activates on paid Develop/Scale plans).
+	EcosystemsAPIKey string
+	// EcosystemsEmail is optional; opts into ecosyste.ms's "polite pool" via
+	// mailto=, a verified rate-limit increase on the Free plan.
+	EcosystemsEmail string
+}
+
 // NewAwesomeListProviderByName constructs an awesome-list provider.
-// ecosyste.ms is keyless, so it always constructs.
-func NewAwesomeListProviderByName(name string, deps Deps) AwesomeListProvider {
+// ecosyste.ms is keyless, so it always constructs regardless of cfg.
+func NewAwesomeListProviderByName(name string, cfg AwesomeListProviderConfig, deps Deps) AwesomeListProvider {
 	switch name {
 	case "ecosystems":
-		return NewEcosystemsAwesomeProvider(deps)
+		return NewEcosystemsAwesomeProvider(cfg.EcosystemsAPIKey, cfg.EcosystemsEmail, deps)
 	}
 	return nil
 }
@@ -67,14 +78,14 @@ func NewAwesomeListProviderByName(name string, deps Deps) AwesomeListProvider {
 // AvailableAwesomeListProviders builds the awesome-list providers, each with
 // its own circuit breaker (parity with the other structured-domain
 // constructors).
-func AvailableAwesomeListProviders(deps Deps) map[string]AwesomeListProvider {
+func AvailableAwesomeListProviders(cfg AwesomeListProviderConfig, deps Deps) map[string]AwesomeListProvider {
 	providers := make(map[string]AwesomeListProvider)
 	for _, name := range SupportedAwesomeListProviders {
 		provDeps := Deps{
 			HTTPClient: deps.HTTPClient,
 			Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
 		}
-		if p := NewAwesomeListProviderByName(name, provDeps); p != nil {
+		if p := NewAwesomeListProviderByName(name, cfg, provDeps); p != nil {
 			providers[name] = p
 		}
 	}

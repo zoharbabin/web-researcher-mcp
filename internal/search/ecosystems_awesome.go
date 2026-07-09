@@ -16,7 +16,12 @@ import (
 // ecosyste.ms Awesome API: a structured index of community-curated
 // "awesome-*" lists (GitHub topic → curated repositories), each carrying
 // stargazer count, curated-entry count, topics, and last-sync freshness.
-// Keyless and free.
+// Keyless and free at the shared "common" pool. An optional contact email
+// opts into the "polite" pool (verified: 5,000 → 15,000 req/period) — see
+// ecosyste.ms/api. An optional API key is also sent, but per ecosyste.ms's
+// published pricing (ecosyste.ms/pricing) key-based auth only takes effect
+// on the paid Develop/Scale plans, not the Free plan self-service keys are
+// issued under — it's a no-op today, kept for forward compatibility.
 //
 // Verified contract (2026):
 //   - topic:  GET /api/v1/topics/{slug}
@@ -27,13 +32,18 @@ import (
 //     repository:{full_name, archived, stargazers_count, topics, …}}, …]
 //     no-match is a 200 with an empty array.
 type EcosystemsAwesomeProvider struct {
+	apiKey  string
+	email   string
 	baseURL string
 	deps    Deps
 }
 
-// NewEcosystemsAwesomeProvider creates the provider. No key required.
-func NewEcosystemsAwesomeProvider(deps Deps) *EcosystemsAwesomeProvider {
+// NewEcosystemsAwesomeProvider creates the provider. apiKey and email may
+// both be "" (keyless — works at the shared "common" rate limit).
+func NewEcosystemsAwesomeProvider(apiKey, email string, deps Deps) *EcosystemsAwesomeProvider {
 	return &EcosystemsAwesomeProvider{
+		apiKey:  apiKey,
+		email:   email,
 		baseURL: "https://awesome.ecosyste.ms/api/v1",
 		deps:    deps,
 	}
@@ -77,6 +87,9 @@ func (e *EcosystemsAwesomeProvider) doSearch(ctx context.Context, params Awesome
 	q := url.Values{}
 	q.Set("topic", topic)
 	q.Set("per_page", strconv.Itoa(num))
+	if e.email != "" {
+		q.Set("mailto", e.email)
+	}
 
 	body, err := e.get(ctx, "/lists?"+q.Encode())
 	if err != nil {
@@ -155,6 +168,9 @@ func (e *EcosystemsAwesomeProvider) get(ctx context.Context, path string) ([]byt
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
+	if e.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+e.apiKey) // never logged
+	}
 	resp, err := e.deps.HTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("ecosystems: request failed: %w", err)
