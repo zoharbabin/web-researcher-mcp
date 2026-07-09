@@ -54,15 +54,26 @@ func ValidateLens(lens *Lens, source string) error {
 		return fmt.Errorf("lens %q (%s): goggle must be an https:// URL", lens.Name, source)
 	}
 	for i, d := range lens.Domains {
-		if strings.TrimSpace(d) == "" {
-			return fmt.Errorf("lens %q (%s): domains[%d] is empty", lens.Name, source, i)
+		if err := ValidateSiteDomain(d); err != nil {
+			return fmt.Errorf("lens %q (%s): domains[%d]: %w", lens.Name, source, i, err)
 		}
-		// A site: operator value: a host, optionally with a path prefix
-		// (e.g. "github.com/advisories" is a valid path-scoped site: filter).
-		// Reject a scheme or whitespace — those break the injected `site:` operator.
-		if strings.Contains(d, "://") || strings.ContainsAny(d, " \t") {
-			return fmt.Errorf("lens %q (%s): domain %q must be a bare host or host/path (e.g. \"example.com\" or \"example.com/section\"), not a URL with a scheme", lens.Name, source, d)
-		}
+	}
+	return nil
+}
+
+// ValidateSiteDomain checks a single site: operator value — a bare host,
+// optionally with a path prefix (e.g. "github.com/advisories" is a valid
+// path-scoped site: filter). Rejects a scheme or whitespace, since either
+// would break the injected `site:` operator once concatenated into a query
+// string. Shared by lens domain validation (ValidateLens) and the ad hoc
+// `sites` param on web_search (#374), so both paths reject a malformed entry
+// with the same message instead of one being silently permissive.
+func ValidateSiteDomain(d string) error {
+	if strings.TrimSpace(d) == "" {
+		return fmt.Errorf("must not be empty")
+	}
+	if strings.Contains(d, "://") || strings.ContainsAny(d, " \t") {
+		return fmt.Errorf("%q must be a bare host or host/path (e.g. \"example.com\" or \"example.com/section\"), not a URL with a scheme", d)
 	}
 	return nil
 }
@@ -134,19 +145,33 @@ func (lr *LensRegistry) List() []string {
 }
 
 func (lr *LensRegistry) BuildSiteQuery(query string, lens *Lens) string {
-	if len(lens.Domains) == 0 {
+	return BuildSitesQuery(query, lens.Domains)
+}
+
+// MaxSiteDomains caps how many domains a single OR-joined site: group may
+// contain — shared by lens domain injection (BuildSiteQuery) and the ad hoc
+// `sites` param on web_search (#374), so both paths bound query length/
+// complexity identically instead of one being unbounded.
+const MaxSiteDomains = 10
+
+// BuildSitesQuery appends an OR-joined group of site: operators — one per
+// domain, capped at MaxSiteDomains — to query. Returns query unchanged when
+// domains is empty. This is the shared OR-join primitive behind both
+// LensRegistry.BuildSiteQuery (file-defined lenses) and the `sites []string`
+// param on web_search (ad hoc, caller-supplied domains, #374).
+func BuildSitesQuery(query string, domains []string) string {
+	if len(domains) == 0 {
 		return query
 	}
 
-	// Use up to 10 domains in site: operators
-	maxDomains := 10
-	if len(lens.Domains) < maxDomains {
-		maxDomains = len(lens.Domains)
+	maxDomains := MaxSiteDomains
+	if len(domains) < maxDomains {
+		maxDomains = len(domains)
 	}
 
 	siteOps := make([]string, maxDomains)
 	for i := 0; i < maxDomains; i++ {
-		siteOps[i] = "site:" + lens.Domains[i]
+		siteOps[i] = "site:" + domains[i]
 	}
 
 	return query + " (" + strings.Join(siteOps, " OR ") + ")"

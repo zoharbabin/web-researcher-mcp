@@ -419,6 +419,160 @@ func TestWebSearchLensOverridesSite(t *testing.T) {
 	}
 }
 
+// TestWebSearchSitesSingle verifies a single-domain sites param OR-joins into
+// the same site: operator shape BuildSitesQuery produces (#374).
+func TestWebSearchSitesSingle(t *testing.T) {
+	ctx := context.Background()
+	cap := &captureProvider{}
+	deps := setupTestDeps()
+	deps.Search = cap
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "web_search",
+		Arguments: map[string]any{"query": "golang", "sites": []string{"stackoverflow.com"}},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("unexpected error: %s", res.Content[0].(*mcp.TextContent).Text)
+	}
+	if len(cap.last.Sites) != 1 || cap.last.Sites[0] != "stackoverflow.com" {
+		t.Errorf("expected Sites=[stackoverflow.com], got %v", cap.last.Sites)
+	}
+}
+
+// TestWebSearchSitesMultipleORJoined verifies multiple domains land in
+// WebSearchParams.Sites and buildQuery OR-joins them into the query text.
+func TestWebSearchSitesMultipleORJoined(t *testing.T) {
+	ctx := context.Background()
+	cap := &captureProvider{}
+	deps := setupTestDeps()
+	deps.Search = cap
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "web_search",
+		Arguments: map[string]any{"query": "golang", "sites": []string{"stackoverflow.com", "github.com"}},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("unexpected error: %s", res.Content[0].(*mcp.TextContent).Text)
+	}
+	if len(cap.last.Sites) != 2 {
+		t.Fatalf("expected 2 sites, got %v", cap.last.Sites)
+	}
+}
+
+// TestWebSearchSiteAndSitesRejected guards the mutual-exclusivity contract:
+// site and sites are alternative ways to scope a search, never both at once.
+func TestWebSearchSiteAndSitesRejected(t *testing.T) {
+	ctx := context.Background()
+	deps := setupTestDeps()
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "web_search",
+		Arguments: map[string]any{"query": "golang", "site": "example.com", "sites": []string{"github.com"}},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected error when combining site and sites")
+	}
+}
+
+// TestWebSearchSitesMalformedRejected guards ValidateSiteDomain enforcement:
+// a scheme or whitespace in a sites entry would break the injected site:
+// operator, so it must be rejected before reaching a provider.
+func TestWebSearchSitesMalformedRejected(t *testing.T) {
+	ctx := context.Background()
+	deps := setupTestDeps()
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "web_search",
+		Arguments: map[string]any{"query": "golang", "sites": []string{"https://example.com"}},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected error for a sites entry with a scheme")
+	}
+}
+
+// TestWebSearchSitesCapEnforced guards MaxSiteDomains: more than the cap must
+// be rejected outright rather than silently truncated, so a caller notices
+// instead of getting a narrower search than they asked for.
+func TestWebSearchSitesCapEnforced(t *testing.T) {
+	ctx := context.Background()
+	deps := setupTestDeps()
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	tooMany := make([]string, search.MaxSiteDomains+1)
+	for i := range tooMany {
+		tooMany[i] = fmt.Sprintf("example%d.com", i)
+	}
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "web_search",
+		Arguments: map[string]any{"query": "golang", "sites": tooMany},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected error when sites exceeds MaxSiteDomains")
+	}
+}
+
+// TestWebSearchLensOverridesSites mirrors TestWebSearchLensOverridesSite for
+// the new sites param: a lens must clear Sites too, not just Site.
+func TestWebSearchLensOverridesSites(t *testing.T) {
+	ctx := context.Background()
+	if err := search.GetLensRegistry().LoadEmbedded(); err != nil {
+		t.Fatalf("load embedded lenses: %v", err)
+	}
+	cap := &captureProvider{}
+	deps := setupTestDeps()
+	deps.Search = cap
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "web_search",
+		Arguments: map[string]any{"query": "ransomware", "lens": "security", "sites": []string{"example.com"}},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("unexpected error: %s", res.Content[0].(*mcp.TextContent).Text)
+	}
+	if len(cap.last.Sites) != 0 {
+		t.Errorf("lens must clear params.Sites, got %v", cap.last.Sites)
+	}
+	if strings.Contains(cap.last.Query, "example.com") {
+		t.Errorf("the overridden sites filter must not appear, got %q", cap.last.Query)
+	}
+}
+
 func TestWebSearchLongQuery(t *testing.T) {
 	ctx := context.Background()
 	deps := setupTestDeps()

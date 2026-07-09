@@ -920,12 +920,49 @@ func TestBuildQuery(t *testing.T) {
 	}{
 		{WebSearchParams{Query: "hello"}, "hello"},
 		{WebSearchParams{Query: "hello", Site: "example.com"}, "hello site:example.com"},
+		{WebSearchParams{Query: "hello", Sites: []string{"example.com"}}, "hello (site:example.com)"},
+		{WebSearchParams{Query: "hello", Sites: []string{"example.com", "github.com"}}, "hello (site:example.com OR site:github.com)"},
+		// Site takes precedence when both are set (the tool layer rejects this
+		// combination before it reaches here; this only pins buildQuery's own
+		// fallback order in case that guard is ever bypassed).
+		{WebSearchParams{Query: "hello", Site: "example.com", Sites: []string{"github.com"}}, "hello site:example.com"},
 	}
 	for _, tt := range tests {
 		got := buildQuery(tt.params)
 		if got != tt.expected {
 			t.Errorf("buildQuery(%+v) = %q, want %q", tt.params, got, tt.expected)
 		}
+	}
+}
+
+func TestBuildSitesQuery(t *testing.T) {
+	tests := []struct {
+		query    string
+		domains  []string
+		expected string
+	}{
+		{"hello", nil, "hello"},
+		{"hello", []string{}, "hello"},
+		{"hello", []string{"example.com"}, "hello (site:example.com)"},
+		{"hello", []string{"example.com", "github.com"}, "hello (site:example.com OR site:github.com)"},
+	}
+	for _, tt := range tests {
+		got := BuildSitesQuery(tt.query, tt.domains)
+		if got != tt.expected {
+			t.Errorf("BuildSitesQuery(%q, %v) = %q, want %q", tt.query, tt.domains, got, tt.expected)
+		}
+	}
+
+	// Cap enforcement: more than MaxSiteDomains domains still produces a valid
+	// query using only the first MaxSiteDomains entries.
+	many := make([]string, MaxSiteDomains+5)
+	for i := range many {
+		many[i] = fmt.Sprintf("d%d.com", i)
+	}
+	got := BuildSitesQuery("hello", many)
+	count := strings.Count(got, "site:")
+	if count != MaxSiteDomains {
+		t.Errorf("BuildSitesQuery with %d domains produced %d site: operators, want %d", len(many), count, MaxSiteDomains)
 	}
 }
 

@@ -326,6 +326,9 @@ func buildWebHints(input webSearchInput, provider string, alternatives []string)
 	if input.Site != "" {
 		filters["site"] = input.Site
 	}
+	if len(input.Sites) > 0 {
+		filters["sites"] = strings.Join(input.Sites, ",")
+	}
 	if input.Lens != "" {
 		filters["lens"] = input.Lens
 	}
