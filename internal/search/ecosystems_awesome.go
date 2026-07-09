@@ -168,6 +168,10 @@ func (e *EcosystemsAwesomeProvider) get(ctx context.Context, path string) ([]byt
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
+	// ecosyste.ms's edge WAF 429s Go's default User-Agent regardless of actual
+	// quota remaining; any descriptive UA passes. mailto is already sent as a
+	// query param (doSearch), so it isn't repeated here.
+	req.Header.Set("User-Agent", "web-researcher-mcp/1.0")
 	if e.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+e.apiKey) // never logged
 	}

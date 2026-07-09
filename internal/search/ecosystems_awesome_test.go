@@ -64,6 +64,22 @@ func TestEcosystemsAwesomeSendsMailtoWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestEcosystemsAwesomeSendsDescriptiveUserAgent(t *testing.T) {
+	// ecosyste.ms's edge WAF 429s Go's default "Go-http-client/*" User-Agent
+	// regardless of quota remaining; a descriptive UA is required to pass.
+	var gotUA string
+	p := newEcosystemsTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		gotUA = r.Header.Get("User-Agent")
+		w.Write([]byte(`[]`))
+	})
+	if _, err := p.AwesomeLists(context.Background(), AwesomeListSearchParams{Topic: "x"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.HasPrefix(gotUA, "web-researcher-mcp/") {
+		t.Errorf("User-Agent = %q, want a descriptive UA (not Go's default)", gotUA)
+	}
+}
+
 func TestEcosystemsAwesomeOmitsMailtoWhenUnset(t *testing.T) {
 	p := newEcosystemsTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Has("mailto") {
