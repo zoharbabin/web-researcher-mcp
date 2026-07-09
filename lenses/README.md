@@ -10,8 +10,7 @@ A **lens** restricts a `web_search` to a curated set of trusted, authority-weigh
   "description": "One line: what this lens scopes search to.",
   "domains": ["law.cornell.edu", "courtlistener.com", "supremecourt.gov"],
   "cx": "",
-  "goggle": "",
-  "routing": ""
+  "goggle": ""
 }
 ```
 
@@ -22,7 +21,6 @@ A **lens** restricts a `web_search` to a curated set of trusted, authority-weigh
 | `domains` | one of `domains`/`cx`/`goggle` | Hosts injected as `site:` operators (up to 10 used). A host, optionally path-scoped (`github.com/advisories`). No scheme, no spaces. |
 | `cx` | one of `domains`/`cx`/`goggle` | A dedicated Google Programmable Search Engine id. When set, the lens skips `site:` operator injection — the PSE engine is expected to already scope results to the intended domains. The cx value itself must be configured as the global `GOOGLE_CUSTOM_SEARCH_ID`; this field is a documentation signal, not a per-request routing override. |
 | `goggle` | one of `domains`/`cx`/`goggle` | A Brave Goggle URL (`https://` required). When set, the Goggle is passed to the Brave provider for server-side re-ranking. Use with `SEARCH_PROVIDER=brave` or a routing config that includes Brave. See [`programming-goggle.json`](programming-goggle.json) for an example. |
-| `routing` | no | Optional provider routing hint. |
 
 A lens **must** define at least one of `domains`, `cx`, or `goggle` — otherwise it never restricts a search. This is enforced by `search.ValidateLens` (`internal/search/lenses.go`); an invalid lens fails `make validate-lenses`. For custom lenses loaded via `CUSTOM_LENSES_PATH`, an invalid lens also fails startup in HTTP mode (`PORT` set); in STDIO mode it is a warning.
 
