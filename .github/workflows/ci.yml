@@ -92,7 +92,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.25.11"
+          go-version: "1.25.12"
           cache: true
 
       - name: Check formatting (gofmt -s)
@@ -122,7 +122,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.25.11"
+          go-version: "1.25.12"
           cache: true
       - name: Verify tool docs/annotations match the registry
         run: |
@@ -142,7 +142,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.25.11"
+          go-version: "1.25.12"
           cache: true
       - uses: actions/setup-python@v6
         with:
@@ -281,7 +281,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go-version: ["1.25.11"]
+        go-version: ["1.25.12"]
     steps:
       - uses: actions/checkout@v7
 
@@ -294,7 +294,7 @@ jobs:
         run: go test -race -coverprofile=coverage.out -covermode=atomic -count=1 ./...
 
       - name: Upload coverage to Codecov
-        if: matrix.go-version == '1.25.11'
+        if: matrix.go-version == '1.25.12'
         uses: codecov/codecov-action@v7
         with:
           files: ./coverage.out
@@ -304,7 +304,7 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload coverage artifact
-        if: matrix.go-version == '1.25.11'
+        if: matrix.go-version == '1.25.12'
         uses: actions/upload-artifact@v7
         with:
           name: coverage
@@ -315,7 +315,7 @@ jobs:
   # When code=true the matrix job ran; when code=false it was skipped (docs PR).
   # Either way this job passes so auto-merge isn't stuck.
   test-gate:
-    name: 🧪 Test · Go 1.25.11
+    name: 🧪 Test · Go 1.25.12
     needs: [changes, test]
     if: always()
     runs-on: ubuntu-latest
@@ -344,7 +344,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.25.11"
+          go-version: "1.25.12"
           cache: true
 
       # The -run alternation MUST match the test name prefixes (TestHTTP_/TestOAuth_)
@@ -394,7 +394,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.25.11"
+          go-version: "1.25.12"
           cache: true
 
       - name: Build binary
@@ -432,7 +432,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.25.11"
+          go-version: "1.25.12"
           cache: true
 
       # govulncheck: known CVEs in module dependencies.
@@ -462,7 +462,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.25.11"
+          go-version: "1.25.12"
           cache: true
 
       - uses: actions/setup-python@v6
