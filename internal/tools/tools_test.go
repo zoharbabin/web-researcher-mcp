@@ -217,6 +217,17 @@ func (m *mockTrialProvider) Trials(_ context.Context, _ search.TrialSearchParams
 	return []search.TrialResult{{NCTID: "NCT00000000", Title: "Mock Trial", Status: "COMPLETED", Phases: []string{"PHASE1"}, Conditions: []string{"Covid19"}, Interventions: []string{"MockDrug"}, Sponsor: "Mock Sponsor", StartDate: "2024-01-01", HasResults: true, URL: "https://clinicaltrials.gov/study/NCT00000000", Source: "clinicaltrials"}}, nil
 }
 
+// mockAwesomeListProvider implements AwesomeListProvider for awesome_list_search.
+type mockAwesomeListProvider struct{}
+
+func (m *mockAwesomeListProvider) Name() string { return "ecosystems" }
+func (m *mockAwesomeListProvider) Metadata() search.ProviderMeta {
+	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "free", Description: "mock ecosystems"}
+}
+func (m *mockAwesomeListProvider) AwesomeLists(_ context.Context, _ search.AwesomeListSearchParams) ([]search.AwesomeListResult, error) {
+	return []search.AwesomeListResult{{Name: "awesome-osint", FullName: "jivoi/awesome-osint", URL: "https://github.com/jivoi/awesome-osint", Description: "A curated list of amazingly awesome OSINT", ProjectsCount: 1431, Stars: 27176, Topics: []string{"osint", "awesome-list"}, LastSyncedAt: "2026-07-02T07:00:27.731Z", Source: "ecosystems"}}, nil
+}
+
 // mockContextSearcherProvider wraps mockProvider and additionally implements
 // ContextSearcher so the search_and_scrape tool exercises the fast-path branch.
 type mockContextSearcherProvider struct {
@@ -273,24 +284,26 @@ func setupTestDeps() Dependencies {
 	caseProv := &mockCaseProvider{}
 	econ := &mockEconProvider{}
 	trial := &mockTrialProvider{}
+	awesome := &mockAwesomeListProvider{}
 	local := &mockLocalProvider{}
 	return Dependencies{
-		Cache:               cache.NewNoop(),
-		Search:              &mockProvider{},
-		AnswerProviders:     map[string]search.AnswerProvider{synth.Name(): synth},
-		StructuredProviders: map[string]search.StructuredProvider{synth.Name(): synth},
-		AcademicProviders:   map[string]search.AcademicProvider{academic.Name(): academic},
-		FilingProviders:     map[string]search.FilingProvider{filing.Name(): filing},
-		CaseProviders:       map[string]search.CaseProvider{caseProv.Name(): caseProv},
-		EconProviders:       map[string]search.EconProvider{econ.Name(): econ},
-		TrialProviders:      map[string]search.TrialProvider{trial.Name(): trial},
-		LocalProviders:      map[string]search.LocalProvider{local.Name(): local},
-		Scraper:             scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2}),
-		Content:             content.NewProcessor(),
-		Sessions:            func() session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
-		Metrics:             metrics.NewCollector(),
-		Auditor:             audit.NewNoop(),
-		Logger:              slog.Default(),
+		Cache:                cache.NewNoop(),
+		Search:               &mockProvider{},
+		AnswerProviders:      map[string]search.AnswerProvider{synth.Name(): synth},
+		StructuredProviders:  map[string]search.StructuredProvider{synth.Name(): synth},
+		AcademicProviders:    map[string]search.AcademicProvider{academic.Name(): academic},
+		FilingProviders:      map[string]search.FilingProvider{filing.Name(): filing},
+		CaseProviders:        map[string]search.CaseProvider{caseProv.Name(): caseProv},
+		EconProviders:        map[string]search.EconProvider{econ.Name(): econ},
+		TrialProviders:       map[string]search.TrialProvider{trial.Name(): trial},
+		AwesomeListProviders: map[string]search.AwesomeListProvider{awesome.Name(): awesome},
+		LocalProviders:       map[string]search.LocalProvider{local.Name(): local},
+		Scraper:              scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2}),
+		Content:              content.NewProcessor(),
+		Sessions:             func() session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
+		Metrics:              metrics.NewCollector(),
+		Auditor:              audit.NewNoop(),
+		Logger:               slog.Default(),
 		// Wire the full superset of optional regulated deps so every
 		// conditionally-registered tool is visible to the CI drift tests
 		// (TestToolsDocMatchesRegistry / TestAllToolsHaveAnnotations /

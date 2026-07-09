@@ -85,33 +85,35 @@ func buildDeps() tools.Dependencies {
 	caseProv := &mockCaseProvider{}
 	econ := &mockEconProvider{}
 	trial := &mockTrialProvider{}
+	awesome := &mockAwesomeListProvider{}
 	local := &mockLocalProvider{}
 
 	mgr, _ := session.NewManager(session.Config{MaxSessions: 100})
 
 	return tools.Dependencies{
-		Cache:               cache.NewNoop(),
-		Search:              &mockProvider{},
-		SearchProviders:     map[string]search.Provider{"mock": &mockProvider{}},
-		PatentProviders:     map[string]search.PatentProvider{},
-		AcademicProviders:   map[string]search.AcademicProvider{academic.Name(): academic},
-		FilingProviders:     map[string]search.FilingProvider{filing.Name(): filing},
-		CaseProviders:       map[string]search.CaseProvider{caseProv.Name(): caseProv},
-		EconProviders:       map[string]search.EconProvider{econ.Name(): econ},
-		TrialProviders:      map[string]search.TrialProvider{trial.Name(): trial},
-		LocalProviders:      map[string]search.LocalProvider{local.Name(): local},
-		AnswerProviders:     map[string]search.AnswerProvider{synth.Name(): synth},
-		StructuredProviders: map[string]search.StructuredProvider{synth.Name(): synth},
-		Scraper:             scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2}),
-		Content:             content.NewProcessor(),
-		Sessions:            mgr,
-		Metrics:             metrics.NewCollector(),
-		Auditor:             audit.NewNoop(),
-		Logger:              slog.New(slog.NewTextHandler(os.Stderr, nil)),
-		Consent:             consent.NewStoreManager(persist.NewMemoryStore()),
-		UserAnalytics:       useranalytics.NewStoreRecorder(persist.NewMemoryStore()),
-		Memory:              memory.NewStore(persist.NewMemoryStore(), 0),
-		Workspaces:          workspace.NewStore(persist.NewMemoryStore(), 0),
+		Cache:                cache.NewNoop(),
+		Search:               &mockProvider{},
+		SearchProviders:      map[string]search.Provider{"mock": &mockProvider{}},
+		PatentProviders:      map[string]search.PatentProvider{},
+		AcademicProviders:    map[string]search.AcademicProvider{academic.Name(): academic},
+		FilingProviders:      map[string]search.FilingProvider{filing.Name(): filing},
+		CaseProviders:        map[string]search.CaseProvider{caseProv.Name(): caseProv},
+		EconProviders:        map[string]search.EconProvider{econ.Name(): econ},
+		TrialProviders:       map[string]search.TrialProvider{trial.Name(): trial},
+		AwesomeListProviders: map[string]search.AwesomeListProvider{awesome.Name(): awesome},
+		LocalProviders:       map[string]search.LocalProvider{local.Name(): local},
+		AnswerProviders:      map[string]search.AnswerProvider{synth.Name(): synth},
+		StructuredProviders:  map[string]search.StructuredProvider{synth.Name(): synth},
+		Scraper:              scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2}),
+		Content:              content.NewProcessor(),
+		Sessions:             mgr,
+		Metrics:              metrics.NewCollector(),
+		Auditor:              audit.NewNoop(),
+		Logger:               slog.New(slog.NewTextHandler(os.Stderr, nil)),
+		Consent:              consent.NewStoreManager(persist.NewMemoryStore()),
+		UserAnalytics:        useranalytics.NewStoreRecorder(persist.NewMemoryStore()),
+		Memory:               memory.NewStore(persist.NewMemoryStore(), 0),
+		Workspaces:           workspace.NewStore(persist.NewMemoryStore(), 0),
 	}
 }
 
@@ -205,6 +207,16 @@ func (m *mockTrialProvider) Metadata() search.ProviderMeta {
 }
 func (m *mockTrialProvider) Trials(_ context.Context, _ search.TrialSearchParams) ([]search.TrialResult, error) {
 	return []search.TrialResult{{NCTID: "NCT00000000", Title: "Mock Trial", Source: "clinicaltrials"}}, nil
+}
+
+type mockAwesomeListProvider struct{}
+
+func (m *mockAwesomeListProvider) Name() string { return "ecosystems" }
+func (m *mockAwesomeListProvider) Metadata() search.ProviderMeta {
+	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "free"}
+}
+func (m *mockAwesomeListProvider) AwesomeLists(_ context.Context, _ search.AwesomeListSearchParams) ([]search.AwesomeListResult, error) {
+	return []search.AwesomeListResult{{Name: "awesome-osint", URL: "https://github.com/jivoi/awesome-osint", Source: "ecosystems"}}, nil
 }
 
 type mockLocalProvider struct{}

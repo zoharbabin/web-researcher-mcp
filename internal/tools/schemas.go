@@ -987,6 +987,34 @@ var clinicalSearchOutputSchema = map[string]any{
 	},
 }
 
+var awesomeListSearchOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"query":       map[string]any{"type": "string"},
+		"resultCount": map[string]any{"type": "integer"},
+		"provider":    map[string]any{"type": "string", "description": "Which awesome-list provider answered (ecosystems)."},
+		"hints":       map[string]any{"type": "object"},
+		"trust":       trustUntrustedExternal,
+		"lists": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"name":          map[string]any{"type": "string"},
+					"fullName":      map[string]any{"type": "string", "description": "owner/repo of the list's source repository."},
+					"url":           map[string]any{"type": "string", "description": "List page; scrape_page for the full curated list."},
+					"description":   map[string]any{"type": "string"},
+					"projectsCount": map[string]any{"type": "integer", "description": "Number of curated entries in the list."},
+					"stars":         map[string]any{"type": "integer", "description": "GitHub stars on the list's repository."},
+					"topics":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"lastSyncedAt":  map[string]any{"type": "string", "description": "When ecosyste.ms last synced this list from its repository."},
+					"source":        map[string]any{"type": "string"},
+				},
+			},
+		},
+	},
+}
+
 var econSearchOutputSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{

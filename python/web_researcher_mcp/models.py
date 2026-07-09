@@ -252,6 +252,56 @@ class AuditBibliographyResponse:
         )
 
 @dataclass
+class AwesomeListSearchList:
+    description: Optional[str] = None
+    fullName: Optional[str] = None
+    lastSyncedAt: Optional[str] = None
+    name: Optional[str] = None
+    projectsCount: Optional[int] = None
+    source: Optional[str] = None
+    stars: Optional[int] = None
+    topics: list[str] = field(default_factory=list)
+    url: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "AwesomeListSearchList | None":
+        if d is None:
+            return None
+        return cls(
+            description=d.get('description'),
+            fullName=d.get('fullName'),
+            lastSyncedAt=d.get('lastSyncedAt'),
+            name=d.get('name'),
+            projectsCount=d.get('projectsCount'),
+            source=d.get('source'),
+            stars=d.get('stars'),
+            topics=list(d.get('topics') or []),
+            url=d.get('url'),
+        )
+
+@dataclass
+class AwesomeListSearchResponse:
+    hints: dict[str, Any] = field(default_factory=dict)
+    lists: list[AwesomeListSearchList] = field(default_factory=list)
+    provider: Optional[str] = None
+    query: Optional[str] = None
+    resultCount: Optional[int] = None
+    trust: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "AwesomeListSearchResponse | None":
+        if d is None:
+            return None
+        return cls(
+            hints=dict(d.get('hints') or {}),
+            lists=[AwesomeListSearchList.from_dict(i) for i in (d.get('lists') or [])],
+            provider=d.get('provider'),
+            query=d.get('query'),
+            resultCount=d.get('resultCount'),
+            trust=d.get('trust'),
+        )
+
+@dataclass
 class Body:
     family: Optional[str] = None
     origin: Optional[str] = None
