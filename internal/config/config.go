@@ -168,10 +168,15 @@ type SearchConfig struct {
 	BrandFetchAPIKey   string // BRANDFETCH_API_KEY — Brand API + Context API
 	BrandFetchClientID string // BRANDFETCH_CLIENT_ID — logo CDN requests
 
-	// EcosystemsAPIKey is optional for awesome_list_search. ecosyste.ms's
-	// Awesome API works keyless at a shared "anonymous" rate limit; a
-	// registered key raises the caller's tier.
+	// EcosystemsAPIKey is optional for awesome_list_search. ecosyste.ms's Free
+	// plan (which self-service keys are issued under) uses the shared
+	// "common"/"polite" pools, not API-key auth — API-key auth only takes
+	// effect on ecosyste.ms's paid Develop/Scale plans. The key is still sent
+	// (forward-compatible; a no-op on the Free plan). EcosystemsEmail opts
+	// into the "polite pool" (mailto= — a real, verified rate-limit increase
+	// on the Free plan) and falls back to OpenAlexEmail when unset.
 	EcosystemsAPIKey string // ECOSYSTEMS_API_KEY
+	EcosystemsEmail  string // falls back to OpenAlexEmail
 }
 
 type OAuthConfig struct {
@@ -370,6 +375,7 @@ func Load() (*Config, error) {
 			BrandFetchAPIKey:      os.Getenv("BRANDFETCH_API_KEY"),
 			BrandFetchClientID:    os.Getenv("BRANDFETCH_CLIENT_ID"),
 			EcosystemsAPIKey:      os.Getenv("ECOSYSTEMS_API_KEY"),
+			EcosystemsEmail:       envOrDefault("ECOSYSTEMS_EMAIL", os.Getenv("OPENALEX_EMAIL")),
 		},
 		Port: port,
 		OAuth: OAuthConfig{

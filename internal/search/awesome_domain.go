@@ -56,9 +56,13 @@ var SupportedAwesomeListProviders = []string{"ecosystems"}
 
 // AwesomeListProviderConfig holds awesome-list provider auth.
 type AwesomeListProviderConfig struct {
-	// EcosystemsAPIKey is optional; ecosyste.ms works keyless at a shared
-	// "anonymous" rate limit, and a registered key raises it.
+	// EcosystemsAPIKey is optional; sent for forward compatibility, but per
+	// ecosyste.ms's published pricing it's a no-op on the Free plan (key auth
+	// only activates on paid Develop/Scale plans).
 	EcosystemsAPIKey string
+	// EcosystemsEmail is optional; opts into ecosyste.ms's "polite pool" via
+	// mailto=, a verified rate-limit increase on the Free plan.
+	EcosystemsEmail string
 }
 
 // NewAwesomeListProviderByName constructs an awesome-list provider.
@@ -66,7 +70,7 @@ type AwesomeListProviderConfig struct {
 func NewAwesomeListProviderByName(name string, cfg AwesomeListProviderConfig, deps Deps) AwesomeListProvider {
 	switch name {
 	case "ecosystems":
-		return NewEcosystemsAwesomeProvider(cfg.EcosystemsAPIKey, deps)
+		return NewEcosystemsAwesomeProvider(cfg.EcosystemsAPIKey, cfg.EcosystemsEmail, deps)
 	}
 	return nil
 }

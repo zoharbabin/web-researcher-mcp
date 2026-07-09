@@ -556,17 +556,19 @@ Backs `clinical_search`. Works **keyless** — `clinical_search` is always avail
 
 ### ecosyste.ms (Awesome-List Discovery)
 
-Backs `awesome_list_search`. Works **keyless** — the tool is always available at a shared "anonymous" rate-limit tier. An optional API key raises your caller's rate-limit tier.
+Backs `awesome_list_search`. Works **keyless** — the tool is always available at a shared "anonymous" rate-limit tier. Setting a contact email opts into ecosyste.ms's "polite pool" — a real rate-limit increase, free, no registration.
 
-**Step 1**: (Optional) Sign in with GitHub at [ecosyste.ms/login](https://ecosyste.ms/login) to get a free API key.
+**Step 1**: No sign-up needed. Set a contact email to join the polite pool.
 
 **Step 2**: Configure (optional)
 
 ```bash
-export ECOSYSTEMS_API_KEY=your-ecosystems-key
+export ECOSYSTEMS_EMAIL=you@example.com
 ```
 
-**Notes**: The key is sent as an `Authorization: Bearer` header and never logged. Without it, `awesome_list_search` works exactly the same — just at the shared anonymous rate limit.
+Falls back to `OPENALEX_EMAIL` when unset. You can also register a free API key at [ecosyste.ms/login](https://ecosyste.ms/login) and set `ECOSYSTEMS_API_KEY` — it's sent as an `Authorization: Bearer` header and never logged — but per ecosyste.ms's published pricing, key-based auth only raises your rate-limit tier on their paid Develop/Scale plans, not the free self-service keys issued at login. `ECOSYSTEMS_EMAIL` is the mechanism that actually raises your limit today.
+
+**Notes**: Without either set, `awesome_list_search` works exactly the same — just at the shared anonymous rate limit.
 
 ### Internet Archive — Save Page Now (Optional, for `archive_source`)
 

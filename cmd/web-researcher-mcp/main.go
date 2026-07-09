@@ -280,9 +280,12 @@ func main() {
 	trialProviders := search.AvailableTrialProviders(searchDeps)
 	// Awesome lists (ecosyste.ms, #375): keyless, so always built —
 	// awesome_list_search is part of the default tool surface. An optional
-	// API key raises the caller's rate-limit tier.
+	// contact email opts into the "polite pool" (verified rate-limit
+	// increase); the optional API key is a no-op on ecosyste.ms's Free plan
+	// (only paid plans activate key auth) but sent for forward compatibility.
 	awesomeListProviders := search.AvailableAwesomeListProviders(search.AwesomeListProviderConfig{
 		EcosystemsAPIKey: cfg.Search.EcosystemsAPIKey,
+		EcosystemsEmail:  cfg.Search.EcosystemsEmail,
 	}, searchDeps)
 
 	// Local place search (#259): Brave Local Search API. Requires BRAVE_API_KEY;
