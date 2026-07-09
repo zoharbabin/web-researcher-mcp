@@ -167,6 +167,11 @@ type SearchConfig struct {
 	// BrandFetch optional credentials for brand_research. Tool degrades gracefully when absent.
 	BrandFetchAPIKey   string // BRANDFETCH_API_KEY — Brand API + Context API
 	BrandFetchClientID string // BRANDFETCH_CLIENT_ID — logo CDN requests
+
+	// EcosystemsAPIKey is optional for awesome_list_search. ecosyste.ms's
+	// Awesome API works keyless at a shared "anonymous" rate limit; a
+	// registered key raises the caller's tier.
+	EcosystemsAPIKey string // ECOSYSTEMS_API_KEY
 }
 
 type OAuthConfig struct {
@@ -364,6 +369,7 @@ func Load() (*Config, error) {
 			IASecretKey:           os.Getenv("IA_SECRET_KEY"),
 			BrandFetchAPIKey:      os.Getenv("BRANDFETCH_API_KEY"),
 			BrandFetchClientID:    os.Getenv("BRANDFETCH_CLIENT_ID"),
+			EcosystemsAPIKey:      os.Getenv("ECOSYSTEMS_API_KEY"),
 		},
 		Port: port,
 		OAuth: OAuthConfig{

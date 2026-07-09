@@ -54,12 +54,19 @@ type AwesomeListResult struct {
 // provider names.
 var SupportedAwesomeListProviders = []string{"ecosystems"}
 
+// AwesomeListProviderConfig holds awesome-list provider auth.
+type AwesomeListProviderConfig struct {
+	// EcosystemsAPIKey is optional; ecosyste.ms works keyless at a shared
+	// "anonymous" rate limit, and a registered key raises it.
+	EcosystemsAPIKey string
+}
+
 // NewAwesomeListProviderByName constructs an awesome-list provider.
-// ecosyste.ms is keyless, so it always constructs.
-func NewAwesomeListProviderByName(name string, deps Deps) AwesomeListProvider {
+// ecosyste.ms is keyless, so it always constructs regardless of cfg.
+func NewAwesomeListProviderByName(name string, cfg AwesomeListProviderConfig, deps Deps) AwesomeListProvider {
 	switch name {
 	case "ecosystems":
-		return NewEcosystemsAwesomeProvider(deps)
+		return NewEcosystemsAwesomeProvider(cfg.EcosystemsAPIKey, deps)
 	}
 	return nil
 }
@@ -67,14 +74,14 @@ func NewAwesomeListProviderByName(name string, deps Deps) AwesomeListProvider {
 // AvailableAwesomeListProviders builds the awesome-list providers, each with
 // its own circuit breaker (parity with the other structured-domain
 // constructors).
-func AvailableAwesomeListProviders(deps Deps) map[string]AwesomeListProvider {
+func AvailableAwesomeListProviders(cfg AwesomeListProviderConfig, deps Deps) map[string]AwesomeListProvider {
 	providers := make(map[string]AwesomeListProvider)
 	for _, name := range SupportedAwesomeListProviders {
 		provDeps := Deps{
 			HTTPClient: deps.HTTPClient,
 			Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
 		}
-		if p := NewAwesomeListProviderByName(name, provDeps); p != nil {
+		if p := NewAwesomeListProviderByName(name, cfg, provDeps); p != nil {
 			providers[name] = p
 		}
 	}

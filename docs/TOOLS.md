@@ -1662,7 +1662,7 @@ Use `brand_research` when you need structured brand JSON. Use `brand-guidelines`
 
 ## Tool 30: `awesome_list_search`
 
-Search the **ecosyste.ms Awesome API** for community-curated "awesome-\*" lists on a GitHub topic — structured, filterable coverage of the awesome-list ecosystem beyond what the `web_search` awesome-lists lens offers via free-text search alone. ecosyste.ms is keyless, so this tool is always registered.
+Search the **ecosyste.ms Awesome API** for community-curated "awesome-\*" lists on a GitHub topic — structured, filterable coverage of the awesome-list ecosystem beyond what the `web_search` awesome-lists lens offers via free-text search alone. ecosyste.ms is keyless, so this tool is always registered; an optional `ECOSYSTEMS_API_KEY` raises the caller's rate-limit tier.
 
 ### Input Schema
 
@@ -1687,7 +1687,7 @@ Each `lists[]` item: `name`, `fullName` (owner/repo of the list's source reposit
 - `min_stars`/`min_projects` filter by the list repository's stars and curated-entry count; results are sorted (descending) by `sort_by`, default `stars`.
 - **Provider honoring**: an explicit `provider` is used exclusively; otherwise the first configured provider answers. An error/empty returns a structured zero-result with hints (no silent fallback).
 - A `404`/no-match from the API is an empty result, never a panic.
-- **Auth**: keyless — ecosyste.ms needs no API key (5,000 req/hour anonymous rate limit).
+- **Auth**: keyless — ecosyste.ms needs no API key (5,000 req/hour anonymous rate limit). Set `ECOSYSTEMS_API_KEY` (free, register at [ecosyste.ms/login](https://ecosyste.ms/login)) to raise the limit.
 
 ### Annotations
 - ReadOnly: true · Idempotent: true · OpenWorld: true (queries the live ecosyste.ms API)

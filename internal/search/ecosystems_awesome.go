@@ -16,7 +16,8 @@ import (
 // ecosyste.ms Awesome API: a structured index of community-curated
 // "awesome-*" lists (GitHub topic → curated repositories), each carrying
 // stargazer count, curated-entry count, topics, and last-sync freshness.
-// Keyless and free.
+// Keyless and free; an optional API key (registered at ecosyste.ms) raises
+// the caller's rate-limit tier — see ecosyste-ms/conditional-rate-limit.lua.
 //
 // Verified contract (2026):
 //   - topic:  GET /api/v1/topics/{slug}
@@ -27,13 +28,16 @@ import (
 //     repository:{full_name, archived, stargazers_count, topics, …}}, …]
 //     no-match is a 200 with an empty array.
 type EcosystemsAwesomeProvider struct {
+	apiKey  string
 	baseURL string
 	deps    Deps
 }
 
-// NewEcosystemsAwesomeProvider creates the provider. No key required.
-func NewEcosystemsAwesomeProvider(deps Deps) *EcosystemsAwesomeProvider {
+// NewEcosystemsAwesomeProvider creates the provider. apiKey may be ""
+// (keyless — works at the shared "anonymous" rate limit).
+func NewEcosystemsAwesomeProvider(apiKey string, deps Deps) *EcosystemsAwesomeProvider {
 	return &EcosystemsAwesomeProvider{
+		apiKey:  apiKey,
 		baseURL: "https://awesome.ecosyste.ms/api/v1",
 		deps:    deps,
 	}
@@ -155,6 +159,9 @@ func (e *EcosystemsAwesomeProvider) get(ctx context.Context, path string) ([]byt
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
+	if e.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+e.apiKey) // never logged
+	}
 	resp, err := e.deps.HTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("ecosystems: request failed: %w", err)

@@ -554,6 +554,20 @@ Backs `clinical_search`. Works **keyless** — `clinical_search` is always avail
 
 **Notes**: Queries the ClinicalTrials.gov v2 API (NIH registry of 400K+ studies). Returns trial registrations as typed data (status, phase, sponsor, conditions, interventions, results availability); read the full record via `scrape_page` on the returned `url`. Discovery + primary-source retrieval only — not medical advice.
 
+### ecosyste.ms (Awesome-List Discovery)
+
+Backs `awesome_list_search`. Works **keyless** — the tool is always available at a shared "anonymous" rate-limit tier. An optional API key raises your caller's rate-limit tier.
+
+**Step 1**: (Optional) Sign in with GitHub at [ecosyste.ms/login](https://ecosyste.ms/login) to get a free API key.
+
+**Step 2**: Configure (optional)
+
+```bash
+export ECOSYSTEMS_API_KEY=your-ecosystems-key
+```
+
+**Notes**: The key is sent as an `Authorization: Bearer` header and never logged. Without it, `awesome_list_search` works exactly the same — just at the shared anonymous rate limit.
+
 ### Internet Archive — Save Page Now (Optional, for `archive_source`)
 
 The `archive_source` tool triggers an Internet Archive Save Page Now (SPN) capture. It works **keyless** by default — no registration is required. An optional S3-style key pair raises the rate limit and improves capture reliability for high-volume use.

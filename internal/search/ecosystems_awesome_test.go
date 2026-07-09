@@ -12,9 +12,14 @@ import (
 
 func newEcosystemsTestProvider(t *testing.T, handler http.HandlerFunc) *EcosystemsAwesomeProvider {
 	t.Helper()
+	return newEcosystemsTestProviderWithKey(t, "", handler)
+}
+
+func newEcosystemsTestProviderWithKey(t *testing.T, apiKey string, handler http.HandlerFunc) *EcosystemsAwesomeProvider {
+	t.Helper()
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	p := NewEcosystemsAwesomeProvider(Deps{
+	p := NewEcosystemsAwesomeProvider(apiKey, Deps{
 		HTTPClient: srv.Client(),
 		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
 	})
@@ -23,11 +28,25 @@ func newEcosystemsTestProvider(t *testing.T, handler http.HandlerFunc) *Ecosyste
 }
 
 func TestEcosystemsAwesomeKeyless(t *testing.T) {
-	if p := NewAwesomeListProviderByName("ecosystems", Deps{}); p == nil {
+	if p := NewAwesomeListProviderByName("ecosystems", AwesomeListProviderConfig{}, Deps{}); p == nil {
 		t.Error("ecosystems should construct without any key")
 	}
-	if p := NewAwesomeListProviderByName("unknown", Deps{}); p != nil {
+	if p := NewAwesomeListProviderByName("unknown", AwesomeListProviderConfig{}, Deps{}); p != nil {
 		t.Error("unknown awesome-list provider should be nil")
+	}
+}
+
+func TestEcosystemsAwesomeSendsKeyWhenConfigured(t *testing.T) {
+	var gotAuth string
+	p := newEcosystemsTestProviderWithKey(t, "secret-key", func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.Write([]byte(`[]`))
+	})
+	if _, err := p.AwesomeLists(context.Background(), AwesomeListSearchParams{Topic: "x"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotAuth != "Bearer secret-key" {
+		t.Errorf("Authorization header = %q, want %q", gotAuth, "Bearer secret-key")
 	}
 }
 
