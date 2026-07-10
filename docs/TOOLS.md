@@ -1683,6 +1683,8 @@ Each `lists[]` item: `name`, `fullName` (owner/repo of the list's source reposit
 
 ### Behavior
 - Provide `topic` and/or `query` — at least one is required. `query` feeds the same underlying topic match when `topic` is empty.
+- The input is lowercased and hyphenated before matching (`"Mental Health"` → `mental-health`), since ecosyste.ms's topic matching is exact-string and case-sensitive with no normalization of its own.
+- If a multi-word input misses as one compound slug, each substantive word (2+ characters, stopwords like "a"/"of"/"the" skipped) is retried independently against the API and the hits are merged and deduped by repository — recovers cases like `personal finance` (no such compound slug exists, but `finance` does) without a caller having to know to split it themselves. A genuine single-word miss (e.g. `parenting` — the real upstream slug is `parent`) is not retried further; there's nothing left to split.
 - Archived source repositories are excluded from results.
 - `min_stars`/`min_projects` filter by the list repository's stars and curated-entry count; results are sorted (descending) by `sort_by`, default `stars`.
 - **Provider honoring**: an explicit `provider` is used exclusively; otherwise the first configured provider answers. An error/empty returns a structured zero-result with hints (no silent fallback).

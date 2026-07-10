@@ -327,3 +327,105 @@ func TestEcosystemsAwesomeRateLimited(t *testing.T) {
 func TestEcosystemsAwesomeInterface(t *testing.T) {
 	var _ AwesomeListProvider = (*EcosystemsAwesomeProvider)(nil)
 }
+
+// TestEcosystemsAwesomeNormalizesSpacesAndCase verifies the topic
+// normalization fix: ecosyste.ms topic matching is case-sensitive and
+// space-vs-hyphen-sensitive (confirmed live: "Mental Health" and
+// "mental health" both 404 while "mental-health" returns 5 results), so the
+// provider must lowercase and hyphenate before ever hitting the wire.
+func TestEcosystemsAwesomeNormalizesSpacesAndCase(t *testing.T) {
+	var gotTopic string
+	p := newEcosystemsTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		gotTopic = r.URL.Query().Get("topic")
+		w.Write([]byte(`[{"name":"awesome-mental-health","url":"https://x/mh","repository":{"full_name":"a/mh","archived":false,"stargazers_count":3561}}]`))
+	})
+	res, err := p.AwesomeLists(context.Background(), AwesomeListSearchParams{Topic: "Mental Health", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotTopic != "mental-health" {
+		t.Errorf("topic should be normalized to %q, got %q", "mental-health", gotTopic)
+	}
+	if len(res) != 1 || res[0].Name != "awesome-mental-health" {
+		t.Errorf("unexpected results: %+v", res)
+	}
+}
+
+// TestEcosystemsAwesomeWordFallbackOnCompoundMiss verifies the retry logic:
+// a compound topic that misses as one slug (e.g. "personal-finance" — no
+// such slug exists upstream, confirmed live) retries each substantive word
+// independently and merges hits, recovering results that the raw compound
+// query would never find.
+func TestEcosystemsAwesomeWordFallbackOnCompoundMiss(t *testing.T) {
+	var topicsQueried []string
+	p := newEcosystemsTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		topic := r.URL.Query().Get("topic")
+		topicsQueried = append(topicsQueried, topic)
+		switch topic {
+		case "personal-finance":
+			w.Write([]byte(`[]`))
+		case "personal":
+			w.Write([]byte(`[{"name":"awesome","url":"https://x/personal","repository":{"full_name":"a/personal","archived":false,"stargazers_count":27}}]`))
+		case "finance":
+			w.Write([]byte(`[{"name":"awesome-quant","url":"https://x/quant","repository":{"full_name":"a/quant","archived":false,"stargazers_count":27000}}]`))
+		default:
+			t.Errorf("unexpected topic queried: %q", topic)
+			w.Write([]byte(`[]`))
+		}
+	})
+
+	res, err := p.AwesomeLists(context.Background(), AwesomeListSearchParams{Topic: "personal-finance", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(topicsQueried) != 3 || topicsQueried[0] != "personal-finance" {
+		t.Errorf("expected compound query then per-word fallback, got %v", topicsQueried)
+	}
+	if len(res) != 2 {
+		t.Fatalf("want 2 merged results, got %d: %+v", len(res), res)
+	}
+	if res[0].Name != "awesome-quant" || res[0].Stars != 27000 {
+		t.Errorf("results should be sorted by stars desc after merge, got %+v", res)
+	}
+}
+
+// TestEcosystemsAwesomeWordFallbackSkipsShortWordsAndStopwords verifies the
+// fallback doesn't burn API calls on words with no topical signal.
+func TestEcosystemsAwesomeWordFallbackSkipsShortWordsAndStopwords(t *testing.T) {
+	var topicsQueried []string
+	p := newEcosystemsTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		topicsQueried = append(topicsQueried, r.URL.Query().Get("topic"))
+		w.Write([]byte(`[]`))
+	})
+	_, err := p.AwesomeLists(context.Background(), AwesomeListSearchParams{Topic: "a of go", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// compound "a-of-go" then only "go" (>=3 chars, not a stopword) — "a" and
+	// "of" are skipped.
+	if len(topicsQueried) != 2 || topicsQueried[0] != "a-of-go" || topicsQueried[1] != "go" {
+		t.Errorf("expected compound then only 'go' retried, got %v", topicsQueried)
+	}
+}
+
+// TestEcosystemsAwesomeNoFallbackForSingleWordMiss verifies a genuine
+// single-word miss (e.g. "parenting" — the real upstream slug is "parent", an
+// unrecoverable stemming gap, confirmed live) makes exactly one call and
+// stays empty rather than retrying itself.
+func TestEcosystemsAwesomeNoFallbackForSingleWordMiss(t *testing.T) {
+	calls := 0
+	p := newEcosystemsTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Write([]byte(`[]`))
+	})
+	res, err := p.AwesomeLists(context.Background(), AwesomeListSearchParams{Topic: "parenting", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if calls != 1 {
+		t.Errorf("single-word miss should not retry, got %d calls", calls)
+	}
+	if len(res) != 0 {
+		t.Errorf("want empty result, got %+v", res)
+	}
+}
