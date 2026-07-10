@@ -162,12 +162,36 @@ func sortAwesomeLists(results []AwesomeListResult, sortBy string) {
 	}
 }
 
+// userAgent mirrors the crossref.go/retraction.go convention: embed the
+// contact email in parens when configured, matching ecosyste.ms's own
+// documented "polite" example (User-Agent: MyApp/1.0 (contact: you@example.com)).
+func (e *EcosystemsAwesomeProvider) userAgent() string {
+	if e.email == "" {
+		return "web-researcher-mcp/1.0"
+	}
+	return "web-researcher-mcp/1.0 (mailto:" + e.email + ")"
+}
+
 func (e *EcosystemsAwesomeProvider) get(ctx context.Context, path string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", e.baseURL+path, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
+	// Two independent gates in front of ecosyste.ms, both confirmed by direct
+	// curl A/B testing (varying only the header under test):
+	//  1. A literal-string block on Go's default "Go-http-client/*" User-Agent
+	//     — 429s even at the "polite" tier with >99% of quota remaining. Any
+	//     other UA string, descriptive or not, passes this gate.
+	//  2. The APISIX conditional-rate-limit.lua plugin, which classifies a
+	//     request "polite" (15,000/period) vs. "anonymous" (5,000/period)
+	//     based on an email-shaped string in the mailto param OR the
+	//     User-Agent header. mailto is already sent as a query param
+	//     (doSearch) and alone is sufficient for tier classification — the
+	//     email mirrored into the UA here is a second, redundant signal for
+	//     gate 2, matching ecosyste.ms's own documented example format, not a
+	//     workaround for gate 1.
+	req.Header.Set("User-Agent", e.userAgent())
 	if e.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+e.apiKey) // never logged
 	}
