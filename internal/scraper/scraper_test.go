@@ -873,6 +873,11 @@ func TestIsSPADomain(t *testing.T) {
 		{"https://twitter.com/user/status/123", false}, // handled by dedicated twitter path
 		{"https://www.linkedin.com/in/user", true},
 		{"https://example.com/page", false},
+		{"https://bsky.app/profile/user.bsky.social", true},
+		{"https://www.tiktok.com/@user/video/123", true},
+		{"https://www.threads.net/@user/post/123", true},
+		{"https://notbsky.app/profile/user", false},
+		{"https://eviltiktok.com/page", false},
 	}
 	for _, tt := range tests {
 		got := isSPADomain(tt.url)

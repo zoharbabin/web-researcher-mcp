@@ -786,6 +786,7 @@ var knownSPADomains = []string{
 	// Frontify-hosted brand portals are React SPAs; also match custom domains
 	// that Frontify serves (brand.*.com pattern) via knownBrandPortalPaths.
 	"frontify.com",
+	"bsky.app", "tiktok.com", "threads.net",
 }
 
 func isSPADomain(rawURL string) bool {

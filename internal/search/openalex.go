@@ -311,6 +311,7 @@ type openAlexLocation struct {
 
 type openAlexSource struct {
 	DisplayName string `json:"display_name"`
+	IsInDoaj    bool   `json:"is_in_doaj"`
 }
 
 type openAlexOA struct {
@@ -355,6 +356,7 @@ func openAlexWorkToResult(work *openAlexWork) AcademicResult {
 	}
 	if work.PrimaryLocation != nil && work.PrimaryLocation.Source != nil {
 		result.Journal = work.PrimaryLocation.Source.DisplayName
+		result.IsInDoaj = work.PrimaryLocation.Source.IsInDoaj
 	}
 	for _, a := range work.Authorships {
 		if a.Author.DisplayName != "" {

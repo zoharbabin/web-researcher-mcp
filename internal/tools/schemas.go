@@ -115,6 +115,7 @@ var academicSearchOutputSchema = map[string]any{
 					"tldr":            map[string]any{"type": "string", "description": "AI-generated one-sentence summary (Semantic Scholar). Treat as AI-generated, not authoritative."},
 					"isInfluential":   map[string]any{"type": "boolean", "description": "Citation-edge only (citation_graph): the citing/cited work is a highly influential citation."},
 					"citationIntents": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Citation-edge only: intent labels (background/methodology/result)."},
+					"isInDoaj":        map[string]any{"type": "boolean", "description": "OpenAlex-only: journal is listed in the Directory of Open Access Journals (DOAJ) — a peer-reviewed OA quality signal."},
 				},
 			},
 		},
@@ -735,6 +736,7 @@ var academicPaperItemSchema = map[string]any{
 		"tldr":            map[string]any{"type": "string"},
 		"isInfluential":   map[string]any{"type": "boolean"},
 		"citationIntents": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+		"isInDoaj":        map[string]any{"type": "boolean"},
 	},
 }
 

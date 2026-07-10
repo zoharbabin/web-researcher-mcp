@@ -29,7 +29,7 @@ const testOpenAlexResponse = `{
         {"author": {"display_name": "Noam Shazeer"}}
       ],
       "primary_location": {
-        "source": {"display_name": "Advances in Neural Information Processing Systems"}
+        "source": {"display_name": "Advances in Neural Information Processing Systems", "is_in_doaj": true}
       },
       "open_access": {
         "is_oa": true,
@@ -146,10 +146,17 @@ func TestOpenAlexProvider_Scholarly(t *testing.T) {
 	if r.Abstract == "" {
 		t.Error("expected abstract to be reconstructed from inverted index")
 	}
+	if !r.IsInDoaj {
+		t.Error("expected IsInDoaj to be true")
+	}
 
 	// Second result should have no abstract (nil inverted index)
 	if results[1].Abstract != "" {
 		t.Errorf("expected empty abstract for nil inverted index, got: %s", results[1].Abstract)
+	}
+	// Second result has no is_in_doaj field in the fixture — must default false.
+	if results[1].IsInDoaj {
+		t.Error("expected IsInDoaj to be false when absent from response")
 	}
 }
 

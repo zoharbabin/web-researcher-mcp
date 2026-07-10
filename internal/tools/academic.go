@@ -446,6 +446,9 @@ func academicResultToMap(r search.AcademicResult) map[string]any {
 	if r.Retraction != nil {
 		paper["retractionStatus"] = r.Retraction
 	}
+	if r.IsInDoaj {
+		paper["isInDoaj"] = true
+	}
 	return paper
 }
 
