@@ -7,26 +7,42 @@
 #                         the MCP response cache (so a live tool call hits the
 #                         network fresh, never a stale cached scrape).
 #   2. Rebuilds         — syncs the embedded lenses, then builds the binary.
-#   3. Reinstalls       — atomically replaces the installed binary using the
-#                         rm + cp + codesign sequence that avoids the macOS
+#   3. Reinstalls       — atomically replaces the binary at EVERY location it
+#                         might actually be invoked from, using the rm + cp +
+#                         codesign sequence that avoids the macOS
 #                         "cp-over-in-place SIGKILL (-32000)" gotcha.
+#
+# "Every location" means the union of: the path ~/.claude.json's MCP config
+# names, and every distinct file named web-researcher-mcp resolvable on
+# $PATH. A dev machine commonly ends up with more than one installed copy
+# (homebrew, ~/.local/bin, a pyenv shim a previous rebuild overwrote with a
+# raw binary, a duplicated PATH entry) — whichever one precedes the others in
+# a given client's $PATH is the one that actually runs, so all of them have to
+# stay in sync or a rebuild silently doesn't take effect for that client.
+# Deliberately excluded: any copy bundled inside a pip/site-packages install
+# (e.g. the Python SDK's `.../web_researcher_mcp/bin/web-researcher-mcp`) —
+# that is a versioned release artifact owned by pip, launched by its own
+# wrapper rather than a PATH lookup of `web-researcher-mcp`, and pip would
+# just overwrite it again on the next install anyway.
 #
 # It deliberately NEVER touches personal-data directories under the cache root
 # (sessions/, persist/ — the latter holds long-term memory, token revocation,
 # and rate quotas). Only the response cache (*.cache + .version) is removed.
 #
 # Usage:
-#   scripts/rebuild-local.sh                  # clean + build + install
+#   scripts/rebuild-local.sh                  # clean + build + install everywhere
 #   INSTALL_PATH=/usr/local/bin/web-researcher-mcp scripts/rebuild-local.sh
 #   CACHE_DIR=/custom/cache scripts/rebuild-local.sh
 #   scripts/rebuild-local.sh --no-install     # clean + build only
 #   scripts/rebuild-local.sh --keep-build-cache  # skip `go clean -cache`
 #
 # Env overrides:
-#   INSTALL_PATH      target binary path (default: the path configured in
-#                     ~/.claude.json's mcpServers.web-researcher.command, if
-#                     present; else resolve `web-researcher-mcp` on PATH;
-#                     else /opt/homebrew/bin on macOS, /usr/local/bin else)
+#   INSTALL_PATH      install to this ONE path only, skipping auto-discovery
+#                     of every other location (default: the path configured
+#                     in ~/.claude.json's mcpServers.web-researcher.command,
+#                     PLUS every distinct web-researcher-mcp found on $PATH;
+#                     falls back to /opt/homebrew/bin on macOS or /usr/local/bin
+#                     elsewhere if neither source finds anything)
 #   CACHE_DIR         MCP cache root (default: matches the server's own default —
 #                     ~/Library/Caches/web-researcher-mcp on macOS,
 #                     ~/.cache/web-researcher-mcp on Linux)
@@ -70,11 +86,8 @@ default_cache_dir() {
 }
 
 # claude_json_install_path reads the exact binary path Claude Code's own MCP
-# config points at (~/.claude.json's mcpServers.web-researcher.command). On a
-# machine with multiple installed copies (pyenv shim, homebrew, ~/.local/bin,
-# ...), `command -v` picks whichever is first on $PATH — not necessarily the
-# one the running MCP client actually loads. This is the authoritative source
-# when it's present.
+# config points at (~/.claude.json's mcpServers.web-researcher.command). This
+# is the authoritative "this is what Claude Code loads" source when present.
 claude_json_install_path() {
   local cfg="$HOME/.claude.json"
   [ -f "$cfg" ] || return 1
@@ -82,19 +95,38 @@ claude_json_install_path() {
   jq -er '.mcpServers["web-researcher"].command // empty' "$cfg" 2>/dev/null
 }
 
-# default_install_path prints "<path>\t<source>". Both are printed (rather
-# than one set as a side-effect variable) because this runs via command
-# substitution, which forks a subshell — any plain variable assignment inside
-# would be invisible to the caller.
-default_install_path() {
+# discover_install_targets prints "<path>\t<source>" lines: the ~/.claude.json
+# path (if configured) followed by every distinct executable file named
+# $BINARY found across $PATH, deduplicated by resolved path (first source
+# wins — so a PATH entry that happens to match the config path still shows
+# "~/.claude.json"). Bash-3.2-safe: no arrays, no mapfile, plain word-splitting
+# on IFS in a for loop.
+discover_install_targets() {
   local from_config
   if from_config="$(claude_json_install_path)" && [ -n "$from_config" ]; then
     printf '%s\t%s\n' "$from_config" "~/.claude.json"
-    return
   fi
-  # Fall back to wherever the binary is already installed on PATH.
-  if command -v "$BINARY" >/dev/null 2>&1; then
-    printf '%s\t%s\n' "$(command -v "$BINARY")" "PATH"
+
+  local old_ifs="$IFS" dir
+  IFS=':'
+  for dir in $PATH; do
+    IFS="$old_ifs"
+    [ -n "$dir" ] || continue
+    if [ -f "$dir/$BINARY" ] && [ -x "$dir/$BINARY" ]; then
+      printf '%s\t%s\n' "$dir/$BINARY" "PATH"
+    fi
+    IFS=':'
+  done
+  IFS="$old_ifs"
+}
+
+# resolve_install_targets wraps discover_install_targets with the dedup pass
+# and the platform-default fallback for a machine with nothing findable yet.
+resolve_install_targets() {
+  local found
+  found="$(discover_install_targets | awk -F'\t' '!seen[$1]++')"
+  if [ -n "$found" ]; then
+    printf '%s\n' "$found"
     return
   fi
   if [ "$UNAME" = "Darwin" ] && [ -d /opt/homebrew/bin ]; then
@@ -106,15 +138,20 @@ default_install_path() {
 
 CACHE_DIR="${CACHE_DIR:-$(default_cache_dir)}"
 if [ -n "${INSTALL_PATH:-}" ]; then
-  INSTALL_PATH_SOURCE="INSTALL_PATH env"
+  TARGETS="$(printf '%s\t%s\n' "$INSTALL_PATH" "INSTALL_PATH env")"
 else
-  IFS=$'\t' read -r INSTALL_PATH INSTALL_PATH_SOURCE <<< "$(default_install_path)"
+  TARGETS="$(resolve_install_targets)"
 fi
+TARGET_COUNT="$(printf '%s\n' "$TARGETS" | grep -c . || true)"
 
 echo "==> web-researcher-mcp local rebuild"
 echo "    repo:    $REPO_ROOT"
 echo "    cache:   $CACHE_DIR"
-echo "    install: $INSTALL_PATH (source: $INSTALL_PATH_SOURCE)"
+echo "    install targets ($TARGET_COUNT):"
+while IFS=$'\t' read -r t_path t_source; do
+  [ -n "$t_path" ] || continue
+  echo "      - $t_path (source: $t_source)"
+done <<< "$TARGETS"
 echo
 
 # --- 1. clear caches --------------------------------------------------------
@@ -158,29 +195,39 @@ if [ "$DO_INSTALL" -eq 0 ]; then
   exit 0
 fi
 
-echo "==> [3/3] installing to $INSTALL_PATH"
-INSTALL_DIR="$(dirname "$INSTALL_PATH")"
-if [ ! -d "$INSTALL_DIR" ]; then
-  echo "ERROR: install dir does not exist: $INSTALL_DIR" >&2
-  echo "       set INSTALL_PATH to a valid location and re-run." >&2
-  exit 1
-fi
-if [ ! -w "$INSTALL_DIR" ]; then
-  echo "ERROR: no write permission to $INSTALL_DIR" >&2
-  echo "       re-run with a writable INSTALL_PATH, or fix the directory perms." >&2
-  exit 1
-fi
+echo "==> [3/3] installing to $TARGET_COUNT location(s)"
+INSTALL_FAILED=0
+while IFS=$'\t' read -r t_path t_source; do
+  [ -n "$t_path" ] || continue
 
-# rm + cp (NOT cp-over-in-place): overwriting a running/just-run Mach-O in place
-# invalidates its code signature and macOS SIGKILLs it (-32000). Remove first,
-# copy fresh, then re-sign ad-hoc so Gatekeeper is satisfied.
-rm -f "$INSTALL_PATH"
-cp "$BINARY" "$INSTALL_PATH"
-if [ "$UNAME" = "Darwin" ]; then
-  codesign --force --sign - "$INSTALL_PATH"
-  codesign --verify --verbose "$INSTALL_PATH" 2>&1 | sed 's/^/    /'
-fi
+  t_dir="$(dirname "$t_path")"
+  if [ ! -d "$t_dir" ]; then
+    echo "    ERROR: install dir does not exist: $t_dir (target: $t_path, source: $t_source)" >&2
+    INSTALL_FAILED=1
+    continue
+  fi
+  if [ ! -w "$t_dir" ]; then
+    echo "    ERROR: no write permission to $t_dir (target: $t_path, source: $t_source)" >&2
+    INSTALL_FAILED=1
+    continue
+  fi
 
-echo "    installed: $(ls -lh "$INSTALL_PATH" | awk '{print $5}') -> $INSTALL_PATH"
+  # rm + cp (NOT cp-over-in-place): overwriting a running/just-run Mach-O in
+  # place invalidates its code signature and macOS SIGKILLs it (-32000).
+  # Remove first, copy fresh, then re-sign ad-hoc so Gatekeeper is satisfied.
+  rm -f "$t_path"
+  cp "$BINARY" "$t_path"
+  if [ "$UNAME" = "Darwin" ]; then
+    codesign --force --sign - "$t_path"
+    codesign --verify --verbose "$t_path" 2>&1 | sed 's/^/      /'
+  fi
+  echo "    installed: $(ls -lh "$t_path" | awk '{print $5}') -> $t_path"
+done <<< "$TARGETS"
+
 echo
-echo "Done. Restart your MCP client to load the new binary."
+if [ "$INSTALL_FAILED" -eq 1 ]; then
+  echo "FAILED: one or more install targets could not be updated (see ERROR lines above)." >&2
+  exit 1
+fi
+
+echo "Done. Restart your MCP client(s) to load the new binary."
