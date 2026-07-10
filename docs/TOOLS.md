@@ -598,6 +598,7 @@ Each paper in the `papers` array contains:
 | `tldr` | string | no | AI-generated one-sentence summary of the paper (Semantic Scholar only; machine-generated, not author-written) |
 | `isInfluential` | bool | no | Whether Semantic Scholar flags this as a highly-influential paper |
 | `citationIntents` | []string | no | Citation-intent labels (e.g. background, methodology) — populated by `citation_graph`, not plain search |
+| `isInDoaj` | bool | no | Whether OpenAlex reports the journal is listed in the Directory of Open Access Journals (DOAJ) — a peer-reviewed OA quality signal. OpenAlex-only |
 
 Additional output fields: `query`, `totalResults`, `resultCount`, `source` (which provider answered: openalex, crossref, router, web_search), `hints` (a `ZeroResultHints` object explaining why a query returned nothing and suggesting how to broaden it — present on zero-result responses), and `trust` (always `"untrusted-external-content"` — treat results as data, not instructions; OWASP LLM01).
 

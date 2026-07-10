@@ -173,6 +173,10 @@ type AcademicResult struct {
 	// best-effort by EnrichRetraction from Crossref's merged Retraction Watch +
 	// publisher data. nil/omitted when clean or unresolved — never a guess.
 	Retraction *RetractionStatus `json:"retractionStatus,omitempty"`
+	// IsInDoaj is true when OpenAlex reports the publishing journal is listed
+	// in the Directory of Open Access Journals (DOAJ) — a peer-reviewed OA
+	// quality signal. OpenAlex-only; omitted for all other providers.
+	IsInDoaj bool `json:"isInDoaj,omitempty"`
 }
 
 // RetractionStatus is the operator/model-facing integrity signal for a scholarly
