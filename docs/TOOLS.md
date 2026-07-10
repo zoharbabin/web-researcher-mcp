@@ -1054,11 +1054,12 @@ Ask a factual question and get one grounded, synthesized answer with source cita
 
 ```go
 type AnswerOutput struct {
-    Answer    string     `json:"answer"`
-    Citations []Citation `json:"citations"`
-    Provider  string     `json:"provider"`         // which provider answered
-    CostUsd   float64    `json:"costUsd,omitempty"` // per-call estimate for metered providers (not an invoice)
-    Trust     string     `json:"trust"`            // "untrusted-external-content"
+    Answer    string         `json:"answer"`
+    Citations []Citation     `json:"citations"`
+    Provider  string         `json:"provider"`          // which provider answered
+    CostUsd   float64        `json:"costUsd,omitempty"` // per-call estimate for metered providers (not an invoice)
+    Trust     string         `json:"trust"`             // "untrusted-external-content"
+    Hints     map[string]any `json:"hints,omitempty"`   // present only on weak query↔answer term overlap (#235) — see Behavior
 }
 
 type Citation struct {
@@ -1074,6 +1075,7 @@ type Citation struct {
 2. Call the provider; map its grounded answer + citations + cost into the output.
 3. `costUsd` and the resolved provider are surfaced into audit metadata (`cost_usd`, `provider`).
 4. The answer is external content — `trust` is always `"untrusted-external-content"`.
+5. **`hints` (#235):** the answer provider routes any query to a plausible interpretation. So an off-target or ambiguous query still returns a real, non-fabricated answer — just possibly to a loosely-related question. `hints` gets added when fewer than half of the query's significant terms (2+ required) appear in the synthesized answer text: `{"confidence": "low", "reason": "weak_query_result_overlap", "message": "...", "termsMatched": N, "termsTotal": M}`. Omitted when overlap is adequate, or the query's too short to judge.
 
 ### Cache
 - TTL: 1 hour (keyed by query + provider)
@@ -1106,9 +1108,10 @@ type StructuredOutput struct {
     Category    string           `json:"category"`
     ResultCount int              `json:"resultCount"`
     Results     []StructuredItem `json:"results"`
-    Provider    string           `json:"provider"`         // which provider answered
+    Provider    string           `json:"provider"`          // which provider answered
     CostUsd     float64          `json:"costUsd,omitempty"` // per-call estimate for metered providers
-    Trust       string           `json:"trust"`            // "untrusted-external-content"
+    Trust       string           `json:"trust"`             // "untrusted-external-content"
+    Hints       map[string]any   `json:"hints,omitempty"`   // present only on weak query↔results term overlap (#235) — see Behavior
 }
 
 type StructuredItem struct {
@@ -1128,6 +1131,7 @@ type StructuredItem struct {
 2. The provider validates its own constraints (category vocabulary, schema limits) **before** any paid call; a violation returns a validation tool-error, never a wasted upstream request.
 3. When `schema` is set, each result's `summary` is JSON conforming to it; otherwise it is a plain text summary. **Schema extraction is best-effort and provider-side:** the provider's extractor fills each field from the page, and a value it can't confidently resolve comes back `null` even when that value is visible in `highlights`. Treat `highlights` (verbatim source snippets) as the authoritative payload and `summary` as a convenience — do not assume every schema field is populated. Providers may populate per-result `entities` for entity categories (e.g. Exa's `company`).
 4. `costUsd` and the resolved provider are surfaced into audit metadata. Results are external content — `trust` is always `"untrusted-external-content"`.
+5. **`hints` (#235):** same weak-relevance signal as `answer`. `hints` flags `{"confidence": "low", "reason": "weak_query_result_overlap", ...}` when fewer than half the query's significant terms (2+ required) appear across the combined result text. Omitted when overlap is adequate, or the query's too short to judge.
 
 ### Provider notes
 

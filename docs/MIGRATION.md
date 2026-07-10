@@ -163,7 +163,7 @@ All open issues from the old project are resolved in the new version:
 
 The tool names and parameters are identical between old and new:
 
-- `web_search` — same parameters (`query`, `num_results`, `time_range`, `lens`, `site`, etc.)
+- `web_search` — same parameters (`query`, `num_results`, `time_range`, `lens`, `site`, etc.), plus a new `sites` array (up to 10 OR-joined domains) for restricting to more than one domain at once
 - `scrape_page` — same parameters (`url`, `max_length`, `mode`)
 - `search_and_scrape` — same parameters (`query`, `num_results`, `deduplicate`, etc.)
 - `image_search` — same parameters (`query`, `size`, `type`, `color_type`, etc.)
@@ -171,8 +171,9 @@ The tool names and parameters are identical between old and new:
 - `academic_search` — same parameters (`query`, `source`, `year_from`, `year_to`, etc.)
 - `patent_search` — same parameters (`query`, `patent_office`, `cpc_code`, etc.)
 - `sequential_search` — same parameters (`searchStep`, `stepNumber`, `nextStepNeeded`, etc.)
+- `awesome_list_search` — new tool, not present in the old project: structured search over ecosyste.ms's Awesome API for community-curated GitHub "awesome-*" lists (`topic`, `query`, `min_stars`, `min_projects`, `sort_by`)
 
-No changes needed in your prompts or workflows.
+No changes needed in your existing prompts or workflows — the new tool is additive.
 
 ---
 

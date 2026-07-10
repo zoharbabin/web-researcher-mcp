@@ -68,7 +68,7 @@ result: WebSearchResponse = await client.web_search(
     query,
     num_results=5,        # 1–100
     time_range=None,      # "day" | "week" | "month" | "year"
-    safe=None,            # "active" | "off"
+    safe=None,            # "off" | "medium" (default) | "high"
     language=None,        # ISO 639-1 code
     site=None,            # restrict to domain
     exact_terms=None,
@@ -121,7 +121,7 @@ result: ImageSearchResponse = await client.image_search(
     color_type=None,   # e.g. "color" | "gray" | "mono" | "trans"
     dominant_color=None,
     file_type=None,    # e.g. "jpg" | "png" | "gif"
-    safe=None,         # "active" | "off"
+    safe=None,         # "off" | "medium" (default) | "high"
     size=None,         # e.g. "large" | "medium" | "icon"
     type=None,         # e.g. "photo" | "clipart" | "face"
 )
