@@ -1,4 +1,4 @@
-.PHONY: build build-fips sync-lenses test test-race test-cover test-e2e test-live test-eval test-concurrency test-bench test-python test-python-live \
+.PHONY: build build-fips sync-lenses test test-race test-cover test-e2e test-live test-eval test-geo-eval test-concurrency test-bench test-python test-python-live \
         lint fmt fmt-check vet vuln sec tools hooks precommit verify clean run dev docker docker-smoke release version-sync rebuild-local help all \
         gen-python-client check-python-drift
 
@@ -57,6 +57,17 @@ test-live:
 # (mislabeling a legitimate source) — the unacceptable error for a trust tool.
 test-eval:
 	go test -tags=live -count=1 -v -run TestTrustSuiteAccuracy ./internal/tools/...
+
+# GEO-defense eval suite (arXiv:2607.05217): empirically tests the MCP against
+# the paper's documented open-web-search failure modes — hard site: scoping
+# vs. soft prompt-steering, fluency-blind domain reputation, claim
+# corroboration tallying, and never-fabricate-on-zero-results. Eval 1/5 need a
+# live provider (DuckDuckGo) so this target carries the `live` tag; Eval 2/3/4
+# are hermetic and would also run under plain `make test`. One target runs the
+# whole suite together for a single "does our trust story hold up" check.
+# See the suite-level map in internal/tools/geo_eval_reputation_test.go.
+test-geo-eval:
+	go test -tags=live -count=1 -v -run TestGeoEval ./internal/search/... ./internal/tools/...
 
 # Concurrency-focused tests (shared-state contention). Always on: they are
 # bounded (a few seconds) and only meaningful under -race.

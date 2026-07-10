@@ -181,8 +181,8 @@ func TestVerifyRecommendationCorroborationCountsAgreement(t *testing.T) {
 		t.Fatalf("LoadEmbedded: %v", err)
 	}
 
-	// The snippet names "Shopify" directly, which should trigger an "addressed"
-	// claimSignal when the claim context is "best e-commerce platforms".
+	// The snippet names "Shopify" directly, so its claimSignal is a non-empty,
+	// non-refuting sentence — independent agreement.
 	provider := &corroborationTestProvider{
 		snippet: "Shopify is widely considered the best e-commerce platform for small businesses.",
 	}

@@ -54,6 +54,12 @@ func skipIfNetworkUnreachable(t *testing.T, err error) {
 	if contains(s, "rate limited") {
 		t.Skipf("provider rate limited: %v", err)
 	}
+	// The circuit breaker opening after repeated rate-limit errors is the same
+	// environment condition, one step removed — the breaker is doing its job,
+	// not signaling a code defect.
+	if errors.Is(err, circuit.ErrCircuitOpen) {
+		t.Skipf("circuit breaker open after upstream throttling: %v", err)
+	}
 }
 
 // TestAwesomeListsLensLive is the real-network live test for the awesome-lists

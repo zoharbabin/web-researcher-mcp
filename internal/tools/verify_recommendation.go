@@ -204,18 +204,23 @@ func detectSelfPromotionForURL(ctx context.Context, deps Dependencies, rawURL st
 	return content.DetectSelfPromotion(host, res.Content)
 }
 
-// corroborationLenses are the lens names searched in order. Journalism covers
-// investigative/public-record sources; tech covers independent tech press.
-// Both are independent of the recommendation author's domain, making them
-// resistant to brand-controlled or sponsored content.
+// corroborationLenses are the lens names searched in order. journalism covers
+// government/public-record/filing sources (sec.gov, courtlistener.com,
+// data.gov, ...); tech covers independent tech press. Both are independent of
+// the recommendation author's domain, making them resistant to brand-controlled
+// or sponsored content.
 var corroborationLenses = []string{"journalism", "tech"}
 
 // corroborateRecommendation issues one web search per corroborationLens for
 // the recommended item title within the caller's claim context. It counts how
 // many results address the recommendation positively (agree), negatively
-// (disagree), or neutrally/silently (silent). The signal mapping follows
-// content.ClaimEvidence: "addressed" → agreeCount, "not_addressed" →
-// disagreeCount, all others (partially_addressed, or empty) → silentCount.
+// (disagree), or neutrally/silently (silent). Each result's claimSignal is the
+// single most claim-relevant snippet sentence (content.ExtractClaimEvidence),
+// not a fixed enum: an empty signal means no sentence mentioned the title
+// (silentCount); a non-empty signal carrying a negation/refutation cue
+// (content.HasContrastCue) means independent coverage disputes it
+// (disagreeCount); any other non-empty signal means independent agreement
+// (agreeCount).
 //
 // The function is fail-open: a nil provider, missing lens, or network error
 // produces an empty slice rather than propagating an error — the audit's
@@ -247,13 +252,18 @@ func corroborateRecommendation(ctx context.Context, deps Dependencies, title, cl
 			ResultCount: len(enriched),
 		}
 		for _, r := range enriched {
-			switch r["claimSignal"] {
-			case "addressed":
-				cr.AgreeCount++
-			case "not_addressed":
+			signal, _ := r["claimSignal"].(string)
+			switch {
+			case signal == "":
+				// No snippet sentence mentioned the title at all — independent silence.
+				cr.SilentCount++
+			case content.HasContrastCue([]string{signal}):
+				// The most relevant sentence carries a negation/refutation cue —
+				// independent coverage that disputes the recommendation.
 				cr.DisagreeCount++
 			default:
-				cr.SilentCount++
+				// A relevant sentence with no refutation cue — independent agreement.
+				cr.AgreeCount++
 			}
 		}
 		cr.TopResults = enriched
