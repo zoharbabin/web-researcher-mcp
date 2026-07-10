@@ -176,7 +176,7 @@ func scrapeErrorToToolError(se *scraper.ScrapeError) ToolError {
 // extractProviderName attempts to extract the provider name from an error string.
 func extractProviderName(err error) string {
 	s := err.Error()
-	for _, prefix := range []string{"google:", "brave:", "serper:", "searxng:", "searchapi:", "lens:", "uspto:", "epo:", "openalex:", "crossref:"} {
+	for _, prefix := range []string{"google:", "brave:", "serper:", "searxng:", "searchapi:", "lens:", "uspto:", "epo:", "openalex:", "crossref:", "ecosystems:"} {
 		if strings.HasPrefix(s, prefix[:len(prefix)-1]) || strings.Contains(s, prefix) {
 			return prefix[:len(prefix)-1]
 		}
