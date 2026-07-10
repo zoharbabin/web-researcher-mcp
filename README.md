@@ -768,8 +768,6 @@ Contributions are welcome. Please see [CONTRIBUTING.md](CONTRIBUTING.md) for cod
 
 ## Star History
 
-## Star History
-
 <a href="https://www.star-history.com/?repos=zoharbabin%2Fweb-researcher-mcp&type=date&legend=top-left">
  <picture>
    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=zoharbabin/web-researcher-mcp&type=date&theme=dark&legend=top-left&sealed_token=_gSupJoamTdZ8GxNNbPc4UwcO3zMRgrPJtbSWAmygDwRwSku6h6a0hU7Uy6I5321R7qFTeKiv70I2k8C-JiM2e65oWvx2MYDdhUnSZZ23rpr7ZhBA1NBA0ggFLevMDUV6AHI6Kiy3WjPsGbIyXEQ7b6ZWrzR-fINC3tGLBkRGCU0CgavjG3EWhlNi2vD" />
