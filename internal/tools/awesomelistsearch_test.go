@@ -84,3 +84,36 @@ func TestAwesomeListSearchQueryAlone(t *testing.T) {
 		t.Errorf("resultCount = %v, want 1", out["resultCount"])
 	}
 }
+
+// TestAwesomeListSearchZeroResultHintsSuggestRephrase verifies the zero-result
+// hint tells the calling model to retry with a different word/phrase — since
+// ecosyste.ms topic matching is exact-string with no stemming (verified live:
+// "parenting" 404s while "parent" matches), the model needs to be told to
+// rephrase rather than conclude no list exists.
+func TestAwesomeListSearchZeroResultHintsSuggestRephrase(t *testing.T) {
+	out, isErr := callAwesomeList(t, setupTestDeps(), map[string]any{"topic": "nomatch"})
+	if isErr {
+		t.Fatal("zero-result should not be a tool error")
+	}
+	hints, ok := out["hints"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected hints on zero result, got %v", out)
+	}
+	actions, ok := hints["suggestedActions"].([]any)
+	if !ok || len(actions) == 0 {
+		t.Fatalf("expected suggestedActions, got %v", hints["suggestedActions"])
+	}
+	var found bool
+	for _, a := range actions {
+		action, _ := a.(map[string]any)
+		if action["action"] == "rephrase_query" {
+			found = true
+			if detail, _ := action["detail"].(string); detail == "" {
+				t.Error("rephrase_query hint should have a non-empty detail")
+			}
+		}
+	}
+	if !found {
+		t.Errorf("expected a rephrase_query suggested action, got %v", actions)
+	}
+}

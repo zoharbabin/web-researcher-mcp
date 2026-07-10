@@ -31,6 +31,18 @@ import (
 //     → [{id, url, name, description, projects_count, last_synced_at,
 //     repository:{full_name, archived, stargazers_count, topics, …}}, …]
 //     no-match is a 200 with an empty array.
+//
+// Topic matching is exact-string and case-sensitive with no built-in fuzzy
+// matching (verified live: "Mental Health" and "mental health" both 404;
+// "mental-health" returns 5 results) and the taxonomy itself is thin outside
+// technical domains (verified live: "personal-finance" and "parenting" have
+// no matching slug at all, though "finance" and "parent" do). doSearch
+// compensates with two client-side layers: (1) lowercase + hyphenate the
+// input before every call, and (2) on a compound miss, retry each
+// substantive word independently and merge — see splitTopicWords /
+// fetchWordFallback. An "awesome-<topic>" prefix retry was tried and
+// dropped: topic slugs are GitHub topic tags, not repo-name conventions, so
+// it never recovers anything a plain miss didn't already have.
 type EcosystemsAwesomeProvider struct {
 	apiKey  string
 	email   string
@@ -73,6 +85,40 @@ func (e *EcosystemsAwesomeProvider) AwesomeLists(ctx context.Context, params Awe
 	return results, err
 }
 
+// ecosystemsListItem mirrors one element of the /lists response.
+type ecosystemsListItem struct {
+	Name          string `json:"name"`
+	URL           string `json:"url"`
+	Description   string `json:"description"`
+	ProjectsCount int    `json:"projects_count"`
+	LastSyncedAt  string `json:"last_synced_at"`
+	Repository    struct {
+		FullName        string   `json:"full_name"`
+		Archived        bool     `json:"archived"`
+		StargazersCount int      `json:"stargazers_count"`
+		Topics          []string `json:"topics"`
+	} `json:"repository"`
+}
+
+// ecosystemsStopwords are filler words skipped when falling back to
+// individual-word retries — querying them wastes an API call on a term with
+// no topical signal (verified: "personal" alone returns unrelated low-star
+// noise; see splitTopicWords fallback in doSearch).
+var ecosystemsStopwords = map[string]bool{
+	"a": true, "an": true, "the": true, "of": true, "in": true, "on": true,
+	"and": true, "or": true, "for": true, "to": true, "with": true,
+	"is": true, "at": true, "by": true, "about": true,
+}
+
+// splitTopicWords lowercases and splits a topic/query into words on spaces,
+// hyphens, and underscores, so "Mental Health", "mental-health", and
+// "mental_health" all normalize to the same lookup and word set.
+func splitTopicWords(topic string) []string {
+	return strings.FieldsFunc(strings.ToLower(topic), func(r rune) bool {
+		return r == ' ' || r == '-' || r == '_'
+	})
+}
+
 func (e *EcosystemsAwesomeProvider) doSearch(ctx context.Context, params AwesomeListSearchParams) ([]AwesomeListResult, error) {
 	num := clamp(params.NumResults, 1, 100)
 
@@ -84,36 +130,25 @@ func (e *EcosystemsAwesomeProvider) doSearch(ctx context.Context, params Awesome
 		return nil, fmt.Errorf("ecosystems: topic or query is required")
 	}
 
-	q := url.Values{}
-	q.Set("topic", topic)
-	q.Set("per_page", strconv.Itoa(num))
-	if e.email != "" {
-		q.Set("mailto", e.email)
-	}
+	words := splitTopicWords(topic)
+	normalized := strings.Join(words, "-")
 
-	body, err := e.get(ctx, "/lists?"+q.Encode())
+	parsed, err := e.fetchRaw(ctx, normalized, num)
 	if err != nil {
 		return nil, err
 	}
-	if len(body) == 0 {
-		return nil, nil // 404 / no body → empty, not an error
-	}
 
-	var parsed []struct {
-		Name          string `json:"name"`
-		URL           string `json:"url"`
-		Description   string `json:"description"`
-		ProjectsCount int    `json:"projects_count"`
-		LastSyncedAt  string `json:"last_synced_at"`
-		Repository    struct {
-			FullName        string   `json:"full_name"`
-			Archived        bool     `json:"archived"`
-			StargazersCount int      `json:"stargazers_count"`
-			Topics          []string `json:"topics"`
-		} `json:"repository"`
-	}
-	if err := json.Unmarshal(body, &parsed); err != nil {
-		return nil, fmt.Errorf("ecosystems: parse: %w", err)
+	// Multi-word input that missed as a compound slug (e.g. "personal-finance"
+	// resolves to zero, but the constituent GitHub topics "personal" and
+	// "finance" each exist independently) gets one retry per substantive word,
+	// merged and deduped. A single-word miss (e.g. "parenting" — the real slug
+	// is "parent", an unrecoverable stemming gap) is left as a genuine
+	// no-match; there's nothing left to split. Deliberately NOT retried: an
+	// "awesome-<topic>" prefix — verified via curl that ecosyste.ms topic
+	// slugs are GitHub topic tags, not repo-name conventions, so
+	// "awesome-parenting"/"awesome-personal-finance" both 404 the same way.
+	if len(parsed) == 0 && len(words) > 1 {
+		parsed = e.fetchWordFallback(ctx, words, num)
 	}
 
 	out := make([]AwesomeListResult, 0, len(parsed))
@@ -146,6 +181,65 @@ func (e *EcosystemsAwesomeProvider) doSearch(ctx context.Context, params Awesome
 		out = out[:num]
 	}
 	return out, nil
+}
+
+// fetchRaw issues one /lists?topic= call and unmarshals the raw items.
+func (e *EcosystemsAwesomeProvider) fetchRaw(ctx context.Context, topic string, num int) ([]ecosystemsListItem, error) {
+	q := url.Values{}
+	q.Set("topic", topic)
+	q.Set("per_page", strconv.Itoa(num))
+	if e.email != "" {
+		q.Set("mailto", e.email)
+	}
+
+	body, err := e.get(ctx, "/lists?"+q.Encode())
+	if err != nil {
+		return nil, err
+	}
+	if len(body) == 0 {
+		return nil, nil // 404 / no body → empty, not an error
+	}
+
+	var parsed []ecosystemsListItem
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return nil, fmt.Errorf("ecosystems: parse: %w", err)
+	}
+	return parsed, nil
+}
+
+// fetchWordFallback retries a compound topic that missed as one slug (e.g.
+// "personal-finance") by querying each substantive word independently (e.g.
+// "personal", "finance") and merging the results, deduped by repository full
+// name. Per-word failures (network error, rate limit) are skipped rather
+// than propagated — this is a best-effort recovery on top of an already-
+// empty result, not the primary path. Stopwords are skipped since they carry
+// no topical signal and only cost an API call (verified: "personal" alone
+// returns unrelated low-star noise that the star-sort at the end of doSearch
+// naturally buries below any real topical match anyway).
+func (e *EcosystemsAwesomeProvider) fetchWordFallback(ctx context.Context, words []string, num int) []ecosystemsListItem {
+	seen := make(map[string]bool)
+	var merged []ecosystemsListItem
+	for _, w := range words {
+		if len(w) < 2 || ecosystemsStopwords[w] {
+			continue
+		}
+		items, err := e.fetchRaw(ctx, w, num)
+		if err != nil {
+			continue
+		}
+		for _, it := range items {
+			key := it.Repository.FullName
+			if key == "" {
+				key = it.URL
+			}
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			merged = append(merged, it)
+		}
+	}
+	return merged
 }
 
 // sortAwesomeLists orders results by the requested facet, descending. "stars"

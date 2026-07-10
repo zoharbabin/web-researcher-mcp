@@ -224,7 +224,10 @@ func (m *mockAwesomeListProvider) Name() string { return "ecosystems" }
 func (m *mockAwesomeListProvider) Metadata() search.ProviderMeta {
 	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "free", Description: "mock ecosystems"}
 }
-func (m *mockAwesomeListProvider) AwesomeLists(_ context.Context, _ search.AwesomeListSearchParams) ([]search.AwesomeListResult, error) {
+func (m *mockAwesomeListProvider) AwesomeLists(_ context.Context, params search.AwesomeListSearchParams) ([]search.AwesomeListResult, error) {
+	if params.Topic == "nomatch" || params.Query == "nomatch" {
+		return nil, nil
+	}
 	return []search.AwesomeListResult{{Name: "awesome-osint", FullName: "jivoi/awesome-osint", URL: "https://github.com/jivoi/awesome-osint", Description: "A curated list of amazingly awesome OSINT", ProjectsCount: 1431, Stars: 27176, Topics: []string{"osint", "awesome-list"}, LastSyncedAt: "2026-07-02T07:00:27.731Z", Source: "ecosystems"}}, nil
 }
 
