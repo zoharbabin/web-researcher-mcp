@@ -80,6 +80,33 @@ func TestIsRateLimitError(t *testing.T) {
 }
 
 // =============================================================================
+// extractProviderName prefix matching
+// =============================================================================
+
+func TestExtractProviderName(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name   string
+		err    error
+		expect string
+	}{
+		{"ecosystems rate limited", fmt.Errorf("ecosystems: rate limited"), "ecosystems"},
+		{"ecosystems api error", fmt.Errorf("ecosystems: API error 429: too many requests"), "ecosystems"},
+		{"google prefix", fmt.Errorf("google: quota exceeded"), "google"},
+		{"unknown provider", fmt.Errorf("connection timeout"), ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := extractProviderName(tc.err)
+			if got != tc.expect {
+				t.Errorf("extractProviderName(%v) = %q, want %q", tc.err, got, tc.expect)
+			}
+		})
+	}
+}
+
+// =============================================================================
 // rateLimitError response format
 // =============================================================================
 
