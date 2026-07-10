@@ -62,9 +62,12 @@ test-eval:
 # the paper's documented open-web-search failure modes — hard site: scoping
 # vs. soft prompt-steering, fluency-blind domain reputation, claim
 # corroboration tallying, and never-fabricate-on-zero-results. Eval 1/5 need a
-# live provider (DuckDuckGo) so this target carries the `live` tag; Eval 2/3/4
-# are hermetic and would also run under plain `make test`. One target runs the
-# whole suite together for a single "does our trust story hold up" check.
+# live provider so this target carries the `live` tag; they prefer Google
+# Custom Search (no rate-limit skips) when GOOGLE_CUSTOM_SEARCH_API_KEY +
+# GOOGLE_CUSTOM_SEARCH_ID are set, falling back to keyless DuckDuckGo
+# otherwise (see newGeoEvalProvider). Eval 2/3/4 are hermetic and would also
+# run under plain `make test`. One target runs the whole suite together for a
+# single "does our trust story hold up" check.
 # See the suite-level map in internal/tools/geo_eval_reputation_test.go.
 test-geo-eval:
 	go test -tags=live -count=1 -v -run TestGeoEval ./internal/search/... ./internal/tools/...

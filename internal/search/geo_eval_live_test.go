@@ -11,6 +11,11 @@
 // (unlike a prompt instruction) an out-of-list host cannot rank at all unless
 // the search engine itself ignores the site: operator.
 //
+// Uses Google Custom Search when GOOGLE_CUSTOM_SEARCH_API_KEY +
+// GOOGLE_CUSTOM_SEARCH_ID are set (see newGeoEvalProvider) — its quota easily
+// absorbs this suite's ~10 requests, unlike the keyless DuckDuckGo fallback,
+// which rate-limits after a handful of requests in quick succession.
+//
 // Run with: go test -tags=live -run TestGeoEval ./internal/search/...
 // (also covered by `make test-live`, which has no -run filter)
 package search
@@ -19,6 +24,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -47,11 +53,21 @@ var geoEvalCases = []geoEvalCase{
 	{"government", "immigration policy regulation"},
 }
 
-func newGeoEvalDDGProvider() *DuckDuckGoProvider {
-	return NewDuckDuckGoProvider(Deps{
+// newGeoEvalProvider picks the live provider for the suite: Google Custom
+// Search when GOOGLE_CUSTOM_SEARCH_API_KEY + GOOGLE_CUSTOM_SEARCH_ID are set
+// (a paid, generously-quota'd API — no rate-limit skips), falling back to the
+// keyless DuckDuckGo scraper otherwise. Both implement search.Provider, so the
+// eval logic below is provider-agnostic; only the eval's own inter-request
+// sleep varies by provider, since Google's quota tolerates a much shorter gap.
+func newGeoEvalProvider() (Provider, time.Duration) {
+	deps := Deps{
 		HTTPClient: &http.Client{Timeout: 30 * time.Second},
 		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
-	})
+	}
+	if key, cx := os.Getenv("GOOGLE_CUSTOM_SEARCH_API_KEY"), os.Getenv("GOOGLE_CUSTOM_SEARCH_ID"); key != "" && cx != "" {
+		return NewGoogleProvider(key, cx, deps), 500 * time.Millisecond
+	}
+	return NewDuckDuckGoProvider(deps), 6 * time.Second
 }
 
 // hostOf strips "www." the same way reputationForURL/hostForURL do in the
@@ -90,12 +106,12 @@ func TestGeoEval_HardScopingContainment(t *testing.T) {
 	if err := registry.LoadFromDir("../../lenses"); err != nil {
 		t.Fatalf("LoadFromDir(../../lenses): %v", err)
 	}
-	provider := newGeoEvalDDGProvider()
+	provider, sleep := newGeoEvalProvider()
 
 	var totalResults, totalContained int
 	for i, c := range geoEvalCases {
 		if i > 0 {
-			time.Sleep(6 * time.Second) // avoid tripping DuckDuckGo's rate limiter
+			time.Sleep(sleep) // avoid tripping the provider's rate limiter
 		}
 		c := c
 		t.Run(c.lens+"/"+c.query, func(t *testing.T) {
@@ -167,7 +183,7 @@ func TestGeoEval_AuthoritativeSourceRecall(t *testing.T) {
 	if err := registry.LoadFromDir("../../lenses"); err != nil {
 		t.Fatalf("LoadFromDir(../../lenses): %v", err)
 	}
-	provider := newGeoEvalDDGProvider()
+	provider, sleep := newGeoEvalProvider()
 
 	cases := []struct {
 		lens        string
@@ -182,7 +198,7 @@ func TestGeoEval_AuthoritativeSourceRecall(t *testing.T) {
 	hit := 0
 	for i, c := range cases {
 		if i > 0 {
-			time.Sleep(3 * time.Second)
+			time.Sleep(sleep)
 		}
 		lens, ok := registry.Get(c.lens)
 		if !ok {
