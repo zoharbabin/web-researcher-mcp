@@ -57,6 +57,48 @@ var contrastCues = []string{
 	"contradict", "dispute", "refute", "disprove", "failed to", "did not",
 	"does not", "do not", "no evidence", "no association", "no difference",
 	"rejected", "no effect", "not associated", "not supported",
+	// Added after a live GEO-defense eval run (2026-07-10) surfaced real refutation
+	// sentences these missed, e.g. "ivermectin failed to treat COVID-19" was caught
+	// by "failed to" above, but "CDC website now falsely links vaccines and autism"
+	// and "we've also added LastPass ... to the avoid section" were not. Unlike
+	// "avoid" (too context-dependent — "avoid this side effect" doesn't oppose a
+	// claim), each of these is an unambiguous negation/refutation word regardless
+	// of surrounding context, so they carry the same low false-positive risk as the
+	// terms above.
+	"falsely", "debunk", "debunked", "hoax", "unfounded", "baseless",
+	"discredited", "misinformation", "fabricated", "no causal link",
+	"no link between", "not true", "untrue", "lacks evidence",
+	"unsupported by evidence",
+}
+
+// ContainsAny reports whether lowerText (already lowercased by the caller)
+// contains any of needles. Shared substring-match primitive for the lexical,
+// English-keyword-heuristic signals in this package (HasContrastCue, the
+// stance-marker boost in ExtractClaimEvidence) and in classify.go
+// (DetectConflictOfInterest) and brand_research.go (looksLikeBrandPage) — the
+// matching mechanism is common across all of them; the word lists themselves
+// stay domain-specific and are never merged (see issue #390).
+func ContainsAny(lowerText string, needles []string) bool {
+	for _, n := range needles {
+		if strings.Contains(lowerText, n) {
+			return true
+		}
+	}
+	return false
+}
+
+// CountAny reports how many distinct needles appear anywhere in lowerText
+// (already lowercased by the caller). Companion to ContainsAny for callers
+// that need a co-occurrence count rather than a short-circuiting boolean
+// (e.g. brand_research.go's weak-signal threshold check).
+func CountAny(lowerText string, needles []string) int {
+	count := 0
+	for _, n := range needles {
+		if strings.Contains(lowerText, n) {
+			count++
+		}
+	}
+	return count
 }
 
 // HasContrastCue reports whether any sentence in evidence contains a
@@ -64,13 +106,14 @@ var contrastCues = []string{
 // claim. Used by audit_bibliography (#174) to raise a neutral contrastSignal so a
 // source that lexically "addresses" a claim while refuting it isn't read as
 // reassurance. Evidence, not a verdict: it flags "read this", never "refutes".
+//
+// English-keyword heuristic (#390): an evidence sentence in another language
+// carrying a genuine refutation will not match this list and returns false —
+// that means "the heuristic didn't fire," not "confirmed no contrast."
 func HasContrastCue(sentences []string) bool {
 	for _, s := range sentences {
-		lower := strings.ToLower(s)
-		for _, c := range contrastCues {
-			if strings.Contains(lower, c) {
-				return true
-			}
+		if ContainsAny(strings.ToLower(s), contrastCues) {
+			return true
 		}
 	}
 	return false
@@ -114,11 +157,8 @@ func ExtractClaimEvidence(text, claim string) ClaimEvidence {
 			continue // must mention the claim to be evidence
 		}
 		score := float64(matched)
-		for _, m := range stanceMarkers {
-			if strings.Contains(lower, m) {
-				score += 1.5 // a stance-bearing sentence is worth more than a bare mention
-				break
-			}
+		if ContainsAny(lower, stanceMarkers) {
+			score += 1.5 // a stance-bearing sentence is worth more than a bare mention
 		}
 		hits = append(hits, scored{idx: i, text: strings.TrimSpace(s), score: score})
 	}

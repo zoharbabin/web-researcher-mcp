@@ -356,6 +356,11 @@ func classifyHost(raw string) string {
 // DetectConflictOfInterest checks whether an author bio or byline shows
 // affiliation with a company/entity mentioned in the citation text. Returns nil
 // when no conflict is detected (conservative — prioritize false negatives).
+//
+// English-keyword heuristic (#390): the employment/funding/equity phrases
+// below only match English text. A genuine conflict of interest stated in
+// another language (e.g. "travaille chez Shopify") will not match and this
+// returns nil — that means "the heuristic didn't fire," not "no conflict."
 func DetectConflictOfInterest(authorBio, citationText string) *ConflictOfInterestSignal {
 	if authorBio == "" || citationText == "" {
 		return nil
@@ -377,50 +382,61 @@ func DetectConflictOfInterest(authorBio, citationText string) *ConflictOfInteres
 			continue
 		}
 
-		// Check employment indicators
+		// Check employment indicators (keyword can precede or follow the company name)
+		employmentHit := false
 		for _, kw := range employmentKeywords {
-			if strings.Contains(bioLower, kw+companyLower) || strings.Contains(bioLower, companyLower+kw) {
-				return &ConflictOfInterestSignal{
-					Detected:          true,
-					AuthorAffiliation: company,
-					ConflictType:      "employment",
-					CitedEntityName:   company,
-					Evidence:          "Author bio mentions employment at " + company,
-					Confidence:        "high",
-				}
+			if ContainsAny(bioLower, []string{kw + companyLower, companyLower + kw}) {
+				employmentHit = true
+				break
+			}
+		}
+		if employmentHit {
+			return &ConflictOfInterestSignal{
+				Detected:          true,
+				AuthorAffiliation: company,
+				ConflictType:      "employment",
+				CitedEntityName:   company,
+				Evidence:          "Author bio mentions employment at " + company,
+				Confidence:        "high",
 			}
 		}
 
 		// Check funding/grant mentions
-		for _, kw := range fundedKeywords {
-			if strings.Contains(bioLower, kw+companyLower) {
-				return &ConflictOfInterestSignal{
-					Detected:          true,
-					AuthorAffiliation: company,
-					ConflictType:      "funded_by",
-					CitedEntityName:   company,
-					Evidence:          "Author bio mentions funding from " + company,
-					Confidence:        "medium",
-				}
+		if hasKeywordBeforeCompany(bioLower, fundedKeywords, companyLower) {
+			return &ConflictOfInterestSignal{
+				Detected:          true,
+				AuthorAffiliation: company,
+				ConflictType:      "funded_by",
+				CitedEntityName:   company,
+				Evidence:          "Author bio mentions funding from " + company,
+				Confidence:        "medium",
 			}
 		}
 
 		// Check equity/board mentions
-		for _, kw := range equityKeywords {
-			if strings.Contains(bioLower, kw+companyLower) {
-				return &ConflictOfInterestSignal{
-					Detected:          true,
-					AuthorAffiliation: company,
-					ConflictType:      "owns_equity",
-					CitedEntityName:   company,
-					Evidence:          "Author bio mentions equity stake in " + company,
-					Confidence:        "medium",
-				}
+		if hasKeywordBeforeCompany(bioLower, equityKeywords, companyLower) {
+			return &ConflictOfInterestSignal{
+				Detected:          true,
+				AuthorAffiliation: company,
+				ConflictType:      "owns_equity",
+				CitedEntityName:   company,
+				Evidence:          "Author bio mentions equity stake in " + company,
+				Confidence:        "medium",
 			}
 		}
 	}
 
 	return nil
+}
+
+// hasKeywordBeforeCompany reports whether bioLower contains any of keywords
+// immediately followed by companyLower.
+func hasKeywordBeforeCompany(bioLower string, keywords []string, companyLower string) bool {
+	needles := make([]string, len(keywords))
+	for i, kw := range keywords {
+		needles[i] = kw + companyLower
+	}
+	return ContainsAny(bioLower, needles)
 }
 
 // extractCompanyMentions extracts company/entity names from text. Conservative

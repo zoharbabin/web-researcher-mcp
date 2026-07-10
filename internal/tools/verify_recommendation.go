@@ -204,18 +204,32 @@ func detectSelfPromotionForURL(ctx context.Context, deps Dependencies, rawURL st
 	return content.DetectSelfPromotion(host, res.Content)
 }
 
-// corroborationLenses are the lens names searched in order. Journalism covers
-// investigative/public-record sources; tech covers independent tech press.
-// Both are independent of the recommendation author's domain, making them
-// resistant to brand-controlled or sponsored content.
+// corroborationLenses are the lens names searched in order. journalism covers
+// government/public-record/filing sources (sec.gov, courtlistener.com,
+// data.gov, ...); tech covers independent tech press. Both are independent of
+// the recommendation author's domain, making them resistant to brand-controlled
+// or sponsored content.
 var corroborationLenses = []string{"journalism", "tech"}
 
 // corroborateRecommendation issues one web search per corroborationLens for
 // the recommended item title within the caller's claim context. It counts how
 // many results address the recommendation positively (agree), negatively
-// (disagree), or neutrally/silently (silent). The signal mapping follows
-// content.ClaimEvidence: "addressed" → agreeCount, "not_addressed" →
-// disagreeCount, all others (partially_addressed, or empty) → silentCount.
+// (disagree), or neutrally/silently (silent). Each result's claimSignal is the
+// single most claim-relevant snippet sentence (content.ExtractClaimEvidence),
+// not a fixed enum: an empty signal means no sentence mentioned the title
+// (silentCount); a non-empty signal carrying a negation/refutation cue
+// (content.HasContrastCue) means independent coverage disputes it
+// (disagreeCount); any other non-empty signal means independent agreement
+// (agreeCount).
+//
+// The disagree check also scans the result's title, not just claimSignal:
+// enrichResultsWithReputation only extracts claim evidence from the snippet
+// (#66, documented in docs/TOOLS.md), so refutation language that lands in a
+// headline rather than the snippet body — e.g. a title like "CDC website now
+// falsely links vaccines and autism" backed by an unrelated snippet — would
+// otherwise be missed and mistallied as silent/agree. This is scoped to the
+// corroboration tally only; it does not change claimSignal's public,
+// documented snippet-only contract used by web_search.
 //
 // The function is fail-open: a nil provider, missing lens, or network error
 // produces an empty slice rather than propagating an error — the audit's
@@ -247,13 +261,22 @@ func corroborateRecommendation(ctx context.Context, deps Dependencies, title, cl
 			ResultCount: len(enriched),
 		}
 		for _, r := range enriched {
-			switch r["claimSignal"] {
-			case "addressed":
-				cr.AgreeCount++
-			case "not_addressed":
+			signal, _ := r["claimSignal"].(string)
+			resultTitle, _ := r["title"].(string)
+			switch {
+			case content.HasContrastCue([]string{signal, resultTitle}):
+				// The claimSignal sentence or the result's own title carries a
+				// negation/refutation cue — independent coverage that disputes
+				// the recommendation (checking the title too catches refutation
+				// language that lands in a headline but not the snippet).
 				cr.DisagreeCount++
-			default:
+			case signal == "":
+				// No snippet sentence mentioned the title at all, and the title
+				// itself carries no refutation cue — independent silence.
 				cr.SilentCount++
+			default:
+				// A relevant sentence with no refutation cue — independent agreement.
+				cr.AgreeCount++
 			}
 		}
 		cr.TopResults = enriched
@@ -277,7 +300,7 @@ var verifyRecommendationOutputSchema = map[string]any{
 					"selfPromotionSignal": map[string]any{"type": "object", "description": "Present when the linked page is a ranking list that places its own host's brand first (e.g. a brand blog ranking itself #1). Detected by fetching the URL."},
 					"conflictOfInterest": map[string]any{
 						"type":        "object",
-						"description": "Present when the author has a detected financial stake in the recommended entity. Employment / funding / equity connections.",
+						"description": "Present when the author has a detected financial stake in the recommended entity. Employment / funding / equity connections." + languageHeuristicCaveat,
 						"properties": map[string]any{
 							"detected":          map[string]any{"type": "boolean"},
 							"authorAffiliation": map[string]any{"type": "string"},
@@ -303,9 +326,9 @@ var verifyRecommendationOutputSchema = map[string]any{
 								"lens":          map[string]any{"type": "string", "description": "Lens name used (e.g. 'journalism', 'tech')."},
 								"resultCount":   map[string]any{"type": "integer", "description": "Total results returned by the search."},
 								"agreeCount":    map[string]any{"type": "integer", "description": "Results whose snippet addresses the recommendation positively in context of the claim."},
-								"disagreeCount": map[string]any{"type": "integer", "description": "Results whose snippet contradicts or does not address the recommendation."},
-								"silentCount":   map[string]any{"type": "integer", "description": "Results that mention the item but neither agree nor disagree with the claim context."},
-								"topResults":    map[string]any{"type": "array", "description": "Enriched search results including claimSignal and sourceReputation per result."},
+								"disagreeCount": map[string]any{"type": "integer", "description": "Results whose snippet or title contradicts or does not address the recommendation." + languageHeuristicCaveat},
+								"silentCount":   map[string]any{"type": "integer", "description": "Results that mention the item but neither agree nor disagree with the claim context." + languageHeuristicCaveat},
+								"topResults":    map[string]any{"type": "array", "description": "Enriched search results including claimSignal and sourceReputation per result." + languageHeuristicCaveat},
 							},
 						},
 					},
