@@ -377,7 +377,7 @@ These enable rich scholarly metadata (DOIs, authors, citation counts, abstracts,
 
 ### Structured-Domain Providers (Optional)
 
-These enable dedicated structured-research tools. Each provider is independent. `filing_search` registers only when its provider is configured; `legal_search`, `econ_search`, and `clinical_search` each have a keyless provider, so they are **always available** (a key/token only adds coverage or raises limits).
+These enable dedicated structured-research tools. Each provider is independent. `filing_search` registers only when its provider is configured; `legal_search`, `econ_search`, `clinical_search`, and `awesome_list_search` each have a keyless provider, so they are **always available** (a key/token only adds coverage or raises limits).
 
 | Variable | Tool | Description | Default |
 |----------|------|-------------|---------|
@@ -386,6 +386,8 @@ These enable dedicated structured-research tools. Each provider is independent. 
 | `FRED_API_KEY` | `econ_search` | Federal Reserve Economic Data API key (free at fred.stlouisfed.org). **`econ_search` is always available** via keyless World Bank / OECD / Eurostat providers; this key *adds* FRED's US macro series | — |
 | — (none) | `econ_search` | World Bank Open Data (global development indicators, 200+ economies), OECD (SDMX economy indicators), and Eurostat (European official statistics). All keyless; no configuration | — |
 | — (none) | `clinical_search` | ClinicalTrials.gov v2 — 400K+ clinical-trial registrations as typed data. Keyless; no configuration. **Always available** | — |
+| `ECOSYSTEMS_EMAIL` | `awesome_list_search` | Opts into ecosyste.ms's "polite pool" (mailto=) for a real rate-limit increase on the Free plan. Falls back to `OPENALEX_EMAIL`. **`awesome_list_search` is always available** keyless | — (falls back to `OPENALEX_EMAIL`) |
+| `ECOSYSTEMS_API_KEY` | `awesome_list_search` | Forward-compatible: ecosyste.ms's Free plan uses shared pools, not API-key auth, so this is a no-op today — it only takes effect on ecosyste.ms's paid Develop/Scale plans | — |
 | `IA_ACCESS_KEY` + `IA_SECRET_KEY` | `archive_source` | Optional Internet Archive S3-style credentials for Save Page Now. **`archive_source` is always available** keyless; both keys together authenticate captures for higher reliability. Never logged. Get a pair at archive.org/account/s3.php | — |
 
 Each structured-domain provider gets an independent circuit breaker and uses the SSRF-safe HTTP client. `filing_search` returns XBRL company facts (with `facts=true`); `econ_search` returns observations passed through exactly as the source provides them — no rounding; `clinical_search` returns trial metadata for discovery (not medical advice).

@@ -169,6 +169,7 @@ Works with Claude, Claude Desktop, Cursor, and any AI assistant that supports to
 | `legal_search` | Search US court opinions and dockets via CourtListener — real cases with real citations |
 | `econ_search` | Look up economic data — World Bank global development indicators, OECD economic indicators, Eurostat European statistics (all keyless), and FRED US macro series (GDP, CPI, unemployment, rates; requires FRED_API_KEY) |
 | `clinical_search` | Search ClinicalTrials.gov — clinical-trial registrations with status, phase, sponsor, and whether results are posted (discovery, not medical advice) |
+| `awesome_list_search` | Search the ecosyste.ms Awesome API for community-curated "awesome-*" lists on a GitHub topic — structured, filterable coverage (stars, curated-entry count, topics) beyond free-text search |
 | `local_search` | Search for physical places (restaurants, shops, services, points of interest) by local intent query — structured POI details and descriptions. Requires `BRAVE_API_KEY` |
 | `brand_research` | Research a company's complete brand identity — colors (hex), logos, typography, tone of voice, and social handles — from any domain or company name. Returns structured JSON for AI content generation. No API key required; BrandFetch key optional for richer data |
 | `verify_citation` | Check a citation before you rely on it — does it exist, match a real record, and is it retracted or a dead link? Evidence, not a verdict |
@@ -512,6 +513,7 @@ Search lenses let you control which websites your AI is allowed to search. Inste
 | `science` | Research, papers |
 | `government` | Policy, regulations |
 | `osint` | Open-source intelligence — public records, corporate registries, social footprint, infrastructure |
+| `awesome-lists` | Community-curated "awesome-*" lists on GitHub — PR-reviewed tool and resource collections across every domain |
 
 You can also [create your own lenses](#search-lenses) for any field — just list the domains you trust.
 

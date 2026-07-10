@@ -34,7 +34,7 @@ cmd/web-researcher-mcp/main.go   # Wiring only — constructs deps, starts serve
 cmd/gen-python-client/           # Emits Go tool schemas as JSON → piped through scripts/gen_python_client.py to regenerate the Python client
 internal/
 ├── tools/        # One file per tool, typed input structs, registered in registry.go; large-payload resource_link store (artifacts.go: research://artifact/{id})
-├── search/       # Provider interface + adapters + Router (multi-provider fallback); DOI enrichment: open-access (Unpaywall) + retraction status (Crossref Retraction Watch); custom/validated lenses
+├── search/       # Provider interface + adapters + Router (multi-provider fallback); structured-domain/synthesis/awesome-list/local/context capability interfaces; DOI enrichment: open-access (Unpaywall) + retraction status (Crossref Retraction Watch); custom/validated lenses
 ├── scraper/      # 4-tier pipeline by default (markdown → stealth → HTML → browser/go-rod), optional 5th Exa tier when EXA_API_KEY is set; SSRF-safe client; link verifier (liveness + Wayback archive)
 ├── documents/    # PDF, DOCX, PPTX extraction
 ├── cache/        # Cache interface + hybrid impl (memory L1 + optional Redis L2 + AES-encrypted disk L3)
@@ -81,7 +81,7 @@ Registry/manifest files (root, each read by a different external tool): `server.
 5. **Lens routing** — if `lens` is set, `site:` operators are injected and routed to the configured provider; lenses with a dedicated `cx` route directly to that Google PSE engine
 6. **Multi-provider routing** — when `SEARCH_ROUTING` is set, the Router wraps all available providers with per-provider circuit breakers and priority-ordered fallback; transparent to tools via the `search.Provider` interface
 7. **Explicit provider honoring** — when a user explicitly requests a provider via the `provider` field, that provider is used exclusively; if it returns empty results (e.g., USPTO for non-US patents), the tool returns empty — no silent fallback
-8. **Provider maps** — `deps.SearchProviders`, `deps.PatentProviders`, `deps.AcademicProviders`, `deps.AnswerProviders`, `deps.StructuredProviders`, `deps.FilingProviders`, `deps.CaseProviders`, `deps.EconProviders`, `deps.TrialProviders`, `deps.LocalProviders`, `deps.ContextProviders` hold all configured providers by name; built at startup via `Available…Providers()`, independent of routing config
+8. **Provider maps** — `deps.SearchProviders`, `deps.PatentProviders`, `deps.AcademicProviders`, `deps.AnswerProviders`, `deps.StructuredProviders`, `deps.FilingProviders`, `deps.CaseProviders`, `deps.EconProviders`, `deps.TrialProviders`, `deps.AwesomeListProviders`, `deps.LocalProviders`, `deps.ContextProviders` hold all configured providers by name; built at startup via `Available…Providers()`, independent of routing config
 
 ## How to Add a Tool
 

@@ -652,6 +652,82 @@ Or pass an explicit `sources` list:
 
 ---
 
+## Checking Your Own Usage (get_my_analytics)
+
+Return your own per-tool usage counts for this tenant — opt-in and consent-gated, and it only ever shows your own data.
+
+```json
+{
+  "tool": "get_my_analytics",
+  "arguments": {}
+}
+```
+
+**Response** contains per-tool call counts plus first/last-seen timestamps, or a disabled/no-consent status if user-level analytics isn't turned on or you haven't consented to the `analytics` purpose.
+
+---
+
+## Remembering a Finding Across Sessions (memory_save, memory_recall)
+
+Save a finding to your own long-term memory so future sessions can recall it — unlike `sequential_search` sessions, which expire after 4 hours. Opt-in and consent-gated.
+
+```json
+{
+  "tool": "memory_save",
+  "arguments": {
+    "note": "The 2020 NEJM remdesivir trial found a modest reduction in recovery time, not mortality.",
+    "topic": "covid-treatments",
+    "url": "https://www.nejm.org/doi/full/10.1056/NEJMoa2007764"
+  }
+}
+```
+
+Recall it later, optionally filtered by topic:
+
+```json
+{
+  "tool": "memory_recall",
+  "arguments": {
+    "topic": "covid-treatments",
+    "limit": 20
+  }
+}
+```
+
+Both tools show only your own memories — never another user's — and persist nothing unless long-term memory is enabled and you've consented to the `memory` purpose.
+
+---
+
+## Sharing Findings in a Team Workspace (workspace_contribute, workspace_read)
+
+Share a finding into a shared workspace your team belongs to. A copy is stored with your attribution — never a live link to your private data.
+
+```json
+{
+  "tool": "workspace_contribute",
+  "arguments": {
+    "workspace_id": "research-team-alpha",
+    "note": "Remdesivir shortens recovery time but doesn't move mortality — worth flagging before citing it as a survival benefit.",
+    "url": "https://www.nejm.org/doi/full/10.1056/NEJMoa2007764"
+  }
+}
+```
+
+Read back everything the team has shared:
+
+```json
+{
+  "tool": "workspace_read",
+  "arguments": {
+    "workspace_id": "research-team-alpha"
+  }
+}
+```
+
+Both tools require the `workspace` purpose consent and membership in the target workspace (membership is managed by your host app, not by these tools) — non-members get nothing back.
+
+---
+
 ## Cross-Tool Trust Workflow
 
 A full trust-verification pass for academic or legal research:

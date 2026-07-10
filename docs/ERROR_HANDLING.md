@@ -271,11 +271,21 @@ When consuming error responses, LLM agents can use the structured JSON for auton
 
 ### Zero-Result Responses (Not Errors)
 
-When `resultCount` is 0, patent_search and academic_search include a `hints` object:
+When `resultCount` is 0, several tools (including `patent_search`, `academic_search`, and `awesome_list_search`) include a `hints` object built by `buildZeroResultHints()`:
 
 ```json
 {"resultCount": 0, "hints": {"reason": "coverage_miss", "suggestedActions": [{"action": "switch_provider", "value": "lens"}]}}
 ```
+
+Each entry in `suggestedActions` is a `HintAction` (`internal/tools/errors.go`). This is a separate, free-form vocabulary from the top-level `SuggestedAction` enum above — a `HintAction.Action` value is never one of the `SuggestedAction` values.
+
+| `HintAction.Action` | LLM Should |
+|----------------------|------------|
+| `remove_filter` | Drop the named `parameter` filter and retry — it narrowed the result set to zero |
+| `try_different_provider` / `switch_provider` | Re-call with `provider` set to the suggested `value` |
+| `rephrase_query` | The query term didn't match (e.g. an exact-match topic tag with no stemming) — retry with the wording in `detail`, not a different tool |
+
+New call sites are free to introduce further `Action` values. Treat an unrecognized one as a generic "read `detail` and adjust the call" signal, not a failure.
 
 ### Partial Success (search_and_scrape)
 

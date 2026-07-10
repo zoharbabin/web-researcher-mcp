@@ -87,6 +87,8 @@ This is the architecture reference for web-researcher-mcp — the tool that give
 └──────────────────────────────────────────────────────────────────┘
 ```
 
+The five boxes above are a schematic, not an exhaustive tool list — the actual tool count has grown well past what fits in five boxes. For the full, current tool inventory grouped by category, see `internal/tools/registry.go`'s `RegisterAll()` (the source of truth) or `docs/TOOLS.md`. As of this writing that includes, beyond the five shown: structured-domain research (`filing_search`, `legal_search`, `econ_search`, `clinical_search`, `awesome_list_search`), synthesis (`answer`, `structured_search`), place/context search (`local_search`), citation tooling (`citation_graph`, `verify_citation`, `audit_bibliography`, `format_bibliography`, `research_export`), trust/anti-sloptimization (`verify_recommendation`, `archive_source`, `brand_research`), and the opt-in regulated tools (`memory_save`/`memory_recall`, `workspace_contribute`/`workspace_read`, `get_my_analytics`).
+
 ## Module Layout
 
 ```
@@ -155,7 +157,9 @@ type Provider interface {
 }
 ```
 
-Several providers implement this interface — Google PSE, Brave, Serper, SearXNG, SearchAPI.io, Tavily, Exa, DuckDuckGo (the zero-config, no-key fallback), and Hacker News (the no-key HN Algolia index). The canonical list is `search.SupportedProviders` in `internal/search/provider.go`. The `Router` also implements `Provider`, enabling transparent multi-provider fallback — tools don't need to know whether they're calling a single provider or a routing layer.
+Several providers implement this interface — Google PSE, Brave, Serper, SearXNG, SearchAPI.io, Tavily, Exa, DuckDuckGo (the zero-config, no-key fallback), and Hacker News (the no-key HN Algolia index, `internal/search/hackernews.go`). The canonical list is `search.SupportedProviders` in `internal/search/provider.go`. The `Router` also implements `Provider`, enabling transparent multi-provider fallback — tools don't need to know whether they're calling a single provider or a routing layer.
+
+This HN *search provider* is a separate integration from the HN *scrape-time* fetcher in the Performance table below (`internal/scraper/hackernews.go`) — one indexes and ranks HN stories for `news_search`/`web_search`, the other fetches a specific item/thread/user directly from HN's own Firebase API when `scrape_page` is pointed at an `news.ycombinator.com` URL. They share no code and hit different upstream APIs.
 
 When `SEARCH_ROUTING` is configured, the Router wraps all available providers with per-provider circuit breakers and priority-ordered fallback. Search lenses inject `site:` operators and route through the configured provider. Lenses with a dedicated `cx` field route directly to that Google PSE engine.
 
@@ -169,6 +173,8 @@ Beyond the general `Provider`, the system layers **opt-in capability interfaces*
 - **`FilingSearcher` / `CaseSearcher` / `EconSearcher` / `TrialSearcher`** — `internal/search/structured_domains.go`. The structured-research domains behind `filing_search` (SEC EDGAR), `legal_search` (CourtListener), `econ_search` (FRED + World Bank + OECD + Eurostat), and `clinical_search` (ClinicalTrials.gov). Each follows the same `…Searcher` + `…Provider` + `Supported…Providers` + `New…ByName` + `Available…Providers` shape as the patent/academic capabilities, resolved from the `Dependencies` maps in the tool layer. A new provider behind an existing interface (e.g. OECD/Eurostat under `EconProvider`) is one factory case + one list entry, no tool change.
 - **`AwesomeListSearcher`** (`AwesomeLists`) — `internal/search/awesome_domain.go`. Community-curated "awesome list" discovery behind `awesome_list_search`, backed by ecosyste.ms (keyless). Follows the same `…Searcher` + `…Provider` + `Supported…Providers` + `New…ByName` + `Available…Providers` shape as the other structured-domain capabilities above.
 - **`AnswerSearcher` / `StructuredSearcher`** — `internal/search/synthesis.go`. The provider-independent capabilities behind the `answer` and `structured_search` tools (grounded Q&A and per-result structured extraction). Currently Exa; a new provider (e.g. Perplexity) is added with one factory case + one list entry and the tools pick it up with no tool-layer change.
+- **`LocalSearcher`** (`Local`) — `internal/search/local.go`. Physical-place search (restaurants, shops, offices) behind `local_search`, backed by Brave's three-call local pipeline (`web/search?result_filter=locations` → `local/pois` → `local/descriptions`). Brave is the sole provider today.
+- **`ContextSearcher`** (`Context`) — `internal/search/context.go`. A provenance-rich LLM grounding context assembled server-side (Brave's `/res/v1/llm/context` endpoint), used by `search_and_scrape` as a fast-path via a type assertion — no tool-layer change needed to add a second provider.
 
 Separate from the capability interfaces, three **enrichment** interfaces operate post-search on DOI-bearing results — not search providers:
 
@@ -176,7 +182,7 @@ Separate from the capability interfaces, three **enrichment** interfaces operate
 - **`RetractionResolver`** (`internal/search/retraction.go`, implemented by `CrossrefRetractionResolver`) — flags retracted or corrected works via `EnrichRetraction`. Used by `academic_search`, `citation_graph`, `scrape_page`, `audit_bibliography`, and `verify_citation`.
 - **`DOIResolver`** (`internal/search/domain.go`, optional capability on academic providers) — performs an exact entity lookup for a DOI (e.g. OpenAlex `/works/doi:{doi}`) so `verify_citation` always retrieves the cited work directly rather than relying on a relevance-ranked search whose top hit could be a different paper.
 
-A provider can satisfy several at once — `ExaProvider` implements `Provider`, `AcademicProvider`, `AnswerProvider`, and `StructuredProvider` simultaneously, and Semantic Scholar/OpenAlex implement both `AcademicProvider` and `CitationSearcher`. The `Router` routes the `Provider`, `PatentSearcher`, and `AcademicSearcher` capabilities with per-provider breaker fallback; the synthesis, citation, and structured-domain (filing/case/econ/trial) capabilities are resolved directly from the `Dependencies` maps in the tool layer. Each configured provider gets an independent circuit breaker.
+A provider can satisfy several at once — `ExaProvider` implements `Provider`, `AcademicProvider`, `AnswerProvider`, and `StructuredProvider` simultaneously, and Semantic Scholar/OpenAlex implement both `AcademicProvider` and `CitationSearcher`. The `Router` routes the `Provider`, `PatentSearcher`, and `AcademicSearcher` capabilities with per-provider breaker fallback; the synthesis, citation, awesome-list, local, context, and structured-domain (filing/case/econ/trial) capabilities are resolved directly from the `Dependencies` maps in the tool layer. Each configured provider gets an independent circuit breaker.
 
 ### 3. Tiered Scraping Pipeline
 
