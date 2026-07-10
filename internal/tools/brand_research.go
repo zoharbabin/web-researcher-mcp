@@ -1632,13 +1632,15 @@ func looksLikeBrandPage(ctx context.Context, client *http.Client, u string) bool
 		return false
 	}
 	body := strings.ToLower(string(buf[:n]))
-	// Reject soft-404 and auth/login pages.
-	for _, marker := range []string{"404", "not found", "page not found", "doesn't exist", "sign in", "log in", "login required"} {
-		if strings.Contains(body, marker) {
-			return false
-		}
+	// Reject soft-404 and auth/login pages. English-keyword heuristic (#390):
+	// a non-English soft-404/login page won't match and falls through to the
+	// signal checks below instead of being rejected here.
+	if content.ContainsAny(body, []string{"404", "not found", "page not found", "doesn't exist", "sign in", "log in", "login required"}) {
+		return false
 	}
-	// Multi-word/specific signals are high-confidence on their own.
+	// Multi-word/specific signals are high-confidence on their own. English-
+	// keyword heuristic (#390): a genuine non-English brand/press page won't
+	// match any of these and falls through to the weak-signal count below.
 	strongSignals := []string{
 		"media kit", "brand kit", "brand book", "brandbook", "brand guide",
 		"brand portal", "brand hub", "brand center", "brand centre",
@@ -1646,22 +1648,14 @@ func looksLikeBrandPage(ctx context.Context, client *http.Client, u string) bool
 		"brand asset", "brand color", "brand colour", "brand font",
 		"press kit", "download logo",
 	}
-	for _, s := range strongSignals {
-		if strings.Contains(body, s) {
-			return true
-		}
+	if content.ContainsAny(body, strongSignals) {
+		return true
 	}
 	// Single-word signals require at least 3 co-occurring matches to avoid
 	// false positives from pages that merely mention "logo" or "color" in
 	// CSS class names or boilerplate (e.g. a generic app page with class="logo-img color-primary").
 	weakSignals := []string{"brand", "logo", "colour", "typeface", "typography", "color", "font", "press"}
-	count := 0
-	for _, s := range weakSignals {
-		if strings.Contains(body, s) {
-			count++
-		}
-	}
-	return count >= 3
+	return content.CountAny(body, weakSignals) >= 3
 }
 
 // ─── URL helpers ───────────────────────────────────────────────────────────

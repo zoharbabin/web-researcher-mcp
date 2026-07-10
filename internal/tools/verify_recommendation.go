@@ -222,6 +222,15 @@ var corroborationLenses = []string{"journalism", "tech"}
 // (disagreeCount); any other non-empty signal means independent agreement
 // (agreeCount).
 //
+// The disagree check also scans the result's title, not just claimSignal:
+// enrichResultsWithReputation only extracts claim evidence from the snippet
+// (#66, documented in docs/TOOLS.md), so refutation language that lands in a
+// headline rather than the snippet body — e.g. a title like "CDC website now
+// falsely links vaccines and autism" backed by an unrelated snippet — would
+// otherwise be missed and mistallied as silent/agree. This is scoped to the
+// corroboration tally only; it does not change claimSignal's public,
+// documented snippet-only contract used by web_search.
+//
 // The function is fail-open: a nil provider, missing lens, or network error
 // produces an empty slice rather than propagating an error — the audit's
 // reputation/liveness signals are unaffected. deps.Search (the default provider
@@ -253,14 +262,18 @@ func corroborateRecommendation(ctx context.Context, deps Dependencies, title, cl
 		}
 		for _, r := range enriched {
 			signal, _ := r["claimSignal"].(string)
+			resultTitle, _ := r["title"].(string)
 			switch {
-			case signal == "":
-				// No snippet sentence mentioned the title at all — independent silence.
-				cr.SilentCount++
-			case content.HasContrastCue([]string{signal}):
-				// The most relevant sentence carries a negation/refutation cue —
-				// independent coverage that disputes the recommendation.
+			case content.HasContrastCue([]string{signal, resultTitle}):
+				// The claimSignal sentence or the result's own title carries a
+				// negation/refutation cue — independent coverage that disputes
+				// the recommendation (checking the title too catches refutation
+				// language that lands in a headline but not the snippet).
 				cr.DisagreeCount++
+			case signal == "":
+				// No snippet sentence mentioned the title at all, and the title
+				// itself carries no refutation cue — independent silence.
+				cr.SilentCount++
 			default:
 				// A relevant sentence with no refutation cue — independent agreement.
 				cr.AgreeCount++
@@ -287,7 +300,7 @@ var verifyRecommendationOutputSchema = map[string]any{
 					"selfPromotionSignal": map[string]any{"type": "object", "description": "Present when the linked page is a ranking list that places its own host's brand first (e.g. a brand blog ranking itself #1). Detected by fetching the URL."},
 					"conflictOfInterest": map[string]any{
 						"type":        "object",
-						"description": "Present when the author has a detected financial stake in the recommended entity. Employment / funding / equity connections.",
+						"description": "Present when the author has a detected financial stake in the recommended entity. Employment / funding / equity connections." + languageHeuristicCaveat,
 						"properties": map[string]any{
 							"detected":          map[string]any{"type": "boolean"},
 							"authorAffiliation": map[string]any{"type": "string"},
@@ -313,9 +326,9 @@ var verifyRecommendationOutputSchema = map[string]any{
 								"lens":          map[string]any{"type": "string", "description": "Lens name used (e.g. 'journalism', 'tech')."},
 								"resultCount":   map[string]any{"type": "integer", "description": "Total results returned by the search."},
 								"agreeCount":    map[string]any{"type": "integer", "description": "Results whose snippet addresses the recommendation positively in context of the claim."},
-								"disagreeCount": map[string]any{"type": "integer", "description": "Results whose snippet contradicts or does not address the recommendation."},
-								"silentCount":   map[string]any{"type": "integer", "description": "Results that mention the item but neither agree nor disagree with the claim context."},
-								"topResults":    map[string]any{"type": "array", "description": "Enriched search results including claimSignal and sourceReputation per result."},
+								"disagreeCount": map[string]any{"type": "integer", "description": "Results whose snippet or title contradicts or does not address the recommendation." + languageHeuristicCaveat},
+								"silentCount":   map[string]any{"type": "integer", "description": "Results that mention the item but neither agree nor disagree with the claim context." + languageHeuristicCaveat},
+								"topResults":    map[string]any{"type": "array", "description": "Enriched search results including claimSignal and sourceReputation per result." + languageHeuristicCaveat},
 							},
 						},
 					},

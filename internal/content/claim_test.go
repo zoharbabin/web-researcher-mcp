@@ -231,3 +231,68 @@ func TestHasContrastCueIgnoresDiscourseConnectives(t *testing.T) {
 		}
 	}
 }
+
+// TestHasContrastCueCatchesRealWorldRefutationLanguage is the regression guard
+// for a gap surfaced by a live GEO-defense eval run (2026-07-10, verify_recommendation
+// against real search results): sentences using common real-world refutation
+// vocabulary — "falsely", "debunked", "hoax", "avoid section" — that the original
+// negation-only cue list missed, so corroborateRecommendation's disagreeCount
+// under-counted genuine disagreement.
+func TestHasContrastCueCatchesRealWorldRefutationLanguage(t *testing.T) {
+	refutations := []string{
+		"The CDC website now falsely links vaccines and autism.",
+		"Health officials debunked the claim within days.",
+		"Researchers called the treatment an unfounded hoax with no causal link to recovery.",
+		"The report was widely discredited as misinformation.",
+		"The study's data were later found to be fabricated.",
+		"Experts say the claim is not true and lacks evidence.",
+	}
+	for _, s := range refutations {
+		if !HasContrastCue([]string{s}) {
+			t.Errorf("real-world refutation language must trip a contrast cue: %q", s)
+		}
+	}
+
+	// A bare mention of the word "avoid" outside of a refutation context must NOT
+	// trip — "avoid" itself is too context-dependent to add as a standalone cue
+	// (see the comment in contrastCues).
+	if HasContrastCue([]string{"Patients should avoid taking the drug on an empty stomach."}) {
+		t.Error(`a benign dosing instruction with "avoid" must NOT trip a contrast cue`)
+	}
+}
+
+func TestContainsAny(t *testing.T) {
+	needles := []string{"foo", "bar"}
+	if !ContainsAny("this has a foo in it", needles) {
+		t.Error("expected match on foo")
+	}
+	if !ContainsAny("this has a bar in it", needles) {
+		t.Error("expected match on bar")
+	}
+	if ContainsAny("no match here", needles) {
+		t.Error("expected no match")
+	}
+	if ContainsAny("", needles) {
+		t.Error("empty text should never match")
+	}
+	if ContainsAny("anything", nil) {
+		t.Error("nil needles should never match")
+	}
+}
+
+func TestCountAny(t *testing.T) {
+	needles := []string{"foo", "bar", "baz"}
+	if got := CountAny("foo and bar and baz all appear", needles); got != 3 {
+		t.Errorf("expected 3 distinct needles, got %d", got)
+	}
+	if got := CountAny("only foo appears", needles); got != 1 {
+		t.Errorf("expected 1 distinct needle, got %d", got)
+	}
+	if got := CountAny("none of these appear", needles); got != 0 {
+		t.Errorf("expected 0 distinct needles, got %d", got)
+	}
+	// Repeated occurrences of the same needle count once, not per-occurrence.
+	if got := CountAny("foo foo foo", needles); got != 1 {
+		t.Errorf("repeated needle should count once, got %d", got)
+	}
+}
