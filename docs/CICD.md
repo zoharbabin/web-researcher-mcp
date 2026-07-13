@@ -250,8 +250,10 @@ Gated on `vars.PACKAGING_UPDATE_ENABLED == 'true'`. The AUR push step is additio
 
 This is what gets `nix profile install nixpkgs#web-researcher-mcp` working for users — no flake, no pinning to this repo. Two modes, chosen automatically per run:
 
-- **Package not yet in nixpkgs** → installs nix, computes `src` hash and `vendorHash` (using `lib.fakeHash` trick — build with empty hash, extract real hash from the error, repeat for vendor), forks `NixOS/nixpkgs`, pushes the derivation in the correct `pkgs/by-name/we/web-researcher-mcp/` path, opens a PR against `NixOS/nixpkgs` master.
+- **Package not yet in nixpkgs** → installs nix, computes `src` hash and `vendorHash` (using `lib.fakeHash` trick — build with empty hash, extract real hash from the error, repeat for vendor), forks `NixOS/nixpkgs`, pushes the derivation to a stable branch, opens or updates the one PR against `NixOS/nixpkgs` master.
 - **Package already merged** → no-op; the `passthru.updateScript = nix-update-script {}` in the derivation signals the `nixpkgs-update` bot to open version-bump PRs automatically on every new release tag — zero maintenance.
+
+The branch name (`nixpkgs-web-researcher-mcp-init`) is version-independent by design: every pre-merge release pushes to the same branch and reuses the same open PR (checked via `gh pr list --head`) instead of opening a new PR per release. The bot-authored commit carries an `Assisted-by: Claude Code (claude-sonnet-5)` trailer and the PR body ticks the automation/AI policy checklist item, per `CONTRIBUTING.md#automationai-policy` in nixpkgs.
 
 ```
 1. Check if pkgs/by-name/we/web-researcher-mcp/package.nix exists in NixOS/nixpkgs
@@ -261,8 +263,9 @@ This is what gets `nix profile install nixpkgs#web-researcher-mcp` working for u
 4. Compute real vendorHash (same trick with src hash known)
 5. Patch packaging/nixpkgs/package.nix with both hashes
 6. Fork NixOS/nixpkgs (gh repo fork — idempotent)
-7. Clone fork, create branch nixpkgs-web-researcher-mcp-<VERSION>, commit, push
-8. Open PR: zoharbabin:nixpkgs-web-researcher-mcp-<VERSION> → NixOS/nixpkgs master
+7. Clone fork, force-push branch nixpkgs-web-researcher-mcp-init, commit (with Assisted-by trailer)
+8. Look for an existing open PR from that branch — update its title/body if found,
+   else open a new PR: zoharbabin:nixpkgs-web-researcher-mcp-init → NixOS/nixpkgs master
 ```
 
 Gated on `vars.NIXPKGS_ENABLED == 'true'` + `secrets.NIXPKGS_FORK_GITHUB_TOKEN`.

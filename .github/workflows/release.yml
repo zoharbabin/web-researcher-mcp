@@ -612,16 +612,22 @@ jobs:
   # Submits (or updates) a PR to NixOS/nixpkgs with a buildGoModule derivation.
   #
   # Two modes, chosen automatically:
-  #   • Package not yet in nixpkgs → opens the initial PR (one-time, human-reviewed)
+  #   • Package not yet in nixpkgs → opens/updates the one init PR (human-reviewed)
   #   • Package already merged      → no-op; nixpkgs-update bot handles future bumps
   #     automatically by running `passthru.updateScript = nix-update-script {}`.
+  #
+  # The branch name is version-independent (nixpkgs-web-researcher-mcp-init) so
+  # every release pushes to the SAME branch/PR instead of opening a new one —
+  # nixpkgs maintainers review one PR per package, not one per release. Before
+  # pushing, we check for an existing open PR from this branch and reuse it
+  # (`gh pr edit`) rather than blindly `gh pr create`.
   #
   # Hash computation workflow:
   #   1. Install nix (DeterminateSystems/nix-installer — fast, cached on ubuntu)
   #   2. Run `nix build` with lib.fakeHash to capture real src hash from error
   #   3. Re-run with real src hash to capture real vendorHash
   #   4. Write both into packaging/nixpkgs/package.nix
-  #   5. Fork NixOS/nixpkgs, push branch, open PR
+  #   5. Fork NixOS/nixpkgs, push the stable branch, open or update the PR
   #
   # Gated on NIXPKGS_ENABLED var + NIXPKGS_FORK_GITHUB_TOKEN secret.
   # An unconfigured fork is a clean no-op (same degradation model as all other
@@ -777,7 +783,11 @@ jobs:
           set -euo pipefail
           VERSION="${RELEASE_TAG#v}"
           GH_USER="$(gh api user --jq '.login')"
-          BRANCH="nixpkgs-web-researcher-mcp-${VERSION}"
+          # Stable, version-independent branch name: every pre-merge release
+          # pushes to the SAME branch, so it updates the one open init PR
+          # instead of opening a new PR per release (see #537807/#540427/#540520
+          # for what happens when this is version-suffixed instead).
+          BRANCH="nixpkgs-web-researcher-mcp-init"
           PKG_DIR="pkgs/by-name/we/web-researcher-mcp"
           FORK_REMOTE="https://x-access-token:${GH_TOKEN}@github.com/${GH_USER}/nixpkgs.git"
 
@@ -796,24 +806,29 @@ jobs:
           # so it sorts immediately before zohl, not before zookatron.
           MLIST="/tmp/nixpkgs/maintainers/maintainer-list.nix"
           if ! grep -q 'zoharbabin' "${MLIST}"; then
-            perl -i -0pe 's|(  zohl = \{)|  zoharbabin = \{\n    email = "zohar\@zoharbabin.com";\n    github = "zoharbabin";\n    githubId = 150514;\n    name = "Zohar Babin";\n  };\n$1|' "${MLIST}"
+            perl -i -0pe 's|(  zohl = \{)|  zoharbabin = \{\n    email = "z.babin\@gmail.com";\n    github = "zoharbabin";\n    githubId = 150514;\n    name = "Zohar Babin";\n  };\n$1|' "${MLIST}"
             git -C /tmp/nixpkgs add maintainers/maintainer-list.nix
           fi
 
           git -C /tmp/nixpkgs add "${PKG_DIR}/package.nix"
-          git -C /tmp/nixpkgs commit -m "web-researcher-mcp: init at ${VERSION}"
+          # Assisted-by trailer satisfies nixpkgs' automation/AI policy
+          # (CONTRIBUTING.md#automationai-policy) for this bot-authored commit.
+          git -C /tmp/nixpkgs commit -m "web-researcher-mcp: init at ${VERSION}" \
+            -m "Assisted-by: Claude Code (claude-sonnet-5)"
 
           # Plain --force, not --force-with-lease: this is a shallow, fresh clone
           # that never fetched ${BRANCH}, so there's no local tracking ref to lease
           # against — git treats the branch as "expected absent" and rejects the
           # push as stale on any re-run once the branch already exists on the fork.
-          # The bot fully owns this branch and always intends to overwrite it.
+          # The bot fully owns this branch and always intends to overwrite it. This
+          # is safe from a history standpoint because the new commit's parent is
+          # master's own (real) tip, never a foreign/unrelated tree.
           git -C /tmp/nixpkgs push "${FORK_REMOTE}" "${BRANCH}" --force
           echo "fork_user=${GH_USER}" >> "$GITHUB_ENV"
           echo "pr_branch=${BRANCH}" >> "$GITHUB_ENV"
           echo "pkg_version=${VERSION}" >> "$GITHUB_ENV"
 
-      - name: Open PR against NixOS/nixpkgs
+      - name: Open or update PR against NixOS/nixpkgs
         if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true'
         env:
           GH_TOKEN: ${{ secrets.NIXPKGS_FORK_GITHUB_TOKEN }}
@@ -848,16 +863,33 @@ jobs:
           - [x] Uses `buildGoModule` per nixpkgs packaging guidelines
           - [x] Placed in `pkgs/by-name/we/web-researcher-mcp/package.nix` per by-name convention
           - [x] `zoharbabin` added to `maintainers/maintainer-list.nix`
+          - [x] Follows the [automation/AI policy](https://github.com/NixOS/nixpkgs/blob/master/CONTRIBUTING.md#automationai-policy) — commit carries an `Assisted-by:` trailer, and a human maintainer (zoharbabin) reviews and responds to this PR personally.
           PREOF
-          PR_URL="$(gh pr create \
-            --repo NixOS/nixpkgs \
-            --head "${fork_user}:${pr_branch}" \
-            --base master \
-            --title "web-researcher-mcp: init at ${pkg_version}" \
-            --body-file /tmp/nixpkgs-pr-body.md || true)"
-          if [ -n "${PR_URL}" ]; then
-            echo "PR created: ${PR_URL}"
-            echo "::notice::nixpkgs PR opened: ${PR_URL}"
+
+          # This branch is stable across releases (see previous step) — check for
+          # an existing open PR from it before creating a new one, so a re-run just
+          # refreshes the same PR's commit/body instead of opening a duplicate.
+          EXISTING_PR="$(gh pr list --repo NixOS/nixpkgs \
+            --head "${fork_user}:${pr_branch}" --state open \
+            --json url --jq '.[0].url' || true)"
+
+          if [ -n "${EXISTING_PR}" ]; then
+            echo "Existing open PR found — updating body/title: ${EXISTING_PR}"
+            gh pr edit "${EXISTING_PR}" --repo NixOS/nixpkgs \
+              --title "web-researcher-mcp: init at ${pkg_version}" \
+              --body-file /tmp/nixpkgs-pr-body.md
+            echo "::notice::nixpkgs PR updated: ${EXISTING_PR}"
           else
-            echo "::warning::PR creation returned empty URL — check for existing open PR or auth issue"
+            PR_URL="$(gh pr create \
+              --repo NixOS/nixpkgs \
+              --head "${fork_user}:${pr_branch}" \
+              --base master \
+              --title "web-researcher-mcp: init at ${pkg_version}" \
+              --body-file /tmp/nixpkgs-pr-body.md || true)"
+            if [ -n "${PR_URL}" ]; then
+              echo "PR created: ${PR_URL}"
+              echo "::notice::nixpkgs PR opened: ${PR_URL}"
+            else
+              echo "::warning::PR creation returned empty URL — check for existing open PR or auth issue"
+            fi
           fi
