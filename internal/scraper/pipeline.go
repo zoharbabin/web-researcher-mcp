@@ -39,6 +39,17 @@ type PipelineConfig struct {
 	// HNAlgoliaBase overrides the production HN Algolia base URL (for tests).
 	// Empty (default) ⇒ https://hn.algolia.com/api/v1
 	HNAlgoliaBase string
+	// GitHubToken is the optional GITHUB_TOKEN (see internal/config), used only
+	// to raise GitHub's unauthenticated rate limit for native README/blob/gist
+	// content routing in scrape_page (#395). Never logged. Empty (default) ⇒
+	// requests are sent unauthenticated.
+	GitHubToken string
+	// GitHubRawBase overrides the production raw.githubusercontent.com base URL
+	// (for tests). Empty (default) ⇒ https://raw.githubusercontent.com
+	GitHubRawBase string
+	// GitHubAPIBase overrides the production api.github.com base URL (for
+	// tests). Empty (default) ⇒ https://api.github.com
+	GitHubAPIBase string
 }
 
 // ForumSignals holds engagement metadata extracted from forum pages (Reddit,
@@ -242,6 +253,8 @@ func (p *Pipeline) Scrape(ctx context.Context, rawURL string, maxLength int) (*S
 		result, err = p.scrapeTwitter(ctx, url, maxLength)
 	case isHNURL(url):
 		result, err = p.scrapeHN(ctx, url, maxLength)
+	case isGitHubContentURL(url):
+		result, err = p.scrapeGitHubContent(ctx, url, maxLength)
 	case isDocumentURL(url):
 		result, err = p.scrapeDocument(ctx, url, maxLength)
 	default:

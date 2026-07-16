@@ -286,6 +286,7 @@ func main() {
 	awesomeListProviders := search.AvailableAwesomeListProviders(search.AwesomeListProviderConfig{
 		EcosystemsAPIKey: cfg.Search.EcosystemsAPIKey,
 		EcosystemsEmail:  cfg.Search.EcosystemsEmail,
+		GitHubToken:      cfg.Search.GitHubToken,
 	}, searchDeps)
 
 	// Local place search (#259): Brave Local Search API. Requires BRAVE_API_KEY;
@@ -383,6 +384,7 @@ func main() {
 		ExaAPIKey:        cfg.Search.ExaAPIKey, // enables the paid Exa /contents fallback tier
 		MaxHTMLBytes:     cfg.MaxHTMLBytes,
 		MaxDocumentBytes: cfg.MaxDocumentBytes,
+		GitHubToken:      cfg.Search.GitHubToken, // raises GitHub's unauth rate limit for native README/blob/gist routing (#395)
 	})
 	defer scraperPipeline.Close()
 

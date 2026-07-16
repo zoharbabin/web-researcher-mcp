@@ -2188,6 +2188,9 @@ func TestAvailableProviders(t *testing.T) {
 	if _, ok := providers["searxng"]; ok {
 		t.Error("did not expect searxng provider (no URL)")
 	}
+	if _, ok := providers["github"]; !ok {
+		t.Error("expected github provider (zero-config, always available)")
+	}
 }
 
 func TestNewProviderByName_MissingCredentials(t *testing.T) {
@@ -2214,6 +2217,9 @@ func TestNewProviderByName_MissingCredentials(t *testing.T) {
 	}
 	if p := NewProviderByName("tavily", config.SearchConfig{TavilyAPIKey: "k"}, deps); p == nil || p.Name() != "tavily" {
 		t.Error("expected tavily provider when key is set")
+	}
+	if p := NewProviderByName("github", cfg, deps); p == nil || p.Name() != "github" {
+		t.Error("expected github provider even without token (zero-config)")
 	}
 }
 
