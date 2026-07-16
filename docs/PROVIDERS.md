@@ -41,6 +41,7 @@ Understanding what backs each provider helps you reason about result overlap and
 | **[Tavily](https://app.tavily.com/)** | Aggregator | Queries multiple existing engines at runtime; scrapes top results; applies AI re-ranking — no proprietary crawled index |
 | **[SearXNG](https://docs.searxng.org/)** | Meta-search | Configurable — routes to whatever backends you point it at (Bing, Google, DuckDuckGo, and others) |
 | **[HackerNews](https://hn.algolia.com/)** | Niche | HN Algolia index — Hacker News stories and submissions only |
+| **[GitHub](https://docs.github.com/en/rest/search/search)** | Niche | GitHub REST Search API — issues and pull requests only |
 
 **Practical implication**: Google PSE, Serper, and SearchAPI.io draw from the same index — using more than one adds no coverage, only redundancy. Brave and Exa bring genuinely independent results. Tavily and SearXNG aggregate results from others rather than crawling themselves.
 
@@ -61,6 +62,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 | **[Tavily](https://app.tavily.com/)** | ✓ | — | ✓ | — | — | — | — |
 | **[SearXNG](https://docs.searxng.org/)** | ✓ | ✓ | ✓ | — | — | — | — |
 | **[HackerNews](https://hn.algolia.com/)** | ✓ | — | ✓ | — | — | — | — |
+| **[GitHub](https://docs.github.com/en/rest/search/search)** | ✓ | — | ✓ | — | — | — | — |
 
 **Notes:**
 - `answer` and `structured_search` are provider-independent tools, but Exa is the only web provider that backs them with its native API. They remain unavailable if no Exa key is set.
@@ -77,6 +79,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 |---|---|---|
 | **[DuckDuckGo](https://duckduckgo.com/)** | Unlimited | Free |
 | **[HackerNews](https://hn.algolia.com/)** | Unlimited | Free |
+| **[GitHub](https://docs.github.com/en/rest/search/search)** | 10 req/min (unauth) / 30 req/min (token) | Free |
 | **[SearXNG](https://docs.searxng.org/)** | Unlimited (self-hosted) | Free (self-hosted) |
 | **[Google PSE](https://programmablesearchengine.google.com/)** | 100 queries/day | $5 / 1,000 queries |
 | **[Brave](https://brave.com/search/api/)** | 2,000 queries/month | Paid plans |
@@ -100,6 +103,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 | `answer` or `structured_search` tools | [Exa](https://exa.ai/) (required) |
 | Air-gapped or no vendor lock-in | [SearXNG](https://docs.searxng.org/) (self-hosted) |
 | Tech/developer community signal | [HackerNews](https://hn.algolia.com/) |
+| GitHub issue and PR search | [GitHub](https://docs.github.com/en/rest/search/search) |
 | Maximum reliability | `SEARCH_ROUTING=brave,google,serper` (three independent providers) |
 
 ---
@@ -121,6 +125,8 @@ Which tools each web search provider enables. `—` means the provider returns e
 **[SearXNG](https://docs.searxng.org/)** — Open-source, self-hosted, routes to configurable backends. Best for air-gapped environments, organizations requiring no external vendor dependency, or privacy-first deployments. Requires hosting and setup but carries no query limits or API costs.
 
 **[HackerNews](https://hn.algolia.com/)** — Searches HN stories and submissions via the public HN Algolia API. No key or registration. Not general web — use only when you specifically want HN community signal, tech discussions, or submission history. `scrape_page` on any HN URL (item, user, list) reads natively through the HN Firebase API regardless of which `SEARCH_PROVIDER` is set.
+
+**[GitHub](https://docs.github.com/en/rest/search/search)** — Searches GitHub issues and pull requests via the public REST Search API. No token required (10 req/min unauthenticated); set GITHUB_TOKEN to raise the limit to 30 req/min. Not general web — use only when you specifically want GitHub issue/PR signal: bug reports, feature requests, open-source community traction, or developer discussion history. Results include issue number, state, kind (issue/PR), reaction count, comment count, author, and creation date. `scrape_page` on any GitHub URL works through the standard scrape pipeline regardless of which `SEARCH_PROVIDER` is set.
 
 ---
 
