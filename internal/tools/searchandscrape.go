@@ -23,7 +23,7 @@ type searchAndScrapeInput struct {
 	MaxLengthPerSource int    `json:"max_length_per_source,omitempty" jsonschema:"Max content bytes extracted per source (default: 50000)."`
 	TotalMaxLength     int    `json:"total_max_length,omitempty" jsonschema:"Max total bytes for combined output (default: 300000). Reduce for faster, more concise results."`
 	FilterByQuery      bool   `json:"filter_by_query,omitempty" jsonschema:"Remove sources with low relevance to the query (default: false). Enable for precision over recall."`
-	Provider           string `json:"provider,omitempty" jsonschema:"Force a specific search provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews. Omit to use configured default."`
+	Provider           string `json:"provider,omitempty" jsonschema:"Force a specific search provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, github. Omit to use configured default."`
 	SessionID          string `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. All scraped sources are automatically recorded for recovery after context loss."`
 	Claim              string `json:"claim,omitempty" jsonschema:"Optional claim to evaluate against each source. When set, each source gains keySentences (the most claim-relevant sentences) and a claimSignal (the single strongest). The server surfaces evidence only — it never decides supports/contradicts; you make that call."`
 }
