@@ -384,6 +384,7 @@ func main() {
 		ExaAPIKey:        cfg.Search.ExaAPIKey, // enables the paid Exa /contents fallback tier
 		MaxHTMLBytes:     cfg.MaxHTMLBytes,
 		MaxDocumentBytes: cfg.MaxDocumentBytes,
+		GitHubToken:      cfg.Search.GitHubToken, // raises GitHub's unauth rate limit for native README/blob/gist routing (#395)
 	})
 	defer scraperPipeline.Close()
 

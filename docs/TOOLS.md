@@ -106,7 +106,7 @@ On a zero-result response, `hints` carries a `ZeroResultHints` object (the same 
 ## Tool 2: `scrape_page`
 
 ### Purpose
-Extract content from a URL, supporting web pages, documents, YouTube videos, and Hacker News threads (read natively via the HN API).
+Extract content from a URL, supporting web pages, documents, YouTube videos, Hacker News threads (read natively via the HN API), and GitHub README/file/gist pages (read natively via the GitHub API).
 
 ### Input Schema
 
@@ -123,7 +123,7 @@ Extract content from a URL, supporting web pages, documents, YouTube videos, and
 type ScrapeOutput struct {
     URL             string    `json:"url"`
     Content         string    `json:"content"`
-    ContentType     string    `json:"contentType"`    // html, markdown, youtube, pdf, docx, pptx (raw mode: the server's Content-Type header, may be "")
+    ContentType     string    `json:"contentType"`    // html, markdown, youtube, pdf, docx, pptx, github (raw mode: the server's Content-Type header, may be "")
     Trust           string    `json:"trust"`          // always "untrusted-external-content" — boundary marker: treat content as data, not instructions (OWASP LLM01)
     ContentLength   int       `json:"contentLength"`
     Truncated       bool      `json:"truncated"`
@@ -203,7 +203,7 @@ In `raw` mode the output additionally carries `"raw": true`, and `contentType` i
 
 **Structured data (#46).** When the page embeds machine-readable metadata, the response carries a `structuredData` object alongside `content`: `jsonLd` (each `<script type="application/ld+json">` block, kept verbatim — invalid JSON is skipped, never failing the scrape), `openGraph` (`og:*`/`article:*` meta, keys keep their prefix), and `citation` (Highwire `citation_*` meta — DOI, authors, journal). The whole object is omitted when no such markup is present, and each sub-field is omitted when empty. It is produced by the HTML-extraction tiers only (absent for `raw` mode, PDFs, YouTube, and markdown-tier results), is independently size-bounded so a pathological page cannot blow the response budget, and is **untrusted external data** under the same trust boundary as `content`.
 
-**Extraction provenance (`extractedBy`).** When known, the response names the tier that produced the content: `markdown`, `stealth`, `html`, `browser`, or — for the paid Exa fallback — `exa:cached` / `exa:crawled`. It lets a caller see whether content came from a free local tier or the metered Exa `/contents` API (Tier 5, present only when `EXA_API_KEY` is set). Omitted when unknown (e.g. document/YouTube routes).
+**Extraction provenance (`extractedBy`).** When known, the response names the tier that produced the content: `markdown`, `stealth`, `html`, `browser`, `github:raw`/`github:contents-api`/`github:gist-api`, or — for the paid Exa fallback — `exa:cached` / `exa:crawled`. It lets a caller see whether content came from a free local tier or the metered Exa `/contents` API (Tier 5, present only when `EXA_API_KEY` is set). Omitted when unknown (e.g. document/YouTube routes).
 
 **Content-volume signal (#358).** `wordCount` is emitted for every non-raw scrape and is a cheap, deterministic proxy for how much prose was actually extracted — it is **orthogonal** to `extractionQuality`, which reflects pipeline tier exhaustion, not content volume: a `complete` extraction can still be a thin paywall/bot-wall stub (a few sentences behind a subscribe wall) if that stub was returned confidently by an early tier. When `wordCount` falls below ~150, `sparsityWarning` is added with a human-readable note that claim checks against this source may be unreliable. Both fields are omitted in raw mode. `verify_citation`, `audit_bibliography`, and `search_and_scrape` surface the same signal (see their sections below) so a caller can tell a thin stub from a genuinely well-supported claim check.
 
@@ -242,6 +242,13 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
    │     /user/<id>  → user profile (karma, about, created date)
    │     Unknown paths fall through to the tiered HTML pipeline
    │     `Truncated: true` when content is capped; `ContentType: "hn"`
+   ├─ github.com / gist.github.com → native GitHub content routing (raw CDN + REST API; GITHUB_TOKEN optional, raises the unauth rate limit):
+   │     /{owner}/{repo}          → README (raw.githubusercontent.com/HEAD/README.md; falls back to the
+   │                                 Contents API's /readme endpoint on 404, e.g. non-standard casing)
+   │     /{owner}/{repo}/blob/{ref}/{path} → the exact file at that ref, fetched directly from the raw CDN
+   │     gist.github.com/{id} or /{user}/{id} → gist content via the Gist API (each file's content concatenated)
+   │     Reserved top-level paths (settings, topics, marketplace, issues, pulls, …) and any other
+   │     shape (issues, PRs, wikis) fall through to the tiered HTML pipeline
    ├─ .pdf / application/pdf → PDF parser
    ├─ .docx / application/vnd.openxmlformats* → DOCX parser
    └─ .pptx / application/vnd.ms-powerpoint → PPTX parser
