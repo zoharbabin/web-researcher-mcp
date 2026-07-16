@@ -215,7 +215,7 @@ func (p *Pipeline) fetchGitHubAPI(ctx context.Context, apiURL string) (int, []by
 // casing (readme.md, README.rst) that raw.githubusercontent.com's literal
 // "README.md" path won't match.
 func (p *Pipeline) scrapeGitHubReadme(ctx context.Context, rawURL, owner, repo string, maxLength int) (*ScrapeResult, error) {
-	rawReadmeURL := fmt.Sprintf("%s/%s/%s/HEAD/README.md", p.githubRawBase(), owner, repo)
+	rawReadmeURL := fmt.Sprintf("%s/%s/%s/HEAD/README.md", p.githubRawBase(), url.PathEscape(owner), url.PathEscape(repo))
 	status, body, err := p.fetchGitHubRaw(ctx, rawReadmeURL)
 	if err != nil {
 		return nil, networkError(rawURL, "github", err)
@@ -227,7 +227,7 @@ func (p *Pipeline) scrapeGitHubReadme(ctx context.Context, rawURL, owner, repo s
 		return nil, classifyHTTPStatus(status, rawURL, "github")
 	}
 
-	apiURL := fmt.Sprintf("%s/repos/%s/%s/readme", p.githubAPIBase(), owner, repo)
+	apiURL := fmt.Sprintf("%s/repos/%s/%s/readme", p.githubAPIBase(), url.PathEscape(owner), url.PathEscape(repo))
 	apiStatus, apiBody, err := p.fetchGitHubAPI(ctx, apiURL)
 	if err != nil {
 		return nil, networkError(rawURL, "github", err)
@@ -274,11 +274,24 @@ func (p *Pipeline) buildGitHubReadmeResult(rawURL, owner, repo, body string, max
 	return stampTier(res, tier)
 }
 
+// escapeGitHubPathSegments PathEscapes each "/"-separated segment of path
+// independently, so a decoded segment containing a raw "#", "?", or "%" (from
+// url.Parse's automatic percent-decoding) can't be misread as a URL fragment,
+// query string, or escape sequence when reassembled into an outbound request
+// (issue #396 rule 2.4). Re-joining with "/" preserves the path's shape.
+func escapeGitHubPathSegments(path string) string {
+	segments := strings.Split(path, "/")
+	for i, s := range segments {
+		segments[i] = url.PathEscape(s)
+	}
+	return strings.Join(segments, "/")
+}
+
 // scrapeGitHubBlob fetches a specific file at a ref/path directly from the
 // raw CDN — the ref and path are already known from the URL, so no API call
 // is needed at all.
 func (p *Pipeline) scrapeGitHubBlob(ctx context.Context, rawURL, owner, repo, ref, path string, maxLength int) (*ScrapeResult, error) {
-	rawFileURL := fmt.Sprintf("%s/%s/%s/%s/%s", p.githubRawBase(), owner, repo, ref, path)
+	rawFileURL := fmt.Sprintf("%s/%s/%s/%s/%s", p.githubRawBase(), url.PathEscape(owner), url.PathEscape(repo), url.PathEscape(ref), escapeGitHubPathSegments(path))
 	status, body, err := p.fetchGitHubRaw(ctx, rawFileURL)
 	if err != nil {
 		return nil, networkError(rawURL, "github", err)

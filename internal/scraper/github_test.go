@@ -198,6 +198,32 @@ func TestScrapeGitHubBlob(t *testing.T) {
 	}
 }
 
+// TestScrapeGitHubBlobAdversarialPathSegment proves issue #396 rule 2.4:
+// a decoded path segment containing raw "#"/"?" characters (e.g. from a URL
+// with %23/%3F) must be percent-re-encoded on the outbound request, not
+// truncated at the first "#"/"?" by naive string concatenation.
+func TestScrapeGitHubBlobAdversarialPathSegment(t *testing.T) {
+	t.Parallel()
+
+	p := newGitHubTestPipeline(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/golang/go/master/foo#bar?baz=1" {
+			t.Errorf("server saw truncated/mangled path: %s (want the full adversarial segment preserved)", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("content"))
+	})
+
+	res, err := p.Scrape(context.Background(), "https://github.com/golang/go/blob/master/foo%23bar%3Fbaz=1", 4096)
+	if err != nil {
+		t.Fatalf("Scrape() error = %v", err)
+	}
+	if res.Content != "content" {
+		t.Errorf("Content = %q, want %q", res.Content, "content")
+	}
+}
+
 func TestScrapeGitHubBlobRateLimited(t *testing.T) {
 	t.Parallel()
 
