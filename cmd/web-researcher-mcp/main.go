@@ -286,6 +286,7 @@ func main() {
 	awesomeListProviders := search.AvailableAwesomeListProviders(search.AwesomeListProviderConfig{
 		EcosystemsAPIKey: cfg.Search.EcosystemsAPIKey,
 		EcosystemsEmail:  cfg.Search.EcosystemsEmail,
+		GitHubToken:      cfg.Search.GitHubToken,
 	}, searchDeps)
 
 	// Local place search (#259): Brave Local Search API. Requires BRAVE_API_KEY;

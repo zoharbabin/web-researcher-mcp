@@ -15,15 +15,30 @@ func newEcosystemsTestProvider(t *testing.T, handler http.HandlerFunc) *Ecosyste
 	return newEcosystemsTestProviderWithAuth(t, "", "", handler)
 }
 
+// emptyGitHubSearchHandler stubs the tier-3 GitHub topic-search fallback with
+// a no-results response, so tests that exercise the ecosyste.ms tiers only
+// (tiers 1/2) aren't perturbed by tier 3 hitting the real GitHub API.
+func emptyGitHubSearchHandler(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte(`{"total_count":0,"items":[]}`))
+}
+
 func newEcosystemsTestProviderWithAuth(t *testing.T, apiKey, email string, handler http.HandlerFunc) *EcosystemsAwesomeProvider {
+	t.Helper()
+	return newEcosystemsTestProviderWithGitHub(t, apiKey, email, "", handler, emptyGitHubSearchHandler)
+}
+
+func newEcosystemsTestProviderWithGitHub(t *testing.T, apiKey, email, githubToken string, handler, githubHandler http.HandlerFunc) *EcosystemsAwesomeProvider {
 	t.Helper()
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	p := NewEcosystemsAwesomeProvider(apiKey, email, Deps{
+	ghSrv := httptest.NewServer(githubHandler)
+	t.Cleanup(ghSrv.Close)
+	p := NewEcosystemsAwesomeProvider(apiKey, email, githubToken, Deps{
 		HTTPClient: srv.Client(),
 		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
 	})
 	p.SetBaseURL(srv.URL)
+	p.SetGitHubBaseURL(ghSrv.URL)
 	return p
 }
 
@@ -326,6 +341,186 @@ func TestEcosystemsAwesomeRateLimited(t *testing.T) {
 
 func TestEcosystemsAwesomeInterface(t *testing.T) {
 	var _ AwesomeListProvider = (*EcosystemsAwesomeProvider)(nil)
+}
+
+// TestEcosystemsAwesomeGitHubTopicFallbackRecoversTaxonomyMiss verifies tier 3
+// (issue #394): when ecosyste.ms's own taxonomy has no matching slug at all
+// (tier 1 empty, and a single-word topic has nothing left for tier 2's
+// per-word retry to split), the GitHub topic-search fallback recovers the
+// result independently.
+func TestEcosystemsAwesomeGitHubTopicFallbackRecoversTaxonomyMiss(t *testing.T) {
+	var gotQuery string
+	p := newEcosystemsTestProviderWithGitHub(t, "", "", "",
+		func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(`[]`)) },
+		func(w http.ResponseWriter, r *http.Request) {
+			gotQuery = r.URL.Query().Get("q")
+			w.Write([]byte(`{"total_count":1,"items":[
+				{"full_name":"a/awesome-parenting","html_url":"https://github.com/a/awesome-parenting","description":"d","stargazers_count":42,"topics":["parenting","awesome"],"archived":false,"pushed_at":"2026-01-01T00:00:00Z"}
+			]}`))
+		},
+	)
+
+	res, err := p.AwesomeLists(context.Background(), AwesomeListSearchParams{Topic: "parenting", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(gotQuery, "topic:awesome") || !strings.Contains(gotQuery, "topic:parenting") {
+		t.Errorf("GitHub search query = %q, want topic:awesome + topic:parenting", gotQuery)
+	}
+	if len(res) != 1 || res[0].FullName != "a/awesome-parenting" || res[0].Source != "github" {
+		t.Errorf("unexpected result: %+v", res)
+	}
+}
+
+// TestEcosystemsAwesomeGitHubTopicFallbackSkippedWhenPriorTiersNonEmpty
+// verifies the fallback is only tried when tiers 1/2 are both empty — a
+// primary-tier hit must never trigger an extra GitHub API call.
+func TestEcosystemsAwesomeGitHubTopicFallbackSkippedWhenPriorTiersNonEmpty(t *testing.T) {
+	githubCalled := false
+	p := newEcosystemsTestProviderWithGitHub(t, "", "", "",
+		func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(`[{"name":"awesome-osint","url":"https://x/osint","repository":{"full_name":"a/osint","archived":false,"stargazers_count":10}}]`))
+		},
+		func(w http.ResponseWriter, r *http.Request) {
+			githubCalled = true
+			w.Write([]byte(`{"total_count":0,"items":[]}`))
+		},
+	)
+
+	res, err := p.AwesomeLists(context.Background(), AwesomeListSearchParams{Topic: "osint", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if githubCalled {
+		t.Error("GitHub fallback should not be called when a prior tier already has results")
+	}
+	if len(res) != 1 || res[0].Source != "ecosystems" {
+		t.Errorf("unexpected result: %+v", res)
+	}
+}
+
+// TestEcosystemsAwesomeGitHubTopicFallbackSkipsOnError verifies the fallback
+// is best-effort: a GitHub API failure degrades to the same empty result the
+// caller would have seen without tier 3, not an error.
+func TestEcosystemsAwesomeGitHubTopicFallbackSkipsOnError(t *testing.T) {
+	p := newEcosystemsTestProviderWithGitHub(t, "", "", "",
+		func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(`[]`)) },
+		func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		},
+	)
+
+	res, err := p.AwesomeLists(context.Background(), AwesomeListSearchParams{Topic: "zzzznomatch", NumResults: 5})
+	if err != nil {
+		t.Fatalf("GitHub fallback failure should degrade to empty, not error: %v", err)
+	}
+	if len(res) != 0 {
+		t.Errorf("want empty result, got %+v", res)
+	}
+}
+
+// TestEcosystemsAwesomeGitHubTopicFallbackExcludesMinProjects verifies a
+// GitHub-sourced result is dropped entirely (not returned unfiltered) when
+// MinProjects is set, since GitHub's Search API carries no equivalent field.
+func TestEcosystemsAwesomeGitHubTopicFallbackExcludesMinProjects(t *testing.T) {
+	p := newEcosystemsTestProviderWithGitHub(t, "", "", "",
+		func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(`[]`)) },
+		func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(`{"total_count":1,"items":[
+				{"full_name":"a/b","html_url":"https://github.com/a/b","stargazers_count":100,"archived":false}
+			]}`))
+		},
+	)
+
+	res, err := p.AwesomeLists(context.Background(), AwesomeListSearchParams{Topic: "x", MinProjects: 10, NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res) != 0 {
+		t.Errorf("MinProjects set should exclude GitHub-sourced results entirely, got %+v", res)
+	}
+}
+
+// TestEcosystemsAwesomeGitHubTopicFallbackExcludesArchived mirrors the
+// primary-tier archived filter for GitHub-sourced results.
+func TestEcosystemsAwesomeGitHubTopicFallbackExcludesArchived(t *testing.T) {
+	p := newEcosystemsTestProviderWithGitHub(t, "", "", "",
+		func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(`[]`)) },
+		func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(`{"total_count":2,"items":[
+				{"full_name":"a/live","html_url":"https://github.com/a/live","stargazers_count":10,"archived":false},
+				{"full_name":"a/dead","html_url":"https://github.com/a/dead","stargazers_count":999,"archived":true}
+			]}`))
+		},
+	)
+
+	res, err := p.AwesomeLists(context.Background(), AwesomeListSearchParams{Topic: "x", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res) != 1 || res[0].FullName != "a/live" {
+		t.Errorf("archived GitHub result should be excluded: %+v", res)
+	}
+}
+
+// TestEcosystemsAwesomeGitHubTokenSentWhenConfigured verifies the optional
+// GITHUB_TOKEN (#282/#394/#395) is forwarded to the fallback's Authorization
+// header exactly like FRED_API_KEY/BRANDFETCH_API_KEY — present when set,
+// absent when not, never logged.
+func TestEcosystemsAwesomeGitHubTokenSentWhenConfigured(t *testing.T) {
+	var gotAuth string
+	p := newEcosystemsTestProviderWithGitHub(t, "", "", "gh-secret-token",
+		func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(`[]`)) },
+		func(w http.ResponseWriter, r *http.Request) {
+			gotAuth = r.Header.Get("Authorization")
+			w.Write([]byte(`{"total_count":0,"items":[]}`))
+		},
+	)
+	if _, err := p.AwesomeLists(context.Background(), AwesomeListSearchParams{Topic: "x"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotAuth != "Bearer gh-secret-token" {
+		t.Errorf("Authorization = %q, want Bearer gh-secret-token", gotAuth)
+	}
+}
+
+// TestMultiInstanceEcosystemsProviderIsolation proves rule 1 (issue #396):
+// two EcosystemsAwesomeProvider instances constructed with different
+// githubToken/apiKey/email values in the same process never leak state
+// across instances — no shared mutable state, only per-instance fields.
+func TestMultiInstanceEcosystemsProviderIsolation(t *testing.T) {
+	var gotAuthA, gotAuthB string
+	pa := newEcosystemsTestProviderWithGitHub(t, "key-a", "a@example.com", "gh-token-a",
+		func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(`[]`)) },
+		func(w http.ResponseWriter, r *http.Request) {
+			gotAuthA = r.Header.Get("Authorization")
+			w.Write([]byte(`{"total_count":0,"items":[]}`))
+		},
+	)
+	pb := newEcosystemsTestProviderWithGitHub(t, "key-b", "b@example.com", "gh-token-b",
+		func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(`[]`)) },
+		func(w http.ResponseWriter, r *http.Request) {
+			gotAuthB = r.Header.Get("Authorization")
+			w.Write([]byte(`{"total_count":0,"items":[]}`))
+		},
+	)
+
+	if _, err := pa.AwesomeLists(context.Background(), AwesomeListSearchParams{Topic: "x"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := pb.AwesomeLists(context.Background(), AwesomeListSearchParams{Topic: "x"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if gotAuthA != "Bearer gh-token-a" {
+		t.Errorf("instance A leaked/lost its own token: got %q", gotAuthA)
+	}
+	if gotAuthB != "Bearer gh-token-b" {
+		t.Errorf("instance B leaked/lost its own token: got %q", gotAuthB)
+	}
+	if pa.githubToken == pb.githubToken || pa.apiKey == pb.apiKey || pa.email == pb.email {
+		t.Error("two instances constructed with different config must not share field values")
+	}
 }
 
 // TestEcosystemsAwesomeNormalizesSpacesAndCase verifies the topic

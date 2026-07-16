@@ -177,6 +177,13 @@ type SearchConfig struct {
 	// on the Free plan) and falls back to OpenAlexEmail when unset.
 	EcosystemsAPIKey string // ECOSYSTEMS_API_KEY
 	EcosystemsEmail  string // falls back to OpenAlexEmail
+
+	// GitHubToken is optional for the GitHub search provider, the awesome-list
+	// GitHub topic-search fallback, and native GitHub content reading in
+	// scrape_page (#282, #394, #395). Every one of those surfaces already
+	// works unauthenticated (GitHub's own public rate limits); a token only
+	// raises the ceiling, it never gates functionality. Never logged.
+	GitHubToken string // GITHUB_TOKEN
 }
 
 type OAuthConfig struct {
@@ -376,6 +383,7 @@ func Load() (*Config, error) {
 			BrandFetchClientID:    os.Getenv("BRANDFETCH_CLIENT_ID"),
 			EcosystemsAPIKey:      os.Getenv("ECOSYSTEMS_API_KEY"),
 			EcosystemsEmail:       envOrDefault("ECOSYSTEMS_EMAIL", os.Getenv("OPENALEX_EMAIL")),
+			GitHubToken:           os.Getenv("GITHUB_TOKEN"),
 		},
 		Port: port,
 		OAuth: OAuthConfig{

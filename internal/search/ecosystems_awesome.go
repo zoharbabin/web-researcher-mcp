@@ -44,20 +44,27 @@ import (
 // dropped: topic slugs are GitHub topic tags, not repo-name conventions, so
 // it never recovers anything a plain miss didn't already have.
 type EcosystemsAwesomeProvider struct {
-	apiKey  string
-	email   string
-	baseURL string
-	deps    Deps
+	apiKey        string
+	email         string
+	githubToken   string
+	baseURL       string
+	githubBaseURL string
+	deps          Deps
 }
 
 // NewEcosystemsAwesomeProvider creates the provider. apiKey and email may
-// both be "" (keyless — works at the shared "common" rate limit).
-func NewEcosystemsAwesomeProvider(apiKey, email string, deps Deps) *EcosystemsAwesomeProvider {
+// both be "" (keyless — works at the shared "common" rate limit). githubToken
+// is optional and only used by the GitHub topic-search fallback tier (#394);
+// "" means that fallback runs unauthenticated against GitHub's public Search
+// API rate limit.
+func NewEcosystemsAwesomeProvider(apiKey, email, githubToken string, deps Deps) *EcosystemsAwesomeProvider {
 	return &EcosystemsAwesomeProvider{
-		apiKey:  apiKey,
-		email:   email,
-		baseURL: "https://awesome.ecosyste.ms/api/v1",
-		deps:    deps,
+		apiKey:        apiKey,
+		email:         email,
+		githubToken:   githubToken,
+		baseURL:       "https://awesome.ecosyste.ms/api/v1",
+		githubBaseURL: githubAPIBaseURL,
+		deps:          deps,
 	}
 }
 
@@ -72,8 +79,12 @@ func (e *EcosystemsAwesomeProvider) Metadata() ProviderMeta {
 	}
 }
 
-// SetBaseURL overrides the API base URL (testing).
+// SetBaseURL overrides the ecosyste.ms API base URL (testing).
 func (e *EcosystemsAwesomeProvider) SetBaseURL(base string) { e.baseURL = base }
+
+// SetGitHubBaseURL overrides the GitHub API base URL used by the tier-3
+// fallback (testing).
+func (e *EcosystemsAwesomeProvider) SetGitHubBaseURL(base string) { e.githubBaseURL = base }
 
 func (e *EcosystemsAwesomeProvider) AwesomeLists(ctx context.Context, params AwesomeListSearchParams) ([]AwesomeListResult, error) {
 	var results []AwesomeListResult
@@ -176,11 +187,107 @@ func (e *EcosystemsAwesomeProvider) doSearch(ctx context.Context, params Awesome
 		})
 	}
 
+	// Tier 3: ecosyste.ms's topic taxonomy has real gaps (see doc comment
+	// above) that fetchWordFallback cannot close on a single-word miss (e.g.
+	// "parenting" — no constituent word to split). GitHub's own Search API
+	// indexes the same "topic:awesome" tagging convention independently and
+	// recovers exactly these misses (verified live 2026-07-15, issue #394).
+	// Only tried when both prior tiers are still empty, and failures are
+	// swallowed (best-effort recovery on top of an already-empty result, same
+	// contract as fetchWordFallback).
+	if len(out) == 0 {
+		out = e.fetchGitHubTopicFallback(ctx, topic, params, num)
+	}
+
 	sortAwesomeLists(out, params.SortBy)
 	if len(out) > num {
 		out = out[:num]
 	}
 	return out, nil
+}
+
+// githubSearchRepoItem mirrors one element of GitHub's
+// /search/repositories response items array — only the fields this fallback
+// tier needs.
+type githubSearchRepoItem struct {
+	FullName    string   `json:"full_name"`
+	HTMLURL     string   `json:"html_url"`
+	Description string   `json:"description"`
+	Stars       int      `json:"stargazers_count"`
+	Topics      []string `json:"topics"`
+	Archived    bool     `json:"archived"`
+	PushedAt    string   `json:"pushed_at"`
+}
+
+type githubSearchRepoResponse struct {
+	TotalCount int                    `json:"total_count"`
+	Items      []githubSearchRepoItem `json:"items"`
+}
+
+// fetchGitHubTopicFallback queries GitHub's Search API for repositories
+// tagged both "awesome" and the requested topic — a second, independent
+// crawl of the same GitHub topic taxonomy ecosyste.ms indexes, filling the
+// gaps its own taxonomy has no slug for at all (see issue #394). Applies the
+// same MinStars/archived filters as the primary tier so callers see a
+// consistent contract regardless of which tier produced the result. Returns
+// nil (not an error) on any failure — this is a best-effort tier on top of
+// an already-empty primary result, matching fetchWordFallback's contract.
+func (e *EcosystemsAwesomeProvider) fetchGitHubTopicFallback(ctx context.Context, topic string, params AwesomeListSearchParams, num int) []AwesomeListResult {
+	if topic == "" {
+		return nil
+	}
+	q := url.Values{}
+	query := "topic:awesome topic:" + topic
+	if params.MinStars > 0 {
+		query += " stars:>" + strconv.Itoa(params.MinStars-1)
+	}
+	query += " archived:false"
+	q.Set("q", query)
+	q.Set("per_page", strconv.Itoa(num))
+	switch params.SortBy {
+	case "updated":
+		q.Set("sort", "updated")
+	default:
+		q.Set("sort", "stars")
+	}
+	q.Set("order", "desc")
+
+	body, err := githubAPIRequest(ctx, e.deps.HTTPClient, e.githubBaseURL, "/search/repositories?"+q.Encode(), e.githubToken)
+	if err != nil || len(body) == 0 {
+		return nil
+	}
+
+	var parsed githubSearchRepoResponse
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return nil
+	}
+
+	out := make([]AwesomeListResult, 0, len(parsed.Items))
+	for _, it := range parsed.Items {
+		if it.Archived {
+			continue
+		}
+		if params.MinProjects > 0 {
+			// GitHub's Search API carries no equivalent to ecosyste.ms's
+			// projects_count (curated-entry count) — this filter cannot be
+			// evaluated against a GitHub-sourced result, so a caller that
+			// requires it gets no GitHub-sourced results rather than an
+			// unfiltered, potentially-misleading one.
+			continue
+		}
+		out = append(out, AwesomeListResult{
+			Name:         it.FullName,
+			FullName:     it.FullName,
+			URL:          it.HTMLURL,
+			Description:  it.Description,
+			Stars:        it.Stars,
+			Topics:       it.Topics,
+			LastSyncedAt: it.PushedAt,
+			Archived:     it.Archived,
+			Source:       "github",
+		})
+	}
+	return out
 }
 
 // fetchRaw issues one /lists?topic= call and unmarshals the raw items.

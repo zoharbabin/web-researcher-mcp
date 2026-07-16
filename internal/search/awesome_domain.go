@@ -63,6 +63,10 @@ type AwesomeListProviderConfig struct {
 	// EcosystemsEmail is optional; opts into ecosyste.ms's "polite pool" via
 	// mailto=, a verified rate-limit increase on the Free plan.
 	EcosystemsEmail string
+	// GitHubToken is optional; raises the rate limit of the GitHub topic-search
+	// fallback ecosyste.ms's provider uses on a taxonomy miss (#394). Absent,
+	// that fallback still works at GitHub's unauthenticated Search API limit.
+	GitHubToken string
 }
 
 // NewAwesomeListProviderByName constructs an awesome-list provider.
@@ -70,7 +74,7 @@ type AwesomeListProviderConfig struct {
 func NewAwesomeListProviderByName(name string, cfg AwesomeListProviderConfig, deps Deps) AwesomeListProvider {
 	switch name {
 	case "ecosystems":
-		return NewEcosystemsAwesomeProvider(cfg.EcosystemsAPIKey, cfg.EcosystemsEmail, deps)
+		return NewEcosystemsAwesomeProvider(cfg.EcosystemsAPIKey, cfg.EcosystemsEmail, cfg.GitHubToken, deps)
 	}
 	return nil
 }
