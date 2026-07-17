@@ -3663,3 +3663,57 @@ func TestPipeline_IframeFollow_WinsOverThinExaResult(t *testing.T) {
 		t.Errorf("expected Exa to never be invoked once an earlier tier's iframe-follow recovered real content, got %d hits", hits)
 	}
 }
+
+// TestPipeline_ThinIframeBearingNonShellStillEscalates is the regression test
+// for a bug flagged in #400 code review: the tier loop's >100-byte confidence
+// floor is deliberately relaxed to len(Content) > 100 || len(iframeCandidates) > 0
+// so a thin SHELL carrying an iframe candidate can reach looksLikePartialShell
+// instead of short-circuiting past it. But a short, genuinely-complete page
+// that merely happens to embed an unrelated iframe (e.g. an ad or chat widget)
+// is NOT a shell — looksLikePartialShell correctly returns false for it — yet
+// without this fix it still cleared the relaxed gate and was returned
+// immediately as "confidently complete" purely because it had an iframe,
+// even though it never crossed the pre-existing >100-byte bar. This must
+// instead be treated like any other short result: recorded as a fallback
+// candidate while the pipeline keeps escalating to later tiers.
+func TestPipeline_ThinIframeBearingNonShellStillEscalates(t *testing.T) {
+	// Low HTML:text ratio (well under shellMinHTMLRatio) with an unrelated
+	// iframe and <=100 bytes of extracted text — not a shell by
+	// looksLikePartialShell's ratio check, but still short.
+	text := strings.Repeat("x", 90)
+	html := `<!DOCTYPE html><html><head><title>T</title></head><body><p>` + text +
+		`</p><iframe src="https://ads.example.com/widget"></iframe></body></html>`
+
+	var htmlHits atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.Header.Get("Accept"), "text/markdown") {
+			w.WriteHeader(406)
+			return
+		}
+		htmlHits.Add(1)
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(html))
+	}))
+	defer ts.Close()
+
+	orig := statFile
+	statFile = func(path string) (any, error) { return nil, fmt.Errorf("not found") }
+	defer func() { statFile = orig }()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, ChromePath: chromeDisabled})
+	result, err := p.Scrape(context.Background(), ts.URL, 50000)
+	if err != nil {
+		t.Fatalf("expected best-of fallback, got error: %v", err)
+	}
+	if result == nil || !strings.Contains(result.Content, text) {
+		t.Fatalf("expected the short page's own content as fallback, got: %+v", result)
+	}
+	if !result.Partial {
+		t.Error("expected Partial=true: a <=100-byte non-shell result must not be treated as confidently complete")
+	}
+	// stealth + html (each server hit once) proves escalation happened instead
+	// of short-circuiting at stealth purely because an iframe was present.
+	if got := htmlHits.Load(); got != 2 {
+		t.Errorf("expected escalation past stealth to the html tier (2 requests), got %d", got)
+	}
+}

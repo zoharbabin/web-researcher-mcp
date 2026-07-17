@@ -421,6 +421,18 @@ func (p *Pipeline) tieredFallback(ctx context.Context, url string, maxLength, de
 				outcomes = append(outcomes, tierOutcome{tier.name, stamped, nil})
 				continue
 			}
+			// The >100-byte floor above is relaxed only to let a thin-but-
+			// iframe-bearing result reach the shell check. A result that
+			// clears that relaxed gate, is NOT a shell, but is still <=100
+			// bytes (e.g. a short genuinely-complete page carrying an
+			// unrelated ad/chat iframe) is not confidently complete on its
+			// own — record it as a fallback candidate and keep escalating,
+			// exactly as any other short result would (see #400 review).
+			if len(stamped.Content) <= 100 {
+				best = betterResult(best, stamped)
+				outcomes = append(outcomes, tierOutcome{tier.name, stamped, nil})
+				continue
+			}
 			// Confident, complete content wins immediately — same latency as before
 			// for the overwhelming majority of pages.
 			return stamped, nil
