@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -28,6 +29,11 @@ const (
 	maxMetaProps           = 64        // cap entry count per meta map (og/article and citation independently)
 	maxMetaValueBytes      = 2 * 1024  // truncate any single meta content value beyond 2KB
 )
+
+// maxIframeCandidates bounds how many cross-origin <iframe src> URLs are kept
+// per page (issue #399) — real wrapper pages (HuggingFace Spaces, CodeSandbox,
+// Stripe Checkout) carry 1-2, so this is generous headroom, not a real limit.
+const maxIframeCandidates = 2
 
 func (p *Pipeline) scrapeHTML(ctx context.Context, url string, maxLength int) (*ScrapeResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -79,6 +85,10 @@ func (p *Pipeline) scrapeHTML(ctx context.Context, url string, maxLength int) (*
 	// MUST precede the script Remove() below (#46): JSON-LD lives in <script
 	// type="application/ld+json">, which the Remove() call strips. Capture first.
 	sd := extractStructuredData(doc)
+	// MUST precede the iframe Remove() below (#399): a cross-origin <iframe src>
+	// carrying the real content (e.g. a HuggingFace Space wrapper) is stripped
+	// by that same call. Capture first.
+	iframes := extractIframeCandidates(doc, url)
 
 	doc.Find("script, style, nav, footer, aside, header, noscript, iframe, form").Remove()
 	doc.Find("[role='navigation'], [role='banner'], [role='complementary']").Remove()
@@ -106,7 +116,8 @@ func (p *Pipeline) scrapeHTML(ctx context.Context, url string, maxLength int) (*
 		// Surface the decompressed HTML size so the pipeline can detect a
 		// JS-rendered SPA shell (large HTML, little extracted text) and keep
 		// escalating to the browser tier (see looksLikePartialShell).
-		rawHTMLBytes: len(body),
+		rawHTMLBytes:     len(body),
+		iframeCandidates: iframes,
 	}
 	// Attach structured data only when something was captured, so ordinary pages
 	// leave the pointer nil (the clean "absent" signal).
@@ -392,6 +403,51 @@ func extractStructuredData(doc *goquery.Document) *StructuredData {
 	})
 
 	return sd
+}
+
+// extractIframeCandidates lifts up to maxIframeCandidates absolute http(s)
+// URLs from <iframe src="..."> in the parsed document (#399). MUST be called
+// BEFORE the iframe-stripping Remove() in scrapeHTML/extractArticleContent —
+// same precedent as extractStructuredData for JSON-LD. Relative src values
+// are resolved against baseURL. data:/about:/javascript:/blob:/mailto:/empty
+// are dropped. Pure, reentrant, never panics. Returns nil when nothing usable.
+func extractIframeCandidates(doc *goquery.Document, baseURL string) []string {
+	base, err := url.Parse(baseURL)
+	if err != nil {
+		return nil
+	}
+
+	var candidates []string
+	seen := map[string]bool{}
+	doc.Find("iframe[src]").EachWithBreak(func(_ int, s *goquery.Selection) bool {
+		if len(candidates) >= maxIframeCandidates {
+			return false
+		}
+		src := strings.TrimSpace(mustAttr(s, "src"))
+		if src == "" {
+			return true
+		}
+		ref, err := url.Parse(src)
+		if err != nil {
+			return true
+		}
+		resolved := base.ResolveReference(ref)
+		scheme := strings.ToLower(resolved.Scheme)
+		if scheme != "http" && scheme != "https" {
+			return true
+		}
+		if resolved.Hostname() == "" {
+			return true
+		}
+		abs := resolved.String()
+		if seen[abs] {
+			return true
+		}
+		seen[abs] = true
+		candidates = append(candidates, abs)
+		return true
+	})
+	return candidates
 }
 
 // mustAttr returns the attribute value or "" when absent (goquery returns

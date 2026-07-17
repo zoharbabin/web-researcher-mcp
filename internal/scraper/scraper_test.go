@@ -3126,3 +3126,594 @@ func TestLooksLikePartialShell_BrowserTierExempt(t *testing.T) {
 		t.Error("expected the same short markdown-tier result to still be flagged as a partial shell")
 	}
 }
+
+// =============================================================================
+// Cross-Origin Iframe Follow Tests (#399)
+// =============================================================================
+
+// iframeShellHTML builds a partial-shell wrapper page (large inert blob to
+// trip looksLikePartialShell's ratio, tiny visible text) embedding one or more
+// cross-origin iframes pointing at the given src values verbatim (so callers
+// can pass absolute URLs, relative paths, or non-http(s) schemes to test
+// extraction/dropping).
+func iframeShellHTML(title, blurb string, iframeSrcs ...string) string {
+	bulk := strings.Repeat("/*hydration state padding*/\n", 600) // ~16KB of script
+	var iframes strings.Builder
+	for _, src := range iframeSrcs {
+		iframes.WriteString(`<iframe src="` + src + `"></iframe>`)
+	}
+	return `<!DOCTYPE html><html><head><title>` + title + `</title>` +
+		`<script type="application/json" id="__NEXT_DATA__">` + bulk + `</script>` +
+		`</head><body><div id="root"><p>` + blurb + `</p>` + iframes.String() + `</div></body></html>`
+}
+
+func TestExtractIframeCandidates(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		html string
+		base string
+		want []string
+	}{
+		{
+			name: "absolute http(s) src kept",
+			html: `<iframe src="https://embed.example.com/widget"></iframe>`,
+			base: "https://wrapper.example.com/page",
+			want: []string{"https://embed.example.com/widget"},
+		},
+		{
+			name: "relative src resolved against base",
+			html: `<iframe src="/embed"></iframe><iframe src="embed2.html"></iframe>`,
+			base: "https://wrapper.example.com/dir/page",
+			want: []string{"https://wrapper.example.com/embed", "https://wrapper.example.com/dir/embed2.html"},
+		},
+		{
+			name: "data/about/javascript/mailto/empty dropped",
+			html: `<iframe src="data:text/html,hi"></iframe>` +
+				`<iframe src="about:blank"></iframe>` +
+				`<iframe src="javascript:void(0)"></iframe>` +
+				`<iframe src="blob:https://x/y"></iframe>` +
+				`<iframe src="mailto:a@b.com"></iframe>` +
+				`<iframe src=""></iframe>`,
+			base: "https://wrapper.example.com/page",
+			want: nil,
+		},
+		{
+			name: "duplicate absolute src deduped",
+			html: `<iframe src="https://embed.example.com/widget"></iframe>` +
+				`<iframe src="https://embed.example.com/widget"></iframe>`,
+			base: "https://wrapper.example.com/page",
+			want: []string{"https://embed.example.com/widget"},
+		},
+		{
+			name: "capped at maxIframeCandidates",
+			html: `<iframe src="https://a.example.com/1"></iframe>` +
+				`<iframe src="https://b.example.com/2"></iframe>` +
+				`<iframe src="https://c.example.com/3"></iframe>`,
+			base: "https://wrapper.example.com/page",
+			want: []string{"https://a.example.com/1", "https://b.example.com/2"},
+		},
+		{
+			name: "no iframe present returns nil",
+			html: `<p>no iframes here</p>`,
+			base: "https://wrapper.example.com/page",
+			want: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := goQueryFromString(tt.html)
+			if err != nil {
+				t.Fatalf("goQueryFromString error: %v", err)
+			}
+			got := extractIframeCandidates(doc, tt.base)
+			if len(got) != len(tt.want) {
+				t.Fatalf("extractIframeCandidates() = %v, want %v", got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("candidate[%d] = %q, want %q", i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestPipeline_IframeFollow_HappyPath(t *testing.T) {
+	articleContent := strings.Repeat("Real article content recovered from the iframe target. ", 20)
+	innerHTML := `<!DOCTYPE html><html><head><title>Inner</title></head><body><article><p>` +
+		articleContent + `</p></article></body></html>`
+
+	inner := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.Header.Get("Accept"), "text/markdown") {
+			w.WriteHeader(406)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(innerHTML))
+	}))
+	defer inner.Close()
+
+	var wrapperHTML string
+	wrapper := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.Header.Get("Accept"), "text/markdown") {
+			w.WriteHeader(406)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(wrapperHTML))
+	}))
+	defer wrapper.Close()
+	wrapperHTML = iframeShellHTML("Wrapper", "Above-the-fold blurb.", inner.URL)
+
+	orig := statFile
+	statFile = func(path string) (any, error) { return nil, fmt.Errorf("not found") }
+	defer func() { statFile = orig }()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, ChromePath: chromeDisabled})
+	result, err := p.Scrape(context.Background(), wrapper.URL, 50000)
+	if err != nil {
+		t.Fatalf("expected success, got error: %v", err)
+	}
+	if result == nil || !strings.Contains(result.Content, "Real article content recovered") {
+		t.Fatalf("expected recursed iframe content to win, got: %+v", result)
+	}
+	if strings.Contains(result.Content, "Above-the-fold blurb") {
+		t.Error("expected the shell blurb to lose to the iframe's real content")
+	}
+}
+
+// TestPipeline_IframeFollow_PrivateIPCandidateSkipped proves the recursive
+// iframe-follow goes through the same SSRF-safe dial path as every other
+// scrape entry point. The wrapper itself is a normal reachable loopback
+// server (AllowPrivateIPs: true, so it succeeds like any other test in this
+// file), but its iframe candidate points at a cloud-metadata literal
+// (169.254.169.254) that isBlockedHostname rejects unconditionally,
+// regardless of AllowPrivateIPs — so the candidate is refused before any
+// connection is attempted, and the pipeline falls back to the wrapper shell.
+func TestPipeline_IframeFollow_PrivateIPCandidateSkipped(t *testing.T) {
+	wrapperHTML := iframeShellHTML("Wrapper", "Above-the-fold blurb.", "http://169.254.169.254/latest/meta-data/")
+	wrapper := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.Header.Get("Accept"), "text/markdown") {
+			w.WriteHeader(406)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(wrapperHTML))
+	}))
+	defer wrapper.Close()
+
+	orig := statFile
+	statFile = func(path string) (any, error) { return nil, fmt.Errorf("not found") }
+	defer func() { statFile = orig }()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, ChromePath: chromeDisabled})
+	result, err := p.Scrape(context.Background(), wrapper.URL, 50000)
+	if err != nil {
+		t.Fatalf("expected best-of fallback to the wrapper shell, got error: %v", err)
+	}
+	if result == nil || !strings.Contains(result.Content, "Above-the-fold blurb") {
+		t.Fatalf("expected the wrapper shell to be returned since the only candidate is blocked, got: %+v", result)
+	}
+}
+
+// TestPipeline_IframeFollow_AllowedDomainsRejection proves the allowlist gate
+// applies to a recursed iframe candidate exactly as it does to any other
+// scrape target. Both servers run on loopback in this test process, so the
+// wrapper is addressed as "127.0.0.1" and the inner candidate is addressed as
+// "localhost" (same loopback network, textually distinct hostname) — letting
+// AllowedDomains, which matches on hostname text, allow the former and reject
+// the latter even though both are in fact reachable.
+func TestPipeline_IframeFollow_AllowedDomainsRejection(t *testing.T) {
+	var innerHits atomic.Int32
+	innerContent := strings.Repeat("Real article content behind a disallowed iframe origin. ", 20)
+	inner := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		innerHits.Add(1)
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, `<html><body><article>%s</article></body></html>`, innerContent)
+	}))
+	defer inner.Close()
+	innerPort := strings.TrimPrefix(inner.URL, "http://127.0.0.1:")
+	innerURLViaLocalhost := "http://localhost:" + innerPort
+
+	wrapperHTML := iframeShellHTML("Wrapper", "Above-the-fold blurb.", innerURLViaLocalhost)
+	wrapper := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.Header.Get("Accept"), "text/markdown") {
+			w.WriteHeader(406)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(wrapperHTML))
+	}))
+	defer wrapper.Close()
+
+	orig := statFile
+	statFile = func(path string) (any, error) { return nil, fmt.Errorf("not found") }
+	defer func() { statFile = orig }()
+
+	p := NewPipeline(PipelineConfig{
+		MaxConcurrency:  2,
+		AllowPrivateIPs: true,
+		AllowedDomains:  []string{"127.0.0.1"},
+		ChromePath:      chromeDisabled,
+	})
+
+	result, err := p.Scrape(context.Background(), wrapper.URL, 50000)
+	if err != nil {
+		t.Fatalf("expected best-of fallback to the wrapper shell, got error: %v", err)
+	}
+	if result == nil || !strings.Contains(result.Content, "Above-the-fold blurb") {
+		t.Fatalf("expected the wrapper shell to be returned since its only candidate is not allowlisted, got: %+v", result)
+	}
+	if innerHits.Load() != 0 {
+		t.Errorf("expected the iframe candidate to never be dialed when its domain is not allowlisted, got %d hits", innerHits.Load())
+	}
+}
+
+func TestPipeline_IframeFollow_DepthCap(t *testing.T) {
+	var thirdHits atomic.Int32
+	thirdContent := strings.Repeat("Content behind a second-level iframe that must never be followed. ", 10)
+	third := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		thirdHits.Add(1)
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, `<html><body><article>%s</article></body></html>`, thirdContent)
+	}))
+	defer third.Close()
+
+	var secondHTML string
+	second := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.Header.Get("Accept"), "text/markdown") {
+			w.WriteHeader(406)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(secondHTML))
+	}))
+	defer second.Close()
+	secondHTML = iframeShellHTML("Second", "Second-level blurb.", third.URL)
+
+	var firstHTML string
+	first := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.Header.Get("Accept"), "text/markdown") {
+			w.WriteHeader(406)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(firstHTML))
+	}))
+	defer first.Close()
+	firstHTML = iframeShellHTML("First", "First-level blurb.", second.URL)
+
+	orig := statFile
+	statFile = func(path string) (any, error) { return nil, fmt.Errorf("not found") }
+	defer func() { statFile = orig }()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, ChromePath: chromeDisabled})
+	result, err := p.Scrape(context.Background(), first.URL, 50000)
+	if err != nil {
+		t.Fatalf("expected best-of fallback to succeed, got error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if strings.Contains(result.Content, "second-level iframe that must never be followed") {
+		t.Error("expected the third-level page to never be reached (depth cap of 1)")
+	}
+	if thirdHits.Load() != 0 {
+		t.Errorf("expected the third-level iframe to never be dialed (depth cap of 1), got %d hits", thirdHits.Load())
+	}
+}
+
+func TestPipeline_IframeFollow_TwoCandidateCap(t *testing.T) {
+	var hits [3]atomic.Int32
+	makeInner := func(idx int) *httptest.Server {
+		content := strings.Repeat(fmt.Sprintf("Content from inner iframe number %d. ", idx), 20)
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hits[idx].Add(1)
+			w.Header().Set("Content-Type", "text/html")
+			fmt.Fprintf(w, `<html><body><article>%s</article></body></html>`, content)
+		}))
+	}
+	inner0 := makeInner(0)
+	defer inner0.Close()
+	inner1 := makeInner(1)
+	defer inner1.Close()
+	inner2 := makeInner(2)
+	defer inner2.Close()
+
+	wrapperHTML := iframeShellHTML("Wrapper", "Above-the-fold blurb.", inner0.URL, inner1.URL, inner2.URL)
+	wrapper := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.Header.Get("Accept"), "text/markdown") {
+			w.WriteHeader(406)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(wrapperHTML))
+	}))
+	defer wrapper.Close()
+
+	orig := statFile
+	statFile = func(path string) (any, error) { return nil, fmt.Errorf("not found") }
+	defer func() { statFile = orig }()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, ChromePath: chromeDisabled})
+	_, err := p.Scrape(context.Background(), wrapper.URL, 50000)
+	if err != nil {
+		t.Fatalf("expected success, got error: %v", err)
+	}
+	// extractIframeCandidates itself caps at maxIframeCandidates(2), so only
+	// the first two <iframe src> elements ever become candidates regardless of
+	// how many appear in the markup — the third is never even extracted, let
+	// alone dialed.
+	if hits[2].Load() != 0 {
+		t.Errorf("expected the third iframe (beyond the cap of 2) to never be dialed, got %d hits", hits[2].Load())
+	}
+}
+
+func TestPipeline_IframeFollow_DecorativeIframeLoses(t *testing.T) {
+	decorative := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><p>Ad</p></body></html>`))
+	}))
+	defer decorative.Close()
+
+	realContent := strings.Repeat("Genuine article content that should win the contentQuality comparison. ", 20)
+	real := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, `<html><body><article>%s</article></body></html>`, realContent)
+	}))
+	defer real.Close()
+
+	wrapperHTML := iframeShellHTML("Wrapper", "Above-the-fold blurb.", decorative.URL, real.URL)
+	wrapper := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.Header.Get("Accept"), "text/markdown") {
+			w.WriteHeader(406)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(wrapperHTML))
+	}))
+	defer wrapper.Close()
+
+	orig := statFile
+	statFile = func(path string) (any, error) { return nil, fmt.Errorf("not found") }
+	defer func() { statFile = orig }()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, ChromePath: chromeDisabled})
+	result, err := p.Scrape(context.Background(), wrapper.URL, 50000)
+	if err != nil {
+		t.Fatalf("expected success, got error: %v", err)
+	}
+	if result == nil || !strings.Contains(result.Content, "Genuine article content") {
+		t.Fatalf("expected the real-content iframe to win via contentQuality scoring, got: %+v", result)
+	}
+}
+
+// TestScrapeStealth_ThinContentWithIframeCandidates is a regression test for
+// the stealth-tier early-return fix (#399): a near-empty extracted-text shell
+// that carries iframe candidates must still produce a result (not nil), so
+// the signal survives to the tiered-fallback loop that acts on it.
+func TestScrapeStealth_ThinContentWithIframeCandidates(t *testing.T) {
+	html := `<!DOCTYPE html><html><head><title>Thin</title></head><body>` +
+		`<p>Hi.</p><iframe src="https://embed.example.com/real"></iframe></body></html>`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(html))
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	result, err := p.scrapeStealth(context.Background(), ts.URL, 50000)
+	if err != nil {
+		t.Fatalf("scrapeStealth error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected a non-nil result carrying iframe candidates, not the old nil-on-thin-content behavior")
+	}
+	if len(result.iframeCandidates) != 1 || result.iframeCandidates[0] != "https://embed.example.com/real" {
+		t.Errorf("expected iframeCandidates=[https://embed.example.com/real], got %v", result.iframeCandidates)
+	}
+}
+
+// TestScrapeStealth_ThinContentNoIframeStillNil is the inverse regression
+// check: a near-empty shell with NO iframe candidates must still return nil,
+// exactly as before this fix — nothing changed for the common thin-page case.
+func TestScrapeStealth_ThinContentNoIframeStillNil(t *testing.T) {
+	html := `<!DOCTYPE html><html><head><title>Thin</title></head><body><p>Short.</p></body></html>`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(html))
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	result, err := p.scrapeStealth(context.Background(), ts.URL, 50000)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != nil {
+		t.Errorf("expected nil result for thin content with no iframe candidates, got: %+v", result)
+	}
+}
+
+// TestPipeline_IframeFollow_DedupedAcrossTiers proves that when multiple
+// tiers (stealth and html both parse the wrapper's markup and both extract
+// the same iframe src) independently flag the same shell, the shared
+// candidate is dialed exactly once — not once per tier. Without the
+// iframeSeen dedup map in tieredFallback, a wrapper page whose stealth AND
+// html tiers both trip looksLikePartialShell would redundantly re-run the
+// full recursive tier ladder against the same candidate URL for each tier.
+func TestPipeline_IframeFollow_DedupedAcrossTiers(t *testing.T) {
+	var innerHits atomic.Int32
+	innerContent := strings.Repeat("Real article content recovered from the shared iframe target. ", 20)
+	inner := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.Header.Get("Accept"), "text/markdown") {
+			w.WriteHeader(406)
+			return
+		}
+		innerHits.Add(1)
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, `<html><body><article>%s</article></body></html>`, innerContent)
+	}))
+	defer inner.Close()
+
+	var wrapperHTML string
+	wrapper := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.Header.Get("Accept"), "text/markdown") {
+			w.WriteHeader(406)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(wrapperHTML))
+	}))
+	defer wrapper.Close()
+	// stealth and html both parse this same markup and will both independently
+	// extract inner.URL as an iframe candidate before either strips <iframe>.
+	wrapperHTML = iframeShellHTML("Wrapper", "Above-the-fold blurb.", inner.URL)
+
+	orig := statFile
+	statFile = func(path string) (any, error) { return nil, fmt.Errorf("not found") }
+	defer func() { statFile = orig }()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, ChromePath: chromeDisabled})
+	result, err := p.Scrape(context.Background(), wrapper.URL, 50000)
+	if err != nil {
+		t.Fatalf("expected success, got error: %v", err)
+	}
+	if result == nil || !strings.Contains(result.Content, "Real article content recovered") {
+		t.Fatalf("expected recursed iframe content to win, got: %+v", result)
+	}
+	// The stealth tier runs before html and should recover the content itself,
+	// returning immediately and never letting html get a turn at all — so this
+	// also proves the early-exit-on-success behavior. Either way, the shared
+	// candidate must be dialed exactly once.
+	if hits := innerHits.Load(); hits != 1 {
+		t.Errorf("expected the shared iframe candidate to be dialed exactly once across tiers, got %d hits", hits)
+	}
+}
+
+// TestPipeline_IframeFollow_WinsOverThinExaResult is the regression test for
+// the exact live bug found in real-user MCP testing (#399 follow-up): when
+// EXA_API_KEY is configured, Exa's ScrapeResult never sets rawHTMLBytes, so
+// looksLikePartialShell falls into its word-count-only branch for Exa
+// results — a thin-but-not-quite-30-words-short Exa result used to read as
+// "confidently complete" and short-circuit the tier loop via the old
+// post-loop-only iframe-follow trigger, before the earlier stealth tier's
+// already-found iframe candidate ever got a chance to run. With iframe-follow
+// now triggered inline the moment stealth's own result is flagged a shell,
+// the free-tier recovery must win and complete before Exa is ever invoked.
+func TestPipeline_IframeFollow_WinsOverThinExaResult(t *testing.T) {
+	var exaHits atomic.Int32
+	exa := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		exaHits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		// A thin-but-word-count-passing body mirroring the real HF Space case:
+		// enough words to clear shellMaxWords (30) so looksLikePartialShell
+		// would (incorrectly) call this "not a shell" if it were ever reached.
+		fmt.Fprint(w, `{"results":[{"id":"x","text":"`+
+			strings.Repeat("Refreshing wrapper placeholder word. ", 6)+`"}]}`)
+	}))
+	defer exa.Close()
+	withExaEndpoint(t, exa.URL)
+
+	var innerHits atomic.Int32
+	innerContent := strings.Repeat("Real article content recovered from the free-tier iframe target. ", 20)
+	inner := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.Header.Get("Accept"), "text/markdown") {
+			w.WriteHeader(406)
+			return
+		}
+		innerHits.Add(1)
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, `<html><body><article>%s</article></body></html>`, innerContent)
+	}))
+	defer inner.Close()
+
+	var wrapperHTML string
+	wrapper := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.Header.Get("Accept"), "text/markdown") {
+			w.WriteHeader(406)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(wrapperHTML))
+	}))
+	defer wrapper.Close()
+	wrapperHTML = iframeShellHTML("Wrapper", "Refreshing", inner.URL)
+
+	orig := statFile
+	statFile = func(path string) (any, error) { return nil, fmt.Errorf("not found") }
+	defer func() { statFile = orig }()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, ChromePath: chromeDisabled, ExaAPIKey: "test-key"})
+	result, err := p.Scrape(context.Background(), wrapper.URL, 50000)
+	if err != nil {
+		t.Fatalf("expected success, got error: %v", err)
+	}
+	if result == nil || !strings.Contains(result.Content, "Real article content recovered") {
+		t.Fatalf("expected recursed free-tier iframe content to win over the thin Exa result, got: %+v", result)
+	}
+	if hits := exaHits.Load(); hits != 0 {
+		t.Errorf("expected Exa to never be invoked once an earlier tier's iframe-follow recovered real content, got %d hits", hits)
+	}
+}
+
+// TestPipeline_ThinIframeBearingNonShellStillEscalates is the regression test
+// for a bug flagged in #400 code review: the tier loop's >100-byte confidence
+// floor is deliberately relaxed to len(Content) > 100 || len(iframeCandidates) > 0
+// so a thin SHELL carrying an iframe candidate can reach looksLikePartialShell
+// instead of short-circuiting past it. But a short, genuinely-complete page
+// that merely happens to embed an unrelated iframe (e.g. an ad or chat widget)
+// is NOT a shell — looksLikePartialShell correctly returns false for it — yet
+// without this fix it still cleared the relaxed gate and was returned
+// immediately as "confidently complete" purely because it had an iframe,
+// even though it never crossed the pre-existing >100-byte bar. This must
+// instead be treated like any other short result: recorded as a fallback
+// candidate while the pipeline keeps escalating to later tiers.
+func TestPipeline_ThinIframeBearingNonShellStillEscalates(t *testing.T) {
+	// Low HTML:text ratio (well under shellMinHTMLRatio) with an unrelated
+	// iframe and <=100 bytes of extracted text — not a shell by
+	// looksLikePartialShell's ratio check, but still short.
+	text := strings.Repeat("x", 90)
+	html := `<!DOCTYPE html><html><head><title>T</title></head><body><p>` + text +
+		`</p><iframe src="https://ads.example.com/widget"></iframe></body></html>`
+
+	var htmlHits atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.Header.Get("Accept"), "text/markdown") {
+			w.WriteHeader(406)
+			return
+		}
+		htmlHits.Add(1)
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(html))
+	}))
+	defer ts.Close()
+
+	orig := statFile
+	statFile = func(path string) (any, error) { return nil, fmt.Errorf("not found") }
+	defer func() { statFile = orig }()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, ChromePath: chromeDisabled})
+	result, err := p.Scrape(context.Background(), ts.URL, 50000)
+	if err != nil {
+		t.Fatalf("expected best-of fallback, got error: %v", err)
+	}
+	if result == nil || !strings.Contains(result.Content, text) {
+		t.Fatalf("expected the short page's own content as fallback, got: %+v", result)
+	}
+	if !result.Partial {
+		t.Error("expected Partial=true: a <=100-byte non-shell result must not be treated as confidently complete")
+	}
+	// stealth + html (each server hit once) proves escalation happened instead
+	// of short-circuiting at stealth purely because an iframe was present.
+	if got := htmlHits.Load(); got != 2 {
+		t.Errorf("expected escalation past stealth to the html tier (2 requests), got %d", got)
+	}
+}
