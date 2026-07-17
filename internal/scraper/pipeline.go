@@ -121,6 +121,16 @@ type ScrapeResult struct {
 	// for tiers that don't parse raw HTML (markdown, browser, document, youtube,
 	// twitter, raw). Unexported: pipeline-internal provenance, never serialized.
 	rawHTMLBytes int
+	// iframeCandidates holds up to maxIframeCandidates absolute http(s) URLs
+	// lifted from server-rendered <iframe src> elements (#399) by the stealth
+	// and html tiers, captured before their existing iframe-stripping step.
+	// When the accumulated best-of result is a partial shell
+	// (looksLikePartialShell) and carries candidates, tieredFallback
+	// recursively re-scrapes up to maxIframeCandidates of them at one
+	// recursion depth to recover real content hiding behind a cross-origin
+	// wrapper (e.g. a HuggingFace Space). Unexported: pipeline-internal
+	// provenance, never serialized.
+	iframeCandidates []string
 }
 
 // StructuredData is page-embedded, machine-readable metadata lifted verbatim
@@ -291,7 +301,17 @@ func stampSparsity(r *ScrapeResult) {
 	}
 }
 
+// scrapeWithTieredFallback runs the free-tier ladder (markdown -> stealth ->
+// html -> browser -> optional paid Exa), following up to maxIframeCandidates
+// cross-origin <iframe src> URLs one level deep the moment ANY tier's own
+// result looks like a partial shell (#399). Thin wrapper preserving the
+// original 3-arg signature for its existing call sites; depth-aware
+// recursion lives in tieredFallback.
 func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, maxLength int) (*ScrapeResult, error) {
+	return p.tieredFallback(ctx, url, maxLength, 0)
+}
+
+func (p *Pipeline) tieredFallback(ctx context.Context, url string, maxLength, depth int) (*ScrapeResult, error) {
 	type namedTier struct {
 		name string
 		fn   func(context.Context, string, int) (*ScrapeResult, error)
@@ -319,8 +339,11 @@ func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, max
 	// Exa /contents is the LAST tier: a paid neural extractor that recovers the
 	// hard pages the free tiers cannot. It runs only when configured and only
 	// after every free tier has failed to extract >100 bytes — so the common
-	// path never incurs Exa cost.
-	if p.config.ExaAPIKey != "" {
+	// path never incurs Exa cost. Skipped on a recursive iframe-follow call
+	// (depth > 0, #399): the paid tier is reserved for the top-level URL the
+	// caller actually asked for, not spent on a candidate the pipeline chose
+	// to follow speculatively.
+	if p.config.ExaAPIKey != "" && depth == 0 {
 		tiers = append(tiers, namedTier{"exa", p.scrapeExa})
 	}
 
@@ -337,6 +360,12 @@ func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, max
 	// and the browser tier is unavailable): we return the most content extracted,
 	// never silently drop to an error.
 	var best *ScrapeResult
+	// iframeSeen dedupes candidate URLs across tiers within this one call: the
+	// stealth and html tiers typically parse the same markup and extract the
+	// same <iframe src> values, so without this a shell flagged by both would
+	// re-fetch (and re-run the full recursive tier ladder against) the same
+	// candidate twice. Populated lazily; nil until the first shell is seen.
+	var iframeSeen map[string]bool
 
 	for _, tier := range tiers {
 		result, err := tier.fn(ctx, url, maxLength)
@@ -348,19 +377,53 @@ func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, max
 			outcomes = append(outcomes, tierOutcome{tier.name, nil, blockedError(url, tier.name, nil, "bot/JS-wall interstitial")})
 			continue
 		}
-		if err == nil && result != nil && len(result.Content) > 100 {
+		// A shell's own extracted text is often well under 100 bytes (e.g. a
+		// one-line "Refreshing" blurb) — the byte-count floor below exists to
+		// weed out truly-empty tier failures, not shells, so it is relaxed
+		// whenever the tier found iframe candidates worth following. Without
+		// this, a thin-but-iframe-bearing result would fall straight to the
+		// generic best-of branch and never reach looksLikePartialShell/
+		// followIframeCandidates at all (the exact gap stealth.go's own
+		// early-return fix already addresses one layer down, at extraction
+		// time — this is the matching fix at the tier-loop layer).
+		if err == nil && result != nil && (len(result.Content) > 100 || len(result.iframeCandidates) > 0) {
 			stamped := stampTier(result, tier.name)
-			// Confident, complete content wins immediately — same latency as before
-			// for the overwhelming majority of pages. A partial SPA shell (a large
-			// HTML payload that yielded little extracted text) does NOT short-circuit:
-			// it is kept as the fallback while the pipeline keeps escalating toward
-			// the JS-executing browser tier, which can render the real content.
-			if !looksLikePartialShell(stamped) {
-				return stamped, nil
+			if looksLikePartialShell(stamped) {
+				// This tier's own result looks like a shell (SPA stub, or — as with
+				// Exa, #399 live-testing finding — a thin neural-extraction result
+				// that happens to clear looksLikePartialShell's word-count bar for
+				// non-HTML-parsing tiers). Try iframe-follow right here, at the
+				// point of detection, rather than deferring to a single post-loop
+				// check: deferring meant that whichever tier happened to run last
+				// decided whether iframe-follow ever got a turn at all, regardless
+				// of what an earlier tier had already found. See #399 comment
+				// thread for the live case this fixes.
+				if depth == 0 && len(stamped.iframeCandidates) > 0 {
+					if iframeSeen == nil {
+						iframeSeen = make(map[string]bool)
+					}
+					if inner := p.followIframeCandidates(ctx, stamped, maxLength, depth, iframeSeen); inner != nil {
+						merged := betterResult(stamped, inner)
+						if merged == inner && !looksLikePartialShell(inner) {
+							// Recovered content beat the shell on quality AND is itself
+							// confidently complete — return immediately, skipping any
+							// remaining tiers (including browser and the paid Exa tier).
+							return inner, nil
+						}
+						// Either the shell text still scores higher (e.g. a
+						// decorative/near-empty iframe), or the recovered content is
+						// itself thin — keep escalating to remaining tiers, but carry
+						// forward whichever of the two is better quality.
+						stamped = merged
+					}
+				}
+				best = betterResult(best, stamped)
+				outcomes = append(outcomes, tierOutcome{tier.name, stamped, nil})
+				continue
 			}
-			best = betterResult(best, stamped)
-			outcomes = append(outcomes, tierOutcome{tier.name, stamped, nil})
-			continue
+			// Confident, complete content wins immediately — same latency as before
+			// for the overwhelming majority of pages.
+			return stamped, nil
 		}
 		outcomes = append(outcomes, tierOutcome{tier.name, result, err})
 		if result != nil && len(result.Content) > 0 && !looksLikeBotWall(result.Content) {
@@ -429,6 +492,55 @@ func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, max
 	}
 
 	return nil, &ScrapeError{Kind: highestKind, Message: msg, URL: url}
+}
+
+// followIframeCandidates tries up to maxIframeCandidates server-rendered
+// cross-origin <iframe src> URLs carried on shell — the wrapper-page pattern
+// behind e.g. HuggingFace Spaces, where the real content lives at a different
+// origin (#399). Called from tieredFallback the moment ANY tier's own result
+// is flagged a shell, not after the whole tier loop completes — so no later
+// tier (including a paid Exa result that clears looksLikePartialShell's
+// word-count bar without actually being useful content) can prevent this from
+// running just by returning first.
+//
+// seen dedupes candidate URLs across multiple tiers' calls within one
+// tieredFallback invocation (stealth and html routinely parse the same
+// markup and extract the same iframe src values); it is mutated in place and
+// must be reused across calls at the same depth, never reset per-tier.
+//
+// Each candidate passes the same validateScrapeURL + isDomainAllowed gates
+// every other scrape entry point uses, and the actual fetch goes through the
+// same SSRF-safe client — a private/blocked-IP target is refused at connect
+// time like any other URL. Evaluates every candidate up to the cap (not just
+// the first success) and returns whichever recursed result scores highest via
+// betterResult/contentQuality — so a decorative candidate (ad slot, payment
+// frame) loses to a real-content candidate on its own merits, with no
+// denylist needed. Returns nil if no candidate produced usable content.
+func (p *Pipeline) followIframeCandidates(ctx context.Context, shell *ScrapeResult, maxLength, depth int, seen map[string]bool) *ScrapeResult {
+	tried := 0
+	var best *ScrapeResult
+	for _, candidate := range shell.iframeCandidates {
+		if tried >= maxIframeCandidates {
+			break
+		}
+		if seen[candidate] {
+			continue
+		}
+		seen[candidate] = true
+		if err := validateScrapeURL(candidate); err != nil {
+			continue
+		}
+		if !p.isDomainAllowed(candidate) {
+			continue
+		}
+		tried++
+		inner, ierr := p.tieredFallback(ctx, candidate, maxLength, depth+1)
+		if ierr != nil || inner == nil || looksLikeBotWall(inner.Content) {
+			continue
+		}
+		best = betterResult(best, inner)
+	}
+	return best
 }
 
 // shell-detection thresholds. Deliberately fixed constants, not tunables: the

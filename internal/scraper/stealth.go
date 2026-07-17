@@ -68,9 +68,17 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int)
 	// (JSON-LD lives in a stripped <script>). The stealth tier wins for most
 	// real pages, so structuredData is populated here too, not only the HTML tier.
 	sd := extractStructuredData(doc)
+	// Capture cross-origin iframe candidates (#399) BEFORE extractArticleContent
+	// strips <iframe> — same precedent as structured data above.
+	iframes := extractIframeCandidates(doc, url)
 
 	content := extractArticleContent(doc)
-	if len(content) < 100 {
+	// A near-empty shell with no iframe candidates has nothing further to
+	// recover from this tier — bail as before. But when iframes were found,
+	// fall through and build the result anyway: the shell's own thin content
+	// is exactly the case the pipeline needs iframeCandidates to escalate past
+	// (issue #399) — returning nil here would silently discard that signal.
+	if len(content) < 100 && len(iframes) == 0 {
 		return nil, nil
 	}
 
@@ -92,7 +100,8 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int)
 		// Surface the decompressed HTML size so the pipeline can detect a
 		// JS-rendered SPA shell (large HTML, little extracted text) and keep
 		// escalating to the browser tier (see looksLikePartialShell).
-		rawHTMLBytes: len(body),
+		rawHTMLBytes:     len(body),
+		iframeCandidates: iframes,
 	}
 	if !sd.IsEmpty() {
 		res.StructuredData = sd
