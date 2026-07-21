@@ -56,6 +56,16 @@ func NewRedditProvider(deps Deps) *RedditProvider {
 	return &RedditProvider{client: deps.HTTPClient, baseURL: "https://www.reddit.com"}
 }
 
+// Reddit has announced (r/modnews) it is deprecating unauthenticated .json
+// access and moving old.reddit.com to login-required; www.reddit.com/search.rss
+// still responds 200 as of this writing but may start 403/429'ing
+// unauthenticated requests without warning. Unlike Bluesky's searchPosts 403
+// (see bluesky.go), there is no equally-legitimate alternate host to fall
+// back to here — old.reddit.com redirects rather than serving RSS directly,
+// and is itself being locked to logged-in users. A future failure here is
+// Reddit tightening access, not a bug in this request; the Router's existing
+// per-provider fallback already degrades gracefully when that happens.
+
 func (p *RedditProvider) Name() string { return "reddit" }
 
 func (p *RedditProvider) Web(ctx context.Context, params WebSearchParams) ([]SearchResult, error) {
