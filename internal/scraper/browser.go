@@ -104,6 +104,13 @@ func (bp *browserPool) close() {
 	}
 	if bp.launcher != nil {
 		bp.launcher.Kill()
+		// Cleanup blocks until the killed process's Wait() goroutine observes
+		// exit, then removes UserDataDir (cached cookies/page content) from
+		// disk (issue #393, SOC 2 confidentiality: no retention beyond the
+		// browser's own lifetime). Kill() already sleeps 1s waiting for
+		// children to be ready to receive the signal, so this adds no new
+		// unbounded wait — the process is already dying by the time we get here.
+		bp.launcher.Cleanup()
 		bp.launcher = nil
 	}
 }
