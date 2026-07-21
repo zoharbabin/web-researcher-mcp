@@ -119,7 +119,7 @@ On a zero-result response, `hints` carries a `ZeroResultHints` object (the same 
 ## Tool 2: `scrape_page`
 
 ### Purpose
-Extract content from a URL, supporting web pages, documents, YouTube videos, Hacker News threads (read natively via the HN API), and GitHub README/file/gist pages (read natively via the GitHub API).
+Extract content from a URL, supporting web pages, documents, YouTube videos, Hacker News threads (read natively via the HN API), GitHub README/file/gist pages (read natively via the GitHub API), and Bluesky posts and profiles (read natively via the AT Protocol API).
 
 ### Input Schema
 
@@ -150,7 +150,7 @@ type ScrapeOutput struct {
     SparsityWarning   string  `json:"sparsityWarning,omitempty"`   // present only when WordCount is below ~150 — the content may be too thin for a reliable claim check (#358). Omitted in raw mode and whenever content is not thin.
     Metadata        *Metadata `json:"metadata,omitempty"` // present only when a title was extracted (full/preview only)
     StructuredData  *StructuredData `json:"structuredData,omitempty"` // page-embedded machine-readable metadata; present only when found (full/preview, HTML pages)
-    ForumSignals    *ForumSignals   `json:"forumSignals,omitempty"`   // Reddit engagement metadata extracted from JSON-LD; present only for Reddit posts where the HTML tier ran (#247)
+    ForumSignals    *ForumSignals   `json:"forumSignals,omitempty"`   // Reddit engagement metadata extracted from JSON-LD (#247), or Bluesky post engagement read natively via the AT Protocol API (#285); present only for Reddit posts where the HTML tier ran, or Bluesky posts
     SourceType      string    `json:"sourceType"`     // typed classification (#62): peer_reviewed|official_docs|government|news_publication|blog|forum|wiki|social_media|unknown
     AuthorityTier   string    `json:"authorityTier"`  // banded authority: high|medium|low
     DomainCategory  string    `json:"domainCategory"` // subject area: academic|legal|medical|financial|technical|general
@@ -172,7 +172,7 @@ type Metadata struct {
 }
 
 type ForumSignals struct {
-    Platform        string `json:"platform"`                  // Forum platform, e.g. "reddit"
+    Platform        string `json:"platform"`                  // Forum platform: "reddit" or "bluesky"
     Upvotes         int    `json:"upvotes"`                   // Vote count from JSON-LD interactionStatistic
     Comments        int    `json:"comments"`                  // Comment count
     DatePublished   string `json:"datePublished,omitempty"`   // ISO 8601 publish date when available
@@ -212,7 +212,7 @@ In `raw` mode the output additionally carries `"raw": true`, and `contentType` i
 
 **Tables in content (#48).** HTML `<table>` elements are rendered as GitHub-flavored markdown pipe tables inside `content` (header row + `---` separator + data rows), preserving row/column structure instead of flattening cells into disconnected fragments. Pipe characters in cells are escaped and multi-line cells are collapsed to a single row. Layout, malformed, single-column, and nested tables degrade gracefully to plain text — never an error, never a panic.
 
-**Forum engagement signals (#247).** For Reddit posts where the HTML extraction tier ran, the response carries a `forumSignals` object: `platform` (`"reddit"`), `upvotes` (vote count from JSON-LD `interactionStatistic`), `comments` (comment count), `datePublished` (ISO 8601), `authorName` (original poster), and `credibilityNote` (set when `upvotes < 20`, noting vote-manipulation risk). The field is **omitted entirely** for non-Reddit URLs, `raw` mode, and any non-HTML extraction tier (markdown, browser, document, YouTube, Twitter) — never `null`, only present-or-absent. For Twitter/X tweets (`contentType: "twitter"`), engagement signals (likes, retweets, replies, quotes, views) are embedded in the plain-text `content` string by the FxTwitter path — they are not surfaced as a separate structured field.
+**Forum engagement signals (#247).** For Reddit posts where the HTML extraction tier ran, the response carries a `forumSignals` object: `platform` (`"reddit"`), `upvotes` (vote count from JSON-LD `interactionStatistic`), `comments` (comment count), `datePublished` (ISO 8601), `authorName` (original poster), and `credibilityNote` (set when `upvotes < 20`, noting vote-manipulation risk). The field is **omitted entirely** for non-Reddit/non-Bluesky URLs, `raw` mode, and any non-HTML extraction tier (markdown, browser, document, YouTube, Twitter) — never `null`, only present-or-absent. For Twitter/X tweets (`contentType: "twitter"`), engagement signals (likes, retweets, replies, quotes, views) are embedded in the plain-text `content` string by the FxTwitter path — they are not surfaced as a separate structured field. For Bluesky posts (bsky.app), `forumSignals` carries `platform: "bluesky"`, `upvotes` (like count), `comments` (reply count), and `authorName` (displayName from the AT Protocol author record) — read natively via `app.bsky.feed.getPostThread`, not extracted from HTML (#285).
 
 **Structured data (#46).** When the page embeds machine-readable metadata, the response carries a `structuredData` object alongside `content`: `jsonLd` (each `<script type="application/ld+json">` block, kept verbatim — invalid JSON is skipped, never failing the scrape), `openGraph` (`og:*`/`article:*` meta, keys keep their prefix), and `citation` (Highwire `citation_*` meta — DOI, authors, journal). The whole object is omitted when no such markup is present, and each sub-field is omitted when empty. It is produced by the HTML-extraction tiers only (absent for `raw` mode, PDFs, YouTube, and markdown-tier results), is independently size-bounded so a pathological page cannot blow the response budget, and is **untrusted external data** under the same trust boundary as `content`.
 
@@ -255,6 +255,12 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
    │     /user/<id>  → user profile (karma, about, created date)
    │     Unknown paths fall through to the tiered HTML pipeline
    │     `Truncated: true` when content is capped; `ContentType: "hn"`
+   ├─ bsky.app → native Bluesky AT Protocol routing (public.api.bsky.app; no API key required):
+   │     /profile/{handle-or-did}/post/{rkey} → post text, embed previews (image alt / external link),
+   │                                            engagement counts, and up to 5 top-level replies
+   │     /profile/{handle-or-did}                → profile: display name, bio, follower/following/post counts
+   │     Unknown paths fall through to the tiered HTML pipeline
+   │     `ContentType: "bluesky"`; `forumSignals.platform: "bluesky"` on post pages (#285)
    ├─ github.com / gist.github.com → native GitHub content routing (raw CDN + REST API; GITHUB_TOKEN optional, raises the unauth rate limit):
    │     /{owner}/{repo}          → README (raw.githubusercontent.com/HEAD/README.md; falls back to the
    │                                 Contents API's /readme endpoint on 404, e.g. non-standard casing)

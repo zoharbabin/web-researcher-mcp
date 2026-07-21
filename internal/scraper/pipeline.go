@@ -50,12 +50,16 @@ type PipelineConfig struct {
 	// GitHubAPIBase overrides the production api.github.com base URL (for
 	// tests). Empty (default) ⇒ https://api.github.com
 	GitHubAPIBase string
+	// BskyAPIBase overrides the production Bluesky AT Protocol base URL (for
+	// tests). Empty (default) ⇒ https://public.api.bsky.app/xrpc
+	BskyAPIBase string
 }
 
 // ForumSignals holds engagement metadata extracted from forum pages (Reddit,
-// HackerNews). Non-nil only when the page is identified as a forum post (#247).
+// HackerNews, Bluesky). Non-nil only when the page is identified as a forum
+// post (#247).
 type ForumSignals struct {
-	// Platform is "reddit" or "hackernews".
+	// Platform is "reddit", "hackernews", or "bluesky".
 	Platform string `json:"platform"`
 	// Upvotes is the post score / upvote count. -1 means not found in page data.
 	Upvotes int `json:"upvotes"`
@@ -263,6 +267,8 @@ func (p *Pipeline) Scrape(ctx context.Context, rawURL string, maxLength int) (*S
 		result, err = p.scrapeTwitter(ctx, url, maxLength)
 	case isHNURL(url):
 		result, err = p.scrapeHN(ctx, url, maxLength)
+	case isBskyURL(url):
+		result, err = p.scrapeBsky(ctx, url, maxLength)
 	case isGitHubContentURL(url):
 		result, err = p.scrapeGitHubContent(ctx, url, maxLength)
 	case isDocumentURL(url):
