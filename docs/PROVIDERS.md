@@ -41,6 +41,7 @@ Understanding what backs each provider helps you reason about result overlap and
 | **[Tavily](https://app.tavily.com/)** | Aggregator | Queries multiple existing engines at runtime; scrapes top results; applies AI re-ranking — no proprietary crawled index |
 | **[SearXNG](https://docs.searxng.org/)** | Meta-search | Configurable — routes to whatever backends you point it at (Bing, Google, DuckDuckGo, and others) |
 | **[HackerNews](https://hn.algolia.com/)** | Niche | HN Algolia index — Hacker News stories and submissions only |
+| **[Reddit](https://www.reddit.com/)** | Niche | Reddit Atom RSS — Reddit posts and community discussions only |
 | **[GitHub](https://docs.github.com/en/rest/search/search)** | Niche | GitHub REST Search API — issues and pull requests only |
 
 **Practical implication**: Google PSE, Serper, and SearchAPI.io draw from the same index — using more than one adds no coverage, only redundancy. Brave and Exa bring genuinely independent results. Tavily and SearXNG aggregate results from others rather than crawling themselves.
@@ -62,6 +63,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 | **[Tavily](https://app.tavily.com/)** | ✓ | — | ✓ | — | — | — | — |
 | **[SearXNG](https://docs.searxng.org/)** | ✓ | ✓ | ✓ | — | — | — | — |
 | **[HackerNews](https://hn.algolia.com/)** | ✓ | — | ✓ | — | — | — | — |
+| **[Reddit](https://www.reddit.com/)** | ✓ | — | ✓ | — | — | — | — |
 | **[GitHub](https://docs.github.com/en/rest/search/search)** | ✓ | — | ✓ | — | — | — | — |
 
 **Notes:**
@@ -79,6 +81,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 |---|---|---|
 | **[DuckDuckGo](https://duckduckgo.com/)** | Unlimited | Free |
 | **[HackerNews](https://hn.algolia.com/)** | Unlimited | Free |
+| **[Reddit](https://www.reddit.com/)** | Unlimited | Free |
 | **[GitHub](https://docs.github.com/en/rest/search/search)** | 10 req/min (unauth) / 30 req/min (token) | Free |
 | **[SearXNG](https://docs.searxng.org/)** | Unlimited (self-hosted) | Free (self-hosted) |
 | **[Google PSE](https://programmablesearchengine.google.com/)** | 100 queries/day | $5 / 1,000 queries |
@@ -94,7 +97,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 
 | If you need… | Use |
 |---|---|
-| Zero-config, no signup | [DuckDuckGo](https://duckduckgo.com/) (built-in fallback) or [HackerNews](https://hn.algolia.com/) (HN-only) |
+| Zero-config, no signup | [DuckDuckGo](https://duckduckgo.com/) (built-in fallback), [HackerNews](https://hn.algolia.com/) (HN-only), or [Reddit](https://www.reddit.com/) (Reddit-only) |
 | Broadest index coverage | [Google PSE](https://programmablesearchengine.google.com/) |
 | High-volume + own index | [Brave](https://brave.com/search/api/) (2,000/month free, privacy-first) |
 | Independent results alongside Google | [Brave](https://brave.com/search/api/) or [Exa](https://exa.ai/) (different indices, no overlap) |
@@ -103,6 +106,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 | `answer` or `structured_search` tools | [Exa](https://exa.ai/) (required) |
 | Air-gapped or no vendor lock-in | [SearXNG](https://docs.searxng.org/) (self-hosted) |
 | Tech/developer community signal | [HackerNews](https://hn.algolia.com/) |
+| Reddit / community discussion signal | [Reddit](https://www.reddit.com/) |
 | GitHub issue and PR search | [GitHub](https://docs.github.com/en/rest/search/search) |
 | Maximum reliability | `SEARCH_ROUTING=brave,google,serper` (three independent providers) |
 
@@ -125,6 +129,8 @@ Which tools each web search provider enables. `—` means the provider returns e
 **[SearXNG](https://docs.searxng.org/)** — Open-source, self-hosted, routes to configurable backends. Best for air-gapped environments, organizations requiring no external vendor dependency, or privacy-first deployments. Requires hosting and setup but carries no query limits or API costs.
 
 **[HackerNews](https://hn.algolia.com/)** — Searches HN stories and submissions via the public HN Algolia API. No key or registration. Not general web — use only when you specifically want HN community signal, tech discussions, or submission history. `scrape_page` on any HN URL (item, user, list) reads natively through the HN Firebase API regardless of which `SEARCH_PROVIDER` is set.
+
+**[Reddit](https://www.reddit.com/)** — Searches Reddit posts via the public Atom RSS endpoint. No key or registration required. Not general web — use only when you specifically want Reddit community discussion, popular threads, or subreddit signal. Supports `web_search` and `news_search`; returns a maximum of 25 results per request (RSS hard limit). The `time_range` filter maps to Reddit's `t=` parameter (hour/day/week/month/year; defaults to month). `scrape_page` on any reddit.com URL works independently of which `SEARCH_PROVIDER` is set.
 
 **[GitHub](https://docs.github.com/en/rest/search/search)** — Searches GitHub issues and pull requests via the public REST Search API. No token required (10 req/min unauthenticated); set GITHUB_TOKEN to raise the limit to 30 req/min. Not general web — use only when you specifically want GitHub issue/PR signal: bug reports, feature requests, open-source community traction, or developer discussion history. Results include issue number, state, kind (issue/PR), reaction count, comment count, author, and creation date. `scrape_page` on any GitHub URL works through the standard scrape pipeline regardless of which `SEARCH_PROVIDER` is set.
 

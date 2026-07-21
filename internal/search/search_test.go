@@ -2191,6 +2191,45 @@ func TestAvailableProviders(t *testing.T) {
 	if _, ok := providers["github"]; !ok {
 		t.Error("expected github provider (zero-config, always available)")
 	}
+	if _, ok := providers["reddit"]; !ok {
+		t.Error("expected reddit provider (zero-config, always available)")
+	}
+}
+
+// TestProviderSupportedListContainsReddit (#277): reddit must be a recognized
+// provider name so config validation and Router wiring accept it.
+func TestProviderSupportedListContainsReddit(t *testing.T) {
+	found := false
+	for _, name := range SupportedProviders {
+		if name == "reddit" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected \"reddit\" in SupportedProviders")
+	}
+}
+
+// TestNewProviderByNameReddit (#277): reddit is zero-config — always returns
+// a non-nil provider regardless of config contents.
+func TestNewProviderByNameReddit(t *testing.T) {
+	p := NewProviderByName("reddit", config.SearchConfig{}, newTestDeps(http.DefaultClient))
+	if p == nil {
+		t.Fatal("expected non-nil reddit provider")
+	}
+	if _, ok := p.(*RedditProvider); !ok {
+		t.Errorf("expected *RedditProvider, got %T", p)
+	}
+}
+
+// TestNewProviderRedditCase (#277): NewProvider's explicit-selection switch
+// also recognizes "reddit".
+func TestNewProviderRedditCase(t *testing.T) {
+	p := NewProvider(config.SearchConfig{Provider: "reddit"}, newTestDeps(http.DefaultClient))
+	if p.Name() != "reddit" {
+		t.Errorf("expected provider name 'reddit', got %q", p.Name())
+	}
 }
 
 func TestNewProviderByName_MissingCredentials(t *testing.T) {

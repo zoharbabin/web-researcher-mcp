@@ -1892,6 +1892,7 @@ These are upstream behaviors we cannot control — they reflect how the underlyi
 | DuckDuckGo | Rate-limited aggressively from cloud/datacenter IPs | Works well from local/STDIO; may return 0 results from servers |
 | DuckDuckGo | Images and News return empty results | HTML endpoint doesn't support these categories; Router falls through |
 | HackerNews | `web_search` / `news_search` only (no Images); `dateRange` filter via Algolia `numericFilters`; `num_results` 1–100 (values outside that range reset to 10); no API key required (`SEARCH_PROVIDER=hackernews` or `provider: hackernews` per-call) | Algolia HN search index only; not a general-web index |
+| Reddit | `web_search` / `news_search` only (no Images); `time_range` maps to Reddit's `t=` parameter (hour/day/week/month/year, default month); `num_results` capped at 25 (RSS feed hard limit); no API key required (`SEARCH_PROVIDER=reddit` or `provider: reddit` per-call) | Reddit Atom RSS search feed only; community discussion content, not a general-web index |
 
 These are not errors in web-researcher-mcp. The tool faithfully passes parameters to the upstream API and returns whatever the API provides.
 
