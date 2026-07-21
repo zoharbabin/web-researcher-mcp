@@ -139,6 +139,7 @@ type SearchConfig struct {
 	SearXNGBasicAuth   string            // raw "user:password" for a SearXNG behind HTTP Basic auth; "" => none (never logged)
 	SearXNGHeaders     map[string]string // validated static request headers for SearXNG; nil/empty => none
 	CustomLensesPath   string
+	ThinThreshold      int // SEARCH_THIN_THRESHOLD: retry same provider with simplified query when result count <= this; 0 disables
 
 	// Patent-specific providers (optional, enables structured patent search)
 	USPTOAPIKey       string
@@ -364,6 +365,7 @@ func Load() (*Config, error) {
 			SearXNGBasicAuth:      searxngBasicAuth,
 			SearXNGHeaders:        searxngHeaders,
 			CustomLensesPath:      os.Getenv("CUSTOM_LENSES_PATH"),
+			ThinThreshold:         envInt("SEARCH_THIN_THRESHOLD", 1),
 			USPTOAPIKey:           os.Getenv("USPTO_API_KEY"),
 			EPOConsumerKey:        os.Getenv("EPO_OPS_CONSUMER_KEY"),
 			EPOConsumerSecret:     os.Getenv("EPO_OPS_CONSUMER_SECRET"),

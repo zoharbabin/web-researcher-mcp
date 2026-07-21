@@ -364,6 +364,7 @@ func main() {
 			Logger:            logger,
 			PatentProviders:   patentProviders,
 			AcademicProviders: academicProviders,
+			ThinThreshold:     cfg.Search.ThinThreshold,
 		})
 		logger.Info("search router initialized", "providers", len(allProviders),
 			"patentProviders", len(patentProviders),

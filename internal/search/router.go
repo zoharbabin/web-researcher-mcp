@@ -11,6 +11,41 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
+// webQueryStopWords are common English function words stripped by
+// simplifyQuery when a provider returns a thin result set for a naturally
+// phrased query (e.g. "what is the capital of france").
+var webQueryStopWords = map[string]bool{
+	"a": true, "about": true, "an": true, "and": true, "any": true,
+	"are": true, "as": true, "at": true, "be": true, "by": true,
+	"can": true, "could": true, "did": true, "do": true, "does": true,
+	"for": true, "from": true, "had": true, "has": true, "have": true,
+	"how": true, "i": true, "in": true, "is": true, "it": true,
+	"me": true, "my": true, "of": true, "on": true, "or": true,
+	"please": true, "should": true, "so": true, "that": true, "the": true,
+	"their": true, "there": true, "this": true, "to": true, "was": true,
+	"we": true, "what": true, "when": true, "where": true, "which": true,
+	"who": true, "why": true, "will": true, "with": true, "would": true,
+	"you": true, "your": true,
+}
+
+// simplifyQuery strips stop-words from query, returning the original string
+// unchanged when doing so would remove every token or would remove nothing
+// (nothing to simplify). Callers should compare the result for equality with
+// the input to decide whether a retry is warranted.
+func simplifyQuery(query string) string {
+	tokens := strings.Fields(query)
+	kept := make([]string, 0, len(tokens))
+	for _, tok := range tokens {
+		if !webQueryStopWords[strings.ToLower(tok)] {
+			kept = append(kept, tok)
+		}
+	}
+	if len(kept) == 0 || len(kept) == len(tokens) {
+		return query
+	}
+	return strings.Join(kept, " ")
+}
+
 // Operation represents a search operation type for routing decisions.
 type Operation string
 
@@ -60,6 +95,7 @@ type Router struct {
 	routing           RoutingConfig
 	notifier          FallbackNotifier
 	logger            *slog.Logger
+	thinThreshold     int
 }
 
 // Compile-time proof the Router satisfies every capability it routes. These
@@ -78,6 +114,9 @@ type RouterConfig struct {
 	Logger            *slog.Logger
 	PatentProviders   map[string]PatentProvider
 	AcademicProviders map[string]AcademicProvider
+	// ThinThreshold retries the same provider with a stop-word-stripped query
+	// when Web() returns a result count <= this threshold; 0 disables the retry.
+	ThinThreshold int
 }
 
 // NewRouter creates a multi-provider router. Providers must be pre-constructed
@@ -133,6 +172,7 @@ func NewRouter(providers map[string]Provider, cfg RouterConfig) *Router {
 		routing:           cfg.Routing,
 		notifier:          cfg.Notifier,
 		logger:            logger,
+		thinThreshold:     cfg.ThinThreshold,
 	}
 }
 
@@ -158,6 +198,15 @@ func (r *Router) Web(ctx context.Context, params WebSearchParams) ([]SearchResul
 
 		results, err := p.Web(ctx, params)
 		if err == nil {
+			if r.thinThreshold > 0 && len(results) <= r.thinThreshold {
+				if simplified := simplifyQuery(params.Query); simplified != params.Query {
+					retryParams := params
+					retryParams.Query = simplified
+					if retryResults, retryErr := p.Web(ctx, retryParams); retryErr == nil && len(retryResults) > len(results) {
+						results = retryResults
+					}
+				}
+			}
 			r.recordSuccess(name)
 			trace.served(name)
 			return results, nil
