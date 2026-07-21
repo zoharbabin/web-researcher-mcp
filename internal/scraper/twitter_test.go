@@ -22,6 +22,8 @@ func TestFormatTweetResult_Article(t *testing.T) {
 		},
 		"likes":      float64(86),
 		"retweets":   float64(7),
+		"replies":    float64(12),
+		"quotes":     float64(3),
 		"views":      float64(9538),
 		"created_at": "Thu Jun 11 14:35:34 +0000 2026",
 		"article": map[string]any{
@@ -127,5 +129,46 @@ func TestFormatTweetResult_PlainText(t *testing.T) {
 	}
 	if !strings.Contains(res.Content, "just a normal tweet") {
 		t.Errorf("plain tweet text missing from content: %q", res.Content)
+	}
+}
+
+// TestFormatTweetResult_EngagementSignals (#280) confirms replies and quotes
+// are read from the FXTwitter response and included in the engagement line
+// alongside the existing likes/retweets/views counts.
+func TestFormatTweetResult_EngagementSignals(t *testing.T) {
+	t.Parallel()
+
+	tweet := map[string]any{
+		"text": "engagement test tweet",
+		"author": map[string]any{
+			"screen_name": "someone",
+			"name":        "Some One",
+		},
+		"likes":      float64(100),
+		"retweets":   float64(50),
+		"replies":    float64(123),
+		"quotes":     float64(45),
+		"views":      float64(999),
+		"created_at": "Thu Jun 11 14:35:34 +0000 2026",
+	}
+
+	res := formatTweetResult("https://x.com/user/status/1", tweet, 10000)
+	if res == nil {
+		t.Fatal("expected a result, got nil")
+	}
+	if !strings.Contains(res.Content, "100 likes") {
+		t.Errorf("likes missing from content: %q", res.Content)
+	}
+	if !strings.Contains(res.Content, "50 retweets") {
+		t.Errorf("retweets missing from content: %q", res.Content)
+	}
+	if !strings.Contains(res.Content, "123 replies") {
+		t.Errorf("replies missing from content: %q", res.Content)
+	}
+	if !strings.Contains(res.Content, "45 quotes") {
+		t.Errorf("quotes missing from content: %q", res.Content)
+	}
+	if !strings.Contains(res.Content, "999 views") {
+		t.Errorf("views missing from content: %q", res.Content)
 	}
 }
