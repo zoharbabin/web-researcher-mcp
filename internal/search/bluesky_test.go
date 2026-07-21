@@ -20,6 +20,76 @@ const bskySampleResponse = `{"posts":[
 	{"uri":"at://did:plc:def456/app.bsky.feed.post/abc789","author":{"handle":"anon.bsky.social","displayName":""},"record":{"text":"Another post","createdAt":"2024-06-02T00:00:00Z"},"likeCount":0,"repostCount":0,"replyCount":0,"indexedAt":"2024-06-02T00:00:00Z"}
 ]}`
 
+// TestMultiInstanceIsolation proves rule 1.1 (issue #407): two RedditProvider
+// and two BlueskyProvider instances constructed with different baseURLs in
+// the same process never leak state across instances — each holds only
+// client/baseURL, set once at construction, read-only after.
+func TestMultiInstanceIsolation(t *testing.T) {
+	t.Parallel()
+
+	var gotPathA, gotPathB string
+	srvA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPathA = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"posts":[]}`))
+	}))
+	defer srvA.Close()
+	srvB := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPathB = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"posts":[]}`))
+	}))
+	defer srvB.Close()
+
+	bskyA := &BlueskyProvider{client: srvA.Client(), baseURL: srvA.URL}
+	bskyB := &BlueskyProvider{client: srvB.Client(), baseURL: srvB.URL}
+
+	if _, err := bskyA.Web(context.Background(), WebSearchParams{Query: "x"}); err != nil {
+		t.Fatalf("bskyA.Web: unexpected error: %v", err)
+	}
+	if _, err := bskyB.Web(context.Background(), WebSearchParams{Query: "x"}); err != nil {
+		t.Fatalf("bskyB.Web: unexpected error: %v", err)
+	}
+
+	if bskyA.baseURL == bskyB.baseURL {
+		t.Errorf("bskyA and bskyB share the same baseURL %q — instance state leaked", bskyA.baseURL)
+	}
+	if gotPathA == "" || gotPathB == "" {
+		t.Fatal("expected both test servers to receive a request")
+	}
+
+	var gotRedditPathA, gotRedditPathB string
+	rsrvA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotRedditPathA = r.URL.Path
+		w.Header().Set("Content-Type", "application/atom+xml")
+		w.Write([]byte(`<feed xmlns="http://www.w3.org/2005/Atom"></feed>`))
+	}))
+	defer rsrvA.Close()
+	rsrvB := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotRedditPathB = r.URL.Path
+		w.Header().Set("Content-Type", "application/atom+xml")
+		w.Write([]byte(`<feed xmlns="http://www.w3.org/2005/Atom"></feed>`))
+	}))
+	defer rsrvB.Close()
+
+	redditA := &RedditProvider{client: rsrvA.Client(), baseURL: rsrvA.URL}
+	redditB := &RedditProvider{client: rsrvB.Client(), baseURL: rsrvB.URL}
+
+	if _, err := redditA.Web(context.Background(), WebSearchParams{Query: "x"}); err != nil {
+		t.Fatalf("redditA.Web: unexpected error: %v", err)
+	}
+	if _, err := redditB.Web(context.Background(), WebSearchParams{Query: "x"}); err != nil {
+		t.Fatalf("redditB.Web: unexpected error: %v", err)
+	}
+
+	if redditA.baseURL == redditB.baseURL {
+		t.Errorf("redditA and redditB share the same baseURL %q — instance state leaked", redditA.baseURL)
+	}
+	if gotRedditPathA == "" || gotRedditPathB == "" {
+		t.Fatal("expected both reddit test servers to receive a request")
+	}
+}
+
 func TestBlueskyProviderName(t *testing.T) {
 	t.Parallel()
 	p := &BlueskyProvider{client: http.DefaultClient, baseURL: "x"}
