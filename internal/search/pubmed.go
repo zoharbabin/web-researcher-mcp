@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 // PubMedProvider implements AcademicSearcher over the NCBI E-utilities API:
@@ -268,7 +270,7 @@ func (p *PubMedProvider) get(ctx context.Context, path string) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == 429 {
-		return nil, fmt.Errorf("pubmed: rate limited (set PUBMED_API_KEY to raise the limit)")
+		return nil, fmt.Errorf("pubmed: rate limited (set PUBMED_API_KEY to raise the limit): %w", circuit.ErrRateLimit)
 	}
 	if resp.StatusCode >= 400 {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))

@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 // Exa (exa.ai) is a neural/semantic search API exposing a single rich /search
@@ -400,7 +402,7 @@ func (e *ExaProvider) doRequest(ctx context.Context, path string, payload map[st
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 429 {
-		return fmt.Errorf("exa API rate limited")
+		return fmt.Errorf("exa API rate limited: %w", circuit.ErrRateLimit)
 	}
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))

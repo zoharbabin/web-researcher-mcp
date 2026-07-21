@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strconv"
 	"time"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 var _ Provider = (*HNProvider)(nil)
@@ -77,7 +79,7 @@ func (p *HNProvider) Web(ctx context.Context, params WebSearchParams) ([]SearchR
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusTooManyRequests {
-		return nil, fmt.Errorf("hackernews: rate limited")
+		return nil, fmt.Errorf("hackernews: rate limited: %w", circuit.ErrRateLimit)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("hackernews: HTTP %d", resp.StatusCode)

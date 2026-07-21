@@ -164,7 +164,7 @@ func (r *Router) Web(ctx context.Context, params WebSearchParams) ([]SearchResul
 		}
 
 		lastErr = err
-		r.recordFailure(name)
+		r.recordFailure(name, err)
 		r.logger.Warn("provider failed, trying next",
 			"provider", name, "operation", "web", "error", err)
 		trace.fellBack(FallbackReasonPrimaryUnavailable)
@@ -205,7 +205,7 @@ func (r *Router) Images(ctx context.Context, params ImageSearchParams) ([]ImageR
 		}
 
 		lastErr = err
-		r.recordFailure(name)
+		r.recordFailure(name, err)
 		r.logger.Warn("provider failed, trying next",
 			"provider", name, "operation", "images", "error", err)
 		trace.fellBack(FallbackReasonPrimaryUnavailable)
@@ -246,7 +246,7 @@ func (r *Router) News(ctx context.Context, params NewsSearchParams) ([]NewsResul
 		}
 
 		lastErr = err
-		r.recordFailure(name)
+		r.recordFailure(name, err)
 		r.logger.Warn("provider failed, trying next",
 			"provider", name, "operation", "news", "error", err)
 		trace.fellBack(FallbackReasonPrimaryUnavailable)
@@ -293,7 +293,7 @@ func (r *Router) Patents(ctx context.Context, params PatentSearchParams) ([]Pate
 				return results, nil
 			}
 			lastErr = err
-			r.recordFailure(name)
+			r.recordFailure(name, err)
 			r.logger.Warn("patent provider failed, trying next",
 				"provider", name, "operation", "patents", "error", err)
 			trace.fellBack(FallbackReasonPrimaryUnavailable)
@@ -574,12 +574,15 @@ func (r *Router) recordSuccess(name string) {
 	}
 }
 
-func (r *Router) recordFailure(name string) {
+// recordFailure forwards the real provider error to the circuit breaker for
+// that provider. If err wraps circuit.ErrRateLimit, the breaker opens
+// immediately.
+func (r *Router) recordFailure(name string, err error) {
 	r.mu.RLock()
 	breaker, ok := r.breakers[name]
 	r.mu.RUnlock()
 	if ok {
-		_ = breaker.Execute(func() error { return fmt.Errorf("recorded failure") })
+		_ = breaker.Execute(func() error { return err })
 	}
 }
 

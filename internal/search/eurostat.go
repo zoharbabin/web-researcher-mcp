@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 // EurostatProvider implements EconSearcher over the Eurostat dissemination API:
@@ -404,7 +406,7 @@ func (e *EurostatProvider) get(ctx context.Context, endpoint string) ([]byte, er
 	case resp == 413:
 		return nil, fmt.Errorf("eurostat: query too large — narrow the geo/time filters")
 	case resp == 429:
-		return nil, fmt.Errorf("eurostat: rate limited")
+		return nil, fmt.Errorf("eurostat: rate limited: %w", circuit.ErrRateLimit)
 	case resp >= 400:
 		return nil, fmt.Errorf("eurostat: API error %d: %s", resp, truncateText(string(body), 200))
 	}

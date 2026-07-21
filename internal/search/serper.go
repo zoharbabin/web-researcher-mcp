@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 type SerperProvider struct {
@@ -162,6 +164,9 @@ func (s *SerperProvider) doRequest(ctx context.Context, apiURL string, payload m
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == 429 {
+		return nil, fmt.Errorf("serper: rate limited: %w", circuit.ErrRateLimit)
+	}
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 		return nil, fmt.Errorf("serper API error %d: %s", resp.StatusCode, string(body))

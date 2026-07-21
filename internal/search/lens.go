@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 // LensProvider searches The Lens patent database (lens.org).
@@ -67,7 +69,7 @@ func (l *LensProvider) doSearch(ctx context.Context, params PatentSearchParams) 
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 429 {
-		return nil, fmt.Errorf("lens: rate limited")
+		return nil, fmt.Errorf("lens: rate limited: %w", circuit.ErrRateLimit)
 	}
 	if resp.StatusCode == 401 {
 		return nil, fmt.Errorf("lens: authentication failed (check LENS_API_TOKEN)")

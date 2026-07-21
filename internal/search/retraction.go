@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 // Retraction integrity enrichment (#156). Crossref absorbed the Retraction Watch
@@ -93,7 +95,7 @@ func (c *CrossrefRetractionResolver) Resolve(ctx context.Context, doi string) (*
 			// Unknown/malformed DOI — legitimate "no info", not an error.
 			return nil
 		case resp.StatusCode == 429:
-			return fmt.Errorf("crossref: rate limited")
+			return fmt.Errorf("crossref: rate limited: %w", circuit.ErrRateLimit)
 		case resp.StatusCode >= 400:
 			body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 			return fmt.Errorf("crossref: API error %d: %s", resp.StatusCode, string(body))

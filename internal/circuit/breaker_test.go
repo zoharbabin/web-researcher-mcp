@@ -2,6 +2,7 @@ package circuit
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -200,6 +201,109 @@ func TestSuccessResetsFailureCount(t *testing.T) {
 
 	if b.State() != StateClosed {
 		t.Errorf("expected Closed (counter should have been reset), got %v", b.State())
+	}
+}
+
+// TestRateLimitOpensImmediately (#276): a single ErrRateLimit failure opens
+// the circuit even though FailureThreshold is far from reached.
+func TestRateLimitOpensImmediately(t *testing.T) {
+	b := New(Config{FailureThreshold: 5, ResetTimeout: 60})
+
+	err := b.Execute(func() error { return ErrRateLimit })
+	if !errors.Is(err, ErrRateLimit) {
+		t.Fatalf("expected ErrRateLimit, got %v", err)
+	}
+	if b.State() != StateOpen {
+		t.Fatalf("expected Open after one rate-limit failure, got %v", b.State())
+	}
+
+	called := false
+	err = b.Execute(func() error {
+		called = true
+		return nil
+	})
+	if !errors.Is(err, ErrCircuitOpen) {
+		t.Errorf("expected ErrCircuitOpen, got %v", err)
+	}
+	if called {
+		t.Error("function should not be called when circuit is open")
+	}
+}
+
+// TestRateLimitDoesNotIncrementFailureCounter (#276): an immediate-open on
+// ErrRateLimit must not touch the generic failures counter — otherwise a
+// rate-limit would count toward, and prematurely trip, the normal threshold.
+func TestRateLimitDoesNotIncrementFailureCounter(t *testing.T) {
+	b := New(Config{FailureThreshold: 5, ResetTimeout: 60})
+
+	_ = b.Execute(func() error { return ErrRateLimit })
+	if b.State() != StateOpen {
+		t.Fatalf("expected Open after rate-limit, got %v", b.State())
+	}
+
+	b.Reset()
+
+	for i := 0; i < 4; i++ {
+		_ = b.Execute(func() error { return errTest })
+	}
+	if b.State() != StateClosed {
+		t.Errorf("expected Closed after 4/5 generic failures, got %v (failures counter may have been polluted by the earlier rate-limit)", b.State())
+	}
+}
+
+// TestWrappedErrRateLimitOpensImmediately (#276): errors.Is unwrapping must
+// see through a provider's %w wrap (e.g. "brave: rate limited: %w").
+func TestWrappedErrRateLimitOpensImmediately(t *testing.T) {
+	b := New(Config{FailureThreshold: 5, ResetTimeout: 60})
+
+	wrapped := fmt.Errorf("brave: rate limited: %w", ErrRateLimit)
+	_ = b.Execute(func() error { return wrapped })
+
+	if b.State() != StateOpen {
+		t.Fatalf("expected Open after wrapped ErrRateLimit, got %v", b.State())
+	}
+}
+
+// TestNormalThresholdUnchanged (#276): non-rate-limit errors must still
+// require FailureThreshold occurrences before opening — the new immediate-open
+// path must not affect the existing generic-failure behavior.
+func TestNormalThresholdUnchanged(t *testing.T) {
+	b := New(Config{FailureThreshold: 5, ResetTimeout: 60})
+
+	for i := 0; i < 4; i++ {
+		_ = b.Execute(func() error { return errTest })
+	}
+	if b.State() != StateClosed {
+		t.Fatalf("expected Closed after 4/5 failures, got %v", b.State())
+	}
+
+	_ = b.Execute(func() error { return errTest })
+	if b.State() != StateOpen {
+		t.Fatalf("expected Open after 5/5 failures, got %v", b.State())
+	}
+}
+
+// TestHalfOpenRateLimitReopensImmediately (#276): a rate-limit hit while
+// half-open must reopen the circuit on the first attempt, not require a
+// second half-open failure.
+func TestHalfOpenRateLimitReopensImmediately(t *testing.T) {
+	b := New(Config{FailureThreshold: 2, ResetTimeout: 1, HalfOpenAttempts: 1})
+
+	for i := 0; i < 2; i++ {
+		_ = b.Execute(func() error { return errTest })
+	}
+	if b.State() != StateOpen {
+		t.Fatalf("expected Open, got %v", b.State())
+	}
+
+	time.Sleep(1100 * time.Millisecond)
+
+	err := b.Execute(func() error { return ErrRateLimit })
+	if !errors.Is(err, ErrRateLimit) {
+		t.Fatalf("expected ErrRateLimit, got %v", err)
+	}
+	if b.State() != StateOpen {
+		t.Fatalf("expected Open after half-open rate-limit, got %v", b.State())
 	}
 }
 

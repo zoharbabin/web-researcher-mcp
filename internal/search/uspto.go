@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 // USPTOProvider searches the USPTO Patent File Wrapper (PEDS) API.
@@ -76,7 +78,7 @@ func (u *USPTOProvider) doSearch(ctx context.Context, params PatentSearchParams)
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 429 {
-		return nil, fmt.Errorf("uspto: rate limited")
+		return nil, fmt.Errorf("uspto: rate limited: %w", circuit.ErrRateLimit)
 	}
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
 		return nil, fmt.Errorf("uspto: authentication failed (check USPTO_API_KEY)")

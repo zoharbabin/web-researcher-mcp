@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 // CourtListenerProvider implements CaseSearcher over the CourtListener (Free Law
@@ -90,7 +92,7 @@ func (c *CourtListenerProvider) doSearch(ctx context.Context, params CaseSearchP
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 429 {
-		return nil, fmt.Errorf("courtlistener: rate limited")
+		return nil, fmt.Errorf("courtlistener: rate limited: %w", circuit.ErrRateLimit)
 	}
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
 		return nil, fmt.Errorf("courtlistener: authentication failed (check COURTLISTENER_API_TOKEN)")

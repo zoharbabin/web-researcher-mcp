@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/audit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/auth"
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/consent"
 	"github.com/zoharbabin/web-researcher-mcp/internal/metrics"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
@@ -391,6 +393,11 @@ func isRateLimitError(err error) bool {
 	if err == nil {
 		return false
 	}
+	// Typed sentinel check first (fast, no string alloc).
+	if errors.Is(err, circuit.ErrRateLimit) {
+		return true
+	}
+	// Legacy string fallback for any provider not yet wrapped.
 	s := err.Error()
 	return strings.Contains(s, "rate limited") || strings.Contains(s, "429") || strings.Contains(s, "quota")
 }

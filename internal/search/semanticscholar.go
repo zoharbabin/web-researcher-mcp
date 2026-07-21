@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 // SemanticScholarProvider searches the Semantic Scholar Academic Graph (Allen
@@ -204,7 +206,7 @@ func (s *SemanticScholarProvider) doRequest(ctx context.Context, path string, ou
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 429 {
-		return fmt.Errorf("semanticscholar: rate limited")
+		return fmt.Errorf("semanticscholar: rate limited: %w", circuit.ErrRateLimit)
 	}
 	if resp.StatusCode == 404 {
 		return fmt.Errorf("semanticscholar: paper not found")

@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 type SearchAPIProvider struct {
@@ -297,7 +299,7 @@ func (s *SearchAPIProvider) doRequest(ctx context.Context, params url.Values) ([
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 429 {
-		return nil, fmt.Errorf("searchapi: rate limited")
+		return nil, fmt.Errorf("searchapi: rate limited: %w", circuit.ErrRateLimit)
 	}
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
 		return nil, fmt.Errorf("searchapi: authentication failed (check SEARCHAPI_API_KEY)")
