@@ -42,6 +42,7 @@ Understanding what backs each provider helps you reason about result overlap and
 | **[SearXNG](https://docs.searxng.org/)** | Meta-search | Configurable — routes to whatever backends you point it at (Bing, Google, DuckDuckGo, and others) |
 | **[HackerNews](https://hn.algolia.com/)** | Niche | HN Algolia index — Hacker News stories and submissions only |
 | **[Reddit](https://www.reddit.com/)** | Niche | Reddit Atom RSS — Reddit posts and community discussions only |
+| **[Bluesky](https://bsky.app/)** | Niche | AT Protocol AppView (`public.api.bsky.app`) — Bluesky posts only |
 | **[GitHub](https://docs.github.com/en/rest/search/search)** | Niche | GitHub REST Search API — issues and pull requests only |
 
 **Practical implication**: Google PSE, Serper, and SearchAPI.io draw from the same index — using more than one adds no coverage, only redundancy. Brave and Exa bring genuinely independent results. Tavily and SearXNG aggregate results from others rather than crawling themselves.

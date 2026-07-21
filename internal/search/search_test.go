@@ -2194,6 +2194,9 @@ func TestAvailableProviders(t *testing.T) {
 	if _, ok := providers["reddit"]; !ok {
 		t.Error("expected reddit provider (zero-config, always available)")
 	}
+	if _, ok := providers["bluesky"]; !ok {
+		t.Error("expected bluesky provider (zero-config, always available)")
+	}
 }
 
 // TestProviderSupportedListContainsReddit (#277): reddit must be a recognized
@@ -2229,6 +2232,42 @@ func TestNewProviderRedditCase(t *testing.T) {
 	p := NewProvider(config.SearchConfig{Provider: "reddit"}, newTestDeps(http.DefaultClient))
 	if p.Name() != "reddit" {
 		t.Errorf("expected provider name 'reddit', got %q", p.Name())
+	}
+}
+
+// TestProviderSupportedListContainsBluesky (#279): bluesky must be a
+// recognized provider name so config validation and Router wiring accept it.
+func TestProviderSupportedListContainsBluesky(t *testing.T) {
+	found := false
+	for _, name := range SupportedProviders {
+		if name == "bluesky" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected \"bluesky\" in SupportedProviders")
+	}
+}
+
+// TestNewProviderByName_Bluesky (#279): bluesky is zero-config — always
+// returns a non-nil provider regardless of config contents.
+func TestNewProviderByName_Bluesky(t *testing.T) {
+	p := NewProviderByName("bluesky", config.SearchConfig{}, newTestDeps(http.DefaultClient))
+	if p == nil {
+		t.Fatal("expected non-nil bluesky provider")
+	}
+	if _, ok := p.(*BlueskyProvider); !ok {
+		t.Errorf("expected *BlueskyProvider, got %T", p)
+	}
+}
+
+// TestNewProvider_Bluesky (#279): NewProvider's explicit-selection switch
+// also recognizes "bluesky".
+func TestNewProvider_Bluesky(t *testing.T) {
+	p := NewProvider(config.SearchConfig{Provider: "bluesky"}, newTestDeps(http.DefaultClient))
+	if p.Name() != "bluesky" {
+		t.Errorf("expected provider name 'bluesky', got %q", p.Name())
 	}
 }
 
