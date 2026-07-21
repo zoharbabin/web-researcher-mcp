@@ -99,12 +99,17 @@ func (p *HNProvider) Web(ctx context.Context, params WebSearchParams) ([]SearchR
 		if itemURL == "" {
 			itemURL = fmt.Sprintf("https://news.ycombinator.com/item?id=%d", h.StoryID)
 		}
+		var eng *EngagementSignals
+		if h.Points > 0 || h.NumComments > 0 {
+			eng = &EngagementSignals{Points: h.Points, CommentCount: h.NumComments}
+		}
 		results = append(results, SearchResult{
 			Title:       h.Title,
 			URL:         itemURL,
 			Snippet:     fmt.Sprintf("%d pts · %d comments · by %s", h.Points, h.NumComments, h.Author),
 			DisplayLink: "news.ycombinator.com",
 			PublishedAt: normalizePublishedAt(h.CreatedAt, time.Now()),
+			Engagement:  eng,
 		})
 	}
 	return results, nil
@@ -132,6 +137,7 @@ func (p *HNProvider) News(ctx context.Context, params NewsSearchParams) ([]NewsR
 			Source:      "hackernews",
 			PublishedAt: r.PublishedAt,
 			Snippet:     r.Snippet,
+			Engagement:  r.Engagement,
 		})
 	}
 	return news, nil

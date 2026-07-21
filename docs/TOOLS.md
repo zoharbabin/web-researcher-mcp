@@ -72,12 +72,25 @@ type SearchResult struct {
     PublishedAt      string            `json:"publishedAt,omitempty"`      // RFC3339 UTC; present only when the provider's response carried a date (#356)
     SourceReputation *DomainReputation `json:"sourceReputation,omitempty"` // present when host is in the reputation dataset (#198); omitted for unknown hosts
     ClaimSignal      string            `json:"claimSignal"`                // most claim-relevant snippet sentence; present on EVERY result whenever `claim` is set (empty string when no snippet sentence matched) — uniform shape (#66, #235)
+    Engagement       *EngagementSignals `json:"engagement,omitempty"`      // provider-supplied engagement metrics (#281); omitted when the provider surfaces none
+}
+
+type EngagementSignals struct {
+    Score        float64 `json:"score,omitempty"`        // relevance/quality score 0-1 (Exa)
+    Points       int     `json:"points,omitempty"`        // upvote/karma points (HackerNews)
+    CommentCount int     `json:"commentCount,omitempty"`  // total comment count (HackerNews)
+    ReplyCount   int     `json:"replyCount,omitempty"`    // reply/thread depth (future providers)
+    LikeCount    int     `json:"likeCount,omitempty"`      // likes/reactions (future providers)
+    RepostCount  int     `json:"repostCount,omitempty"`    // reposts/shares (future providers)
+    ViewCount    int     `json:"viewCount,omitempty"`      // view/impression count (future providers)
 }
 ```
 
 `sourceReputation` is a descriptive signal (same shape as `scrape_page`/`search_and_scrape`) indicating the host's known reliability tier (`high`, `low`, `mixed`) with a `basis` note. It is omitted for hosts not in the dataset — absence means unknown, not bad. When `claim` is set, every result carries a `claimSignal` holding the most claim-relevant snippet sentence to help triage which links to read — it is the empty string (not absent) when no snippet sentence matched, so the field's shape is uniform across results and downstream null-checking stays simple (#235). For full-text claim evidence use `search_and_scrape` with `claim`. `claimSignal` is an English-keyword heuristic (#390): an empty string on non-English snippet text means the heuristic never matched, not that the snippet is confirmed unrelated — read the snippet yourself for non-English sources.
 
 `publishedAt` (#356) is **optional and provider-dependent**, populated only by providers whose web response carries a date signal (Google via pagemap metadata, Tavily, Exa, SearXNG, HackerNews) and omitted (never guessed from snippet/title text) for providers that don't (Brave, Serper, DuckDuckGo, SearchAPI). When present it is normalized to RFC3339 UTC regardless of the provider's raw format.
+
+`engagement` (#281) is **optional and provider-dependent**, populated only by providers that natively surface engagement metrics: HackerNews (`points`, `commentCount`) and Exa (`score`). Absence means the provider doesn't surface any signal — never treat a missing `engagement` as zero engagement.
 
 On a zero-result response, `hints` carries a `ZeroResultHints` object (the same shape `academic_search` and `patent_search` emit) explaining why nothing matched and how to recover: `reason` (`no_match` | `filters_too_restrictive`), `filtersApplied` (the constraints that may have eliminated results — `site`, `sites`, `lens`, `time_range`, `country`, `language`, `exact_terms`, `exclude_terms`), `suggestedActions` (remove-filter / try-different-provider), and `epistemicWarning` (#357: a fixed reminder that zero results do not confirm absence — the fact may exist and simply be unreachable by the current query/provider; never assert non-existence from an empty result set). Suggested alternative providers are limited to those **configured and currently healthy**. On any non-empty result set the field is omitted.
 
@@ -545,6 +558,7 @@ type NewsArticle struct {
     Source      string `json:"source"`
     PublishedAt string `json:"publishedAt,omitempty"` // optional, provider-dependent; ISO-8601 (RFC3339 UTC) when present
     Snippet     string `json:"snippet"`
+    Engagement  *EngagementSignals `json:"engagement,omitempty"` // provider-supplied engagement metrics (#281); see web_search's EngagementSignals shape. Omitted when the provider surfaces none
 }
 ```
 

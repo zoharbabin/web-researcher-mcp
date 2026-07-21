@@ -78,21 +78,21 @@ func TestScrapeCacheKey_VariesByModeAndMaxLength(t *testing.T) {
 	}
 }
 
-// TestWebSearchCacheKeyBumped (#356): the cache key's version segment must be
-// "|v5" (publishedAt added to every web_search result) so a pre-upgrade cache
-// entry can never be served without the new field. Reimplements the same hash
-// independently rather than calling an internal helper, so it fails loudly if
-// searchCacheKey's version segment regresses to v4 or is bumped without this
-// test being updated.
+// TestWebSearchCacheKeyBumped (#281): the cache key's version segment must be
+// "|v6" (engagement signals added to every web_search/news_search result) so a
+// pre-upgrade cache entry can never be served without the new field.
+// Reimplements the same hash independently rather than calling an internal
+// helper, so it fails loudly if searchCacheKey's version segment regresses to
+// v5 or is bumped without this test being updated.
 func TestWebSearchCacheKeyBumped(t *testing.T) {
 	t.Parallel()
 	h := sha256.New()
 	h.Write([]byte("web"))
-	h.Write([]byte("|v5"))
+	h.Write([]byte("|v6"))
 	fmt.Fprintf(h, "|%v", "query")
 	want := "search:" + hex.EncodeToString(h.Sum(nil))[:32]
 	if got := searchCacheKey("web", "query"); got != want {
-		t.Errorf("searchCacheKey version segment is not v5: got %s, want %s", got, want)
+		t.Errorf("searchCacheKey version segment is not v6: got %s, want %s", got, want)
 	}
 }
 

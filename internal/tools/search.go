@@ -214,8 +214,9 @@ func searchCacheKey(toolName string, parts ...any) string {
 	// added the "trust" untrusted-content marker to every search-family output;
 	// v3 added the optional zero-result "hints" object to web_search/news_search
 	// (#100); v4 added sourceReputation to every web_search result (#198); v5
-	// added publishedAt to every web_search result (#356).
-	h.Write([]byte("|v5"))
+	// added publishedAt to every web_search result (#356); v6 added the
+	// optional engagement signals object to web_search/news_search results (#281).
+	h.Write([]byte("|v6"))
 	for _, p := range parts {
 		fmt.Fprintf(h, "|%v", p)
 	}

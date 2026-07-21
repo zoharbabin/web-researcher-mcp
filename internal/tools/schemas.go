@@ -22,6 +22,23 @@ var trustUserAsserted = map[string]any{"type": "string", "enum": []any{"user-ass
 // clean — read the underlying title/snippet/bio yourself when it isn't English.
 const languageHeuristicCaveat = " English-keyword heuristic (#390): an empty/false/absent value on non-English text means the heuristic didn't match, not that the signal is confirmed absent — read the underlying text yourself for non-English sources."
 
+// engagementSignalsSchema is the shared output-schema fragment for
+// search.EngagementSignals (#281) — reused by web_search and news_search
+// result items. Present only when the provider supplies at least one signal.
+var engagementSignalsSchema = map[string]any{
+	"type":        "object",
+	"description": "Provider-supplied engagement metrics (#281). Present only when the provider surfaces at least one signal (HackerNews: points/commentCount; Exa: score). Absent means unavailable, never zero.",
+	"properties": map[string]any{
+		"score":        map[string]any{"type": "number"},
+		"points":       map[string]any{"type": "integer"},
+		"commentCount": map[string]any{"type": "integer"},
+		"replyCount":   map[string]any{"type": "integer"},
+		"likeCount":    map[string]any{"type": "integer"},
+		"repostCount":  map[string]any{"type": "integer"},
+		"viewCount":    map[string]any{"type": "integer"},
+	},
+}
+
 var webSearchOutputSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{
@@ -41,6 +58,7 @@ var webSearchOutputSchema = map[string]any{
 					"displayLink": map[string]any{"type": "string"},
 					"publishedAt": map[string]any{"type": "string", "description": "RFC3339 publish timestamp, present only when the provider's response carried a date (Google, Tavily, Exa, SearXNG, HackerNews). Never inferred from snippet/title text."},
 					"claimSignal": map[string]any{"type": "string", "description": "Most claim-relevant snippet sentence (present per result only when the `claim` param was supplied and matched). Evidence, not a verdict." + languageHeuristicCaveat},
+					"engagement":  engagementSignalsSchema,
 				},
 			},
 		},
@@ -90,6 +108,7 @@ var newsSearchOutputSchema = map[string]any{
 					"source":      map[string]any{"type": "string"},
 					"publishedAt": map[string]any{"type": "string"},
 					"snippet":     map[string]any{"type": "string"},
+					"engagement":  engagementSignalsSchema,
 				},
 			},
 		},

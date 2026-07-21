@@ -127,13 +127,38 @@ func TestExaWebSearch_PublishedAt(t *testing.T) {
 	}
 }
 
+// TestExaWebSearch_Engagement (#281): a result's score must populate
+// SearchResult.Engagement; a zero/absent score must leave Engagement nil.
+func TestExaWebSearch_Engagement(t *testing.T) {
+	p, _ := newExaTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"results":[
+			{"title":"Scored","url":"https://a.example/x","highlights":["h"],"score":0.87},
+			{"title":"Unscored","url":"https://b.example/y","highlights":["h"]}
+		]}`))
+	})
+
+	results, err := p.Web(context.Background(), WebSearchParams{Query: "golang", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("want 2 results, got %d", len(results))
+	}
+	if results[0].Engagement == nil || results[0].Engagement.Score != 0.87 {
+		t.Errorf("results[0].Engagement = %+v, want Score=0.87", results[0].Engagement)
+	}
+	if results[1].Engagement != nil {
+		t.Errorf("results[1].Engagement should be nil when score is absent/zero, got %+v", results[1].Engagement)
+	}
+}
+
 func TestExaNewsSearch(t *testing.T) {
 	var gotBody map[string]any
 	p, _ := newExaTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		_ = json.Unmarshal(body, &gotBody)
 		_, _ = w.Write([]byte(`{
-			"results":[{"title":"News","url":"https://news.example/z","publishedDate":"2026-06-01T00:00:00.000Z","highlights":["h"]}],
+			"results":[{"title":"News","url":"https://news.example/z","publishedDate":"2026-06-01T00:00:00.000Z","highlights":["h"],"score":0.55}],
 			"costDollars":{"total":0.007}
 		}`))
 	})
@@ -152,6 +177,9 @@ func TestExaNewsSearch(t *testing.T) {
 	}
 	if results[0].Source != "news.example" {
 		t.Errorf("source should be host, got %q", results[0].Source)
+	}
+	if results[0].Engagement == nil || results[0].Engagement.Score != 0.55 {
+		t.Errorf("results[0].Engagement = %+v, want Score=0.55 (#281)", results[0].Engagement)
 	}
 }
 

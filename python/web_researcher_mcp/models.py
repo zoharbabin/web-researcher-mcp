@@ -706,6 +706,30 @@ class EconSearchResult:
         )
 
 @dataclass
+class Engagement:
+    commentCount: Optional[int] = None
+    likeCount: Optional[int] = None
+    points: Optional[int] = None
+    replyCount: Optional[int] = None
+    repostCount: Optional[int] = None
+    score: Optional[float] = None
+    viewCount: Optional[int] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "Engagement | None":
+        if d is None:
+            return None
+        return cls(
+            commentCount=d.get('commentCount'),
+            likeCount=d.get('likeCount'),
+            points=d.get('points'),
+            replyCount=d.get('replyCount'),
+            repostCount=d.get('repostCount'),
+            score=d.get('score'),
+            viewCount=d.get('viewCount'),
+        )
+
+@dataclass
 class FilingSearchFiling:
     accession: Optional[str] = None
     cik: Optional[str] = None
@@ -1267,6 +1291,7 @@ class Metadata:
 
 @dataclass
 class NewsSearchArticle:
+    engagement: Optional[Engagement] = None
     publishedAt: Optional[str] = None
     snippet: Optional[str] = None
     source: Optional[str] = None
@@ -1278,6 +1303,7 @@ class NewsSearchArticle:
         if d is None:
             return None
         return cls(
+            engagement=Engagement.from_dict(d.get('engagement')) if d.get('engagement') else None,
             publishedAt=d.get('publishedAt'),
             snippet=d.get('snippet'),
             source=d.get('source'),
@@ -2041,6 +2067,7 @@ class WebSearchResponse:
 class WebSearchResult:
     claimSignal: Optional[str] = None
     displayLink: Optional[str] = None
+    engagement: Optional[Engagement] = None
     publishedAt: Optional[str] = None
     snippet: Optional[str] = None
     title: Optional[str] = None
@@ -2053,6 +2080,7 @@ class WebSearchResult:
         return cls(
             claimSignal=d.get('claimSignal'),
             displayLink=d.get('displayLink'),
+            engagement=Engagement.from_dict(d.get('engagement')) if d.get('engagement') else None,
             publishedAt=d.get('publishedAt'),
             snippet=d.get('snippet'),
             title=d.get('title'),
