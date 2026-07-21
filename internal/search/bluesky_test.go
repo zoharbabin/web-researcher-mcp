@@ -209,6 +209,121 @@ func TestBlueskyProviderNonOK(t *testing.T) {
 	}
 }
 
+// TestBlueskyProviderSearchPosts403FallsBack proves that when the primary
+// (cached) AppView host 403s searchPosts specifically — the documented
+// load-shedding behavior in bluesky-social/bsky-docs#332 — the provider
+// retries once against the uncached fallback host and returns its results
+// instead of surfacing the 403.
+func TestBlueskyProviderSearchPosts403FallsBack(t *testing.T) {
+	fallbackSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(bskySampleResponse))
+	}))
+	defer fallbackSrv.Close()
+
+	origFallback := bskyFallbackBaseURL
+	bskyFallbackBaseURL = fallbackSrv.URL
+	defer func() { bskyFallbackBaseURL = origFallback }()
+
+	primarySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer primarySrv.Close()
+
+	p := &BlueskyProvider{client: primarySrv.Client(), baseURL: primarySrv.URL}
+	results, err := p.Web(context.Background(), WebSearchParams{Query: "test", NumResults: 5})
+	if err != nil {
+		t.Fatalf("expected fallback to succeed, got error: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results from fallback host, got %d", len(results))
+	}
+}
+
+// TestBlueskyProviderSearchPosts403NoFallbackLoop proves the provider does
+// not retry against itself when it is already the fallback host (avoids a
+// duplicate/self-retry when both hosts happen to be the same).
+func TestBlueskyProviderSearchPosts403NoFallbackLoop(t *testing.T) {
+	var requestCount int
+	primarySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer primarySrv.Close()
+
+	origFallback := bskyFallbackBaseURL
+	bskyFallbackBaseURL = primarySrv.URL
+	defer func() { bskyFallbackBaseURL = origFallback }()
+
+	p := &BlueskyProvider{client: primarySrv.Client(), baseURL: primarySrv.URL}
+	_, err := p.Web(context.Background(), WebSearchParams{Query: "test", NumResults: 5})
+	if err == nil {
+		t.Fatal("expected error when primary and fallback host are the same and both 403, got nil")
+	}
+	if requestCount != 1 {
+		t.Errorf("expected exactly 1 request (no fallback retry against the same host), got %d", requestCount)
+	}
+}
+
+// TestBlueskyProviderSearchPosts403BothFail proves that when the fallback
+// host also 403s, the provider surfaces the fallback's error rather than
+// silently swallowing it.
+func TestBlueskyProviderSearchPosts403BothFail(t *testing.T) {
+	primarySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer primarySrv.Close()
+
+	fallbackSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer fallbackSrv.Close()
+
+	origFallback := bskyFallbackBaseURL
+	bskyFallbackBaseURL = fallbackSrv.URL
+	defer func() { bskyFallbackBaseURL = origFallback }()
+
+	p := &BlueskyProvider{client: primarySrv.Client(), baseURL: primarySrv.URL}
+	_, err := p.Web(context.Background(), WebSearchParams{Query: "test", NumResults: 5})
+	if err == nil {
+		t.Fatal("expected error when both hosts 403, got nil")
+	}
+	if !strings.Contains(err.Error(), "403") {
+		t.Errorf("error message should mention 403, got %q", err.Error())
+	}
+}
+
+// TestBlueskyProviderNon403ErrorNoFallback proves the fallback path is
+// scoped to 403 specifically — a non-403 error (e.g. 503) on the primary
+// host must not trigger a retry against the fallback host.
+func TestBlueskyProviderNon403ErrorNoFallback(t *testing.T) {
+	var fallbackCalled bool
+	fallbackSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fallbackCalled = true
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(bskySampleResponse))
+	}))
+	defer fallbackSrv.Close()
+
+	origFallback := bskyFallbackBaseURL
+	bskyFallbackBaseURL = fallbackSrv.URL
+	defer func() { bskyFallbackBaseURL = origFallback }()
+
+	primarySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer primarySrv.Close()
+
+	p := &BlueskyProvider{client: primarySrv.Client(), baseURL: primarySrv.URL}
+	_, err := p.Web(context.Background(), WebSearchParams{Query: "test", NumResults: 5})
+	if err == nil {
+		t.Fatal("expected error on HTTP 503, got nil")
+	}
+	if fallbackCalled {
+		t.Error("fallback host should not be called for a non-403 error")
+	}
+}
+
 func TestBlueskyProviderZeroHits(t *testing.T) {
 	t.Parallel()
 	p := newBlueskyTestProvider(t, func(w http.ResponseWriter, r *http.Request) {

@@ -16,6 +16,16 @@ import (
 
 var _ Provider = (*BlueskyProvider)(nil)
 
+// bskyFallbackBaseURL is the Bluesky AppView's uncached host. Same backend as
+// public.api.bsky.app (both documented at
+// https://docs.bsky.app/docs/advanced-guides/api-directory), reached only
+// when the cached host 403s searchPosts — observed in production as
+// deliberate, intermittent load-shedding on that one endpoint (see
+// https://github.com/bluesky-social/bsky-docs/issues/332), not an outage of
+// the AppView itself. Var, not const, so tests can point it at an httptest
+// server instead of the real network.
+var bskyFallbackBaseURL = "https://api.bsky.app"
+
 // BlueskyProvider searches Bluesky posts via the public AT Protocol AppView
 // API. No API key required — works as a zero-config provider. Circuit
 // breaking is handled at the Router layer (see internal/search/router.go),
@@ -55,20 +65,17 @@ func NewBlueskyProvider(deps Deps) *BlueskyProvider {
 
 func (p *BlueskyProvider) Name() string { return "bluesky" }
 
-func (p *BlueskyProvider) Web(ctx context.Context, params WebSearchParams) ([]SearchResult, error) {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
+// isBskyForbidden reports whether err is the HTTP 403 response wrapped by
+// searchPosts — the signal that the cached AppView host is load-shedding
+// this endpoint and the uncached fallback host should be tried.
+func isBskyForbidden(err error) bool {
+	return strings.Contains(err.Error(), "HTTP 403")
+}
 
-	n := params.NumResults
-	if n <= 0 || n > 100 {
-		n = 10
-	}
-
-	qp := url.Values{}
-	qp.Set("q", params.Query)
-	qp.Set("limit", strconv.Itoa(n))
-
-	reqURL := p.baseURL + "/xrpc/app.bsky.feed.searchPosts?" + qp.Encode()
+// searchPosts calls app.bsky.feed.searchPosts against base and returns the
+// size-bounded response body.
+func (p *BlueskyProvider) searchPosts(ctx context.Context, base string, qp url.Values) ([]byte, error) {
+	reqURL := base + "/xrpc/app.bsky.feed.searchPosts?" + qp.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("bluesky: %w", err)
@@ -90,6 +97,32 @@ func (p *BlueskyProvider) Web(ctx context.Context, params WebSearchParams) ([]Se
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
 	if err != nil {
 		return nil, fmt.Errorf("bluesky: %w", err)
+	}
+	return body, nil
+}
+
+func (p *BlueskyProvider) Web(ctx context.Context, params WebSearchParams) ([]SearchResult, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	n := params.NumResults
+	if n <= 0 || n > 100 {
+		n = 10
+	}
+
+	qp := url.Values{}
+	qp.Set("q", params.Query)
+	qp.Set("limit", strconv.Itoa(n))
+
+	body, err := p.searchPosts(ctx, p.baseURL, qp)
+	if err != nil && p.baseURL != bskyFallbackBaseURL && isBskyForbidden(err) {
+		// The cached AppView host load-sheds searchPosts by 403'ing it while
+		// every other endpoint keeps working — retry once against the same
+		// backend's uncached host before giving up.
+		body, err = p.searchPosts(ctx, bskyFallbackBaseURL, qp)
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	var searchResp bskySearchResponse

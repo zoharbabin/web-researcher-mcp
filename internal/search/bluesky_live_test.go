@@ -12,7 +12,6 @@ package search
 import (
 	"context"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
@@ -25,17 +24,14 @@ func TestBlueskyProviderLive(t *testing.T) {
 		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
 	})
 
+	// public.api.bsky.app deliberately 403s app.bsky.feed.searchPosts as
+	// load-shedding on that one endpoint (confirmed by a Bluesky maintainer:
+	// https://github.com/bluesky-social/bsky-docs/issues/332) while every
+	// other AT Protocol endpoint it fronts responds normally. Web() retries
+	// against api.bsky.app (same AppView backend, no caching layer) on a 403,
+	// so this call should transparently succeed rather than needing a skip.
 	res, err := p.Web(context.Background(), WebSearchParams{Query: "golang", NumResults: 5})
 	skipIfNetworkUnreachable(t, err)
-	// public.api.bsky.app's edge (BunnyCDN) intermittently 403s the
-	// app.bsky.feed.searchPosts endpoint specifically from some source IPs
-	// (e.g. shared CI/datacenter ranges) while every other AT Protocol
-	// endpoint (getProfile, getAuthorFeed, getPostThread) it fronts responds
-	// normally — an edge-level condition of the test environment, not a
-	// defect in the request this provider sends.
-	if err != nil && strings.Contains(err.Error(), "HTTP 403") {
-		t.Skipf("bsky.app searchPosts edge returned 403 from this environment: %v", err)
-	}
 	if err != nil {
 		t.Fatalf("Web() error: %v", err)
 	}
