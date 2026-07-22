@@ -3,6 +3,9 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"sync"
@@ -419,16 +422,16 @@ func TestBrandResearchNXDomainSubdomainNotAccepted(t *testing.T) {
 	}
 }
 
-// ─── 10b. No BrandFetch key — company_name path succeeds ────────────────────
-// This tests that the tool handles a missing BrandFetchAPIKey on the
+// ─── 10b. No BrandFetch client ID — company_name path succeeds ──────────────
+// This tests that the tool handles a missing BrandFetchClientID on the
 // company_name-only resolution path without panicking or crashing.
 // Uses a mock search provider to avoid real network calls. (F25)
 
 func TestBrandResearchURLInputNoBrandFetchKey(t *testing.T) {
 	t.Parallel()
 	deps := brandDepsWithPrivate()
-	if deps.BrandFetchAPIKey != "" {
-		t.Skip("BrandFetchAPIKey is set in environment; skipping no-key test")
+	if deps.BrandFetchClientID != "" {
+		t.Skip("BrandFetchClientID is set in environment; skipping no-key test")
 	}
 	// company_name-only path: search provider returns no results, tool should
 	// return a toolError about not being able to resolve the domain — not crash.
@@ -1178,5 +1181,460 @@ func TestDeduplicateFields(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// ─── searchBrandFetchDomain: BrandFetch Brand Search API contract ──────────
+// BrandFetch's Search API ("v2/search/{name}?c={clientId}") is a distinct
+// product from the Brand API ("v2/brands/{domain}", Bearer auth) used
+// elsewhere in this file. It takes the query as a path segment and a client
+// ID (not an API key) in the "c" query param — no Authorization header.
+// Confirmed live against api.brandfetch.io: the old Bearer+"?query="
+// shape returns 403 "Missing Authentication Token" regardless of key
+// validity, while this path+"c=" shape returns 200 even with a bogus or
+// absent "c" value.
+
+func TestSearchBrandFetchDomainRequestShape(t *testing.T) {
+	var gotPath, gotQuery, gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotQuery = r.URL.RawQuery
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`[{"domain":"kaltura.com","name":"Kaltura"}]`))
+	}))
+	defer srv.Close()
+
+	origBase, origClient := brandFetchSearchBaseURL, brandFetchSearchHTTPClient
+	brandFetchSearchBaseURL = srv.URL
+	brandFetchSearchHTTPClient = srv.Client()
+	defer func() { brandFetchSearchBaseURL, brandFetchSearchHTTPClient = origBase, origClient }()
+
+	domain := searchBrandFetchDomain(context.Background(), "myClientId", "Kaltura")
+
+	if domain != "kaltura.com" {
+		t.Errorf("searchBrandFetchDomain() = %q, want %q", domain, "kaltura.com")
+	}
+	if gotPath != "/v2/search/Kaltura" {
+		t.Errorf("request path = %q, want %q (query must be a path segment, not a query param)", gotPath, "/v2/search/Kaltura")
+	}
+	if gotQuery != "c=myClientId" {
+		t.Errorf("request query = %q, want %q (client ID via c= param)", gotQuery, "c=myClientId")
+	}
+	if gotAuth != "" {
+		t.Errorf("Authorization header = %q, want empty — the Search API does not accept Bearer auth", gotAuth)
+	}
+}
+
+func TestSearchBrandFetchDomainNon200ReturnsEmpty(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte(`{"message":"Missing Authentication Token"}`))
+	}))
+	defer srv.Close()
+
+	origBase, origClient := brandFetchSearchBaseURL, brandFetchSearchHTTPClient
+	brandFetchSearchBaseURL = srv.URL
+	brandFetchSearchHTTPClient = srv.Client()
+	defer func() { brandFetchSearchBaseURL, brandFetchSearchHTTPClient = origBase, origClient }()
+
+	if got := searchBrandFetchDomain(context.Background(), "myClientId", "Kaltura"); got != "" {
+		t.Errorf("searchBrandFetchDomain() = %q, want empty string on HTTP 403", got)
+	}
+}
+
+func TestSearchBrandFetchDomainEmptyResultsReturnsEmpty(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`[]`))
+	}))
+	defer srv.Close()
+
+	origBase, origClient := brandFetchSearchBaseURL, brandFetchSearchHTTPClient
+	brandFetchSearchBaseURL = srv.URL
+	brandFetchSearchHTTPClient = srv.Client()
+	defer func() { brandFetchSearchBaseURL, brandFetchSearchHTTPClient = origBase, origClient }()
+
+	if got := searchBrandFetchDomain(context.Background(), "myClientId", "NonExistentBrandXYZ"); got != "" {
+		t.Errorf("searchBrandFetchDomain() = %q, want empty string on zero results", got)
+	}
+}
+
+// TestResolveBrandDomainUsesBrandFetchClientID proves resolveBrandDomain gates
+// the BrandFetch search step on BrandFetchClientID, not BrandFetchAPIKey —
+// the two are different credentials for different BrandFetch products.
+func TestResolveBrandDomainUsesBrandFetchClientID(t *testing.T) {
+	var brandFetchCalled bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		brandFetchCalled = true
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`[{"domain":"kaltura.com","name":"Kaltura"}]`))
+	}))
+	defer srv.Close()
+
+	origBase, origClient := brandFetchSearchBaseURL, brandFetchSearchHTTPClient
+	brandFetchSearchBaseURL = srv.URL
+	brandFetchSearchHTTPClient = srv.Client()
+	defer func() { brandFetchSearchBaseURL, brandFetchSearchHTTPClient = origBase, origClient }()
+
+	deps := setupTestDeps()
+	deps.BrandFetchClientID = "myClientId"
+
+	domain, _, err := resolveBrandDomain(context.Background(), deps, "", "Kaltura")
+	if err != nil {
+		t.Fatalf("resolveBrandDomain: unexpected error: %v", err)
+	}
+	if !brandFetchCalled {
+		t.Error("expected resolveBrandDomain to call the BrandFetch Search API when BrandFetchClientID is set")
+	}
+	if domain != "kaltura.com" {
+		t.Errorf("domain = %q, want %q", domain, "kaltura.com")
+	}
+}
+
+// ─── Tier 1: BrandFetch Brand API + Context API ────────────────────────────
+//
+// These tests mutate the shared package-level vars brandFetchAPIBaseURL and
+// brandFetchAPIHTTPClient via defer-restore, so — matching the established
+// convention for the Search API tests above and the bskyFallbackBaseURL tests
+// in internal/search/bluesky_test.go — none of them call t.Parallel().
+
+func swapBrandFetchAPIBaseURL(url string, client *http.Client) func() {
+	origBase, origClient := brandFetchAPIBaseURL, brandFetchAPIHTTPClient
+	brandFetchAPIBaseURL = url
+	brandFetchAPIHTTPClient = client
+	return func() { brandFetchAPIBaseURL, brandFetchAPIHTTPClient = origBase, origClient }
+}
+
+func TestFetchBrandFetchRequestShape(t *testing.T) {
+	var gotPath, gotAuth, gotAccept string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/v2/brands/") {
+			gotPath = r.URL.Path
+			gotAuth = r.Header.Get("Authorization")
+			gotAccept = r.Header.Get("Accept")
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"name":"Kaltura","domain":"kaltura.com","qualityScore":0.948}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	defer swapBrandFetchAPIBaseURL(srv.URL, srv.Client())()
+
+	result := &brandResearchResult{Identity: brandIdentity{Name: "Kaltura", Domain: "kaltura.com"}}
+	var mu sync.Mutex
+	src := fetchBrandFetch(context.Background(), "myApiKey", "kaltura.com", "quick", result, &mu)
+
+	if gotPath != "/v2/brands/kaltura.com" {
+		t.Errorf("request path = %q, want %q", gotPath, "/v2/brands/kaltura.com")
+	}
+	if gotAuth != "Bearer myApiKey" {
+		t.Errorf("Authorization header = %q, want %q", gotAuth, "Bearer myApiKey")
+	}
+	if gotAccept != "application/json" {
+		t.Errorf("Accept header = %q, want application/json", gotAccept)
+	}
+	if src == nil {
+		t.Fatal("fetchBrandFetch returned nil source, want a populated brandSource")
+	}
+}
+
+func TestFetchBrandFetchPopulatesFields(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/v2/brands/") {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{
+				"name":"Kaltura",
+				"domain":"kaltura.com",
+				"description":"Video experience cloud",
+				"logos":[
+					{"theme":"light","formats":[{"src":"https://cdn.example/logo.svg","format":"svg","width":100,"height":40}]},
+					{"theme":"dark","formats":[{"src":"https://cdn.example/logo-dark.png","format":"png"}]},
+					{"theme":"icon","formats":[{"src":"https://cdn.example/icon.png","format":"png"}]}
+				],
+				"colors":[
+					{"hex":"#B2D238","type":"brand","name":"Kaltura Green"},
+					{"hex":"#0A0A0A","type":"dark"},
+					{"hex":"#FFFFFF","type":"light"}
+				],
+				"fonts":[
+					{"name":"Soho","type":"title","origin":"custom"},
+					{"name":"Source Sans Pro","type":"body","origin":"google","weights":[400,700]}
+				],
+				"links":[
+					{"name":"linkedin","url":"https://linkedin.com/company/kaltura"},
+					{"name":"twitter","url":"https://twitter.com/kaltura"}
+				],
+				"company":{"industries":[{"name":"Software"}],"foundedYear":2006,"location":{"city":"New York","countryCode":"US"}},
+				"qualityScore":0.948
+			}`)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	defer swapBrandFetchAPIBaseURL(srv.URL, srv.Client())()
+
+	result := &brandResearchResult{Identity: brandIdentity{Name: "Kaltura", Domain: "kaltura.com"}}
+	var mu sync.Mutex
+	src := fetchBrandFetch(context.Background(), "myApiKey", "kaltura.com", "quick", result, &mu)
+
+	if src == nil {
+		t.Fatal("fetchBrandFetch returned nil source")
+	}
+	if result.Identity.Description != "Video experience cloud" {
+		t.Errorf("Identity.Description = %q, want %q", result.Identity.Description, "Video experience cloud")
+	}
+	if result.Identity.Industry != "Software" {
+		t.Errorf("Identity.Industry = %q, want %q", result.Identity.Industry, "Software")
+	}
+	if result.Identity.Founded != 2006 {
+		t.Errorf("Identity.Founded = %d, want 2006", result.Identity.Founded)
+	}
+	if result.Identity.Location == nil || result.Identity.Location.City != "New York" {
+		t.Errorf("Identity.Location = %+v, want city=New York", result.Identity.Location)
+	}
+	if result.Logos == nil || result.Logos.Primary == nil || result.Logos.Primary.URL != "https://cdn.example/logo.svg" {
+		t.Errorf("Logos.Primary = %+v, want svg logo", result.Logos)
+	}
+	if result.Logos == nil || result.Logos.Dark == nil {
+		t.Error("Logos.Dark not populated")
+	}
+	if result.Logos == nil || result.Logos.Icon == nil {
+		t.Error("Logos.Icon not populated")
+	}
+	if result.Colors == nil || result.Colors.Primary != "#b2d238" {
+		t.Errorf("Colors.Primary = %v, want #b2d238", result.Colors)
+	}
+	if result.Colors == nil || len(result.Colors.Palette) != 3 {
+		t.Errorf("Colors.Palette length = %d, want 3", len(result.Colors.Palette))
+	}
+	if result.Typography == nil || result.Typography.Heading == nil || result.Typography.Heading.Family != "Soho" {
+		t.Errorf("Typography.Heading = %+v, want Soho", result.Typography)
+	}
+	if result.Typography == nil || result.Typography.Body == nil || result.Typography.Body.Family != "Source Sans Pro" {
+		t.Errorf("Typography.Body = %+v, want Source Sans Pro", result.Typography)
+	}
+	if result.Social == nil || result.Social.LinkedIn != "https://linkedin.com/company/kaltura" {
+		t.Errorf("Social.LinkedIn = %v, want linkedin URL", result.Social)
+	}
+	if result.Social == nil || result.Social.Twitter != "https://twitter.com/kaltura" {
+		t.Errorf("Social.Twitter = %v, want twitter URL", result.Social)
+	}
+}
+
+// TestFetchBrandFetchColorsWithoutBrandTypeFallback proves Colors.Primary
+// still gets set when BrandFetch's response has no color tagged type:"brand"
+// — confirmed live against api.brandfetch.io/v2/brands/kaltura.com, which
+// returns only "light" and "accent" types, no "brand" type.
+func TestFetchBrandFetchColorsWithoutBrandTypeFallback(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"name":"Kaltura","domain":"kaltura.com","colors":[{"hex":"#ffffff","type":"light"},{"hex":"#b2d238","type":"accent"}]}`)
+	}))
+	defer srv.Close()
+	defer swapBrandFetchAPIBaseURL(srv.URL, srv.Client())()
+
+	result := &brandResearchResult{Identity: brandIdentity{Name: "Kaltura", Domain: "kaltura.com"}}
+	var mu sync.Mutex
+	fetchBrandFetch(context.Background(), "myApiKey", "kaltura.com", "quick", result, &mu)
+
+	if result.Colors == nil || result.Colors.Primary != "#b2d238" {
+		t.Errorf("Colors.Primary = %v, want #b2d238 (fallback to accent when no brand-typed color exists)", result.Colors)
+	}
+}
+
+// TestFetchBrandFetchDoesNotClobberExisting proves the enrichment layer only
+// fills fields Tier 2 left empty — it must never overwrite data another tier
+// already populated, since Tier 1 and Tier 2 run concurrently and either can
+// finish first.
+func TestFetchBrandFetchDoesNotClobberExisting(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"name":"Kaltura","domain":"kaltura.com","description":"BrandFetch description","colors":[{"hex":"#000000","type":"brand"}]}`)
+	}))
+	defer srv.Close()
+	defer swapBrandFetchAPIBaseURL(srv.URL, srv.Client())()
+
+	result := &brandResearchResult{
+		Identity: brandIdentity{Name: "Kaltura", Domain: "kaltura.com", Description: "Homepage meta description"},
+		Colors:   &brandColors{Palette: []brandColor{{Hex: "#ffffff", Role: "primary"}}},
+	}
+	var mu sync.Mutex
+	fetchBrandFetch(context.Background(), "myApiKey", "kaltura.com", "quick", result, &mu)
+
+	if result.Identity.Description != "Homepage meta description" {
+		t.Errorf("Identity.Description = %q, want the pre-existing value preserved", result.Identity.Description)
+	}
+	if len(result.Colors.Palette) != 1 || result.Colors.Palette[0].Hex != "#ffffff" {
+		t.Errorf("Colors.Palette = %+v, want the pre-existing palette preserved", result.Colors.Palette)
+	}
+}
+
+func TestFetchBrandFetchNon200ReturnsNil(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"message":"invalid api key"}`))
+	}))
+	defer srv.Close()
+	defer swapBrandFetchAPIBaseURL(srv.URL, srv.Client())()
+
+	result := &brandResearchResult{Identity: brandIdentity{Name: "Kaltura", Domain: "kaltura.com"}}
+	var mu sync.Mutex
+	src := fetchBrandFetch(context.Background(), "badKey", "kaltura.com", "quick", result, &mu)
+	if src != nil {
+		t.Errorf("fetchBrandFetch() = %+v, want nil on HTTP 401", src)
+	}
+}
+
+func TestFetchBrandFetchMalformedJSONReturnsNil(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{not valid json`))
+	}))
+	defer srv.Close()
+	defer swapBrandFetchAPIBaseURL(srv.URL, srv.Client())()
+
+	result := &brandResearchResult{Identity: brandIdentity{Name: "Kaltura", Domain: "kaltura.com"}}
+	var mu sync.Mutex
+	src := fetchBrandFetch(context.Background(), "myApiKey", "kaltura.com", "quick", result, &mu)
+	if src != nil {
+		t.Errorf("fetchBrandFetch() = %+v, want nil on malformed JSON", src)
+	}
+}
+
+// TestFetchBrandFetchQuickDepthSkipsContext proves the Context API round trip
+// only happens at standard/full depth, matching the original tier design.
+func TestFetchBrandFetchQuickDepthSkipsContext(t *testing.T) {
+	var contextCalled bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/v2/context/") {
+			contextCalled = true
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"name":"Kaltura","domain":"kaltura.com"}`))
+	}))
+	defer srv.Close()
+	defer swapBrandFetchAPIBaseURL(srv.URL, srv.Client())()
+
+	result := &brandResearchResult{Identity: brandIdentity{Name: "Kaltura", Domain: "kaltura.com"}}
+	var mu sync.Mutex
+	fetchBrandFetch(context.Background(), "myApiKey", "kaltura.com", "quick", result, &mu)
+
+	if contextCalled {
+		t.Error("Context API was called at depth=quick, want it skipped")
+	}
+}
+
+func TestFetchBrandFetchContextPopulatesTaglineAndTone(t *testing.T) {
+	var gotPath, gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/v2/context/") {
+			gotPath = r.URL.Path
+			gotAuth = r.Header.Get("Authorization")
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"identity":{"tagline":"The Video Experience Cloud"},"brand":{"voiceSummary":"Confident and technical","attributes":["bold","precise"]}}`)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"name":"Kaltura","domain":"kaltura.com"}`))
+	}))
+	defer srv.Close()
+	defer swapBrandFetchAPIBaseURL(srv.URL, srv.Client())()
+
+	result := &brandResearchResult{Identity: brandIdentity{Name: "Kaltura", Domain: "kaltura.com"}}
+	var mu sync.Mutex
+	fetchBrandFetch(context.Background(), "myApiKey", "kaltura.com", "standard", result, &mu)
+
+	if gotPath != "/v2/context/kaltura.com" {
+		t.Errorf("context request path = %q, want %q", gotPath, "/v2/context/kaltura.com")
+	}
+	if gotAuth != "Bearer myApiKey" {
+		t.Errorf("context Authorization header = %q, want Bearer myApiKey", gotAuth)
+	}
+	if result.Identity.Tagline != "The Video Experience Cloud" {
+		t.Errorf("Identity.Tagline = %q, want %q", result.Identity.Tagline, "The Video Experience Cloud")
+	}
+	if result.ToneOfVoice == nil || result.ToneOfVoice.Summary != "Confident and technical" {
+		t.Errorf("ToneOfVoice.Summary = %+v, want %q", result.ToneOfVoice, "Confident and technical")
+	}
+	if result.ToneOfVoice == nil || len(result.ToneOfVoice.Attributes) != 2 {
+		t.Errorf("ToneOfVoice.Attributes = %+v, want 2 entries", result.ToneOfVoice)
+	}
+}
+
+func TestFetchBrandFetchContextDoesNotOverwriteExistingTone(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"identity":{"tagline":"New tagline"},"brand":{"voiceSummary":"New summary"}}`)
+	}))
+	defer srv.Close()
+
+	result := &brandResearchResult{
+		Identity:    brandIdentity{Name: "Kaltura", Domain: "kaltura.com", Tagline: "Existing tagline"},
+		ToneOfVoice: &brandTone{Summary: "Existing summary"},
+	}
+	var mu sync.Mutex
+	fetchBrandFetchContext(context.Background(), srv.Client(), "myApiKey", "kaltura.com", result, &mu)
+
+	if result.Identity.Tagline != "Existing tagline" {
+		t.Errorf("Identity.Tagline = %q, want existing value preserved", result.Identity.Tagline)
+	}
+	if result.ToneOfVoice.Summary != "Existing summary" {
+		t.Errorf("ToneOfVoice.Summary = %q, want existing value preserved", result.ToneOfVoice.Summary)
+	}
+}
+
+// TestBrandResearchTier1EnrichesWithAPIKey drives the full brand_research
+// tool end-to-end with BrandFetchAPIKey set, proving Tier 1 actually wires
+// into the handler and its fields surface in the final JSON response.
+//
+// Uses a non-resolving domain for the "url" input (canonicalDomain rejects
+// bare IPs, so an httptest 127.0.0.1 address can't stand in for the domain
+// the way it does for other tests) — Tier 2's homepage scrape fails/no-ops as
+// a result, isolating this test to Tier 1's contribution, which reaches the
+// mocked BrandFetch server directly via the overridden base URL regardless of
+// whether "domain" resolves on the real network.
+func TestBrandResearchTier1EnrichesWithAPIKey(t *testing.T) {
+	brandFetchSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/v2/brands/") {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"name":"TestCo","domain":"testco.example","description":"From BrandFetch","colors":[{"hex":"#123456","type":"brand"}],"qualityScore":0.9}`)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer brandFetchSrv.Close()
+	defer swapBrandFetchAPIBaseURL(brandFetchSrv.URL, brandFetchSrv.Client())()
+
+	deps := brandDepsWithPrivate()
+	deps.BrandFetchAPIKey = "myApiKey"
+
+	out, isErr := callBrandResearch(t, deps, map[string]any{"url": "https://brandfetch-tier1-test.invalid", "depth": "quick"})
+	if isErr {
+		t.Fatal("brand_research returned an error with BrandFetchAPIKey set")
+	}
+
+	identity, _ := out["identity"].(map[string]any)
+	if identity == nil || identity["description"] != "From BrandFetch" {
+		t.Errorf("identity.description = %v, want %q from Tier 1 enrichment", identity, "From BrandFetch")
+	}
+	colors, _ := out["colors"].(map[string]any)
+	if colors == nil || colors["primary"] != "#123456" {
+		t.Errorf("colors.primary = %v, want #123456 from Tier 1 enrichment", colors)
+	}
+	sources, _ := out["sources"].([]any)
+	foundBrandFetchSource := false
+	for _, s := range sources {
+		src, _ := s.(map[string]any)
+		if src != nil && src["name"] == "brandfetch_api" {
+			foundBrandFetchSource = true
+		}
+	}
+	if !foundBrandFetchSource {
+		t.Errorf("sources = %v, want a brandfetch_api entry", sources)
 	}
 }

@@ -166,8 +166,8 @@ type SearchConfig struct {
 	IASecretKey string
 
 	// BrandFetch optional credentials for brand_research. Tool degrades gracefully when absent.
-	BrandFetchAPIKey   string // BRANDFETCH_API_KEY — Brand API + Context API
-	BrandFetchClientID string // BRANDFETCH_CLIENT_ID — logo CDN requests
+	BrandFetchAPIKey   string // BRANDFETCH_API_KEY — Brand API + Context API (Bearer auth)
+	BrandFetchClientID string // BRANDFETCH_CLIENT_ID — Brand Search API (company_name→domain) + logo CDN requests
 
 	// EcosystemsAPIKey is optional for awesome_list_search. ecosyste.ms's Free
 	// plan (which self-service keys are issued under) uses the shared

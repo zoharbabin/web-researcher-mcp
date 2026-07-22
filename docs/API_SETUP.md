@@ -587,15 +587,15 @@ export IA_SECRET_KEY=your-ia-secret-key
 
 ### BrandFetch (Brand Research — Optional)
 
-Backs `brand_research`. Works **keyless** — the tool always runs and extracts brand identity from CSS, meta tags, and homepage content. A BrandFetch API key adds structured brand-color, font, logo, and slogan data from the BrandFetch Brand API.
+Backs `brand_research`. Works **keyless** — the tool always runs homepage meta/structured-data extraction and brand-page probing, which is enough for most tasks. Setting `BRANDFETCH_API_KEY` adds a concurrent BrandFetch Brand API + Context API enrichment tier that fills in richer identity, logo, color, font, tagline, and tone-of-voice fields the no-key tiers didn't find — it only adds coverage, never replaces the no-key pipeline. `BRANDFETCH_CLIENT_ID` separately enables company-name → domain resolution via BrandFetch's Brand Search API and logo CDN requests.
 
-**Step 1**: (Optional) Sign up at [brandfetch.com](https://brandfetch.com) and copy your API key from the dashboard.
+**Step 1**: (Optional) Sign up at [brandfetch.com](https://brandfetch.com) and copy your API key and client ID from the dashboard.
 
-**Step 2**: Configure (both are optional)
+**Step 2**: Configure (both are optional and independent)
 
 ```bash
-export BRANDFETCH_API_KEY=pk_your-key          # Brand + Context API; free tier: 100 req/month
-export BRANDFETCH_CLIENT_ID=your-client-id     # Logo CDN requests; free tier: 500K req/month
+export BRANDFETCH_API_KEY=your-api-key         # Brand + Context API (Bearer auth); free tier: 100 req/month
+export BRANDFETCH_CLIENT_ID=your-client-id     # Brand Search API + logo CDN; free tier: 500K req/month
 ```
 
-**Notes**: `BRANDFETCH_API_KEY` format is `pk_*`. The key is never logged. Without it, `brand_research` degrades gracefully to CSS extraction, homepage meta scraping, and web search — useful for most tasks.
+**Notes**: Neither key is ever logged. Without `BRANDFETCH_API_KEY`, `brand_research` still runs its full no-key pipeline (homepage meta/structured-data extraction, brand-page probing, optional web search) — useful for most tasks.
