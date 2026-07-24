@@ -828,6 +828,7 @@ class ForumSignals:
     credibilityNote: Optional[str] = None
     datePublished: Optional[str] = None
     platform: Optional[str] = None
+    topComments: list[ScrapePageTopcomment] = field(default_factory=list)
     upvotes: Optional[int] = None
 
     @classmethod
@@ -840,6 +841,7 @@ class ForumSignals:
             credibilityNote=d.get('credibilityNote'),
             datePublished=d.get('datePublished'),
             platform=d.get('platform'),
+            topComments=[ScrapePageTopcomment.from_dict(i) for i in (d.get('topComments') or [])],
             upvotes=d.get('upvotes'),
         )
 
@@ -1483,6 +1485,26 @@ class ScrapePageResponse:
             trust=d.get('trust'),
             url=d.get('url'),
             wordCount=d.get('wordCount'),
+        )
+
+@dataclass
+class ScrapePageTopcomment:
+    author: Optional[str] = None
+    body: Optional[str] = None
+    created: Optional[str] = None
+    permalink: Optional[str] = None
+    score: Optional[int] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "ScrapePageTopcomment | None":
+        if d is None:
+            return None
+        return cls(
+            author=d.get('author'),
+            body=d.get('body'),
+            created=d.get('created'),
+            permalink=d.get('permalink'),
+            score=d.get('score'),
         )
 
 @dataclass

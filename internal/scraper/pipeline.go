@@ -53,6 +53,9 @@ type PipelineConfig struct {
 	// BskyAPIBase overrides the production Bluesky AT Protocol base URL (for
 	// tests). Empty (default) ⇒ https://public.api.bsky.app/xrpc
 	BskyAPIBase string
+	// ShredditBase overrides the production Reddit shreddit base URL (for
+	// tests). Empty (default) ⇒ https://www.reddit.com
+	ShredditBase string
 }
 
 // ForumSignals holds engagement metadata extracted from forum pages (Reddit,
@@ -72,6 +75,21 @@ type ForumSignals struct {
 	// CredibilityNote is a human-readable note for the AI when signals suggest
 	// low engagement. Empty when engagement is normal.
 	CredibilityNote string `json:"credibilityNote,omitempty"`
+	// TopComments carries up to 5 top comments (by score descending) fetched
+	// from Reddit's unauthenticated shreddit endpoint. Best-effort: nil when
+	// unavailable (timeout, rate limit, parse error) — never blocks or errors
+	// the parent scrape.
+	TopComments []ForumComment `json:"topComments,omitempty"`
+}
+
+// ForumComment holds per-comment engagement data extracted from the Reddit
+// shreddit endpoint. Body is plain text, truncated to 500 chars.
+type ForumComment struct {
+	Author    string `json:"author"`
+	Score     int    `json:"score"`
+	Body      string `json:"body"`
+	Permalink string `json:"permalink,omitempty"`
+	Created   string `json:"created,omitempty"`
 }
 
 type ScrapeResult struct {

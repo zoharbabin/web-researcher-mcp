@@ -241,7 +241,7 @@ var scrapePageOutputSchema = map[string]any{
 		},
 		"forumSignals": map[string]any{
 			"type":        "object",
-			"description": "Reddit engagement signals extracted from JSON-LD (#247): upvotes, comment count, credibility note. Present only for Reddit posts where the HTML extraction tier ran; absent for all other URLs, raw mode, and non-HTML tiers.",
+			"description": "Reddit engagement signals extracted from JSON-LD (#247): upvotes, comment count, credibility note, and (best-effort) top comments (#283). Present only for Reddit posts where the HTML extraction tier ran; absent for all other URLs, raw mode, and non-HTML tiers.",
 			"properties": map[string]any{
 				"platform":        map[string]any{"type": "string", "description": "Forum platform (e.g. 'reddit')."},
 				"upvotes":         map[string]any{"type": "integer", "description": "Vote count (upvotes) from the JSON-LD interaction stats."},
@@ -249,6 +249,20 @@ var scrapePageOutputSchema = map[string]any{
 				"datePublished":   map[string]any{"type": "string", "description": "ISO 8601 publish date when available."},
 				"authorName":      map[string]any{"type": "string", "description": "Original poster name when available."},
 				"credibilityNote": map[string]any{"type": "string", "description": "Contextual note about the reliability of this forum signal (e.g. vote manipulation risk on Reddit)."},
+				"topComments": map[string]any{
+					"type":        "array",
+					"description": "Up to 5 top comments (by score descending), fetched best-effort from Reddit's unauthenticated shreddit endpoint. Absent when the fetch failed or timed out — never treated as an error.",
+					"items": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"author":    map[string]any{"type": "string", "description": "Comment author's username."},
+							"score":     map[string]any{"type": "integer", "description": "Comment score (upvotes minus downvotes)."},
+							"body":      map[string]any{"type": "string", "description": "Comment body, plain text, truncated to 500 characters."},
+							"permalink": map[string]any{"type": "string", "description": "Relative permalink to the comment on reddit.com."},
+							"created":   map[string]any{"type": "string", "description": "Comment creation timestamp as reported by the shreddit endpoint."},
+						},
+					},
+				},
 			},
 		},
 		"sourceType":     sourceTypeSchema,
