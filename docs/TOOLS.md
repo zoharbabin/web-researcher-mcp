@@ -602,7 +602,7 @@ On a zero-result response, `hints` carries the same `ZeroResultHints` object as 
 | `pdf_only` | bool | no | false | — |
 | `sort_by` | string | no | `relevance` | relevance, date |
 | `open_access` | bool | no | false | Only return open-access papers |
-| `provider` | string | no | — | Force provider: openalex, crossref, pubmed, semanticscholar, exa (academic APIs), or google, brave, serper, searxng, searchapi, duckduckgo, tavily (web fallback) |
+| `provider` | string | no | — | Force provider: openalex, crossref, pubmed, semanticscholar, core, exa (academic APIs), or google, brave, serper, searxng, searchapi, duckduckgo, tavily (web fallback) |
 | `sessionId` | string | no | — | Link results to a `sequential_search` session; sources are auto-recorded for recovery after context loss |
 
 ### Output Fields
@@ -634,7 +634,8 @@ Additional output fields: `query`, `totalResults`, `resultCount`, `source` (whic
 - When academic providers (OpenAlex, CrossRef, PubMed, Semantic Scholar) are configured, returns rich metadata (DOI, authors, citations, OA status)
 - Metadata richness varies by provider: OpenAlex returns abstracts, citation counts, and authors consistently; Semantic Scholar adds `tldr` and `isInfluential`; CrossRef is a DOI registry and may omit abstracts/citation counts; PubMed returns biomedical records (title, authors, year, venue, DOI) — no abstract in the summary response. Automatic selection prefers OpenAlex; others answer when explicitly forced or as a fallback. Field absence reflects the provider, not an error.
 - Without academic env vars, falls back to site-restricted web search (identical to previous behavior)
-- OpenAlex/CrossRef require only an email address (no API key); PubMed and Semantic Scholar work key-free at a lower shared rate (`PUBMED_API_KEY` / `SEMANTIC_SCHOLAR_API_KEY` raise the respective limit). PubMed DOIs feed the same retraction enrichment as every other provider.
+- OpenAlex/CrossRef require only an email address (no API key); PubMed, Semantic Scholar, and CORE work key-free at a lower shared rate (`PUBMED_API_KEY` / `SEMANTIC_SCHOLAR_API_KEY` / `CORE_API_KEY` raise the respective limit). PubMed DOIs feed the same retraction enrichment as every other provider.
+- CORE (core.ac.uk) aggregates 300M+ open-access works from repositories worldwide; every result has `openAccess:true`, and `pdfUrl` links directly to full text when available. It does not resolve DOI entities or provide citation-graph edges — use OpenAlex or Semantic Scholar for those.
 - **Open-access enrichment (Unpaywall):** when `UNPAYWALL_EMAIL` (or `OPENALEX_EMAIL`) is set, DOI-bearing results that lack a PDF link are enriched with the best open-access PDF Unpaywall knows about. Best-effort: never overwrites a provider-supplied `pdfUrl`, never fails the search, and runs *before* the `pdf_only` filter so resolved PDFs are counted. No-op when unconfigured.
 - `source` filter: when set (e.g., "arxiv"), OpenAlex filters by source ID; web fallback restricts to that source's domain
 - `sort_by=date`: OpenAlex sorts by `publication_date:desc`; CrossRef uses `published:desc`

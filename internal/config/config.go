@@ -154,6 +154,7 @@ type SearchConfig struct {
 	UnpaywallEmail        string // open-access PDF resolution; falls back to OpenAlexEmail when unset
 	PubMedAPIKey          string // optional; PubMed E-utilities work keyless (~3 req/s), a key raises it (~10 req/s)
 	PubMedEmail           string // optional NCBI contact (tool/email params) — falls back to OpenAlexEmail
+	COREAPIKey            string // optional; CORE.ac.uk works keyless at a lower shared rate, a key raises the limit
 
 	// Structured-domain providers (optional, enable filing/case/economic search)
 	EDGARContactEmail  string // SEC EDGAR requires a contact email for its required User-Agent
@@ -376,6 +377,7 @@ func Load() (*Config, error) {
 			UnpaywallEmail:        envOrDefault("UNPAYWALL_EMAIL", os.Getenv("OPENALEX_EMAIL")),
 			PubMedAPIKey:          os.Getenv("PUBMED_API_KEY"),
 			PubMedEmail:           envOrDefault("PUBMED_EMAIL", os.Getenv("OPENALEX_EMAIL")),
+			COREAPIKey:            os.Getenv("CORE_API_KEY"),
 			EDGARContactEmail:     envOrDefault("EDGAR_CONTACT_EMAIL", os.Getenv("OPENALEX_EMAIL")),
 			CourtListenerToken:    os.Getenv("COURTLISTENER_API_TOKEN"),
 			FREDAPIKey:            os.Getenv("FRED_API_KEY"),
