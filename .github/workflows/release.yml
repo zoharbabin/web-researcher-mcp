@@ -869,9 +869,13 @@ jobs:
           # This branch is stable across releases (see previous step) — check for
           # an existing open PR from it before creating a new one, so a re-run just
           # refreshes the same PR's commit/body instead of opening a duplicate.
+          # `gh pr list --head owner:branch` does not reliably match on a repo
+          # this large (NixOS/nixpkgs) — filter by plain branch name, then
+          # cross-check the fork owner in jq instead.
           EXISTING_PR="$(gh pr list --repo NixOS/nixpkgs \
-            --head "${fork_user}:${pr_branch}" --state open \
-            --json url --jq '.[0].url' || true)"
+            --head "${pr_branch}" --state open \
+            --json url,headRepositoryOwner \
+            --jq "[.[] | select(.headRepositoryOwner.login == \"${fork_user}\")][0].url" || true)"
 
           if [ -n "${EXISTING_PR}" ]; then
             echo "Existing open PR found — updating body/title: ${EXISTING_PR}"
