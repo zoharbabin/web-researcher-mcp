@@ -378,8 +378,8 @@ var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"c
 			w.Write([]byte(html))
 		} else if strings.Contains(r.URL.Path, "captions") {
 			captionRequested.Add(1)
-			w.Header().Set("Content-Type", "text/xml")
-			w.Write([]byte(`<transcript><text start="0" dur="5">Hello world</text><text start="5" dur="3">Testing captions</text></transcript>`))
+			w.Header().Set("Content-Type", "text/vtt")
+			w.Write([]byte("WEBVTT\n\n00:00:00.000 --> 00:00:05.000\nHello world\n\n00:00:05.000 --> 00:00:08.000\nTesting captions\n"))
 		} else {
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -737,11 +737,11 @@ func TestExtractVideoID(t *testing.T) {
 // =============================================================================
 
 func TestExtractTranscript_WithMockServer(t *testing.T) {
-	captionXML := `<transcript><text start="0.5" dur="2">Hello everyone</text><text start="3.0" dur="2">Welcome to the video</text><text start="6.0" dur="3">Today we discuss testing</text></transcript>`
+	captionVTT := "WEBVTT\n\n00:00:00.500 --> 00:00:02.500\nHello everyone\n\n00:00:03.000 --> 00:00:05.000\nWelcome to the video\n\n00:00:06.000 --> 00:00:09.000\nToday we discuss testing\n"
 
 	captionServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/xml")
-		w.Write([]byte(captionXML))
+		w.Header().Set("Content-Type", "text/vtt")
+		w.Write([]byte(captionVTT))
 	}))
 	defer captionServer.Close()
 
@@ -771,6 +771,28 @@ func TestExtractTranscript_NoPlayerResponse(t *testing.T) {
 	_, err := extractTranscript(context.Background(), client, pageHTML)
 	if err == nil {
 		t.Fatal("expected error when player response is missing")
+	}
+}
+
+func TestExtractTranscript_AppendsVTTParam(t *testing.T) {
+	var gotQuery string
+	captionServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "text/vtt")
+		w.Write([]byte("WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nHello\n"))
+	}))
+	defer captionServer.Close()
+
+	pageHTML := `<html><body><script>
+var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"baseUrl":"` + captionServer.URL + `?lang=en","languageCode":"en"}]}}};
+</script></body></html>`
+
+	client := NewSSRFSafeClient(true)
+	if _, err := extractTranscript(context.Background(), client, pageHTML); err != nil {
+		t.Fatalf("extractTranscript error: %v", err)
+	}
+	if !strings.Contains(gotQuery, "fmt=vtt") {
+		t.Errorf("expected caption request to carry fmt=vtt, got query %q", gotQuery)
 	}
 }
 
@@ -887,9 +909,9 @@ func TestIsSPADomain(t *testing.T) {
 	}
 }
 
-func TestParseTranscriptXML(t *testing.T) {
-	xml := `<transcript><text start="0" dur="2">Hello</text><text start="2.5" dur="3">World</text></transcript>`
-	result := parseTranscriptXML(xml)
+func TestParseTranscriptVTT(t *testing.T) {
+	vtt := "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nHello\n\n00:00:02.500 --> 00:00:05.500\nWorld\n"
+	result := parseTranscriptVTT(vtt)
 	if !strings.Contains(result, "[0:00] Hello") {
 		t.Errorf("expected '[0:00] Hello' in transcript, got %q", result)
 	}
@@ -898,11 +920,11 @@ func TestParseTranscriptXML(t *testing.T) {
 	}
 }
 
-func TestParseTranscriptXML_HTMLEntities(t *testing.T) {
-	xml := `<transcript><text start="0" dur="2">Tom &amp; Jerry &lt;3</text></transcript>`
-	result := parseTranscriptXML(xml)
-	if !strings.Contains(result, "Tom & Jerry <3") {
-		t.Errorf("expected HTML entities to be decoded, got %q", result)
+func TestParseTranscriptVTT_HTMLEntities(t *testing.T) {
+	vtt := "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nTom &amp; Jerry &lt;3\n"
+	result := parseTranscriptVTT(vtt)
+	if !strings.Contains(result, "Tom &amp; Jerry &lt;3") {
+		t.Errorf("expected VTT entities to pass through undecoded, got %q", result)
 	}
 }
 
@@ -1202,13 +1224,12 @@ func TestExtractDescription_NotFound(t *testing.T) {
 func TestFetchTimedTextAPI_Success(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "timedtext") || strings.Contains(r.URL.RawQuery, "timedtext") {
-			w.Header().Set("Content-Type", "text/xml")
-			w.Write([]byte(`<transcript>` +
-				`<text start="0" dur="2">First segment of the video transcript.</text>` +
-				`<text start="2" dur="3">Second segment with more content here.</text>` +
-				`<text start="5" dur="2">Third segment to exceed the character threshold required.</text>` +
-				`<text start="7" dur="4">Fourth segment adding even more text to ensure we have enough.</text>` +
-				`</transcript>`))
+			w.Header().Set("Content-Type", "text/vtt")
+			w.Write([]byte("WEBVTT\n\n" +
+				"00:00:00.000 --> 00:00:02.000\nFirst segment of the video transcript.\n\n" +
+				"00:00:02.000 --> 00:00:05.000\nSecond segment with more content here.\n\n" +
+				"00:00:05.000 --> 00:00:07.000\nThird segment to exceed the character threshold required.\n\n" +
+				"00:00:07.000 --> 00:00:11.000\nFourth segment adding even more text to ensure we have enough.\n"))
 			return
 		}
 		w.WriteHeader(404)
@@ -1239,6 +1260,27 @@ func TestFetchTimedTextAPI_Success(t *testing.T) {
 	}
 }
 
+func TestFetchTimedTextAPI_RequestsVTTFormat(t *testing.T) {
+	var gotQuery string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		w.WriteHeader(404)
+	}))
+	defer ts.Close()
+
+	client := ts.Client()
+	client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		req.URL.Scheme = "http"
+		req.URL.Host = ts.Listener.Addr().String()
+		return http.DefaultTransport.RoundTrip(req)
+	})
+
+	_, _ = fetchTimedTextAPI(context.Background(), client, "testVideo123")
+	if !strings.Contains(gotQuery, "fmt=vtt") {
+		t.Errorf("expected timedtext request to carry fmt=vtt, got query %q", gotQuery)
+	}
+}
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -1265,13 +1307,16 @@ func TestFetchTimedTextAPI_NoTranscript(t *testing.T) {
 }
 
 func TestExtractTranscript_AlternateRegex(t *testing.T) {
-	captionXML := `<transcript><text start="0" dur="2">Alternate regex caption text that needs to be long enough.</text>` +
-		`<text start="2" dur="3">More caption content to meet threshold requirements for valid extraction.</text>` +
-		`<text start="5" dur="4">Even more text to ensure we exceed the minimum character limit.</text></transcript>`
+	captionVTT := "WEBVTT\n\n" +
+		"00:00:00.000 --> 00:00:02.000\nAlternate regex caption text that needs to be long enough.\n\n" +
+		"00:00:02.000 --> 00:00:05.000\nMore caption content to meet threshold requirements for valid extraction.\n\n" +
+		"00:00:05.000 --> 00:00:09.000\nEven more text to ensure we exceed the minimum character limit.\n"
 
+	var gotQuery string
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/xml")
-		w.Write([]byte(captionXML))
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "text/vtt")
+		w.Write([]byte(captionVTT))
 	}))
 	defer ts.Close()
 
@@ -1285,16 +1330,20 @@ func TestExtractTranscript_AlternateRegex(t *testing.T) {
 	if !strings.Contains(result, "Alternate regex caption") {
 		t.Errorf("expected caption text, got %q", result)
 	}
+	if !strings.Contains(gotQuery, "fmt=vtt") {
+		t.Errorf("expected caption request to carry fmt=vtt, got query %q", gotQuery)
+	}
 }
 
 func TestExtractTranscript_PrimaryRegex(t *testing.T) {
-	captionXML := `<transcript><text start="0" dur="2">Primary regex caption text for testing.</text>` +
-		`<text start="2" dur="3">Additional content to meet the minimum character threshold.</text>` +
-		`<text start="5" dur="2">Third segment making sure we have enough characters total.</text></transcript>`
+	captionVTT := "WEBVTT\n\n" +
+		"00:00:00.000 --> 00:00:02.000\nPrimary regex caption text for testing.\n\n" +
+		"00:00:02.000 --> 00:00:05.000\nAdditional content to meet the minimum character threshold.\n\n" +
+		"00:00:05.000 --> 00:00:07.000\nThird segment making sure we have enough characters total.\n"
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/xml")
-		w.Write([]byte(captionXML))
+		w.Header().Set("Content-Type", "text/vtt")
+		w.Write([]byte(captionVTT))
 	}))
 	defer ts.Close()
 
@@ -1372,11 +1421,10 @@ ytInitialPlayerResponse = {"playabilityStatus":{"status":"OK"},"videoDetails":{"
 }
 
 func TestYouTubeScrape_TranscriptStrategy1(t *testing.T) {
-	captionXML := `<transcript>` +
-		`<text start="0" dur="3">Welcome to this video about testing strategies in Go.</text>` +
-		`<text start="3" dur="4">We will cover unit tests, integration tests, and more.</text>` +
-		`<text start="7" dur="3">Let us begin with the basics of test coverage.</text>` +
-		`</transcript>`
+	captionVTT := "WEBVTT\n\n" +
+		"00:00:00.000 --> 00:00:03.000\nWelcome to this video about testing strategies in Go.\n\n" +
+		"00:00:03.000 --> 00:00:07.000\nWe will cover unit tests, integration tests, and more.\n\n" +
+		"00:00:07.000 --> 00:00:10.000\nLet us begin with the basics of test coverage.\n"
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "watch") || r.URL.Query().Get("v") != "" {
@@ -1390,8 +1438,8 @@ func TestYouTubeScrape_TranscriptStrategy1(t *testing.T) {
 			return
 		}
 		if strings.Contains(r.URL.Path, "captions") {
-			w.Header().Set("Content-Type", "text/xml")
-			w.Write([]byte(captionXML))
+			w.Header().Set("Content-Type", "text/vtt")
+			w.Write([]byte(captionVTT))
 			return
 		}
 		w.WriteHeader(404)
@@ -1421,11 +1469,226 @@ func TestYouTubeScrape_TranscriptStrategy1(t *testing.T) {
 	}
 }
 
-func TestParseTranscriptXML_NewlineEntity(t *testing.T) {
-	xml := `<transcript><text start="10" dur="2">Line one&#10;Line two</text></transcript>`
-	result := parseTranscriptXML(xml)
-	if !strings.Contains(result, "Line one\nLine two") {
-		t.Errorf("expected &#10; to be decoded as newline, got %q", result)
+func TestScrapeYouTube_HighlightsAbsentWhenFewSegments(t *testing.T) {
+	captionVTT := "WEBVTT\n\n" +
+		"00:00:00.000 --> 00:00:03.000\nWelcome to this video about testing strategies in Go.\n\n" +
+		"00:00:03.000 --> 00:00:07.000\nWe will cover unit tests, integration tests, and more.\n\n" +
+		"00:00:07.000 --> 00:00:10.000\nLet us begin with the basics of test coverage.\n"
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "watch") || r.URL.Query().Get("v") != "" {
+			captionURL := "http://" + r.Host + "/captions"
+			playerResp := `{"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"baseUrl":"` + captionURL + `","languageCode":"en"}]}}}`
+			html := `<!DOCTYPE html><html><head><title>Go Testing - YouTube</title></head><body>
+<script>ytInitialPlayerResponse = ` + playerResp + `;</script>
+</body></html>`
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte(html))
+			return
+		}
+		if strings.Contains(r.URL.Path, "captions") {
+			w.Header().Set("Content-Type", "text/vtt")
+			w.Write([]byte(captionVTT))
+			return
+		}
+		w.WriteHeader(404)
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	p.client = ts.Client()
+	p.client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		req.URL.Scheme = "http"
+		req.URL.Host = ts.Listener.Addr().String()
+		return http.DefaultTransport.RoundTrip(req)
+	})
+
+	result, err := p.scrapeYouTube(context.Background(), "https://www.youtube.com/watch?v=abc123def45", 50000)
+	if err != nil {
+		t.Fatalf("scrapeYouTube error: %v", err)
+	}
+	if result.Highlights != nil {
+		t.Errorf("expected nil highlights for a %d-segment transcript, got %v", minHighlightSegments-2, result.Highlights)
+	}
+}
+
+func TestScrapeYouTube_HighlightsPresent(t *testing.T) {
+	captionVTT := "WEBVTT\n\n" +
+		"00:00:00.000 --> 00:00:02.000\nWelcome to this video about testing strategies in Go.\n\n" +
+		"00:00:02.000 --> 00:00:04.000\nWe will cover unit tests, integration tests, and more.\n\n" +
+		"00:00:04.000 --> 00:00:06.000\nIn 2024 the release shipped with full coverage.\n\n" +
+		"00:00:06.000 --> 00:00:08.000\nIs this really going to work in production?\n\n" +
+		"00:00:08.000 --> 00:00:10.000\nNASA even uses similar testing approaches.\n\n" +
+		"00:00:10.000 --> 00:00:12.000\nLet us begin with the basics of test coverage.\n"
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "watch") || r.URL.Query().Get("v") != "" {
+			captionURL := "http://" + r.Host + "/captions"
+			playerResp := `{"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"baseUrl":"` + captionURL + `","languageCode":"en"}]}}}`
+			html := `<!DOCTYPE html><html><head><title>Go Testing - YouTube</title></head><body>
+<script>ytInitialPlayerResponse = ` + playerResp + `;</script>
+</body></html>`
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte(html))
+			return
+		}
+		if strings.Contains(r.URL.Path, "captions") {
+			w.Header().Set("Content-Type", "text/vtt")
+			w.Write([]byte(captionVTT))
+			return
+		}
+		w.WriteHeader(404)
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	p.client = ts.Client()
+	p.client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		req.URL.Scheme = "http"
+		req.URL.Host = ts.Listener.Addr().String()
+		return http.DefaultTransport.RoundTrip(req)
+	})
+
+	result, err := p.scrapeYouTube(context.Background(), "https://www.youtube.com/watch?v=abc123def45", 50000)
+	if err != nil {
+		t.Fatalf("scrapeYouTube error: %v", err)
+	}
+	if len(result.Highlights) == 0 {
+		t.Fatal("expected non-empty highlights for a 6-segment transcript")
+	}
+	if len(result.Highlights) > maxHighlights {
+		t.Errorf("expected at most %d highlights, got %d", maxHighlights, len(result.Highlights))
+	}
+}
+
+func TestParseTranscriptVTT_Multiline(t *testing.T) {
+	vtt := "WEBVTT\n\n00:00:10.000 --> 00:00:12.000\nLine one\nLine two\n"
+	result := parseTranscriptVTT(vtt)
+	if !strings.Contains(result, "Line one Line two") {
+		t.Errorf("expected multi-line cue text joined with a space, got %q", result)
+	}
+}
+
+func TestParseTranscriptVTT_InlineTimingTags(t *testing.T) {
+	vtt := "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\n<00:00:00.000>Hello <00:00:01.000>world\n"
+	result := parseTranscriptVTT(vtt)
+	if !strings.Contains(result, "[0:00] Hello world") {
+		t.Errorf("expected inline timing tags stripped, got %q", result)
+	}
+}
+
+func TestParseTranscriptVTT_EmptyInput(t *testing.T) {
+	if result := parseTranscriptVTT(""); result != "" {
+		t.Errorf("expected empty result for empty input, got %q", result)
+	}
+}
+
+func TestParseTranscriptVTT_NoWebVTTHeader(t *testing.T) {
+	vtt := "00:00:00.000 --> 00:00:02.000\nHello\n"
+	result := parseTranscriptVTT(vtt)
+	if !strings.Contains(result, "[0:00] Hello") {
+		t.Errorf("expected transcript parsed even without WEBVTT header, got %q", result)
+	}
+}
+
+func TestFormatTimestampVTT(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"00:01:23.456", "1:23"},
+		{"00:00:05.000", "0:05"},
+		{"01:00:00.000", "60:00"},
+		{"02:30.500", "2:30"},
+	}
+	for _, tt := range tests {
+		if got := formatTimestampVTT(tt.in); got != tt.want {
+			t.Errorf("formatTimestampVTT(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestScoreTranscriptHighlights_TooFewSegments(t *testing.T) {
+	transcript := "[0:00] Line one\n[0:01] Line two"
+	if got := scoreTranscriptHighlights(transcript, ""); got != nil {
+		t.Errorf("expected nil for < %d segments, got %v", minHighlightSegments, got)
+	}
+}
+
+func TestScoreTranscriptHighlights_ExactlyFiveSegments(t *testing.T) {
+	transcript := "[0:00] Line one\n[0:01] Line two\n[0:02] Line three\n[0:03] Line four\n[0:04] Line five"
+	got := scoreTranscriptHighlights(transcript, "")
+	if got == nil {
+		t.Fatalf("expected non-nil result for exactly %d segments", minHighlightSegments)
+	}
+	if len(got) > maxHighlights {
+		t.Errorf("expected at most %d highlights, got %d", maxHighlights, len(got))
+	}
+}
+
+func TestScoreTranscriptHighlights_TopN(t *testing.T) {
+	transcript := strings.Join([]string{
+		"[0:00] Plain line with no signals",
+		"[0:01] Another plain line here",
+		"[0:02] In 2024 the results were released",
+		"[0:03] Is this really going to work?",
+		"[0:04] NASA announced a new mission",
+		"[0:05] Just filler text for padding",
+		"[0:06] More filler text for padding",
+	}, "\n")
+	got := scoreTranscriptHighlights(transcript, "")
+	if len(got) == 0 {
+		t.Fatal("expected highlights, got none")
+	}
+	if len(got) > maxHighlights {
+		t.Errorf("expected at most %d highlights, got %d", maxHighlights, len(got))
+	}
+	if !strings.Contains(got[0].Text, "2024") && !strings.Contains(got[0].Text, "NASA") && !strings.Contains(got[0].Text, "?") {
+		t.Errorf("expected top highlight to carry a structural signal, got %q", got[0].Text)
+	}
+	for i := 1; i < len(got); i++ {
+		if got[i].Score > got[i-1].Score {
+			t.Errorf("highlights not in descending score order at index %d: %v", i, got)
+		}
+	}
+}
+
+func TestScoreTranscriptHighlights_KeywordBoost(t *testing.T) {
+	transcript := strings.Join([]string{
+		"[0:00] Plain line about gardening",
+		"[0:01] Another plain line about cooking",
+		"[0:02] Plain line about weather",
+		"[0:03] This line mentions golang golang golang",
+		"[0:04] Plain line about travel",
+		"[0:05] Plain line about music",
+	}, "\n")
+	got := scoreTranscriptHighlights(transcript, "golang")
+	if len(got) == 0 {
+		t.Fatal("expected highlights, got none")
+	}
+	if !strings.Contains(got[0].Text, "golang") {
+		t.Errorf("expected keyword-matching line to rank first, got %q", got[0].Text)
+	}
+}
+
+func TestScoreTranscriptHighlights_EmptyQuery(t *testing.T) {
+	transcript := "[0:00] Line one\n[0:01] Line two\n[0:02] Line three\n[0:03] Line four\n[0:04] Line five"
+	got := scoreTranscriptHighlights(transcript, "")
+	if got == nil {
+		t.Fatal("expected non-nil result with empty query (structural signals only)")
+	}
+}
+
+func TestScoreTranscriptHighlights_AllZeroScore(t *testing.T) {
+	transcript := "[0:00] plain\n[0:01] plain\n[0:02] plain\n[0:03] plain\n[0:04] plain"
+	got := scoreTranscriptHighlights(transcript, "")
+	if got == nil {
+		t.Fatal("expected non-nil result even when all scores are zero")
+	}
+	for _, h := range got {
+		if h.Score != 0 {
+			t.Errorf("expected score 0 when all lines are equally scoreless, got %v", h.Score)
+		}
 	}
 }
 

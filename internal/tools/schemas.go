@@ -264,6 +264,18 @@ var scrapePageOutputSchema = map[string]any{
 			"type":        "object",
 			"description": "Crossref (Retraction Watch + publisher) integrity status for detectedDoi when retracted/corrected/flagged — the same object academic_search and verify_citation return ({retracted, kind, date?, noticeDoi?, source?}). Omitted when clean, when no DOI was detected, or when the resolver is unavailable. Captured at scrape time (shares the scrape cache TTL); best-effort external data, never a guess.",
 		},
+		"highlights": map[string]any{
+			"type":        "array",
+			"description": "Up to 5 top-scored YouTube transcript segments (#284), scored by structural signals (digit presence, all-caps word, question ending) and normalized to [0,1]. Present only for YouTube videos with a successfully extracted transcript of at least 5 segments; omitted for non-YouTube URLs, the description-only fallback, and shorter transcripts.",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"text":      map[string]any{"type": "string", "description": "The '[M:SS] text' formatted transcript segment."},
+					"score":     map[string]any{"type": "number", "description": "Normalized highlight score in [0,1]."},
+					"startTime": map[string]any{"type": "string", "description": "Segment start time as 'M:SS'; omitted when unavailable."},
+				},
+			},
+		},
 	},
 }
 

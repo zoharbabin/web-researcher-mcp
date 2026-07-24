@@ -117,6 +117,11 @@ type ScrapeResult struct {
 	// ForumSignals holds engagement metadata (upvotes, comments, credibility) for
 	// Reddit posts extracted from JSON-LD (#247). Nil for non-Reddit URLs.
 	ForumSignals *ForumSignals
+	// Highlights holds up to 5 top-scored transcript segments for YouTube videos
+	// with a successfully extracted transcript of >= minHighlightSegments lines
+	// (#284). Nil for non-YouTube URLs, the description-only fallback, and short
+	// transcripts.
+	Highlights []TranscriptHighlight
 	// rawHTMLBytes is the size of the decompressed HTML the HTML-parsing tiers
 	// (stealth, html) read before extraction. The pipeline reads it to detect a
 	// JavaScript-rendered SPA shell — a large HTML payload that yielded little

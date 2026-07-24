@@ -156,6 +156,13 @@ type ScrapeOutput struct {
     DomainCategory  string    `json:"domainCategory"` // subject area: academic|legal|medical|financial|technical|general
     DetectedDOI      string            `json:"detectedDoi,omitempty"`      // a scholarly DOI the page declares (#199); peer-reviewed pages only; omitted when none
     RetractionStatus *RetractionStatus `json:"retractionStatus,omitempty"` // Crossref integrity status for detectedDoi; omitted when clean/unresolved — never a guess
+    Highlights       []TranscriptHighlight `json:"highlights,omitempty"`   // top ≤5 scored YouTube transcript segments (#284); omitted for non-YouTube URLs and transcripts under 5 segments
+}
+
+type TranscriptHighlight struct {
+    Text      string  `json:"text"`                // "[M:SS] text" formatted transcript segment
+    Score     float64 `json:"score"`                // normalized score in [0,1]; highest-scored segment is 1.0
+    StartTime string  `json:"startTime,omitempty"`  // segment start time as "M:SS"
 }
 
 type RetractionStatus struct {
@@ -224,6 +231,8 @@ In `raw` mode the output additionally carries `"raw": true`, and `contentType` i
 
 **Scholarly DOI + integrity status (#199).** When a page classifies as `peer_reviewed` **or** sits on a known academic-journal host (the latter so detection still engages when an extraction tier strips the citation metadata, e.g. the cached-text fallback), the response surfaces `detectedDoi` — the DOI the page declares, read (in descending order of authority) from its Highwire `citation_doi` `<head>` metadata, then a DOI embedded in the request URL path itself (the publisher's canonical article identifier, e.g. `nejm.org/doi/full/10.1056/…` — present even on extraction tiers that strip the citation metadata, such as the cached-text fallback), then the first few KB of the cleaned text (the front matter, above any references list, so a references-list DOI is never mistaken for the page's own). It is **evidence, never a verdict and never an identity claim**: it says "this DOI appears on the page; here is its recorded integrity status," not "the page *is* this record" — you confirm the document's identity. When the DOI resolves to a Crossref/Retraction-Watch integrity record, `retractionStatus` is attached (the same object `verify_citation` and `academic_search` return); an `expression_of_concern`/`correction` is reported but is **not** a retraction (`retracted` stays `false`), and `retractionStatus.source` names `retraction-watch` vs `publisher`. The status is captured at scrape time and shares the one-hour scrape cache TTL — re-scrape or use `verify_citation` for a point-in-time check. Both fields are omitted on non-scholarly pages, in raw mode, and when no DOI is found or the resolver is unavailable. Use `verify_citation` to verify one citation and `audit_bibliography` to audit a whole reference list.
 
+**Transcript highlights (YouTube, #284).** When a YouTube transcript is successfully extracted (Strategy 1 or 2) and has at least 5 lines, the response carries `highlights` — up to 5 top-scored transcript segments, each with `text` (the `"[M:SS] text"` formatted line), `score` (normalized to `[0,1]`, with the top segment always `1.0`), and `startTime` (`"M:SS"`). Scoring is purely structural: a digit anywhere in a word (+2), an all-caps word like "NASA" (+1), and a question-ending line (+1) — no query or keyword weighting is applied from this tool. `highlights` is omitted for non-YouTube URLs, the description-only fallback (Strategy 3), and transcripts shorter than 5 lines. Transcripts are now fetched in WebVTT format (`fmt=vtt`) rather than the legacy `srv3` XML dialect; VTT entities (if any) pass through unmodified rather than being HTML-decoded.
+
 **Trust boundary marker.** Every scrape response (full, preview, and raw) carries `"trust": "untrusted-external-content"` in the JSON envelope — an explicit, machine-readable boundary marker. It is deliberately placed in the structured output, never inside the `content` string (where a malicious page could forge or close it), and signals that `content` is external data to be treated as data, never as instructions (OWASP LLM01, indirect prompt injection). The server cannot enforce the prompt boundary itself — the model and agent loop live in the host application — so this marker exists to make the untrusted provenance unmissable to that host.
 
 ### Raw Mode
@@ -245,9 +254,10 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
 
 2. CONTENT TYPE DETECTION
    ├─ YouTube URL → YouTube extractor (3-strategy fallback):
-   │     Strategy 1: Player response captions (primary + alt regex)
-   │     Strategy 2: Direct timedtext API (en, en-US, en-GB)
+   │     Strategy 1: Player response captions (primary + alt regex), fmt=vtt (WebVTT)
+   │     Strategy 2: Direct timedtext API (en, en-US, en-GB), fmt=vtt (WebVTT)
    │     Strategy 3: Video description (shortDescription JSON field)
+   │     Strategies 1-2 additionally score the transcript into up to 5 highlights (#284)
    ├─ news.ycombinator.com → native HN API (Firebase REST + Algolia; no API key required):
    │     /item/<id>  → story metadata (title, URL, score, author, date) + top 10 comments
    │     /           → top 20 stories from the HN top-stories list (parallel Firebase fetch)
