@@ -308,6 +308,7 @@ class WebResearcherClient:
     async def academic_search(
         self,
         query: str,
+        full_text: bool = False,
         num_results: int = 5,
         open_access: bool = False,
         pdf_only: bool = False,
@@ -323,6 +324,7 @@ class WebResearcherClient:
             "academic_search",
             {
                 "query": query,
+                "full_text": full_text,
                 "num_results": num_results,
                 "open_access": open_access,
                 "pdf_only": pdf_only,
@@ -1157,6 +1159,7 @@ class SyncWebResearcherClient:
     def academic_search(
         self,
         query: str,
+        full_text: bool = False,
         num_results: int = 5,
         open_access: bool = False,
         pdf_only: bool = False,
@@ -1170,6 +1173,7 @@ class SyncWebResearcherClient:
         return self._run(
             self._async_client.academic_search(
             query=query,
+            full_text=full_text,
             num_results=num_results,
             open_access=open_access,
             pdf_only=pdf_only,

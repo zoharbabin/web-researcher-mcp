@@ -144,6 +144,7 @@ var academicSearchOutputSchema = map[string]any{
 					"isInfluential":   map[string]any{"type": "boolean", "description": "Citation-edge only (citation_graph): the citing/cited work is a highly influential citation."},
 					"citationIntents": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Citation-edge only: intent labels (background/methodology/result)."},
 					"isInDoaj":        map[string]any{"type": "boolean", "description": "OpenAlex-only: journal is listed in the Directory of Open Access Journals (DOAJ) — a peer-reviewed OA quality signal."},
+					"fullText":        map[string]any{"type": "string", "description": "PubMed-only: full article text extracted from PubMed Central. Present only when full_text=true and a PMCID is available."},
 				},
 			},
 		},
