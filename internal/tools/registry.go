@@ -94,9 +94,18 @@ type Dependencies struct {
 	// Noop (no membership, no data). The workspace_contribute/workspace_read
 	// tools are registered only when a non-Noop store is present.
 	Workspaces workspace.Store
-	// BrandFetchAPIKey enables Tier 1 BrandFetch API lookups in brand_research.
-	// Empty → tool still registers and degrades gracefully to CSS+meta extraction.
+	// BrandFetchAPIKey enables Tier 1 BrandFetch Brand API + Context API
+	// enrichment in brand_research (Bearer auth). It only fills fields the
+	// always-on no-key tiers (homepage meta/structured-data + brand-page
+	// probe + optional web search) didn't already find — empty → tool still
+	// registers and runs those no-key tiers unconditionally.
 	BrandFetchAPIKey string
+	// BrandFetchClientID enables the company_name → domain resolution step in
+	// brand_research via BrandFetch's Brand Search API, which authenticates with
+	// a client ID query param rather than the Bearer-token BrandFetchAPIKey used
+	// by the Brand API. Empty → that resolution step is skipped (falls back to
+	// deps.Search.Web()).
+	BrandFetchClientID string
 }
 
 // Features mirrors config.FeatureConfig for the tool layer (kept local so the
@@ -204,8 +213,9 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 		registerWorkspaceContribute(srv, deps)
 		registerWorkspaceRead(srv, deps)
 	}
-	// brand_research — always registered; degrades gracefully without BRANDFETCH_API_KEY
-	// (uses CSS extraction + homepage meta + brand-page probe + optional web search).
+	// brand_research — always registered; the homepage meta/structured-data
+	// extraction + brand-page probe + optional web search tiers run
+	// unconditionally without BRANDFETCH_API_KEY/BRANDFETCH_CLIENT_ID.
 	registerBrandResearch(srv, deps)
 }
 

@@ -80,6 +80,45 @@ func TestHNProviderPublishedAtNotInSnippet(t *testing.T) {
 	}
 }
 
+// TestHNProviderEngagement (#281): Points/NumComments must populate
+// Engagement on both Web() and News(); a hit with neither must leave
+// Engagement nil (absence means "unavailable", never "zero").
+func TestHNProviderEngagement(t *testing.T) {
+	t.Parallel()
+	const body = `{"hits":[
+		{"objectID":"1","story_id":1,"author":"user1","title":"Has engagement","url":"https://example.com/a","points":500,"num_comments":100,"created_at":"2024-02-06T00:00:00Z"},
+		{"objectID":"2","story_id":2,"author":"user2","title":"No engagement","url":"https://example.com/b","points":0,"num_comments":0,"created_at":"2024-02-05T00:00:00Z"}
+	],"nbHits":2}`
+	p := newHNTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(body))
+	})
+	results, err := p.Web(context.Background(), WebSearchParams{Query: "golang", NumResults: 2})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("want 2 results, got %d", len(results))
+	}
+	if results[0].Engagement == nil {
+		t.Fatal("results[0].Engagement should not be nil when points/comments are non-zero")
+	}
+	if results[0].Engagement.Points != 500 || results[0].Engagement.CommentCount != 100 {
+		t.Errorf("results[0].Engagement = %+v, want Points=500 CommentCount=100", results[0].Engagement)
+	}
+	if results[1].Engagement != nil {
+		t.Errorf("results[1].Engagement should be nil when points/comments are both zero, got %+v", results[1].Engagement)
+	}
+
+	news, err := p.News(context.Background(), NewsSearchParams{Query: "golang", NumResults: 2})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(news) != 2 || news[0].Engagement == nil || news[0].Engagement.Points != 500 {
+		t.Fatalf("News() must propagate Engagement from Web(), got %+v", news)
+	}
+}
+
 func TestHNProviderImages(t *testing.T) {
 	t.Parallel()
 	// newHNTestProvider requires a non-nil handler; use a no-op — Images never calls the server.

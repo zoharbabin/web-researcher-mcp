@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/audit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/auth"
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/consent"
 	"github.com/zoharbabin/web-researcher-mcp/internal/metrics"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
@@ -46,7 +48,7 @@ type webSearchInput struct {
 	ExcludeTerms string   `json:"exclude_terms,omitempty" jsonschema:"Terms to exclude from results (space-separated)."`
 	Country      string   `json:"country,omitempty" jsonschema:"Restrict to a country using ISO 3166-1 alpha-2 code (e.g. US, GB)."`
 	Lens         string   `json:"lens,omitempty" jsonschema:"Focus your search on trusted sites in a specific field: docs, academic, academic-extended, clinical, security, journalism, programming, devops, news, tech, legal, medical, finance, science, government, awesome-lists. Only one lens can be active at a time (overrides the site/sites parameters)."`
-	Provider     string   `json:"provider,omitempty" jsonschema:"Choose which search engine to use for this query: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, github. Leave empty to use the default. Returns an error if the chosen provider isn't set up."`
+	Provider     string   `json:"provider,omitempty" jsonschema:"Choose which search engine to use for this query: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github. Leave empty to use the default. Returns an error if the chosen provider isn't set up."`
 	SessionID    string   `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. Sources are automatically recorded in the session for recovery after context loss."`
 	Claim        string   `json:"claim,omitempty" jsonschema:"Optional claim to evaluate against each result's snippet. When set, each result gains a claimSignal (the most claim-relevant snippet sentence) to help triage which links to read; for full-text evidence use search_and_scrape with claim. Evidence only — the server never decides supports/contradicts."`
 }
@@ -214,8 +216,9 @@ func searchCacheKey(toolName string, parts ...any) string {
 	// added the "trust" untrusted-content marker to every search-family output;
 	// v3 added the optional zero-result "hints" object to web_search/news_search
 	// (#100); v4 added sourceReputation to every web_search result (#198); v5
-	// added publishedAt to every web_search result (#356).
-	h.Write([]byte("|v5"))
+	// added publishedAt to every web_search result (#356); v6 added the
+	// optional engagement signals object to web_search/news_search results (#281).
+	h.Write([]byte("|v6"))
 	for _, p := range parts {
 		fmt.Fprintf(h, "|%v", p)
 	}
@@ -390,6 +393,11 @@ func isRateLimitError(err error) bool {
 	if err == nil {
 		return false
 	}
+	// Typed sentinel check first (fast, no string alloc).
+	if errors.Is(err, circuit.ErrRateLimit) {
+		return true
+	}
+	// Legacy string fallback for any provider not yet wrapped.
 	s := err.Error()
 	return strings.Contains(s, "rate limited") || strings.Contains(s, "429") || strings.Contains(s, "quota")
 }

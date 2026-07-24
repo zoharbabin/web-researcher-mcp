@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 // WorldBankProvider implements EconSearcher over the World Bank Open Data
@@ -266,7 +268,7 @@ func (w *WorldBankProvider) get(ctx context.Context, path string) ([]byte, error
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == 429 {
-		return nil, fmt.Errorf("worldbank: rate limited")
+		return nil, fmt.Errorf("worldbank: rate limited: %w", circuit.ErrRateLimit)
 	}
 	if resp.StatusCode >= 400 {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))

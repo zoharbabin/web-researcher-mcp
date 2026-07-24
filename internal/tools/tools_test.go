@@ -1775,6 +1775,29 @@ func TestWebSearchEnrichPreservesPublishedAt(t *testing.T) {
 	}
 }
 
+// TestWebSearchEnrichPreservesEngagement (#281): enrichResultsWithReputation
+// must carry a provider-supplied Engagement through to the "engagement" key,
+// and must omit the key entirely when the provider left it nil (never emit a
+// zero-valued engagement object).
+func TestWebSearchEnrichPreservesEngagement(t *testing.T) {
+	t.Parallel()
+	results := []search.SearchResult{
+		{Title: "Engaged", URL: "https://example.org/a", Snippet: "has engagement", Engagement: &search.EngagementSignals{Points: 42, CommentCount: 7}},
+		{Title: "Unengaged", URL: "https://example.org/b", Snippet: "no engagement"},
+	}
+	enriched := enrichResultsWithReputation(results, "")
+	if len(enriched) != 2 {
+		t.Fatalf("want 2 results, got %d", len(enriched))
+	}
+	eng, ok := enriched[0]["engagement"].(*search.EngagementSignals)
+	if !ok || eng.Points != 42 || eng.CommentCount != 7 {
+		t.Errorf("engagement = %v, want &EngagementSignals{Points:42, CommentCount:7}", enriched[0]["engagement"])
+	}
+	if _, ok := enriched[1]["engagement"]; ok {
+		t.Errorf("engagement key must be omitted when the provider left it nil, got %v", enriched[1]["engagement"])
+	}
+}
+
 func TestImageSearchEmptyQuery(t *testing.T) {
 	ctx := context.Background()
 	deps := setupTestDeps()

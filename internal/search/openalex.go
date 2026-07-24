@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 // OpenAlexProvider searches the OpenAlex API for scholarly works.
@@ -92,7 +94,7 @@ func (p *OpenAlexProvider) doSearch(ctx context.Context, params AcademicSearchPa
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 429 {
-		return nil, fmt.Errorf("openalex: rate limited")
+		return nil, fmt.Errorf("openalex: rate limited: %w", circuit.ErrRateLimit)
 	}
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
@@ -243,7 +245,7 @@ func (p *OpenAlexProvider) get(ctx context.Context, path string) ([]byte, error)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == 429 {
-		return nil, fmt.Errorf("openalex: rate limited")
+		return nil, fmt.Errorf("openalex: rate limited: %w", circuit.ErrRateLimit)
 	}
 	if resp.StatusCode == 404 {
 		return nil, fmt.Errorf("openalex: not found")

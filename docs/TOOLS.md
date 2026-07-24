@@ -48,7 +48,7 @@ Perform a web search and return structured result URLs with metadata.
 | `exclude_terms` | string | no | — | Terms to exclude |
 | `country` | string | no | — | ISO 3166-1 alpha-2 |
 | `lens` | string | no | — | Domain lens (overrides `site`/`sites`). See `lenses/` directory for available lenses |
-| `provider` | string | no | — | Force search provider. Returns error listing available providers if unknown |
+| `provider` | string | no | — | Force search provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github. Returns error listing available providers if unknown |
 | `sessionId` | string | no | — | Link results to a `sequential_search` session |
 | `claim` | string | no | — | Optional claim to evaluate against each result's snippet; when set, each result gains a `claimSignal` (#66). Evidence only — never a verdict |
 
@@ -72,12 +72,25 @@ type SearchResult struct {
     PublishedAt      string            `json:"publishedAt,omitempty"`      // RFC3339 UTC; present only when the provider's response carried a date (#356)
     SourceReputation *DomainReputation `json:"sourceReputation,omitempty"` // present when host is in the reputation dataset (#198); omitted for unknown hosts
     ClaimSignal      string            `json:"claimSignal"`                // most claim-relevant snippet sentence; present on EVERY result whenever `claim` is set (empty string when no snippet sentence matched) — uniform shape (#66, #235)
+    Engagement       *EngagementSignals `json:"engagement,omitempty"`      // provider-supplied engagement metrics (#281); omitted when the provider surfaces none
+}
+
+type EngagementSignals struct {
+    Score        float64 `json:"score,omitempty"`        // relevance/quality score 0-1 (Exa)
+    Points       int     `json:"points,omitempty"`        // upvote/karma points (HackerNews)
+    CommentCount int     `json:"commentCount,omitempty"`  // total comment count (HackerNews)
+    ReplyCount   int     `json:"replyCount,omitempty"`    // reply count (Bluesky)
+    LikeCount    int     `json:"likeCount,omitempty"`      // likes/reactions (Bluesky)
+    RepostCount  int     `json:"repostCount,omitempty"`    // reposts/shares (Bluesky)
+    ViewCount    int     `json:"viewCount,omitempty"`      // view/impression count (future providers)
 }
 ```
 
 `sourceReputation` is a descriptive signal (same shape as `scrape_page`/`search_and_scrape`) indicating the host's known reliability tier (`high`, `low`, `mixed`) with a `basis` note. It is omitted for hosts not in the dataset — absence means unknown, not bad. When `claim` is set, every result carries a `claimSignal` holding the most claim-relevant snippet sentence to help triage which links to read — it is the empty string (not absent) when no snippet sentence matched, so the field's shape is uniform across results and downstream null-checking stays simple (#235). For full-text claim evidence use `search_and_scrape` with `claim`. `claimSignal` is an English-keyword heuristic (#390): an empty string on non-English snippet text means the heuristic never matched, not that the snippet is confirmed unrelated — read the snippet yourself for non-English sources.
 
-`publishedAt` (#356) is **optional and provider-dependent**, populated only by providers whose web response carries a date signal (Google via pagemap metadata, Tavily, Exa, SearXNG, HackerNews) and omitted (never guessed from snippet/title text) for providers that don't (Brave, Serper, DuckDuckGo, SearchAPI). When present it is normalized to RFC3339 UTC regardless of the provider's raw format.
+`publishedAt` (#356) is **optional and provider-dependent**, populated only by providers whose web response carries a date signal (Google via pagemap metadata, Tavily, Exa, SearXNG, HackerNews, Reddit, Bluesky) and omitted (never guessed from snippet/title text) for providers that don't (Brave, Serper, DuckDuckGo, SearchAPI). When present it is normalized to RFC3339 UTC regardless of the provider's raw format.
+
+`engagement` (#281) is **optional and provider-dependent**, populated only by providers that natively surface engagement metrics: HackerNews (`points`, `commentCount`), Exa (`score`), and Bluesky (`likeCount`, `repostCount`, `replyCount`). Absence means the provider doesn't surface any signal — never treat a missing `engagement` as zero engagement.
 
 On a zero-result response, `hints` carries a `ZeroResultHints` object (the same shape `academic_search` and `patent_search` emit) explaining why nothing matched and how to recover: `reason` (`no_match` | `filters_too_restrictive`), `filtersApplied` (the constraints that may have eliminated results — `site`, `sites`, `lens`, `time_range`, `country`, `language`, `exact_terms`, `exclude_terms`), `suggestedActions` (remove-filter / try-different-provider), and `epistemicWarning` (#357: a fixed reminder that zero results do not confirm absence — the fact may exist and simply be unreachable by the current query/provider; never assert non-existence from an empty result set). Suggested alternative providers are limited to those **configured and currently healthy**. On any non-empty result set the field is omitted.
 
@@ -106,7 +119,7 @@ On a zero-result response, `hints` carries a `ZeroResultHints` object (the same 
 ## Tool 2: `scrape_page`
 
 ### Purpose
-Extract content from a URL, supporting web pages, documents, YouTube videos, Hacker News threads (read natively via the HN API), and GitHub README/file/gist pages (read natively via the GitHub API).
+Extract content from a URL, supporting web pages, documents, YouTube videos, Hacker News threads (read natively via the HN API), GitHub README/file/gist pages (read natively via the GitHub API), and Bluesky posts and profiles (read natively via the AT Protocol API).
 
 ### Input Schema
 
@@ -137,7 +150,7 @@ type ScrapeOutput struct {
     SparsityWarning   string  `json:"sparsityWarning,omitempty"`   // present only when WordCount is below ~150 — the content may be too thin for a reliable claim check (#358). Omitted in raw mode and whenever content is not thin.
     Metadata        *Metadata `json:"metadata,omitempty"` // present only when a title was extracted (full/preview only)
     StructuredData  *StructuredData `json:"structuredData,omitempty"` // page-embedded machine-readable metadata; present only when found (full/preview, HTML pages)
-    ForumSignals    *ForumSignals   `json:"forumSignals,omitempty"`   // Reddit engagement metadata extracted from JSON-LD; present only for Reddit posts where the HTML tier ran (#247)
+    ForumSignals    *ForumSignals   `json:"forumSignals,omitempty"`   // Reddit engagement metadata extracted from JSON-LD (#247), or Bluesky post engagement read natively via the AT Protocol API (#285); present only for Reddit posts where the HTML tier ran, or Bluesky posts
     SourceType      string    `json:"sourceType"`     // typed classification (#62): peer_reviewed|official_docs|government|news_publication|blog|forum|wiki|social_media|unknown
     AuthorityTier   string    `json:"authorityTier"`  // banded authority: high|medium|low
     DomainCategory  string    `json:"domainCategory"` // subject area: academic|legal|medical|financial|technical|general
@@ -159,7 +172,7 @@ type Metadata struct {
 }
 
 type ForumSignals struct {
-    Platform        string `json:"platform"`                  // Forum platform, e.g. "reddit"
+    Platform        string `json:"platform"`                  // Forum platform: "reddit" or "bluesky"
     Upvotes         int    `json:"upvotes"`                   // Vote count from JSON-LD interactionStatistic
     Comments        int    `json:"comments"`                  // Comment count
     DatePublished   string `json:"datePublished,omitempty"`   // ISO 8601 publish date when available
@@ -199,7 +212,7 @@ In `raw` mode the output additionally carries `"raw": true`, and `contentType` i
 
 **Tables in content (#48).** HTML `<table>` elements are rendered as GitHub-flavored markdown pipe tables inside `content` (header row + `---` separator + data rows), preserving row/column structure instead of flattening cells into disconnected fragments. Pipe characters in cells are escaped and multi-line cells are collapsed to a single row. Layout, malformed, single-column, and nested tables degrade gracefully to plain text — never an error, never a panic.
 
-**Forum engagement signals (#247).** For Reddit posts where the HTML extraction tier ran, the response carries a `forumSignals` object: `platform` (`"reddit"`), `upvotes` (vote count from JSON-LD `interactionStatistic`), `comments` (comment count), `datePublished` (ISO 8601), `authorName` (original poster), and `credibilityNote` (set when `upvotes < 20`, noting vote-manipulation risk). The field is **omitted entirely** for non-Reddit URLs, `raw` mode, and any non-HTML extraction tier (markdown, browser, document, YouTube, Twitter) — never `null`, only present-or-absent.
+**Forum engagement signals (#247).** For Reddit posts where the HTML extraction tier ran, the response carries a `forumSignals` object: `platform` (`"reddit"`), `upvotes` (vote count from JSON-LD `interactionStatistic`), `comments` (comment count), `datePublished` (ISO 8601), `authorName` (original poster), and `credibilityNote` (set when `upvotes < 20`, noting vote-manipulation risk). The field is **omitted entirely** for non-Reddit/non-Bluesky URLs, `raw` mode, and any non-HTML extraction tier (markdown, browser, document, YouTube, Twitter) — never `null`, only present-or-absent. For Twitter/X tweets (`contentType: "twitter"`), engagement signals (likes, retweets, replies, quotes, views) are embedded in the plain-text `content` string by the FxTwitter path — they are not surfaced as a separate structured field. For Bluesky posts (bsky.app), `forumSignals` carries `platform: "bluesky"`, `upvotes` (like count), `comments` (reply count), and `authorName` (displayName from the AT Protocol author record) — read natively via `app.bsky.feed.getPostThread`, not extracted from HTML (#285).
 
 **Structured data (#46).** When the page embeds machine-readable metadata, the response carries a `structuredData` object alongside `content`: `jsonLd` (each `<script type="application/ld+json">` block, kept verbatim — invalid JSON is skipped, never failing the scrape), `openGraph` (`og:*`/`article:*` meta, keys keep their prefix), and `citation` (Highwire `citation_*` meta — DOI, authors, journal). The whole object is omitted when no such markup is present, and each sub-field is omitted when empty. It is produced by the HTML-extraction tiers only (absent for `raw` mode, PDFs, YouTube, and markdown-tier results), is independently size-bounded so a pathological page cannot blow the response budget, and is **untrusted external data** under the same trust boundary as `content`.
 
@@ -242,6 +255,12 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
    │     /user/<id>  → user profile (karma, about, created date)
    │     Unknown paths fall through to the tiered HTML pipeline
    │     `Truncated: true` when content is capped; `ContentType: "hn"`
+   ├─ bsky.app → native Bluesky AT Protocol routing (public.api.bsky.app; no API key required):
+   │     /profile/{handle-or-did}/post/{rkey} → post text, embed previews (image alt / external link),
+   │                                            engagement counts, and up to 5 top-level replies
+   │     /profile/{handle-or-did}                → profile: display name, bio, follower/following/post counts
+   │     Unknown paths fall through to the tiered HTML pipeline
+   │     `ContentType: "bluesky"`; `forumSignals.platform: "bluesky"` on post pages (#285)
    ├─ github.com / gist.github.com → native GitHub content routing (raw CDN + REST API; GITHUB_TOKEN optional, raises the unauth rate limit):
    │     /{owner}/{repo}          → README (raw.githubusercontent.com/HEAD/README.md; falls back to the
    │                                 Contents API's /readme endpoint on 404, e.g. non-standard casing)
@@ -545,6 +564,7 @@ type NewsArticle struct {
     Source      string `json:"source"`
     PublishedAt string `json:"publishedAt,omitempty"` // optional, provider-dependent; ISO-8601 (RFC3339 UTC) when present
     Snippet     string `json:"snippet"`
+    Engagement  *EngagementSignals `json:"engagement,omitempty"` // provider-supplied engagement metrics (#281); see web_search's EngagementSignals shape. Omitted when the provider surfaces none
 }
 ```
 
@@ -1611,7 +1631,7 @@ Capture a **fresh** Internet Archive (Wayback Machine) snapshot of a URL via Sav
 
 ### Purpose
 
-Research a company's complete brand identity — colors, logos, typography, tone of voice, social handles, and W3C design tokens — from any domain or company name. Probes official brand portals and brand guideline pages; only returns high-confidence structured data found directly on those pages (empty fields = genuinely not found). When a brand portal is found, the fully rendered page text is stored as a resource (`brand_portal_resource`) that an AI agent can pass to `read_resource` to analyze colors, typography, and other details directly. When no brand portal is found, the `suggestion` field guides the AI agent to use `scrape_page` on the homepage instead.
+Research a company's complete brand identity — colors, logos, typography, tone of voice, social handles, and W3C design tokens — from any domain or company name. Probes official brand portals and brand guideline pages; only returns high-confidence structured data found directly on those pages (empty fields = genuinely not found). Fully functional with no API key: homepage meta/structured-data extraction and brand-page probing run unconditionally. When `BRANDFETCH_API_KEY` is set, an additional BrandFetch Brand API enrichment tier runs concurrently and fills in richer identity, logo, color, font, and social fields the no-key tiers didn't find — it only adds coverage, never replaces the default no-key pipeline. When a brand portal is found, the fully rendered page text is stored as a resource (`brand_portal_resource`) that an AI agent can pass to `read_resource` to analyze colors, typography, and other details directly. When no brand portal is found, the `suggestion` field guides the AI agent to use `scrape_page` on the homepage instead.
 
 Use `brand_research` when you need structured brand JSON. Use `brand-guidelines` (MCP Prompt) when you want LLM interpretation for a specific use case (landing page, email, video brief).
 
@@ -1646,7 +1666,7 @@ Use `brand_research` when you need structured brand JSON. Use `brand-guidelines`
 | `typography` | object | `heading`, `body`, `mono` (each: `family`, `weights`, `origin`, `origin_id`) + `google_fonts_url`, `scale` |
 | `tone_of_voice` | object | `summary`, `attributes` array, `dos_and_donts` object |
 | `social` | object | `twitter`, `linkedin`, `github`, `youtube`, `facebook`, `instagram` (URLs) |
-| `sources` | array | Which tiers contributed: `name` (`homepage_meta`/`brand_page`/`web_search`), `url`, `fields`, `scrapeQuality` (`"thin"` when that page's content was below ~150 words (#358) — a content-volume signal, not an error; the source may still have contributed real fields) |
+| `sources` | array | Which tiers contributed: `name` (`brandfetch_api`/`homepage_meta`/`brand_page`/`web_search`), `url`, `fields`, `scrapeQuality` (`"thin"` when that page's content was below ~150 words (#358) — a content-volume signal, not an error; the source may still have contributed real fields) |
 | `guidelines_url` | string | First discovered brand guidelines page URL. Candidate pages are classified with English soft-404/login-page and brand-page keyword matching (#390); a genuine non-English brand portal may be missed or misclassified — verify by reading `brand_portal_resource` yourself when the target site isn't English |
 | `brand_portal_resource` | string | `research://artifact/{id}` URI — pass to `read_resource` to retrieve the full rendered brand portal text for AI analysis |
 | `suggestion` | string | Guidance for the AI agent when no brand portal was found (recommends `scrape_page` on the homepage), OR when a portal URL was found but its content could not be extracted (recommends `scrape_page` on the portal URL) |
@@ -1657,8 +1677,8 @@ Use `brand_research` when you need structured brand JSON. Use `brand-guidelines`
 
 ### Behavior
 
-- **Three-tier extraction pipeline.** Tiers **(2)** homepage structured-data + meta and **(4)** brand-page probe (concurrent HEAD requests, 26 patterns: 5 subdomains + 21 paths) run concurrently via goroutines. Tier **(5)** web search (depth=full only) runs sequentially after they complete. Higher tiers never overwrite lower-tier values.
-- **Authoritative-data-first.** Only high-confidence data found explicitly on brand portal pages is returned. Empty fields mean genuinely not found — never inferred or guessed. No CSS heuristics.
+- **Tiered extraction pipeline.** Tier **(1)** BrandFetch Brand API (optional, gated on `BRANDFETCH_API_KEY`), Tier **(2)** homepage structured-data + meta, and Tier **(4)** brand-page probe (concurrent HEAD requests, 26 patterns: 5 subdomains + 21 paths) all run concurrently via goroutines, each writing only into fields still empty (mutex-guarded, first write per field wins — no data loss, but not a fixed priority order between 1 and 2). Tier **(5)** web search (depth=full only) runs sequentially after they complete and likewise never overwrites a value the concurrent tiers already set.
+- **Authoritative-data-first.** Only high-confidence data found explicitly on brand portal pages (or the BrandFetch API) is returned. Empty fields mean genuinely not found — never inferred or guessed. No CSS heuristics.
 - **Brand-page probe** runs all 26 candidates concurrently, picks the highest-priority match (dedicated brand subdomains beat path matches), rejects redirects to the homepage or a different host. For dynamic SPA brand portals (e.g. Corebook.io), the page is rendered via browser tier and navigation links are extracted from the rendered DOM to find color/typography sub-pages.
 - **Brand portal resource.** When a brand portal is found, the full rendered page text (including any color sub-pages) is stored as an encrypted artifact (`research://artifact/{id}`, 30-min TTL) and returned in `brand_portal_resource`. Pass this URI to `read_resource` so an AI agent can analyze the raw rendered content for colors, typography, and other details.
 - **Fallback suggestion.** When no brand portal is found, `suggestion` is populated with guidance to use `scrape_page` on the homepage for fully rendered content analysis. When a portal URL was found but its content could not be extracted (e.g. a gated SPA), `suggestion` instead recommends `scrape_page` on the portal URL.
@@ -1878,6 +1898,8 @@ These are upstream behaviors we cannot control — they reflect how the underlyi
 | DuckDuckGo | Rate-limited aggressively from cloud/datacenter IPs | Works well from local/STDIO; may return 0 results from servers |
 | DuckDuckGo | Images and News return empty results | HTML endpoint doesn't support these categories; Router falls through |
 | HackerNews | `web_search` / `news_search` only (no Images); `dateRange` filter via Algolia `numericFilters`; `num_results` 1–100 (values outside that range reset to 10); no API key required (`SEARCH_PROVIDER=hackernews` or `provider: hackernews` per-call) | Algolia HN search index only; not a general-web index |
+| Reddit | `web_search` / `news_search` only (no Images); `time_range` maps to Reddit's `t=` parameter (hour/day/week/month/year, default month); `num_results` capped at 25 (RSS feed hard limit); no API key required (`SEARCH_PROVIDER=reddit` or `provider: reddit` per-call) | Reddit Atom RSS search feed only; community discussion content, not a general-web index |
+| Bluesky | `web_search` only (no Images, no News); `num_results` 1–100 (values outside that range reset to 10); no API key required (`SEARCH_PROVIDER=bluesky` or `provider: "bluesky"` per-call); AT Protocol URIs converted to `bsky.app` HTTPS URLs | AT Protocol public AppView only — not a general-web index; use only for Bluesky community signal |
 
 These are not errors in web-researcher-mcp. The tool faithfully passes parameters to the upstream API and returns whatever the API provides.
 

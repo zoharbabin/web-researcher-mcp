@@ -41,6 +41,8 @@ Understanding what backs each provider helps you reason about result overlap and
 | **[Tavily](https://app.tavily.com/)** | Aggregator | Queries multiple existing engines at runtime; scrapes top results; applies AI re-ranking — no proprietary crawled index |
 | **[SearXNG](https://docs.searxng.org/)** | Meta-search | Configurable — routes to whatever backends you point it at (Bing, Google, DuckDuckGo, and others) |
 | **[HackerNews](https://hn.algolia.com/)** | Niche | HN Algolia index — Hacker News stories and submissions only |
+| **[Reddit](https://www.reddit.com/)** | Niche | Reddit Atom RSS — Reddit posts and community discussions only |
+| **[Bluesky](https://bsky.app/)** | Niche | AT Protocol AppView (`public.api.bsky.app`) — Bluesky posts only |
 | **[GitHub](https://docs.github.com/en/rest/search/search)** | Niche | GitHub REST Search API — issues and pull requests only |
 
 **Practical implication**: Google PSE, Serper, and SearchAPI.io draw from the same index — using more than one adds no coverage, only redundancy. Brave and Exa bring genuinely independent results. Tavily and SearXNG aggregate results from others rather than crawling themselves.
@@ -62,6 +64,8 @@ Which tools each web search provider enables. `—` means the provider returns e
 | **[Tavily](https://app.tavily.com/)** | ✓ | — | ✓ | — | — | — | — |
 | **[SearXNG](https://docs.searxng.org/)** | ✓ | ✓ | ✓ | — | — | — | — |
 | **[HackerNews](https://hn.algolia.com/)** | ✓ | — | ✓ | — | — | — | — |
+| **[Reddit](https://www.reddit.com/)** | ✓ | — | ✓ | — | — | — | — |
+| **[Bluesky](https://bsky.app/)** | ✓ | — | — | — | — | — | — |
 | **[GitHub](https://docs.github.com/en/rest/search/search)** | ✓ | — | ✓ | — | — | — | — |
 
 **Notes:**
@@ -79,6 +83,8 @@ Which tools each web search provider enables. `—` means the provider returns e
 |---|---|---|
 | **[DuckDuckGo](https://duckduckgo.com/)** | Unlimited | Free |
 | **[HackerNews](https://hn.algolia.com/)** | Unlimited | Free |
+| **[Reddit](https://www.reddit.com/)** | Unlimited | Free |
+| **[Bluesky](https://bsky.app/)** | Unlimited (public AppView) | Free |
 | **[GitHub](https://docs.github.com/en/rest/search/search)** | 10 req/min (unauth) / 30 req/min (token) | Free |
 | **[SearXNG](https://docs.searxng.org/)** | Unlimited (self-hosted) | Free (self-hosted) |
 | **[Google PSE](https://programmablesearchengine.google.com/)** | 100 queries/day | $5 / 1,000 queries |
@@ -94,7 +100,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 
 | If you need… | Use |
 |---|---|
-| Zero-config, no signup | [DuckDuckGo](https://duckduckgo.com/) (built-in fallback) or [HackerNews](https://hn.algolia.com/) (HN-only) |
+| Zero-config, no signup | [DuckDuckGo](https://duckduckgo.com/) (built-in fallback), [HackerNews](https://hn.algolia.com/) (HN-only), [Reddit](https://www.reddit.com/) (Reddit-only), or [Bluesky](https://bsky.app/) (Bluesky-only) |
 | Broadest index coverage | [Google PSE](https://programmablesearchengine.google.com/) |
 | High-volume + own index | [Brave](https://brave.com/search/api/) (2,000/month free, privacy-first) |
 | Independent results alongside Google | [Brave](https://brave.com/search/api/) or [Exa](https://exa.ai/) (different indices, no overlap) |
@@ -103,6 +109,8 @@ Which tools each web search provider enables. `—` means the provider returns e
 | `answer` or `structured_search` tools | [Exa](https://exa.ai/) (required) |
 | Air-gapped or no vendor lock-in | [SearXNG](https://docs.searxng.org/) (self-hosted) |
 | Tech/developer community signal | [HackerNews](https://hn.algolia.com/) |
+| Reddit / community discussion signal | [Reddit](https://www.reddit.com/) |
+| Bluesky community signal | [Bluesky](https://bsky.app/) |
 | GitHub issue and PR search | [GitHub](https://docs.github.com/en/rest/search/search) |
 | Maximum reliability | `SEARCH_ROUTING=brave,google,serper` (three independent providers) |
 
@@ -125,6 +133,10 @@ Which tools each web search provider enables. `—` means the provider returns e
 **[SearXNG](https://docs.searxng.org/)** — Open-source, self-hosted, routes to configurable backends. Best for air-gapped environments, organizations requiring no external vendor dependency, or privacy-first deployments. Requires hosting and setup but carries no query limits or API costs.
 
 **[HackerNews](https://hn.algolia.com/)** — Searches HN stories and submissions via the public HN Algolia API. No key or registration. Not general web — use only when you specifically want HN community signal, tech discussions, or submission history. `scrape_page` on any HN URL (item, user, list) reads natively through the HN Firebase API regardless of which `SEARCH_PROVIDER` is set.
+
+**[Reddit](https://www.reddit.com/)** — Searches Reddit posts via the public Atom RSS endpoint. No key or registration required. Not general web — use only when you specifically want Reddit community discussion, popular threads, or subreddit signal. Supports `web_search` and `news_search`; returns a maximum of 25 results per request (RSS hard limit). The `time_range` filter maps to Reddit's `t=` parameter (hour/day/week/month/year; defaults to month). `scrape_page` on any reddit.com URL works independently of which `SEARCH_PROVIDER` is set.
+
+**[Bluesky](https://bsky.app/)** — Searches Bluesky posts via the AT Protocol public AppView (`public.api.bsky.app`, falling back to `api.bsky.app` — same backend, no caching layer — if the cached host 403s the search endpoint specifically). No key or registration required. Not general web — use only when you specifically want Bluesky community signal. Supports `web_search` only (no images, no news); returns up to 100 results per request (defaults to 10). No `time_range` filtering. `scrape_page` on any bsky.app post or profile URL reads natively through the same AT Protocol API regardless of which `SEARCH_PROVIDER` is set, surfacing engagement (likes, reposts, replies) via `forumSignals`.
 
 **[GitHub](https://docs.github.com/en/rest/search/search)** — Searches GitHub issues and pull requests via the public REST Search API. No token required (10 req/min unauthenticated); set GITHUB_TOKEN to raise the limit to 30 req/min. Not general web — use only when you specifically want GitHub issue/PR signal: bug reports, feature requests, open-source community traction, or developer discussion history. Results include issue number, state, kind (issue/PR), reaction count, comment count, author, and creation date. `scrape_page` on any GitHub URL works through the standard scrape pipeline regardless of which `SEARCH_PROVIDER` is set.
 
@@ -212,12 +224,12 @@ These providers back dedicated tools and are independent of the web search provi
 | `clinical_search` | **[ClinicalTrials.gov](https://clinicaltrials.gov/)** | 400K+ NIH-registered clinical trials | No |
 | `awesome_list_search` | **[ecosyste.ms](https://ecosyste.ms/)** | Community-curated "awesome list" discovery by topic — stars, project counts, archived status | No (`ECOSYSTEMS_EMAIL` optional, raises rate-limit tier via the "polite pool") |
 | `archive_source` | **[Internet Archive SPN](https://web.archive.org/save/)** | Save Page Now capture | No (keys raise reliability/limits) |
-| `brand_research` | **[BrandFetch](https://brandfetch.com/)** | Brand colors, fonts, logos, slogans (degrades to CSS+meta scraping without key) | No (`BRANDFETCH_API_KEY` optional) |
+| `brand_research` | **[BrandFetch](https://brandfetch.com/)** | Brand colors, fonts, logos, tagline, tone of voice (homepage meta + brand-page probing run unconditionally without a key) | No (`BRANDFETCH_API_KEY` optional) |
 
 **Notes:**
 - World Bank, OECD, Eurostat, ClinicalTrials.gov, CourtListener, and ecosyste.ms are always available — no configuration required. Setting `ECOSYSTEMS_EMAIL` (falls back to `OPENALEX_EMAIL`) opts ecosyste.ms calls into the "polite pool," raising the per-caller rate-limit tier above the shared "anonymous" pool. `ECOSYSTEMS_API_KEY` is also sent but only takes effect on ecosyste.ms's paid plans.
 - SEC EDGAR and FRED activate on their respective env vars (`EDGAR_CONTACT_EMAIL` / `FRED_API_KEY`). `EDGAR_CONTACT_EMAIL` falls back to `OPENALEX_EMAIL`.
-- `brand_research` is always available — without `BRANDFETCH_API_KEY` it falls back to CSS/meta scraping.
+- `brand_research` is always available — without `BRANDFETCH_API_KEY` it runs homepage meta/structured-data extraction and brand-page probing; the key adds a concurrent BrandFetch enrichment tier on top, never a replacement.
 - `archive_source`, `memory_save`, and `workspace_contribute` are the write tools in the suite. `archive_source` triggers a live internet capture; `memory_save` and `workspace_contribute` are opt-in regulated features.
 
 ---

@@ -60,6 +60,24 @@ type SearchResult struct {
 	// carries a date (Google, Tavily, Exa, SearXNG, HackerNews). Empty when
 	// the provider has no date signal — never guessed from snippet/title text.
 	PublishedAt string `json:"publishedAt,omitempty"`
+	// Engagement (#281) carries provider-supplied engagement metrics. Nil
+	// when the provider does not surface any — absence means "unavailable",
+	// never "zero engagement".
+	Engagement *EngagementSignals `json:"engagement,omitempty"`
+}
+
+// EngagementSignals carries optional provider-supplied engagement metrics.
+// All fields are omitempty — callers must treat absence as "unavailable",
+// not "zero engagement". Populated only by providers that natively surface
+// these signals (HackerNews: Points/CommentCount; Exa: Score).
+type EngagementSignals struct {
+	Score        float64 `json:"score,omitempty"`        // relevance/quality score 0-1 (Exa)
+	Points       int     `json:"points,omitempty"`       // upvote/karma points (HackerNews)
+	CommentCount int     `json:"commentCount,omitempty"` // total comment count
+	ReplyCount   int     `json:"replyCount,omitempty"`   // reply/thread depth (future providers)
+	LikeCount    int     `json:"likeCount,omitempty"`    // likes/reactions (future providers)
+	RepostCount  int     `json:"repostCount,omitempty"`  // reposts/shares (future providers)
+	ViewCount    int     `json:"viewCount,omitempty"`    // view/impression count (future providers)
 }
 
 type ImageResult struct {
@@ -80,6 +98,9 @@ type NewsResult struct {
 	PublishedAt   string   `json:"publishedAt,omitempty"`
 	Snippet       string   `json:"snippet"`
 	ExtraSnippets []string `json:"extraSnippets,omitempty"`
+	// Engagement (#281) mirrors SearchResult.Engagement; nil when the
+	// provider does not surface engagement metrics.
+	Engagement *EngagementSignals `json:"engagement,omitempty"`
 }
 
 // Provider is the core web-search capability: Web, Images, and News.
@@ -131,7 +152,7 @@ type Deps struct {
 }
 
 // SupportedProviders lists all provider names that can be configured.
-var SupportedProviders = []string{"google", "brave", "serper", "searxng", "searchapi", "duckduckgo", "tavily", "exa", "hackernews", "github"}
+var SupportedProviders = []string{"google", "brave", "serper", "searxng", "searchapi", "duckduckgo", "tavily", "exa", "hackernews", "reddit", "bluesky", "github"}
 
 func NewProvider(cfg config.SearchConfig, deps Deps) Provider {
 	switch cfg.Provider {
@@ -151,6 +172,10 @@ func NewProvider(cfg config.SearchConfig, deps Deps) Provider {
 		return NewDuckDuckGoProvider(deps)
 	case "hackernews":
 		return NewHNProvider(deps)
+	case "reddit":
+		return NewRedditProvider(deps)
+	case "bluesky":
+		return NewBlueskyProvider(deps)
 	case "github":
 		return NewGitHubProvider(cfg.GitHubToken, deps)
 	default:
@@ -197,6 +222,10 @@ func NewProviderByName(name string, cfg config.SearchConfig, deps Deps) Provider
 		return NewDuckDuckGoProvider(deps)
 	case "hackernews":
 		return NewHNProvider(deps)
+	case "reddit":
+		return NewRedditProvider(deps)
+	case "bluesky":
+		return NewBlueskyProvider(deps)
 	case "github":
 		return NewGitHubProvider(cfg.GitHubToken, deps)
 	}

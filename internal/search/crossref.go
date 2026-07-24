@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 // CrossRefProvider searches the CrossRef REST API for scholarly works.
@@ -82,7 +84,7 @@ func (p *CrossRefProvider) doSearch(ctx context.Context, params AcademicSearchPa
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 429 {
-		return nil, fmt.Errorf("crossref: rate limited")
+		return nil, fmt.Errorf("crossref: rate limited: %w", circuit.ErrRateLimit)
 	}
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))

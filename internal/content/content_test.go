@@ -614,6 +614,36 @@ func TestScoreRelevance(t *testing.T) {
 			minWant: 0.5,
 			maxWant: 0.5,
 		},
+		{
+			// Stopwords-only query falls back to original keywords; result is low
+			// because the stopwords appear only incidentally in content.
+			name:    "stopword query fallback",
+			content: "quantum entanglement teleportation",
+			title:   "Quantum Physics",
+			query:   "is the a",
+			minWant: 0.0,
+			maxWant: 0.5,
+		},
+		{
+			// Stopword "for" is filtered; only "italian" remains and matches both
+			// content and title, so score should be high.
+			name:    "stopword filtered leaves informative token",
+			content: "cooking recipes for italian food",
+			title:   "Italian Recipes",
+			query:   "for italian",
+			minWant: 0.7,
+			maxWant: 1.0,
+		},
+		{
+			// IDF weighting: "neuroscience" (12 chars) outweighs "ai" (2 chars);
+			// both tokens are present so overall score is high.
+			name:    "longer token weighted higher",
+			content: "neuroscience research uses ai techniques extensively",
+			title:   "Neuroscience and AI",
+			query:   "ai neuroscience",
+			minWant: 0.8,
+			maxWant: 1.0,
+		},
 	}
 
 	for _, tt := range tests {
@@ -623,6 +653,30 @@ func TestScoreRelevance(t *testing.T) {
 				t.Errorf("scoreRelevance() = %f, want [%f, %f]", got, tt.minWant, tt.maxWant)
 			}
 		})
+	}
+}
+
+// TestScoreRelevanceStopWordFilter (#275): "go" is a common stopword in tech
+// queries — it must not suppress a match on the substantive term that
+// survives filtering. An all-stopword query must fall back to unfiltered
+// keywords rather than short-circuiting.
+func TestScoreRelevanceStopWordFilter(t *testing.T) {
+	t.Parallel()
+	// "go" is a stopword — only "programming" survives filtering; result should
+	// still be high because "programming" is present in both content and title.
+	got := scoreRelevance(
+		strings.Repeat("Go programming is great. ", 10),
+		"Go Programming",
+		"Go programming",
+	)
+	if got < 0.8 {
+		t.Errorf("stopword 'go' filtered but 'programming' should dominate; got %f, want >=0.8", got)
+	}
+
+	// All-stopword query: falls back to all keywords; must return a valid [0,1] value.
+	got2 := scoreRelevance("some content here", "Some Title", "go get set")
+	if got2 < 0 || got2 > 1 {
+		t.Errorf("all-stopword fallback must return [0,1], got %f", got2)
 	}
 }
 

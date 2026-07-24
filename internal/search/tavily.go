@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 const (
@@ -144,7 +146,7 @@ func (t *TavilyProvider) doRequest(ctx context.Context, payload map[string]any) 
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 429 {
-		return nil, fmt.Errorf("tavily API rate limited") // must contain "rate limited" so tools.isRateLimitError classifies it (brave.go parity)
+		return nil, fmt.Errorf("tavily API rate limited: %w", circuit.ErrRateLimit)
 	}
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))

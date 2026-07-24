@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 // EPOProvider searches the European Patent Office Open Patent Services (OPS) API.
@@ -104,10 +106,10 @@ func (e *EPOProvider) doSearch(ctx context.Context, params PatentSearchParams) (
 		if reason != "" {
 			return nil, fmt.Errorf("epo: quota exceeded (%s)", reason)
 		}
-		return nil, fmt.Errorf("epo: rate limited (403)")
+		return nil, fmt.Errorf("epo: rate limited (403): %w", circuit.ErrRateLimit)
 	}
 	if resp.StatusCode == 429 {
-		return nil, fmt.Errorf("epo: rate limited")
+		return nil, fmt.Errorf("epo: rate limited: %w", circuit.ErrRateLimit)
 	}
 	if resp.StatusCode == 404 {
 		return nil, nil

@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 // EDGARProvider implements FilingSearcher over the SEC EDGAR public APIs.
@@ -488,7 +490,7 @@ func (e *EDGARProvider) get(ctx context.Context, fullURL string) ([]byte, error)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == 429 {
-		return nil, fmt.Errorf("edgar: rate limited")
+		return nil, fmt.Errorf("edgar: rate limited: %w", circuit.ErrRateLimit)
 	}
 	if resp.StatusCode == 404 {
 		return nil, fmt.Errorf("edgar: not found")

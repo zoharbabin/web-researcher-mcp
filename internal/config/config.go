@@ -139,6 +139,7 @@ type SearchConfig struct {
 	SearXNGBasicAuth   string            // raw "user:password" for a SearXNG behind HTTP Basic auth; "" => none (never logged)
 	SearXNGHeaders     map[string]string // validated static request headers for SearXNG; nil/empty => none
 	CustomLensesPath   string
+	ThinThreshold      int // SEARCH_THIN_THRESHOLD: retry same provider with simplified query when result count <= this; 0 disables
 
 	// Patent-specific providers (optional, enables structured patent search)
 	USPTOAPIKey       string
@@ -165,8 +166,8 @@ type SearchConfig struct {
 	IASecretKey string
 
 	// BrandFetch optional credentials for brand_research. Tool degrades gracefully when absent.
-	BrandFetchAPIKey   string // BRANDFETCH_API_KEY — Brand API + Context API
-	BrandFetchClientID string // BRANDFETCH_CLIENT_ID — logo CDN requests
+	BrandFetchAPIKey   string // BRANDFETCH_API_KEY — Brand API + Context API (Bearer auth)
+	BrandFetchClientID string // BRANDFETCH_CLIENT_ID — Brand Search API (company_name→domain) + logo CDN requests
 
 	// EcosystemsAPIKey is optional for awesome_list_search. ecosyste.ms's Free
 	// plan (which self-service keys are issued under) uses the shared
@@ -364,6 +365,7 @@ func Load() (*Config, error) {
 			SearXNGBasicAuth:      searxngBasicAuth,
 			SearXNGHeaders:        searxngHeaders,
 			CustomLensesPath:      os.Getenv("CUSTOM_LENSES_PATH"),
+			ThinThreshold:         envInt("SEARCH_THIN_THRESHOLD", 1),
 			USPTOAPIKey:           os.Getenv("USPTO_API_KEY"),
 			EPOConsumerKey:        os.Getenv("EPO_OPS_CONSUMER_KEY"),
 			EPOConsumerSecret:     os.Getenv("EPO_OPS_CONSUMER_SECRET"),

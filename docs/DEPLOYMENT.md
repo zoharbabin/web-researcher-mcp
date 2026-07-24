@@ -395,12 +395,12 @@ Each structured-domain provider gets an independent circuit breaker and uses the
 
 ### BrandFetch (Optional)
 
-These enable the Tier 1 BrandFetch API for `brand_research`. The tool always works without them — it falls back to CSS extraction, homepage meta, and web search.
+These enable optional BrandFetch enrichment for `brand_research`. The tool always works without them — homepage meta/structured-data extraction, brand-page probing, and optional web search run unconditionally.
 
 | Variable | Description |
 |----------|-------------|
-| `BRANDFETCH_API_KEY` | BrandFetch Brand + Context API key (`pk_*`). Free tier: 100 req/month. Never logged | 
-| `BRANDFETCH_CLIENT_ID` | BrandFetch logo CDN client ID. Free tier: 500K req/month |
+| `BRANDFETCH_API_KEY` | BrandFetch Brand + Context API key (Bearer auth). Runs a concurrent Tier 1 enrichment pass that fills identity/logo/color/font/tagline/tone-of-voice fields the no-key tiers didn't find. Free tier: 100 req/month. Never logged |
+| `BRANDFETCH_CLIENT_ID` | BrandFetch Brand Search API client ID — enables company-name → domain resolution, plus logo CDN requests. Free tier: 500K req/month |
 
 ### Multi-Provider Routing
 

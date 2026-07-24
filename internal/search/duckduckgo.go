@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 // DuckDuckGoProvider scrapes DuckDuckGo's HTML endpoint.
@@ -81,7 +82,7 @@ func (d *DuckDuckGoProvider) doWebSearch(ctx context.Context, params WebSearchPa
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusAccepted || resp.StatusCode == http.StatusTooManyRequests {
-		return nil, fmt.Errorf("duckduckgo: rate limited")
+		return nil, fmt.Errorf("duckduckgo: rate limited: %w", circuit.ErrRateLimit)
 	}
 	if resp.StatusCode >= 500 {
 		return nil, fmt.Errorf("duckduckgo: server error %d", resp.StatusCode)

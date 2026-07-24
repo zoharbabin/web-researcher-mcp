@@ -346,9 +346,10 @@ if resp.StatusCode >= 400 {
 
 ### In a new search provider:
 ```go
-// Use the conventional error message patterns so isRateLimitError/isAuthError detect them:
+// Wrap circuit.ErrRateLimit on 429 so the circuit breaker opens immediately
+// (bypassing FailureThreshold) and isRateLimitError's errors.Is check detects it:
 if resp.StatusCode == 429 {
-    return nil, fmt.Errorf("myprovider: rate limited")
+    return nil, fmt.Errorf("myprovider: rate limited: %w", circuit.ErrRateLimit)
 }
 if resp.StatusCode == 401 {
     // isAuthError matches any of: "401", "API key not valid", "unauthorized", "INVALID_ARGUMENT"

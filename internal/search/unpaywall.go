@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 // Unpaywall (by OurResearch, the OpenAlex team) maps a DOI to a legal
@@ -86,7 +88,7 @@ func (u *UnpaywallResolver) Resolve(ctx context.Context, doi string) (bool, stri
 			return nil
 		}
 		if resp.StatusCode == 429 {
-			return fmt.Errorf("unpaywall: rate limited")
+			return fmt.Errorf("unpaywall: rate limited: %w", circuit.ErrRateLimit)
 		}
 		if resp.StatusCode >= 400 {
 			body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))

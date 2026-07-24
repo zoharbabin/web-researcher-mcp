@@ -39,6 +39,18 @@ func ScoreQuality(input QualityInput) QualityScore {
 	}
 }
 
+// relevanceStopWords are common function words excluded from scoreRelevance
+// keyword matching. Filtering them prevents high-frequency noise tokens (e.g.
+// "the", "a", "go", "is") from diluting the IDF-like weights assigned to
+// substantive query terms.
+var relevanceStopWords = map[string]bool{
+	"the": true, "a": true, "an": true, "is": true, "are": true,
+	"was": true, "were": true, "of": true, "in": true, "on": true,
+	"at": true, "to": true, "for": true, "with": true, "by": true,
+	"from": true, "and": true, "or": true, "not": true, "but": true,
+	"go": true, "get": true, "set": true, "new": true, "use": true,
+}
+
 func scoreRelevance(content, title, query string) float64 {
 	if query == "" {
 		return 0.5
@@ -48,23 +60,45 @@ func scoreRelevance(content, title, query string) float64 {
 	contentLower := strings.ToLower(content)
 	titleLower := strings.ToLower(title)
 
-	keywords := strings.Fields(queryLower)
-	if len(keywords) == 0 {
+	allKeywords := strings.Fields(queryLower)
+	if len(allKeywords) == 0 {
 		return 0.5
 	}
 
-	var titleHits, contentHits int
+	// Filter stopwords; fall back to all keywords if the query is entirely stopwords.
+	keywords := make([]string, 0, len(allKeywords))
+	for _, kw := range allKeywords {
+		if !relevanceStopWords[kw] {
+			keywords = append(keywords, kw)
+		}
+	}
+	if len(keywords) == 0 {
+		keywords = allKeywords
+	}
+
+	// IDF-like weighting: longer tokens carry more information.
+	// weight(token) = len(token) / avgLen(keywords), so a rare long term
+	// like "neuroscience" outweighs a short one like "ai".
+	var totalLen float64
 	for _, kw := range keywords {
+		totalLen += float64(len(kw))
+	}
+	avgLen := totalLen / float64(len(keywords))
+
+	var titleScore, contentScore, totalWeight float64
+	for _, kw := range keywords {
+		w := float64(len(kw)) / avgLen
+		totalWeight += w
 		if strings.Contains(titleLower, kw) {
-			titleHits++
+			titleScore += w
 		}
 		if strings.Contains(contentLower, kw) {
-			contentHits++
+			contentScore += w
 		}
 	}
 
-	titleScore := float64(titleHits) / float64(len(keywords))
-	contentScore := float64(contentHits) / float64(len(keywords))
+	titleScore /= totalWeight
+	contentScore /= totalWeight
 
 	return math.Min(1.0, titleScore*0.4+contentScore*0.6)
 }

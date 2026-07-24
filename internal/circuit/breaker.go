@@ -8,6 +8,11 @@ import (
 
 var ErrCircuitOpen = errors.New("circuit breaker open")
 
+// ErrRateLimit is the sentinel a provider wraps its 429 error with so the
+// circuit breaker opens immediately on the first rate-limit, without waiting
+// for FailureThreshold generic failures to accumulate.
+var ErrRateLimit = errors.New("rate limited")
+
 type State int
 
 const (
@@ -55,7 +60,7 @@ func (b *Breaker) Execute(fn func() error) error {
 	defer b.mu.Unlock()
 
 	if err != nil {
-		b.onFailure()
+		b.onFailure(err)
 		return err
 	}
 
@@ -89,10 +94,18 @@ func (b *Breaker) onSuccess() {
 	b.halfOpenAttempts = 0
 }
 
-func (b *Breaker) onFailure() {
-	b.failures++
+// onFailure records a failure and updates the circuit state. A wrapped
+// ErrRateLimit opens the circuit immediately, bypassing FailureThreshold — a
+// 429 is an unambiguous saturation signal, unlike a generic transient error.
+func (b *Breaker) onFailure(err error) {
 	b.lastFailure = time.Now()
 
+	if errors.Is(err, ErrRateLimit) {
+		b.state = StateOpen
+		return
+	}
+
+	b.failures++
 	switch b.state {
 	case StateClosed:
 		if b.failures >= b.config.FailureThreshold {

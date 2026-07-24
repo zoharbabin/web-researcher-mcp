@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 // FREDProvider implements EconSearcher over the Federal Reserve Economic Data
@@ -178,7 +180,7 @@ func (f *FREDProvider) get(ctx context.Context, path string) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == 429 {
-		return nil, fmt.Errorf("fred: rate limited")
+		return nil, fmt.Errorf("fred: rate limited: %w", circuit.ErrRateLimit)
 	}
 	if resp.StatusCode == 403 {
 		return nil, fmt.Errorf("fred: access denied (check FRED_API_KEY)")

@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 // Compile-time assertions: BraveProvider satisfies Provider, LocalProvider,
@@ -390,14 +392,14 @@ func braveError(status int, body []byte) error {
 		m := er.Error.Meta
 		// Monthly quota exhaustion vs per-second throttle, when Brave tells us.
 		if m.QuotaLimit > 0 && m.QuotaCurrent >= m.QuotaLimit {
-			return fmt.Errorf("brave API monthly quota exhausted (plan=%s, quota %d/%d): rate limited",
-				m.Plan, m.QuotaCurrent, m.QuotaLimit)
+			return fmt.Errorf("brave API monthly quota exhausted (plan=%s, quota %d/%d): rate limited: %w",
+				m.Plan, m.QuotaCurrent, m.QuotaLimit, circuit.ErrRateLimit)
 		}
 		if m.Component != "" || m.RateLimit > 0 {
-			return fmt.Errorf("brave API rate limited (component=%s, rate %d/%d per second, plan=%s)",
-				m.Component, m.RateCurrent, m.RateLimit, m.Plan)
+			return fmt.Errorf("brave API rate limited (component=%s, rate %d/%d per second, plan=%s): %w",
+				m.Component, m.RateCurrent, m.RateLimit, m.Plan, circuit.ErrRateLimit)
 		}
-		return fmt.Errorf("brave API rate limited")
+		return fmt.Errorf("brave API rate limited: %w", circuit.ErrRateLimit)
 	}
 
 	if er.Error.Code != "" || er.Error.Detail != "" {

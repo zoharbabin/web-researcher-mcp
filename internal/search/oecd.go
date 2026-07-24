@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 // OECDProvider implements EconSearcher over the modern OECD SDMX REST API
@@ -571,7 +573,7 @@ func (o *OECDProvider) get(ctx context.Context, endpoint, accept string) ([]byte
 	case resp.StatusCode == 422:
 		return nil, fmt.Errorf("oecd: invalid query key for this dataflow")
 	case resp.StatusCode == 429:
-		return nil, fmt.Errorf("oecd: rate limited")
+		return nil, fmt.Errorf("oecd: rate limited: %w", circuit.ErrRateLimit)
 	case resp.StatusCode >= 400:
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		return nil, fmt.Errorf("oecd: API error %d: %s", resp.StatusCode, string(b))

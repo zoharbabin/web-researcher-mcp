@@ -177,11 +177,13 @@ func formatTweetResult(rawURL string, tweet map[string]any, maxLength int) *Scra
 
 	likes := jsonNumber(tweet["likes"])
 	retweets := jsonNumber(tweet["retweets"])
+	replies := jsonNumber(tweet["replies"])
+	quotes := jsonNumber(tweet["quotes"])
 	views := jsonNumber(tweet["views"])
 	createdAt, _ := tweet["created_at"].(string)
 
-	content := fmt.Sprintf("@%s (%s)\n%s\n\n%s likes · %s retweets · %s views\nPosted: %s",
-		username, displayName, text, likes, retweets, views, createdAt)
+	content := fmt.Sprintf("@%s (%s)\n%s\n\n%s likes · %s retweets · %s replies · %s quotes · %s views\nPosted: %s",
+		username, displayName, text, likes, retweets, replies, quotes, views, createdAt)
 
 	if len(content) > maxLength {
 		content = truncateBytes(content, maxLength)

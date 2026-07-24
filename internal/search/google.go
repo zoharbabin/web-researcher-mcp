@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 type GoogleProvider struct {
@@ -206,7 +208,7 @@ func (g *GoogleProvider) doRequest(ctx context.Context, apiURL string) (*googleR
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 429 {
-		return nil, fmt.Errorf("google API rate limited")
+		return nil, fmt.Errorf("google API rate limited: %w", circuit.ErrRateLimit)
 	}
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))

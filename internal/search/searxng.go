@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 type SearXNGProvider struct {
@@ -163,6 +165,9 @@ func (s *SearXNGProvider) doRequest(ctx context.Context, apiURL string) ([]byte,
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == 429 {
+		return nil, fmt.Errorf("searxng: rate limited: %w", circuit.ErrRateLimit)
+	}
 	if resp.StatusCode >= 400 {
 		return nil, fmt.Errorf("searxng error %d", resp.StatusCode)
 	}

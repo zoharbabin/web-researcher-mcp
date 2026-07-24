@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 // Authoritative DOI existence check (#226). Crossref's /works/{doi} only knows
@@ -93,7 +95,7 @@ func (h *HandleDOIRegistry) IsRegistered(ctx context.Context, doi string) (bool,
 			registered = false
 			return nil
 		case resp.StatusCode == 429:
-			return fmt.Errorf("doi-handle: rate limited")
+			return fmt.Errorf("doi-handle: rate limited: %w", circuit.ErrRateLimit)
 		case resp.StatusCode >= 400:
 			body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 			return fmt.Errorf("doi-handle: API error %d: %s", resp.StatusCode, string(body))

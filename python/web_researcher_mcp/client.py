@@ -772,7 +772,7 @@ class WebResearcherClient:
         mode: str = None,
         sessionId: str = None,
     ) -> ScrapePageResponse:
-        """Read a single URL and get back its content — web pages (including JavaScript-heavy sites), PDFs, Word/PowerPoint files, YouTube transcripts, Hacker News item/user/list pages (read natively via the HN API), and GitHub README/file/gist pages (read natively via the GitHub API) — picking the best extraction method automatically"""
+        """Read a single URL and get back its content — web pages (including JavaScript-heavy sites), PDFs, Word/PowerPoint files, YouTube transcripts, Hacker News item/user/list pages (read natively via the HN API), GitHub README/file/gist pages (read natively via the GitHub API), and Bluesky posts and profiles (bsky"""
         d = await self._call_tool(
             "scrape_page",
             {

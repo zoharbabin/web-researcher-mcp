@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 // ClinicalTrialsProvider implements TrialSearcher over the ClinicalTrials.gov v2
@@ -180,7 +182,7 @@ func (c *ClinicalTrialsProvider) get(ctx context.Context, path string) ([]byte, 
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == 429 {
-		return nil, fmt.Errorf("clinicaltrials: rate limited")
+		return nil, fmt.Errorf("clinicaltrials: rate limited: %w", circuit.ErrRateLimit)
 	}
 	if resp.StatusCode == 404 {
 		return nil, nil // not found → empty, not an error

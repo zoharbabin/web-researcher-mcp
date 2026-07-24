@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 // Exa (exa.ai) is a neural/semantic search API exposing a single rich /search
@@ -141,12 +143,17 @@ func (e *ExaProvider) doWebSearch(ctx context.Context, params WebSearchParams) (
 
 	results := make([]SearchResult, 0, len(resp.Results))
 	for _, r := range resp.Results {
+		var eng *EngagementSignals
+		if r.Score > 0 {
+			eng = &EngagementSignals{Score: r.Score}
+		}
 		results = append(results, SearchResult{
 			Title:       r.Title, // may be empty — passed through as-is
 			URL:         r.URL,
 			Snippet:     r.snippet(),
 			DisplayLink: extractDisplayLink(r.URL),
 			PublishedAt: normalizePublishedAt(r.PublishedDate, time.Now()),
+			Engagement:  eng,
 		})
 	}
 	return results, nil
@@ -171,12 +178,17 @@ func (e *ExaProvider) doNewsSearch(ctx context.Context, params NewsSearchParams)
 
 	results := make([]NewsResult, 0, len(resp.Results))
 	for _, r := range resp.Results {
+		var eng *EngagementSignals
+		if r.Score > 0 {
+			eng = &EngagementSignals{Score: r.Score}
+		}
 		results = append(results, NewsResult{
 			Title:       r.Title,
 			URL:         r.URL,
 			Source:      extractDisplayLink(r.URL),                         // Exa has no separate source field; host is the honest source
 			PublishedAt: normalizePublishedAt(r.PublishedDate, time.Now()), // ISO-normalized; empty when absent/unparseable → dropped by omitempty
 			Snippet:     r.snippet(),
+			Engagement:  eng,
 		})
 	}
 	return results, nil
@@ -390,7 +402,7 @@ func (e *ExaProvider) doRequest(ctx context.Context, path string, payload map[st
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 429 {
-		return fmt.Errorf("exa API rate limited")
+		return fmt.Errorf("exa API rate limited: %w", circuit.ErrRateLimit)
 	}
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
@@ -422,6 +434,7 @@ type exaResult struct {
 	Highlights    []string        `json:"highlights"`
 	Summary       string          `json:"summary"`  // a JSON string when a summary schema was supplied
 	Entities      json.RawMessage `json:"entities"` // present only for category:"company"
+	Score         float64         `json:"score"`    // relevance/quality score 0-1
 }
 
 // snippet returns the best available short text for a result: the first
