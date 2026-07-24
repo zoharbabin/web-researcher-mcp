@@ -1078,6 +1078,41 @@ var econSearchOutputSchema = map[string]any{
 	},
 }
 
+var monarchSearchOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"operation":   map[string]any{"type": "string", "enum": []any{"semsim", "entity", "associations", "compare", "annotate"}, "description": "Echoed operation."},
+		"resultCount": map[string]any{"type": "integer"},
+		"provider":    map[string]any{"type": "string", "description": "Which biomedical-knowledge-graph provider answered (monarch)."},
+		"hints":       map[string]any{"type": "object"},
+		"trust":       trustUntrustedExternal,
+		"results": map[string]any{
+			"type":        "array",
+			"description": "Element shape varies by operation: semsim/compare use score/ancestorId/ancestorLabel; entity uses description/crossReferences; associations uses the subject/object pair; annotate uses text alongside id/label.",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":                     map[string]any{"type": "string", "description": "Entity CURIE (semsim/entity/annotate)."},
+					"label":                  map[string]any{"type": "string"},
+					"category":               map[string]any{"type": "string", "description": "Biolink category, e.g. biolink:Disease (semsim/entity/associations)."},
+					"score":                  map[string]any{"type": "number", "description": "Similarity score (semsim/compare)."},
+					"ancestorId":             map[string]any{"type": "string", "description": "Shared ontology ancestor CURIE explaining the match (semsim/compare)."},
+					"ancestorLabel":          map[string]any{"type": "string"},
+					"description":            map[string]any{"type": "string", "description": "Entity description (entity)."},
+					"crossReferences":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Equivalent CURIEs in other ontologies (entity)."},
+					"subjectId":              map[string]any{"type": "string", "description": "Association subject CURIE (associations)."},
+					"subjectLabel":           map[string]any{"type": "string"},
+					"objectId":               map[string]any{"type": "string", "description": "Association object CURIE (associations)."},
+					"objectLabel":            map[string]any{"type": "string"},
+					"primaryKnowledgeSource": map[string]any{"type": "string", "description": "Originating knowledge source infores id (associations)."},
+					"text":                   map[string]any{"type": "string", "description": "Grounded text span (annotate)."},
+					"source":                 map[string]any{"type": "string"},
+				},
+			},
+		},
+	},
+}
+
 var localSearchOutputSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{

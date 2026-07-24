@@ -231,6 +231,29 @@ func (m *mockAwesomeListProvider) AwesomeLists(_ context.Context, params search.
 	return []search.AwesomeListResult{{Name: "awesome-osint", FullName: "jivoi/awesome-osint", URL: "https://github.com/jivoi/awesome-osint", Description: "A curated list of amazingly awesome OSINT", ProjectsCount: 1431, Stars: 27176, Topics: []string{"osint", "awesome-list"}, LastSyncedAt: "2026-07-02T07:00:27.731Z", Source: "ecosystems"}}, nil
 }
 
+// mockMonarchProvider implements MonarchProvider for monarch_search.
+type mockMonarchProvider struct{}
+
+func (m *mockMonarchProvider) Name() string { return "monarch" }
+func (m *mockMonarchProvider) Metadata() search.ProviderMeta {
+	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "free", Description: "mock monarch"}
+}
+func (m *mockMonarchProvider) Search(_ context.Context, params search.MonarchSearchParams) ([]search.MonarchResult, error) {
+	switch params.Operation {
+	case "semsim":
+		return []search.MonarchResult{{ID: "MONDO:0007947", Label: "Marfan syndrome", Score: 0.85, AncestorID: "HP:0001166", AncestorLabel: "Arachnodactyly", Source: "monarch"}}, nil
+	case "entity":
+		return []search.MonarchResult{{ID: "MONDO:0007947", Label: "Marfan syndrome", Category: "biolink:Disease", Description: "A connective tissue disorder.", CrossReferences: []string{"OMIM:154700"}, Source: "monarch"}}, nil
+	case "associations":
+		return []search.MonarchResult{{SubjectID: "HGNC:3603", SubjectLabel: "FBN1", ObjectID: "MONDO:0007947", ObjectLabel: "Marfan syndrome", Category: "biolink:CausalGeneToDiseaseAssociation", PrimaryKnowledgeSource: "infores:omim", Source: "monarch"}}, nil
+	case "compare":
+		return []search.MonarchResult{{Score: 0.72, AncestorID: "HP:0001166", AncestorLabel: "Arachnodactyly", Source: "monarch"}}, nil
+	case "annotate":
+		return []search.MonarchResult{{ID: "HP:0001166", Label: "Arachnodactyly", Text: "long fingers", Source: "monarch"}}, nil
+	}
+	return nil, nil
+}
+
 // mockContextSearcherProvider wraps mockProvider and additionally implements
 // ContextSearcher so the search_and_scrape tool exercises the fast-path branch.
 type mockContextSearcherProvider struct {
@@ -289,6 +312,7 @@ func setupTestDeps() Dependencies {
 	trial := &mockTrialProvider{}
 	awesome := &mockAwesomeListProvider{}
 	local := &mockLocalProvider{}
+	monarch := &mockMonarchProvider{}
 	return Dependencies{
 		Cache:                cache.NewNoop(),
 		Search:               &mockProvider{},
@@ -301,6 +325,7 @@ func setupTestDeps() Dependencies {
 		TrialProviders:       map[string]search.TrialProvider{trial.Name(): trial},
 		AwesomeListProviders: map[string]search.AwesomeListProvider{awesome.Name(): awesome},
 		LocalProviders:       map[string]search.LocalProvider{local.Name(): local},
+		MonarchProviders:     map[string]search.MonarchProvider{monarch.Name(): monarch},
 		Scraper:              scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2}),
 		Content:              content.NewProcessor(),
 		Sessions:             func() session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),

@@ -1731,6 +1731,52 @@ Each `lists[]` item: `name`, `fullName` (owner/repo of the list's source reposit
 
 ---
 
+## Tool 31: `monarch_search`
+
+Query the **Monarch Initiative** biomedical knowledge graph — rank diseases and genes by phenotype similarity, look up disease/gene/phenotype entities, and traverse gene-disease-phenotype associations. One tool, five operations selected by the required `operation` field. The Monarch API is keyless, so this tool is always registered. For published literature on a condition, combine with `academic_search`; for active interventional trials, use `clinical_search`. Discovery only — not medical advice, and the `annotate` operation must never be sent identifiable patient data (it forwards free text to a public third-party API with no BAA).
+
+### Input Schema
+
+| Field | Type | Required | Default | Constraints |
+|-------|------|----------|---------|-------------|
+| `operation` | string | yes | — | One of: `semsim`, `entity`, `associations`, `compare`, `annotate` |
+| `phenotypes` | []string | yes* | — | `semsim`/`compare`: HPO term IDs, e.g. `["HP:0001166","HP:0001083"]`. Max 20 |
+| `group` | string | no | `Human Diseases` | `semsim`: one of `Human Genes`, `Mouse Genes`, `Rat Genes`, `Zebrafish Genes`, `C. Elegans Genes`, `Human Diseases` |
+| `compareTo` | []string | yes* | — | `compare`: second list of HPO term IDs to compare `phenotypes` against. Max 20 |
+| `query` | string | yes* | — | `entity`: free-text search term, e.g. `"Marfan syndrome"` |
+| `entityId` | string | yes* | — | `entity`/`associations`: an entity CURIE, e.g. `MONDO:0007947`, `HGNC:3603`, `HP:0001166`. Must match `^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$` |
+| `assocSubject` | string | yes* | — | `associations`: subject-side entity CURIE to filter edges by |
+| `assocObject` | string | yes* | — | `associations`: object-side entity CURIE to filter edges by |
+| `category` | string | no | — | `associations`: Biolink association category enum, e.g. `biolink:CausalGeneToDiseaseAssociation` |
+| `text` | string | yes* | — | `annotate`: short clinical text to ground to HPO terms. Max 2000 characters. Never patient-identifiable |
+| `numResults` | int | no | 20 | 1–200 (the API caps association pages at 200) |
+| `provider` | string | no | — | Force a Monarch provider: `monarch` |
+| `sessionId` | string | no | — | Record results as sources on a `sequential_search` session |
+
+\*Required per `operation`: `semsim` needs `phenotypes`; `entity` needs `query` or `entityId`; `associations` needs one of `entityId`/`assocSubject`/`assocObject`; `compare` needs both `phenotypes` and `compareTo`; `annotate` needs `text`.
+
+### Output Fields
+
+Each `results[]` item carries only the fields relevant to its operation: `source` (always `monarch`), plus — `semsim`: `id`, `label`, `category`, `score`, `ancestorId`, `ancestorLabel`; `entity`: `id`, `label`, `category`, `description`, `crossReferences` (array); `associations`: `subjectId`, `subjectLabel`, `objectId`, `objectLabel`, `category`, `primaryKnowledgeSource`; `compare`: `score`, `ancestorId`, `ancestorLabel`; `annotate`: `id`, `label`, `text` (the matched span, sanitized). Plus `operation` (echo), `resultCount`, `provider`, `hints` (when empty), and `trust` (`untrusted-external-content`).
+
+### Behavior
+- **Operation discriminator.** `operation` selects one of five distinct API calls; each has its own required-field validation, enforced before any HTTP call is made.
+- **CURIE injection guard.** `entityId` is validated against a strict CURIE pattern pre-flight for both `entity` and `associations`; a path-traversal or otherwise malformed ID (e.g. `../etc/passwd`) is rejected with a validation error, never sent upstream. Association filter values (`assocSubject`/`assocObject`/`category`/`entityId`) are additionally checked for `&`/`?`/`#`/`/` characters as defense in depth beyond URL encoding.
+- **Caps.** `phenotypes`/`compareTo` are capped at 20 HPO terms per query; `text` is capped at 2000 characters — both enforced before the call.
+- **Sanitization.** `annotate`'s matched-span `text` is passed through `content.Processor.SanitizeText()` before being returned, since it is derived from third-party HTML.
+- **Provider honoring**: an explicit `provider` is used exclusively; otherwise the first configured provider answers. An error/empty returns a structured zero-result with hints (no silent fallback).
+- A `404`/no-match from the API is an empty result, never a panic; a `429` surfaces as a rate-limited error.
+- **Auth**: keyless — the Monarch Initiative API needs no API key.
+- **No identifiable patient data.** The `annotate` operation forwards its `text` argument to a public third-party API with no Business Associate Agreement — callers must never submit real patient data.
+
+### Annotations
+- ReadOnly: true · Idempotent: true · OpenWorld: true (queries the live Monarch Initiative API)
+
+### Cache
+- TTL: 6 hours (only for non-empty results)
+
+---
+
 ## Cross-Cutting Concerns
 
 ### Timeouts

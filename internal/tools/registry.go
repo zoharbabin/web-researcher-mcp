@@ -38,6 +38,10 @@ type Dependencies struct {
 	// so AvailableAwesomeListProviders always builds it and awesome_list_search
 	// is always registered. Empty ⇒ the tool is not registered.
 	AwesomeListProviders map[string]search.AwesomeListProvider
+	// MonarchProviders back monarch_search (Monarch Initiative biomedical
+	// knowledge graph, #318). Keyless, so AvailableMonarchProviders always builds
+	// it and monarch_search is always registered. Empty ⇒ the tool is not registered.
+	MonarchProviders map[string]search.MonarchProvider
 	// LocalProviders back local_search (#259). Brave is the sole provider today;
 	// requires BRAVE_API_KEY. Empty ⇒ the tool is not registered.
 	LocalProviders map[string]search.LocalProvider
@@ -188,6 +192,11 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	// local_search (#259) — Brave Local Search API; requires BRAVE_API_KEY.
 	if len(deps.LocalProviders) > 0 {
 		registerLocal(srv, deps)
+	}
+	// monarch_search (#318) — Monarch Initiative API is keyless, so
+	// AvailableMonarchProviders always builds it and the tool is always registered.
+	if len(deps.MonarchProviders) > 0 {
+		registerMonarchSearch(srv, deps)
 	}
 
 	// Synthesis tools — provider-independent (like academic/patent search).
