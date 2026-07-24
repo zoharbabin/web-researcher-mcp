@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -30,6 +31,23 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/useranalytics"
 	"github.com/zoharbabin/web-researcher-mcp/internal/workspace"
 )
+
+// TestMain redirects scraper.JinaReaderURL to a local stub for the whole test
+// binary (#270): the Jina Reader scrape tier is unconditional (no API-key
+// gate), so every test in this package that builds a scraper.Pipeline against
+// a local httptest server would otherwise leak a real network call to
+// r.jina.ai. The stub returns empty content, so it behaves like Jina having
+// nothing to add — the remaining tiers decide the result exactly as they did
+// before this tier existed.
+func TestMain(m *testing.M) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"code":200,"status":20000,"data":{"content":""}}`))
+	}))
+	scraper.JinaReaderURL = stub.URL + "/"
+	code := m.Run()
+	stub.Close()
+	os.Exit(code)
+}
 
 type mockProvider struct{}
 
