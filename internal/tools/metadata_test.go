@@ -45,6 +45,7 @@ var expectedTools = []string{
 	"workspace_contribute",
 	"workspace_read",
 	"brand_research",
+	"paper_fulltext",
 }
 
 func listTools(t *testing.T) []*mcp.Tool {
@@ -265,6 +266,7 @@ func TestOutputSchemaMatchesResponse(t *testing.T) {
 		"awesome_list_search": {"topic": "osint"},
 		"local_search":        {"query": "coffee near me"},
 		"brand_research":      {"url": "example.com"},
+		"paper_fulltext":      {"identifier": "https://example.com/paper.pdf"},
 	}
 
 	tools := listTools(t)
@@ -350,6 +352,7 @@ func TestExternalContentToolsCarryTrustMarker(t *testing.T) {
 		"clinical_search":     "untrusted-external-content",
 		"awesome_list_search": "untrusted-external-content",
 		"local_search":        "untrusted-external-content",
+		"paper_fulltext":      "untrusted-external-content",
 	}
 	args := map[string]map[string]any{
 		"web_search":          {"query": "test"},
@@ -371,6 +374,7 @@ func TestExternalContentToolsCarryTrustMarker(t *testing.T) {
 		"clinical_search":     {"condition": "covid-19"},
 		"awesome_list_search": {"topic": "osint"},
 		"local_search":        {"query": "coffee near me"},
+		"paper_fulltext":      {"identifier": "https://example.com/paper.pdf"},
 	}
 
 	for name, wantTrust := range want {

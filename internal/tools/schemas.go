@@ -1240,3 +1240,50 @@ var brandResearchOutputSchema = map[string]any{
 		"trust":     trustUntrustedExternal,
 	},
 }
+
+var paperFulltextOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"identifier":    map[string]any{"type": "string", "description": "The input identifier, echoed back."},
+		"resolvedUrl":   map[string]any{"type": "string", "description": "The URL that was actually scraped: the open-access PDF, the Semantic Scholar landing page, the doi.org redirect, or the input URL verbatim."},
+		"content":       map[string]any{"type": "string"},
+		"title":         map[string]any{"type": "string"},
+		"trust":         trustUntrustedExternal,
+		"truncated":     map[string]any{"type": "boolean"},
+		"scrapeTier":    map[string]any{"type": "string", "description": "Which extraction tier produced the content (markdown, stealth, html, browser). Provenance only; omitted when unknown."},
+		"source":        map[string]any{"type": "string", "enum": []any{"semanticscholar", "direct-url"}, "description": "Where metadata came from: 'semanticscholar' when a DOI/paper-ID lookup succeeded, 'direct-url' when the identifier was a URL or no metadata could be resolved."},
+		"authors":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+		"year":          map[string]any{"type": "integer"},
+		"doi":           map[string]any{"type": "string"},
+		"pdfUrl":        map[string]any{"type": "string", "description": "The open-access PDF URL Semantic Scholar reports, when known."},
+		"openAccess":    map[string]any{"type": "boolean"},
+		"citationCount": map[string]any{"type": "integer"},
+		"abstract":      map[string]any{"type": "string"},
+		"journal":       map[string]any{"type": "string"},
+		"tldr":          map[string]any{"type": "string", "description": "AI-generated one-sentence summary (Semantic Scholar)."},
+		"citation": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"url":          map[string]any{"type": "string"},
+				"accessedDate": map[string]any{"type": "string"},
+				"metadata": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"title":  map[string]any{"type": "string"},
+						"author": map[string]any{"type": "string"},
+						"site":   map[string]any{"type": "string"},
+						"date":   map[string]any{"type": "string"},
+					},
+				},
+				"formatted": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"apa":    map[string]any{"type": "string"},
+						"mla":    map[string]any{"type": "string"},
+						"bibtex": map[string]any{"type": "string"},
+					},
+				},
+			},
+		},
+	},
+}

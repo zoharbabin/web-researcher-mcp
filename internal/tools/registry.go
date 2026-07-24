@@ -147,6 +147,11 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	// verifiable. Always registered; degrades to status:"unavailable" when no link
 	// verifier is configured.
 	registerArchiveSource(srv, deps)
+	// paper_fulltext (#269) — collapses academic_search + scrape_page into one
+	// call for a DOI/paper-ID/URL. Always registered; degrades to a doi.org
+	// redirect or the input URL verbatim when no Semantic Scholar provider is
+	// configured.
+	registerPaperFulltext(srv, deps)
 	// verify_recommendation — audits AI recommendations (listicles, product
 	// lists) for anti-sloptimization signals: self-promotion, conflicts of interest,
 	// domain reputation, dead links. Always registered as part of the trust suite.

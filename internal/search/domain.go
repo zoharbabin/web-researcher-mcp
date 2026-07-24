@@ -137,6 +137,14 @@ type CitationSearcher interface {
 	References(ctx context.Context, seedID string, numResults int) ([]AcademicResult, error)
 }
 
+// PaperFetcher fetches full paper metadata by DOI or Semantic Scholar paper ID.
+// The returned AcademicResult always includes PDFUrl when an open-access PDF is
+// known. Backs the paper_fulltext tool (#269). Returns (nil, nil) when the
+// identifier has no record (not an error).
+type PaperFetcher interface {
+	FetchPaper(ctx context.Context, id string) (*AcademicResult, error)
+}
+
 // AcademicSearchParams defines parameters for scholarly paper search.
 type AcademicSearchParams struct {
 	Query      string

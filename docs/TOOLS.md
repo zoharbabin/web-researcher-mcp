@@ -1731,6 +1731,39 @@ Each `lists[]` item: `name`, `fullName` (owner/repo of the list's source reposit
 
 ---
 
+## Tool 31: `paper_fulltext`
+
+### Purpose
+
+Retrieve the full text of an academic paper from a single identifier — a DOI, a Semantic Scholar paper ID, or a direct URL — collapsing the two-call `academic_search` → `scrape_page` workflow into one. For a DOI or paper ID it fetches Semantic Scholar metadata (title, authors, abstract, citation count, TLDR) and scrapes the open-access PDF when one is known, falling back to the DOI resolver landing page when no PDF is indexed or no Semantic Scholar provider is configured. A direct URL is scraped as-is, with no metadata enrichment. Use `academic_search` first to discover papers by topic, or `citation_graph` to explore a paper's citation neighborhood — `paper_fulltext` is the follow-up call once you already have an identifier.
+
+### Input Schema
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `identifier` | string | yes | — | A DOI (e.g. `10.1038/nature12373`), a Semantic Scholar paper ID, or a direct URL to the paper or its PDF. The type is auto-detected. |
+| `max_length` | int | no | 50000 | Maximum characters of content to return. Clamped to 1000–200000. |
+
+### Output Schema
+
+`identifier` (echo), `resolvedUrl` (the URL actually scraped — the open-access PDF, the Semantic Scholar landing page, the doi.org redirect, or the input URL verbatim), `content`, `title`, `trust` (`untrusted-external-content`), `truncated`, `scrapeTier` (which extraction tier produced the content, when known), `source` (`semanticscholar` when a DOI/paper-ID lookup succeeded, `direct-url` for a URL input or when no metadata could be resolved), `citation` (the same `url`/`accessedDate`/`metadata`/`formatted` shape as `scrape_page`'s citation object). When `source:"semanticscholar"`: `authors`, `year`, `doi`, `pdfUrl`, `openAccess`, `citationCount`, `abstract`, `journal`, `tldr` (AI-generated one-sentence summary — attribute as AI-generated).
+
+### Behavior
+
+- **Identifier auto-detection.** A value that parses as a URL is scraped directly with no metadata lookup. Otherwise it's checked for a DOI shape (`10.xxxx/...`); a DOI or a bare Semantic Scholar paper ID is resolved via a Semantic Scholar `FetchPaper` lookup when a `semanticscholar` (or any other `PaperFetcher`-capable) academic provider is configured.
+- **URL resolution order** for a resolved paper: the open-access PDF URL Semantic Scholar reports, then the Semantic Scholar/DOI/arXiv landing page URL, then (DOI input only) the `https://doi.org/{doi}` redirect.
+- **Paywalled papers** return whatever the landing page or abstract makes available — full text is only retrievable for open-access papers. This is expected, not an error.
+- **Graceful degradation.** With no `PaperFetcher`-capable provider configured, a DOI identifier still resolves via the doi.org redirect (metadata fields are simply omitted, `source:"direct-url"`); a bare paper ID with no provider configured returns a validation error, since there is no URL to fall back to.
+- **No provider-construction wiring needed.** `PaperFetcher` is a capability interface (like `DOIResolver`/`CitationSearcher`) satisfied via type assertion on the existing Semantic Scholar `AcademicProvider` — no separate provider or env var is introduced.
+
+### Annotations
+- ReadOnly: true · Idempotent: true · OpenWorld: true
+
+### Cache
+- TTL: 1 hour. Key: SHA-256 of identifier + max_length.
+
+---
+
 ## Cross-Cutting Concerns
 
 ### Timeouts
@@ -1872,6 +1905,7 @@ Every tool declares annotations for client consumption (`readOnlyAnnotations(ide
 | workspace_contribute | **false (write)** | false | false |
 | workspace_read | true | true | false |
 | brand_research | true | true | true |
+| paper_fulltext | true | true | true |
 
 Notes: `sequential_search` is non-idempotent because it writes session state to disk on every call. `memory_save`, `workspace_contribute`, and `archive_source` are the three **write** tools (`ReadOnly:false`). `memory_save` and `workspace_contribute` are non-idempotent (each call appends a new record); `archive_source` is idempotent (archiving the same URL twice is safe). `OpenWorld:false` marks tools that touch only local/server state (sessions, memory, analytics, workspaces, exports) rather than the open web. `Destructive` is uniformly false — no tool is annotated destructive.
 
