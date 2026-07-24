@@ -967,3 +967,4 @@ To force immediate re-encryption rather than waiting for natural reads, flush th
 | `literature-review` | Systematic academic literature review | `topic` |
 | `brand-guidelines` | Extract and document a company's brand identity | `company` |
 | `company-recon` | OSINT company reconnaissance profile | `company` |
+| `curriculum-research` | Syllabus coverage, institutional climate, and academic-freedom research | `subject` |

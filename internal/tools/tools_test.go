@@ -315,6 +315,11 @@ func setupTestDeps() Dependencies {
 		UserAnalytics: useranalytics.NewStoreRecorder(persist.NewMemoryStore()),
 		Memory:        memory.NewStore(persist.NewMemoryStore(), 0),
 		Workspaces:    workspace.NewStore(persist.NewMemoryStore(), 0),
+		// Bare-field-gated tools (#352): a non-empty value is all that's needed
+		// to register them under test — no mock provider map involved.
+		OpenSyllabusAPIKey:      "test-key",
+		OpenSyllabusAPIURL:      "http://test.invalid",
+		PENAmericaAirtableToken: "test-token",
 	}
 }
 
