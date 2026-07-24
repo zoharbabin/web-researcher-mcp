@@ -1,0 +1,1826 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust.">
+      
+      
+      
+        <link rel="canonical" href="https://zoharbabin.com/web-researcher-mcp/providers/">
+      
+      
+        <link rel="prev" href="../api-setup/">
+      
+      
+        <link rel="next" href="../deployment/">
+      
+      
+      <link rel="icon" href="../img/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.14">
+    
+    
+      
+        <title>Providers - Web Researcher MCP</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.342714a4.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  <!-- Google Tag Manager -->
+  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+  })(window,document,'script','dataLayer','GTM-P225W69C');</script>
+  <!-- End Google Tag Manager -->
+  <!-- Preconnect for cross-origin origins used on every page load -->
+  <link rel="preconnect" href="https://raw.githubusercontent.com">
+  <link rel="preconnect" href="https://api.github.com">
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Providers - Web Researcher MCP" />
+  <meta property="og:description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust. Free, private, open source." />
+  <meta property="og:image" content="https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/social-preview.png" />
+  <meta property="og:url" content="https://zoharbabin.com/web-researcher-mcp/providers/" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Providers - Web Researcher MCP" />
+  <meta name="twitter:description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust. Free, private, open source." />
+  <meta name="twitter:image" content="https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/social-preview.png" />
+
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#provider-reference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+        <aside class="md-banner">
+          <div class="md-banner__inner md-grid md-typeset">
+            
+            
+  <!-- Google Tag Manager (noscript) -->
+  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-P225W69C"
+  height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+  <!-- End Google Tag Manager (noscript) -->
+  <a href="https://github.com/zoharbabin/web-researcher-mcp" style="display:inline-flex;align-items:center;gap:.4em;">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25z"/></svg>
+    Star us on GitHub
+  </a>
+
+          </div>
+          
+        </aside>
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Web Researcher MCP" class="md-header__button md-logo" aria-label="Web Researcher MCP" data-md-component="logo">
+      
+  <img src="../img/logo.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Web Researcher MCP
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Providers
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/zoharbabin/web-researcher-mcp" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    zoharbabin/web-researcher-mcp
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Web Researcher MCP" class="md-nav__button md-logo" aria-label="Web Researcher MCP" data-md-component="logo">
+      
+  <img src="../img/logo.svg" alt="logo">
+
+    </a>
+    Web Researcher MCP
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/zoharbabin/web-researcher-mcp" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    zoharbabin/web-researcher-mcp
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Examples
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Tools
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    API Setup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Providers
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Providers
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#contents" class="md-nav__link">
+    <span class="md-ellipsis">
+      Contents
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#web-search-providers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Web Search Providers
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Web Search Providers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#index-classification" class="md-nav__link">
+    <span class="md-ellipsis">
+      Index Classification
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#capability-matrix" class="md-nav__link">
+    <span class="md-ellipsis">
+      Capability Matrix
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#free-tier-and-pricing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Free Tier and Pricing
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#quick-pick-guide" class="md-nav__link">
+    <span class="md-ellipsis">
+      Quick-Pick Guide
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#provider-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Provider Notes
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#academic-search-providers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Academic Search Providers
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Academic Search Providers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#capability-matrix_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Capability Matrix
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#coverage" class="md-nav__link">
+    <span class="md-ellipsis">
+      Coverage
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#academic-routing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Academic Routing
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#patent-search-providers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Patent Search Providers
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Patent Search Providers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#jurisdiction-matrix" class="md-nav__link">
+    <span class="md-ellipsis">
+      Jurisdiction Matrix
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#patent-routing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Patent Routing
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#structured-domain-providers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Structured-Domain Providers
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-provider-routing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Multi-Provider Routing
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Deployment
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Security
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../security-and-compliance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Security & Compliance
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Contributing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../error-handling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Error Handling
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../privacy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Privacy Policy
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../brand-guidelines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Brand Guidelines
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lessons-learned/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Our Story
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../session-persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Session Persistence
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Migration
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cicd/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CI/CD Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#contents" class="md-nav__link">
+    <span class="md-ellipsis">
+      Contents
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#web-search-providers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Web Search Providers
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Web Search Providers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#index-classification" class="md-nav__link">
+    <span class="md-ellipsis">
+      Index Classification
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#capability-matrix" class="md-nav__link">
+    <span class="md-ellipsis">
+      Capability Matrix
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#free-tier-and-pricing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Free Tier and Pricing
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#quick-pick-guide" class="md-nav__link">
+    <span class="md-ellipsis">
+      Quick-Pick Guide
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#provider-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Provider Notes
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#academic-search-providers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Academic Search Providers
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Academic Search Providers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#capability-matrix_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Capability Matrix
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#coverage" class="md-nav__link">
+    <span class="md-ellipsis">
+      Coverage
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#academic-routing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Academic Routing
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#patent-search-providers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Patent Search Providers
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Patent Search Providers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#jurisdiction-matrix" class="md-nav__link">
+    <span class="md-ellipsis">
+      Jurisdiction Matrix
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#patent-routing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Patent Routing
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#structured-domain-providers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Structured-Domain Providers
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-provider-routing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Multi-Provider Routing
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="provider-reference">Provider Reference<a class="headerlink" href="#provider-reference" title="Permanent link">&para;</a></h1>
+<p>This document covers every search and data provider supported by web-researcher-mcp: what backs each one, which tools it enables, free-tier limits, and when to choose it. For setup instructions (API keys, env vars, routing config) see <a href="../api-setup/">API_SETUP.md</a>.</p>
+<hr />
+<h2 id="contents">Contents<a class="headerlink" href="#contents" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="#web-search-providers">Web Search Providers</a></li>
+<li><a href="#index-classification">Index Classification</a></li>
+<li><a href="#capability-matrix">Capability Matrix</a></li>
+<li><a href="#free-tier-and-pricing">Free Tier and Pricing</a></li>
+<li><a href="#quick-pick-guide">Quick-Pick Guide</a></li>
+<li><a href="#provider-notes">Provider Notes</a></li>
+<li><a href="#academic-search-providers">Academic Search Providers</a></li>
+<li><a href="#capability-matrix-1">Capability Matrix</a></li>
+<li><a href="#coverage">Coverage</a></li>
+<li><a href="#academic-routing">Academic Routing</a></li>
+<li><a href="#patent-search-providers">Patent Search Providers</a></li>
+<li><a href="#jurisdiction-matrix">Jurisdiction Matrix</a></li>
+<li><a href="#patent-routing">Patent Routing</a></li>
+<li><a href="#structured-domain-providers">Structured-Domain Providers</a></li>
+<li><a href="#multi-provider-routing">Multi-Provider Routing</a></li>
+</ul>
+<hr />
+<h2 id="web-search-providers">Web Search Providers<a class="headerlink" href="#web-search-providers" title="Permanent link">&para;</a></h2>
+<h3 id="index-classification">Index Classification<a class="headerlink" href="#index-classification" title="Permanent link">&para;</a></h3>
+<p>Understanding what backs each provider helps you reason about result overlap and independence.</p>
+<table>
+<thead>
+<tr>
+<th>Provider</th>
+<th>Index Type</th>
+<th>What backs the results</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong><a href="https://duckduckgo.com/">DuckDuckGo</a></strong></td>
+<td>Bing-sourced</td>
+<td>Microsoft Bing (+ Bing-syndicated sources)</td>
+</tr>
+<tr>
+<td><strong><a href="https://programmablesearchengine.google.com/">Google PSE</a></strong></td>
+<td>Own index</td>
+<td>Google's web index</td>
+</tr>
+<tr>
+<td><strong><a href="https://serper.dev/">Serper</a></strong></td>
+<td>Google-backed</td>
+<td>Google's web index via API</td>
+</tr>
+<tr>
+<td><strong><a href="https://www.searchapi.io/">SearchAPI.io</a></strong></td>
+<td>Google-backed</td>
+<td>Google's web index via API</td>
+</tr>
+<tr>
+<td><strong><a href="https://brave.com/search/api/">Brave</a></strong></td>
+<td>Own independent</td>
+<td>Brave's own web crawler and index</td>
+</tr>
+<tr>
+<td><strong><a href="https://exa.ai/">Exa</a></strong></td>
+<td>Own independent</td>
+<td>Neural/embedding-based web index</td>
+</tr>
+<tr>
+<td><strong><a href="https://app.tavily.com/">Tavily</a></strong></td>
+<td>Aggregator</td>
+<td>Queries multiple existing engines at runtime; scrapes top results; applies AI re-ranking — no proprietary crawled index</td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.searxng.org/">SearXNG</a></strong></td>
+<td>Meta-search</td>
+<td>Configurable — routes to whatever backends you point it at (Bing, Google, DuckDuckGo, and others)</td>
+</tr>
+<tr>
+<td><strong><a href="https://hn.algolia.com/">HackerNews</a></strong></td>
+<td>Niche</td>
+<td>HN Algolia index — Hacker News stories and submissions only</td>
+</tr>
+<tr>
+<td><strong><a href="https://www.reddit.com/">Reddit</a></strong></td>
+<td>Niche</td>
+<td>Reddit Atom RSS — Reddit posts and community discussions only</td>
+</tr>
+<tr>
+<td><strong><a href="https://bsky.app/">Bluesky</a></strong></td>
+<td>Niche</td>
+<td>AT Protocol AppView (<code>public.api.bsky.app</code>) — Bluesky posts only</td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.github.com/en/rest/search/search">GitHub</a></strong></td>
+<td>Niche</td>
+<td>GitHub REST Search API — issues and pull requests only</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Practical implication</strong>: Google PSE, Serper, and SearchAPI.io draw from the same index — using more than one adds no coverage, only redundancy. Brave and Exa bring genuinely independent results. Tavily and SearXNG aggregate results from others rather than crawling themselves.</p>
+<hr />
+<h3 id="capability-matrix">Capability Matrix<a class="headerlink" href="#capability-matrix" title="Permanent link">&para;</a></h3>
+<p>Which tools each web search provider enables. <code>—</code> means the provider returns empty (no error) for that capability — image-capable providers in <code>SEARCH_ROUTING</code> will handle the fallback automatically.</p>
+<table>
+<thead>
+<tr>
+<th>Provider</th>
+<th style="text-align: center;"><code>web_search</code></th>
+<th style="text-align: center;"><code>image_search</code></th>
+<th style="text-align: center;"><code>news_search</code></th>
+<th style="text-align: center;"><code>answer</code></th>
+<th style="text-align: center;"><code>structured_search</code></th>
+<th style="text-align: center;"><code>local_search</code></th>
+<th style="text-align: center;">Scrape fallback tier</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong><a href="https://duckduckgo.com/">DuckDuckGo</a></strong></td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+</tr>
+<tr>
+<td><strong><a href="https://programmablesearchengine.google.com/">Google PSE</a></strong></td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+</tr>
+<tr>
+<td><strong><a href="https://serper.dev/">Serper</a></strong></td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+</tr>
+<tr>
+<td><strong><a href="https://www.searchapi.io/">SearchAPI.io</a></strong></td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+</tr>
+<tr>
+<td><strong><a href="https://brave.com/search/api/">Brave</a></strong></td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">—</td>
+</tr>
+<tr>
+<td><strong><a href="https://exa.ai/">Exa</a></strong></td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">✓ (paid, last-resort)</td>
+</tr>
+<tr>
+<td><strong><a href="https://app.tavily.com/">Tavily</a></strong></td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.searxng.org/">SearXNG</a></strong></td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+</tr>
+<tr>
+<td><strong><a href="https://hn.algolia.com/">HackerNews</a></strong></td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+</tr>
+<tr>
+<td><strong><a href="https://www.reddit.com/">Reddit</a></strong></td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+</tr>
+<tr>
+<td><strong><a href="https://bsky.app/">Bluesky</a></strong></td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.github.com/en/rest/search/search">GitHub</a></strong></td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Notes:</strong>
+- <code>answer</code> and <code>structured_search</code> are provider-independent tools, but Exa is the only web provider that backs them with its native API. They remain unavailable if no Exa key is set.
+- <code>local_search</code> is Brave-only — it requires <code>BRAVE_API_KEY</code>. No other web provider supports the three-call local pipeline (locations → POIs → descriptions).
+- Brave also exposes a LLM context endpoint (<code>/res/v1/llm/context</code>) consumed by <code>search_and_scrape</code> as a fast-path for RAG/grounding workflows. When Brave is the active provider, <code>search_and_scrape</code> tries the server-assembled context first; if that fails, it falls back to the standard search-then-scrape pipeline. Requires <code>BRAVE_DATA_FOR_AI</code> plan access.
+- Exa's scrape fallback tier (<code>/contents</code>) fires only when all four free tiers (markdown → stealth → HTML → browser) have failed. It charges an Exa credit per call.
+- Tavily's time-range filter is aggressive on web search — for recent content, <code>news_search</code> works better; <code>web_search</code> may return nothing for narrow windows.</p>
+<hr />
+<h3 id="free-tier-and-pricing">Free Tier and Pricing<a class="headerlink" href="#free-tier-and-pricing" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Provider</th>
+<th>Free Tier</th>
+<th>Paid</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong><a href="https://duckduckgo.com/">DuckDuckGo</a></strong></td>
+<td>Unlimited</td>
+<td>Free</td>
+</tr>
+<tr>
+<td><strong><a href="https://hn.algolia.com/">HackerNews</a></strong></td>
+<td>Unlimited</td>
+<td>Free</td>
+</tr>
+<tr>
+<td><strong><a href="https://www.reddit.com/">Reddit</a></strong></td>
+<td>Unlimited</td>
+<td>Free</td>
+</tr>
+<tr>
+<td><strong><a href="https://bsky.app/">Bluesky</a></strong></td>
+<td>Unlimited (public AppView)</td>
+<td>Free</td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.github.com/en/rest/search/search">GitHub</a></strong></td>
+<td>10 req/min (unauth) / 30 req/min (token)</td>
+<td>Free</td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.searxng.org/">SearXNG</a></strong></td>
+<td>Unlimited (self-hosted)</td>
+<td>Free (self-hosted)</td>
+</tr>
+<tr>
+<td><strong><a href="https://programmablesearchengine.google.com/">Google PSE</a></strong></td>
+<td>100 queries/day</td>
+<td>$5 / 1,000 queries</td>
+</tr>
+<tr>
+<td><strong><a href="https://brave.com/search/api/">Brave</a></strong></td>
+<td>2,000 queries/month</td>
+<td>Paid plans</td>
+</tr>
+<tr>
+<td><strong><a href="https://serper.dev/">Serper</a></strong></td>
+<td>2,500 queries (one-time)</td>
+<td>Paid plans</td>
+</tr>
+<tr>
+<td><strong><a href="https://www.searchapi.io/">SearchAPI.io</a></strong></td>
+<td>100 searches/month</td>
+<td>Paid plans</td>
+</tr>
+<tr>
+<td><strong><a href="https://exa.ai/">Exa</a></strong></td>
+<td>1,000 requests/month</td>
+<td>Per call beyond free tier</td>
+</tr>
+<tr>
+<td><strong><a href="https://app.tavily.com/">Tavily</a></strong></td>
+<td>Monthly dev credits</td>
+<td>Paid plans</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="quick-pick-guide">Quick-Pick Guide<a class="headerlink" href="#quick-pick-guide" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>If you need…</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Zero-config, no signup</td>
+<td><a href="https://duckduckgo.com/">DuckDuckGo</a> (built-in fallback), <a href="https://hn.algolia.com/">HackerNews</a> (HN-only), <a href="https://www.reddit.com/">Reddit</a> (Reddit-only), or <a href="https://bsky.app/">Bluesky</a> (Bluesky-only)</td>
+</tr>
+<tr>
+<td>Broadest index coverage</td>
+<td><a href="https://programmablesearchengine.google.com/">Google PSE</a></td>
+</tr>
+<tr>
+<td>High-volume + own index</td>
+<td><a href="https://brave.com/search/api/">Brave</a> (2,000/month free, privacy-first)</td>
+</tr>
+<tr>
+<td>Independent results alongside Google</td>
+<td><a href="https://brave.com/search/api/">Brave</a> or <a href="https://exa.ai/">Exa</a> (different indices, no overlap)</td>
+</tr>
+<tr>
+<td>Semantic / conceptual search</td>
+<td><a href="https://exa.ai/">Exa</a></td>
+</tr>
+<tr>
+<td>LLM-ready extracted content</td>
+<td><a href="https://app.tavily.com/">Tavily</a></td>
+</tr>
+<tr>
+<td><code>answer</code> or <code>structured_search</code> tools</td>
+<td><a href="https://exa.ai/">Exa</a> (required)</td>
+</tr>
+<tr>
+<td>Air-gapped or no vendor lock-in</td>
+<td><a href="https://docs.searxng.org/">SearXNG</a> (self-hosted)</td>
+</tr>
+<tr>
+<td>Tech/developer community signal</td>
+<td><a href="https://hn.algolia.com/">HackerNews</a></td>
+</tr>
+<tr>
+<td>Reddit / community discussion signal</td>
+<td><a href="https://www.reddit.com/">Reddit</a></td>
+</tr>
+<tr>
+<td>Bluesky community signal</td>
+<td><a href="https://bsky.app/">Bluesky</a></td>
+</tr>
+<tr>
+<td>GitHub issue and PR search</td>
+<td><a href="https://docs.github.com/en/rest/search/search">GitHub</a></td>
+</tr>
+<tr>
+<td>Maximum reliability</td>
+<td><code>SEARCH_ROUTING=brave,google,serper</code> (three independent providers)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="provider-notes">Provider Notes<a class="headerlink" href="#provider-notes" title="Permanent link">&para;</a></h3>
+<p><strong><a href="https://duckduckgo.com/">DuckDuckGo</a></strong> — The zero-config default. No API key, no registration, no rate limit to configure. Result depth is lower than keyed providers; image and news results are present but less comprehensive. Use as a fallback, not a primary.</p>
+<p><strong><a href="https://programmablesearchengine.google.com/">Google PSE</a></strong> — The largest index. Best for broadest coverage, image search, and exact-phrase queries. Requires both an API key (via <a href="https://console.cloud.google.com/">Google Cloud Console</a>) and a Programmable Search Engine ID. Free tier of 100/day is low for sustained use.</p>
+<p><strong><a href="https://serper.dev/">Serper</a> and <a href="https://www.searchapi.io/">SearchAPI.io</a></strong> — Google results without the PSE setup overhead. Serper is the simpler option; SearchAPI.io supports multiple engine backends beyond Google. Both draw from Google — no coverage difference between them or vs. Google PSE.</p>
+<p><strong><a href="https://brave.com/search/api/">Brave</a></strong> — Own crawler, own index, privacy-first. Best all-purpose choice when you want index independence from Google/Bing and a generous free tier. Supports web, image, news, and Goggles-based custom result weighting. Also exposes local/map results via <code>local_search</code> (the only provider that does) and a LLM context endpoint used by <code>search_and_scrape</code> for faster grounding when you're on Brave's Data for AI plan.</p>
+<p><strong><a href="https://exa.ai/">Exa</a></strong> — Neural/semantic index. Results are ranked by embedding similarity, not just keyword match — better for conceptual or research queries. The only provider that backs <code>answer</code> (grounded synthesis with citations) and <code>structured_search</code> (schema-defined entity extraction). Also provides a paid <code>/contents</code> scrape tier as a last-resort fallback for <code>scrape_page</code>. Most expensive per-call but uniquely capable.</p>
+<p><strong><a href="https://app.tavily.com/">Tavily</a></strong> — Aggregates from multiple existing search engines at query time, then scrapes the top results and applies AI re-ranking. No proprietary index — similar in architecture to SearXNG, but hosted/commercial with an AI synthesis layer. Returns pre-extracted LLM-ready content. Closest comparison: SearXNG (open-source, self-hosted, no synthesis layer) or Exa (own index, deeper semantic capabilities). Best used as a routing member rather than the sole provider since it lacks image search.</p>
+<p><strong><a href="https://docs.searxng.org/">SearXNG</a></strong> — Open-source, self-hosted, routes to configurable backends. Best for air-gapped environments, organizations requiring no external vendor dependency, or privacy-first deployments. Requires hosting and setup but carries no query limits or API costs.</p>
+<p><strong><a href="https://hn.algolia.com/">HackerNews</a></strong> — Searches HN stories and submissions via the public HN Algolia API. No key or registration. Not general web — use only when you specifically want HN community signal, tech discussions, or submission history. <code>scrape_page</code> on any HN URL (item, user, list) reads natively through the HN Firebase API regardless of which <code>SEARCH_PROVIDER</code> is set.</p>
+<p><strong><a href="https://www.reddit.com/">Reddit</a></strong> — Searches Reddit posts via the public Atom RSS endpoint. No key or registration required. Not general web — use only when you specifically want Reddit community discussion, popular threads, or subreddit signal. Supports <code>web_search</code> and <code>news_search</code>; returns a maximum of 25 results per request (RSS hard limit). The <code>time_range</code> filter maps to Reddit's <code>t=</code> parameter (hour/day/week/month/year; defaults to month). <code>scrape_page</code> on any reddit.com URL works independently of which <code>SEARCH_PROVIDER</code> is set.</p>
+<p><strong><a href="https://bsky.app/">Bluesky</a></strong> — Searches Bluesky posts via the AT Protocol public AppView (<code>public.api.bsky.app</code>, falling back to <code>api.bsky.app</code> — same backend, no caching layer — if the cached host 403s the search endpoint specifically). No key or registration required. Not general web — use only when you specifically want Bluesky community signal. Supports <code>web_search</code> only (no images, no news); returns up to 100 results per request (defaults to 10). No <code>time_range</code> filtering. <code>scrape_page</code> on any bsky.app post or profile URL reads natively through the same AT Protocol API regardless of which <code>SEARCH_PROVIDER</code> is set, surfacing engagement (likes, reposts, replies) via <code>forumSignals</code>.</p>
+<p><strong><a href="https://docs.github.com/en/rest/search/search">GitHub</a></strong> — Searches GitHub issues and pull requests via the public REST Search API. No token required (10 req/min unauthenticated); set GITHUB_TOKEN to raise the limit to 30 req/min. Not general web — use only when you specifically want GitHub issue/PR signal: bug reports, feature requests, open-source community traction, or developer discussion history. Results include issue number, state, kind (issue/PR), reaction count, comment count, author, and creation date. <code>scrape_page</code> on any GitHub URL works through the standard scrape pipeline regardless of which <code>SEARCH_PROVIDER</code> is set.</p>
+<hr />
+<h2 id="academic-search-providers">Academic Search Providers<a class="headerlink" href="#academic-search-providers" title="Permanent link">&para;</a></h2>
+<h3 id="capability-matrix_1">Capability Matrix<a class="headerlink" href="#capability-matrix_1" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Provider</th>
+<th style="text-align: center;">Search</th>
+<th style="text-align: center;">DOI Resolution</th>
+<th style="text-align: center;">Citation Graph</th>
+<th style="text-align: center;">OA PDF enrichment</th>
+<th style="text-align: center;">AI summaries</th>
+<th>Key Required</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong><a href="https://openalex.org/">OpenAlex</a></strong></td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">via Unpaywall</td>
+<td style="text-align: center;">—</td>
+<td>No (email for polite pool)</td>
+</tr>
+<tr>
+<td><strong><a href="https://www.crossref.org/">CrossRef</a></strong></td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓ (authoritative)</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td>No (email for polite pool)</td>
+</tr>
+<tr>
+<td><strong><a href="https://www.semanticscholar.org/">Semantic Scholar</a></strong></td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">✓ (rich edges)</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">✓ (tldr)</td>
+<td>No (key raises limits)</td>
+</tr>
+<tr>
+<td><strong><a href="https://pubmed.ncbi.nlm.nih.gov/">PubMed</a></strong></td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td>No (key raises limits)</td>
+</tr>
+<tr>
+<td><strong><a href="https://exa.ai/">Exa</a></strong></td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td>Yes (<code>EXA_API_KEY</code>)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Notes:</strong>
+- CrossRef is the official DOI registration agency — the authoritative source for DOI metadata. Every DOI-registered work appears here.
+- Semantic Scholar enriches results with AI-generated <code>tldr</code> summaries and citation intent/influence edges, which power <code>citation_graph</code>. OpenAlex also implements <code>citation_graph</code> support with citation-count edges as a fallback.
+- Only OpenAlex implements the <code>DOIResolver</code> interface (exact-entity lookup via <code>/works/doi:{doi}</code>). CrossRef, Semantic Scholar, and PubMed do not.
+- Exa routes academic queries using its <code>research-paper</code> category — useful when its neural index surfaces papers the bibliographic databases miss.
+- <a href="https://unpaywall.org/">Unpaywall</a> OA enrichment runs as a post-processing step on any DOI-bearing result — not a separate provider to select.</p>
+<h3 id="coverage">Coverage<a class="headerlink" href="#coverage" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Provider</th>
+<th>Corpus</th>
+<th>Focus</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong><a href="https://openalex.org/">OpenAlex</a></strong></td>
+<td>287M+ works</td>
+<td>All academic disciplines; CC0 data</td>
+</tr>
+<tr>
+<td><strong><a href="https://www.crossref.org/">CrossRef</a></strong></td>
+<td>140M+ DOI-registered works</td>
+<td>Peer-reviewed literature; authoritative DOI metadata</td>
+</tr>
+<tr>
+<td><strong><a href="https://www.semanticscholar.org/">Semantic Scholar</a></strong></td>
+<td>200M+ papers</td>
+<td>Broad; strong on CS, medicine, biology</td>
+</tr>
+<tr>
+<td><strong><a href="https://pubmed.ncbi.nlm.nih.gov/">PubMed</a></strong></td>
+<td>35M+ citations</td>
+<td>Biomedical and life science only</td>
+</tr>
+<tr>
+<td><strong><a href="https://exa.ai/">Exa</a></strong></td>
+<td>Neural web index</td>
+<td>Research-paper category; surfaces papers outside bibliographic DBs</td>
+</tr>
+</tbody>
+</table>
+<h3 id="academic-routing">Academic Routing<a class="headerlink" href="#academic-routing" title="Permanent link">&para;</a></h3>
+<p>Without explicit routing, all configured academic providers are tried in order. The recommended starting config:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">SEARCH_ROUTING</span><span class="o">=</span><span class="s1">&#39;{&quot;academic&quot;:&quot;openalex,crossref,semanticscholar&quot;,&quot;default&quot;:&quot;brave,google&quot;}&#39;</span>
+</code></pre></div>
+<p>If no academic providers are configured, <code>academic_search</code> automatically falls back to site-restricted web search.</p>
+<hr />
+<h2 id="patent-search-providers">Patent Search Providers<a class="headerlink" href="#patent-search-providers" title="Permanent link">&para;</a></h2>
+<h3 id="jurisdiction-matrix">Jurisdiction Matrix<a class="headerlink" href="#jurisdiction-matrix" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Provider</th>
+<th style="text-align: center;">US</th>
+<th style="text-align: center;">EP</th>
+<th style="text-align: center;">WO (PCT)</th>
+<th style="text-align: center;">Other Offices</th>
+<th>Key Required</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong><a href="https://developers.epo.org/">EPO OPS</a></strong></td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓ (100M+ docs, all major offices)</td>
+<td>Yes (free registration)</td>
+</tr>
+<tr>
+<td><strong><a href="https://www.lens.org/">The Lens</a></strong></td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓ (100+ jurisdictions)</td>
+<td>Yes (free, request access)</td>
+</tr>
+<tr>
+<td><strong><a href="https://data.uspto.gov/">USPTO</a></strong></td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td>Yes (free)</td>
+</tr>
+<tr>
+<td><strong><a href="https://www.searchapi.io/">SearchAPI.io</a></strong></td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓ (Google Patents via SerpAPI)</td>
+<td>Yes (<code>SEARCHAPI_API_KEY</code>)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Notes:</strong>
+- EPO OPS and The Lens cover worldwide jurisdictions; USPTO covers US patents only.
+- SearchAPI.io wraps Google Patents via SerpAPI — good for quick coverage when you already have a SearchAPI key.
+- The Lens uniquely links patents to citing academic papers.
+- Without any patent provider configured, <code>patent_search</code> falls back to site-restricted web discovery.
+- The <code>patent_office</code> parameter enables intelligent routing — a search restricted to <code>EP</code> automatically skips USPTO.</p>
+<h3 id="patent-routing">Patent Routing<a class="headerlink" href="#patent-routing" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">SEARCH_ROUTING</span><span class="o">=</span><span class="s1">&#39;{&quot;patents&quot;:&quot;epo,lens,searchapi,uspto&quot;,&quot;default&quot;:&quot;brave,google&quot;}&#39;</span>
+</code></pre></div>
+<hr />
+<h2 id="structured-domain-providers">Structured-Domain Providers<a class="headerlink" href="#structured-domain-providers" title="Permanent link">&para;</a></h2>
+<p>These providers back dedicated tools and are independent of the web search providers above.</p>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Provider</th>
+<th>Coverage</th>
+<th>Key Required</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>filing_search</code></td>
+<td><strong><a href="https://www.sec.gov/edgar/">SEC EDGAR</a></strong></td>
+<td>US public-company filings (10-K, 10-Q, 8-K, XBRL company facts)</td>
+<td>No (contact email required)</td>
+</tr>
+<tr>
+<td><code>legal_search</code></td>
+<td><strong><a href="https://www.courtlistener.com/">CourtListener</a></strong></td>
+<td>US federal and state court opinions</td>
+<td>No (token raises limit to ~5,000/day)</td>
+</tr>
+<tr>
+<td><code>econ_search</code></td>
+<td><strong><a href="https://data.worldbank.org/">World Bank</a></strong></td>
+<td>Global development indicators, 200+ economies</td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>econ_search</code></td>
+<td><strong><a href="https://data.oecd.org/">OECD</a></strong></td>
+<td>OECD economy indicators via SDMX</td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>econ_search</code></td>
+<td><strong><a href="https://ec.europa.eu/eurostat/">Eurostat</a></strong></td>
+<td>European official statistics</td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>econ_search</code></td>
+<td><strong><a href="https://fred.stlouisfed.org/">FRED</a></strong></td>
+<td>800K+ US macro series (GDP, CPI, unemployment, rates)</td>
+<td>Yes (free)</td>
+</tr>
+<tr>
+<td><code>clinical_search</code></td>
+<td><strong><a href="https://clinicaltrials.gov/">ClinicalTrials.gov</a></strong></td>
+<td>400K+ NIH-registered clinical trials</td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>awesome_list_search</code></td>
+<td><strong><a href="https://ecosyste.ms/">ecosyste.ms</a></strong></td>
+<td>Community-curated "awesome list" discovery by topic — stars, project counts, archived status</td>
+<td>No (<code>ECOSYSTEMS_EMAIL</code> optional, raises rate-limit tier via the "polite pool")</td>
+</tr>
+<tr>
+<td><code>archive_source</code></td>
+<td><strong><a href="https://web.archive.org/save/">Internet Archive SPN</a></strong></td>
+<td>Save Page Now capture</td>
+<td>No (keys raise reliability/limits)</td>
+</tr>
+<tr>
+<td><code>brand_research</code></td>
+<td><strong><a href="https://brandfetch.com/">BrandFetch</a></strong></td>
+<td>Brand colors, fonts, logos, tagline, tone of voice (homepage meta + brand-page probing run unconditionally without a key)</td>
+<td>No (<code>BRANDFETCH_API_KEY</code> optional)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Notes:</strong>
+- World Bank, OECD, Eurostat, ClinicalTrials.gov, CourtListener, and ecosyste.ms are always available — no configuration required. Setting <code>ECOSYSTEMS_EMAIL</code> (falls back to <code>OPENALEX_EMAIL</code>) opts ecosyste.ms calls into the "polite pool," raising the per-caller rate-limit tier above the shared "anonymous" pool. <code>ECOSYSTEMS_API_KEY</code> is also sent but only takes effect on ecosyste.ms's paid plans.
+- SEC EDGAR and FRED activate on their respective env vars (<code>EDGAR_CONTACT_EMAIL</code> / <code>FRED_API_KEY</code>). <code>EDGAR_CONTACT_EMAIL</code> falls back to <code>OPENALEX_EMAIL</code>.
+- <code>brand_research</code> is always available — without <code>BRANDFETCH_API_KEY</code> it runs homepage meta/structured-data extraction and brand-page probing; the key adds a concurrent BrandFetch enrichment tier on top, never a replacement.
+- <code>archive_source</code>, <code>memory_save</code>, and <code>workspace_contribute</code> are the write tools in the suite. <code>archive_source</code> triggers a live internet capture; <code>memory_save</code> and <code>workspace_contribute</code> are opt-in regulated features.</p>
+<hr />
+<h2 id="multi-provider-routing">Multi-Provider Routing<a class="headerlink" href="#multi-provider-routing" title="Permanent link">&para;</a></h2>
+<p>See <a href="../deployment/">docs/DEPLOYMENT.md</a> for full routing configuration. The short version:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Priority-ordered fallback — if Brave is down, routes to Google, then Serper</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">SEARCH_ROUTING</span><span class="o">=</span>brave,google,serper
+
+<span class="c1"># Per-operation routing</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">SEARCH_ROUTING</span><span class="o">=</span><span class="s1">&#39;{&quot;web&quot;:&quot;brave,google&quot;,&quot;news&quot;:&quot;brave,serper&quot;,&quot;images&quot;:&quot;google,brave&quot;,&quot;academic&quot;:&quot;openalex,crossref&quot;,&quot;patents&quot;:&quot;epo,lens,searchapi,uspto&quot;,&quot;default&quot;:&quot;brave,google,searchapi&quot;}&#39;</span>
+</code></pre></div>
+<p>Providers with repeated failures are automatically circuit-broken and skipped until they recover.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        <div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/zoharbabin/web-researcher-mcp" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://x.com/zohar" target="_blank" rel="noopener" title="x.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M389.2 48h70.6L305.6 224.2 487 464H345L233.7 318.6 106.5 464H35.8l164.9-188.5L26.8 48h145.6l100.5 132.9zm-24.8 373.8h39.1L151.1 88h-42z"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://hub.docker.com/r/zoharbabin/web-researcher-mcp" target="_blank" rel="noopener" title="hub.docker.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M349.9 236.3h-66.1v-59.4h66.1zm0-204.3h-66.1v60.7h66.1zm78.2 144.8H362v59.4h66.1zm-156.3-72.1h-66.1v60.1h66.1zm78.1 0h-66.1v60.1h66.1zm276.8 100c-14.4-9.7-47.6-13.2-73.1-8.4-3.3-24-16.7-44.9-41.1-63.7l-14-9.3-9.3 14c-18.4 27.8-23.4 73.6-3.7 103.8-8.7 4.7-25.8 11.1-48.4 10.7H2.4c-8.7 50.8 5.8 116.8 44 162.1 37.1 43.9 92.7 66.2 165.4 66.2 157.4 0 273.9-72.5 328.4-204.2 21.4.4 67.6.1 91.3-45.2 1.5-2.5 6.6-13.2 8.5-17.1zm-511.1-27.9h-66v59.4h66.1v-59.4zm78.1 0h-66.1v59.4h66.1zm78.1 0h-66.1v59.4h66.1zm-78.1-72.1h-66.1v60.1h66.1z"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "..", "features": ["navigation.sections", "navigation.top", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+  
+      <script src="../assets/javascripts/bundle.13a4f30d.min.js"></script>
+      
+    
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      document.querySelectorAll('img[src$=".gif"], img[src$=".png"]').forEach(function(img) {
+        if (!img.loading) img.loading = "lazy";
+      });
+    });
+  </script>
+
+  </body>
+</html>

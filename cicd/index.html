@@ -1,0 +1,2040 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust.">
+      
+      
+      
+        <link rel="canonical" href="https://zoharbabin.com/web-researcher-mcp/cicd/">
+      
+      
+        <link rel="prev" href="../migration/">
+      
+      
+      
+      <link rel="icon" href="../img/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.14">
+    
+    
+      
+        <title>CI/CD Guide - Web Researcher MCP</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.342714a4.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  <!-- Google Tag Manager -->
+  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+  })(window,document,'script','dataLayer','GTM-P225W69C');</script>
+  <!-- End Google Tag Manager -->
+  <!-- Preconnect for cross-origin origins used on every page load -->
+  <link rel="preconnect" href="https://raw.githubusercontent.com">
+  <link rel="preconnect" href="https://api.github.com">
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="CI/CD Guide - Web Researcher MCP" />
+  <meta property="og:description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust. Free, private, open source." />
+  <meta property="og:image" content="https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/social-preview.png" />
+  <meta property="og:url" content="https://zoharbabin.com/web-researcher-mcp/cicd/" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="CI/CD Guide - Web Researcher MCP" />
+  <meta name="twitter:description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust. Free, private, open source." />
+  <meta name="twitter:image" content="https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/social-preview.png" />
+
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#cicd-guide" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+        <aside class="md-banner">
+          <div class="md-banner__inner md-grid md-typeset">
+            
+            
+  <!-- Google Tag Manager (noscript) -->
+  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-P225W69C"
+  height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+  <!-- End Google Tag Manager (noscript) -->
+  <a href="https://github.com/zoharbabin/web-researcher-mcp" style="display:inline-flex;align-items:center;gap:.4em;">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25z"/></svg>
+    Star us on GitHub
+  </a>
+
+          </div>
+          
+        </aside>
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Web Researcher MCP" class="md-header__button md-logo" aria-label="Web Researcher MCP" data-md-component="logo">
+      
+  <img src="../img/logo.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Web Researcher MCP
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              CI/CD Guide
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/zoharbabin/web-researcher-mcp" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    zoharbabin/web-researcher-mcp
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Web Researcher MCP" class="md-nav__button md-logo" aria-label="Web Researcher MCP" data-md-component="logo">
+      
+  <img src="../img/logo.svg" alt="logo">
+
+    </a>
+    Web Researcher MCP
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/zoharbabin/web-researcher-mcp" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    zoharbabin/web-researcher-mcp
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Examples
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Tools
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    API Setup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../providers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Providers
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Deployment
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Security
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../security-and-compliance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Security & Compliance
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Contributing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../error-handling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Error Handling
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../privacy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Privacy Policy
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../brand-guidelines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Brand Guidelines
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lessons-learned/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Our Story
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../session-persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Session Persistence
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Migration
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    CI/CD Guide
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    CI/CD Guide
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#at-a-glance" class="md-nav__link">
+    <span class="md-ellipsis">
+      🗺️ At a glance
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#workflow-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      📄 Workflow files
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ciyml-the-merge-gate" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚙️ ci.yml — The merge gate
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="⚙️ ci.yml — The merge gate">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#triggers" class="md-nav__link">
+    <span class="md-ellipsis">
+      📡 Triggers
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#change-detector-changes-job" class="md-nav__link">
+    <span class="md-ellipsis">
+      🔍 Change detector (changes job)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#always-run-jobs-every-pr-except-packaging-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      🔒 Always-run jobs (every PR except packaging-only)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fast-fail-ordering-in-the-code-path" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚡ Fast-fail ordering in the code path
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#code-only-jobs-skipped-on-docspackaging-prs" class="md-nav__link">
+    <span class="md-ellipsis">
+      🧪 Code-only jobs (skipped on docs/packaging PRs)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#manual-dispatch-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      🐍 Manual-dispatch only
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#releaseyml-the-publish-pipeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      🚀 release.yml — The publish pipeline
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🚀 release.yml — The publish pipeline">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#trigger" class="md-nav__link">
+    <span class="md-ellipsis">
+      📡 Trigger
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#required-secrets-and-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      🔑 Required secrets and variables
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#job-dependency-graph" class="md-nav__link">
+    <span class="md-ellipsis">
+      📦 Job dependency graph
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fast-fail-ordering-inside-the-core-release-job" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚡ Fast-fail ordering inside the core release job
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-release-steps-in-detail" class="md-nav__link">
+    <span class="md-ellipsis">
+      🔬 Core release steps in detail
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#docker-sign-sign-docker-images" class="md-nav__link">
+    <span class="md-ellipsis">
+      🐳 [docker-sign] — Sign Docker images
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#publish-mcp-registry-mcp-registry" class="md-nav__link">
+    <span class="md-ellipsis">
+      📋 [publish-mcp-registry] — MCP Registry
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#publish-smithery-smithery" class="md-nav__link">
+    <span class="md-ellipsis">
+      🔨 [publish-smithery] — Smithery
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#publish-pypi-pypi-platform-wheels" class="md-nav__link">
+    <span class="md-ellipsis">
+      🐍 [publish-pypi] — PyPI platform wheels
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#update-packaging-aur-nix-publishing" class="md-nav__link">
+    <span class="md-ellipsis">
+      📦 [update-packaging] — AUR + Nix publishing
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#submit-nixpkgs-pr-nixpkgs-proper" class="md-nav__link">
+    <span class="md-ellipsis">
+      🐧 [submit-nixpkgs-pr] — nixpkgs proper
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#docsyml-docs-deploy" class="md-nav__link">
+    <span class="md-ellipsis">
+      📚 docs.yml — Docs deploy
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="📚 docs.yml — Docs deploy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#trigger_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      📡 Trigger
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      Steps
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#codeqlyml-deep-static-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      🔍 codeql.yml — Deep static analysis
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🔍 codeql.yml — Deep static analysis">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#triggers_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      📡 Triggers
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#adding-or-changing-a-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      🛠️ Adding or changing a workflow
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🛠️ Adding or changing a workflow">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#adding-a-job-to-ciyml" class="md-nav__link">
+    <span class="md-ellipsis">
+      Adding a job to ci.yml
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#adding-a-post-release-distribution-channel" class="md-nav__link">
+    <span class="md-ellipsis">
+      Adding a post-release distribution channel
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cutting-a-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cutting a release
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#debugging-a-failed-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      🐛 Debugging a failed run
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      🔗 See also
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#at-a-glance" class="md-nav__link">
+    <span class="md-ellipsis">
+      🗺️ At a glance
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#workflow-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      📄 Workflow files
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ciyml-the-merge-gate" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚙️ ci.yml — The merge gate
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="⚙️ ci.yml — The merge gate">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#triggers" class="md-nav__link">
+    <span class="md-ellipsis">
+      📡 Triggers
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#change-detector-changes-job" class="md-nav__link">
+    <span class="md-ellipsis">
+      🔍 Change detector (changes job)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#always-run-jobs-every-pr-except-packaging-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      🔒 Always-run jobs (every PR except packaging-only)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fast-fail-ordering-in-the-code-path" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚡ Fast-fail ordering in the code path
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#code-only-jobs-skipped-on-docspackaging-prs" class="md-nav__link">
+    <span class="md-ellipsis">
+      🧪 Code-only jobs (skipped on docs/packaging PRs)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#manual-dispatch-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      🐍 Manual-dispatch only
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#releaseyml-the-publish-pipeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      🚀 release.yml — The publish pipeline
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🚀 release.yml — The publish pipeline">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#trigger" class="md-nav__link">
+    <span class="md-ellipsis">
+      📡 Trigger
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#required-secrets-and-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      🔑 Required secrets and variables
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#job-dependency-graph" class="md-nav__link">
+    <span class="md-ellipsis">
+      📦 Job dependency graph
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fast-fail-ordering-inside-the-core-release-job" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚡ Fast-fail ordering inside the core release job
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-release-steps-in-detail" class="md-nav__link">
+    <span class="md-ellipsis">
+      🔬 Core release steps in detail
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#docker-sign-sign-docker-images" class="md-nav__link">
+    <span class="md-ellipsis">
+      🐳 [docker-sign] — Sign Docker images
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#publish-mcp-registry-mcp-registry" class="md-nav__link">
+    <span class="md-ellipsis">
+      📋 [publish-mcp-registry] — MCP Registry
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#publish-smithery-smithery" class="md-nav__link">
+    <span class="md-ellipsis">
+      🔨 [publish-smithery] — Smithery
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#publish-pypi-pypi-platform-wheels" class="md-nav__link">
+    <span class="md-ellipsis">
+      🐍 [publish-pypi] — PyPI platform wheels
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#update-packaging-aur-nix-publishing" class="md-nav__link">
+    <span class="md-ellipsis">
+      📦 [update-packaging] — AUR + Nix publishing
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#submit-nixpkgs-pr-nixpkgs-proper" class="md-nav__link">
+    <span class="md-ellipsis">
+      🐧 [submit-nixpkgs-pr] — nixpkgs proper
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#docsyml-docs-deploy" class="md-nav__link">
+    <span class="md-ellipsis">
+      📚 docs.yml — Docs deploy
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="📚 docs.yml — Docs deploy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#trigger_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      📡 Trigger
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      Steps
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#codeqlyml-deep-static-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      🔍 codeql.yml — Deep static analysis
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🔍 codeql.yml — Deep static analysis">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#triggers_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      📡 Triggers
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#adding-or-changing-a-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      🛠️ Adding or changing a workflow
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🛠️ Adding or changing a workflow">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#adding-a-job-to-ciyml" class="md-nav__link">
+    <span class="md-ellipsis">
+      Adding a job to ci.yml
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#adding-a-post-release-distribution-channel" class="md-nav__link">
+    <span class="md-ellipsis">
+      Adding a post-release distribution channel
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cutting-a-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cutting a release
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#debugging-a-failed-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      🐛 Debugging a failed run
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      🔗 See also
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="cicd-guide">CI/CD Guide<a class="headerlink" href="#cicd-guide" title="Permanent link">&para;</a></h1>
+<p>One-stop reference for the four workflow files that govern every code change, release, and docs update in this repo. Read this when you're debugging a failed run, adding a new job, or preparing a release.</p>
+<hr />
+<h2 id="at-a-glance">🗺️ At a glance<a class="headerlink" href="#at-a-glance" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code>Every push / PR                         v* tag push
+       │                                     │
+       ▼                                     ▼
+ ┌───────────────────┐             ┌──────────────────────┐
+ │  ⚙️ ci.yml         │             │  🚀 release.yml       │
+ │  (merge gate)     │             │  (publish pipeline)  │
+ └─────────┬─────────┘             └──────────┬───────────┘
+           │                                  │
+    change detector (code / packaging flags)
+    ┌──────────────────┬──────────────────────┬────────────────────────┐
+    │ packaging-only   │ docs/human (no code) │ code change            │
+    │ ──────────────   │ ────────────────      │ ──────────────────     │
+    │ 📦 validate-pkg  │ 📄 docs-drift        │ 🧹 lint                │
+    │                  │ 🐍 python-drift      │ 🧪 test (race+coverage)│
+    │                  │ 🧪 test-python       │ 🔬 e2e (STDIO+HTTP+OAuth│
+    │                  │ 📦 validate-pkg      │ 🐳 docker-smoke        │
+    │                  │                      │ 🏗️ build (5 platforms) │
+    │                  │                      │ 🛡️ security (vuln+gosec│
+    └──────────────────┴──────────────────────┴────────────────────────┘
+                                              🏗️ GoReleaser · Build &amp; Publish
+                                          │
+                           ┌──────────────┼────────────────────┐
+                           ▼              ▼                     ▼
+                  🐳 docker-sign   📋 mcp-registry   🔨 smithery
+                  🐍 pypi          📦 packaging      (all parallel)
+</code></pre></div>
+<p>There is also a fourth file, <code>codeql.yml</code>, that runs GitHub's CodeQL deep static analysis separately on push-to-main and a weekly schedule.</p>
+<hr />
+<h2 id="workflow-files">📄 Workflow files<a class="headerlink" href="#workflow-files" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Trigger</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.github/workflows/ci.yml</code></td>
+<td>push to <code>main</code>, any PR, <code>workflow_dispatch</code></td>
+<td>Gate: prevents broken code from merging</td>
+</tr>
+<tr>
+<td><code>.github/workflows/release.yml</code></td>
+<td>push of a <code>v*</code> tag, <code>workflow_dispatch</code> (manual re-run)</td>
+<td>Publish: builds, signs, and ships a release</td>
+</tr>
+<tr>
+<td><code>.github/workflows/docs.yml</code></td>
+<td>push to <code>main</code> (docs paths only)</td>
+<td>Deploy: builds the mkdocs site to GitHub Pages</td>
+</tr>
+<tr>
+<td><code>.github/workflows/codeql.yml</code></td>
+<td>push to <code>main</code>, weekly</td>
+<td>Security: deep static analysis via GitHub CodeQL</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="ciyml-the-merge-gate">⚙️ ci.yml — The merge gate<a class="headerlink" href="#ciyml-the-merge-gate" title="Permanent link">&para;</a></h2>
+<h3 id="triggers">📡 Triggers<a class="headerlink" href="#triggers" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Every pull request targeting <code>main</code></li>
+<li>Every push to <code>main</code></li>
+<li>Manual: <code>Actions → ⚙️ CI → Run workflow</code> (add <code>run_python_live=true</code> to run live SDK tests)</li>
+</ul>
+<h3 id="change-detector-changes-job">🔍 Change detector (<code>changes</code> job)<a class="headerlink" href="#change-detector-changes-job" title="Permanent link">&para;</a></h3>
+<p>The first job classifies every PR. It reads the list of changed files and outputs two flags:</p>
+<ul>
+<li><code>code=true</code> — at least one file outside the harmless/packaging allowlist changed → full CI runs</li>
+<li><code>packaging=true</code> — every changed file is under <code>packaging/**</code> → packaging-only mode (only <code>validate-packaging</code> runs)</li>
+</ul>
+<p><strong>Harmless files</strong> (skip heavy CI, not packaging-only):
+- <code>*.md</code>, <code>docs/**</code>, <code>decks/**</code>, <code>assets/**</code>
+- <code>LICENSE</code>, <code>.gitignore</code>, <code>mkdocs.yml</code>, <code>overrides/**</code>
+- <code>.github/**_TEMPLATE*</code>, <code>.github/ISSUE_TEMPLATE/**</code></p>
+<p>Anything else outside <code>packaging/**</code> → <code>code=true</code> → full CI runs.</p>
+<blockquote>
+<p><strong>Why?</strong> Branch protection marks skipped <em>required</em> checks as passing. A docs-only PR goes green in seconds without getting stuck on checks that legitimately have nothing to test. A machine-generated packaging PR only runs <code>validate-packaging</code> — the one check that actually matters.</p>
+</blockquote>
+<h3 id="always-run-jobs-every-pr-except-packaging-only">🔒 Always-run jobs (every PR except packaging-only)<a class="headerlink" href="#always-run-jobs-every-pr-except-packaging-only" title="Permanent link">&para;</a></h3>
+<p>These run on every PR — except packaging-only ones, which can't cause the drift they detect:</p>
+<table>
+<thead>
+<tr>
+<th>Job</th>
+<th>What it catches</th>
+<th>Skipped on packaging-only?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>🧹 lint</strong></td>
+<td><code>gofmt -s</code> + <code>golangci-lint</code> — formatting and static analysis</td>
+<td>No (gated on <code>code=true</code>)</td>
+</tr>
+<tr>
+<td><strong>📄 docs-drift</strong></td>
+<td><code>docs/TOOLS.md</code> ↔ registry drift; tool annotation coverage</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><strong>🐍 python-drift</strong></td>
+<td>Python client (<code>models.py</code>/<code>client.py</code>) not regenerated after Go schema change</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><strong>🧪 test-python</strong></td>
+<td>Python SDK unit + integration tests (mock HTTP, no binary needed)</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><strong>📦 validate-packaging</strong></td>
+<td><code>PKGBUILD</code> / <code>.SRCINFO</code> / <code>flake.nix</code> version + hash consistency</td>
+<td>No — this is the only job that runs on packaging-only PRs</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Rule:</strong> If you change a Go tool schema, run <code>make gen-python-client</code> before pushing. If you change <code>docs/TOOLS.md</code>, the matching tool definition must change in the same commit (or vice versa). These jobs enforce both.</p>
+</blockquote>
+<h3 id="fast-fail-ordering-in-the-code-path">⚡ Fast-fail ordering in the code path<a class="headerlink" href="#fast-fail-ordering-in-the-code-path" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code>🔍 changes ─► 🧹 lint ─► 🧪 test ─► 🔬 e2e
+                      └──────────────► 🐳 docker-smoke
+              └──────► 🛡️ security
+🔍 changes ─► 🏗️ build   (parallel, independent of test)
+</code></pre></div>
+<ul>
+<li><code>lint</code> gates both <code>test</code> and <code>security</code> — a formatting error surfaces before expensive compute starts.</li>
+<li><code>e2e</code> and <code>docker-smoke</code> wait for <code>test</code> — a unit test failure blocks the heavier suites.</li>
+<li><code>build</code> runs in parallel with everything else — cross-compilation failures surface alongside test feedback without waiting.</li>
+</ul>
+<h3 id="code-only-jobs-skipped-on-docspackaging-prs">🧪 Code-only jobs (skipped on docs/packaging PRs)<a class="headerlink" href="#code-only-jobs-skipped-on-docspackaging-prs" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Job</th>
+<th>What it runs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>🧪 test</strong></td>
+<td><code>go test -race</code> — unit + integration tests with race detector</td>
+</tr>
+<tr>
+<td><strong>🔬 e2e</strong></td>
+<td>Security + lifecycle E2E suite (STDIO, HTTP, OAuth) — network-free</td>
+</tr>
+<tr>
+<td><strong>🐳 docker-smoke</strong></td>
+<td>Builds the Docker image and drives MCP over HTTP end-to-end</td>
+</tr>
+<tr>
+<td><strong>🏗️ build</strong></td>
+<td>Cross-compile for Linux/Darwin/Windows × amd64/arm64</td>
+</tr>
+<tr>
+<td><strong>🛡️ security</strong></td>
+<td><code>govulncheck</code> + <code>gosec</code> — vulnerability and security scanning</td>
+</tr>
+</tbody>
+</table>
+<h3 id="manual-dispatch-only">🐍 Manual-dispatch only<a class="headerlink" href="#manual-dispatch-only" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Job</th>
+<th>How to trigger</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>🐍 python-live-e2e</strong></td>
+<td><code>Actions → ⚙️ CI → Run workflow</code> with <code>run_python_live=true</code></td>
+</tr>
+</tbody>
+</table>
+<p>Hits real external APIs. Not part of the required gate — too flaky on rate limits.</p>
+<hr />
+<h2 id="releaseyml-the-publish-pipeline">🚀 release.yml — The publish pipeline<a class="headerlink" href="#releaseyml-the-publish-pipeline" title="Permanent link">&para;</a></h2>
+<h3 id="trigger">📡 Trigger<a class="headerlink" href="#trigger" title="Permanent link">&para;</a></h3>
+<p>Any tag matching <code>v*</code> pushed to the repo.</p>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>tag<span class="w"> </span>v1.38.0
+git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>v1.38.0
+</code></pre></div>
+<h3 id="required-secrets-and-variables">🔑 Required secrets and variables<a class="headerlink" href="#required-secrets-and-variables" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Kind</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GITHUB_TOKEN</code></td>
+<td>Auto</td>
+<td>Release assets, Docker GHCR, PR creation</td>
+</tr>
+<tr>
+<td><code>DOCKERHUB_USERNAME</code> / <code>DOCKERHUB_TOKEN</code></td>
+<td>Secret</td>
+<td>Docker Hub push</td>
+</tr>
+<tr>
+<td><code>HOMEBREW_TAP_GITHUB_TOKEN</code></td>
+<td>Secret</td>
+<td>Homebrew tap PR</td>
+</tr>
+<tr>
+<td><code>SCOOP_BUCKET_GITHUB_TOKEN</code></td>
+<td>Secret</td>
+<td>Scoop bucket PR</td>
+</tr>
+<tr>
+<td><code>WINGET_PKGS_GITHUB_TOKEN</code></td>
+<td>Secret</td>
+<td>WinGet PR</td>
+</tr>
+<tr>
+<td><code>CHOCOLATEY_API_KEY</code></td>
+<td>Secret</td>
+<td>Chocolatey push (optional — degrades gracefully)</td>
+</tr>
+<tr>
+<td><code>MACOS_SIGN_P12</code> / <code>MACOS_SIGN_PASSWORD</code></td>
+<td>Secret</td>
+<td>macOS Developer ID signing</td>
+</tr>
+<tr>
+<td><code>MACOS_NOTARY_ISSUER_ID</code> / <code>MACOS_NOTARY_KEY_ID</code> / <code>MACOS_NOTARY_KEY</code></td>
+<td>Secret</td>
+<td>Notarization</td>
+</tr>
+<tr>
+<td><code>AZURE_TENANT_ID</code> / <code>AZURE_CLIENT_ID</code> / <code>AZURE_CLIENT_SECRET</code></td>
+<td>Secret</td>
+<td>Windows Authenticode (jsign)</td>
+</tr>
+<tr>
+<td><code>SMITHERY_API_KEY</code></td>
+<td>Secret</td>
+<td>Smithery publish</td>
+</tr>
+<tr>
+<td><code>AZURE_SIGNING_ENABLED</code></td>
+<td>Var</td>
+<td><code>"true"</code> to enable Windows signing</td>
+</tr>
+<tr>
+<td><code>SMITHERY_ENABLED</code></td>
+<td>Var</td>
+<td><code>"true"</code> to enable Smithery job</td>
+</tr>
+<tr>
+<td><code>PYPI_PUBLISH_ENABLED</code></td>
+<td>Var</td>
+<td><code>"true"</code> to enable PyPI wheels</td>
+</tr>
+<tr>
+<td><code>AUR_SSH_KEY</code></td>
+<td>Secret</td>
+<td>SSH private key for AUR push (optional — skips gracefully if absent)</td>
+</tr>
+<tr>
+<td><code>PACKAGING_UPDATE_ENABLED</code></td>
+<td>Var</td>
+<td><code>"true"</code> to enable AUR/Nix manifest generation + upload</td>
+</tr>
+<tr>
+<td><code>NIXPKGS_FORK_GITHUB_TOKEN</code></td>
+<td>Secret</td>
+<td>PAT (repo scope) used to push branch to the NixOS/nixpkgs fork and open the PR</td>
+</tr>
+<tr>
+<td><code>NIXPKGS_ENABLED</code></td>
+<td>Var</td>
+<td><code>"true"</code> to enable the nixpkgs submission job</td>
+</tr>
+</tbody>
+</table>
+<h3 id="job-dependency-graph">📦 Job dependency graph<a class="headerlink" href="#job-dependency-graph" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code>[🏗️ GoReleaser · Build &amp; Publish]
+     │
+     ├──► [🐳 Sign Docker Images]
+     │
+     ├──► [📋 Publish → MCP Registry]   (independent of docker-sign)
+     │
+     ├──► [🔨 Publish → Smithery]       (if SMITHERY_ENABLED)
+     │
+     ├──► [🐍 Publish → PyPI]           (if PYPI_PUBLISH_ENABLED)
+     │
+     ├──► [📦 Update Packaging Manifests] (if PACKAGING_UPDATE_ENABLED)
+     │         └─ attaches PKGBUILD/.SRCINFO/flake.nix/package.nix to release
+     │         └─ pushes to AUR via SSH (if AUR_SSH_KEY set)
+     │
+     └──► [🐧 Submit → nixpkgs proper]   (if NIXPKGS_ENABLED)
+</code></pre></div>
+<p>All downstream jobs run in parallel after the core release job completes. A failure in any one job does not block the others.</p>
+<h3 id="fast-fail-ordering-inside-the-core-release-job">⚡ Fast-fail ordering inside the core release job<a class="headerlink" href="#fast-fail-ordering-inside-the-core-release-job" title="Permanent link">&para;</a></h3>
+<p>Steps run in cheapest-first order so an early misconfiguration surfaces before slow Docker builds start:</p>
+<div class="highlight"><pre><span></span><code>0. Resolve tag ref (override for manual dispatch) — resolves RELEASE_TAG for workflow_dispatch runs
+1. Set up Go
+2. Set up Python + verify Python client drift  ← fast fail
+3. Verify macOS signing chain                  ← fast fail
+4. Set up Chocolatey CLI (only if key set)     ← fast fail
+5. Log in to Docker Hub + GHCR
+6. Set up Docker Buildx + QEMU
+7. Install cosign + Syft
+7a. Clear existing release assets (idempotent re-run) — deletes existing assets so GoReleaser can re-upload on workflow_dispatch retrigger
+8. Run GoReleaser  ← the slow step (cross-compile, sign, push)
+9. Build + upload .mcpb bundles
+10. Generate + attach SBOM
+11. Sign checksums.txt with cosign (keyless OIDC)
+12. Upload dist binaries artifact (for PyPI)
+</code></pre></div>
+<h3 id="core-release-steps-in-detail">🔬 Core release steps in detail<a class="headerlink" href="#core-release-steps-in-detail" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Verify Python client drift</td>
+<td>Fails fast if <code>make gen-python-client</code> was not run before tagging</td>
+</tr>
+<tr>
+<td>Verify macOS signing chain</td>
+<td>Checks p12 contains leaf + intermediate + Apple Root CA (prevents AMFI SIGKILL on launch)</td>
+</tr>
+<tr>
+<td>Set up Chocolatey CLI</td>
+<td>Installs <code>choco</code> under mono; <code>push</code> subcommand is non-fatal (Chocolatey moderation can 403)</td>
+</tr>
+<tr>
+<td>Run GoReleaser</td>
+<td>Cross-compiles 5 platforms; signs macOS (quill+notarize); signs Windows (jsign/Azure); pushes Docker multi-arch; updates Homebrew/Scoop/WinGet; publishes GitHub Release</td>
+</tr>
+<tr>
+<td>Build .mcpb bundles</td>
+<td>Assembles MCP bundle archives for Smithery + MCPB registries</td>
+</tr>
+<tr>
+<td>Generate SBOM</td>
+<td>Syft produces a full SPDX JSON; attached to the release</td>
+</tr>
+<tr>
+<td>Sign checksums.txt</td>
+<td>Cosign keyless OIDC signature; <code>.sig</code> + <code>.pem</code> attached to the release</td>
+</tr>
+<tr>
+<td>Upload dist binaries</td>
+<td>Artifact for the PyPI job to wrap into wheels without re-running GoReleaser</td>
+</tr>
+</tbody>
+</table>
+<h3 id="docker-sign-sign-docker-images">🐳 [docker-sign] — Sign Docker images<a class="headerlink" href="#docker-sign-sign-docker-images" title="Permanent link">&para;</a></h3>
+<p>Fetches the image digest from GHCR and signs it with cosign using GitHub's OIDC identity. Creates a publicly verifiable Sigstore signature.</p>
+<h3 id="publish-mcp-registry-mcp-registry">📋 [publish-mcp-registry] — MCP Registry<a class="headerlink" href="#publish-mcp-registry-mcp-registry" title="Permanent link">&para;</a></h3>
+<p>Depends on <code>release</code> directly (not <code>docker-sign</code>) — the registry only needs the GitHub Release to exist, not the Docker signature. Re-syncs the version string and publishes via <code>mcp-publisher</code> + GitHub OIDC authentication.</p>
+<h3 id="publish-smithery-smithery">🔨 [publish-smithery] — Smithery<a class="headerlink" href="#publish-smithery-smithery" title="Permanent link">&para;</a></h3>
+<p>Downloads the <code>.mcpb</code> bundle that was already built and uploaded by the <code>release</code> job (no re-build from source). Publishes to <a href="https://smithery.ai">Smithery</a>. Gated on <code>vars.SMITHERY_ENABLED == 'true'</code>.</p>
+<h3 id="publish-pypi-pypi-platform-wheels">🐍 [publish-pypi] — PyPI platform wheels<a class="headerlink" href="#publish-pypi-pypi-platform-wheels" title="Permanent link">&para;</a></h3>
+<p>Downloads the cross-compiled binaries from the <code>release</code> job artifact, wraps them into platform wheels, smoke-tests the manylinux wheel (import check), then publishes via Trusted Publishing (OIDC — no token secret). Gated on <code>vars.PYPI_PUBLISH_ENABLED == 'true'</code>.</p>
+<h3 id="update-packaging-aur-nix-publishing">📦 [update-packaging] — AUR + Nix publishing<a class="headerlink" href="#update-packaging-aur-nix-publishing" title="Permanent link">&para;</a></h3>
+<p><strong>Fully automated — no manual steps needed.</strong></p>
+<div class="highlight"><pre><span></span><code>1. Run scripts/update-packaging.sh &lt;VERSION&gt;
+   └─ Fetches checksums.txt from the new release
+   └─ Generates packaging/aur/PKGBUILD         (version + hex SHA256)
+   └─ Generates packaging/aur/.SRCINFO         (version + hex SHA256)
+   └─ Generates packaging/nix/flake.nix        (version + SRI hashes, 4 platforms)
+   └─ Updates packaging/nixpkgs/package.nix    (version string only — hashes via nix)
+2. Attach PKGBUILD, .SRCINFO, flake.nix, package.nix to the GitHub Release as assets
+3. Push PKGBUILD + .SRCINFO to AUR via SSH (gated on AUR_SSH_KEY secret)
+</code></pre></div>
+<p>Gated on <code>vars.PACKAGING_UPDATE_ENABLED == 'true'</code>. The AUR push step is additionally gated on the <code>AUR_SSH_KEY</code> secret — absent key means the step skips cleanly, manifests are still attached to the release.</p>
+<blockquote>
+<p><strong>No PR to this repo.</strong> Checksums only exist after GoReleaser builds the binaries, so the manifest generation must happen post-release. The generated files are published directly — as release artifacts and to AUR — without needing to land in <code>main</code>. Nix flake users pin to a release tag (<code>github:zoharbabin/web-researcher-mcp/vX.Y.Z</code>) and get the correct <code>flake.nix</code> from that tag's checkout automatically.</p>
+</blockquote>
+<h3 id="submit-nixpkgs-pr-nixpkgs-proper">🐧 [submit-nixpkgs-pr] — nixpkgs proper<a class="headerlink" href="#submit-nixpkgs-pr-nixpkgs-proper" title="Permanent link">&para;</a></h3>
+<p><strong>Initial submission is automated; future bumps are handled by the nixpkgs-update bot.</strong></p>
+<p>This is what gets <code>nix profile install nixpkgs#web-researcher-mcp</code> working for users — no flake, no pinning to this repo. Two modes, chosen automatically per run:</p>
+<ul>
+<li><strong>Package not yet in nixpkgs</strong> → installs nix, computes <code>src</code> hash and <code>vendorHash</code> (using <code>lib.fakeHash</code> trick — build with empty hash, extract real hash from the error, repeat for vendor), forks <code>NixOS/nixpkgs</code>, pushes the derivation to a stable branch, opens or updates the one PR against <code>NixOS/nixpkgs</code> master.</li>
+<li><strong>Package already merged</strong> → no-op; the <code>passthru.updateScript = nix-update-script {}</code> in the derivation signals the <code>nixpkgs-update</code> bot to open version-bump PRs automatically on every new release tag — zero maintenance.</li>
+</ul>
+<p>The branch name (<code>nixpkgs-web-researcher-mcp-init</code>) is version-independent by design: every pre-merge release pushes to the same branch and reuses the same open PR (checked via <code>gh pr list --head</code>) instead of opening a new PR per release. The bot-authored commit carries an <code>Assisted-by: Claude Code (claude-sonnet-5)</code> trailer and the PR body ticks the automation/AI policy checklist item, per <code>CONTRIBUTING.md#automationai-policy</code> in nixpkgs.</p>
+<div class="highlight"><pre><span></span><code>1. Check if pkgs/by-name/we/web-researcher-mcp/package.nix exists in NixOS/nixpkgs
+   └─ If yes → exit 0 (nixpkgs-update handles future bumps)
+2. Install nix via DeterminateSystems/nix-installer-action
+3. Compute real src hash  (nix-build with lib.fakeHash → parse error output)
+4. Compute real vendorHash (same trick with src hash known)
+5. Patch packaging/nixpkgs/package.nix with both hashes
+6. Fork NixOS/nixpkgs (gh repo fork — idempotent)
+7. Clone fork, force-push branch nixpkgs-web-researcher-mcp-init, commit (with Assisted-by trailer)
+8. Look for an existing open PR from that branch — update its title/body if found,
+   else open a new PR: zoharbabin:nixpkgs-web-researcher-mcp-init → NixOS/nixpkgs master
+</code></pre></div>
+<p>Gated on <code>vars.NIXPKGS_ENABLED == 'true'</code> + <code>secrets.NIXPKGS_FORK_GITHUB_TOKEN</code>.</p>
+<hr />
+<h2 id="docsyml-docs-deploy">📚 docs.yml — Docs deploy<a class="headerlink" href="#docsyml-docs-deploy" title="Permanent link">&para;</a></h2>
+<h3 id="trigger_1">📡 Trigger<a class="headerlink" href="#trigger_1" title="Permanent link">&para;</a></h3>
+<p>Push to <code>main</code> touching any of:
+- <code>README.md</code>, <code>ARCHITECTURE.md</code>, <code>CONTRIBUTING.md</code>
+- <code>docs/**</code>, <code>decks/**</code>, <code>overrides/**</code>
+- <code>assets/logo-final-transparent.svg</code>, <code>assets/favicon.ico</code>, <code>assets/demo.webm</code>, <code>assets/demo.mp4</code>
+- <code>mkdocs.yml</code>, <code>.github/workflows/docs.yml</code></p>
+<h3 id="steps">Steps<a class="headerlink" href="#steps" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Checkout</li>
+<li>Install <code>mkdocs-material</code> (pinned version)</li>
+<li>Assemble <code>site_src/</code> from root + <code>docs/</code> files (with cross-link rewriting)</li>
+<li>Generate <code>robots.txt</code></li>
+<li>Deploy to GitHub Pages via <code>mkdocs gh-deploy --force --remote-branch gh-pages</code></li>
+</ol>
+<blockquote>
+<p>All <code>docs/*.md</code> links are rewritten from <code>](docs/FOO.md</code> → <code>](foo.md</code> so the published site URLs are clean. Root policy files (<code>SECURITY.md</code>, <code>CODE_OF_CONDUCT.md</code>) point to GitHub because they are not published to the site.</p>
+</blockquote>
+<hr />
+<h2 id="codeqlyml-deep-static-analysis">🔍 codeql.yml — Deep static analysis<a class="headerlink" href="#codeqlyml-deep-static-analysis" title="Permanent link">&para;</a></h2>
+<h3 id="triggers_1">📡 Triggers<a class="headerlink" href="#triggers_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Push to <code>main</code> (excluding docs/assets)</li>
+<li>Any PR targeting <code>main</code> (same exclusion)</li>
+<li>Weekly schedule: every Monday at 06:00 UTC</li>
+</ul>
+<p>Runs GitHub's CodeQL engine with <code>security-extended,security-and-quality</code> query suites. Results appear in the <strong>Security → Code scanning</strong> tab. Findings must be addressed or dismissed before they accumulate.</p>
+<hr />
+<h2 id="adding-or-changing-a-workflow">🛠️ Adding or changing a workflow<a class="headerlink" href="#adding-or-changing-a-workflow" title="Permanent link">&para;</a></h2>
+<h3 id="adding-a-job-to-ciyml">Adding a job to ci.yml<a class="headerlink" href="#adding-a-job-to-ciyml" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Runs on every non-packaging PR</strong> (e.g., a new drift gate): add <code>needs: changes</code> and <code>if: needs.changes.outputs.packaging != 'true'</code>.</li>
+<li><strong>Only relevant when Go code changes</strong>: gate it on <code>needs.changes.outputs.code == 'true'</code> and add <code>needs: [changes, lint]</code> (so formatting failures fast-fail first).</li>
+<li><strong>Must run even on packaging PRs</strong>: omit the <code>packaging</code> guard and add <code>needs: changes</code> only if you need the outputs. Only <code>validate-packaging</code> falls into this category.</li>
+</ol>
+<h3 id="adding-a-post-release-distribution-channel">Adding a post-release distribution channel<a class="headerlink" href="#adding-a-post-release-distribution-channel" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Add a new job to <code>release.yml</code> with <code>needs: release</code>.</li>
+<li>Gate it on a repo var (e.g., <code>vars.MY_CHANNEL_ENABLED == 'true'</code>) so an unconfigured fork is a clean no-op.</li>
+<li>Use <code>|| echo "::warning::..."</code> for non-fatal publish failures so a channel hiccup doesn't block the overall release.</li>
+<li>Document the required secret/var in the table above.</li>
+</ol>
+<h3 id="cutting-a-release">Cutting a release<a class="headerlink" href="#cutting-a-release" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># 1. Merge your feature branch to main via PR</span>
+<span class="c1"># 2. Bump version</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;1.38.0&quot;</span><span class="w"> </span>&gt;<span class="w"> </span>VERSION
+bash<span class="w"> </span>scripts/sync-version.sh
+make<span class="w"> </span>sync-lenses
+make<span class="w"> </span>gen-python-client
+git<span class="w"> </span>add<span class="w"> </span>VERSION<span class="w"> </span>server.json<span class="w"> </span>.claude-plugin/plugin.json<span class="w"> </span>python/<span class="w"> </span>internal/search/lenses_embed/
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;chore: bump VERSION to 1.38.0&quot;</span>
+git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>HEAD<span class="w">  </span><span class="c1"># via PR</span>
+
+<span class="c1"># 3. Tag + push</span>
+git<span class="w"> </span>tag<span class="w"> </span>v1.38.0
+git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>v1.38.0
+<span class="c1"># → release.yml starts automatically</span>
+<span class="c1"># → update-packaging job generates PKGBUILD/.SRCINFO/flake.nix and attaches them to the release</span>
+</code></pre></div>
+<hr />
+<h2 id="debugging-a-failed-run">🐛 Debugging a failed run<a class="headerlink" href="#debugging-a-failed-run" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Where to look</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gofmt</code> failure</td>
+<td>Run <code>make fmt</code> locally, push again</td>
+</tr>
+<tr>
+<td><code>golangci-lint</code> failure</td>
+<td>Run <code>go tool golangci-lint run</code> locally</td>
+</tr>
+<tr>
+<td><code>docs-drift</code> failure</td>
+<td><code>docs/TOOLS.md</code> section out of sync with the Go tool registry — update the matching <code>## Tool N: \</code>name`<code>section in</code>docs/TOOLS.md` (or update the tool definition to match the doc)</td>
+</tr>
+<tr>
+<td><code>python-drift</code> failure</td>
+<td>Run <code>make gen-python-client</code>, stage + commit the regenerated files</td>
+</tr>
+<tr>
+<td><code>validate-packaging</code> failure</td>
+<td>Version mismatch across PKGBUILD / .SRCINFO / flake.nix — run <code>scripts/update-packaging.sh &lt;version&gt;</code></td>
+</tr>
+<tr>
+<td>GoReleaser failure</td>
+<td>Check secrets are set; check <code>.goreleaser.yml</code> template syntax</td>
+</tr>
+<tr>
+<td>Python drift fails during release</td>
+<td>Tag pushed before <code>make gen-python-client</code> — rebuild on a new patch tag</td>
+</tr>
+<tr>
+<td>macOS chain verify fails</td>
+<td>Re-export the signing p12 with full chain (leaf + intermediate + Apple Root CA)</td>
+</tr>
+<tr>
+<td><code>update-packaging</code> assets not attached</td>
+<td>Check <code>vars.PACKAGING_UPDATE_ENABLED == 'true'</code>; check job logs</td>
+</tr>
+<tr>
+<td>AUR push skipped</td>
+<td>Expected when <code>AUR_SSH_KEY</code> secret is absent — add the secret to enable</td>
+</tr>
+<tr>
+<td>AUR push fails</td>
+<td>Verify SSH key is registered on aur.archlinux.org; check package name matches</td>
+</tr>
+<tr>
+<td>PyPI publish failure</td>
+<td>Check <code>pypi</code> environment is configured with Trusted Publishing OIDC</td>
+</tr>
+<tr>
+<td>Docker sign failure</td>
+<td>Check GHCR image exists; check cosign OIDC token permissions</td>
+</tr>
+<tr>
+<td>MCP Registry warning</td>
+<td>Non-fatal; check <code>mcp-publisher</code> OIDC credentials, may already be published</td>
+</tr>
+<tr>
+<td>Smithery warning</td>
+<td>Non-fatal; check <code>SMITHERY_API_KEY</code> secret, may already be published</td>
+</tr>
+<tr>
+<td>Release workflow didn't fire on tag push</td>
+<td>GitHub infrastructure glitch — use <code>Actions → 🚀 Release → Run workflow</code> and supply the tag (e.g. <code>v1.37.5</code>) to retrigger manually</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="see-also">🔗 See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../CONTRIBUTING.md"><code>CONTRIBUTING.md</code></a> — commit format, branch naming, PR process</li>
+<li><a href="../deployment/"><code>docs/DEPLOYMENT.md</code></a> — Docker, Kubernetes, env vars</li>
+<li><a href="../security-and-compliance/"><code>docs/SECURITY_AND_COMPLIANCE.md</code></a> — security rules that apply to CI changes</li>
+<li><a href="../.goreleaser.yml"><code>.goreleaser.yml</code></a> — GoReleaser pipeline config (build matrix, signing, publishers)</li>
+<li><a href="../scripts/update-packaging.sh"><code>scripts/update-packaging.sh</code></a> — packaging update script invoked by the CI job</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        <div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/zoharbabin/web-researcher-mcp" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://x.com/zohar" target="_blank" rel="noopener" title="x.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M389.2 48h70.6L305.6 224.2 487 464H345L233.7 318.6 106.5 464H35.8l164.9-188.5L26.8 48h145.6l100.5 132.9zm-24.8 373.8h39.1L151.1 88h-42z"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://hub.docker.com/r/zoharbabin/web-researcher-mcp" target="_blank" rel="noopener" title="hub.docker.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M349.9 236.3h-66.1v-59.4h66.1zm0-204.3h-66.1v60.7h66.1zm78.2 144.8H362v59.4h66.1zm-156.3-72.1h-66.1v60.1h66.1zm78.1 0h-66.1v60.1h66.1zm276.8 100c-14.4-9.7-47.6-13.2-73.1-8.4-3.3-24-16.7-44.9-41.1-63.7l-14-9.3-9.3 14c-18.4 27.8-23.4 73.6-3.7 103.8-8.7 4.7-25.8 11.1-48.4 10.7H2.4c-8.7 50.8 5.8 116.8 44 162.1 37.1 43.9 92.7 66.2 165.4 66.2 157.4 0 273.9-72.5 328.4-204.2 21.4.4 67.6.1 91.3-45.2 1.5-2.5 6.6-13.2 8.5-17.1zm-511.1-27.9h-66v59.4h66.1v-59.4zm78.1 0h-66.1v59.4h66.1zm78.1 0h-66.1v59.4h66.1zm-78.1-72.1h-66.1v60.1h66.1z"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "..", "features": ["navigation.sections", "navigation.top", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+  
+      <script src="../assets/javascripts/bundle.13a4f30d.min.js"></script>
+      
+    
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      document.querySelectorAll('img[src$=".gif"], img[src$=".png"]').forEach(function(img) {
+        if (!img.loading) img.loading = "lazy";
+      });
+    });
+  </script>
+
+  </body>
+</html>

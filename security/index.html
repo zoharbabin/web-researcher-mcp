@@ -1,0 +1,2200 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust.">
+      
+      
+      
+        <link rel="canonical" href="https://zoharbabin.com/web-researcher-mcp/security/">
+      
+      
+        <link rel="prev" href="../deployment/">
+      
+      
+        <link rel="next" href="../security-and-compliance/">
+      
+      
+      <link rel="icon" href="../img/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.14">
+    
+    
+      
+        <title>Security - Web Researcher MCP</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.342714a4.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  <!-- Google Tag Manager -->
+  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+  })(window,document,'script','dataLayer','GTM-P225W69C');</script>
+  <!-- End Google Tag Manager -->
+  <!-- Preconnect for cross-origin origins used on every page load -->
+  <link rel="preconnect" href="https://raw.githubusercontent.com">
+  <link rel="preconnect" href="https://api.github.com">
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Security - Web Researcher MCP" />
+  <meta property="og:description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust. Free, private, open source." />
+  <meta property="og:image" content="https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/social-preview.png" />
+  <meta property="og:url" content="https://zoharbabin.com/web-researcher-mcp/security/" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Security - Web Researcher MCP" />
+  <meta name="twitter:description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust. Free, private, open source." />
+  <meta name="twitter:image" content="https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/social-preview.png" />
+
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#security-architecture" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+        <aside class="md-banner">
+          <div class="md-banner__inner md-grid md-typeset">
+            
+            
+  <!-- Google Tag Manager (noscript) -->
+  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-P225W69C"
+  height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+  <!-- End Google Tag Manager (noscript) -->
+  <a href="https://github.com/zoharbabin/web-researcher-mcp" style="display:inline-flex;align-items:center;gap:.4em;">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25z"/></svg>
+    Star us on GitHub
+  </a>
+
+          </div>
+          
+        </aside>
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Web Researcher MCP" class="md-header__button md-logo" aria-label="Web Researcher MCP" data-md-component="logo">
+      
+  <img src="../img/logo.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Web Researcher MCP
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Security
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/zoharbabin/web-researcher-mcp" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    zoharbabin/web-researcher-mcp
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Web Researcher MCP" class="md-nav__button md-logo" aria-label="Web Researcher MCP" data-md-component="logo">
+      
+  <img src="../img/logo.svg" alt="logo">
+
+    </a>
+    Web Researcher MCP
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/zoharbabin/web-researcher-mcp" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    zoharbabin/web-researcher-mcp
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Examples
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Tools
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    API Setup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../providers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Providers
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Deployment
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Security
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Security
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#threat-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      Threat Model
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#defense-layers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Defense Layers
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Defense Layers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#layer-1-ssrf-protection" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 1: SSRF Protection
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#layer-2-authentication-authorization-http-transport" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 2: Authentication &amp; Authorization (HTTP Transport)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#layer-3-session-isolation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 3: Session Isolation
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#layer-4-content-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 4: Content Security
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#layer-5-rate-limiting" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 5: Rate Limiting
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#layer-6-circuit-breaker" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 6: Circuit Breaker
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#layer-7-audit-logging" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 7: Audit Logging
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#layer-8-operator-observability-non-content-privacy-minimal" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 8: Operator Observability (non-content, privacy-minimal)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#encryption" class="md-nav__link">
+    <span class="md-ellipsis">
+      Encryption
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Encryption">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#at-rest" class="md-nav__link">
+    <span class="md-ellipsis">
+      At Rest
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#in-transit" class="md-nav__link">
+    <span class="md-ellipsis">
+      In Transit
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fips-compliance-optional" class="md-nav__link">
+    <span class="md-ellipsis">
+      FIPS Compliance (Optional)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuration Security
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#http-transport-hardening" class="md-nav__link">
+    <span class="md-ellipsis">
+      HTTP Transport Hardening
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="HTTP Transport Hardening">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#connection-body-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      Connection &amp; Body Limits
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#response-security-headers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Response Security Headers
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cors" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORS
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pre-auth-per-ip-rate-limit" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pre-Auth Per-IP Rate Limit
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#persistence" class="md-nav__link">
+    <span class="md-ellipsis">
+      Persistence
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#compliance-frameworks" class="md-nav__link">
+    <span class="md-ellipsis">
+      Compliance Frameworks
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Compliance Frameworks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mitre-attck-technique-coverage" class="md-nav__link">
+    <span class="md-ellipsis">
+      MITRE ATT&amp;CK Technique Coverage
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#nist-cybersecurity-framework-20-crosswalk" class="md-nav__link">
+    <span class="md-ellipsis">
+      NIST Cybersecurity Framework 2.0 Crosswalk
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#soc-2-type-ii" class="md-nav__link">
+    <span class="md-ellipsis">
+      SOC 2 Type II
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gdpr" class="md-nav__link">
+    <span class="md-ellipsis">
+      GDPR
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fedramp-moderate-baseline" class="md-nav__link">
+    <span class="md-ellipsis">
+      FedRAMP (Moderate Baseline)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#multi-tenancy-isolation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Multi-Tenancy Isolation
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#supply-chain-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      Supply Chain Security
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../security-and-compliance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Security & Compliance
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Contributing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../error-handling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Error Handling
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../privacy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Privacy Policy
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../brand-guidelines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Brand Guidelines
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lessons-learned/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Our Story
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../session-persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Session Persistence
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Migration
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cicd/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CI/CD Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#threat-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      Threat Model
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#defense-layers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Defense Layers
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Defense Layers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#layer-1-ssrf-protection" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 1: SSRF Protection
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#layer-2-authentication-authorization-http-transport" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 2: Authentication &amp; Authorization (HTTP Transport)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#layer-3-session-isolation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 3: Session Isolation
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#layer-4-content-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 4: Content Security
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#layer-5-rate-limiting" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 5: Rate Limiting
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#layer-6-circuit-breaker" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 6: Circuit Breaker
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#layer-7-audit-logging" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 7: Audit Logging
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#layer-8-operator-observability-non-content-privacy-minimal" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 8: Operator Observability (non-content, privacy-minimal)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#encryption" class="md-nav__link">
+    <span class="md-ellipsis">
+      Encryption
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Encryption">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#at-rest" class="md-nav__link">
+    <span class="md-ellipsis">
+      At Rest
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#in-transit" class="md-nav__link">
+    <span class="md-ellipsis">
+      In Transit
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fips-compliance-optional" class="md-nav__link">
+    <span class="md-ellipsis">
+      FIPS Compliance (Optional)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuration Security
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#http-transport-hardening" class="md-nav__link">
+    <span class="md-ellipsis">
+      HTTP Transport Hardening
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="HTTP Transport Hardening">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#connection-body-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      Connection &amp; Body Limits
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#response-security-headers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Response Security Headers
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cors" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORS
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pre-auth-per-ip-rate-limit" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pre-Auth Per-IP Rate Limit
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#persistence" class="md-nav__link">
+    <span class="md-ellipsis">
+      Persistence
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#compliance-frameworks" class="md-nav__link">
+    <span class="md-ellipsis">
+      Compliance Frameworks
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Compliance Frameworks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mitre-attck-technique-coverage" class="md-nav__link">
+    <span class="md-ellipsis">
+      MITRE ATT&amp;CK Technique Coverage
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#nist-cybersecurity-framework-20-crosswalk" class="md-nav__link">
+    <span class="md-ellipsis">
+      NIST Cybersecurity Framework 2.0 Crosswalk
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#soc-2-type-ii" class="md-nav__link">
+    <span class="md-ellipsis">
+      SOC 2 Type II
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gdpr" class="md-nav__link">
+    <span class="md-ellipsis">
+      GDPR
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fedramp-moderate-baseline" class="md-nav__link">
+    <span class="md-ellipsis">
+      FedRAMP (Moderate Baseline)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#multi-tenancy-isolation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Multi-Tenancy Isolation
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#supply-chain-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      Supply Chain Security
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="security-architecture">Security Architecture<a class="headerlink" href="#security-architecture" title="Permanent link">&para;</a></h1>
+<p>Your research stays private and your infrastructure stays protected. This document describes how the server defends against the threats specific to AI-powered web research.</p>
+<h2 id="threat-model">Threat Model<a class="headerlink" href="#threat-model" title="Permanent link">&para;</a></h2>
+<p>This server operates in a unique threat environment:
+1. It fetches arbitrary URLs from the internet on behalf of an LLM
+2. Scraped content is returned to the LLM which may interpret it as instructions (indirect prompt injection)
+3. Multiple users/agents may share a single server instance (multi-tenancy)
+4. The server holds API keys with billing implications (cost abuse)</p>
+<h2 id="defense-layers">Defense Layers<a class="headerlink" href="#defense-layers" title="Permanent link">&para;</a></h2>
+<h3 id="layer-1-ssrf-protection">Layer 1: SSRF Protection<a class="headerlink" href="#layer-1-ssrf-protection" title="Permanent link">&para;</a></h3>
+<p>Server-Side Request Forgery is the highest-severity risk for a scraping server.</p>
+<p><strong>Implementation:</strong> Custom <code>DialContext</code> on <code>http.Transport</code> — see <code>internal/scraper/ssrf.go</code>.</p>
+<p>The approach:
+1. Check hostname against blocklist (cloud metadata endpoints)
+2. Resolve DNS
+3. Validate ALL resolved IPs against private/reserved ranges
+4. Connect directly to the resolved IP (prevents DNS rebinding)
+5. Re-validate on each redirect hop (max 5 redirects)</p>
+<p><strong>Blocked IP Ranges:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Range</th>
+<th>Reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>127.0.0.0/8</code></td>
+<td>Loopback</td>
+</tr>
+<tr>
+<td><code>10.0.0.0/8</code></td>
+<td>RFC 1918 private</td>
+</tr>
+<tr>
+<td><code>172.16.0.0/12</code></td>
+<td>RFC 1918 private</td>
+</tr>
+<tr>
+<td><code>192.168.0.0/16</code></td>
+<td>RFC 1918 private</td>
+</tr>
+<tr>
+<td><code>169.254.0.0/16</code></td>
+<td>Link-local / cloud metadata (AWS, GCP, Azure IMDS)</td>
+</tr>
+<tr>
+<td><code>100.64.0.0/10</code></td>
+<td>Carrier-grade NAT</td>
+</tr>
+<tr>
+<td><code>0.0.0.0/8</code></td>
+<td>Current network</td>
+</tr>
+<tr>
+<td><code>192.0.0.0/24</code></td>
+<td>IETF protocol assignments</td>
+</tr>
+<tr>
+<td><code>192.0.2.0/24</code>, <code>198.51.100.0/24</code>, <code>203.0.113.0/24</code></td>
+<td>Documentation</td>
+</tr>
+<tr>
+<td><code>198.18.0.0/15</code></td>
+<td>Benchmark testing</td>
+</tr>
+<tr>
+<td><code>224.0.0.0/4</code></td>
+<td>Multicast</td>
+</tr>
+<tr>
+<td><code>240.0.0.0/4</code></td>
+<td>Reserved</td>
+</tr>
+<tr>
+<td><code>::1/128</code></td>
+<td>IPv6 loopback</td>
+</tr>
+<tr>
+<td><code>fc00::/7</code></td>
+<td>IPv6 ULA</td>
+</tr>
+<tr>
+<td><code>fe80::/10</code></td>
+<td>IPv6 link-local</td>
+</tr>
+<tr>
+<td><code>ff00::/8</code></td>
+<td>IPv6 multicast</td>
+</tr>
+<tr>
+<td><code>::/128</code></td>
+<td>IPv6 unspecified</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Blocked Hostnames:</strong></p>
+<p>Matched case-insensitively as an exact hostname or a dot-bounded suffix, so <code>svc.cluster.local</code> matches <code>foo.svc.cluster.local</code> but NOT <code>svc.cluster.local.evil.com</code> (a different registrable domain). See <code>blockedHostnames</code> and <code>isBlockedHostname</code> in <code>internal/scraper/ssrf.go</code>.</p>
+<ul>
+<li><code>metadata.google.internal</code> (GCP IMDS)</li>
+<li><code>metadata.azure.com</code> (Azure IMDS)</li>
+<li><code>metadata.tencentyun.com</code> (Tencent Cloud IMDS)</li>
+<li><code>169.254.169.254</code> (AWS / Azure / GCP / DigitalOcean / OpenStack link-local)</li>
+<li><code>192.0.0.192</code> (Oracle Cloud metadata)</li>
+<li><code>100.100.100.200</code> (Alibaba Cloud metadata)</li>
+<li><code>instance-data</code></li>
+<li><code>kubernetes.default.svc</code> (in-cluster API server)</li>
+<li><code>svc.cluster.local</code> (any in-cluster service, matched as a suffix)</li>
+</ul>
+<p><strong>DNS Rebinding Prevention:</strong>
+- Resolve once, connect to the resolved IP directly
+- Re-validate on every redirect hop
+- Max redirect depth: 5</p>
+<p><strong>Configuration:</strong>
+- <code>ALLOW_PRIVATE_IPS=true</code> — Disable for local development only
+- <code>ALLOWED_DOMAINS=a.com,b.com</code> — Allowlist mode for enterprise</p>
+<hr />
+<h3 id="layer-2-authentication-authorization-http-transport">Layer 2: Authentication &amp; Authorization (HTTP Transport)<a class="headerlink" href="#layer-2-authentication-authorization-http-transport" title="Permanent link">&para;</a></h3>
+<p><strong>OAuth 2.1 Resource Server</strong></p>
+<div class="highlight"><pre><span></span><code>Client → [Authorization: Bearer &lt;token&gt;] → MCP Server
+                                              │
+                                              ▼
+                                      ┌─────────────┐
+                                      │ Validate JWT │
+                                      │ - Signature  │
+                                      │ - iss, aud   │
+                                      │ - exp, nbf   │
+                                      │ - scope      │
+                                      └──────┬──────┘
+                                             │
+                                      ┌──────▼──────┐
+                                      │Extract claims│
+                                      │ - sub (user) │
+                                      │ - tenant_id  │
+                                      │ - session_id │
+                                      └─────────────┘
+</code></pre></div>
+<p><strong>JWKS Management:</strong>
+- Fetch from <code>{issuerURL}/.well-known/jwks.json</code>
+- Cache with auto-refresh (configurable interval, default 1 hour)
+- Graceful degradation: serve from cache if JWKS endpoint is down
+- Implementation: custom RS256 validation (no external JWT library dependency)</p>
+<p><strong>Token Requirements:</strong>
+- Algorithm: <strong>RS256 only</strong> — any other <code>alg</code> (including <code>none</code>, <code>HS256</code>, <code>ES256</code>) is rejected, defeating algorithm-confusion attacks. JWKS keys advertising a non-RS256 <code>alg</code> are skipped.
+- Required claim: <code>exp</code> (missing <code>exp</code> is rejected; expired tokens rejected)
+- <code>iss</code> must match <code>OAUTH_ISSUER_URL</code>; <code>aud</code> must contain <code>OAUTH_AUDIENCE</code>
+- <code>nbf</code> and <code>iat</code> are honored when present (±60s clock-skew tolerance)
+- <code>jti</code> is checked against the revocation set when present
+- <code>sub</code>, <code>tenant_id</code>, <code>session_id</code> are optional; absent <code>sub</code> maps to <code>anonymous</code>, absent <code>tenant_id</code> maps to <code>default</code></p>
+<p><strong>STDIO Transport:</strong>
+- No authentication. Credentials come from environment.
+- The calling process (Claude Code, Cursor) is trusted.</p>
+<p><strong>Scope Enforcement (per-tool authorization):</strong></p>
+<p>Scope enforcement is opt-in via <code>ENFORCE_SCOPES=true</code> and remains permissive by design. The gate parses the union of the OAuth <code>scope</code> (space-delimited) and <code>scp</code> (array or space-delimited) claims, attaches them to the request context, and applies the policy in <code>Middleware.EnforceScopes</code> (<code>internal/auth/middleware.go</code>):</p>
+<ul>
+<li><code>ENFORCE_SCOPES=false</code> (default) — scope claims are ignored; every authenticated caller may invoke every tool.</li>
+<li><code>ENFORCE_SCOPES=true</code>, token carries <strong>no</strong> scope claim — allowed (backward-compatible: tokens issued before scopes existed keep working).</li>
+<li><code>ENFORCE_SCOPES=true</code>, token <strong>carries</strong> a scope claim — the caller must hold one of <code>tool:*</code> (wildcard), <code>tool:&lt;toolName&gt;</code> (exact), or the coarse-grained <code>research</code> scope; AND every entry in <code>REQUIRED_SCOPES</code> (if configured) must be present. Otherwise the call is rejected.</li>
+</ul>
+<p>This fails closed only for present-but-insufficient scopes — it never silently downgrades a token that predates scope issuance. The gate is wired as an SDK receiving-middleware (registered in <code>main.go</code>) inside the HTTP-mode block only; STDIO is unaffected.</p>
+<hr />
+<h3 id="layer-3-session-isolation">Layer 3: Session Isolation<a class="headerlink" href="#layer-3-session-isolation" title="Permanent link">&para;</a></h3>
+<p><strong>Per-Tenant Data Boundaries:</strong></p>
+<div class="highlight"><pre><span></span><code>┌─────────────────────────────────┐
+│          Tenant A               │
+│  ┌──────────┐  ┌────────────┐  │
+│  │ Session 1│  │ Session 2  │  │
+│  │ cache ns │  │ cache ns   │  │
+│  │ seq state│  │ seq state  │  │
+│  └──────────┘  └────────────┘  │
+└─────────────────────────────────┘
+┌─────────────────────────────────┐
+│          Tenant B               │
+│  ┌──────────┐                   │
+│  │ Session 3│  (isolated)       │
+│  └──────────┘                   │
+└─────────────────────────────────┘
+</code></pre></div>
+<p><strong>Rules:</strong>
+1. Sequential search sessions are keyed by <code>{tenantID}:{userID}:{sessionID}</code> — never shared
+2. Cache can be shared for public content (search results, scraped pages are not user-specific)
+3. Audit logs include tenant ID for filtering</p>
+<p><strong>Shared vs. Isolated Cache:</strong>
+- Search results: SHARED (same query = same results regardless of who asked)
+- Scraped pages: SHARED (public URLs return same content)
+- Sequential search state: ISOLATED (per-session, per-tenant)
+- Rate limit counters: ISOLATED (per-tenant)</p>
+<hr />
+<h3 id="layer-4-content-security">Layer 4: Content Security<a class="headerlink" href="#layer-4-content-security" title="Permanent link">&para;</a></h3>
+<p><strong>Sanitization Pipeline (applied to all scraped content before return):</strong></p>
+<div class="highlight"><pre><span></span><code>Raw HTML/Content
+    │
+    ▼
+┌────────────────────────────────────┐
+│ 1. Strip dangerous HTML            │
+│    - &lt;script&gt;, &lt;style&gt;, &lt;iframe&gt;   │
+│    - &lt;object&gt;, &lt;embed&gt;, &lt;applet&gt;   │
+│    - event handlers (onclick, etc) │
+│    - data: URIs                    │
+│    - javascript: URIs              │
+└────────────────┬───────────────────┘
+                 │
+    ▼
+┌────────────────────────────────────┐
+│ 2. Remove hidden content           │
+│    - display:none / visibility:    │
+│      hidden (inline CSS)           │
+│    - font-size:0 / color matching  │
+│      background                    │
+│    - HTML comments                 │
+│    - Zero-width characters         │
+│      (U+200B, U+200C, U+200D,     │
+│       U+FEFF, U+2060)             │
+└────────────────┬───────────────────┘
+                 │
+    ▼
+┌────────────────────────────────────┐
+│ 3. Size enforcement                │
+│    - Max 50KB per source           │
+│    - Max 300KB total               │
+│    - Truncate at paragraph boundary│
+│    - Set truncated flag            │
+└────────────────┬───────────────────┘
+                 │
+    ▼
+┌────────────────────────────────────┐
+│ 4. Trust boundary marker           │
+│    &quot;trust&quot;:                        │
+│      &quot;untrusted-external-content&quot;  │
+│    (in the JSON envelope, never    │
+│     inside the content string)     │
+└────────────────────────────────────┘
+</code></pre></div>
+<p><strong>Prompt Injection Mitigations:</strong>
+- A <code>"trust": "untrusted-external-content"</code> boundary marker on every scrape response (<code>scrape_page</code> full/preview/raw, and <code>search_and_scrape</code> top-level + per-source). It lives in the structured JSON envelope, <strong>not</strong> inside the <code>content</code> string — where a malicious page could forge or close it. It signals that <code>content</code> is external data to be treated as data, never as instructions.
+- <strong>The server cannot enforce the prompt boundary</strong> — the model and the agent loop live in the host application. The marker exists to make the untrusted provenance unmissable so the host can enforce it. Neutralizing plain-text injection payloads is the host's responsibility.
+- The <code>contentType</code> field reports the MIME/format of the content (it is not itself a trust signal — that is the <code>trust</code> field's job).
+- Response metadata (tool name, schema) is never derived from scraped content.
+- Size limits prevent context flooding attacks.</p>
+<hr />
+<h3 id="layer-5-rate-limiting">Layer 5: Rate Limiting<a class="headerlink" href="#layer-5-rate-limiting" title="Permanent link">&para;</a></h3>
+<p><strong>Rate-limit tiers</strong> (<code>internal/ratelimit</code>, HTTP mode):</p>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>Scope</th>
+<th>Default</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Global</td>
+<td>Per-server</td>
+<td>1000 req/s</td>
+<td>Infrastructure protection</td>
+</tr>
+<tr>
+<td>Per-Tenant</td>
+<td>Per JWT <code>tenant_id</code> claim (falls back to <code>default</code>)</td>
+<td>120 req/min</td>
+<td>Fair use</td>
+</tr>
+<tr>
+<td>Per-IP (pre-auth)</td>
+<td>Per client IP, outermost middleware</td>
+<td><code>0</code> = disabled</td>
+<td>Shed unauthenticated floods</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Implementation:</strong>
+- Global: <code>golang.org/x/time/rate</code> token bucket
+- Per-Tenant: <code>sync.Map[tenantID]*rate.Limiter</code> with TTL cleanup; daily quota (<code>AllowDaily</code>) optionally atomic across pods via Redis (<code>internal/redisbackend</code>)
+- Per-IP: <code>RATE_LIMIT_PER_IP</code> / <code>TRUST_PROXY</code></p>
+<p><strong>Scrape concurrency (separate from rate limiting):</strong> the scraper pipeline (<code>internal/scraper</code>) bounds in-flight scrapes with a buffered-channel semaphore of <code>MAX_SCRAPE_CONCURRENCY</code> slots (default 5) — backpressure on outbound fetches, not a per-session request limit.</p>
+<p><strong>Cost Quotas:</strong>
+- Track tool/API call count per tenant per day (<code>DAILY_QUOTA_PER_TENANT</code>)
+- Configurable daily limit (default: 5000 calls/day)
+- Reject with informative error when exceeded
+- Counters are in-memory by default; set <code>RATE_LIMIT_PERSIST=true</code> to write them through to the encrypted persist store so quotas survive a restart</p>
+<p><strong>Burst handling (parallel tool calls):</strong>
+When a single agent spawns many parallel tool calls, limits are enforced by token buckets, not a queue:
+- Per-tenant and global token buckets (<code>internal/ratelimit/limiter.go</code>) — excess calls are rejected immediately, never buffered
+- Rejected HTTP requests return <code>429</code> with a <code>Retry-After</code> header (<code>60</code> for the per-minute bucket, <code>3600</code> for the daily quota)
+- Concurrent scraping is separately bounded by a fixed-size semaphore in the scrape pipeline (<code>internal/scraper/pipeline.go</code>), so a burst of scrapes runs at a capped concurrency rather than all at once</p>
+<hr />
+<h3 id="layer-6-circuit-breaker">Layer 6: Circuit Breaker<a class="headerlink" href="#layer-6-circuit-breaker" title="Permanent link">&para;</a></h3>
+<p>Protects against cascading failures when upstream APIs are down.</p>
+<p><strong>States:</strong> CLOSED → OPEN → HALF_OPEN → CLOSED. Each provider gets an independent breaker, so a failure in one never blocks fallback to another. There are three distinct breaker layers, each with its own thresholds (see <code>internal/search/provider.go</code>, <code>internal/search/domain.go</code>, <code>internal/search/structured_domains.go</code>, and <code>internal/search/router.go</code> for the authoritative values):</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Wraps</th>
+<th>Threshold</th>
+<th>Reset</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Web provider breaker (<code>AvailableProviders</code>)</td>
+<td>Each web provider in <code>search.SupportedProviders</code></td>
+<td>3 failures</td>
+<td>120s</td>
+</tr>
+<tr>
+<td>Domain provider breaker (<code>Available{Patent,Academic,Filing,Case,Econ,Trial}Providers</code>)</td>
+<td>Each domain provider's own upstream HTTP calls</td>
+<td>5 failures</td>
+<td>60s</td>
+</tr>
+<tr>
+<td>Routing breaker (<code>SEARCH_ROUTING</code>)</td>
+<td>Fallback decision across the priority list (web, patent, academic)</td>
+<td>3 failures</td>
+<td>30s</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Half-open attempts: 1 (all layers)</li>
+<li>Scraping (per domain): optional, prevents hammering broken sites</li>
+</ul>
+<hr />
+<h3 id="layer-7-audit-logging">Layer 7: Audit Logging<a class="headerlink" href="#layer-7-audit-logging" title="Permanent link">&para;</a></h3>
+<p><strong>Tool calls that do real work are audited</strong> — on cache-hit, terminal success,
+upstream error, AND regulated-tool refusal (no_consent / not_member /
+unauthenticated). Authentication and authorization failures (missing/invalid
+token, insufficient scope, bad admin key) emit a separate <code>auth.failure</code> event.
+<strong>Not audited:</strong> cheap input-validation rejections handled at the top of the
+handler before any work (e.g. empty query, missing URL, oversized note) — they
+return a <code>toolError</code> immediately and emit no event.</p>
+<p>See <code>internal/audit/logger.go</code> for the canonical <code>AuditEvent</code> struct. Key fields:
+timestamp, tenant/user/session IDs, tool name, request ID, source IP (HTTP only;
+proxy-aware, empty under STDIO), duration, success/error status, and extensible
+metadata.</p>
+<p><strong>Storage:</strong>
+- Default: structured log to stderr (slog JSON)
+- File output: set <code>AUDIT_OUTPUT_PATH</code> (JSONL). The active file is rotated to a timestamped sibling once it reaches <code>AUDIT_MAX_BYTES</code> (default 100 MB); rotation runs on the audit processor goroutine and never blocks a <code>Log()</code> call.
+- Production: ship to SIEM via syslog/fluentd
+- Retention: rotated files older than <code>AUDIT_RETENTION_DAYS</code> are deleted on startup and hourly. The default is 180 days; any non-zero value is clamped to <code>[180, 3650]</code> per NIS2/HGB retention floors. <code>0</code> disables cleanup.</p>
+<p><strong>What is NOT logged (by default):</strong>
+- <strong>Raw query text</strong> — omitted unless <code>AUDIT_INCLUDE_REQUEST_BODY=true</code>. When that flag is false (default), only the query <strong>length</strong> (an integer) is recorded, never the literal query; when true, the raw query is recorded after <code>MaskSecrets</code> redaction.
+- Scraped content (too large, PII risk)
+- Full request parameters (may contain PII)</p>
+<p><strong>Secret redaction:</strong> audit metadata and upstream error messages pass through <code>audit.MaskSecrets</code> (<code>internal/audit/mask.go</code>) before they are written. It redacts Google (<code>AIza…</code>), OpenAI/Anthropic (<code>sk-…</code>), Brave (<code>BSA…</code>) keys, <code>Bearer</code> tokens, prefix-less provider auth headers (<code>x-api-key</code>, <code>x-subscription-token</code>, <code>authorization</code> in <code>Name: value</code> form), sensitive query-string params (<code>api_key=</code>, <code>token=</code>, <code>secret=</code>, <code>password=</code>, <code>key=</code>, …), and bare 64-hex key material. This is defense-in-depth so a credential echoed back by an upstream provider never reaches a sink or an LLM-facing error.</p>
+<p><strong>Request correlation:</strong> every HTTP request is assigned a correlation ID by the transport ingress middleware (adopting a sanitized inbound <code>X-Request-Id</code>, else the W3C <code>traceparent</code> trace-id, else a fresh UUIDv4). All audit events for one tool call share that <code>RequestID</code>, and it is echoed back on the response <code>X-Request-Id</code> header.</p>
+<h3 id="layer-8-operator-observability-non-content-privacy-minimal">Layer 8: Operator Observability (non-content, privacy-minimal)<a class="headerlink" href="#layer-8-operator-observability-non-content-privacy-minimal" title="Permanent link">&para;</a></h3>
+<p>Routing decisions, provider health, and recent errors are surfaced to operators through channels that are deliberately <strong>not</strong> part of any tool's model-facing content, so infrastructure detail never reaches the LLM and carries no personal data:</p>
+<ul>
+<li><strong>Routing <code>_meta</code></strong> — per-call routing (which provider served, what was attempted, whether a fallback fired) is attached to the MCP result's <code>_meta.routing</code>, never the content body. The provider <em>name</em> is the disclosure boundary: no upstream URLs, credentials, or circuit-breaker counts are exposed, and the <code>fallback_reason</code> is a coarse enum (<code>circuit_open</code> / <code>primary_unavailable</code>), never a raw upstream error string.</li>
+<li><strong><code>diagnostics://errors/recent</code></strong> — a bounded, <strong>memory-only</strong>, tenant-scoped ring of recent errors (<code>internal/metrics/errors.go</code>). Each cause is redacted through <code>audit.MaskSecrets</code> at insert; there is no disk persistence and no unbounded growth (oldest entries are overwritten), consistent with the no-retention posture.</li>
+<li><strong><code>diagnostics://health</code></strong> — live provider/circuit-breaker state (tri-state aggregate), derived on read. No PII.</li>
+<li><strong><code>GET /dashboard</code></strong> (HTTP mode) — an admin-gated, aggregate-only operator dashboard served under a per-request nonce CSP (<code>internal/server/dashboard.go</code>); its data endpoint shares the <code>/admin/*</code> trust tier. No per-user or per-query data.</li>
+</ul>
+<p>None of these is a personal-data store. Field contracts live in <code>docs/TOOLS.md</code> (Routing Provenance) and <code>docs/DEPLOYMENT.md</code> (Operator Observability).</p>
+<hr />
+<h2 id="encryption">Encryption<a class="headerlink" href="#encryption" title="Permanent link">&para;</a></h2>
+<h3 id="at-rest">At Rest<a class="headerlink" href="#at-rest" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Cache on disk, sessions, and the persist store: AES-256-GCM encryption (configurable)</li>
+<li>Key: 64-char hex from <code>CACHE_ENCRYPTION_KEY</code> env var</li>
+<li>If unset: disk cache is plaintext (acceptable for STDIO single-user mode)</li>
+<li><strong>Key rotation:</strong> set <code>CACHE_ENCRYPTION_KEY_PREV</code> to the prior 64-hex key for zero-downtime rotation. The disk cache and session/persist stores decrypt-fall-back to the previous key and lazily re-encrypt with the current key on read, so a key swap never strands existing data.</li>
+<li><strong>AAD binding:</strong> each on-disk blob binds its key (SHA-256 of the logical key) as GCM additional authenticated data, so a ciphertext cannot be moved to a different key's file.</li>
+</ul>
+<h3 id="in-transit">In Transit<a class="headerlink" href="#in-transit" title="Permanent link">&para;</a></h3>
+<ul>
+<li>All outbound HTTP: TLS 1.2+ (Go's default)</li>
+<li>HTTP transport: TLS termination at load balancer or direct</li>
+<li>No sensitive data in URL query parameters</li>
+</ul>
+<h3 id="fips-compliance-optional">FIPS Compliance (Optional)<a class="headerlink" href="#fips-compliance-optional" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Build with <code>GOEXPERIMENT=boringcrypto</code> for FIPS 140-2 validated crypto</li>
+<li>Affects: TLS, AES, SHA, RSA operations</li>
+</ul>
+<hr />
+<h2 id="configuration-security">Configuration Security<a class="headerlink" href="#configuration-security" title="Permanent link">&para;</a></h2>
+<p><strong>Sensitive Environment Variables:</strong>
+- API keys, OAuth secrets, encryption keys
+- Never logged (even at debug level)
+- Validated at startup with pattern matching
+- Clear error messages on format violation (without echoing the value)</p>
+<p><strong>Startup Validation:</strong>
+- Pattern-check all known env vars (key lengths, hex encoding, scope formats)
+- <strong>STDIO mode</strong> (<code>PORT</code> unset): config errors are logged and the server continues, so zero-config local use is never blocked (e.g., a missing Google key still lets DuckDuckGo serve as fallback). Tools fail gracefully at call time with actionable error messages.
+- <strong>HTTP mode</strong> (<code>PORT</code> set): config validation is <strong>fatal</strong> (<code>os.Exit(1)</code>) — a misconfiguration on a network-facing deployment is operationally significant and must fail loud.
+- Clear error messages on format violation, never echoing the offending value</p>
+<hr />
+<h2 id="http-transport-hardening">HTTP Transport Hardening<a class="headerlink" href="#http-transport-hardening" title="Permanent link">&para;</a></h2>
+<p>All controls in this section apply <strong>only in HTTP mode</strong> (<code>PORT</code> set). STDIO mode does not start an <code>http.Server</code> and is unaffected. Defaults are permissive so legitimate long research responses are never truncated. Implementation: <code>internal/server/server.go</code>.</p>
+<h3 id="connection-body-limits">Connection &amp; Body Limits<a class="headerlink" href="#connection-body-limits" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Control</th>
+<th>Variable</th>
+<th>Default</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Header read timeout</td>
+<td><code>HTTP_READ_HEADER_TIMEOUT</code></td>
+<td><code>5s</code></td>
+<td>Primary slowloris guard</td>
+</tr>
+<tr>
+<td>Request read timeout</td>
+<td><code>HTTP_READ_TIMEOUT</code></td>
+<td><code>30s</code></td>
+<td>Bounds full-request read</td>
+</tr>
+<tr>
+<td>Response write timeout</td>
+<td><code>HTTP_WRITE_TIMEOUT</code></td>
+<td><code>0</code> (unlimited)</td>
+<td>Kept permissive so long scrape/research responses are never truncated</td>
+</tr>
+<tr>
+<td>Idle timeout</td>
+<td><code>HTTP_IDLE_TIMEOUT</code></td>
+<td><code>120s</code></td>
+<td>Frees idle keep-alive connections</td>
+</tr>
+<tr>
+<td>Max header bytes</td>
+<td><code>HTTP_MAX_HEADER_BYTES</code></td>
+<td><code>1 MB</code></td>
+<td>Guards against header-flood memory exhaustion</td>
+</tr>
+<tr>
+<td>Max request body</td>
+<td><code>MAX_REQUEST_BODY_BYTES</code></td>
+<td><code>10 MB</code></td>
+<td><code>/mcp</code> and <code>/admin</code> bodies over the cap are rejected with <code>413</code> via <code>http.MaxBytesReader</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="response-security-headers">Response Security Headers<a class="headerlink" href="#response-security-headers" title="Permanent link">&para;</a></h3>
+<p>Applied to every HTTP response by the <code>securityHeaders</code> middleware. The three configurable headers omit themselves when their value is empty.</p>
+<table>
+<thead>
+<tr>
+<th>Header</th>
+<th>Value</th>
+<th>Configurable via</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>X-Content-Type-Options</code></td>
+<td><code>nosniff</code></td>
+<td>(fixed)</td>
+</tr>
+<tr>
+<td><code>X-Frame-Options</code></td>
+<td><code>DENY</code></td>
+<td>(fixed)</td>
+</tr>
+<tr>
+<td><code>Cache-Control</code></td>
+<td><code>no-store</code></td>
+<td>(fixed)</td>
+</tr>
+<tr>
+<td><code>Strict-Transport-Security</code></td>
+<td><code>max-age=31536000; includeSubDomains</code></td>
+<td>(fixed)</td>
+</tr>
+<tr>
+<td><code>Content-Security-Policy</code></td>
+<td><code>default-src 'none'; frame-ancestors 'none'</code></td>
+<td><code>HTTP_CSP</code></td>
+</tr>
+<tr>
+<td><code>Referrer-Policy</code></td>
+<td><code>no-referrer</code></td>
+<td><code>HTTP_REFERRER_POLICY</code></td>
+</tr>
+<tr>
+<td><code>Permissions-Policy</code></td>
+<td><code>geolocation=(), camera=(), microphone=()</code></td>
+<td><code>HTTP_PERMISSIONS_POLICY</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="cors">CORS<a class="headerlink" href="#cors" title="Permanent link">&para;</a></h3>
+<p>CORS is a <strong>browser-only</strong> control; backend-to-backend connectors (hosted MCP connectors, SDKs) and STDIO never apply it. The <code>corsMiddleware</code> reflects an allowed <code>Origin</code>. With a non-empty <code>ALLOWED_ORIGINS</code> it reflects only listed origins (or any when <code>*</code> is listed). With an <strong>empty</strong> <code>ALLOWED_ORIGINS</code> the behavior is governed by <code>CORS_STRICT</code>:</p>
+<ul>
+<li><code>CORS_STRICT=true</code> (<strong>default</strong>) — fail-closed: deny all cross-origin requests.</li>
+<li><code>CORS_STRICT=false</code> — permissive: reflect any <code>Origin</code> (legacy escape hatch).</li>
+</ul>
+<p>It never reflects the literal <code>*</code> together with credentials. The default is secure-by-default (fail-closed).</p>
+<h3 id="pre-auth-per-ip-rate-limit">Pre-Auth Per-IP Rate Limit<a class="headerlink" href="#pre-auth-per-ip-rate-limit" title="Permanent link">&para;</a></h3>
+<p><code>RATE_LIMIT_PER_IP</code> (default <code>0</code> = disabled) enforces a per-client-IP request ceiling as the <strong>outermost</strong> middleware, so an unauthenticated flood is shed before it reaches auth or the mux. When <code>TRUST_PROXY=true</code>, the client IP is read from the leftmost <code>X-Forwarded-For</code> entry (for use behind a trusted load balancer); otherwise <code>RemoteAddr</code> is used, preventing spoofed-IP bypass.</p>
+<hr />
+<h2 id="persistence">Persistence<a class="headerlink" href="#persistence" title="Permanent link">&para;</a></h2>
+<p>Two HTTP-mode subsystems durably persist state across restarts through a single <code>persist.Store</code> interface (<code>internal/persist/store.go</code>):</p>
+<ul>
+<li><strong>Token revocation (Layer 2 — Auth)</strong> — revoked JTIs are written through to the store with a TTL matching natural token expiry, so a revoked token stays revoked across restarts. The in-memory set remains authoritative; the store is consulted as an additional source of truth (a JTI is revoked if present in <strong>either</strong> layer — fail-closed).</li>
+<li><strong>Daily quota counters (Layer 5 — Rate Limiting)</strong> — enabled by <code>RATE_LIMIT_PERSIST=true</code>, so per-tenant daily quotas survive restarts.</li>
+</ul>
+<p>The default implementation is the encrypted-disk pattern generalized from the session store: AES-256-GCM, atomic temp-file-and-rename writes, <code>0600</code> permissions, an 8-byte big-endian expiry prefix, SHA-256-hashed filenames, and key-bound GCM AAD. Local (memory) and disk backends behave identically — no drift between STDIO and HTTP. In HTTP mode, setting <code>REDIS_URL</code> swaps in a <code>RedisStore</code> that satisfies the same interface for cross-pod shared state; Redis-stored values are AES-256-GCM encrypted before write (so <code>REDIS_URL</code> requires <code>CACHE_ENCRYPTION_KEY</code>). All Redis code is confined to <code>internal/redisbackend</code> (the sole importer of the Redis client), constructed in one gated place in <code>main.go</code>; STDIO never reaches it.</p>
+<hr />
+<h2 id="compliance-frameworks">Compliance Frameworks<a class="headerlink" href="#compliance-frameworks" title="Permanent link">&para;</a></h2>
+<h3 id="mitre-attck-technique-coverage">MITRE ATT&amp;CK Technique Coverage<a class="headerlink" href="#mitre-attck-technique-coverage" title="Permanent link">&para;</a></h3>
+<p>How the server's controls counter the ATT&amp;CK techniques most relevant to an internet-facing scraping service.</p>
+<table>
+<thead>
+<tr>
+<th>Tactic</th>
+<th>Technique</th>
+<th>ID</th>
+<th>Mitigation in this server</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Reconnaissance</td>
+<td>Active Scanning / internal service discovery</td>
+<td>T1595</td>
+<td>SSRF guard blocks private/reserved IP ranges and in-cluster hostnames (<code>svc.cluster.local</code>, <code>kubernetes.default.svc</code>)</td>
+</tr>
+<tr>
+<td>Initial Access</td>
+<td>Exploit Public-Facing Application</td>
+<td>T1190</td>
+<td>HTTP timeouts, <code>MAX_REQUEST_BODY_BYTES</code>, header-byte cap, per-IP pre-auth rate limit</td>
+</tr>
+<tr>
+<td>Credential Access</td>
+<td>Unsecured Credentials in cloud metadata</td>
+<td>T1552.005</td>
+<td>SSRF blocklist for AWS/GCP/Azure/Oracle/Alibaba/Tencent IMDS endpoints + link-local IP blocking</td>
+</tr>
+<tr>
+<td>Credential Access</td>
+<td>Steal Application Access Token</td>
+<td>T1528</td>
+<td>RS256 JWT validation (iss/aud/exp/nbf), revocation list, OAuth scope gate</td>
+</tr>
+<tr>
+<td>Defense Evasion</td>
+<td>DNS rebinding / redirect to internal host</td>
+<td>T1090</td>
+<td>Resolve-once-connect-to-IP, re-validation on every redirect hop (max 5)</td>
+</tr>
+<tr>
+<td>Impact</td>
+<td>Endpoint/Network Denial of Service</td>
+<td>T1499 / T1498</td>
+<td>Slowloris-guarding timeouts, per-IP and per-tenant rate limits, circuit breakers, body/header caps</td>
+</tr>
+<tr>
+<td>Impact</td>
+<td>Resource Hijacking (cost abuse)</td>
+<td>T1496</td>
+<td>Per-tenant daily quota (optionally persisted), global rate limit</td>
+</tr>
+<tr>
+<td>Collection / Exfiltration</td>
+<td>Indirect prompt injection via scraped content</td>
+<td>T1059 (analog)</td>
+<td>Content sanitization pipeline, a <code>"trust": "untrusted-external-content"</code> boundary marker in the JSON envelope, size caps; raw mode is opt-in and clearly flagged. Enforcing the prompt boundary itself is the host's job (the model lives there).</td>
+</tr>
+<tr>
+<td>Defense Evasion</td>
+<td>Credential leakage in logs/errors</td>
+<td>T1552 (analog)</td>
+<td><code>audit.MaskSecrets</code> redacts keys/tokens before any sink</td>
+</tr>
+</tbody>
+</table>
+<h3 id="nist-cybersecurity-framework-20-crosswalk">NIST Cybersecurity Framework 2.0 Crosswalk<a class="headerlink" href="#nist-cybersecurity-framework-20-crosswalk" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>CSF 2.0 Function</th>
+<th>Outcome</th>
+<th>Implementation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>GOVERN (GV)</strong></td>
+<td>Roles, policy, supply chain</td>
+<td>PSIRT process (<a href="https://github.com/zoharbabin/web-researcher-mcp/blob/main/SECURITY.md">SECURITY.md</a>), pinned <code>go tool govulncheck</code>/<code>gosec</code>/<code>golangci-lint</code> (go.mod tool directives) + SBOM in CI (GoReleaser), documented design rules</td>
+</tr>
+<tr>
+<td><strong>IDENTIFY (ID)</strong></td>
+<td>Asset &amp; risk awareness</td>
+<td>This threat model, <code>DATA_REGION</code> residency labeling, per-tool audit inventory</td>
+</tr>
+<tr>
+<td><strong>PROTECT (PR)</strong></td>
+<td>Access control &amp; data security</td>
+<td>OAuth 2.1 + scope gate, SSRF guard, AES-256-GCM at rest with key rotation, TLS in transit, security headers, CORS, rate limits</td>
+</tr>
+<tr>
+<td><strong>DETECT (DE)</strong></td>
+<td>Continuous monitoring</td>
+<td>Structured audit logs with request correlation IDs, Prometheus metrics, circuit-breaker state</td>
+</tr>
+<tr>
+<td><strong>RESPOND (RS)</strong></td>
+<td>Incident handling</td>
+<td>PSIRT triage with CVSS v4.0/CWE, token revocation (persisted), structured error taxonomy for triage</td>
+</tr>
+<tr>
+<td><strong>RECOVER (RC)</strong></td>
+<td>Resilience &amp; restoration</td>
+<td>Graceful shutdown with buffer drain, encrypted persist store survives restarts, zero-downtime key rotation</td>
+</tr>
+</tbody>
+</table>
+<h3 id="soc-2-type-ii">SOC 2 Type II<a class="headerlink" href="#soc-2-type-ii" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Criterion</th>
+<th>How We Satisfy</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>CC6.1</strong> Access Control</td>
+<td>OAuth 2.1 middleware; per-<strong>tool</strong> authorization via JWT scopes (<code>tool:*</code> / <code>tool:&lt;name&gt;</code> / <code>research</code>); tenant isolation enforced separately by tenant-scoped storage/cache keys</td>
+</tr>
+<tr>
+<td><strong>CC6.2</strong> Logical Access</td>
+<td>Session isolation, cache namespace per tenant</td>
+</tr>
+<tr>
+<td><strong>CC6.6</strong> Threat Mitigation</td>
+<td>SSRF protection, rate limiting, circuit breakers</td>
+</tr>
+<tr>
+<td><strong>CC7.1</strong> Monitoring</td>
+<td>Prometheus metrics, structured audit logs</td>
+</tr>
+<tr>
+<td><strong>CC7.3</strong> Incident Response</td>
+<td>Structured error types, trace IDs for correlation</td>
+</tr>
+<tr>
+<td><strong>CC8.1</strong> Change Management</td>
+<td>Git history, CI/CD pipeline, tagged releases</td>
+</tr>
+<tr>
+<td><strong>A1.2</strong> Availability</td>
+<td>Health checks, HPA scaling, circuit breakers</td>
+</tr>
+</tbody>
+</table>
+<h3 id="gdpr">GDPR<a class="headerlink" href="#gdpr" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Right</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Access</strong> (Art. 15)</td>
+<td><strong>Implemented.</strong> <code>GET /admin/data?tenant_id=&amp;user_id=</code> returns a JSON export of all data held for the subject, fanned across every registered namespace (sessions today; long-term memory / user analytics / workspace contributions when those features are enabled). Admin-gated (<code>ADMIN_API_KEY</code>).</td>
+</tr>
+<tr>
+<td><strong>Portability</strong> (Art. 20)</td>
+<td><strong>Implemented.</strong> Same <code>GET /admin/data</code> endpoint returns machine-readable JSON.</td>
+</tr>
+<tr>
+<td><strong>Erasure</strong> (Art. 17)</td>
+<td><strong>Implemented.</strong> <code>DELETE /admin/data?tenant_id=&amp;user_id=</code> purges the subject's data across all namespaces (memory + encrypted disk) and withdraws their consent so processing cannot silently resume; the erasure itself is recorded as a <code>data.erasure</code> audit event.</td>
+</tr>
+<tr>
+<td><strong>Restriction</strong> (Art. 18)</td>
+<td>Set <code>CACHE_ISOLATION=tenant</code> to scope all cache keys by tenant ID — prevents cross-tenant cache access</td>
+</tr>
+</tbody>
+</table>
+<p>Implementation notes: requests are tenant-scoped — a request targets exactly one <code>tenant_id</code>, so cross-tenant access is impossible. <code>user_id</code> is optional; stores with no per-user dimension (e.g. sessions) operate at tenant granularity and label the export scope accordingly. The fan-out is driven by a registry (<code>internal/datasubject</code>) into which every personal-data store registers an exporter/eraser, so coverage extends automatically as regulated features ship.</p>
+<p>Data minimization (implemented): by default audit logs store only the query length (an integer), not raw queries; no persistent PII storage beyond cache TTLs.</p>
+<h3 id="fedramp-moderate-baseline">FedRAMP (Moderate Baseline)<a class="headerlink" href="#fedramp-moderate-baseline" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Control</th>
+<th>Implementation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>SC-8</strong> Transmission Confidentiality</td>
+<td>TLS 1.2+ on all connections</td>
+</tr>
+<tr>
+<td><strong>SC-13</strong> Cryptographic Protection</td>
+<td>FIPS 140-2 via <code>GOEXPERIMENT=boringcrypto</code></td>
+</tr>
+<tr>
+<td><strong>SC-28</strong> Protection at Rest</td>
+<td>AES-256-GCM for disk cache</td>
+</tr>
+<tr>
+<td><strong>AC-3</strong> Access Enforcement</td>
+<td>OAuth middleware on all HTTP endpoints</td>
+</tr>
+<tr>
+<td><strong>AU-2</strong> Audit Events</td>
+<td>All tool calls, auth failures, config changes</td>
+</tr>
+<tr>
+<td><strong>SI-2</strong> Flaw Remediation</td>
+<td>Automated <code>go tool govulncheck</code> + <code>gosec</code> in CI (<code>make vuln</code>, <code>make sec</code>)</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code><span class="c1"># FIPS-compliant build</span>
+<span class="nv">GOEXPERIMENT</span><span class="o">=</span>boringcrypto<span class="w"> </span><span class="nv">CGO_ENABLED</span><span class="o">=</span><span class="m">0</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>go<span class="w"> </span>build<span class="w"> </span>-ldflags<span class="o">=</span><span class="s2">&quot;-s -w -X main.version=</span><span class="si">${</span><span class="nv">VERSION</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-o<span class="w"> </span>web-researcher-mcp<span class="w"> </span>./cmd/web-researcher-mcp
+</code></pre></div>
+<h3 id="multi-tenancy-isolation">Multi-Tenancy Isolation<a class="headerlink" href="#multi-tenancy-isolation" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Boundary</th>
+<th>Shared</th>
+<th>Isolated</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Binary code, HTTP client pool</td>
+<td>Yes</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Public content cache (search results, scraped pages)</td>
+<td>Yes</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Rate limit counters</td>
+<td>—</td>
+<td>Per-tenant</td>
+</tr>
+<tr>
+<td>Sequential search sessions</td>
+<td>—</td>
+<td>Per-tenant:session</td>
+</tr>
+<tr>
+<td>Search history</td>
+<td>—</td>
+<td>Per-tenant</td>
+</tr>
+<tr>
+<td>Audit logs</td>
+<td>—</td>
+<td>Filterable by tenant</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Note:</strong> Set <code>CACHE_ISOLATION=tenant</code> to enforce per-tenant cache isolation. When enabled, all cache keys are prefixed with the authenticated tenant ID, preventing cross-tenant cache access. Default is <code>shared</code> (cache keys are content-addressed, identical queries share results across tenants). For search results sharing is safe (same query returns same results), but scrape cache may contain tenant-specific content — use <code>tenant</code> mode for strict data isolation deployments.</p>
+<h3 id="supply-chain-security">Supply Chain Security<a class="headerlink" href="#supply-chain-security" title="Permanent link">&para;</a></h3>
+<p>The vulnerability scanner, linter, and security scanner are pinned in <code>go.mod</code> via <code>tool</code> directives and invoked through <code>go tool</code> (wrapped by <code>make</code>), so every contributor and CI run uses byte-identical versions with zero manual install:</p>
+<div class="highlight"><pre><span></span><code>make<span class="w"> </span>vuln<span class="w">                </span><span class="c1"># go tool govulncheck ./... — audit for known vulnerabilities</span>
+make<span class="w"> </span>sec<span class="w">                 </span><span class="c1"># go tool gosec — command/SQL injection, weak crypto, SSRF sinks</span>
+</code></pre></div>
+<p>SBOMs are generated automatically by GoReleaser's built-in <code>sboms</code> directive on every release — no manual command needed.</p>
+<p><code>make verify</code> runs the full gate (fmt-check, vet, lint, sec, vuln, validate-lenses, test-race, test-e2e, check-python-drift, test-python, build) — the same sequence CI runs.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        <div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/zoharbabin/web-researcher-mcp" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://x.com/zohar" target="_blank" rel="noopener" title="x.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M389.2 48h70.6L305.6 224.2 487 464H345L233.7 318.6 106.5 464H35.8l164.9-188.5L26.8 48h145.6l100.5 132.9zm-24.8 373.8h39.1L151.1 88h-42z"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://hub.docker.com/r/zoharbabin/web-researcher-mcp" target="_blank" rel="noopener" title="hub.docker.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M349.9 236.3h-66.1v-59.4h66.1zm0-204.3h-66.1v60.7h66.1zm78.2 144.8H362v59.4h66.1zm-156.3-72.1h-66.1v60.1h66.1zm78.1 0h-66.1v60.1h66.1zm276.8 100c-14.4-9.7-47.6-13.2-73.1-8.4-3.3-24-16.7-44.9-41.1-63.7l-14-9.3-9.3 14c-18.4 27.8-23.4 73.6-3.7 103.8-8.7 4.7-25.8 11.1-48.4 10.7H2.4c-8.7 50.8 5.8 116.8 44 162.1 37.1 43.9 92.7 66.2 165.4 66.2 157.4 0 273.9-72.5 328.4-204.2 21.4.4 67.6.1 91.3-45.2 1.5-2.5 6.6-13.2 8.5-17.1zm-511.1-27.9h-66v59.4h66.1v-59.4zm78.1 0h-66.1v59.4h66.1zm78.1 0h-66.1v59.4h66.1zm-78.1-72.1h-66.1v60.1h66.1z"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "..", "features": ["navigation.sections", "navigation.top", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+  
+      <script src="../assets/javascripts/bundle.13a4f30d.min.js"></script>
+      
+    
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      document.querySelectorAll('img[src$=".gif"], img[src$=".png"]').forEach(function(img) {
+        if (!img.loading) img.loading = "lazy";
+      });
+    });
+  </script>
+
+  </body>
+</html>

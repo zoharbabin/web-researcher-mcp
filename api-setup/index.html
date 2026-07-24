@@ -1,0 +1,2295 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust.">
+      
+      
+      
+        <link rel="canonical" href="https://zoharbabin.com/web-researcher-mcp/api-setup/">
+      
+      
+        <link rel="prev" href="../tools/">
+      
+      
+        <link rel="next" href="../providers/">
+      
+      
+      <link rel="icon" href="../img/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.14">
+    
+    
+      
+        <title>API Setup - Web Researcher MCP</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.342714a4.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  <!-- Google Tag Manager -->
+  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+  })(window,document,'script','dataLayer','GTM-P225W69C');</script>
+  <!-- End Google Tag Manager -->
+  <!-- Preconnect for cross-origin origins used on every page load -->
+  <link rel="preconnect" href="https://raw.githubusercontent.com">
+  <link rel="preconnect" href="https://api.github.com">
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="API Setup - Web Researcher MCP" />
+  <meta property="og:description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust. Free, private, open source." />
+  <meta property="og:image" content="https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/social-preview.png" />
+  <meta property="og:url" content="https://zoharbabin.com/web-researcher-mcp/api-setup/" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="API Setup - Web Researcher MCP" />
+  <meta name="twitter:description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust. Free, private, open source." />
+  <meta name="twitter:image" content="https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/social-preview.png" />
+
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#setting-up-your-search-keys" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+        <aside class="md-banner">
+          <div class="md-banner__inner md-grid md-typeset">
+            
+            
+  <!-- Google Tag Manager (noscript) -->
+  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-P225W69C"
+  height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+  <!-- End Google Tag Manager (noscript) -->
+  <a href="https://github.com/zoharbabin/web-researcher-mcp" style="display:inline-flex;align-items:center;gap:.4em;">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25z"/></svg>
+    Star us on GitHub
+  </a>
+
+          </div>
+          
+        </aside>
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Web Researcher MCP" class="md-header__button md-logo" aria-label="Web Researcher MCP" data-md-component="logo">
+      
+  <img src="../img/logo.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Web Researcher MCP
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              API Setup
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/zoharbabin/web-researcher-mcp" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    zoharbabin/web-researcher-mcp
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Web Researcher MCP" class="md-nav__button md-logo" aria-label="Web Researcher MCP" data-md-component="logo">
+      
+  <img src="../img/logo.svg" alt="logo">
+
+    </a>
+    Web Researcher MCP
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/zoharbabin/web-researcher-mcp" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    zoharbabin/web-researcher-mcp
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Examples
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Tools
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    API Setup
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    API Setup
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#how-to-configure-keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      How to Configure Keys
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#duckduckgo-zero-config-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      DuckDuckGo (Zero-Config Default)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hacker-news-zero-config" class="md-nav__link">
+    <span class="md-ellipsis">
+      Hacker News (Zero-Config)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Hacker News (Zero-Config)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#good-to-know" class="md-nav__link">
+    <span class="md-ellipsis">
+      Good to know
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#google-custom-search-programmable-search-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      Google Custom Search (Programmable Search Engine)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Google Custom Search (Programmable Search Engine)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-get-an-api-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 1: Get an API Key
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-create-a-programmable-search-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 2: Create a Programmable Search Engine
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-configure" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 3: Configure
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#brave-search" class="md-nav__link">
+    <span class="md-ellipsis">
+      Brave Search
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Brave Search">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-get-an-api-key_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 1: Get an API Key
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-configure" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 2: Configure
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#serperdev" class="md-nav__link">
+    <span class="md-ellipsis">
+      Serper.dev
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Serper.dev">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-get-an-api-key_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 1: Get an API Key
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-configure_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 2: Configure
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tavily" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tavily
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tavily">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-get-an-api-key_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 1: Get an API Key
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-configure_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 2: Configure
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#good-to-know_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Good to know
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exa" class="md-nav__link">
+    <span class="md-ellipsis">
+      Exa
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Exa">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-get-an-api-key_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 1: Get an API Key
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-configure_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 2: Configure
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#good-to-know_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      Good to know
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#searxng-self-hosted" class="md-nav__link">
+    <span class="md-ellipsis">
+      SearXNG (Self-Hosted)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="SearXNG (Self-Hosted)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-run-searxng" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 1: Run SearXNG
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-enable-json-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 2: Enable JSON API
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-configure_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 3: Configure
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-4-authenticating-to-a-protected-searxng-optional" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 4: Authenticating to a protected SearXNG (optional)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#searchapiio" class="md-nav__link">
+    <span class="md-ellipsis">
+      SearchAPI.io
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="SearchAPI.io">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-get-an-api-key_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 1: Get an API Key
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-configure_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 2: Configure
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-provider-routing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Multi-Provider Routing
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#choosing-a-provider" class="md-nav__link">
+    <span class="md-ellipsis">
+      Choosing a Provider
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#patent-search-providers-optional" class="md-nav__link">
+    <span class="md-ellipsis">
+      Patent Search Providers (Optional)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Patent Search Providers (Optional)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#epo-open-patent-services-worldwide" class="md-nav__link">
+    <span class="md-ellipsis">
+      EPO Open Patent Services (Worldwide)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#uspto-us-patents" class="md-nav__link">
+    <span class="md-ellipsis">
+      USPTO (US Patents)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-lens-worldwide-scholarly-links" class="md-nav__link">
+    <span class="md-ellipsis">
+      The Lens (Worldwide + Scholarly Links)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#patent-routing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Patent Routing
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#academic-search-providers-optional" class="md-nav__link">
+    <span class="md-ellipsis">
+      Academic Search Providers (Optional)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Academic Search Providers (Optional)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#openalex-worldwide-287m-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      OpenAlex (Worldwide — 287M+ Works)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#crossref-worldwide-140m-doi-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      CrossRef (Worldwide — 140M+ DOI Works)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#semantic-scholar-worldwide-200m-papers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Semantic Scholar (Worldwide — 200M+ Papers)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pubmed-biomedical-literature-35m-citations" class="md-nav__link">
+    <span class="md-ellipsis">
+      PubMed (Biomedical Literature — 35M+ Citations)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#unpaywall-open-access-enrichment" class="md-nav__link">
+    <span class="md-ellipsis">
+      Unpaywall (Open-Access Enrichment)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#academic-routing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Academic Routing
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#structured-domain-providers-optional" class="md-nav__link">
+    <span class="md-ellipsis">
+      Structured-Domain Providers (Optional)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Structured-Domain Providers (Optional)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sec-edgar-us-public-company-filings" class="md-nav__link">
+    <span class="md-ellipsis">
+      SEC EDGAR (US Public-Company Filings)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#courtlistener-us-case-law" class="md-nav__link">
+    <span class="md-ellipsis">
+      CourtListener (US Case Law)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#world-bank-oecd-eurostat-keyless-fred-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      World Bank + OECD + Eurostat (keyless) + FRED (key)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#clinicaltrialsgov-clinical-trials" class="md-nav__link">
+    <span class="md-ellipsis">
+      ClinicalTrials.gov (Clinical Trials)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ecosystems-awesome-list-discovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      ecosyste.ms (Awesome-List Discovery)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#internet-archive-save-page-now-optional-for-archive_source" class="md-nav__link">
+    <span class="md-ellipsis">
+      Internet Archive — Save Page Now (Optional, for archive_source)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#brandfetch-brand-research-optional" class="md-nav__link">
+    <span class="md-ellipsis">
+      BrandFetch (Brand Research — Optional)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../providers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Providers
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Deployment
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Security
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../security-and-compliance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Security & Compliance
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Contributing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../error-handling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Error Handling
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../privacy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Privacy Policy
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../brand-guidelines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Brand Guidelines
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lessons-learned/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Our Story
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../session-persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Session Persistence
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Migration
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cicd/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CI/CD Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#how-to-configure-keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      How to Configure Keys
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#duckduckgo-zero-config-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      DuckDuckGo (Zero-Config Default)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hacker-news-zero-config" class="md-nav__link">
+    <span class="md-ellipsis">
+      Hacker News (Zero-Config)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Hacker News (Zero-Config)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#good-to-know" class="md-nav__link">
+    <span class="md-ellipsis">
+      Good to know
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#google-custom-search-programmable-search-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      Google Custom Search (Programmable Search Engine)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Google Custom Search (Programmable Search Engine)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-get-an-api-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 1: Get an API Key
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-create-a-programmable-search-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 2: Create a Programmable Search Engine
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-configure" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 3: Configure
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#brave-search" class="md-nav__link">
+    <span class="md-ellipsis">
+      Brave Search
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Brave Search">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-get-an-api-key_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 1: Get an API Key
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-configure" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 2: Configure
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#serperdev" class="md-nav__link">
+    <span class="md-ellipsis">
+      Serper.dev
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Serper.dev">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-get-an-api-key_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 1: Get an API Key
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-configure_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 2: Configure
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tavily" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tavily
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tavily">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-get-an-api-key_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 1: Get an API Key
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-configure_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 2: Configure
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#good-to-know_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Good to know
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exa" class="md-nav__link">
+    <span class="md-ellipsis">
+      Exa
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Exa">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-get-an-api-key_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 1: Get an API Key
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-configure_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 2: Configure
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#good-to-know_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      Good to know
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#searxng-self-hosted" class="md-nav__link">
+    <span class="md-ellipsis">
+      SearXNG (Self-Hosted)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="SearXNG (Self-Hosted)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-run-searxng" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 1: Run SearXNG
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-enable-json-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 2: Enable JSON API
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-configure_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 3: Configure
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-4-authenticating-to-a-protected-searxng-optional" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 4: Authenticating to a protected SearXNG (optional)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#searchapiio" class="md-nav__link">
+    <span class="md-ellipsis">
+      SearchAPI.io
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="SearchAPI.io">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-get-an-api-key_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 1: Get an API Key
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-configure_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 2: Configure
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-provider-routing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Multi-Provider Routing
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#choosing-a-provider" class="md-nav__link">
+    <span class="md-ellipsis">
+      Choosing a Provider
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#patent-search-providers-optional" class="md-nav__link">
+    <span class="md-ellipsis">
+      Patent Search Providers (Optional)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Patent Search Providers (Optional)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#epo-open-patent-services-worldwide" class="md-nav__link">
+    <span class="md-ellipsis">
+      EPO Open Patent Services (Worldwide)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#uspto-us-patents" class="md-nav__link">
+    <span class="md-ellipsis">
+      USPTO (US Patents)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-lens-worldwide-scholarly-links" class="md-nav__link">
+    <span class="md-ellipsis">
+      The Lens (Worldwide + Scholarly Links)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#patent-routing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Patent Routing
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#academic-search-providers-optional" class="md-nav__link">
+    <span class="md-ellipsis">
+      Academic Search Providers (Optional)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Academic Search Providers (Optional)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#openalex-worldwide-287m-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      OpenAlex (Worldwide — 287M+ Works)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#crossref-worldwide-140m-doi-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      CrossRef (Worldwide — 140M+ DOI Works)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#semantic-scholar-worldwide-200m-papers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Semantic Scholar (Worldwide — 200M+ Papers)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pubmed-biomedical-literature-35m-citations" class="md-nav__link">
+    <span class="md-ellipsis">
+      PubMed (Biomedical Literature — 35M+ Citations)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#unpaywall-open-access-enrichment" class="md-nav__link">
+    <span class="md-ellipsis">
+      Unpaywall (Open-Access Enrichment)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#academic-routing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Academic Routing
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#structured-domain-providers-optional" class="md-nav__link">
+    <span class="md-ellipsis">
+      Structured-Domain Providers (Optional)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Structured-Domain Providers (Optional)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sec-edgar-us-public-company-filings" class="md-nav__link">
+    <span class="md-ellipsis">
+      SEC EDGAR (US Public-Company Filings)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#courtlistener-us-case-law" class="md-nav__link">
+    <span class="md-ellipsis">
+      CourtListener (US Case Law)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#world-bank-oecd-eurostat-keyless-fred-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      World Bank + OECD + Eurostat (keyless) + FRED (key)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#clinicaltrialsgov-clinical-trials" class="md-nav__link">
+    <span class="md-ellipsis">
+      ClinicalTrials.gov (Clinical Trials)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ecosystems-awesome-list-discovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      ecosyste.ms (Awesome-List Discovery)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#internet-archive-save-page-now-optional-for-archive_source" class="md-nav__link">
+    <span class="md-ellipsis">
+      Internet Archive — Save Page Now (Optional, for archive_source)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#brandfetch-brand-research-optional" class="md-nav__link">
+    <span class="md-ellipsis">
+      BrandFetch (Brand Research — Optional)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="setting-up-your-search-keys">Setting Up Your Search Keys<a class="headerlink" href="#setting-up-your-search-keys" title="Permanent link">&para;</a></h1>
+<p>This guide shows you how to get the API keys that power your searches. You only need one provider to get started — or set up several, and the server will automatically switch between them if one goes down.</p>
+<h2 id="how-to-configure-keys">How to Configure Keys<a class="headerlink" href="#how-to-configure-keys" title="Permanent link">&para;</a></h2>
+<p>Pass API keys as environment variables. How you set them depends on your MCP client:</p>
+<p><strong>Claude Code</strong> (CLI / VS Code / JetBrains):
+<div class="highlight"><pre><span></span><code><span class="c1">// In ~/.claude.json under &quot;mcpServers&quot;:</span>
+<span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;web-researcher&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;command&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;web-researcher-mcp&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;env&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;BRAVE_API_KEY&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;your-key&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;EPO_OPS_CONSUMER_KEY&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;your-key&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;EPO_OPS_CONSUMER_SECRET&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;your-secret&quot;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<p><strong>Claude Desktop</strong>:
+<div class="highlight"><pre><span></span><code><span class="c1">// In ~/Library/Application Support/Claude/claude_desktop_config.json (macOS)</span>
+<span class="c1">// or %APPDATA%\Claude\claude_desktop_config.json (Windows)</span>
+<span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;mcpServers&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;web-researcher&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;command&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/path/to/web-researcher-mcp&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;env&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;BRAVE_API_KEY&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;your-key&quot;</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<p><strong>Shell (direct / Docker)</strong>:
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">BRAVE_API_KEY</span><span class="o">=</span>your-key
+web-researcher-mcp
+</code></pre></div></p>
+<p>Keys set in the MCP client config are passed directly to the server process — no <code>.env</code> file needed.</p>
+<hr />
+<h2 id="duckduckgo-zero-config-default">DuckDuckGo (Zero-Config Default)<a class="headerlink" href="#duckduckgo-zero-config-default" title="Permanent link">&para;</a></h2>
+<p><strong>Free</strong>: No API key, no registration, no query limits to configure.</p>
+<p>DuckDuckGo is the built-in fallback and works out of the box. If you set no provider keys at all, web search still works through DuckDuckGo. There is nothing to configure — but you can select it explicitly:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">SEARCH_PROVIDER</span><span class="o">=</span>duckduckgo
+web-researcher-mcp
+</code></pre></div>
+<p>For better result quality and higher volume, add one of the keyed providers below and the server will prefer it.</p>
+<hr />
+<h2 id="hacker-news-zero-config">Hacker News (Zero-Config)<a class="headerlink" href="#hacker-news-zero-config" title="Permanent link">&para;</a></h2>
+<p><strong>Free</strong>: No API key, no registration. Searches Hacker News stories through the public <a href="https://hn.algolia.com/">HN Algolia</a> index.</p>
+<p>This is a domain-specific provider — it returns Hacker News stories only, not general web results. Select it when you want HN discussion and submission results:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">SEARCH_PROVIDER</span><span class="o">=</span>hackernews
+web-researcher-mcp
+</code></pre></div>
+<h3 id="good-to-know">Good to know<a class="headerlink" href="#good-to-know" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><code>web_search</code> and <code>news_search</code> only.</strong> <code>image_search</code> with Hacker News returns empty (no error). Keep an image-capable provider (Google, Brave, SearchAPI) in <code>SEARCH_ROUTING</code> if you need images.</li>
+<li><strong>Date filtering works.</strong> <code>dateRange</code> is honored via the Algolia <code>numericFilters</code> (<code>created_at_i</code>); <code>num_results</code> accepts 1–100 (values outside that range reset to the default of 10).</li>
+<li><strong>Reading threads.</strong> <code>scrape_page</code> on a <code>news.ycombinator.com</code> item, user, or list URL is read natively through the HN Firebase API (story + top comments) — independent of which <code>SEARCH_PROVIDER</code> is set.</li>
+</ul>
+<hr />
+<h2 id="google-custom-search-programmable-search-engine">Google Custom Search (Programmable Search Engine)<a class="headerlink" href="#google-custom-search-programmable-search-engine" title="Permanent link">&para;</a></h2>
+<p><strong>Free tier</strong>: 100 queries/day (paid: $5 per 1,000 queries)</p>
+<h3 id="step-1-get-an-api-key">Step 1: Get an API Key<a class="headerlink" href="#step-1-get-an-api-key" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Go to the <a href="https://console.cloud.google.com/">Google Cloud Console</a></li>
+<li>Create a new project (or select an existing one)</li>
+<li>Navigate to <strong>APIs &amp; Services &gt; Library</strong></li>
+<li>Search for "Custom Search API" and enable it</li>
+<li>Go to <strong>APIs &amp; Services &gt; Credentials</strong></li>
+<li>Click <strong>Create Credentials &gt; API Key</strong></li>
+<li>Copy the key</li>
+</ol>
+<h3 id="step-2-create-a-programmable-search-engine">Step 2: Create a Programmable Search Engine<a class="headerlink" href="#step-2-create-a-programmable-search-engine" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Go to <a href="https://programmablesearchengine.google.com/">Programmable Search Engine</a></li>
+<li>Click <strong>Add</strong> to create a new search engine</li>
+<li>Under "What to search", select <strong>Search the entire web</strong></li>
+<li>Give it a name and click <strong>Create</strong></li>
+<li>Copy the <strong>Search Engine ID</strong> (cx)</li>
+</ol>
+<h3 id="step-3-configure">Step 3: Configure<a class="headerlink" href="#step-3-configure" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">GOOGLE_CUSTOM_SEARCH_API_KEY</span><span class="o">=</span>AIzaSy...your-key
+<span class="nb">export</span><span class="w"> </span><span class="nv">GOOGLE_CUSTOM_SEARCH_ID</span><span class="o">=</span>your-search-engine-id
+</code></pre></div>
+<hr />
+<h2 id="brave-search">Brave Search<a class="headerlink" href="#brave-search" title="Permanent link">&para;</a></h2>
+<p><strong>Free tier</strong>: 2,000 queries/month (paid plans available)</p>
+<h3 id="step-1-get-an-api-key_1">Step 1: Get an API Key<a class="headerlink" href="#step-1-get-an-api-key_1" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Go to <a href="https://brave.com/search/api/">Brave Search API</a></li>
+<li>Click <strong>Get Started</strong> and create an account</li>
+<li>Subscribe to the <strong>Free</strong> plan (or a paid plan for higher volume)</li>
+<li>Navigate to your dashboard and copy your API key</li>
+</ol>
+<h3 id="step-2-configure">Step 2: Configure<a class="headerlink" href="#step-2-configure" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">BRAVE_API_KEY</span><span class="o">=</span>BSAxxxxxxxxxxxxxxxxxx
+</code></pre></div>
+<p>To use Brave as your primary (or only) provider:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">SEARCH_PROVIDER</span><span class="o">=</span>brave
+<span class="nb">export</span><span class="w"> </span><span class="nv">BRAVE_API_KEY</span><span class="o">=</span>BSAxxxxxxxxxxxxxxxxxx
+</code></pre></div>
+<hr />
+<h2 id="serperdev">Serper.dev<a class="headerlink" href="#serperdev" title="Permanent link">&para;</a></h2>
+<p><strong>Free tier</strong>: 2,500 queries (one-time credit, then paid)</p>
+<h3 id="step-1-get-an-api-key_2">Step 1: Get an API Key<a class="headerlink" href="#step-1-get-an-api-key_2" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Go to <a href="https://serper.dev/">Serper.dev</a></li>
+<li>Sign up for an account</li>
+<li>Your API key is shown on the dashboard immediately after sign-up</li>
+<li>Copy the key</li>
+</ol>
+<h3 id="step-2-configure_1">Step 2: Configure<a class="headerlink" href="#step-2-configure_1" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">SERPER_API_KEY</span><span class="o">=</span>your-serper-key
+</code></pre></div>
+<p>To use Serper as your primary provider:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">SEARCH_PROVIDER</span><span class="o">=</span>serper
+<span class="nb">export</span><span class="w"> </span><span class="nv">SERPER_API_KEY</span><span class="o">=</span>your-serper-key
+</code></pre></div>
+<hr />
+<h2 id="tavily">Tavily<a class="headerlink" href="#tavily" title="Permanent link">&para;</a></h2>
+<p><strong>Free tier</strong>: monthly credits for development; paid plans for higher volume</p>
+<p>Tavily is a search API purpose-built for AI agents — it returns clean, extracted, LLM-ready content rather than raw result pages. It supports web and news search (no native image search; image queries fall through to another provider when routing is enabled).</p>
+<h3 id="step-1-get-an-api-key_3">Step 1: Get an API Key<a class="headerlink" href="#step-1-get-an-api-key_3" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Go to <a href="https://app.tavily.com/">app.tavily.com</a></li>
+<li>Sign up for an account</li>
+<li>Copy the <code>tvly-...</code> API key from your dashboard</li>
+</ol>
+<h3 id="step-2-configure_2">Step 2: Configure<a class="headerlink" href="#step-2-configure_2" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">SEARCH_PROVIDER</span><span class="o">=</span>tavily
+<span class="nb">export</span><span class="w"> </span><span class="nv">TAVILY_API_KEY</span><span class="o">=</span>tvly-your-key
+</code></pre></div>
+<p>The key is sent as an <code>Authorization: Bearer</code> header (never in the request body), and queries are capped at Tavily's 400-character limit automatically.</p>
+<h3 id="good-to-know_1">Good to know<a class="headerlink" href="#good-to-know_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>No image search.</strong> <code>image_search</code> with Tavily returns empty (no error). Keep an image-capable provider (Google, Brave, SearchAPI) in <code>SEARCH_ROUTING</code> if you need images — the Router falls through automatically. Best used as a routing member rather than the sole provider: <code>SEARCH_ROUTING=tavily,brave,google</code>.</li>
+<li><strong>Web <code>time_range</code> is strict.</strong> Tavily's web recency filter is aggressive — a <code>time_range=week</code> web search may return nothing for terms that have older results. For recent <em>news</em> use <code>news_search</code> (its <code>freshness</code> window works well); for recent <em>web</em> content, widen <code>time_range</code> or omit it.</li>
+<li><strong>Some filters don't apply.</strong> Tavily honors <code>site</code>, <code>lens</code>, <code>num_results</code>, <code>time_range</code>/<code>freshness</code>, but ignores <code>country</code>, <code>language</code>, <code>safe</code>, and exact/exclude-term filters (it has no API field for them). Use Google if you need hard country/language/exact-phrase control.</li>
+</ul>
+<hr />
+<h2 id="exa">Exa<a class="headerlink" href="#exa" title="Permanent link">&para;</a></h2>
+<p><strong>Free tier</strong>: 1,000 requests/month; paid per call beyond that</p>
+<p>Exa is a neural/semantic search API. Beyond ordinary web and news search, an Exa key unlocks several capabilities no other provider offers here:</p>
+<ul>
+<li><strong>Grounded answers</strong> — backs the provider-independent <code>answer</code> tool (one synthesized answer with citations).</li>
+<li><strong>Structured extraction</strong> — backs the provider-independent <code>structured_search</code> tool (schema-defined fields and company/people entities, as JSON per result).</li>
+<li><strong>Academic search</strong> — <code>academic_search</code> can route to Exa via the research-paper category.</li>
+<li><strong>A paid scrape fallback</strong> — Exa's <code>/contents</code> API becomes the last-resort extraction tier for <code>scrape_page</code>, recovering hard pages the free tiers can't (only when the local tiers all fail).</li>
+</ul>
+<h3 id="step-1-get-an-api-key_4">Step 1: Get an API Key<a class="headerlink" href="#step-1-get-an-api-key_4" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Go to <a href="https://dashboard.exa.ai/">dashboard.exa.ai</a></li>
+<li>Sign up for an account</li>
+<li>Copy your API key from the dashboard</li>
+</ol>
+<h3 id="step-2-configure_3">Step 2: Configure<a class="headerlink" href="#step-2-configure_3" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">SEARCH_PROVIDER</span><span class="o">=</span>exa
+<span class="nb">export</span><span class="w"> </span><span class="nv">EXA_API_KEY</span><span class="o">=</span>your-exa-key
+</code></pre></div>
+<p>The key is sent as the <code>x-api-key</code> header (never in the request body or logs).</p>
+<h3 id="good-to-know_2">Good to know<a class="headerlink" href="#good-to-know_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Paid per call.</strong> Exa charges per request (free tier: 1,000/month). Each <code>answer</code> / <code>structured_search</code> response (when served by Exa) reports the estimated <code>costUsd</code> of that call, and the cost is recorded in the audit trail as <code>cost_usd</code>. The estimate is not an invoice.</li>
+<li><strong>No image search.</strong> <code>image_search</code> with Exa returns empty (no error) — keep an image-capable provider (Google, Brave, SearchAPI) in <code>SEARCH_ROUTING</code> if you need images.</li>
+<li><strong>Search type is fixed to <code>auto</code>.</strong> The expensive deep/deep-reasoning tiers are deliberately not exposed; <code>auto</code> is the balanced, predictable-cost default.</li>
+<li><strong>The scrape fallback is opt-in by cost.</strong> The Exa <code>/contents</code> tier runs only when the free scrape tiers (markdown → stealth → HTML → browser, when Chrome is configured) all fail to extract content — the common path never spends an Exa credit on scraping.</li>
+<li><strong>Best used as a routing member</strong> when you also want a free default: <code>SEARCH_ROUTING=brave,exa</code>.</li>
+</ul>
+<hr />
+<h2 id="searxng-self-hosted">SearXNG (Self-Hosted)<a class="headerlink" href="#searxng-self-hosted" title="Permanent link">&para;</a></h2>
+<p><strong>Free</strong>: Open source, self-hosted — no API key needed, no query limits</p>
+<p>SearXNG is a privacy-respecting metasearch engine that aggregates results from multiple sources. Ideal for air-gapped deployments or organizations that need full control over search infrastructure.</p>
+<h3 id="step-1-run-searxng">Step 1: Run SearXNG<a class="headerlink" href="#step-1-run-searxng" title="Permanent link">&para;</a></h3>
+<p>The fastest way is Docker:</p>
+<div class="highlight"><pre><span></span><code>docker<span class="w"> </span>run<span class="w"> </span>-d<span class="w"> </span>--name<span class="w"> </span>searxng<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-p<span class="w"> </span><span class="m">8080</span>:8080<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-e<span class="w"> </span><span class="nv">SEARXNG_SECRET</span><span class="o">=</span>your-secret-key<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>searxng/searxng:latest
+</code></pre></div>
+<p>For production deployments, see the <a href="https://docs.searxng.org/">SearXNG documentation</a> for configuration options (engine selection, rate limiting, result ranking).</p>
+<h3 id="step-2-enable-json-api">Step 2: Enable JSON API<a class="headerlink" href="#step-2-enable-json-api" title="Permanent link">&para;</a></h3>
+<p>SearXNG needs the JSON format enabled. Create or edit <code>settings.yml</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">search</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">formats</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">html</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">json</span>
+</code></pre></div>
+<h3 id="step-3-configure_1">Step 3: Configure<a class="headerlink" href="#step-3-configure_1" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">SEARCH_PROVIDER</span><span class="o">=</span>searxng
+<span class="nb">export</span><span class="w"> </span><span class="nv">SEARXNG_URL</span><span class="o">=</span>http://localhost:8080
+</code></pre></div>
+<h3 id="step-4-authenticating-to-a-protected-searxng-optional">Step 4: Authenticating to a protected SearXNG (optional)<a class="headerlink" href="#step-4-authenticating-to-a-protected-searxng-optional" title="Permanent link">&para;</a></h3>
+<p>If your instance is behind HTTP Basic auth or a reverse proxy that requires a token, supply the credential at deploy time. Both variables are optional — unset, the server talks to SearXNG exactly as before.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># HTTP Basic auth (the most common case):</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">SEARXNG_BASIC_AUTH</span><span class="o">=</span>user:password<span class="w">   </span><span class="c1"># everything after the first &#39;:&#39; is the password, so colons in the password are fine</span>
+
+<span class="c1"># Non-Basic schemes (bearer token, Cloudflare Access service token, API-gateway shared secret) —</span>
+<span class="c1"># comma-separated &quot;Name: Value&quot; pairs:</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">SEARXNG_HEADERS</span><span class="o">=</span><span class="s2">&quot;X-Proxy-Token: abc123, CF-Access-Client-Id: client.id&quot;</span>
+</code></pre></div>
+<p>Notes:</p>
+<ul>
+<li><strong>Never logged.</strong> The credential and header values never appear in logs, errors, or audit records — messages name only the variable or the header name.</li>
+<li><strong>Fail-closed &amp; validated.</strong> A malformed value — Basic auth without a <code>user:password</code> shape, a header missing its <code>:</code>, an invalid header name, or a newline/control character in a value — is rejected at startup and never sent on the wire. In HTTP mode (<code>PORT</code> set) the server refuses to start; in STDIO mode it logs the error and drops the bad value (matching the existing zero-config startup behavior). Either way the malformed credential is never used.</li>
+<li><strong>No commas or newlines inside a header value</strong> — commas delimit the pairs, and newlines are rejected to prevent header injection.</li>
+<li><strong>Precedence.</strong> A custom <code>Authorization</code> header in <code>SEARXNG_HEADERS</code> overrides <code>SEARXNG_BASIC_AUTH</code> (last writer wins), which lets a bearer-token proxy take priority.</li>
+<li>Auth applies whenever <code>SEARXNG_URL</code> is set — including when SearXNG is only a <code>SEARCH_ROUTING</code> or fallback target, not just when <code>SEARCH_PROVIDER=searxng</code>.</li>
+<li>Never commit real credentials; set these as deployment secrets.</li>
+</ul>
+<hr />
+<h2 id="searchapiio">SearchAPI.io<a class="headerlink" href="#searchapiio" title="Permanent link">&para;</a></h2>
+<p><strong>Free tier</strong>: 100 searches/month (paid plans available)</p>
+<h3 id="step-1-get-an-api-key_5">Step 1: Get an API Key<a class="headerlink" href="#step-1-get-an-api-key_5" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Go to <a href="https://www.searchapi.io/">SearchAPI.io</a></li>
+<li>Sign up for an account</li>
+<li>Navigate to your dashboard</li>
+<li>Copy your API key</li>
+</ol>
+<h3 id="step-2-configure_4">Step 2: Configure<a class="headerlink" href="#step-2-configure_4" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">SEARCHAPI_API_KEY</span><span class="o">=</span>your-searchapi-key
+</code></pre></div>
+<p>To use SearchAPI.io as your primary provider:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">SEARCH_PROVIDER</span><span class="o">=</span>searchapi
+<span class="nb">export</span><span class="w"> </span><span class="nv">SEARCHAPI_API_KEY</span><span class="o">=</span>your-searchapi-key
+</code></pre></div>
+<hr />
+<h2 id="multi-provider-routing">Multi-Provider Routing<a class="headerlink" href="#multi-provider-routing" title="Permanent link">&para;</a></h2>
+<p>For maximum reliability, configure multiple providers and let the server route automatically with fallback:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># All providers configured</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">BRAVE_API_KEY</span><span class="o">=</span>BSA...
+<span class="nb">export</span><span class="w"> </span><span class="nv">GOOGLE_CUSTOM_SEARCH_API_KEY</span><span class="o">=</span>AIza...
+<span class="nb">export</span><span class="w"> </span><span class="nv">GOOGLE_CUSTOM_SEARCH_ID</span><span class="o">=</span><span class="m">017</span>...
+<span class="nb">export</span><span class="w"> </span><span class="nv">SERPER_API_KEY</span><span class="o">=</span>...
+
+<span class="c1"># Priority-ordered routing with automatic failover</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">SEARCH_ROUTING</span><span class="o">=</span>brave,google,serper
+</code></pre></div>
+<p>If Brave is down or rate-limited, requests automatically switch to Google, then Serper. If one provider starts failing repeatedly, the server stops trying it and routes to the next one.</p>
+<p>For per-operation routing (different providers for different search types):</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">SEARCH_ROUTING</span><span class="o">=</span><span class="s1">&#39;{&quot;web&quot;:&quot;brave,google&quot;,&quot;news&quot;:&quot;brave,serper&quot;,&quot;images&quot;:&quot;google,brave&quot;,&quot;academic&quot;:&quot;openalex,crossref&quot;,&quot;patents&quot;:&quot;epo,lens,searchapi,uspto&quot;,&quot;default&quot;:&quot;brave,google,searchapi&quot;}&#39;</span>
+</code></pre></div>
+<p>See <a href="../deployment/">docs/DEPLOYMENT.md</a> for advanced routing configuration.</p>
+<hr />
+<h2 id="choosing-a-provider">Choosing a Provider<a class="headerlink" href="#choosing-a-provider" title="Permanent link">&para;</a></h2>
+<p>Not sure which provider to pick? See <strong><a href="../providers/">docs/PROVIDERS.md</a></strong> for a full comparison: index classification (own index vs. Google-backed vs. aggregator), capability matrix per tool, free-tier limits, and a quick-pick guide.</p>
+<p><strong>Short recommendation</strong>: Start with Brave (2,000/month free, own independent index) and add Google as a fallback. Use <code>SEARCH_ROUTING=brave,google</code> for a good balance of coverage and reliability.</p>
+<hr />
+<h2 id="patent-search-providers-optional">Patent Search Providers (Optional)<a class="headerlink" href="#patent-search-providers-optional" title="Permanent link">&para;</a></h2>
+<p>These providers enable structured patent search via <code>patent_search</code>. All are optional — without them, patent search falls back to web discovery via your configured web search provider.</p>
+<h3 id="epo-open-patent-services-worldwide">EPO Open Patent Services (Worldwide)<a class="headerlink" href="#epo-open-patent-services-worldwide" title="Permanent link">&para;</a></h3>
+<p>Free access to 100M+ patent documents across all major offices.</p>
+<p><strong>Step 1</strong>: Register at <a href="https://developers.epo.org">developers.epo.org</a> and create an app with "OPS - EPO OPS Core APIs" enabled.</p>
+<p><strong>Step 2</strong>: Configure</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">EPO_OPS_CONSUMER_KEY</span><span class="o">=</span>your-consumer-key
+<span class="nb">export</span><span class="w"> </span><span class="nv">EPO_OPS_CONSUMER_SECRET</span><span class="o">=</span>your-consumer-secret
+</code></pre></div>
+<p><strong>Notes</strong>: Free tier is rate-limited (throttled, not hard-capped). Authentication uses OAuth2 Client Credentials (handled automatically). Coverage is worldwide — all patent offices.</p>
+<h3 id="uspto-us-patents">USPTO (US Patents)<a class="headerlink" href="#uspto-us-patents" title="Permanent link">&para;</a></h3>
+<p>Access to US patent applications and grants.</p>
+<p><strong>Step 1</strong>: Request an API key at <a href="https://data.uspto.gov">data.uspto.gov</a>.</p>
+<p><strong>Step 2</strong>: Configure</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">USPTO_API_KEY</span><span class="o">=</span>your-api-key
+</code></pre></div>
+<p><strong>Notes</strong>: Covers US patents only. Queries for non-US patent offices automatically skip this provider.</p>
+<h3 id="the-lens-worldwide-scholarly-links">The Lens (Worldwide + Scholarly Links)<a class="headerlink" href="#the-lens-worldwide-scholarly-links" title="Permanent link">&para;</a></h3>
+<p>Access to 100+ jurisdictions with links between patents and scholarly works.</p>
+<p><strong>Step 1</strong>: Register at <a href="https://www.lens.org">lens.org</a> and request API access from your account settings.</p>
+<p><strong>Step 2</strong>: Configure</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">LENS_API_TOKEN</span><span class="o">=</span>your-api-token
+</code></pre></div>
+<p><strong>Notes</strong>: Free tier allows limited monthly requests. Unique capability: links patents to citing academic papers.</p>
+<h3 id="patent-routing">Patent Routing<a class="headerlink" href="#patent-routing" title="Permanent link">&para;</a></h3>
+<p>When you have multiple patent providers configured, the server tries each one in order — if the first doesn't have results, it moves to the next:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">SEARCH_ROUTING</span><span class="o">=</span><span class="s1">&#39;{&quot;patents&quot;:&quot;epo,lens,searchapi,uspto&quot;,&quot;default&quot;:&quot;brave,google&quot;}&#39;</span>
+</code></pre></div>
+<p>Without explicit routing, all configured patent providers are tried in order until one returns results. The <code>patent_office</code> parameter in search requests enables intelligent routing — e.g., a search restricted to <code>EP</code> skips USPTO automatically.</p>
+<hr />
+<h2 id="academic-search-providers-optional">Academic Search Providers (Optional)<a class="headerlink" href="#academic-search-providers-optional" title="Permanent link">&para;</a></h2>
+<p>These providers enable structured scholarly search via <code>academic_search</code>. All are optional — without them, academic search falls back to site-restricted web discovery via your configured web search provider.</p>
+<h3 id="openalex-worldwide-287m-works">OpenAlex (Worldwide — 287M+ Works)<a class="headerlink" href="#openalex-worldwide-287m-works" title="Permanent link">&para;</a></h3>
+<p>Open scholarly metadata covering all academic disciplines. Returns DOIs, authors with affiliations, citation counts, open-access status, PDF links, and funding data.</p>
+<p><strong>Step 1</strong>: No registration needed — just provide a contact email for the polite pool (100 RPS instead of 10 RPS).</p>
+<p><strong>Step 2</strong>: Configure</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">OPENALEX_EMAIL</span><span class="o">=</span>you@example.com
+</code></pre></div>
+<p><strong>Notes</strong>: CC0 data, no API key required. The email is used for the "polite pool" (higher rate limits, priority support). Abstracts are returned in inverted index format and reconstructed automatically.</p>
+<h3 id="crossref-worldwide-140m-doi-works">CrossRef (Worldwide — 140M+ DOI Works)<a class="headerlink" href="#crossref-worldwide-140m-doi-works" title="Permanent link">&para;</a></h3>
+<p>Authoritative DOI metadata with 99.94% documented uptime. Returns structured journal metadata, publication dates, and citation counts for peer-reviewed works.</p>
+<p><strong>Step 1</strong>: No registration needed — just provide a contact email for the polite pool (50 RPS instead of 5 RPS).</p>
+<p><strong>Step 2</strong>: Configure</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">CROSSREF_EMAIL</span><span class="o">=</span>you@example.com
+</code></pre></div>
+<p><strong>Notes</strong>: The email is used for the polite pool (higher rate limits). CrossRef is the official DOI registration agency — every DOI-registered work appears here with authoritative metadata.</p>
+<h3 id="semantic-scholar-worldwide-200m-papers">Semantic Scholar (Worldwide — 200M+ Papers)<a class="headerlink" href="#semantic-scholar-worldwide-200m-papers" title="Permanent link">&para;</a></h3>
+<p>Adds AI <code>tldr</code> summaries and citation intent/influence signals, and powers <code>citation_graph</code> with rich edges. Works <strong>without</strong> a key at a lower shared rate limit; a key raises throughput.</p>
+<p><strong>Step 1</strong>: (Optional) Request a key at <a href="https://www.semanticscholar.org/product/api">semanticscholar.org/product/api</a>.</p>
+<p><strong>Step 2</strong>: Configure (optional)</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">SEMANTIC_SCHOLAR_API_KEY</span><span class="o">=</span>your-key
+</code></pre></div>
+<p><strong>Notes</strong>: Keyless use is rate-limited by a shared public pool and may return a <code>rate_limited</code> error under load — set a key to avoid this. Also selectable as a <code>citation_graph</code> provider.</p>
+<h3 id="pubmed-biomedical-literature-35m-citations">PubMed (Biomedical Literature — 35M+ Citations)<a class="headerlink" href="#pubmed-biomedical-literature-35m-citations" title="Permanent link">&para;</a></h3>
+<p>NIH's NCBI E-utilities index of biomedical and life-science literature. Works <strong>keyless</strong> at ~3 requests/second; a free API key raises it to ~10 req/s.</p>
+<p><strong>Step 1</strong>: (Optional) Sign in at <a href="https://www.ncbi.nlm.nih.gov/account">ncbi.nlm.nih.gov/account</a> and go to <strong>Settings → API Key Management</strong> to generate a key.</p>
+<p><strong>Step 2</strong>: Configure (both are optional)</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">PUBMED_API_KEY</span><span class="o">=</span>your-ncbi-key<span class="w">     </span><span class="c1"># raises rate limit (~10 req/s)</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">PUBMED_EMAIL</span><span class="o">=</span>you@example.com<span class="w">     </span><span class="c1"># NCBI contact param; falls back to OPENALEX_EMAIL when unset</span>
+</code></pre></div>
+<p><strong>Notes</strong>: Keyless use works out of the box. A key is recommended for sustained or high-volume use. <code>PUBMED_EMAIL</code> falls back to <code>OPENALEX_EMAIL</code> — setting the OpenAlex email is sufficient to cover both. Also selectable as an <code>academic_search</code> provider via <code>provider: pubmed</code>.</p>
+<h3 id="unpaywall-open-access-enrichment">Unpaywall (Open-Access Enrichment)<a class="headerlink" href="#unpaywall-open-access-enrichment" title="Permanent link">&para;</a></h3>
+<p>Not a search provider — it fills free-PDF links on DOI-bearing <code>academic_search</code> results that lack one. Best-effort; never fails or slows a search beyond its own bounded request.</p>
+<p><strong>Step 1</strong>: No registration — just provide a contact email.</p>
+<p><strong>Step 2</strong>: Configure</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">UNPAYWALL_EMAIL</span><span class="o">=</span>you@example.com
+</code></pre></div>
+<p><strong>Notes</strong>: Falls back to <code>OPENALEX_EMAIL</code> when unset; a complete no-op when neither is set.</p>
+<h3 id="academic-routing">Academic Routing<a class="headerlink" href="#academic-routing" title="Permanent link">&para;</a></h3>
+<p>When multiple academic providers are configured, the router tries them in priority order with automatic fallback:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">SEARCH_ROUTING</span><span class="o">=</span><span class="s1">&#39;{&quot;academic&quot;:&quot;openalex,crossref&quot;,&quot;patents&quot;:&quot;epo,lens&quot;,&quot;default&quot;:&quot;brave,google&quot;}&#39;</span>
+</code></pre></div>
+<p>Without explicit routing, all configured academic providers are tried in order until one returns results. If no academic providers are configured, <code>academic_search</code> automatically falls back to site-restricted web search.</p>
+<h2 id="structured-domain-providers-optional">Structured-Domain Providers (Optional)<a class="headerlink" href="#structured-domain-providers-optional" title="Permanent link">&para;</a></h2>
+<p>These enable dedicated structured-research tools. Each is independent; <code>filing_search</code> is the only one that requires configuration (a contact email). The rest are always available — see each section for optional keys that raise rate limits or add data sources.</p>
+<h3 id="sec-edgar-us-public-company-filings">SEC EDGAR (US Public-Company Filings)<a class="headerlink" href="#sec-edgar-us-public-company-filings" title="Permanent link">&para;</a></h3>
+<p>Backs <code>filing_search</code>. SEC requires a contact email in the request User-Agent — there is <strong>no API key</strong>.</p>
+<p><strong>Step 1</strong>: No registration. SEC asks only that automated requests identify a contact email.</p>
+<p><strong>Step 2</strong>: Configure</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">EDGAR_CONTACT_EMAIL</span><span class="o">=</span>you@example.com
+</code></pre></div>
+<p><strong>Notes</strong>: Falls back to <code>OPENALEX_EMAIL</code> if <code>EDGAR_CONTACT_EMAIL</code> is unset; <code>filing_search</code> registers only when one of the two is set. Returns recent filings or, with <code>facts=true</code>, structured XBRL company facts passed through exactly as filed.</p>
+<h3 id="courtlistener-us-case-law">CourtListener (US Case Law)<a class="headerlink" href="#courtlistener-us-case-law" title="Permanent link">&para;</a></h3>
+<p>Backs <code>legal_search</code>. Works <strong>keyless</strong> — <code>legal_search</code> is always available. An optional token raises the rate limit.</p>
+<p><strong>Step 1</strong>: (Optional) Register at <a href="https://www.courtlistener.com">courtlistener.com</a> and create an API token in your account settings.</p>
+<p><strong>Step 2</strong>: Configure (optional)</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">COURTLISTENER_API_TOKEN</span><span class="o">=</span>your-token
+</code></pre></div>
+<p><strong>Notes</strong>: Without a token, roughly 100 requests/day; a token raises this to ~5000/day. Coverage is US federal and state court opinions.</p>
+<h3 id="world-bank-oecd-eurostat-keyless-fred-key">World Bank + OECD + Eurostat (keyless) + FRED (key)<a class="headerlink" href="#world-bank-oecd-eurostat-keyless-fred-key" title="Permanent link">&para;</a></h3>
+<p><code>econ_search</code> is backed by four providers. <strong>World Bank Open Data</strong>, <strong>OECD</strong>, and <strong>Eurostat</strong> are all keyless and always available. <strong>FRED</strong> (Federal Reserve Economic Data) adds 800K+ US macro series and needs a free key.</p>
+<ul>
+<li>World Bank (<code>provider: worldbank</code>) — global development indicators for 200+ economies, scope by <code>country</code></li>
+<li>OECD (<code>provider: oecd</code>) — OECD economy indicators via SDMX</li>
+<li>Eurostat (<code>provider: eurostat</code>) — European official statistics</li>
+<li>FRED (<code>provider: fred</code>) — US macro series (GDP, CPI, unemployment, rates)</li>
+</ul>
+<p>So <code>econ_search</code> works out of the box (World Bank, OECD, Eurostat); add the FRED key to also reach US macro series.</p>
+<p><strong>FRED — Step 1</strong>: Request a free key at <a href="https://fred.stlouisfed.org/docs/api/api_key.html">fred.stlouisfed.org</a> (sign in → My Account → API Keys).</p>
+<p><strong>FRED — Step 2</strong>: Configure</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">FRED_API_KEY</span><span class="o">=</span>your-fred-key
+</code></pre></div>
+<p><strong>Notes</strong>: World Bank, OECD, and Eurostat require no configuration. FRED is enabled by <code>FRED_API_KEY</code>. Observation values pass through exactly as each source returns them — no rounding; the FRED key is sent as a query param and never logged.</p>
+<h3 id="clinicaltrialsgov-clinical-trials">ClinicalTrials.gov (Clinical Trials)<a class="headerlink" href="#clinicaltrialsgov-clinical-trials" title="Permanent link">&para;</a></h3>
+<p>Backs <code>clinical_search</code>. Works <strong>keyless</strong> — <code>clinical_search</code> is always available. No registration or API key.</p>
+<p><strong>Notes</strong>: Queries the ClinicalTrials.gov v2 API (NIH registry of 400K+ studies). Returns trial registrations as typed data (status, phase, sponsor, conditions, interventions, results availability); read the full record via <code>scrape_page</code> on the returned <code>url</code>. Discovery + primary-source retrieval only — not medical advice.</p>
+<h3 id="ecosystems-awesome-list-discovery">ecosyste.ms (Awesome-List Discovery)<a class="headerlink" href="#ecosystems-awesome-list-discovery" title="Permanent link">&para;</a></h3>
+<p>Backs <code>awesome_list_search</code>. Works <strong>keyless</strong> — the tool is always available at a shared "anonymous" rate-limit tier. Setting a contact email opts into ecosyste.ms's "polite pool" — a real rate-limit increase, free, no registration.</p>
+<p><strong>Step 1</strong>: No sign-up needed. Set a contact email to join the polite pool.</p>
+<p><strong>Step 2</strong>: Configure (optional)</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">ECOSYSTEMS_EMAIL</span><span class="o">=</span>you@example.com
+</code></pre></div>
+<p>Falls back to <code>OPENALEX_EMAIL</code> when unset. You can also register a free API key at <a href="https://ecosyste.ms/login">ecosyste.ms/login</a> and set <code>ECOSYSTEMS_API_KEY</code> — it's sent as an <code>Authorization: Bearer</code> header and never logged — but per ecosyste.ms's published pricing, key-based auth only raises your rate-limit tier on their paid Develop/Scale plans, not the free self-service keys issued at login. <code>ECOSYSTEMS_EMAIL</code> is the mechanism that actually raises your limit today.</p>
+<p><strong>Notes</strong>: Without either set, <code>awesome_list_search</code> works exactly the same — just at the shared anonymous rate limit.</p>
+<h3 id="internet-archive-save-page-now-optional-for-archive_source">Internet Archive — Save Page Now (Optional, for <code>archive_source</code>)<a class="headerlink" href="#internet-archive-save-page-now-optional-for-archive_source" title="Permanent link">&para;</a></h3>
+<p>The <code>archive_source</code> tool triggers an Internet Archive Save Page Now (SPN) capture. It works <strong>keyless</strong> by default — no registration is required. An optional S3-style key pair raises the rate limit and improves capture reliability for high-volume use.</p>
+<p><strong>Step 1</strong>: (Optional) Sign in at <a href="https://archive.org/account/s3.php">archive.org/account/s3.php</a> to generate an access/secret key pair.</p>
+<p><strong>Step 2</strong>: Configure (both are optional)</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">IA_ACCESS_KEY</span><span class="o">=</span>your-ia-access-key
+<span class="nb">export</span><span class="w"> </span><span class="nv">IA_SECRET_KEY</span><span class="o">=</span>your-ia-secret-key
+</code></pre></div>
+<p><strong>Notes</strong>: Both keys are required together — set neither or both. Values are never logged or included in error messages. Keyless SPN is sufficient for occasional archiving; keys are recommended for production deployments that archive frequently.</p>
+<h3 id="brandfetch-brand-research-optional">BrandFetch (Brand Research — Optional)<a class="headerlink" href="#brandfetch-brand-research-optional" title="Permanent link">&para;</a></h3>
+<p>Backs <code>brand_research</code>. Works <strong>keyless</strong> — the tool always runs homepage meta/structured-data extraction and brand-page probing, which is enough for most tasks. Setting <code>BRANDFETCH_API_KEY</code> adds a concurrent BrandFetch Brand API + Context API enrichment tier that fills in richer identity, logo, color, font, tagline, and tone-of-voice fields the no-key tiers didn't find — it only adds coverage, never replaces the no-key pipeline. <code>BRANDFETCH_CLIENT_ID</code> separately enables company-name → domain resolution via BrandFetch's Brand Search API and logo CDN requests.</p>
+<p><strong>Step 1</strong>: (Optional) Sign up at <a href="https://brandfetch.com">brandfetch.com</a> and copy your API key and client ID from the dashboard.</p>
+<p><strong>Step 2</strong>: Configure (both are optional and independent)</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">BRANDFETCH_API_KEY</span><span class="o">=</span>your-api-key<span class="w">         </span><span class="c1"># Brand + Context API (Bearer auth); free tier: 100 req/month</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">BRANDFETCH_CLIENT_ID</span><span class="o">=</span>your-client-id<span class="w">     </span><span class="c1"># Brand Search API + logo CDN; free tier: 500K req/month</span>
+</code></pre></div>
+<p><strong>Notes</strong>: Neither key is ever logged. Without <code>BRANDFETCH_API_KEY</code>, <code>brand_research</code> still runs its full no-key pipeline (homepage meta/structured-data extraction, brand-page probing, optional web search) — useful for most tasks.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        <div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/zoharbabin/web-researcher-mcp" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://x.com/zohar" target="_blank" rel="noopener" title="x.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M389.2 48h70.6L305.6 224.2 487 464H345L233.7 318.6 106.5 464H35.8l164.9-188.5L26.8 48h145.6l100.5 132.9zm-24.8 373.8h39.1L151.1 88h-42z"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://hub.docker.com/r/zoharbabin/web-researcher-mcp" target="_blank" rel="noopener" title="hub.docker.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M349.9 236.3h-66.1v-59.4h66.1zm0-204.3h-66.1v60.7h66.1zm78.2 144.8H362v59.4h66.1zm-156.3-72.1h-66.1v60.1h66.1zm78.1 0h-66.1v60.1h66.1zm276.8 100c-14.4-9.7-47.6-13.2-73.1-8.4-3.3-24-16.7-44.9-41.1-63.7l-14-9.3-9.3 14c-18.4 27.8-23.4 73.6-3.7 103.8-8.7 4.7-25.8 11.1-48.4 10.7H2.4c-8.7 50.8 5.8 116.8 44 162.1 37.1 43.9 92.7 66.2 165.4 66.2 157.4 0 273.9-72.5 328.4-204.2 21.4.4 67.6.1 91.3-45.2 1.5-2.5 6.6-13.2 8.5-17.1zm-511.1-27.9h-66v59.4h66.1v-59.4zm78.1 0h-66.1v59.4h66.1zm78.1 0h-66.1v59.4h66.1zm-78.1-72.1h-66.1v60.1h66.1z"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "..", "features": ["navigation.sections", "navigation.top", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+  
+      <script src="../assets/javascripts/bundle.13a4f30d.min.js"></script>
+      
+    
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      document.querySelectorAll('img[src$=".gif"], img[src$=".png"]').forEach(function(img) {
+        if (!img.loading) img.loading = "lazy";
+      });
+    });
+  </script>
+
+  </body>
+</html>

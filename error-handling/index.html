@@ -1,0 +1,2152 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust.">
+      
+      
+      
+        <link rel="canonical" href="https://zoharbabin.com/web-researcher-mcp/error-handling/">
+      
+      
+        <link rel="prev" href="../contributing/">
+      
+      
+        <link rel="next" href="../privacy/">
+      
+      
+      <link rel="icon" href="../img/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.14">
+    
+    
+      
+        <title>Error Handling - Web Researcher MCP</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.342714a4.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  <!-- Google Tag Manager -->
+  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+  })(window,document,'script','dataLayer','GTM-P225W69C');</script>
+  <!-- End Google Tag Manager -->
+  <!-- Preconnect for cross-origin origins used on every page load -->
+  <link rel="preconnect" href="https://raw.githubusercontent.com">
+  <link rel="preconnect" href="https://api.github.com">
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Error Handling - Web Researcher MCP" />
+  <meta property="og:description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust. Free, private, open source." />
+  <meta property="og:image" content="https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/social-preview.png" />
+  <meta property="og:url" content="https://zoharbabin.com/web-researcher-mcp/error-handling/" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Error Handling - Web Researcher MCP" />
+  <meta name="twitter:description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust. Free, private, open source." />
+  <meta name="twitter:image" content="https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/social-preview.png" />
+
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#error-handling" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+        <aside class="md-banner">
+          <div class="md-banner__inner md-grid md-typeset">
+            
+            
+  <!-- Google Tag Manager (noscript) -->
+  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-P225W69C"
+  height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+  <!-- End Google Tag Manager (noscript) -->
+  <a href="https://github.com/zoharbabin/web-researcher-mcp" style="display:inline-flex;align-items:center;gap:.4em;">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25z"/></svg>
+    Star us on GitHub
+  </a>
+
+          </div>
+          
+        </aside>
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Web Researcher MCP" class="md-header__button md-logo" aria-label="Web Researcher MCP" data-md-component="logo">
+      
+  <img src="../img/logo.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Web Researcher MCP
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Error Handling
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/zoharbabin/web-researcher-mcp" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    zoharbabin/web-researcher-mcp
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Web Researcher MCP" class="md-nav__button md-logo" aria-label="Web Researcher MCP" data-md-component="logo">
+      
+  <img src="../img/logo.svg" alt="logo">
+
+    </a>
+    Web Researcher MCP
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/zoharbabin/web-researcher-mcp" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    zoharbabin/web-researcher-mcp
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Examples
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Tools
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    API Setup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../providers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Providers
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Deployment
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Security
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../security-and-compliance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Security & Compliance
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Contributing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Error Handling
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Error Handling
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#why-this-matters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Why This Matters
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Why This Matters">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-github-issue-guidance-pattern" class="md-nav__link">
+    <span class="md-ellipsis">
+      The GitHub Issue Guidance Pattern
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#error-layers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Error Layers
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layer-1-scraper-error-taxonomy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 1: Scraper Error Taxonomy
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Layer 1: Scraper Error Taxonomy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#error-kinds" class="md-nav__link">
+    <span class="md-ellipsis">
+      Error Kinds
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#helper-constructors" class="md-nav__link">
+    <span class="md-ellipsis">
+      Helper Constructors
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#classification-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Classification Functions
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#composite-error-all-tiers-failed" class="md-nav__link">
+    <span class="md-ellipsis">
+      Composite Error (All Tiers Failed)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layer-2-structured-error-responses" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 2: Structured Error Responses
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Layer 2: Structured Error Responses">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#response-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      Response Format
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#structured-error-fields-toolerror-in-internaltoolserrorsgo" class="md-nav__link">
+    <span class="md-ellipsis">
+      Structured Error Fields (ToolError in internal/tools/errors.go)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#error-kind-enum-errorkind" class="md-nav__link">
+    <span class="md-ellipsis">
+      Error Kind Enum (ErrorKind)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#suggested-action-vocabulary" class="md-nav__link">
+    <span class="md-ellipsis">
+      Suggested Action Vocabulary
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Key Functions
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#validation-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      Validation Errors
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layer-3-mcp-protocol-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 3: MCP Protocol Contract
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layer-4-session-level-error-aggregation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 4: Session-level Error Aggregation
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#for-llm-agents-parsing-and-recovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      For LLM Agents: Parsing and Recovery
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="For LLM Agents: Parsing and Recovery">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#recovery-decision-tree" class="md-nav__link">
+    <span class="md-ellipsis">
+      Recovery Decision Tree
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#zero-result-responses-not-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      Zero-Result Responses (Not Errors)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#partial-success-search_and_scrape" class="md-nav__link">
+    <span class="md-ellipsis">
+      Partial Success (search_and_scrape)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#design-principles" class="md-nav__link">
+    <span class="md-ellipsis">
+      Design Principles
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Design Principles">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-errors-are-actionable-not-diagnostic" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Errors are actionable, not diagnostic
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-errors-are-categorized-not-strings" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Errors are categorized, not strings
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-errors-flow-up-never-sideways" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Errors flow up, never sideways
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-the-issue-link-is-surgical" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. The issue link is surgical
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-errors-are-tested" class="md-nav__link">
+    <span class="md-ellipsis">
+      5. Errors are tested
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#for-contributors-adding-error-handling-to-new-code" class="md-nav__link">
+    <span class="md-ellipsis">
+      For Contributors: Adding Error Handling to New Code
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="For Contributors: Adding Error Handling to New Code">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#in-a-new-scraper-tier" class="md-nav__link">
+    <span class="md-ellipsis">
+      In a new scraper tier:
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#in-a-new-search-provider" class="md-nav__link">
+    <span class="md-ellipsis">
+      In a new search provider:
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#in-a-new-tool-handler" class="md-nav__link">
+    <span class="md-ellipsis">
+      In a new tool handler:
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#file-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      File Reference
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../privacy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Privacy Policy
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../brand-guidelines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Brand Guidelines
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lessons-learned/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Our Story
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../session-persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Session Persistence
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Migration
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cicd/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CI/CD Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#why-this-matters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Why This Matters
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Why This Matters">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-github-issue-guidance-pattern" class="md-nav__link">
+    <span class="md-ellipsis">
+      The GitHub Issue Guidance Pattern
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#error-layers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Error Layers
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layer-1-scraper-error-taxonomy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 1: Scraper Error Taxonomy
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Layer 1: Scraper Error Taxonomy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#error-kinds" class="md-nav__link">
+    <span class="md-ellipsis">
+      Error Kinds
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#helper-constructors" class="md-nav__link">
+    <span class="md-ellipsis">
+      Helper Constructors
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#classification-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Classification Functions
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#composite-error-all-tiers-failed" class="md-nav__link">
+    <span class="md-ellipsis">
+      Composite Error (All Tiers Failed)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layer-2-structured-error-responses" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 2: Structured Error Responses
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Layer 2: Structured Error Responses">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#response-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      Response Format
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#structured-error-fields-toolerror-in-internaltoolserrorsgo" class="md-nav__link">
+    <span class="md-ellipsis">
+      Structured Error Fields (ToolError in internal/tools/errors.go)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#error-kind-enum-errorkind" class="md-nav__link">
+    <span class="md-ellipsis">
+      Error Kind Enum (ErrorKind)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#suggested-action-vocabulary" class="md-nav__link">
+    <span class="md-ellipsis">
+      Suggested Action Vocabulary
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Key Functions
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#validation-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      Validation Errors
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layer-3-mcp-protocol-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 3: MCP Protocol Contract
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layer-4-session-level-error-aggregation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 4: Session-level Error Aggregation
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#for-llm-agents-parsing-and-recovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      For LLM Agents: Parsing and Recovery
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="For LLM Agents: Parsing and Recovery">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#recovery-decision-tree" class="md-nav__link">
+    <span class="md-ellipsis">
+      Recovery Decision Tree
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#zero-result-responses-not-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      Zero-Result Responses (Not Errors)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#partial-success-search_and_scrape" class="md-nav__link">
+    <span class="md-ellipsis">
+      Partial Success (search_and_scrape)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#design-principles" class="md-nav__link">
+    <span class="md-ellipsis">
+      Design Principles
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Design Principles">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-errors-are-actionable-not-diagnostic" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Errors are actionable, not diagnostic
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-errors-are-categorized-not-strings" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Errors are categorized, not strings
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-errors-flow-up-never-sideways" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Errors flow up, never sideways
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-the-issue-link-is-surgical" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. The issue link is surgical
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-errors-are-tested" class="md-nav__link">
+    <span class="md-ellipsis">
+      5. Errors are tested
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#for-contributors-adding-error-handling-to-new-code" class="md-nav__link">
+    <span class="md-ellipsis">
+      For Contributors: Adding Error Handling to New Code
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="For Contributors: Adding Error Handling to New Code">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#in-a-new-scraper-tier" class="md-nav__link">
+    <span class="md-ellipsis">
+      In a new scraper tier:
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#in-a-new-search-provider" class="md-nav__link">
+    <span class="md-ellipsis">
+      In a new search provider:
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#in-a-new-tool-handler" class="md-nav__link">
+    <span class="md-ellipsis">
+      In a new tool handler:
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#file-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      File Reference
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="error-handling">Error Handling<a class="headerlink" href="#error-handling" title="Permanent link">&para;</a></h1>
+<p>How web-researcher-mcp detects, classifies, and reports errors — and why errors are designed to guide LLM clients toward resolution.</p>
+<hr />
+<h2 id="why-this-matters">Why This Matters<a class="headerlink" href="#why-this-matters" title="Permanent link">&para;</a></h2>
+<p>When an AI assistant calls a tool and gets an error, it has three options:
+1. Retry blindly (wastes API quota, annoys users)
+2. Give up and say "something went wrong" (unhelpful)
+3. Understand what failed, explain it clearly, and suggest a next step</p>
+<p>This project optimizes for option 3. Every error response tells the LLM client <em>what category of failure occurred</em>, <em>what specifically went wrong</em>, and <em>what action to take</em> — including when to suggest the user file a bug report.</p>
+<h3 id="the-github-issue-guidance-pattern">The GitHub Issue Guidance Pattern<a class="headerlink" href="#the-github-issue-guidance-pattern" title="Permanent link">&para;</a></h3>
+<p>Some errors indicate a limitation in the MCP server itself — sites that should be scrapeable but aren't, providers that return unexpected formats, or content types not yet supported. For these cases, error messages include a direct link to the project's GitHub issues page, prompting the LLM to suggest the user report the problem.</p>
+<p>This creates a feedback loop: users encounter real-world edge cases → LLM guides them to report it → maintainers get actionable bug reports with the exact URL and failure mode → the server improves.</p>
+<p>The issue link appears <strong>only</strong> for errors where the MCP server could plausibly improve:
+- <code>ErrContent</code> — a page loaded but yielded no usable text
+- <code>ErrBrowser</code> — Chrome not available for a JS-heavy site
+- General upstream failures that persist across retries</p>
+<p>It does <strong>not</strong> appear for:
+- <code>ErrAuth</code> — login-walled pages (user's problem, not ours)
+- <code>ErrRateLimit</code> — transient, resolves with time
+- <code>ErrNetwork</code> — user's connectivity or the remote server is down</p>
+<hr />
+<h2 id="error-layers">Error Layers<a class="headerlink" href="#error-layers" title="Permanent link">&para;</a></h2>
+<p>Errors are handled at three layers, each with a different audience:</p>
+<div class="highlight"><pre><span></span><code>┌────────────────────────────────────────────────────┐
+│  Layer 1: Scraper errors (internal/scraper/)       │
+│  Audience: Server operators (via slog)             │
+│  Type: ScrapeError{Kind, Message, Cause, URL, Tier}│
+└──────────────────────┬─────────────────────────────┘
+                       │
+┌──────────────────────▼─────────────────────────────┐
+│  Layer 2: Tool-level error mapping (internal/tools/)│
+│  Audience: LLM clients (via MCP result)            │
+│  Functions: scrapeErrorResponse(), upstreamError-  │
+│             Response(), toolError()                 │
+└──────────────────────┬─────────────────────────────┘
+                       │
+┌──────────────────────▼─────────────────────────────┐
+│  Layer 3: MCP protocol (IsError: true)             │
+│  Audience: MCP client framework                    │
+│  Contract: text content with actionable message    │
+└────────────────────────────────────────────────────┘
+</code></pre></div>
+<hr />
+<h2 id="layer-1-scraper-error-taxonomy">Layer 1: Scraper Error Taxonomy<a class="headerlink" href="#layer-1-scraper-error-taxonomy" title="Permanent link">&para;</a></h2>
+<p><strong>File:</strong> <code>internal/scraper/errors.go</code></p>
+<p>All scrape pipeline errors are typed as <code>ScrapeError</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="kd">type</span><span class="w"> </span><span class="nx">ScrapeError</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">Kind</span><span class="w">    </span><span class="nx">ErrorKind</span><span class="w">  </span><span class="c1">// Category (see table below)</span>
+<span class="w">    </span><span class="nx">Message</span><span class="w"> </span><span class="kt">string</span><span class="w">     </span><span class="c1">// Human-readable description</span>
+<span class="w">    </span><span class="nx">Cause</span><span class="w">   </span><span class="kt">error</span><span class="w">      </span><span class="c1">// Underlying error (for Unwrap)</span>
+<span class="w">    </span><span class="nx">URL</span><span class="w">     </span><span class="kt">string</span><span class="w">     </span><span class="c1">// The URL that was being scraped</span>
+<span class="w">    </span><span class="nx">Tier</span><span class="w">    </span><span class="kt">string</span><span class="w">     </span><span class="c1">// Which pipeline tier produced this (&quot;markdown&quot;, &quot;stealth&quot;, &quot;html&quot;, &quot;browser&quot;, and the optional paid &quot;exa:cached&quot;/&quot;exa:crawled&quot;)</span>
+<span class="p">}</span>
+</code></pre></div>
+<h3 id="error-kinds">Error Kinds<a class="headerlink" href="#error-kinds" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Constant</th>
+<th>Triggers</th>
+<th>Tier Examples</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Network</td>
+<td><code>ErrNetwork</code></td>
+<td>DNS failure, timeout, connection refused, TLS error</td>
+<td>Any tier's HTTP client</td>
+</tr>
+<tr>
+<td>Validation</td>
+<td><code>ErrValidation</code></td>
+<td>Unsupported scheme, empty host, SSRF / private-IP / blocked-hostname denial, domain allowlist</td>
+<td>pipeline (validation chokepoint)</td>
+</tr>
+<tr>
+<td>Blocked</td>
+<td><code>ErrBlocked</code></td>
+<td>HTTP 403, remote bot detection (a real site refusing us)</td>
+<td>stealth/html (403)</td>
+</tr>
+<tr>
+<td>Browser</td>
+<td><code>ErrBrowser</code></td>
+<td>Chrome not found, launch failed, connect failed</td>
+<td>browser tier only</td>
+</tr>
+<tr>
+<td>Content</td>
+<td><code>ErrContent</code></td>
+<td>Page loaded but &lt;100 bytes of useful text extracted</td>
+<td>All tiers (composite failure)</td>
+</tr>
+<tr>
+<td>Auth</td>
+<td><code>ErrAuth</code></td>
+<td>HTTP 401, login redirect detected</td>
+<td>stealth, html</td>
+</tr>
+<tr>
+<td>Rate Limit</td>
+<td><code>ErrRateLimit</code></td>
+<td>HTTP 429</td>
+<td>Any tier's HTTP client</td>
+</tr>
+<tr>
+<td>Not Found</td>
+<td><code>ErrNotFound</code></td>
+<td>HTTP 404/410 — dead link, resource gone</td>
+<td>stealth/html/browser</td>
+</tr>
+</tbody>
+</table>
+<p><code>ErrValidation</code> is distinct from <code>ErrBlocked</code> on purpose: a validation/security rejection is a <strong>permanent</strong> client error (the URL itself is invalid or disallowed), so it is <strong>never retryable</strong> and must not be reported as transient bot-detection. <code>ErrBlocked</code> is reserved for a real remote site actively refusing the request (HTTP 403 / bot walls), which is retryable from a different source.</p>
+<h3 id="helper-constructors">Helper Constructors<a class="headerlink" href="#helper-constructors" title="Permanent link">&para;</a></h3>
+<p>Each tier uses these to create appropriately-typed errors:</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Creates</th>
+<th>Used By</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>networkError(url, tier, cause)</code></td>
+<td><code>ErrNetwork</code></td>
+<td>All tiers on HTTP failures</td>
+</tr>
+<tr>
+<td><code>validationError(url, tier, cause, detail)</code></td>
+<td><code>ErrValidation</code></td>
+<td>Pipeline chokepoint on bad scheme/host, SSRF denial, allowlist</td>
+</tr>
+<tr>
+<td><code>blockedError(url, tier, cause, detail)</code></td>
+<td><code>ErrBlocked</code></td>
+<td>stealth/html on remote HTTP 403</td>
+</tr>
+<tr>
+<td><code>browserError(url, cause, detail)</code></td>
+<td><code>ErrBrowser</code></td>
+<td>browser tier on init/launch failure</td>
+</tr>
+<tr>
+<td><code>contentError(url, detail)</code></td>
+<td><code>ErrContent</code></td>
+<td>Pipeline when all tiers extract nothing</td>
+</tr>
+<tr>
+<td><code>authError(url, tier, statusCode)</code></td>
+<td><code>ErrAuth</code></td>
+<td>stealth/html on 401</td>
+</tr>
+<tr>
+<td><code>rateLimitError(url, tier)</code></td>
+<td><code>ErrRateLimit</code></td>
+<td>Any tier on 429</td>
+</tr>
+<tr>
+<td><code>notFoundError(url, tier, statusCode)</code></td>
+<td><code>ErrNotFound</code></td>
+<td>stealth/html/browser on 404/410</td>
+</tr>
+</tbody>
+</table>
+<h3 id="classification-functions">Classification Functions<a class="headerlink" href="#classification-functions" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>classifyHTTPStatus(code, url, tier)</code></td>
+<td>Maps HTTP status codes to the correct ErrorKind</td>
+</tr>
+<tr>
+<td><code>classifyRawError(err, url)</code></td>
+<td>Wraps any untyped error into a ScrapeError by inspecting the message text</td>
+</tr>
+</tbody>
+</table>
+<h3 id="composite-error-all-tiers-failed">Composite Error (All Tiers Failed)<a class="headerlink" href="#composite-error-all-tiers-failed" title="Permanent link">&para;</a></h3>
+<p>When all pipeline tiers fail, <code>scrapeWithTieredFallback()</code> in <code>internal/scraper/pipeline.go</code> composes a diagnostic message showing what each tier observed:</p>
+<div class="highlight"><pre><span></span><code>no content extracted from https://x.com/user/status/123 (markdown: empty, stealth: HTTP 403, html: 12 bytes, browser: chrome launch failed)
+</code></pre></div>
+<p>The composite error's <code>Kind</code> is selected by priority — the single highest-priority kind across all tiers wins:
+- <code>ErrValidation</code> (priority 6) wins unconditionally — a security/validation denial is permanent and must never be downgraded
+- Otherwise the highest-priority kind from the remaining tiers: <code>ErrNotFound</code> (5) &gt; <code>ErrAuth</code> (4) &gt; <code>ErrRateLimit</code> (3) &gt; <code>ErrBlocked</code> (2) &gt; <code>ErrBrowser</code> (1) &gt; <code>ErrContent</code> (0)
+- If all tiers returned <code>ErrNetwork</code> → use <code>ErrNetwork</code></p>
+<p>A 404 co-occurring with a bot-block surfaces as <code>not_found</code> (priority 5 &gt; 2), not <code>blocked</code>.</p>
+<hr />
+<h2 id="layer-2-structured-error-responses">Layer 2: Structured Error Responses<a class="headerlink" href="#layer-2-structured-error-responses" title="Permanent link">&para;</a></h2>
+<p><strong>Files:</strong> <code>internal/tools/errors.go</code> (types + helpers), <code>internal/tools/search.go</code>, <code>internal/tools/scrape.go</code></p>
+<p>All error responses use a <strong>dual-format</strong> pattern: a natural-language first line (for LLMs and legacy clients) followed by a JSON block with machine-readable metadata (for programmatic parsing).</p>
+<h3 id="response-format">Response Format<a class="headerlink" href="#response-format" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code>Rate limited (google). Wait 60 seconds and retry, or try a different provider.
+
+{&quot;error&quot;:{&quot;kind&quot;:&quot;rate_limited&quot;,&quot;retryable&quot;:true,&quot;retryAfterSeconds&quot;:60,&quot;suggestedAction&quot;:&quot;retry_after_delay&quot;,&quot;provider&quot;:&quot;google&quot;}}
+</code></pre></div>
+<h3 id="structured-error-fields-toolerror-in-internaltoolserrorsgo">Structured Error Fields (<code>ToolError</code> in <code>internal/tools/errors.go</code>)<a class="headerlink" href="#structured-error-fields-toolerror-in-internaltoolserrorsgo" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>kind</code></td>
+<td>string</td>
+<td>Error category (see enum below)</td>
+</tr>
+<tr>
+<td><code>retryable</code></td>
+<td>bool</td>
+<td>Whether retrying the same call might succeed</td>
+</tr>
+<tr>
+<td><code>retryAfterSeconds</code></td>
+<td>int (optional)</td>
+<td>Seconds to wait before retrying</td>
+</tr>
+<tr>
+<td><code>suggestedAction</code></td>
+<td>string</td>
+<td>Recovery strategy for the LLM</td>
+</tr>
+<tr>
+<td><code>provider</code></td>
+<td>string (optional)</td>
+<td>Which provider failed</td>
+</tr>
+<tr>
+<td><code>alternatives</code></td>
+<td>[]string (optional)</td>
+<td>Other available providers</td>
+</tr>
+<tr>
+<td><code>detail</code></td>
+<td>string (optional)</td>
+<td>Technical detail for debugging (secret-masked, see below)</td>
+</tr>
+<tr>
+<td><code>recoveryHint</code></td>
+<td>object (optional)</td>
+<td>Session-recovery guidance, set on <code>session_not_found</code>: <code>{lastKnownStep int, canResume bool}</code> — lets a client resume or restart deterministically when a follow-up step reaches a pod that doesn't hold the (in-memory) session</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Secret masking:</strong> Before any error string reaches an LLM-facing result (or a downstream audit log), it is passed through <code>audit.MaskSecrets()</code>. Scrape errors can echo a target URL containing embedded credentials, and upstream provider errors occasionally reflect back an API key (e.g. <code>?key=AIza...</code>). <code>scrapeErrorToToolError()</code> masks <code>te.Detail</code>, <code>failureFromScrapeError()</code> masks the failure <code>reason</code>, and <code>upstreamErrorResponse()</code> masks the upstream detail. As a result, the <code>detail</code>/<code>reason</code> fields and the human-readable message never expose API keys, tokens, or credentials.</p>
+</blockquote>
+<h3 id="error-kind-enum-errorkind">Error Kind Enum (<code>ErrorKind</code>)<a class="headerlink" href="#error-kind-enum-errorkind" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>When</th>
+<th>Retryable</th>
+<th>Suggested Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>rate_limited</code></td>
+<td>HTTP 429, quota exceeded</td>
+<td>true</td>
+<td><code>retry_after_delay</code></td>
+</tr>
+<tr>
+<td><code>auth_required</code></td>
+<td>Provider HTTP 401 / invalid API key → <code>check_api_key</code>; scrape login wall (<code>ErrAuth</code>) → <code>inform_user</code></td>
+<td>false</td>
+<td><code>check_api_key</code> (provider) or <code>inform_user</code> (scrape)</td>
+</tr>
+<tr>
+<td><code>blocked</code></td>
+<td>HTTP 403, remote bot detection</td>
+<td>false</td>
+<td><code>inform_user</code></td>
+</tr>
+<tr>
+<td><code>validation</code></td>
+<td>Invalid input params, unsupported scheme, SSRF / private-IP / blocked-host / allowlist denial, or a provider-side rejection (<code>search.InvalidParamsError</code> — bad <code>category</code> / out-of-spec <code>schema</code> in <code>structured_search</code>)</td>
+<td>false</td>
+<td><code>inform_user</code></td>
+</tr>
+<tr>
+<td><code>network</code></td>
+<td>DNS failure, timeout, connection refused</td>
+<td>true</td>
+<td><code>retry_after_delay</code></td>
+</tr>
+<tr>
+<td><code>content_empty</code></td>
+<td>Page loaded but no text extracted</td>
+<td>true</td>
+<td><code>report_bug</code></td>
+</tr>
+<tr>
+<td><code>not_found</code></td>
+<td>HTTP 404/410 — page does not exist (dead link)</td>
+<td>false</td>
+<td><code>inform_user</code></td>
+</tr>
+<tr>
+<td><code>browser_unavailable</code></td>
+<td>Chrome not found/failed</td>
+<td>false</td>
+<td><code>report_bug</code></td>
+</tr>
+<tr>
+<td><code>config</code></td>
+<td>Unknown/unconfigured provider</td>
+<td>false</td>
+<td><code>try_different_provider</code> or <code>check_api_key</code></td>
+</tr>
+<tr>
+<td><code>upstream_unavailable</code></td>
+<td>General provider failure</td>
+<td>true</td>
+<td><code>try_different_provider</code></td>
+</tr>
+<tr>
+<td><code>session_not_found</code></td>
+<td><code>sequential_search</code> follow-up step reached a pod that doesn't hold the (in-memory) session, or the session expired</td>
+<td>false</td>
+<td><code>inform_user</code> (carries a <code>recoveryHint</code> with the last known step)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="suggested-action-vocabulary">Suggested Action Vocabulary<a class="headerlink" href="#suggested-action-vocabulary" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>LLM Should</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>retry_after_delay</code></td>
+<td>Wait N seconds, call same tool again</td>
+</tr>
+<tr>
+<td><code>try_different_provider</code></td>
+<td>Re-call with a different <code>provider</code> param</td>
+</tr>
+<tr>
+<td><code>check_api_key</code></td>
+<td>Tell user to verify API key configuration</td>
+</tr>
+<tr>
+<td><code>broaden_query</code></td>
+<td>Remove filters or use broader terms</td>
+</tr>
+<tr>
+<td><code>inform_user</code></td>
+<td>Tell user this content is permanently inaccessible</td>
+</tr>
+<tr>
+<td><code>report_bug</code></td>
+<td>Suggest user file a GitHub issue</td>
+</tr>
+</tbody>
+</table>
+<h3 id="key-functions">Key Functions<a class="headerlink" href="#key-functions" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>structuredError(msg, ToolError)</code></td>
+<td><code>internal/tools/errors.go</code></td>
+<td>Builds dual-format error response</td>
+</tr>
+<tr>
+<td><code>scrapeErrorResponse(err, url)</code></td>
+<td><code>internal/tools/scrape.go</code></td>
+<td>Maps ScrapeError → structured response</td>
+</tr>
+<tr>
+<td><code>upstreamErrorResponse(toolName, err)</code></td>
+<td><code>internal/tools/search.go</code></td>
+<td>Maps provider errors → structured response</td>
+</tr>
+<tr>
+<td><code>toolError(msg)</code></td>
+<td><code>internal/tools/search.go</code></td>
+<td>Plain-text validation errors (no JSON block)</td>
+</tr>
+<tr>
+<td><code>structuredResult(jsonBytes)</code></td>
+<td><code>internal/tools/search.go</code></td>
+<td>Wraps success payloads as MCP result</td>
+</tr>
+<tr>
+<td><code>resolveProvider()</code></td>
+<td><code>internal/tools/search.go</code></td>
+<td>Returns structured error for unknown providers</td>
+</tr>
+<tr>
+<td><code>resolvePatentSearcher()</code></td>
+<td><code>internal/tools/search.go</code></td>
+<td>Same for patent providers</td>
+</tr>
+<tr>
+<td><code>resolveAcademicSearcher()</code></td>
+<td><code>internal/tools/academic.go</code></td>
+<td>Same for academic providers</td>
+</tr>
+</tbody>
+</table>
+<h3 id="validation-errors">Validation Errors<a class="headerlink" href="#validation-errors" title="Permanent link">&para;</a></h3>
+<p><strong>Function:</strong> <code>toolError(msg string)</code> — used only for input validation (no structured JSON needed since there's nothing to retry):
+<div class="highlight"><pre><span></span><code>query is required
+query must be 500 characters or less
+query, assignee, or inventor is required
+</code></pre></div></p>
+<hr />
+<h2 id="layer-3-mcp-protocol-contract">Layer 3: MCP Protocol Contract<a class="headerlink" href="#layer-3-mcp-protocol-contract" title="Permanent link">&para;</a></h2>
+<p>All error responses set <code>IsError: true</code> on the MCP <code>CallToolResult</code>. The text content contains:
+- Line 1: natural-language message (what failed + what to do next)
+- Blank line separator
+- JSON block: <code>{"error":{...}}</code> with machine-readable metadata</p>
+<p><code>StructuredContent</code> is always nil on error responses (per MCP spec — SDKs exempt <code>isError: true</code> from outputSchema validation).</p>
+<p>Tools never panic. Tools never return Go errors from the handler function (the third return value is always <code>nil</code>). All failures are communicated via the MCP result.</p>
+<hr />
+<h2 id="layer-4-session-level-error-aggregation">Layer 4: Session-level Error Aggregation<a class="headerlink" href="#layer-4-session-level-error-aggregation" title="Permanent link">&para;</a></h2>
+<p>Layers 1–3 handle a <strong>single</strong> call. Across a multi-step <code>sequential_search</code> session, repeated failures of the <em>same kind</em> (auth walls, bot blocks, rate limits) are a pattern the LLM should act on — but no single call sees the whole picture. Layer 4 is the cross-call view.</p>
+<p><strong>How it works:</strong></p>
+<ul>
+<li>Tools that carry a <code>sessionId</code> (scrape, academic search, and the <code>thorough</code>-depth refinement searches) record a bounded <code>OutcomeEvent</code> per call via <code>trackOutcome</code> / <code>trackScrapeOutcome</code> (<code>internal/tools/sourcetracker.go</code>): <code>{ provider, success, errorKind, url, timestamp }</code>. Scrape errors map their <code>ScrapeError.Kind</code> to the shared <code>ErrorKind</code> taxonomy via <code>mapScrapeErrorKind</code>, so the cross-call kinds line up with the per-call ones.</li>
+<li>The session layer (<code>internal/session/outcomes.go</code>) stores the most-recent <strong>200</strong> events per session (FIFO) — bounded, tenant/user-isolated, honoring the no-unbounded-retention posture.</li>
+<li><code>get_research_session</code> surfaces the aggregation (<code>internal/session</code> <code>AggregateOutcomes</code>):</li>
+<li><code>errorPatterns</code> — only when a kind occurs <strong>≥ 3 times</strong> (<code>ErrorPatternMinCount</code>, a false-positive guard). Each carries a session-level <code>suggestion</code> from the kind→remediation map.</li>
+<li><code>providerStats</code> — per-provider <code>{ attempts, successes }</code>.</li>
+</ul>
+<p><strong>Session-level remediation map</strong> (distinct from the per-call <code>suggestedAction</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Session-level suggestion</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>auth_required</code></td>
+<td>Consider <code>open_access=true</code> or target preprint servers (arxiv, biorxiv).</td>
+</tr>
+<tr>
+<td><code>blocked</code></td>
+<td>Try alternative sources or use <code>web_search</code> for cached versions.</td>
+</tr>
+<tr>
+<td><code>rate_limited</code></td>
+<td>Switch to a different provider or space requests further apart.</td>
+</tr>
+<tr>
+<td><code>browser_unavailable</code></td>
+<td>Set <code>CHROME_PATH</code> for JavaScript-heavy sites.</td>
+</tr>
+<tr>
+<td><code>network</code></td>
+<td>Transient network errors — retry, or try a different source.</td>
+</tr>
+<tr>
+<td><code>content_empty</code></td>
+<td>The page yielded no usable text — try a different source or the original PDF.</td>
+</tr>
+<tr>
+<td><code>upstream_unavailable</code></td>
+<td>The provider is unavailable — switch providers or retry later.</td>
+</tr>
+</tbody>
+</table>
+<p>Aggregation is <strong>additive</strong> — it never suppresses or alters the per-call errors that callers already receive.</p>
+<hr />
+<h2 id="for-llm-agents-parsing-and-recovery">For LLM Agents: Parsing and Recovery<a class="headerlink" href="#for-llm-agents-parsing-and-recovery" title="Permanent link">&para;</a></h2>
+<p>When consuming error responses, LLM agents can use the structured JSON for autonomous recovery:</p>
+<h3 id="recovery-decision-tree">Recovery Decision Tree<a class="headerlink" href="#recovery-decision-tree" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code>1. Parse JSON block from the error response (after the blank line)
+2. Check retryable:
+   - true  → check retryAfterSeconds (if present, wait; then retry)
+   - false → follow suggestedAction directly
+3. Check suggestedAction:
+   - &quot;retry_after_delay&quot;      → wait retryAfterSeconds, retry same call
+   - &quot;try_different_provider&quot; → re-call with provider set to one from alternatives[]
+   - &quot;check_api_key&quot;          → inform user their API key needs configuration
+   - &quot;broaden_query&quot;          → remove filters or use broader terms
+   - &quot;inform_user&quot;            → tell user this content is inaccessible
+   - &quot;report_bug&quot;             → suggest user file a GitHub issue
+</code></pre></div>
+<h3 id="zero-result-responses-not-errors">Zero-Result Responses (Not Errors)<a class="headerlink" href="#zero-result-responses-not-errors" title="Permanent link">&para;</a></h3>
+<p>When <code>resultCount</code> is 0, several tools (including <code>patent_search</code>, <code>academic_search</code>, and <code>awesome_list_search</code>) include a <code>hints</code> object built by <code>buildZeroResultHints()</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span><span class="nt">&quot;resultCount&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;hints&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;reason&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;coverage_miss&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;suggestedActions&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="nt">&quot;action&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;switch_provider&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;value&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;lens&quot;</span><span class="p">}]}}</span>
+</code></pre></div>
+<p>Each entry in <code>suggestedActions</code> is a <code>HintAction</code> (<code>internal/tools/errors.go</code>). This is a separate, free-form vocabulary from the top-level <code>SuggestedAction</code> enum above — a <code>HintAction.Action</code> value is never one of the <code>SuggestedAction</code> values.</p>
+<table>
+<thead>
+<tr>
+<th><code>HintAction.Action</code></th>
+<th>LLM Should</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>remove_filter</code></td>
+<td>Drop the named <code>parameter</code> filter and retry — it narrowed the result set to zero</td>
+</tr>
+<tr>
+<td><code>try_different_provider</code> / <code>switch_provider</code></td>
+<td>Re-call with <code>provider</code> set to the suggested <code>value</code></td>
+</tr>
+<tr>
+<td><code>rephrase_query</code></td>
+<td>The query term didn't match (e.g. an exact-match topic tag with no stemming) — retry with the wording in <code>detail</code>, not a different tool</td>
+</tr>
+</tbody>
+</table>
+<p>New call sites are free to introduce further <code>Action</code> values. Treat an unrecognized one as a generic "read <code>detail</code> and adjust the call" signal, not a failure.</p>
+<h3 id="partial-success-search_and_scrape">Partial Success (search_and_scrape)<a class="headerlink" href="#partial-success-search_and_scrape" title="Permanent link">&para;</a></h3>
+<p>The <code>status</code> field tells you immediately: <code>"complete"</code>, <code>"partial"</code>, or <code>"failed"</code>. On <code>"partial"</code>, check <code>scrapeFailures[]</code> for per-URL recovery options.</p>
+<hr />
+<h2 id="design-principles">Design Principles<a class="headerlink" href="#design-principles" title="Permanent link">&para;</a></h2>
+<h3 id="1-errors-are-actionable-not-diagnostic">1. Errors are actionable, not diagnostic<a class="headerlink" href="#1-errors-are-actionable-not-diagnostic" title="Permanent link">&para;</a></h3>
+<p>Bad: <code>"error: HTTP 403"</code>
+Good:
+<div class="highlight"><pre><span></span><code>Blocked: x.com uses bot detection. Try an alternative source — its content can&#39;t be read directly.
+
+{&quot;error&quot;:{&quot;kind&quot;:&quot;blocked&quot;,&quot;retryable&quot;:false,&quot;suggestedAction&quot;:&quot;inform_user&quot;,&quot;detail&quot;:&quot;access blocked: HTTP 403&quot;}}
+</code></pre></div></p>
+<h3 id="2-errors-are-categorized-not-strings">2. Errors are categorized, not strings<a class="headerlink" href="#2-errors-are-categorized-not-strings" title="Permanent link">&para;</a></h3>
+<p>The <code>ErrorKind</code> enum means tool handlers can switch on category rather than parsing error messages. This keeps the mapping stable even as providers change their error formats.</p>
+<h3 id="3-errors-flow-up-never-sideways">3. Errors flow up, never sideways<a class="headerlink" href="#3-errors-flow-up-never-sideways" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code>tier produces ScrapeError → pipeline collects per-tier outcomes → tool handler maps to LLM message
+</code></pre></div>
+<p>Each layer enriches without losing information. The pipeline adds multi-tier diagnostics; the tool handler adds user-facing guidance. Nothing is swallowed.</p>
+<h3 id="4-the-issue-link-is-surgical">4. The issue link is surgical<a class="headerlink" href="#4-the-issue-link-is-surgical" title="Permanent link">&para;</a></h3>
+<p>The GitHub issue link appears in exactly two places (<code>scrapeErrorResponse</code> cases for <code>ErrBrowser</code>, <code>ErrContent</code>) and one place in <code>upstreamErrorResponse</code> (general upstream failures). These are the only categories where a bug report could lead to an improvement.</p>
+<h3 id="5-errors-are-tested">5. Errors are tested<a class="headerlink" href="#5-errors-are-tested" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>TestAllToolsHaveAnnotations</code> — CI verifies every tool has proper MCP annotations</li>
+<li><code>internal/tools/scrape_errors_test.go</code> — integration tests for each error kind → LLM message mapping</li>
+<li><code>internal/scraper/errors_test.go</code> — unit tests for HTTP status classification and raw error classification</li>
+<li><code>internal/scraper/scraper_test.go</code> — unit tests for composite error assembly and tier propagation</li>
+</ul>
+<hr />
+<h2 id="for-contributors-adding-error-handling-to-new-code">For Contributors: Adding Error Handling to New Code<a class="headerlink" href="#for-contributors-adding-error-handling-to-new-code" title="Permanent link">&para;</a></h2>
+<h3 id="in-a-new-scraper-tier">In a new scraper tier:<a class="headerlink" href="#in-a-new-scraper-tier" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="c1">// Wrap HTTP errors with the appropriate kind:</span>
+<span class="nx">resp</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">client</span><span class="p">.</span><span class="nx">Do</span><span class="p">(</span><span class="nx">req</span><span class="p">)</span>
+<span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="kc">nil</span><span class="p">,</span><span class="w"> </span><span class="nx">networkError</span><span class="p">(</span><span class="nx">url</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;my-tier&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="p">)</span>
+<span class="p">}</span>
+<span class="k">if</span><span class="w"> </span><span class="nx">resp</span><span class="p">.</span><span class="nx">StatusCode</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">400</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="kc">nil</span><span class="p">,</span><span class="w"> </span><span class="nx">classifyHTTPStatus</span><span class="p">(</span><span class="nx">resp</span><span class="p">.</span><span class="nx">StatusCode</span><span class="p">,</span><span class="w"> </span><span class="nx">url</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;my-tier&quot;</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div>
+<h3 id="in-a-new-search-provider">In a new search provider:<a class="headerlink" href="#in-a-new-search-provider" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="c1">// Wrap circuit.ErrRateLimit on 429 so the circuit breaker opens immediately</span>
+<span class="c1">// (bypassing FailureThreshold) and isRateLimitError&#39;s errors.Is check detects it:</span>
+<span class="k">if</span><span class="w"> </span><span class="nx">resp</span><span class="p">.</span><span class="nx">StatusCode</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">429</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="kc">nil</span><span class="p">,</span><span class="w"> </span><span class="nx">fmt</span><span class="p">.</span><span class="nx">Errorf</span><span class="p">(</span><span class="s">&quot;myprovider: rate limited: %w&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">circuit</span><span class="p">.</span><span class="nx">ErrRateLimit</span><span class="p">)</span>
+<span class="p">}</span>
+<span class="k">if</span><span class="w"> </span><span class="nx">resp</span><span class="p">.</span><span class="nx">StatusCode</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">401</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// isAuthError matches any of: &quot;401&quot;, &quot;API key not valid&quot;, &quot;unauthorized&quot;, &quot;INVALID_ARGUMENT&quot;</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="kc">nil</span><span class="p">,</span><span class="w"> </span><span class="nx">fmt</span><span class="p">.</span><span class="nx">Errorf</span><span class="p">(</span><span class="s">&quot;myprovider: 401 unauthorized&quot;</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div>
+<h3 id="in-a-new-tool-handler">In a new tool handler:<a class="headerlink" href="#in-a-new-tool-handler" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="c1">// Use the shared response functions — never format errors manually:</span>
+<span class="nx">results</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">provider</span><span class="p">.</span><span class="nx">Web</span><span class="p">(</span><span class="nx">ctx</span><span class="p">,</span><span class="w"> </span><span class="nx">params</span><span class="p">)</span>
+<span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nx">upstreamErrorResponse</span><span class="p">(</span><span class="s">&quot;my_tool&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="p">),</span><span class="w"> </span><span class="kc">nil</span><span class="p">,</span><span class="w"> </span><span class="kc">nil</span>
+<span class="p">}</span>
+
+<span class="c1">// For validation errors (no structured JSON needed):</span>
+<span class="k">if</span><span class="w"> </span><span class="nx">input</span><span class="p">.</span><span class="nx">Query</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="s">&quot;&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nx">toolError</span><span class="p">(</span><span class="s">&quot;query is required&quot;</span><span class="p">),</span><span class="w"> </span><span class="kc">nil</span><span class="p">,</span><span class="w"> </span><span class="kc">nil</span>
+<span class="p">}</span>
+</code></pre></div>
+<hr />
+<h2 id="file-reference">File Reference<a class="headerlink" href="#file-reference" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Owns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>internal/tools/errors.go</code></td>
+<td><code>ToolError</code> struct, <code>ErrorKind</code>/<code>SuggestedAction</code> enums, <code>structuredError()</code>, <code>FailureInfo</code>, <code>ZeroResultHints</code>, cache freshness helpers</td>
+</tr>
+<tr>
+<td><code>internal/scraper/errors.go</code></td>
+<td><code>ScrapeError</code> type, scraper <code>ErrorKind</code> enum, helper constructors, classifiers</td>
+</tr>
+<tr>
+<td><code>internal/scraper/pipeline.go</code></td>
+<td>Composite error assembly (per-tier diagnostics)</td>
+</tr>
+<tr>
+<td><code>internal/tools/scrape.go</code></td>
+<td><code>scrapeErrorResponse()</code>, negative cache helpers</td>
+</tr>
+<tr>
+<td><code>internal/session/outcomes.go</code></td>
+<td>Session-level outcome log + <code>AggregateOutcomes()</code>, kind→remediation map</td>
+</tr>
+<tr>
+<td><code>internal/session/types.go</code></td>
+<td><code>ErrorPatternMinCount</code> constant (defined here; referenced by outcomes.go)</td>
+</tr>
+<tr>
+<td><code>internal/tools/sourcetracker.go</code></td>
+<td><code>trackOutcome()</code> / <code>trackScrapeOutcome()</code> — record per-call outcomes onto a session</td>
+</tr>
+<tr>
+<td><code>internal/tools/search.go</code></td>
+<td><code>upstreamErrorResponse()</code>, <code>toolError()</code>, <code>rateLimitError()</code>, <code>structuredResult()</code>, resolver functions, <code>allSupportedProviders()</code></td>
+</tr>
+<tr>
+<td><code>internal/tools/scrape_errors_test.go</code></td>
+<td>Integration tests for error → response mapping</td>
+</tr>
+<tr>
+<td><code>internal/scraper/errors_test.go</code></td>
+<td>Unit tests for HTTP status classification and raw error classification</td>
+</tr>
+<tr>
+<td><code>internal/scraper/scraper_test.go</code></td>
+<td>Unit tests for composite error assembly and tier propagation</td>
+</tr>
+</tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        <div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/zoharbabin/web-researcher-mcp" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://x.com/zohar" target="_blank" rel="noopener" title="x.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M389.2 48h70.6L305.6 224.2 487 464H345L233.7 318.6 106.5 464H35.8l164.9-188.5L26.8 48h145.6l100.5 132.9zm-24.8 373.8h39.1L151.1 88h-42z"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://hub.docker.com/r/zoharbabin/web-researcher-mcp" target="_blank" rel="noopener" title="hub.docker.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M349.9 236.3h-66.1v-59.4h66.1zm0-204.3h-66.1v60.7h66.1zm78.2 144.8H362v59.4h66.1zm-156.3-72.1h-66.1v60.1h66.1zm78.1 0h-66.1v60.1h66.1zm276.8 100c-14.4-9.7-47.6-13.2-73.1-8.4-3.3-24-16.7-44.9-41.1-63.7l-14-9.3-9.3 14c-18.4 27.8-23.4 73.6-3.7 103.8-8.7 4.7-25.8 11.1-48.4 10.7H2.4c-8.7 50.8 5.8 116.8 44 162.1 37.1 43.9 92.7 66.2 165.4 66.2 157.4 0 273.9-72.5 328.4-204.2 21.4.4 67.6.1 91.3-45.2 1.5-2.5 6.6-13.2 8.5-17.1zm-511.1-27.9h-66v59.4h66.1v-59.4zm78.1 0h-66.1v59.4h66.1zm78.1 0h-66.1v59.4h66.1zm-78.1-72.1h-66.1v60.1h66.1z"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "..", "features": ["navigation.sections", "navigation.top", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+  
+      <script src="../assets/javascripts/bundle.13a4f30d.min.js"></script>
+      
+    
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      document.querySelectorAll('img[src$=".gif"], img[src$=".png"]').forEach(function(img) {
+        if (!img.loading) img.loading = "lazy";
+      });
+    });
+  </script>
+
+  </body>
+</html>
