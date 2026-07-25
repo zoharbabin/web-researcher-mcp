@@ -53,6 +53,7 @@ from web_researcher_mcp.models import (
     MCPError,
     MemoryRecallResponse,
     MemorySaveResponse,
+    MonarchSearchResponse,
     NewsSearchResponse,
     PatentSearchResponse,
     ResearchExportResponse,
@@ -687,6 +688,42 @@ class WebResearcherClient:
             },
         )
         return MemorySaveResponse.from_dict(d)
+    async def monarch_search(
+        self,
+        operation: str,
+        assocObject: str = None,
+        assocSubject: str = None,
+        category: str = None,
+        compareTo: Optional[list] = None,
+        entityId: str = None,
+        group: str = None,
+        numResults: int = None,
+        phenotypes: Optional[list] = None,
+        provider: str = None,
+        query: str = None,
+        sessionId: str = None,
+        text: str = None,
+    ) -> MonarchSearchResponse:
+        """Query the Monarch Initiative biomedical knowledge graph: rank diseases and genes by phenotype similarity (semsim), look up disease/gene/phenotype entities, and traverse gene-disease-phenotype associations"""
+        d = await self._call_tool(
+            "monarch_search",
+            {
+                "operation": operation,
+                "assocObject": assocObject,
+                "assocSubject": assocSubject,
+                "category": category,
+                "compareTo": compareTo,
+                "entityId": entityId,
+                "group": group,
+                "numResults": numResults,
+                "phenotypes": phenotypes,
+                "provider": provider,
+                "query": query,
+                "sessionId": sessionId,
+                "text": text,
+            },
+        )
+        return MonarchSearchResponse.from_dict(d)
     async def news_search(
         self,
         query: str,
@@ -1480,6 +1517,39 @@ class SyncWebResearcherClient:
             tags=tags,
             topic=topic,
             url=url,
+            )
+        )
+    def monarch_search(
+        self,
+        operation: str,
+        assocObject: str = None,
+        assocSubject: str = None,
+        category: str = None,
+        compareTo: Optional[list] = None,
+        entityId: str = None,
+        group: str = None,
+        numResults: int = None,
+        phenotypes: Optional[list] = None,
+        provider: str = None,
+        query: str = None,
+        sessionId: str = None,
+        text: str = None,
+    ) -> MonarchSearchResponse:
+        return self._run(
+            self._async_client.monarch_search(
+            operation=operation,
+            assocObject=assocObject,
+            assocSubject=assocSubject,
+            category=category,
+            compareTo=compareTo,
+            entityId=entityId,
+            group=group,
+            numResults=numResults,
+            phenotypes=phenotypes,
+            provider=provider,
+            query=query,
+            sessionId=sessionId,
+            text=text,
             )
         )
     def news_search(

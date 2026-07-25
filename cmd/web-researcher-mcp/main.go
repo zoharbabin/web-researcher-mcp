@@ -294,6 +294,10 @@ func main() {
 	// local_search is registered only when the key is present.
 	localProviders := search.AvailableLocalProviders(cfg.Search.BraveAPIKey, searchDeps)
 
+	// Monarch Initiative biomedical knowledge graph (#318): keyless, so always
+	// built — monarch_search is part of the default tool surface.
+	monarchProviders := search.AvailableMonarchProviders(searchDeps)
+
 	// LLM Context (#257): Brave's /res/v1/llm/context endpoint for server-side
 	// provenance-rich context assembly. Requires BRAVE_API_KEY and a Brave Data
 	// for AI plan that includes the endpoint; search_and_scrape uses it when
@@ -454,6 +458,7 @@ func main() {
 		TrialProviders:       trialProviders,
 		AwesomeListProviders: awesomeListProviders,
 		LocalProviders:       localProviders,
+		MonarchProviders:     monarchProviders,
 		ContextProviders:     contextProviders,
 		AnswerProviders:      answerProviders,
 		StructuredProviders:  structuredProviders,
@@ -812,6 +817,9 @@ func completionProviderNames(deps tools.Dependencies) []string {
 		add(name)
 	}
 	for name := range deps.LocalProviders {
+		add(name)
+	}
+	for name := range deps.MonarchProviders {
 		add(name)
 	}
 	for name := range deps.AnswerProviders {

@@ -107,3 +107,52 @@ func TestSearchCacheKey_NamespacedByTool(t *testing.T) {
 		t.Fatalf("different tools must yield different keys: web=%s news=%s image=%s", web, news, img)
 	}
 }
+
+// TestMonarchSearchCacheKey_VariesByPart guards monarch_search's cache key
+// (#318): two structurally different operations, or two calls that differ in
+// any single param, must never collide.
+func TestMonarchSearchCacheKey_VariesByPart(t *testing.T) {
+	t.Parallel()
+	base := searchCacheKey("monarch", "entity", "", "", "", "", "MONDO:0007947", "", "", "", "", 20, "monarch")
+
+	cases := []struct {
+		name string
+		key  string
+	}{
+		{"operation", searchCacheKey("monarch", "associations", "", "", "", "", "MONDO:0007947", "", "", "", "", 20, "monarch")},
+		{"group", searchCacheKey("monarch", "entity", "Mouse Genes", "", "", "", "MONDO:0007947", "", "", "", "", 20, "monarch")},
+		{"phenotypes", searchCacheKey("monarch", "entity", "", "HP:0001166", "", "", "MONDO:0007947", "", "", "", "", 20, "monarch")},
+		{"compareTo", searchCacheKey("monarch", "entity", "", "", "HP:0001083", "", "MONDO:0007947", "", "", "", "", 20, "monarch")},
+		{"query", searchCacheKey("monarch", "entity", "", "", "", "Marfan", "MONDO:0007947", "", "", "", "", 20, "monarch")},
+		{"entityId", searchCacheKey("monarch", "entity", "", "", "", "", "MONDO:0000000", "", "", "", "", 20, "monarch")},
+		{"assocSubject", searchCacheKey("monarch", "entity", "", "", "", "", "MONDO:0007947", "HGNC:3603", "", "", "", 20, "monarch")},
+		{"assocObject", searchCacheKey("monarch", "entity", "", "", "", "", "MONDO:0007947", "", "MONDO:0007947", "", "", 20, "monarch")},
+		{"category", searchCacheKey("monarch", "entity", "", "", "", "", "MONDO:0007947", "", "", "biolink:CausalGeneToDiseaseAssociation", "", 20, "monarch")},
+		{"text", searchCacheKey("monarch", "entity", "", "", "", "", "MONDO:0007947", "", "", "", "clinical note", 20, "monarch")},
+		{"numResults", searchCacheKey("monarch", "entity", "", "", "", "", "MONDO:0007947", "", "", "", "", 50, "monarch")},
+		{"provider", searchCacheKey("monarch", "entity", "", "", "", "", "MONDO:0007947", "", "", "", "", 20, "other")},
+	}
+	seen := map[string]string{base: "base"}
+	for _, c := range cases {
+		if c.key == base {
+			t.Errorf("changing %q must change the cache key, but it matched base", c.name)
+		}
+		if prev, dup := seen[c.key]; dup {
+			t.Errorf("changing %q collided with %q (key %s)", c.name, prev, c.key)
+		}
+		seen[c.key] = c.name
+	}
+}
+
+// TestMonarchSearchCacheKey_SemsimVsAssociationsSameEntity: semsim and
+// associations queried with the same entity-shaped value must not collide —
+// the operation discriminator alone must separate them even when every other
+// field lines up.
+func TestMonarchSearchCacheKey_SemsimVsAssociationsSameEntity(t *testing.T) {
+	t.Parallel()
+	semsim := searchCacheKey("monarch", "semsim", "Human Diseases", "HP:0001166", "", "", "", "", "", "", "", 20, "monarch")
+	assoc := searchCacheKey("monarch", "associations", "Human Diseases", "HP:0001166", "", "", "", "", "", "", "", 20, "monarch")
+	if semsim == assoc {
+		t.Fatal("semsim and associations must not share a cache key even with identical other params")
+	}
+}
