@@ -49,6 +49,7 @@ var expectedTools = []string{
 	"syllabus_search",
 	"gag_order_search",
 	"paper_fulltext",
+	"company_recon",
 }
 
 func listTools(t *testing.T) []*mcp.Tool {
@@ -182,6 +183,15 @@ func TestAllToolsHaveAnnotations(t *testing.T) {
 				if *tool.Annotations.OpenWorldHint {
 					t.Error("workspace_read should NOT be open-world")
 				}
+			case "company_recon":
+				// Not idempotent: crt.sh/Wayback CDX results grow over time (new
+				// certs logged, new captures archived) between two identical calls.
+				if tool.Annotations.IdempotentHint {
+					t.Error("company_recon should NOT be idempotent")
+				}
+				if !*tool.Annotations.OpenWorldHint {
+					t.Error("company_recon should be open-world")
+				}
 			case "syllabus_search":
 				// Corpus-side ranking/frequency data can shift between identical
 				// calls as Open Syllabus's corpus is updated: NOT idempotent.
@@ -282,6 +292,7 @@ func TestOutputSchemaMatchesResponse(t *testing.T) {
 		"syllabus_search":     {"query": "Marx"},
 		"gag_order_search":    {},
 		"paper_fulltext":      {"identifier": "https://example.com/paper.pdf"},
+		"company_recon":       {"target": "example.com"},
 	}
 
 	tools := listTools(t)
@@ -491,6 +502,7 @@ var structuredDomainDocTools = map[string]bool{
 	"brand_research":      true,
 	"syllabus_search":     true,
 	"gag_order_search":    true,
+	"company_recon":       true,
 }
 
 // TestProvidersDocStructuredDomainTable is a doc-drift guard for docs/PROVIDERS.md's

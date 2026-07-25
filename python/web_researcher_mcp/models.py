@@ -580,6 +580,104 @@ class Colors:
         )
 
 @dataclass
+class CompanyReconArchiveUrl:
+    category: Optional[str] = None
+    mime_type: Optional[str] = None
+    status_code: Optional[str] = None
+    timestamp: Optional[str] = None
+    url: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "CompanyReconArchiveUrl | None":
+        if d is None:
+            return None
+        return cls(
+            category=d.get('category'),
+            mime_type=d.get('mime_type'),
+            status_code=d.get('status_code'),
+            timestamp=d.get('timestamp'),
+            url=d.get('url'),
+        )
+
+@dataclass
+class CompanyReconCertSan:
+    domain: Optional[str] = None
+    issuer: Optional[str] = None
+    logged_at: Optional[str] = None
+    not_after: Optional[str] = None
+    not_before: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "CompanyReconCertSan | None":
+        if d is None:
+            return None
+        return cls(
+            domain=d.get('domain'),
+            issuer=d.get('issuer'),
+            logged_at=d.get('logged_at'),
+            not_after=d.get('not_after'),
+            not_before=d.get('not_before'),
+        )
+
+@dataclass
+class CompanyReconResponse:
+    archive_urls: list[CompanyReconArchiveUrl] = field(default_factory=list)
+    cache_age: Optional[int] = None
+    cert_sans: list[CompanyReconCertSan] = field(default_factory=list)
+    domain: Optional[str] = None
+    profile: Optional[Profile] = None
+    sources: list[CompanyReconSource] = field(default_factory=list)
+    subdomains: list[CompanyReconSubdomain] = field(default_factory=list)
+    target: Optional[str] = None
+    trust: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "CompanyReconResponse | None":
+        if d is None:
+            return None
+        return cls(
+            archive_urls=[CompanyReconArchiveUrl.from_dict(i) for i in (d.get('archive_urls') or [])],
+            cache_age=d.get('cache_age'),
+            cert_sans=[CompanyReconCertSan.from_dict(i) for i in (d.get('cert_sans') or [])],
+            domain=d.get('domain'),
+            profile=Profile.from_dict(d.get('profile')) if d.get('profile') else None,
+            sources=[CompanyReconSource.from_dict(i) for i in (d.get('sources') or [])],
+            subdomains=[CompanyReconSubdomain.from_dict(i) for i in (d.get('subdomains') or [])],
+            target=d.get('target'),
+            trust=d.get('trust'),
+        )
+
+@dataclass
+class CompanyReconSource:
+    name: Optional[str] = None
+    phase: Optional[str] = None
+    url: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "CompanyReconSource | None":
+        if d is None:
+            return None
+        return cls(
+            name=d.get('name'),
+            phase=d.get('phase'),
+            url=d.get('url'),
+        )
+
+@dataclass
+class CompanyReconSubdomain:
+    source: Optional[str] = None
+    subdomain: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "CompanyReconSubdomain | None":
+        if d is None:
+            return None
+        return cls(
+            source=d.get('source'),
+            subdomain=d.get('subdomain'),
+        )
+
+@dataclass
 class ConflictOfInterest:
     authorAffiliation: Optional[str] = None
     citedEntityName: Optional[str] = None
@@ -1541,6 +1639,18 @@ class PatentSearchResponse:
             searchUrl=d.get('searchUrl'),
             source=d.get('source'),
             trust=d.get('trust'),
+        )
+
+@dataclass
+class Profile:
+    summary: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "Profile | None":
+        if d is None:
+            return None
+        return cls(
+            summary=d.get('summary'),
         )
 
 @dataclass

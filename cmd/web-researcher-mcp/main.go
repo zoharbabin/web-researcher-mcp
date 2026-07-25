@@ -335,6 +335,19 @@ func main() {
 		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
 	})
 
+	// OSINT recon enrichment (#323): Certificate Transparency log lookups (crt.sh)
+	// and Wayback CDX historical URL inventories, both keyless so always
+	// constructed. Own breakers isolate failures from every other subsystem;
+	// company_recon degrades gracefully (per-phase soft failure) if either 5xxs.
+	ctLogResolver := search.NewCrtShResolver(search.Deps{
+		HTTPClient: searchDeps.HTTPClient,
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+	})
+	archiveResolver := search.NewWaybackCDXResolver(search.Deps{
+		HTTPClient: searchDeps.HTTPClient,
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+	})
+
 	// Link verifier (#157): SSRF-safe liveness + Wayback archive fallback for the
 	// opt-in verify_links flag on research_export and for verify_citation. Honors
 	// the same private-IP posture as the scrape pipeline. Optional IA Save-Page-Now
@@ -487,6 +500,8 @@ func main() {
 		OpenSyllabusAPIKey:      cfg.Search.OpenSyllabusAPIKey,
 		OpenSyllabusAPIURL:      cfg.Search.OpenSyllabusAPIURL,
 		PENAmericaAirtableToken: cfg.Search.PENAmericaAirtableToken,
+		CTLogResolver:           ctLogResolver,
+		ArchiveResolver:         archiveResolver,
 	}
 
 	// Completion suppliers (#193): the live value sets the server can autocomplete

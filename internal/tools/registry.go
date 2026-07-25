@@ -117,6 +117,14 @@ type Dependencies struct {
 	OpenSyllabusAPIURL string
 	// PENAmericaAirtableToken gates gag_order_search. Empty ⇒ tool not registered.
 	PENAmericaAirtableToken string
+	// CTLogResolver backs company_recon's Certificate Transparency phase
+	// (crt.sh, #323). Keyless, so main.go always constructs it — non-nil in
+	// production. A nil value in tests degrades that phase to a soft skip.
+	CTLogResolver search.CTLogResolver
+	// ArchiveResolver backs company_recon's Wayback CDX phase (#323). Keyless,
+	// so main.go always constructs it — non-nil in production. A nil value in
+	// tests degrades that phase to a soft skip.
+	ArchiveResolver search.ArchiveResolver
 }
 
 // Features mirrors config.FeatureConfig for the tool layer (kept local so the
@@ -249,6 +257,11 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	if deps.PENAmericaAirtableToken != "" {
 		registerGagOrderSearch(srv, deps)
 	}
+	// company_recon (#323) — always registered; every phase's data source
+	// (crt.sh, Wayback CDX, homepage probing, web search) is keyless. Individual
+	// phases soft-skip when their resolver dependency is nil (e.g. in a minimal
+	// test harness), never failing the whole tool call.
+	registerCompanyRecon(srv, deps)
 }
 
 // hasCitationProvider reports whether any configured academic provider supports
