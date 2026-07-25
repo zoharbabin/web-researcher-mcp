@@ -182,3 +182,16 @@ func TestDepthUnknownTreatedAsQuick(t *testing.T) {
 		t.Error("unknown depth should behave as quick (no coverage)")
 	}
 }
+
+// TestSequentialSearchPropagatesDepthToWebSearchParams (#286): sequential_search
+// must forward its depth input to search.WebSearchParams.Depth so the router
+// can apply depth-tiered NumResults defaults when NumResults is left at 0.
+func TestSequentialSearchPropagatesDepthToWebSearchParams(t *testing.T) {
+	deps := setupTestDeps()
+	cap := &captureProvider{}
+	deps.Search = cap
+	startSession(t, deps, "thorough")
+	if cap.last.Depth != "thorough" {
+		t.Errorf("WebSearchParams.Depth = %q, want %q", cap.last.Depth, "thorough")
+	}
+}

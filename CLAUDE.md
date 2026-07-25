@@ -81,7 +81,7 @@ Registry/manifest files (root, each read by a different external tool): `server.
 5. **Lens routing** — if `lens` is set, `site:` operators are injected and routed to the configured provider; lenses with a dedicated `cx` route directly to that Google PSE engine
 6. **Multi-provider routing** — when `SEARCH_ROUTING` is set, the Router wraps all available providers with per-provider circuit breakers and priority-ordered fallback; transparent to tools via the `search.Provider` interface
 7. **Explicit provider honoring** — when a user explicitly requests a provider via the `provider` field, that provider is used exclusively; if it returns empty results (e.g., USPTO for non-US patents), the tool returns empty — no silent fallback
-8. **Provider maps** — `deps.SearchProviders`, `deps.PatentProviders`, `deps.AcademicProviders`, `deps.AnswerProviders`, `deps.StructuredProviders`, `deps.FilingProviders`, `deps.CaseProviders`, `deps.EconProviders`, `deps.TrialProviders`, `deps.AwesomeListProviders`, `deps.LocalProviders`, `deps.ContextProviders` hold all configured providers by name; built at startup via `Available…Providers()`, independent of routing config
+8. **Provider maps** — `deps.SearchProviders`, `deps.PatentProviders`, `deps.AcademicProviders`, `deps.AnswerProviders`, `deps.StructuredProviders`, `deps.FilingProviders`, `deps.CaseProviders`, `deps.EconProviders`, `deps.TrialProviders`, `deps.AwesomeListProviders`, `deps.LocalProviders`, `deps.ContextProviders`, `deps.MonarchProviders` hold all configured providers by name; built at startup via `Available…Providers()`, independent of routing config
 
 ## How to Add a Tool
 

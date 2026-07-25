@@ -60,7 +60,7 @@ func applyDepth(ctx context.Context, deps Dependencies, input sequentialSearchIn
 	refined := make([]map[string]any, 0, len(rounds))
 	zeroCount := 0
 	for _, q := range rounds {
-		results, err := deps.Search.Web(ctx, search.WebSearchParams{Query: q, NumResults: 5})
+		results, err := deps.Search.Web(ctx, search.WebSearchParams{Query: q, NumResults: 5, Depth: input.Depth})
 		entry := map[string]any{"query": q}
 		if err != nil {
 			entry["error"] = "search failed"

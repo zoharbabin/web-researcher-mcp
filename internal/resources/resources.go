@@ -558,6 +558,53 @@ func registerPrompts(srv *mcp.Server) {
 			},
 		}, nil
 	})
+
+	srv.AddPrompt(&mcp.Prompt{
+		Name:        "rare-disease-research",
+		Description: "Differential-diagnosis and gene-disease research over the Monarch Initiative biomedical knowledge graph, corroborated with published literature and active trials.",
+		Arguments: []*mcp.PromptArgument{
+			{Name: "topic", Description: "Disease name or a set of phenotypes (e.g. HPO term IDs) to research", Required: true},
+			{Name: "focus", Description: "differential diagnosis | causal genes | phenotype overlap — adjusts which monarch_search operation to lead with"},
+		},
+	}, func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+		topic := sanitizePromptArg(req.Params.Arguments["topic"], 512)
+		if strings.TrimSpace(topic) == "" {
+			return nil, fmt.Errorf("topic is required")
+		}
+		focus := sanitizePromptArg(req.Params.Arguments["focus"], 128)
+		prompt := buildRareDiseaseResearchPrompt(topic, focus)
+		return &mcp.GetPromptResult{
+			Description: "Rare-disease research: " + topic,
+			Messages: []*mcp.PromptMessage{
+				{Role: "user", Content: &mcp.TextContent{Text: prompt}},
+			},
+		}, nil
+	})
+}
+
+// buildRareDiseaseResearchPrompt constructs a research plan over
+// monarch_search (semsim for phenotype-driven differential diagnosis,
+// associations for gene-disease edges), corroborated with academic_search and
+// clinical_search, and verified with verify_citation.
+func buildRareDiseaseResearchPrompt(topic, focus string) string {
+	p := "Research the following rare-disease / phenotype topic using the Monarch Initiative biomedical knowledge graph: " + topic + "\n"
+	if focus != "" {
+		p += "Focus: " + focus + "\n"
+	}
+	p += "\nAvailable tools: monarch_search (Monarch Initiative KG — operations: semsim, entity, associations, compare, annotate), " +
+		"academic_search, clinical_search (ClinicalTrials.gov), verify_citation, scrape_page.\n\n" +
+		"Approach:\n" +
+		"- If the topic is a set of phenotypes (HPO term IDs) rather than a named disease, call monarch_search with operation=semsim, group=\"Human Diseases\" " +
+		"to get a ranked differential of candidate diseases, each with the shared ontology ancestor explaining the match.\n" +
+		"- If the topic is a named disease or gene, call monarch_search with operation=entity to resolve it to a stable CURIE (MONDO/OMIM/Orphanet/HGNC), " +
+		"then operation=associations with category=biolink:CausalGeneToDiseaseAssociation to find causal genes, or the reverse direction for gene-to-disease.\n" +
+		"- Cross-species leads: semsim against group=\"Mouse Genes\", \"Zebrafish Genes\", or \"C. Elegans Genes\" can surface model-organism orthologs for a human phenotype set.\n" +
+		"- Corroborate any candidate disease or gene with academic_search for published evidence, and with clinical_search for active interventional trials.\n" +
+		"- Verify any cited paper or finding with verify_citation before including it in your summary.\n" +
+		"- Do not submit identifiable patient data to monarch_search's annotate operation.\n\n" +
+		"Caution: for ultra-rare diseases, case data derived from published phenopackets (specific HPO combinations, age at onset, sex, PMID) " +
+		"may retain enough quasi-identifiers to re-identify the source patient. Do not use this research for patient matching without IRB approval.\n"
+	return p
 }
 
 // sanitizePromptArg strips control characters and newlines from a user-supplied

@@ -135,7 +135,9 @@ func TestScrapeExaFallthrough(t *testing.T) {
 	withExaEndpoint(t, exa.URL)
 
 	// ChromePath:"disabled" removes the browser tier so the run is deterministic;
-	// Exa is the only configured fallback after markdown/stealth/html fail.
+	// Exa is the only configured fallback after markdown/stealth/jina/html fail.
+	// The Jina tier (now unconditionally in the ladder, #270) falls through on
+	// TestMain's package-wide empty-content stub, same as the free HTTP tiers.
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, ChromePath: "disabled", ExaAPIKey: "k"})
 	res, err := p.Scrape(context.Background(), page.URL, 5000)
 	if err != nil {
@@ -165,7 +167,9 @@ func TestScrapeExaTierAbsentWhenUnconfigured(t *testing.T) {
 	}))
 	defer page.Close()
 
-	// No ExaAPIKey ⇒ tier not appended.
+	// No ExaAPIKey ⇒ tier not appended. The Jina tier (now unconditionally in
+	// the ladder, #270) falls through on TestMain's package-wide empty-content
+	// stub, same as the free HTTP tiers.
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, ChromePath: "disabled"})
 	_, _ = p.Scrape(context.Background(), page.URL, 5000)
 	if exaCalled {

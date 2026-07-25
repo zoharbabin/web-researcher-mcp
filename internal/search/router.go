@@ -85,17 +85,18 @@ type FallbackNotifier func(op Operation, from, to, reason string)
 // fallback ladder. Add Answer/StructuredSearch methods here if/when multiple
 // synthesis providers warrant routed fallback.
 type Router struct {
-	mu                sync.RWMutex
-	providers         map[string]Provider
-	breakers          map[string]*circuit.Breaker
-	patentProviders   map[string]PatentProvider
-	patentBreakers    map[string]*circuit.Breaker
-	academicProviders map[string]AcademicProvider
-	academicBreakers  map[string]*circuit.Breaker
-	routing           RoutingConfig
-	notifier          FallbackNotifier
-	logger            *slog.Logger
-	thinThreshold     int
+	mu                  sync.RWMutex
+	providers           map[string]Provider
+	breakers            map[string]*circuit.Breaker
+	patentProviders     map[string]PatentProvider
+	patentBreakers      map[string]*circuit.Breaker
+	academicProviders   map[string]AcademicProvider
+	academicBreakers    map[string]*circuit.Breaker
+	routing             RoutingConfig
+	notifier            FallbackNotifier
+	logger              *slog.Logger
+	thinThreshold       int
+	maxFetchPerProvider map[string]int
 }
 
 // Compile-time proof the Router satisfies every capability it routes. These
@@ -117,6 +118,17 @@ type RouterConfig struct {
 	// ThinThreshold retries the same provider with a stop-word-stripped query
 	// when Web() returns a result count <= this threshold; 0 disables the retry.
 	ThinThreshold int
+	// MaxFetchPerProvider caps NumResults for the named provider before forwarding.
+	// A zero or absent entry means no additional cap (provider's native cap applies).
+	MaxFetchPerProvider map[string]int
+}
+
+// depthNumResults maps a Depth hint to a default NumResults when the caller
+// passes NumResults<=0. Keys are the three canonical depth tiers.
+var depthNumResults = map[string]int{
+	"quick": 6,
+	"":      12,
+	"deep":  20,
 }
 
 // NewRouter creates a multi-provider router. Providers must be pre-constructed
@@ -163,16 +175,17 @@ func NewRouter(providers map[string]Provider, cfg RouterConfig) *Router {
 	}
 
 	return &Router{
-		providers:         providers,
-		breakers:          breakers,
-		patentProviders:   patentProviders,
-		patentBreakers:    patentBreakers,
-		academicProviders: academicProviders,
-		academicBreakers:  academicBreakers,
-		routing:           cfg.Routing,
-		notifier:          cfg.Notifier,
-		logger:            logger,
-		thinThreshold:     cfg.ThinThreshold,
+		providers:           providers,
+		breakers:            breakers,
+		patentProviders:     patentProviders,
+		patentBreakers:      patentBreakers,
+		academicProviders:   academicProviders,
+		academicBreakers:    academicBreakers,
+		routing:             cfg.Routing,
+		notifier:            cfg.Notifier,
+		logger:              logger,
+		thinThreshold:       cfg.ThinThreshold,
+		maxFetchPerProvider: cfg.MaxFetchPerProvider,
 	}
 }
 
@@ -181,6 +194,16 @@ func (r *Router) Name() string { return "router" }
 func (r *Router) Web(ctx context.Context, params WebSearchParams) ([]SearchResult, error) {
 	trace := routingTraceFromContext(ctx)
 	priority := r.priorityFor(OpWeb)
+
+	// Apply depth-tiered default when caller did not specify NumResults.
+	if params.NumResults <= 0 {
+		if n, ok := depthNumResults[params.Depth]; ok {
+			params.NumResults = n
+		} else {
+			params.NumResults = depthNumResults[""] // unknown depth → standard default
+		}
+	}
+
 	var lastErr error
 	for i, name := range priority {
 		p, ok := r.provider(name)
@@ -196,11 +219,17 @@ func (r *Router) Web(ctx context.Context, params WebSearchParams) ([]SearchResul
 			continue
 		}
 
-		results, err := p.Web(ctx, params)
+		// Apply per-provider NumResults cap; copy params to avoid mutating the shared struct.
+		providerParams := params
+		if fetchCap, ok := r.maxFetchPerProvider[name]; ok && fetchCap > 0 && providerParams.NumResults > fetchCap {
+			providerParams.NumResults = fetchCap
+		}
+
+		results, err := p.Web(ctx, providerParams)
 		if err == nil {
 			if r.thinThreshold > 0 && len(results) <= r.thinThreshold {
-				if simplified := simplifyQuery(params.Query); simplified != params.Query {
-					retryParams := params
+				if simplified := simplifyQuery(providerParams.Query); simplified != providerParams.Query {
+					retryParams := providerParams
 					retryParams.Query = simplified
 					if retryResults, retryErr := p.Web(ctx, retryParams); retryErr == nil && len(retryResults) > len(results) {
 						results = retryResults

@@ -184,6 +184,13 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 			output["forumSignals"] = result.ForumSignals
 		}
 
+		// YouTube transcript highlights (#284): top-scored transcript segments.
+		// Absent for non-YouTube URLs, the description-only fallback, and
+		// transcripts with fewer than minHighlightSegments lines.
+		if len(result.Highlights) > 0 {
+			output["highlights"] = result.Highlights
+		}
+
 		// Typed source classification (#62): source_type / authority_tier /
 		// domain_category, derived from the Schema.org/Highwire signals + the
 		// numeric authority score. Additive; no lens on scrape_page. Captured once
