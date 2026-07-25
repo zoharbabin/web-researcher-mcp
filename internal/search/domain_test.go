@@ -108,6 +108,34 @@ func TestNewPatentProviderByName(t *testing.T) {
 	}
 }
 
+func TestSupportedAcademicProviders_IncludesCORE(t *testing.T) {
+	t.Parallel()
+
+	found := false
+	for _, name := range SupportedAcademicProviders {
+		if name == "core" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error(`SupportedAcademicProviders should include "core"`)
+	}
+}
+
+func TestAvailableAcademicProviders_IncludesCORE(t *testing.T) {
+	t.Parallel()
+
+	providers := AvailableAcademicProviders(AcademicProviderConfig{}, Deps{HTTPClient: nil})
+	p, ok := providers["core"]
+	if !ok {
+		t.Fatal(`AvailableAcademicProviders should construct "core" without any credentials`)
+	}
+	if p.Name() != "core" {
+		t.Errorf("Name() = %q, want core", p.Name())
+	}
+}
+
 func TestNewPatentProviderByName_MissingCredentials(t *testing.T) {
 	t.Parallel()
 

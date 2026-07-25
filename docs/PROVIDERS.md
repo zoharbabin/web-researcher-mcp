@@ -152,12 +152,14 @@ Which tools each web search provider enables. `—` means the provider returns e
 | **[CrossRef](https://www.crossref.org/)** | ✓ | ✓ (authoritative) | — | — | — | No (email for polite pool) |
 | **[Semantic Scholar](https://www.semanticscholar.org/)** | ✓ | — | ✓ (rich edges) | — | ✓ (tldr) | No (key raises limits) |
 | **[PubMed](https://pubmed.ncbi.nlm.nih.gov/)** | ✓ | — | — | — | — | No (key raises limits) |
+| **[CORE](https://core.ac.uk/)** | ✓ | — | — | ✓ (native `fullText`) | — | No (key raises limits) |
 | **[Exa](https://exa.ai/)** | ✓ | — | — | — | — | Yes (`EXA_API_KEY`) |
 
 **Notes:**
 - CrossRef is the official DOI registration agency — the authoritative source for DOI metadata. Every DOI-registered work appears here.
 - Semantic Scholar enriches results with AI-generated `tldr` summaries and citation intent/influence edges, which power `citation_graph`. OpenAlex also implements `citation_graph` support with citation-count edges as a fallback.
-- Only OpenAlex implements the `DOIResolver` interface (exact-entity lookup via `/works/doi:{doi}`). CrossRef, Semantic Scholar, and PubMed do not.
+- Only OpenAlex implements the `DOIResolver` interface (exact-entity lookup via `/works/doi:{doi}`). CrossRef, Semantic Scholar, PubMed, and CORE do not.
+- CORE's every result is open access by definition — it aggregates OA repositories exclusively — and its `pdfUrl` links directly to full text, no Unpaywall enrichment needed.
 - Exa routes academic queries using its `research-paper` category — useful when its neural index surfaces papers the bibliographic databases miss.
 - [Unpaywall](https://unpaywall.org/) OA enrichment runs as a post-processing step on any DOI-bearing result — not a separate provider to select.
 
@@ -169,6 +171,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 | **[CrossRef](https://www.crossref.org/)** | 140M+ DOI-registered works | Peer-reviewed literature; authoritative DOI metadata |
 | **[Semantic Scholar](https://www.semanticscholar.org/)** | 200M+ papers | Broad; strong on CS, medicine, biology |
 | **[PubMed](https://pubmed.ncbi.nlm.nih.gov/)** | 35M+ citations | Biomedical and life science only |
+| **[CORE](https://core.ac.uk/)** | 300M+ OA outputs | Open-access works aggregated from repositories worldwide; all results are OA |
 | **[Exa](https://exa.ai/)** | Neural web index | Research-paper category; surfaces papers outside bibliographic DBs |
 
 ### Academic Routing

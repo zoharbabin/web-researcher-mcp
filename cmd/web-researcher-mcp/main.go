@@ -259,6 +259,7 @@ func main() {
 		SemanticScholarAPIKey: cfg.Search.SemanticScholarAPIKey,
 		PubMedAPIKey:          cfg.Search.PubMedAPIKey,
 		PubMedEmail:           cfg.Search.PubMedEmail,
+		COREAPIKey:            cfg.Search.COREAPIKey,
 	}
 	academicProviders := search.AvailableAcademicProviders(academicCfg, searchDeps)
 
