@@ -69,6 +69,54 @@ func (p *placeholderAcademicProvider) References(_ context.Context, _ string, _ 
 // TestAcademicSearchPlaceholderTriggersHints is the #229 regression guard: when a
 // provider returns only Crossref test-prefix noise, academic_search must drop it
 // and surface the empty-result hints object rather than passing junk through.
+// fullTextAcademicProvider records whether Scholarly was called with
+// FullText=true and returns a result carrying FullText when it was. Named
+// "pubmed" so it's selected by resolveAcademicSearcher when provider=pubmed.
+type fullTextAcademicProvider struct {
+	gotFullText bool
+}
+
+func (p *fullTextAcademicProvider) Name() string { return "pubmed" }
+func (p *fullTextAcademicProvider) Metadata() search.ProviderMeta {
+	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "free", Description: "mock (fulltext)"}
+}
+func (p *fullTextAcademicProvider) Scholarly(_ context.Context, params search.AcademicSearchParams) ([]search.AcademicResult, error) {
+	p.gotFullText = params.FullText
+	r := search.AcademicResult{Title: "A PMC Paper", URL: "https://pubmed.ncbi.nlm.nih.gov/1/", Source: "pubmed"}
+	if params.FullText {
+		r.FullText = "The full extracted body text."
+	}
+	return []search.AcademicResult{r}, nil
+}
+
+// TestAcademicSearchFullText is the #268 integration guard: full_text=true
+// propagates through to AcademicSearchParams.FullText and the resulting
+// AcademicResult.FullText renders as papers[].fullText in tool output,
+// matching academicSearchOutputSchema (guards TestOutputSchemaMatchesResponse).
+func TestAcademicSearchFullText(t *testing.T) {
+	deps := setupTestDeps()
+	provider := &fullTextAcademicProvider{}
+	deps.AcademicProviders = map[string]search.AcademicProvider{"pubmed": provider}
+
+	out, res := callTool(t, deps, "academic_search", map[string]any{
+		"query": "CRISPR", "provider": "pubmed", "full_text": true,
+	})
+	if res.IsError {
+		t.Fatalf("unexpected error result")
+	}
+	if !provider.gotFullText {
+		t.Error("AcademicSearchParams.FullText was not propagated to the provider")
+	}
+	papers, _ := out["papers"].([]any)
+	if len(papers) != 1 {
+		t.Fatalf("expected 1 paper, got %d", len(papers))
+	}
+	paper := papers[0].(map[string]any)
+	if paper["fullText"] != "The full extracted body text." {
+		t.Errorf("fullText = %v, want the provider's full text", paper["fullText"])
+	}
+}
+
 func TestAcademicSearchPlaceholderTriggersHints(t *testing.T) {
 	deps := setupTestDeps()
 	deps.AcademicProviders = map[string]search.AcademicProvider{"openalex": &placeholderAcademicProvider{}}

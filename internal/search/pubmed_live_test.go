@@ -68,3 +68,15 @@ func TestPubMedLiveDateRange(t *testing.T) {
 		}
 	}
 }
+
+func TestPubMedFetchFullTextLive(t *testing.T) {
+	p := newPubMedLiveProvider()
+	// PMC3539452 is a stable, well-known open-access PMC article.
+	text, err := p.FetchFullText(context.Background(), "PMC3539452")
+	if err != nil {
+		t.Skipf("PubMed PMC unreachable (skipping): %v", err)
+	}
+	if len(text) <= 100 {
+		t.Fatalf("expected substantial full text for PMC3539452, got %d chars: %q", len(text), text)
+	}
+}

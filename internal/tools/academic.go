@@ -48,8 +48,9 @@ type academicSearchInput struct {
 	Source     string `json:"source,omitempty" jsonschema:"Restrict to an academic source: all (default), arxiv, pubmed, ieee, nature, springer."`
 	PDFOnly    bool   `json:"pdf_only,omitempty" jsonschema:"Only return papers with direct PDF links (default: false). Useful when you plan to scrape the full paper."`
 	SortBy     string `json:"sort_by,omitempty" jsonschema:"Sort order: relevance (default) or date (newest first)."`
-	Provider   string `json:"provider,omitempty" jsonschema:"Force a specific provider. Academic: openalex, crossref, pubmed, semanticscholar, exa. Web fallback: google, brave, serper, searxng, searchapi, duckduckgo, tavily. Omit to use automatic selection (recommended)."`
+	Provider   string `json:"provider,omitempty" jsonschema:"Force a specific provider. Academic: openalex, crossref, pubmed, semanticscholar, core, exa. Web fallback: google, brave, serper, searxng, searchapi, duckduckgo, tavily. Omit to use automatic selection (recommended)."`
 	OpenAccess bool   `json:"open_access,omitempty" jsonschema:"Only return open-access papers with free full-text (default: false)."`
+	FullText   bool   `json:"full_text,omitempty" jsonschema:"Fetch PMC full text for open-access biomedical articles with a PubMed Central ID (default: false). Only effective when the pubmed provider is active. Substantially increases response time."`
 	SessionID  string `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. Sources are automatically recorded for recovery after context loss."`
 }
 
@@ -82,7 +83,7 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 			source = "all"
 		}
 
-		cacheKey := searchCacheKey("academic", input.Query, numResults, input.YearFrom, input.YearTo, source, input.Provider, input.OpenAccess, input.PDFOnly)
+		cacheKey := searchCacheKey("academic", input.Query, numResults, input.YearFrom, input.YearTo, source, input.Provider, input.OpenAccess, input.PDFOnly, input.FullText)
 		if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
 			deps.Metrics.RecordToolCall("academic_search", time.Since(start), nil, "", true)
 			rt := routingMeta(search.RoutingDecision{}, time.Since(start), true)
@@ -119,6 +120,7 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 			NumResults: numResults,
 			OpenAccess: input.OpenAccess,
 			SortBy:     sortBy,
+			FullText:   input.FullText,
 		}
 
 		var results []search.AcademicResult
@@ -393,6 +395,8 @@ func academicProviderEnvHint(name string) string {
 		return "Set CROSSREF_EMAIL to your contact email."
 	case "semanticscholar":
 		return "Semantic Scholar works without a key at a lower shared rate; set SEMANTIC_SCHOLAR_API_KEY to raise the limit."
+	case "core":
+		return "CORE works without a key at a lower shared rate; set CORE_API_KEY to raise the limit."
 	case "exa":
 		return "Set EXA_API_KEY to your Exa API key."
 	default:
@@ -448,6 +452,9 @@ func academicResultToMap(r search.AcademicResult) map[string]any {
 	}
 	if r.IsInDoaj {
 		paper["isInDoaj"] = true
+	}
+	if r.FullText != "" {
+		paper["fullText"] = r.FullText
 	}
 	return paper
 }
@@ -511,8 +518,19 @@ func buildAcademicHints(input academicSearchInput, provider string) *ZeroResultH
 	if input.PDFOnly {
 		filters["pdf_only"] = "true"
 	}
+	if input.FullText {
+		filters["full_text"] = "true"
+	}
 
 	hints := buildZeroResultHints(provider, filters, nil)
+
+	if input.FullText && provider != "pubmed" {
+		hints.SuggestedActions = append([]HintAction{{
+			Action:    "remove_filter",
+			Parameter: "full_text",
+			Detail:    "full_text is only fetched by the pubmed provider; it has no effect with other providers.",
+		}}, hints.SuggestedActions...)
+	}
 
 	if input.PDFOnly {
 		hints.SuggestedActions = append([]HintAction{{
