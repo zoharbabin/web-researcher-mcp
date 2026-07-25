@@ -1779,6 +1779,155 @@ func TestRouter_NoProviders(t *testing.T) {
 	}
 }
 
+// capturingProvider records the last WebSearchParams it received, for
+// asserting what the router actually forwarded downstream.
+type capturingProvider struct {
+	name       string
+	lastParams WebSearchParams
+}
+
+func (c *capturingProvider) Web(_ context.Context, p WebSearchParams) ([]SearchResult, error) {
+	c.lastParams = p
+	return []SearchResult{{Title: "r", URL: "https://example.com"}}, nil
+}
+func (c *capturingProvider) Images(context.Context, ImageSearchParams) ([]ImageResult, error) {
+	return nil, nil
+}
+func (c *capturingProvider) News(context.Context, NewsSearchParams) ([]NewsResult, error) {
+	return nil, nil
+}
+func (c *capturingProvider) Name() string { return c.name }
+
+func TestRouter_WebDepthDefault_Quick(t *testing.T) {
+	t.Parallel()
+	p := &capturingProvider{name: "p1"}
+	r := NewRouter(map[string]Provider{"p1": p}, RouterConfig{
+		Routing: RoutingConfig{Default: []string{"p1"}},
+	})
+	if _, err := r.Web(context.Background(), WebSearchParams{Query: "q", Depth: "quick"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p.lastParams.NumResults != 6 {
+		t.Errorf("NumResults = %d, want 6", p.lastParams.NumResults)
+	}
+}
+
+func TestRouter_WebDepthDefault_Empty(t *testing.T) {
+	t.Parallel()
+	p := &capturingProvider{name: "p1"}
+	r := NewRouter(map[string]Provider{"p1": p}, RouterConfig{
+		Routing: RoutingConfig{Default: []string{"p1"}},
+	})
+	if _, err := r.Web(context.Background(), WebSearchParams{Query: "q"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p.lastParams.NumResults != 12 {
+		t.Errorf("NumResults = %d, want 12", p.lastParams.NumResults)
+	}
+}
+
+func TestRouter_WebDepthDefault_Deep(t *testing.T) {
+	t.Parallel()
+	p := &capturingProvider{name: "p1"}
+	r := NewRouter(map[string]Provider{"p1": p}, RouterConfig{
+		Routing: RoutingConfig{Default: []string{"p1"}},
+	})
+	if _, err := r.Web(context.Background(), WebSearchParams{Query: "q", Depth: "deep"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p.lastParams.NumResults != 20 {
+		t.Errorf("NumResults = %d, want 20", p.lastParams.NumResults)
+	}
+}
+
+func TestRouter_WebDepthDefault_Unknown(t *testing.T) {
+	t.Parallel()
+	p := &capturingProvider{name: "p1"}
+	r := NewRouter(map[string]Provider{"p1": p}, RouterConfig{
+		Routing: RoutingConfig{Default: []string{"p1"}},
+	})
+	if _, err := r.Web(context.Background(), WebSearchParams{Query: "q", Depth: "standard"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p.lastParams.NumResults != 12 {
+		t.Errorf("NumResults = %d, want 12 (unknown depth falls back to default)", p.lastParams.NumResults)
+	}
+}
+
+func TestRouter_WebDepthDefault_ExplicitOverridesDepth(t *testing.T) {
+	t.Parallel()
+	p := &capturingProvider{name: "p1"}
+	r := NewRouter(map[string]Provider{"p1": p}, RouterConfig{
+		Routing: RoutingConfig{Default: []string{"p1"}},
+	})
+	if _, err := r.Web(context.Background(), WebSearchParams{Query: "q", NumResults: 7, Depth: "deep"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p.lastParams.NumResults != 7 {
+		t.Errorf("NumResults = %d, want 7 (explicit NumResults must not be overridden)", p.lastParams.NumResults)
+	}
+}
+
+func TestRouter_WebPerProviderCap(t *testing.T) {
+	t.Parallel()
+	p := &capturingProvider{name: "p1"}
+	r := NewRouter(map[string]Provider{"p1": p}, RouterConfig{
+		Routing:             RoutingConfig{Default: []string{"p1"}},
+		MaxFetchPerProvider: map[string]int{"p1": 8},
+	})
+	if _, err := r.Web(context.Background(), WebSearchParams{Query: "q", NumResults: 20}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p.lastParams.NumResults != 8 {
+		t.Errorf("NumResults = %d, want 8", p.lastParams.NumResults)
+	}
+}
+
+func TestRouter_WebPerProviderCap_NoCap(t *testing.T) {
+	t.Parallel()
+	p := &capturingProvider{name: "p1"}
+	r := NewRouter(map[string]Provider{"p1": p}, RouterConfig{
+		Routing: RoutingConfig{Default: []string{"p1"}},
+	})
+	if _, err := r.Web(context.Background(), WebSearchParams{Query: "q", NumResults: 20}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p.lastParams.NumResults != 20 {
+		t.Errorf("NumResults = %d, want 20", p.lastParams.NumResults)
+	}
+}
+
+func TestRouter_WebPerProviderCap_ZeroCapNoOp(t *testing.T) {
+	t.Parallel()
+	p := &capturingProvider{name: "p1"}
+	r := NewRouter(map[string]Provider{"p1": p}, RouterConfig{
+		Routing:             RoutingConfig{Default: []string{"p1"}},
+		MaxFetchPerProvider: map[string]int{"p1": 0},
+	})
+	if _, err := r.Web(context.Background(), WebSearchParams{Query: "q", NumResults: 20}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p.lastParams.NumResults != 20 {
+		t.Errorf("NumResults = %d, want 20 (zero cap is a no-op)", p.lastParams.NumResults)
+	}
+}
+
+func TestRouter_WebPerProviderCap_DoesNotMutateOriginalParams(t *testing.T) {
+	t.Parallel()
+	p := &capturingProvider{name: "p1"}
+	r := NewRouter(map[string]Provider{"p1": p}, RouterConfig{
+		Routing:             RoutingConfig{Default: []string{"p1"}},
+		MaxFetchPerProvider: map[string]int{"p1": 8},
+	})
+	params := WebSearchParams{Query: "q", NumResults: 20}
+	if _, err := r.Web(context.Background(), params); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if params.NumResults != 20 {
+		t.Errorf("caller's params.NumResults mutated to %d, want unchanged 20", params.NumResults)
+	}
+}
+
 // =============================================================================
 // Router Patent Search Tests
 // =============================================================================
