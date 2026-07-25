@@ -516,7 +516,7 @@ func TestScrapeHTML_ExtractsContent(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{AllowPrivateIPs: true})
-	result, err := p.scrapeHTML(context.Background(), ts.URL, 50000)
+	result, err := p.scrapeHTML(context.Background(), ts.URL, 50000, false)
 	if err != nil {
 		t.Fatalf("scrapeHTML error: %v", err)
 	}
@@ -563,7 +563,7 @@ func TestScrapeHTML_Truncation(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{AllowPrivateIPs: true})
-	result, err := p.scrapeHTML(context.Background(), ts.URL, 200)
+	result, err := p.scrapeHTML(context.Background(), ts.URL, 200, false)
 	if err != nil {
 		t.Fatalf("scrapeHTML error: %v", err)
 	}
@@ -583,7 +583,7 @@ func TestScrapeHTML_HTTPError(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{AllowPrivateIPs: true})
-	_, err := p.scrapeHTML(context.Background(), ts.URL, 10000)
+	_, err := p.scrapeHTML(context.Background(), ts.URL, 10000, false)
 	if err == nil {
 		t.Fatal("expected error for HTTP 404")
 	}
@@ -606,7 +606,7 @@ func TestScrapeHTML_ContentTypeIsHTML(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{AllowPrivateIPs: true})
-	result, err := p.scrapeHTML(context.Background(), ts.URL, 50000)
+	result, err := p.scrapeHTML(context.Background(), ts.URL, 50000, false)
 	if err != nil {
 		t.Fatalf("scrapeHTML error: %v", err)
 	}
@@ -638,7 +638,7 @@ This is a paragraph with [a link](https://example.com) and some content.
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{AllowPrivateIPs: true})
-	result, err := p.scrapeMarkdown(context.Background(), ts.URL, 50000)
+	result, err := p.scrapeMarkdown(context.Background(), ts.URL, 50000, false)
 	if err != nil {
 		t.Fatalf("scrapeMarkdown error: %v", err)
 	}
@@ -661,7 +661,7 @@ func TestScrapeMarkdown_NonMarkdownContentType(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{AllowPrivateIPs: true})
-	result, err := p.scrapeMarkdown(context.Background(), ts.URL, 50000)
+	result, err := p.scrapeMarkdown(context.Background(), ts.URL, 50000, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -945,7 +945,7 @@ func TestScrapeStealth_ExtractsArticleContent(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-	result, err := p.scrapeStealth(context.Background(), ts.URL, 50000)
+	result, err := p.scrapeStealth(context.Background(), ts.URL, 50000, false)
 	if err != nil {
 		t.Fatalf("scrapeStealth error: %v", err)
 	}
@@ -976,7 +976,7 @@ func TestScrapeStealth_ReturnsNilForThinContent(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-	result, err := p.scrapeStealth(context.Background(), ts.URL, 50000)
+	result, err := p.scrapeStealth(context.Background(), ts.URL, 50000, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -997,7 +997,7 @@ func TestScrapeStealth_Truncation(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-	result, err := p.scrapeStealth(context.Background(), ts.URL, 500)
+	result, err := p.scrapeStealth(context.Background(), ts.URL, 500, false)
 	if err != nil {
 		t.Fatalf("scrapeStealth error: %v", err)
 	}
@@ -1019,7 +1019,7 @@ func TestScrapeStealth_HTTP4xxError(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-	_, err := p.scrapeStealth(context.Background(), ts.URL, 50000)
+	_, err := p.scrapeStealth(context.Background(), ts.URL, 50000, false)
 	if err == nil {
 		t.Fatal("expected error for 403 response")
 	}
@@ -1045,7 +1045,7 @@ func TestScrapeStealth_BrowserHeaders(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-	_, _ = p.scrapeStealth(context.Background(), ts.URL, 50000)
+	_, _ = p.scrapeStealth(context.Background(), ts.URL, 50000, false)
 
 	if receivedHeaders == nil {
 		t.Fatal("no headers received")
@@ -1075,7 +1075,7 @@ func TestScrapeStealth_FallsBackToBody(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-	result, err := p.scrapeStealth(context.Background(), ts.URL, 50000)
+	result, err := p.scrapeStealth(context.Background(), ts.URL, 50000, false)
 	if err != nil {
 		t.Fatalf("scrapeStealth error: %v", err)
 	}
@@ -1141,7 +1141,7 @@ func TestExtractArticleContent_Selectors(t *testing.T) {
 			defer ts.Close()
 
 			p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-			result, err := p.scrapeStealth(context.Background(), ts.URL, 50000)
+			result, err := p.scrapeStealth(context.Background(), ts.URL, 50000, false)
 			if err != nil {
 				t.Fatalf("error: %v", err)
 			}
@@ -1745,7 +1745,7 @@ func TestScrapeHTML_GzipDecompression(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{AllowPrivateIPs: true})
-	result, err := p.scrapeHTML(context.Background(), ts.URL, 50000)
+	result, err := p.scrapeHTML(context.Background(), ts.URL, 50000, false)
 	if err != nil {
 		t.Fatalf("scrapeHTML with gzip error: %v", err)
 	}
@@ -1775,7 +1775,7 @@ func TestScrapeStealth_GzipDecompression(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{AllowPrivateIPs: true})
-	result, err := p.scrapeStealth(context.Background(), ts.URL, 50000)
+	result, err := p.scrapeStealth(context.Background(), ts.URL, 50000, false)
 	if err != nil {
 		t.Fatalf("scrapeStealth with gzip error: %v", err)
 	}
@@ -2084,7 +2084,7 @@ func TestScrapeStealth_AuthError(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-	_, err := p.scrapeStealth(context.Background(), ts.URL, 50000)
+	_, err := p.scrapeStealth(context.Background(), ts.URL, 50000, false)
 	if err == nil {
 		t.Fatal("expected error for 401")
 	}
@@ -2104,7 +2104,7 @@ func TestScrapeStealth_RateLimitError(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-	_, err := p.scrapeStealth(context.Background(), ts.URL, 50000)
+	_, err := p.scrapeStealth(context.Background(), ts.URL, 50000, false)
 	if err == nil {
 		t.Fatal("expected error for 429")
 	}
@@ -2124,7 +2124,7 @@ func TestScrapeHTML_ClassifiedErrors(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-	_, err := p.scrapeHTML(context.Background(), ts.URL, 50000)
+	_, err := p.scrapeHTML(context.Background(), ts.URL, 50000, false)
 	if err == nil {
 		t.Fatal("expected error for 403")
 	}
@@ -2147,7 +2147,7 @@ func TestScrapeHTML_429_ClassifiesAsRateLimit(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-	_, err := p.scrapeHTML(context.Background(), ts.URL, 50000)
+	_, err := p.scrapeHTML(context.Background(), ts.URL, 50000, false)
 	if err == nil {
 		t.Fatal("expected error for 429")
 	}
@@ -2619,6 +2619,49 @@ func TestScrape_SSRFCompositeIsValidation(t *testing.T) {
 	}
 }
 
+// TestScrapeRaw_EscalatesPastBotWall is the core regression guard for raw
+// mode's "reuse the regular pipeline" fix: a site that bot-walls requests
+// carrying a weak/generic User-Agent (exactly what the OLD single-shot
+// ScrapeRaw sent) but serves real content to a browser-spoofed UA (what the
+// stealth tier sends) must have raw mode come back with the REAL content, not
+// the bot-wall interstitial — proving raw mode escalated through the tiered
+// ladder rather than giving up after one weak fetch.
+func TestScrapeRaw_EscalatesPastBotWall(t *testing.T) {
+	t.Parallel()
+	realHTML := `<html><body><article><p>` + strings.Repeat("real page content. ", 20) + `</p></article></body></html>`
+	botWallHTML := `<html><body><h1>Checking your browser before accessing the site.</h1>` +
+		`<p>Please verify you are a human by completing the security check.</p></body></html>`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		// The stealth tier's UA is the only one among markdown/stealth/html that
+		// impersonates a real desktop browser (contains "Macintosh"); html.go and
+		// the OLD ScrapeRaw both send a generic "Mozilla/5.0 (compatible; ...)"
+		// UA that this server treats as a bot.
+		if strings.Contains(r.Header.Get("User-Agent"), "Macintosh") {
+			_, _ = w.Write([]byte(realHTML))
+			return
+		}
+		_, _ = w.Write([]byte(botWallHTML))
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{AllowPrivateIPs: true})
+	result, err := p.ScrapeRaw(context.Background(), ts.URL, 50000)
+	if err != nil {
+		t.Fatalf("ScrapeRaw error: %v", err)
+	}
+	if strings.Contains(result.Content, "Checking your browser") {
+		t.Fatalf("raw mode returned the bot-wall interstitial instead of escalating: %q", result.Content)
+	}
+	if !strings.Contains(result.Content, "real page content") {
+		t.Errorf("expected real page content, got %q", result.Content)
+	}
+	if result.Tier != "raw:stealth" {
+		t.Errorf("expected escalation to land on the stealth tier, got Tier=%q", result.Tier)
+	}
+}
+
 func TestScrapeRaw_HTTPError(t *testing.T) {
 	t.Parallel()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2813,7 +2856,7 @@ func TestScrapeHTML_BoundsOversizeBody(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-	res, err := p.scrapeHTML(context.Background(), ts.URL, 5_000_000)
+	res, err := p.scrapeHTML(context.Background(), ts.URL, 5_000_000, false)
 	if err != nil {
 		t.Fatalf("scrapeHTML errored on oversize body: %v", err)
 	}
@@ -2902,7 +2945,7 @@ func TestScrapeStealth_PDFContentType_Reroutes(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-	res, err := p.scrapeStealth(context.Background(), ts.URL+"/download/paper", 50_000)
+	res, err := p.scrapeStealth(context.Background(), ts.URL+"/download/paper", 50_000, false)
 	if err != nil {
 		t.Fatalf("scrapeStealth unexpectedly errored on PDF response: %v", err)
 	}
@@ -2933,7 +2976,7 @@ func TestScrapeHTML_PDFContentType_Reroutes(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-	res, err := p.scrapeHTML(context.Background(), ts.URL+"/view/fulltext", 50_000)
+	res, err := p.scrapeHTML(context.Background(), ts.URL+"/view/fulltext", 50_000, false)
 	if err != nil {
 		t.Fatalf("scrapeHTML unexpectedly errored on PDF response: %v", err)
 	}
@@ -2964,7 +3007,7 @@ func TestScrapeStealth_PDFMagicBytes_Reroutes(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-	res, err := p.scrapeStealth(context.Background(), ts.URL+"/report", 50_000)
+	res, err := p.scrapeStealth(context.Background(), ts.URL+"/report", 50_000, false)
 	if err != nil {
 		t.Fatalf("scrapeStealth errored on PDF-magic-bytes response: %v", err)
 	}
@@ -2991,7 +3034,7 @@ func TestScrapeHTML_HTMLContent_NotRerouted(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-	res, err := p.scrapeHTML(context.Background(), ts.URL+"/article", 50_000)
+	res, err := p.scrapeHTML(context.Background(), ts.URL+"/article", 50_000, false)
 	if err != nil {
 		t.Fatalf("scrapeHTML errored on plain HTML: %v", err)
 	}
@@ -3769,7 +3812,7 @@ func TestScrapeStealth_ThinContentWithIframeCandidates(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-	result, err := p.scrapeStealth(context.Background(), ts.URL, 50000)
+	result, err := p.scrapeStealth(context.Background(), ts.URL, 50000, false)
 	if err != nil {
 		t.Fatalf("scrapeStealth error: %v", err)
 	}
@@ -3794,7 +3837,7 @@ func TestScrapeStealth_ThinContentNoIframeStillNil(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-	result, err := p.scrapeStealth(context.Background(), ts.URL, 50000)
+	result, err := p.scrapeStealth(context.Background(), ts.URL, 50000, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

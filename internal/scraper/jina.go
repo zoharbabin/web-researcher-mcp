@@ -43,7 +43,12 @@ var JinaReaderURL = "https://r.jina.ai/"
 // subprocess against local httptest servers, so JinaReaderURL cannot be
 // stubbed there the way unit tests do via TestMain — without a kill switch,
 // the tier makes a genuine call to production r.jina.ai during those tests.
-func (p *Pipeline) scrapeJina(ctx context.Context, pageURL string, maxLength int) (*ScrapeResult, error) {
+// raw is unused: Jina is a cloud proxy that fetches the target URL itself and
+// returns its own processed extraction, never the target's verbatim response
+// bytes — structurally incompatible with raw mode. tieredFallback excludes
+// this tier entirely when raw is true; the parameter exists only to satisfy
+// the uniform namedTier.fn signature.
+func (p *Pipeline) scrapeJina(ctx context.Context, pageURL string, maxLength int, raw bool) (*ScrapeResult, error) {
 	if p.config.JinaDisabled {
 		return nil, contentError(pageURL, "jina tier disabled")
 	}

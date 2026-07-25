@@ -27,7 +27,12 @@ var exaContentsURL = "https://api.exa.ai/contents"
 // The same SSRF/allowlist guards as every other tier already ran in Scrape
 // before this tier is reached; this method only performs the outbound Exa API
 // call (a fixed, trusted host), not a fetch of the user URL itself.
-func (p *Pipeline) scrapeExa(ctx context.Context, pageURL string, maxLength int) (*ScrapeResult, error) {
+// raw is unused: Exa is a paid cloud proxy that fetches the target URL itself
+// and returns its own neural-extracted text, never the target's verbatim
+// response bytes — structurally incompatible with raw mode. tieredFallback
+// excludes this tier entirely when raw is true; the parameter exists only to
+// satisfy the uniform namedTier.fn signature.
+func (p *Pipeline) scrapeExa(ctx context.Context, pageURL string, maxLength int, raw bool) (*ScrapeResult, error) {
 	if p.config.ExaAPIKey == "" {
 		return nil, contentError(pageURL, "exa tier not configured")
 	}

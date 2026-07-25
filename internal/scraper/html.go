@@ -41,7 +41,7 @@ const (
 // Stripe Checkout) carry 1-2, so this is generous headroom, not a real limit.
 const maxIframeCandidates = 2
 
-func (p *Pipeline) scrapeHTML(ctx context.Context, url string, maxLength int) (*ScrapeResult, error) {
+func (p *Pipeline) scrapeHTML(ctx context.Context, url string, maxLength int, raw bool) (*ScrapeResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
@@ -79,8 +79,9 @@ func (p *Pipeline) scrapeHTML(ctx context.Context, url string, maxLength int) (*
 
 	// Same PDF detection as the stealth tier — HTML tier is the third pass,
 	// still before the browser; same re-route logic applies (#206).
-	if isPDFContentType(resp.Header.Get("Content-Type")) || looksLikePDF(body) {
-		return p.scrapeBodyAsPDF(url, body, maxLength)
+	ct := resp.Header.Get("Content-Type")
+	if isPDFContentType(ct) || looksLikePDF(body) {
+		return p.scrapeBodyAsPDF(url, body, maxLength, raw, ct)
 	}
 
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
@@ -110,6 +111,15 @@ func (p *Pipeline) scrapeHTML(ctx context.Context, url string, maxLength int) (*
 		truncated = true
 	}
 
+	// Raw mode's returned body must respect the caller's maxLength the same
+	// way Content does — body itself is only bounded by MaxHTMLBytes, which is
+	// deliberately larger so extraction reaches the real article text.
+	rawBody := string(body)
+	if len(rawBody) > maxLength {
+		rawBody = truncateBytes(rawBody, maxLength)
+		truncated = true
+	}
+
 	res := &ScrapeResult{
 		URL:         url,
 		Content:     content,
@@ -124,6 +134,11 @@ func (p *Pipeline) scrapeHTML(ctx context.Context, url string, maxLength int) (*
 		// escalating to the browser tier (see looksLikePartialShell).
 		rawHTMLBytes:     len(body),
 		iframeCandidates: iframes,
+		// The undecoded HTML body this tier already fetched, before
+		// extractMainContent stripped it down to Content — raw mode returns
+		// this instead of Content once tieredFallback picks a winner.
+		rawBody:        rawBody,
+		rawContentType: ct,
 	}
 	// Attach structured data only when something was captured, so ordinary pages
 	// leave the pointer nil (the clean "absent" signal).
