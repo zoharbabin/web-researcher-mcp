@@ -196,7 +196,7 @@ var scrapePageOutputSchema = map[string]any{
 		"estimatedTokens":   map[string]any{"type": "integer"},
 		"sizeCategory":      map[string]any{"type": "string"},
 		"raw":               map[string]any{"type": "boolean"},
-		"extractedBy":       map[string]any{"type": "string", "description": "Which extraction tier produced the content (markdown, stealth, html, browser, or exa:cached/exa:crawled for the paid Exa fallback). Provenance only; omitted when unknown."},
+		"extractedBy":       map[string]any{"type": "string", "description": "Which extraction tier produced the content (markdown, stealth, jina, html, browser, or exa:cached/exa:crawled for the paid Exa fallback). Provenance only; omitted when unknown."},
 		"citation": map[string]any{
 			"type": "object",
 			"properties": map[string]any{

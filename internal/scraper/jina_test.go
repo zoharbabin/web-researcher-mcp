@@ -164,6 +164,28 @@ func TestScrapeJinaNetworkError(t *testing.T) {
 	}
 }
 
+// TestScrapeJinaDisabled verifies the JinaDisabled kill switch short-circuits
+// before any network call, so a deployment or test context can opt out of
+// the tier's dependency on r.jina.ai entirely (mirrors ChromePath="disabled").
+func TestScrapeJinaDisabled(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		_, _ = w.Write([]byte(`{"code":200,"status":20000,"data":{"content":"should not be reached"}}`))
+	}))
+	defer srv.Close()
+	withJinaEndpoint(t, srv.URL+"/")
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, JinaDisabled: true})
+	_, err := p.scrapeJina(context.Background(), "https://x.example", 5000)
+	if err == nil {
+		t.Fatal("expected error when Jina tier is disabled")
+	}
+	if called {
+		t.Error("scrapeJina made a network call despite JinaDisabled=true")
+	}
+}
+
 // TestScrapeJinaFallthrough verifies the Jina tier fires between stealth and
 // html: a page the free stealth/markdown tiers cannot extract (empty body)
 // falls through to Jina, and the result carries the jina tier.

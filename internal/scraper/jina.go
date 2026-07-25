@@ -34,7 +34,20 @@ var JinaReaderURL = "https://r.jina.ai/"
 // The same SSRF/allowlist guards as every other tier already ran in Scrape
 // before this tier is reached; this method only performs the outbound request
 // to the fixed, trusted r.jina.ai host, not a direct fetch of the user URL.
+//
+// JinaDisabled is the tier's kill switch (JINA_READER_DISABLED env var),
+// mirroring ChromePath=disabled for the browser tier: unlike Exa (opt-in via
+// an API key), Jina runs unconditionally, so a deployment or test context
+// that wants zero dependency on this third-party proxy needs an explicit way
+// to turn it off. It also keeps e2e tests deterministic: e2e spawns a real
+// subprocess against local httptest servers, so JinaReaderURL cannot be
+// stubbed there the way unit tests do via TestMain — without a kill switch,
+// the tier makes a genuine call to production r.jina.ai during those tests.
 func (p *Pipeline) scrapeJina(ctx context.Context, pageURL string, maxLength int) (*ScrapeResult, error) {
+	if p.config.JinaDisabled {
+		return nil, contentError(pageURL, "jina tier disabled")
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 

@@ -30,6 +30,7 @@ type Config struct {
 	AllowPrivateIPs        bool
 	AllowedDomains         []string
 	ChromePath             string
+	JinaDisabled           bool
 	MaxScrapeConcurrency   int
 	MaxHTMLBytes           int
 	MaxDocumentBytes       int
@@ -433,6 +434,7 @@ func Load() (*Config, error) {
 		AllowPrivateIPs:      envBool("ALLOW_PRIVATE_IPS", false),
 		AllowedDomains:       splitCSV(os.Getenv("ALLOWED_DOMAINS")),
 		ChromePath:           os.Getenv("CHROME_PATH"),
+		JinaDisabled:         envBool("JINA_READER_DISABLED", false),
 		MaxScrapeConcurrency: envInt("MAX_SCRAPE_CONCURRENCY", 5),
 		MaxHTMLBytes:         envInt("MAX_HTML_BYTES", 8<<20),
 		MaxDocumentBytes:     envInt("MAX_DOCUMENT_BYTES", 50<<20),

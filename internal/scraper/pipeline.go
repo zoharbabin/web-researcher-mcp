@@ -32,6 +32,12 @@ type PipelineConfig struct {
 	// raises the free-tier rate limit via the Authorization header. Empty
 	// (default) ⇒ requests are sent unauthenticated.
 	JinaAPIKey string
+	// JinaDisabled turns the Jina Reader tier off entirely (JINA_READER_DISABLED
+	// env var), mirroring ChromePath=disabled for the browser tier. Unlike Exa
+	// (opt-in via an API key), Jina runs unconditionally by default, so this is
+	// the only way to remove its outbound dependency on r.jina.ai — e.g. for
+	// hardened deployments or e2e tests that must stay network-free.
+	JinaDisabled bool
 	// MaxHTMLBytes bounds the decompressed HTML body each HTML-parsing tier reads
 	// before extraction (stealth, html, patents). Zero ⇒ the NewPipeline default.
 	MaxHTMLBytes int

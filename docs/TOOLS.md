@@ -144,7 +144,7 @@ type ScrapeOutput struct {
     SizeCategory    string    `json:"sizeCategory"`   // small, medium, large, very_large
     Citation        *Citation `json:"citation"`       // always present
     Raw             bool      `json:"raw,omitempty"`  // true only in raw mode; omitted otherwise
-    ExtractedBy     string    `json:"extractedBy,omitempty"` // extraction tier: markdown|stealth|html|browser|exa:cached|exa:crawled; omitted when unknown
+    ExtractedBy     string    `json:"extractedBy,omitempty"` // extraction tier: markdown|stealth|jina|html|browser|exa:cached|exa:crawled; omitted when unknown
     ExtractionQuality string  `json:"extractionQuality,omitempty"` // complete when the pipeline returned a confident extraction; partial when every tier was exhausted and the best-quality candidate was returned instead. Never an error. Omitted in raw mode.
     WordCount         int     `json:"wordCount,omitempty"`         // words in the extracted content (#358); orthogonal to ExtractionQuality — a "complete" extraction can still be a thin paywall/bot-wall stub. Omitted in raw mode.
     SparsityWarning   string  `json:"sparsityWarning,omitempty"`   // present only when WordCount is below ~150 — the content may be too thin for a reliable claim check (#358). Omitted in raw mode and whenever content is not thin.
@@ -216,7 +216,7 @@ In `raw` mode the output additionally carries `"raw": true`, and `contentType` i
 
 **Structured data (#46).** When the page embeds machine-readable metadata, the response carries a `structuredData` object alongside `content`: `jsonLd` (each `<script type="application/ld+json">` block, kept verbatim — invalid JSON is skipped, never failing the scrape), `openGraph` (`og:*`/`article:*` meta, keys keep their prefix), and `citation` (Highwire `citation_*` meta — DOI, authors, journal). The whole object is omitted when no such markup is present, and each sub-field is omitted when empty. It is produced by the HTML-extraction tiers only (absent for `raw` mode, PDFs, YouTube, and markdown-tier results), is independently size-bounded so a pathological page cannot blow the response budget, and is **untrusted external data** under the same trust boundary as `content`.
 
-**Extraction provenance (`extractedBy`).** When known, the response names the tier that produced the content: `markdown`, `stealth`, `html`, `browser`, `github:raw`/`github:contents-api`/`github:gist-api`, or — for the paid Exa fallback — `exa:cached` / `exa:crawled`. It lets a caller see whether content came from a free local tier or the metered Exa `/contents` API (Tier 5, present only when `EXA_API_KEY` is set). Omitted when unknown (e.g. document/YouTube routes).
+**Extraction provenance (`extractedBy`).** When known, the response names the tier that produced the content: `markdown`, `stealth`, `jina`, `html`, `browser`, `github:raw`/`github:contents-api`/`github:gist-api`, or — for the paid Exa fallback — `exa:cached` / `exa:crawled`. It lets a caller see whether content came from a free local tier or the metered Exa `/contents` API (Tier 5, present only when `EXA_API_KEY` is set). Omitted when unknown (e.g. document/YouTube routes).
 
 **Content-volume signal (#358).** `wordCount` is emitted for every non-raw scrape and is a cheap, deterministic proxy for how much prose was actually extracted — it is **orthogonal** to `extractionQuality`, which reflects pipeline tier exhaustion, not content volume: a `complete` extraction can still be a thin paywall/bot-wall stub (a few sentences behind a subscribe wall) if that stub was returned confidently by an early tier. When `wordCount` falls below ~150, `sparsityWarning` is added with a human-readable note that claim checks against this source may be unreliable. Both fields are omitted in raw mode. `verify_citation`, `audit_bibliography`, and `search_and_scrape` surface the same signal (see their sections below) so a caller can tell a thin stub from a genuinely well-supported claim check.
 
@@ -272,7 +272,7 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
    ├─ .docx / application/vnd.openxmlformats* → DOCX parser
    └─ .pptx / application/vnd.ms-powerpoint → PPTX parser
 
-3. WEB PAGE EXTRACTION (4 free tiers, ordered by speed; + optional paid Exa tier last)
+3. WEB PAGE EXTRACTION (5 free tiers, ordered by speed; + optional paid Exa tier last)
    a) Tier 1: MARKDOWN NEGOTIATION (fastest, ~200ms)
       ├─ Send GET with Accept: text/markdown
       ├─ 5-second timeout
@@ -287,7 +287,15 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
       ├─ SSRF protection via safe dialer when AllowPrivateIPs=false
       └─ If below 100-char threshold → next tier
 
-   c) Tier 3: HTML EXTRACTION via goquery (standard, ~500ms)
+   c) Tier 2.5: JINA READER (cloud proxy, free/keyless, ~1-3s) — skipped when
+      JINA_READER_DISABLED is set (#270)
+      ├─ POST to r.jina.ai with the target URL; returns clean extracted markdown
+      ├─ Recovers Cloudflare/JS-heavy pages the local HTTP tiers (a, b) cannot,
+      │  without paying for the browser tier
+      ├─ Keyless free tier; optional JINA_API_KEY only raises the rate limit
+      └─ If empty content or HTTP error → next tier
+
+   d) Tier 3: HTML EXTRACTION via goquery (standard, ~500ms)
       ├─ Fetch page with standard Accept header
       ├─ Parse with goquery
       ├─ Extract: article > main > body (priority order)
@@ -295,7 +303,7 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
       ├─ Minimum content: 100 bytes, 10% meaningful text ratio
       └─ If below threshold → next tier
 
-   d) Tier 4: HEADLESS BROWSER via go-rod + stealth (slow, ~5s)
+   e) Tier 4: HEADLESS BROWSER via go-rod + stealth (slow, ~5s)
       ├─ Browser pool with lazy init + singleton pattern
       ├─ go-rod/stealth plugin (navigator spoofing, WebGL masking)
       ├─ Used for: Known SPA domains, JS-rendered content, bot challenges
@@ -303,7 +311,7 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
       ├─ Extract: rendered DOM via JavaScript evaluation
       └─ Graceful cleanup via Pipeline.Close()
 
-   e) Tier 5: EXA /contents (PAID, opt-in, last resort) — only when EXA_API_KEY is set
+   f) Tier 5: EXA /contents (PAID, opt-in, last resort) — only when EXA_API_KEY is set
       ├─ Neural extractor: POST https://api.exa.ai/contents (x-api-key auth)
       ├─ Runs ONLY after every free tier above failed to extract >100 bytes,
       │  so the common path never incurs Exa cost
