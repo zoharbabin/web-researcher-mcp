@@ -372,12 +372,13 @@ These enable rich scholarly metadata (DOIs, authors, citation counts, abstracts,
 | `PUBMED_API_KEY` | NCBI E-utilities API key for PubMed (biomedical literature). **PubMed is always available** keyless (~3 req/s); this key raises the rate (~10 req/s) | — |
 | `PUBMED_EMAIL` | Optional NCBI contact for PubMed requests (recommended by NCBI). Falls back to `OPENALEX_EMAIL` | — (falls back to `OPENALEX_EMAIL`) |
 | `UNPAYWALL_EMAIL` | Contact email enabling Unpaywall open-access enrichment (fills free-PDF links on DOI-bearing results that lack one). Falls back to `OPENALEX_EMAIL` when unset; no-op when neither is set | — (falls back to `OPENALEX_EMAIL`) |
+| `CORE_API_KEY` | CORE.ac.uk API key (300M+ open-access works with native full text). **CORE is always available** keyless; this key only raises the rate limit | — |
 
 `citation_graph` registers only when a citation-capable academic provider (Semantic Scholar or OpenAlex) is configured. Open-access enrichment is best-effort and never fails or slows a search beyond its own bounded request.
 
 ### Structured-Domain Providers (Optional)
 
-These enable dedicated structured-research tools. Each provider is independent. `filing_search` registers only when its provider is configured; `legal_search`, `econ_search`, `clinical_search`, and `awesome_list_search` each have a keyless provider, so they are **always available** (a key/token only adds coverage or raises limits).
+These enable dedicated structured-research tools. Each provider is independent. `filing_search` registers only when its provider is configured; `legal_search`, `econ_search`, `clinical_search`, `awesome_list_search`, and `monarch_search` each have a keyless provider, so they are **always available** (a key/token only adds coverage or raises limits). `syllabus_search` and `gag_order_search` register only when their respective variables are set.
 
 | Variable | Tool | Description | Default |
 |----------|------|-------------|---------|
@@ -386,12 +387,15 @@ These enable dedicated structured-research tools. Each provider is independent. 
 | `FRED_API_KEY` | `econ_search` | Federal Reserve Economic Data API key (free at fred.stlouisfed.org). **`econ_search` is always available** via keyless World Bank / OECD / Eurostat providers; this key *adds* FRED's US macro series | — |
 | — (none) | `econ_search` | World Bank Open Data (global development indicators, 200+ economies), OECD (SDMX economy indicators), and Eurostat (European official statistics). All keyless; no configuration | — |
 | — (none) | `clinical_search` | ClinicalTrials.gov v2 — 400K+ clinical-trial registrations as typed data. Keyless; no configuration. **Always available** | — |
+| — (none) | `monarch_search` | Monarch Initiative v3 API — biomedical knowledge graph (phenotype similarity, entity lookup, association traversal). Keyless; no configuration. **Always available** | — |
 | `ECOSYSTEMS_EMAIL` | `awesome_list_search` | Opts into ecosyste.ms's "polite pool" (mailto=) for a real rate-limit increase on the Free plan. Falls back to `OPENALEX_EMAIL`. **`awesome_list_search` is always available** keyless | — (falls back to `OPENALEX_EMAIL`) |
 | `ECOSYSTEMS_API_KEY` | `awesome_list_search` | Forward-compatible: ecosyste.ms's Free plan uses shared pools, not API-key auth, so this is a no-op today — it only takes effect on ecosyste.ms's paid Develop/Scale plans | — |
 | `IA_ACCESS_KEY` + `IA_SECRET_KEY` | `archive_source` | Optional Internet Archive S3-style credentials for Save Page Now. **`archive_source` is always available** keyless; both keys together authenticate captures for higher reliability. Never logged. Get a pair at archive.org/account/s3.php | — |
 | `GITHUB_TOKEN` | `awesome_list_search`, `web_search`/`news_search` (`provider=github`), `scrape_page` | Optional token raising GitHub's public REST API rate limits (Search API, Contents/Gists API). Every surface it touches **is always available** unauthenticated at GitHub's documented public rate limit; the token only raises that ceiling, never gates functionality. No `gh` CLI, no subprocess. Never logged. Create a scopeless fine-grained PAT at github.com/settings/tokens | — |
+| `OPEN_SYLLABUS_API_KEY` + `OPEN_SYLLABUS_API_URL` | `syllabus_search` | Research-agreement credentials for the Open Syllabus Project API (research@opensyllabus.org). Both must be set or the tool does not register | — |
+| `PEN_AMERICA_AIRTABLE_TOKEN` | `gag_order_search` | Airtable personal access token for PEN America's public educational gag-order tracker base. Tool does not register when unset | — |
 
-Each structured-domain provider gets an independent circuit breaker and uses the SSRF-safe HTTP client. `filing_search` returns XBRL company facts (with `facts=true`); `econ_search` returns observations passed through exactly as the source provides them — no rounding; `clinical_search` returns trial metadata for discovery (not medical advice).
+Each structured-domain provider gets an independent circuit breaker and uses the SSRF-safe HTTP client. `filing_search` returns XBRL company facts (with `facts=true`); `econ_search` returns observations passed through exactly as the source provides them — no rounding; `clinical_search` returns trial metadata for discovery (not medical advice); `monarch_search`'s `annotate` operation must never receive identifiable patient data (it forwards free text to a public third-party API with no BAA).
 
 ### BrandFetch (Optional)
 

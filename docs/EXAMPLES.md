@@ -83,6 +83,54 @@ Search peer-reviewed papers, preprints, and academic databases.
 
 ---
 
+## Retrieving a Paper's Full Text (paper_fulltext)
+
+Collapse the `academic_search` → `scrape_page` workflow into one call when you already have a DOI, Semantic Scholar paper ID, or direct URL.
+
+```json
+{
+  "tool": "paper_fulltext",
+  "arguments": {
+    "identifier": "10.1038/nature12373"
+  }
+}
+```
+
+**Response** contains: `identifier` (echo), `resolvedUrl` (the open-access PDF, the Semantic Scholar landing page, the doi.org redirect, or the input URL verbatim), `content`, `title`, `trust`, `truncated`, `scrapeTier` (when known), `citation`, and `source` (`semanticscholar` when metadata resolved, `direct-url` otherwise). When `source:"semanticscholar"`, also: `authors`, `year`, `doi`, `pdfUrl`, `openAccess`, `citationCount`, `abstract`, `journal`, `tldr`. Paywalled papers return the landing page or abstract only — full text is only available for open-access works. Use `academic_search` first to discover a paper by topic, or `citation_graph` to explore its citation neighborhood. Results stay fresh for 1 hour.
+
+---
+
+## Biomedical Knowledge Graph Search (monarch_search)
+
+Query the **Monarch Initiative** knowledge graph (keyless) — rank diseases and genes by phenotype similarity, look up entities, or traverse gene-disease-phenotype associations. One tool, five operations selected by the required `operation` field.
+
+```json
+{
+  "tool": "monarch_search",
+  "arguments": {
+    "operation": "semsim",
+    "phenotypes": ["HP:0001166", "HP:0001083"],
+    "group": "Human Diseases"
+  }
+}
+```
+
+**Response** contains: `operation` (echo), `resultCount`, `provider`, `trust`, and `results` — each item carries only the fields relevant to its operation (`semsim`: `id`, `label`, `score`, `ancestorId`, `ancestorLabel`; `entity`: `id`, `label`, `description`, `crossReferences`; `associations`: `subjectId`, `subjectLabel`, `objectId`, `objectLabel`, `category`; `annotate`: `id`, `label`, `text`). Look up a single entity instead by passing `operation: "entity"` with a `query` or CURIE `entityId`:
+
+```json
+{
+  "tool": "monarch_search",
+  "arguments": {
+    "operation": "entity",
+    "entityId": "MONDO:0007947"
+  }
+}
+```
+
+For published literature on a condition, combine with `academic_search`; for active interventional trials, use `clinical_search`. Never submit identifiable patient data to the `annotate` operation — it forwards free text to a public third-party API with no BAA. Results stay fresh for 6 hours.
+
+---
+
 ## Patent Landscape Analysis
 
 Search patent databases with classification codes and office filtering.
@@ -233,6 +281,43 @@ Find community-curated "awesome list" collections on a topic — good for scouti
 ```
 
 **Response** contains: `query`, `resultCount`, `provider`, `trust`, and `lists` (array with `name`, `fullName`, `url`, `description`, `stars`, `projectsCount`, `topics`, `lastSyncedAt`, `archived`, `source`). Archived lists are excluded automatically. Filter with `min_stars` or `min_projects` to cut noise from small/abandoned lists, and `sort_by` (`stars` (default), `projects`, or `updated`) to change ranking. Pass `query` instead of `topic` for a free-text search when you don't know the exact topic tag.
+
+---
+
+## University Syllabus Search (syllabus_search)
+
+Query the Open Syllabus Project's corpus of 32.9M university syllabi for structured author/title assignment data. Requires a research agreement with Open Syllabus (research@opensyllabus.org); registers only when `OPEN_SYLLABUS_API_KEY` and `OPEN_SYLLABUS_API_URL` are both set.
+
+```json
+{
+  "tool": "syllabus_search",
+  "arguments": {
+    "query": "George Orwell",
+    "field": "history",
+    "sort_by": "frequency"
+  }
+}
+```
+
+**Response** contains: `query`, `sortBy`, `resultCount`, `provider` (always `opensyllabus`), `corpusNote`, `trust`, and `results` (array with `title`, `author`, `institution`, `country`, `field`, `year`, `frequency`, `institutionCount`, `coAssignedWith`, `url`). The corpus is ~65% US/Anglophone — absence of a result means "not indexed in this corpus," not "never assigned." Use lens `curriculum` with `web_search` for broader curriculum-related discovery. Results stay fresh for 6 hours.
+
+---
+
+## Educational Gag Order Tracking (gag_order_search)
+
+Query PEN America's live tracker of state legislation restricting what public school and university instructors may teach, sourced from PEN America's public Airtable base. Registers only when `PEN_AMERICA_AIRTABLE_TOKEN` is set.
+
+```json
+{
+  "tool": "gag_order_search",
+  "arguments": {
+    "state": "FL",
+    "status": "enacted"
+  }
+}
+```
+
+**Response** contains: `resultCount`, `provider` (always `pen_america`), `trust`, and `results` (array with `state`, `billName`, `status`, `targets`, `year`, `summary`, `url`, all present when found). The target Airtable table and its field names are resolved fuzzily at runtime rather than hardcoded, since PEN America may restructure the base without notice — treat an unmapped field as absent, not as evidence a bill lacks that attribute. Results stay fresh for 30 minutes.
 
 ---
 
@@ -528,6 +613,23 @@ Pull a company's colors, logo, typography, and tone of voice from its official b
 ```
 
 You can pass a `url` (domain or full URL) or a `company_name` — `url` takes precedence when both are set. **Response** carries a structured `identity` object with `name`, `domain`, `colors` (hex values with their roles), `fonts`, `logo` URLs, `socialHandles`, `toneOfVoice`, and `guidelinesUrl`. Empty fields mean the data wasn't found — not that it doesn't exist. When a brand portal is found, `brand_portal_resource` carries a `research://artifact/{id}` URI — pass it to `read_resource` to get the full rendered portal text for deeper analysis. When no portal is found, the `suggestion` field tells you what to do next. Results are cached for 24 hours; `cache_age` tells you how fresh they are.
+
+---
+
+## OSINT Company Reconnaissance (company_recon)
+
+Pull Certificate Transparency log SANs, a Wayback Machine historical URL inventory, a derived subdomain list, and a web-search company summary in one call. Both crt.sh and the Wayback CDX API are keyless, so this tool is always registered.
+
+```json
+{
+  "tool": "company_recon",
+  "arguments": {
+    "target": "acme.com"
+  }
+}
+```
+
+**Response** carries: `target` (echo), `domain` (resolved canonical domain), `profile` (one-line company summary, when the `profiling` phase ran), `cert_sans` (array of `domain`, `issuer`, `not_before`, `not_after`, `logged_at`), `archive_urls` (array of `url`, `timestamp`, `status_code`, `mime_type`, `category`), `subdomains` (deduplicated, with `source`), `sources` (which phases actually ran and contributed data), `cache_age`, and `trust`. Restrict to specific phases with `phases` (`profiling`, `ct_logs`, `archives`, `web`) when you only need one signal. A non-domain `target` (e.g. a company name) resolves to a domain via the same web-search fallback `brand_research` uses. Use `brand_research` for brand identity instead, and the `company-recon` MCP Prompt for an AI-orchestrated narrative across many tools. Results stay fresh for 24 hours.
 
 ---
 
