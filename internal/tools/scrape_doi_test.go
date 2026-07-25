@@ -257,7 +257,7 @@ func TestScrapePageSchemaDeclaresDOIFields(t *testing.T) {
 	if props == nil {
 		t.Fatal("scrapePageOutputSchema has no properties")
 	}
-	for _, k := range []string{"detectedDoi", "retractionStatus"} {
+	for _, k := range []string{"detectedDoi", "retractionStatus", "highlights"} {
 		if _, declared := props[k]; !declared {
 			t.Errorf("scrapePageOutputSchema must declare %q", k)
 		}
