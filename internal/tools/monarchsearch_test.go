@@ -211,3 +211,28 @@ func TestMonarchSearchUnregisteredWithoutProvider(t *testing.T) {
 		t.Error("monarch_search must NOT register without its provider")
 	}
 }
+
+func TestMonarchSearchExplicitProvider(t *testing.T) {
+	out, res := callTool(t, setupTestDeps(), "monarch_search", map[string]any{
+		"operation":  "semsim",
+		"phenotypes": []any{"HP:0001166"},
+		"provider":   "monarch",
+	})
+	if res.IsError {
+		t.Fatalf("unexpected error result")
+	}
+	if out["provider"] != "monarch" {
+		t.Errorf("provider: %v", out["provider"])
+	}
+}
+
+func TestMonarchSearchUnknownProvider(t *testing.T) {
+	_, res := callTool(t, setupTestDeps(), "monarch_search", map[string]any{
+		"operation":  "semsim",
+		"phenotypes": []any{"HP:0001166"},
+		"provider":   "bloomberg",
+	})
+	if !res.IsError {
+		t.Error("unknown provider should error")
+	}
+}

@@ -33,6 +33,7 @@ type monarchSearchInput struct {
 	AssocCategory string   `json:"category,omitempty" jsonschema:"associations: Biolink association category enum, e.g. biolink:CausalGeneToDiseaseAssociation. Maps to the API 'category' query parameter."`
 	Text          string   `json:"text,omitempty" jsonschema:"annotate: short clinical text to ground to HPO terms. Hard limit 2000 characters. Never include patient-identifiable data."`
 	NumResults    int      `json:"numResults,omitempty" jsonschema:"Maximum results to return. Default 20, max 200 (the API caps association pages at 200)."`
+	Provider      string   `json:"provider,omitempty" jsonschema:"Force a specific Monarch provider: monarch. Errors if not configured."`
 	SessionID     string   `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. Sources are automatically recorded for recovery after context loss."`
 }
 
@@ -53,7 +54,7 @@ func registerMonarchSearch(srv *mcp.Server, deps Dependencies) {
 			return errResult, nil, nil
 		}
 
-		searcher, providerName, errResult := resolveMonarchSearcher(deps)
+		searcher, providerName, errResult := resolveMonarchSearcher(deps, input.Provider)
 		if errResult != nil {
 			return errResult, nil, nil
 		}
@@ -210,7 +211,24 @@ func buildMonarchParams(input monarchSearchInput) (search.MonarchSearchParams, *
 	return params, nil
 }
 
-func resolveMonarchSearcher(deps Dependencies) (search.MonarchSearcher, string, *mcp.CallToolResult) {
+// resolveMonarchSearcher selects a MonarchProvider. Returns (nil, "", nil) when no
+// provider is configured; a structured error for an unknown/unconfigured name.
+func resolveMonarchSearcher(deps Dependencies, providerName string) (search.MonarchSearcher, string, *mcp.CallToolResult) {
+	if providerName != "" {
+		if p, ok := deps.MonarchProviders[providerName]; ok {
+			return p, providerName, nil
+		}
+		for _, n := range search.SupportedMonarchProviders {
+			if n == providerName {
+				return nil, "", structuredError(
+					fmt.Sprintf("Monarch provider %q is not configured.", providerName),
+					ToolError{Kind: ErrKindConfig, Retryable: false, SuggestedAction: ActionCheckAPIKey, Provider: providerName})
+			}
+		}
+		return nil, "", structuredError(
+			fmt.Sprintf("Unknown Monarch provider %q. Supported: %v.", providerName, search.SupportedMonarchProviders),
+			ToolError{Kind: ErrKindConfig, Retryable: false, SuggestedAction: ActionTryDifferentProvider, Alternatives: search.SupportedMonarchProviders})
+	}
 	for _, name := range search.SupportedMonarchProviders {
 		if p, ok := deps.MonarchProviders[name]; ok {
 			return p, name, nil
