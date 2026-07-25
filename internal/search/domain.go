@@ -146,6 +146,9 @@ type AcademicSearchParams struct {
 	NumResults int
 	OpenAccess bool
 	SortBy     string // "relevance" (default) or "date"
+	// FullText requests provider-side full-text enrichment when supported (e.g.
+	// PubMed PMC efetch). Best-effort: providers that don't support it ignore it.
+	FullText bool
 }
 
 // AcademicResult represents a scholarly paper from an academic search provider.
@@ -177,6 +180,10 @@ type AcademicResult struct {
 	// in the Directory of Open Access Journals (DOAJ) — a peer-reviewed OA
 	// quality signal. OpenAlex-only; omitted for all other providers.
 	IsInDoaj bool `json:"isInDoaj,omitempty"`
+	// FullText is the extracted full text of a PMC open-access article, populated
+	// only when AcademicSearchParams.FullText is true and a PMCID is available.
+	// Empty when the provider does not support full-text or the article is not in PMC.
+	FullText string `json:"fullText,omitempty"`
 }
 
 // RetractionStatus is the operator/model-facing integrity signal for a scholarly

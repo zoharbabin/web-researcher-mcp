@@ -28,6 +28,7 @@ class AcademicSearchPaper:
     citationCount: Optional[int] = None
     citationIntents: list[str] = field(default_factory=list)
     doi: Optional[str] = None
+    fullText: Optional[str] = None
     isInDoaj: Optional[bool] = None
     isInfluential: Optional[bool] = None
     journal: Optional[str] = None
@@ -49,6 +50,7 @@ class AcademicSearchPaper:
             citationCount=d.get('citationCount'),
             citationIntents=list(d.get('citationIntents') or []),
             doi=d.get('doi'),
+            fullText=d.get('fullText'),
             isInDoaj=d.get('isInDoaj'),
             isInfluential=d.get('isInfluential'),
             journal=d.get('journal'),
