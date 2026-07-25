@@ -478,12 +478,15 @@ func main() {
 			SourceRecommendations: cfg.Features.SourceRecommendations,
 			GenerativeUI:          cfg.Features.GenerativeUI,
 		},
-		Consent:            consentManager,
-		UserAnalytics:      userAnalytics,
-		Memory:             memoryStore,
-		Workspaces:         workspaceStore,
-		BrandFetchAPIKey:   cfg.Search.BrandFetchAPIKey,
-		BrandFetchClientID: cfg.Search.BrandFetchClientID,
+		Consent:                 consentManager,
+		UserAnalytics:           userAnalytics,
+		Memory:                  memoryStore,
+		Workspaces:              workspaceStore,
+		BrandFetchAPIKey:        cfg.Search.BrandFetchAPIKey,
+		BrandFetchClientID:      cfg.Search.BrandFetchClientID,
+		OpenSyllabusAPIKey:      cfg.Search.OpenSyllabusAPIKey,
+		OpenSyllabusAPIURL:      cfg.Search.OpenSyllabusAPIURL,
+		PENAmericaAirtableToken: cfg.Search.PENAmericaAirtableToken,
 	}
 
 	// Completion suppliers (#193): the live value sets the server can autocomplete

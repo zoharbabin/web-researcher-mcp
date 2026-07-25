@@ -848,6 +848,50 @@ class ForumSignals:
         )
 
 @dataclass
+class GagOrderSearchResponse:
+    hints: dict[str, Any] = field(default_factory=dict)
+    provider: Optional[str] = None
+    resultCount: Optional[int] = None
+    results: list[GagOrderSearchResult] = field(default_factory=list)
+    trust: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "GagOrderSearchResponse | None":
+        if d is None:
+            return None
+        return cls(
+            hints=dict(d.get('hints') or {}),
+            provider=d.get('provider'),
+            resultCount=d.get('resultCount'),
+            results=[GagOrderSearchResult.from_dict(i) for i in (d.get('results') or [])],
+            trust=d.get('trust'),
+        )
+
+@dataclass
+class GagOrderSearchResult:
+    billName: Optional[str] = None
+    state: Optional[str] = None
+    status: Optional[str] = None
+    summary: Optional[str] = None
+    targets: Optional[str] = None
+    url: Optional[str] = None
+    year: Optional[int] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "GagOrderSearchResult | None":
+        if d is None:
+            return None
+        return cls(
+            billName=d.get('billName'),
+            state=d.get('state'),
+            status=d.get('status'),
+            summary=d.get('summary'),
+            targets=d.get('targets'),
+            url=d.get('url'),
+            year=d.get('year'),
+        )
+
+@dataclass
 class GetMyAnalyticsResponse:
     analytics: Optional[Analytics] = None
     reason: Optional[str] = None
@@ -2003,6 +2047,62 @@ class Summary:
             urlsFailed=d.get('urlsFailed'),
             urlsScraped=d.get('urlsScraped'),
             urlsSearched=d.get('urlsSearched'),
+        )
+
+@dataclass
+class SyllabusSearchResponse:
+    corpusNote: Optional[str] = None
+    hints: dict[str, Any] = field(default_factory=dict)
+    provider: Optional[str] = None
+    query: Optional[str] = None
+    resultCount: Optional[int] = None
+    results: list[SyllabusSearchResult] = field(default_factory=list)
+    sortBy: Optional[str] = None
+    trust: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "SyllabusSearchResponse | None":
+        if d is None:
+            return None
+        return cls(
+            corpusNote=d.get('corpusNote'),
+            hints=dict(d.get('hints') or {}),
+            provider=d.get('provider'),
+            query=d.get('query'),
+            resultCount=d.get('resultCount'),
+            results=[SyllabusSearchResult.from_dict(i) for i in (d.get('results') or [])],
+            sortBy=d.get('sortBy'),
+            trust=d.get('trust'),
+        )
+
+@dataclass
+class SyllabusSearchResult:
+    author: Optional[str] = None
+    coAssignedWith: list[str] = field(default_factory=list)
+    country: Optional[str] = None
+    field: Optional[str] = None
+    frequency: Optional[int] = None
+    institution: Optional[str] = None
+    institutionCount: Optional[int] = None
+    title: Optional[str] = None
+    url: Optional[str] = None
+    year: Optional[int] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "SyllabusSearchResult | None":
+        if d is None:
+            return None
+        return cls(
+            author=d.get('author'),
+            coAssignedWith=list(d.get('coAssignedWith') or []),
+            country=d.get('country'),
+            field=d.get('field'),
+            frequency=d.get('frequency'),
+            institution=d.get('institution'),
+            institutionCount=d.get('institutionCount'),
+            title=d.get('title'),
+            url=d.get('url'),
+            year=d.get('year'),
         )
 
 @dataclass

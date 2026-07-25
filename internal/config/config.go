@@ -188,6 +188,16 @@ type SearchConfig struct {
 	// works unauthenticated (GitHub's own public rate limits); a token only
 	// raises the ceiling, it never gates functionality. Never logged.
 	GitHubToken string // GITHUB_TOKEN
+
+	// OpenSyllabus optional credentials for syllabus_search. Requires a
+	// research agreement (contact research@opensyllabus.org); the tool
+	// registers only when both are set.
+	OpenSyllabusAPIKey string // OPEN_SYLLABUS_API_KEY
+	OpenSyllabusAPIURL string // OPEN_SYLLABUS_API_URL — configurable base URL
+
+	// PENAmericaAirtableToken is optional for gag_order_search. The tool
+	// registers only when this is set.
+	PENAmericaAirtableToken string // PEN_AMERICA_AIRTABLE_TOKEN
 }
 
 type OAuthConfig struct {
@@ -354,43 +364,46 @@ func Load() (*Config, error) {
 		GoogleAPIKey: googleKey,
 		GoogleCX:     googleCX,
 		Search: SearchConfig{
-			Provider:              provider,
-			Routing:               os.Getenv("SEARCH_ROUTING"),
-			GoogleAPIKey:          googleKey,
-			GoogleCX:              googleCX,
-			BraveAPIKey:           braveKey,
-			BraveExtraSnippets:    braveExtraSnippets,
-			SerperAPIKey:          serperKey,
-			SearchAPIKey:          searchAPIKey,
-			TavilyAPIKey:          tavilyKey,
-			ExaAPIKey:             exaKey,
-			JinaAPIKey:            os.Getenv("JINA_API_KEY"),
-			SearXNGURL:            searxngURL,
-			SearXNGBasicAuth:      searxngBasicAuth,
-			SearXNGHeaders:        searxngHeaders,
-			CustomLensesPath:      os.Getenv("CUSTOM_LENSES_PATH"),
-			ThinThreshold:         envInt("SEARCH_THIN_THRESHOLD", 1),
-			USPTOAPIKey:           os.Getenv("USPTO_API_KEY"),
-			EPOConsumerKey:        os.Getenv("EPO_OPS_CONSUMER_KEY"),
-			EPOConsumerSecret:     os.Getenv("EPO_OPS_CONSUMER_SECRET"),
-			LensAPIToken:          os.Getenv("LENS_API_TOKEN"),
-			OpenAlexEmail:         os.Getenv("OPENALEX_EMAIL"),
-			CrossRefEmail:         os.Getenv("CROSSREF_EMAIL"),
-			SemanticScholarAPIKey: os.Getenv("SEMANTIC_SCHOLAR_API_KEY"),
-			UnpaywallEmail:        envOrDefault("UNPAYWALL_EMAIL", os.Getenv("OPENALEX_EMAIL")),
-			PubMedAPIKey:          os.Getenv("PUBMED_API_KEY"),
-			PubMedEmail:           envOrDefault("PUBMED_EMAIL", os.Getenv("OPENALEX_EMAIL")),
-			COREAPIKey:            os.Getenv("CORE_API_KEY"),
-			EDGARContactEmail:     envOrDefault("EDGAR_CONTACT_EMAIL", os.Getenv("OPENALEX_EMAIL")),
-			CourtListenerToken:    os.Getenv("COURTLISTENER_API_TOKEN"),
-			FREDAPIKey:            os.Getenv("FRED_API_KEY"),
-			IAAccessKey:           os.Getenv("IA_ACCESS_KEY"),
-			IASecretKey:           os.Getenv("IA_SECRET_KEY"),
-			BrandFetchAPIKey:      os.Getenv("BRANDFETCH_API_KEY"),
-			BrandFetchClientID:    os.Getenv("BRANDFETCH_CLIENT_ID"),
-			EcosystemsAPIKey:      os.Getenv("ECOSYSTEMS_API_KEY"),
-			EcosystemsEmail:       envOrDefault("ECOSYSTEMS_EMAIL", os.Getenv("OPENALEX_EMAIL")),
-			GitHubToken:           os.Getenv("GITHUB_TOKEN"),
+			Provider:                provider,
+			Routing:                 os.Getenv("SEARCH_ROUTING"),
+			GoogleAPIKey:            googleKey,
+			GoogleCX:                googleCX,
+			BraveAPIKey:             braveKey,
+			BraveExtraSnippets:      braveExtraSnippets,
+			SerperAPIKey:            serperKey,
+			SearchAPIKey:            searchAPIKey,
+			TavilyAPIKey:            tavilyKey,
+			ExaAPIKey:               exaKey,
+			JinaAPIKey:              os.Getenv("JINA_API_KEY"),
+			SearXNGURL:              searxngURL,
+			SearXNGBasicAuth:        searxngBasicAuth,
+			SearXNGHeaders:          searxngHeaders,
+			CustomLensesPath:        os.Getenv("CUSTOM_LENSES_PATH"),
+			ThinThreshold:           envInt("SEARCH_THIN_THRESHOLD", 1),
+			USPTOAPIKey:             os.Getenv("USPTO_API_KEY"),
+			EPOConsumerKey:          os.Getenv("EPO_OPS_CONSUMER_KEY"),
+			EPOConsumerSecret:       os.Getenv("EPO_OPS_CONSUMER_SECRET"),
+			LensAPIToken:            os.Getenv("LENS_API_TOKEN"),
+			OpenAlexEmail:           os.Getenv("OPENALEX_EMAIL"),
+			CrossRefEmail:           os.Getenv("CROSSREF_EMAIL"),
+			SemanticScholarAPIKey:   os.Getenv("SEMANTIC_SCHOLAR_API_KEY"),
+			UnpaywallEmail:          envOrDefault("UNPAYWALL_EMAIL", os.Getenv("OPENALEX_EMAIL")),
+			PubMedAPIKey:            os.Getenv("PUBMED_API_KEY"),
+			PubMedEmail:             envOrDefault("PUBMED_EMAIL", os.Getenv("OPENALEX_EMAIL")),
+			COREAPIKey:              os.Getenv("CORE_API_KEY"),
+			EDGARContactEmail:       envOrDefault("EDGAR_CONTACT_EMAIL", os.Getenv("OPENALEX_EMAIL")),
+			CourtListenerToken:      os.Getenv("COURTLISTENER_API_TOKEN"),
+			FREDAPIKey:              os.Getenv("FRED_API_KEY"),
+			IAAccessKey:             os.Getenv("IA_ACCESS_KEY"),
+			IASecretKey:             os.Getenv("IA_SECRET_KEY"),
+			BrandFetchAPIKey:        os.Getenv("BRANDFETCH_API_KEY"),
+			BrandFetchClientID:      os.Getenv("BRANDFETCH_CLIENT_ID"),
+			EcosystemsAPIKey:        os.Getenv("ECOSYSTEMS_API_KEY"),
+			EcosystemsEmail:         envOrDefault("ECOSYSTEMS_EMAIL", os.Getenv("OPENALEX_EMAIL")),
+			GitHubToken:             os.Getenv("GITHUB_TOKEN"),
+			OpenSyllabusAPIKey:      os.Getenv("OPEN_SYLLABUS_API_KEY"),
+			OpenSyllabusAPIURL:      os.Getenv("OPEN_SYLLABUS_API_URL"),
+			PENAmericaAirtableToken: os.Getenv("PEN_AMERICA_AIRTABLE_TOKEN"),
 		},
 		Port: port,
 		OAuth: OAuthConfig{

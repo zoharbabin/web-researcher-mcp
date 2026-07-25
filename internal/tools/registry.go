@@ -110,6 +110,13 @@ type Dependencies struct {
 	// by the Brand API. Empty → that resolution step is skipped (falls back to
 	// deps.Search.Web()).
 	BrandFetchClientID string
+	// OpenSyllabusAPIKey / OpenSyllabusAPIURL gate syllabus_search. Both must be
+	// set (a research agreement with Open Syllabus is required) or the tool
+	// does not register.
+	OpenSyllabusAPIKey string
+	OpenSyllabusAPIURL string
+	// PENAmericaAirtableToken gates gag_order_search. Empty ⇒ tool not registered.
+	PENAmericaAirtableToken string
 }
 
 // Features mirrors config.FeatureConfig for the tool layer (kept local so the
@@ -231,6 +238,17 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	// extraction + brand-page probe + optional web search tiers run
 	// unconditionally without BRANDFETCH_API_KEY/BRANDFETCH_CLIENT_ID.
 	registerBrandResearch(srv, deps)
+
+	// syllabus_search (#352) — requires a research agreement with Open
+	// Syllabus; registers only when both the key and base URL are set.
+	if deps.OpenSyllabusAPIKey != "" && deps.OpenSyllabusAPIURL != "" {
+		registerSyllabusSearch(srv, deps)
+	}
+	// gag_order_search (#352) — PEN America's educational gag order tracker
+	// via Airtable; registers only when a token is set.
+	if deps.PENAmericaAirtableToken != "" {
+		registerGagOrderSearch(srv, deps)
+	}
 }
 
 // hasCitationProvider reports whether any configured academic provider supports
