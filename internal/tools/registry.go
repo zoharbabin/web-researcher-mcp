@@ -38,6 +38,10 @@ type Dependencies struct {
 	// so AvailableAwesomeListProviders always builds it and awesome_list_search
 	// is always registered. Empty ⇒ the tool is not registered.
 	AwesomeListProviders map[string]search.AwesomeListProvider
+	// MonarchProviders back monarch_search (Monarch Initiative biomedical
+	// knowledge graph, #318). Keyless, so AvailableMonarchProviders always builds
+	// it and monarch_search is always registered. Empty ⇒ the tool is not registered.
+	MonarchProviders map[string]search.MonarchProvider
 	// LocalProviders back local_search (#259). Brave is the sole provider today;
 	// requires BRAVE_API_KEY. Empty ⇒ the tool is not registered.
 	LocalProviders map[string]search.LocalProvider
@@ -154,6 +158,11 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	// verifiable. Always registered; degrades to status:"unavailable" when no link
 	// verifier is configured.
 	registerArchiveSource(srv, deps)
+	// paper_fulltext (#269) — collapses academic_search + scrape_page into one
+	// call for a DOI/paper-ID/URL. Always registered; degrades to a doi.org
+	// redirect or the input URL verbatim when no Semantic Scholar provider is
+	// configured.
+	registerPaperFulltext(srv, deps)
 	// verify_recommendation — audits AI recommendations (listicles, product
 	// lists) for anti-sloptimization signals: self-promotion, conflicts of interest,
 	// domain reputation, dead links. Always registered as part of the trust suite.
@@ -195,6 +204,11 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	// local_search (#259) — Brave Local Search API; requires BRAVE_API_KEY.
 	if len(deps.LocalProviders) > 0 {
 		registerLocal(srv, deps)
+	}
+	// monarch_search (#318) — Monarch Initiative API is keyless, so
+	// AvailableMonarchProviders always builds it and the tool is always registered.
+	if len(deps.MonarchProviders) > 0 {
+		registerMonarchSearch(srv, deps)
 	}
 
 	// Synthesis tools — provider-independent (like academic/patent search).

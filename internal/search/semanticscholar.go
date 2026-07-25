@@ -183,6 +183,31 @@ func (s *SemanticScholarProvider) edges(ctx context.Context, path string, numRes
 	return out, err
 }
 
+// FetchPaper implements PaperFetcher. Fetches a single paper by DOI or S2 paper
+// ID, returning full metadata including the open-access PDF URL when available.
+// Returns (nil, nil) when the paper is not found (HTTP 404), matching the
+// (nil, nil) "no record" convention doRequest's 404 branch signals via its error
+// string — never treated as a hard failure.
+func (s *SemanticScholarProvider) FetchPaper(ctx context.Context, id string) (*AcademicResult, error) {
+	var result *AcademicResult
+	err := s.deps.Breaker.Execute(func() error {
+		q := url.Values{}
+		q.Set("fields", s2SearchFields)
+
+		var p s2Paper
+		if er := s.doRequest(ctx, s2PaperPath(id)+"?"+q.Encode(), &p); er != nil {
+			if strings.Contains(er.Error(), "paper not found") {
+				return nil
+			}
+			return er
+		}
+		r := p.toAcademicResult()
+		result = &r
+		return nil
+	})
+	return result, err
+}
+
 func (s *SemanticScholarProvider) doRequest(ctx context.Context, path string, out any) error {
 	// Politeness spacing for the shared/keyless rate limit; honors ctx so a
 	// cancelled request abandons the queue instead of stalling other callers.
@@ -334,4 +359,5 @@ func isDOI(s string) bool {
 var (
 	_ AcademicProvider = (*SemanticScholarProvider)(nil)
 	_ CitationSearcher = (*SemanticScholarProvider)(nil)
+	_ PaperFetcher     = (*SemanticScholarProvider)(nil)
 )

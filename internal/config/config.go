@@ -30,6 +30,7 @@ type Config struct {
 	AllowPrivateIPs        bool
 	AllowedDomains         []string
 	ChromePath             string
+	JinaDisabled           bool
 	MaxScrapeConcurrency   int
 	MaxHTMLBytes           int
 	MaxDocumentBytes       int
@@ -135,6 +136,7 @@ type SearchConfig struct {
 	SearchAPIKey       string
 	TavilyAPIKey       string
 	ExaAPIKey          string
+	JinaAPIKey         string // optional; the Jina Reader scraper tier works keyless, a key raises its rate limit
 	SearXNGURL         string
 	SearXNGBasicAuth   string            // raw "user:password" for a SearXNG behind HTTP Basic auth; "" => none (never logged)
 	SearXNGHeaders     map[string]string // validated static request headers for SearXNG; nil/empty => none
@@ -154,6 +156,7 @@ type SearchConfig struct {
 	UnpaywallEmail        string // open-access PDF resolution; falls back to OpenAlexEmail when unset
 	PubMedAPIKey          string // optional; PubMed E-utilities work keyless (~3 req/s), a key raises it (~10 req/s)
 	PubMedEmail           string // optional NCBI contact (tool/email params) — falls back to OpenAlexEmail
+	COREAPIKey            string // optional; CORE.ac.uk works keyless at a lower shared rate, a key raises the limit
 
 	// Structured-domain providers (optional, enable filing/case/economic search)
 	EDGARContactEmail  string // SEC EDGAR requires a contact email for its required User-Agent
@@ -371,6 +374,7 @@ func Load() (*Config, error) {
 			SearchAPIKey:            searchAPIKey,
 			TavilyAPIKey:            tavilyKey,
 			ExaAPIKey:               exaKey,
+			JinaAPIKey:              os.Getenv("JINA_API_KEY"),
 			SearXNGURL:              searxngURL,
 			SearXNGBasicAuth:        searxngBasicAuth,
 			SearXNGHeaders:          searxngHeaders,
@@ -386,6 +390,7 @@ func Load() (*Config, error) {
 			UnpaywallEmail:          envOrDefault("UNPAYWALL_EMAIL", os.Getenv("OPENALEX_EMAIL")),
 			PubMedAPIKey:            os.Getenv("PUBMED_API_KEY"),
 			PubMedEmail:             envOrDefault("PUBMED_EMAIL", os.Getenv("OPENALEX_EMAIL")),
+			COREAPIKey:              os.Getenv("CORE_API_KEY"),
 			EDGARContactEmail:       envOrDefault("EDGAR_CONTACT_EMAIL", os.Getenv("OPENALEX_EMAIL")),
 			CourtListenerToken:      os.Getenv("COURTLISTENER_API_TOKEN"),
 			FREDAPIKey:              os.Getenv("FRED_API_KEY"),
@@ -444,6 +449,7 @@ func Load() (*Config, error) {
 		AllowPrivateIPs:      envBool("ALLOW_PRIVATE_IPS", false),
 		AllowedDomains:       splitCSV(os.Getenv("ALLOWED_DOMAINS")),
 		ChromePath:           os.Getenv("CHROME_PATH"),
+		JinaDisabled:         envBool("JINA_READER_DISABLED", false),
 		MaxScrapeConcurrency: envInt("MAX_SCRAPE_CONCURRENCY", 5),
 		MaxHTMLBytes:         envInt("MAX_HTML_BYTES", 8<<20),
 		MaxDocumentBytes:     envInt("MAX_DOCUMENT_BYTES", 50<<20),

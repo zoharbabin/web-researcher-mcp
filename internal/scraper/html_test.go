@@ -498,7 +498,7 @@ func TestExtractForumSignals_Reddit(t *testing.T) {
 			"author": {"@type": "Person", "name": "test_user"}
 		}`),
 	}
-	sig := extractForumSignals("https://www.reddit.com/r/golang/comments/abc/test", blocks)
+	sig := extractForumSignals(context.Background(), "https://www.reddit.com/r/golang/comments/abc/test", blocks, nil, "")
 	if sig == nil {
 		t.Fatal("expected ForumSignals, got nil")
 	}
@@ -521,7 +521,7 @@ func TestExtractForumSignals_NonReddit(t *testing.T) {
 	block := []json.RawMessage{
 		json.RawMessage(`{"@type":"DiscussionForumPosting","upvoteCount":100}`),
 	}
-	if sig := extractForumSignals("https://news.ycombinator.com/item?id=123", block); sig != nil {
+	if sig := extractForumSignals(context.Background(), "https://news.ycombinator.com/item?id=123", block, nil, ""); sig != nil {
 		t.Errorf("expected nil for non-Reddit URL, got %+v", sig)
 	}
 }
@@ -531,7 +531,7 @@ func TestExtractForumSignals_NoForumType(t *testing.T) {
 	block := []json.RawMessage{
 		json.RawMessage(`{"@type":"Article","headline":"Some article"}`),
 	}
-	if sig := extractForumSignals("https://www.reddit.com/r/test/comments/xyz/article", block); sig != nil {
+	if sig := extractForumSignals(context.Background(), "https://www.reddit.com/r/test/comments/xyz/article", block, nil, ""); sig != nil {
 		t.Errorf("expected nil for non-DiscussionForumPosting type, got %+v", sig)
 	}
 }
@@ -542,11 +542,114 @@ func TestExtractForumSignals_LowEngagementNote(t *testing.T) {
 	block := []json.RawMessage{
 		json.RawMessage(`{"@type":"DiscussionForumPosting","upvoteCount":5}`),
 	}
-	sig := extractForumSignals("https://www.reddit.com/r/test/comments/xyz/low", block)
+	sig := extractForumSignals(context.Background(), "https://www.reddit.com/r/test/comments/xyz/low", block, nil, "")
 	if sig == nil {
 		t.Fatal("expected ForumSignals, got nil")
 	}
 	if sig.CredibilityNote == "" {
 		t.Error("expected credibility note for low-engagement post, got empty string")
+	}
+}
+
+// =============================================================================
+// #283 — fetchShredditComments extraction
+// =============================================================================
+
+func TestFetchShredditComments_Success(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`
+			<shreddit-comment score="12" author="alice" created="2024-01-15T10:00:00Z" permalink="/r/golang/comments/abc/comment/1/">
+				<div id="t1_1-post-rtjson-content"><p>Low score comment.</p></div>
+			</shreddit-comment>
+			<shreddit-comment score="99" author="bob" created="2024-01-15T11:00:00Z" permalink="/r/golang/comments/abc/comment/2/">
+				<div id="t1_2-post-rtjson-content"><p>High score comment.</p></div>
+			</shreddit-comment>
+		`))
+	}))
+	defer ts.Close()
+
+	client := NewPipeline(PipelineConfig{MaxConcurrency: 1, AllowPrivateIPs: true}).client
+	comments := fetchShredditComments(context.Background(), "https://www.reddit.com/r/golang/comments/abc/test", ts.URL, client)
+	if len(comments) != 2 {
+		t.Fatalf("expected 2 comments, got %d: %+v", len(comments), comments)
+	}
+	if comments[0].Score != 99 || comments[0].Author != "bob" {
+		t.Errorf("expected highest-score comment first, got %+v", comments[0])
+	}
+	if comments[1].Score != 12 {
+		t.Errorf("expected second comment score 12, got %d", comments[1].Score)
+	}
+	for _, c := range comments {
+		if len(c.Body) > shredditMaxBodyBytes {
+			t.Errorf("body exceeds cap: %d bytes", len(c.Body))
+		}
+	}
+}
+
+func TestFetchShredditComments_RateLimit_ReturnsNil(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer ts.Close()
+
+	client := NewPipeline(PipelineConfig{MaxConcurrency: 1, AllowPrivateIPs: true}).client
+	comments := fetchShredditComments(context.Background(), "https://www.reddit.com/r/golang/comments/abc/test", ts.URL, client)
+	if comments != nil {
+		t.Errorf("expected nil on 429, got %+v", comments)
+	}
+}
+
+func TestFetchShredditComments_InvalidURL_SkipsFetch(t *testing.T) {
+	client := NewPipeline(PipelineConfig{MaxConcurrency: 1, AllowPrivateIPs: true}).client
+	comments := fetchShredditComments(context.Background(), "https://www.reddit.com/r/golang/wiki/faq", "http://should-not-be-called.invalid", client)
+	if comments != nil {
+		t.Errorf("expected nil for URL without /comments/ path, got %+v", comments)
+	}
+}
+
+func TestFetchShredditComments_DeletedBodySkipped(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`
+			<shreddit-comment score="5" author="[deleted]" created="2024-01-15T10:00:00Z" permalink="/r/golang/comments/abc/comment/1/">
+				<div id="t1_1-post-rtjson-content"><p>[deleted]</p></div>
+			</shreddit-comment>
+			<shreddit-comment score="10" author="carol" created="2024-01-15T11:00:00Z" permalink="/r/golang/comments/abc/comment/2/">
+				<div id="t1_2-post-rtjson-content"><p>Real comment text.</p></div>
+			</shreddit-comment>
+		`))
+	}))
+	defer ts.Close()
+
+	client := NewPipeline(PipelineConfig{MaxConcurrency: 1, AllowPrivateIPs: true}).client
+	comments := fetchShredditComments(context.Background(), "https://www.reddit.com/r/golang/comments/abc/test", ts.URL, client)
+	if len(comments) != 1 {
+		t.Fatalf("expected 1 comment (deleted skipped), got %d: %+v", len(comments), comments)
+	}
+	if comments[0].Author != "carol" {
+		t.Errorf("expected carol's comment to survive, got %+v", comments[0])
+	}
+}
+
+func TestFetchShredditComments_BodyTruncated(t *testing.T) {
+	longBody := strings.Repeat("a", shredditMaxBodyBytes+200)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`
+			<shreddit-comment score="1" author="dave" created="2024-01-15T10:00:00Z" permalink="/r/golang/comments/abc/comment/1/">
+				<div id="t1_1-post-rtjson-content"><p>` + longBody + `</p></div>
+			</shreddit-comment>
+		`))
+	}))
+	defer ts.Close()
+
+	client := NewPipeline(PipelineConfig{MaxConcurrency: 1, AllowPrivateIPs: true}).client
+	comments := fetchShredditComments(context.Background(), "https://www.reddit.com/r/golang/comments/abc/test", ts.URL, client)
+	if len(comments) != 1 {
+		t.Fatalf("expected 1 comment, got %d", len(comments))
+	}
+	if len(comments[0].Body) > shredditMaxBodyBytes {
+		t.Errorf("body not truncated: %d bytes", len(comments[0].Body))
+	}
+	if !utf8.ValidString(comments[0].Body) {
+		t.Error("truncated body is not valid UTF-8")
 	}
 }

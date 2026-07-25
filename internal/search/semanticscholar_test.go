@@ -149,6 +149,52 @@ func TestS2Helpers(t *testing.T) {
 
 func TestSemanticScholarInterface(t *testing.T) {
 	var _ AcademicProvider = (*SemanticScholarProvider)(nil)
+	var _ PaperFetcher = (*SemanticScholarProvider)(nil)
+}
+
+// TestSemanticScholarFetchPaper covers the PaperFetcher path (#269): a DOI seed
+// resolves via /paper/DOI:..., and the full field mask (including the OA PDF
+// URL) is mapped exactly like Scholarly's results.
+func TestSemanticScholarFetchPaper(t *testing.T) {
+	var gotPath string
+	p := newS2TestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.String()
+		_, _ = w.Write([]byte(`{"paperId":"abc","externalIds":{"DOI":"10.1038/nature12373"},"title":"A Study","venue":"Nature","year":2013,"citationCount":100,"isOpenAccess":true,"openAccessPdf":{"url":"https://x/paper.pdf"},"tldr":{"text":"Summary."},"authors":[{"name":"A. Smith"}],"abstract":"Long abstract."}`))
+	})
+	res, err := p.FetchPaper(context.Background(), "10.1038/nature12373")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res == nil {
+		t.Fatal("expected a result, got nil")
+	}
+	if res.Title != "A Study" || res.DOI != "10.1038/nature12373" || res.Year != 2013 {
+		t.Errorf("bad mapping: %+v", res)
+	}
+	if res.PDFUrl != "https://x/paper.pdf" || !res.OpenAccess {
+		t.Errorf("OA fields not mapped: %+v", res)
+	}
+	if !strings.HasPrefix(gotPath, "/paper/DOI:10.1038/nature12373") {
+		t.Errorf("DOI seed should map to /paper/DOI:..., got %s", gotPath)
+	}
+	if !strings.Contains(gotPath, "fields=") {
+		t.Errorf("request path missing fields mask; got %s", gotPath)
+	}
+}
+
+// TestSemanticScholarFetchPaperNotFound verifies a 404 normalizes to (nil, nil)
+// per PaperFetcher's documented "no record" contract, not a hard error.
+func TestSemanticScholarFetchPaperNotFound(t *testing.T) {
+	p := newS2TestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+	res, err := p.FetchPaper(context.Background(), "10.9999/doesnotexist")
+	if err != nil {
+		t.Fatalf("expected nil error on 404, got %v", err)
+	}
+	if res != nil {
+		t.Fatalf("expected nil result on 404, got %+v", res)
+	}
 }
 
 // TestS2WaitHonorsContext verifies the throttle is cancel-aware: a request whose

@@ -8,12 +8,18 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/PuerkitoBio/goquery"
 )
+
+// redditPostRe parses subreddit and post ID from any reddit.com post URL.
+var redditPostRe = regexp.MustCompile(`/r/([^/]+)/comments/([A-Za-z0-9]+)`)
 
 // Structured-data extraction caps (#46). structuredData is UNTRUSTED external
 // data that content.Process never sanitizes/truncates, so extractStructuredData
@@ -126,7 +132,7 @@ func (p *Pipeline) scrapeHTML(ctx context.Context, url string, maxLength int) (*
 	}
 	// Extract forum signals (Reddit upvotes, comments, etc.) from JSON-LD
 	if res.StructuredData != nil && len(res.StructuredData.JSONLD) > 0 {
-		res.ForumSignals = extractForumSignals(url, res.StructuredData.JSONLD)
+		res.ForumSignals = extractForumSignals(ctx, url, res.StructuredData.JSONLD, p.client, p.config.ShredditBase)
 	}
 	return res, nil
 }
@@ -497,7 +503,10 @@ func cleanText(s string) string {
 
 // extractForumSignals parses JSON-LD blocks from a Reddit page and returns
 // ForumSignals. Returns nil for non-Reddit URLs or when no forum schema found.
-func extractForumSignals(rawURL string, jsonldBlocks []json.RawMessage) *ForumSignals {
+// When client is non-nil, it also best-effort fetches top comments from
+// Reddit's unauthenticated shreddit endpoint; any failure there is swallowed
+// and never affects the post-level signals returned.
+func extractForumSignals(ctx context.Context, rawURL string, jsonldBlocks []json.RawMessage, client *http.Client, shredditBase string) *ForumSignals {
 	if !strings.Contains(rawURL, "reddit.com") {
 		return nil
 	}
@@ -562,8 +571,95 @@ func extractForumSignals(rawURL string, jsonldBlocks []json.RawMessage) *ForumSi
 			sig.CredibilityNote = "Low engagement: this post has fewer than 20 upvotes. Community validation is minimal."
 		}
 
+		if client != nil {
+			sig.TopComments = fetchShredditComments(ctx, rawURL, shredditBase, client)
+		}
+
 		return sig
 	}
 
 	return nil
+}
+
+const (
+	shredditMaxComments  = 5
+	shredditMaxBodyBytes = 500
+	shredditBodyLimit    = 512 * 1024 // 512 KB cap on shreddit HTML response
+)
+
+// fetchShredditComments best-effort fetches the top comments for a Reddit
+// post from the unauthenticated shreddit server-rendered HTML endpoint. Any
+// failure (invalid URL, timeout, non-200, parse error) returns nil — callers
+// must never treat a nil result as an error.
+func fetchShredditComments(ctx context.Context, postURL, shredditBase string, client *http.Client) []ForumComment {
+	m := redditPostRe.FindStringSubmatch(postURL)
+	if len(m) != 3 {
+		return nil
+	}
+	sub, id := m[1], m[2]
+
+	base := shredditBase
+	if base == "" {
+		base = "https://www.reddit.com"
+	}
+	fetchURL := fmt.Sprintf("%s/svc/shreddit/comments/r/%s/t3_%s?sort=top", base, sub, id)
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", fetchURL, nil)
+	if err != nil {
+		return nil
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; web-researcher-mcp/1.0)")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,*/*;q=0.8")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+
+	doc, err := goquery.NewDocumentFromReader(io.LimitReader(resp.Body, shredditBodyLimit))
+	if err != nil {
+		return nil
+	}
+
+	var comments []ForumComment
+	doc.Find("shreddit-comment").Each(func(_ int, s *goquery.Selection) {
+		body := ""
+		if bodyNode := s.Find("[id$='post-rtjson-content']").First(); bodyNode.Length() > 0 {
+			body = strings.TrimSpace(bodyNode.Text())
+		} else if p := s.Find("p").First(); p.Length() > 0 {
+			body = strings.TrimSpace(p.Text())
+		}
+		if body == "" || body == "[deleted]" || body == "[removed]" {
+			return
+		}
+		body = truncateBytes(cleanText(body), shredditMaxBodyBytes)
+
+		score, _ := strconv.Atoi(mustAttr(s, "score"))
+
+		comments = append(comments, ForumComment{
+			Author:    mustAttr(s, "author"),
+			Score:     score,
+			Body:      body,
+			Permalink: mustAttr(s, "permalink"),
+			Created:   mustAttr(s, "created"),
+		})
+	})
+
+	if len(comments) == 0 {
+		return nil
+	}
+
+	sort.Slice(comments, func(i, j int) bool { return comments[i].Score > comments[j].Score })
+	if len(comments) > shredditMaxComments {
+		comments = comments[:shredditMaxComments]
+	}
+	return comments
 }

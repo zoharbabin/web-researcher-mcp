@@ -1483,3 +1483,116 @@ func TestBuildCompanyReconPromptUnit(t *testing.T) {
 		}
 	}
 }
+
+// ── rare-disease-research prompt tests ────────────────────────────────────────
+
+func TestRareDiseaseResearchPromptRegistered(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	prompts, err := cs.ListPrompts(ctx, &mcp.ListPromptsParams{})
+	if err != nil {
+		t.Fatalf("ListPrompts failed: %v", err)
+	}
+	found := false
+	for _, pr := range prompts.Prompts {
+		if pr.Name == "rare-disease-research" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected 'rare-disease-research' in prompt list")
+	}
+}
+
+func TestRareDiseaseResearchPrompt(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "rare-disease-research",
+		Arguments: map[string]string{"topic": "Marfan syndrome"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	if len(result.Messages) == 0 {
+		t.Fatal("expected at least one message")
+	}
+	msg := requireFirstMessageText(t, result)
+	if !strings.Contains(msg, "Marfan syndrome") {
+		t.Errorf("expected supplied topic in prompt output, got: %.200s", msg)
+	}
+	if strings.Contains(msg, "{{") {
+		t.Errorf("prompt output contains an unresolved template placeholder: %.200s", msg)
+	}
+	if !strings.Contains(msg, "monarch_search") {
+		t.Errorf("expected 'monarch_search' mentioned in prompt output")
+	}
+}
+
+func TestRareDiseaseResearchPromptWithFocus(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "rare-disease-research",
+		Arguments: map[string]string{"topic": "HP:0001166,HP:0001083", "focus": "differential diagnosis"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	msg := requireFirstMessageText(t, result)
+	if !strings.Contains(msg, "differential diagnosis") {
+		t.Errorf("expected focus text in prompt output")
+	}
+}
+
+func TestRareDiseaseResearchPromptEmptyTopic(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	_, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "rare-disease-research",
+		Arguments: map[string]string{"topic": ""},
+	})
+	if err == nil {
+		t.Error("expected error for empty topic, got nil")
+	}
+}
+
+// TestBuildRareDiseaseResearchPromptUnit is a direct unit test for
+// buildRareDiseaseResearchPrompt.
+func TestBuildRareDiseaseResearchPromptUnit(t *testing.T) {
+	t.Parallel()
+	got := buildRareDiseaseResearchPrompt("Marfan syndrome", "")
+	if got == "" {
+		t.Fatal("expected non-empty prompt")
+	}
+	for _, want := range []string{"Marfan syndrome", "monarch_search", "academic_search", "clinical_search", "identifiable patient data"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q in prompt output", want)
+		}
+	}
+}

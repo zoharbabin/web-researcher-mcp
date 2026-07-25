@@ -332,3 +332,91 @@ func AvailableTrialProviders(deps Deps) map[string]TrialProvider {
 	}
 	return providers
 }
+
+// ──────────────── Biomedical knowledge graph (Monarch Initiative) ───────────
+
+// MonarchSearcher queries the Monarch Initiative biomedical knowledge graph:
+// phenotype-similarity search (semsim), entity lookup, association traversal,
+// direct phenotype-set comparison, and clinical-text annotation (#318). One
+// interface covers all five operations — MonarchSearchParams.Operation is the
+// discriminator, mirroring the tool layer's single-tool multi-operation shape.
+type MonarchSearcher interface {
+	Search(ctx context.Context, params MonarchSearchParams) ([]MonarchResult, error)
+}
+
+// MonarchProvider is a named, described MonarchSearcher.
+type MonarchProvider interface {
+	MonarchSearcher
+	Name() string
+	Metadata() ProviderMeta
+}
+
+// MonarchSearchParams drives one Monarch operation. Only the fields relevant to
+// Operation are read; the tool layer validates required fields per operation
+// before calling Search.
+type MonarchSearchParams struct {
+	Operation     string   // semsim | entity | associations | compare | annotate
+	Phenotypes    []string // semsim/compare: HPO term IDs (subjects)
+	Group         string   // semsim: SemsimSearchGroup, e.g. "Human Diseases"
+	CompareTo     []string // compare: HPO term IDs (objects)
+	Query         string   // entity: free-text search term
+	EntityID      string   // entity/associations: a CURIE, e.g. MONDO:0007947
+	AssocSubject  string   // associations: subject-side CURIE filter
+	AssocObject   string   // associations: object-side CURIE filter
+	AssocCategory string   // associations: Biolink association category
+	Text          string   // annotate: clinical text to ground to HPO terms
+	NumResults    int
+}
+
+// MonarchResult is one entry from any Monarch operation. Field population
+// varies by operation: semsim/compare use Score/AncestorID/AncestorLabel;
+// entity uses Description/CrossReferences; associations uses the
+// Subject/Object pair; annotate uses Text alongside ID/Label.
+type MonarchResult struct {
+	ID                     string   `json:"id,omitempty"`
+	Label                  string   `json:"label,omitempty"`
+	Category               string   `json:"category,omitempty"`
+	Score                  float64  `json:"score,omitempty"`
+	AncestorID             string   `json:"ancestorId,omitempty"`
+	AncestorLabel          string   `json:"ancestorLabel,omitempty"`
+	Description            string   `json:"description,omitempty"`
+	CrossReferences        []string `json:"crossReferences,omitempty"`
+	SubjectID              string   `json:"subjectId,omitempty"`
+	SubjectLabel           string   `json:"subjectLabel,omitempty"`
+	ObjectID               string   `json:"objectId,omitempty"`
+	ObjectLabel            string   `json:"objectLabel,omitempty"`
+	PrimaryKnowledgeSource string   `json:"primaryKnowledgeSource,omitempty"`
+	Text                   string   `json:"text,omitempty"`
+	Source                 string   `json:"source"`
+}
+
+// SupportedMonarchProviders is the source of truth for Monarch provider names.
+var SupportedMonarchProviders = []string{"monarch"}
+
+// NewMonarchProviderByName constructs a Monarch provider. The Monarch API is
+// keyless, so it always constructs.
+func NewMonarchProviderByName(name string, deps Deps) MonarchProvider {
+	switch name {
+	case "monarch":
+		return NewMonarchProvider(deps)
+	}
+	return nil
+}
+
+// AvailableMonarchProviders builds the Monarch providers, each with its own
+// circuit breaker. A lower failure threshold and longer reset than the default
+// {5, 60} — Monarch has documented intermittent endpoint instability, and KG
+// rebuilds can cause multi-minute outages.
+func AvailableMonarchProviders(deps Deps) map[string]MonarchProvider {
+	providers := make(map[string]MonarchProvider)
+	for _, name := range SupportedMonarchProviders {
+		provDeps := Deps{
+			HTTPClient: deps.HTTPClient,
+			Breaker:    circuit.New(circuit.Config{FailureThreshold: 3, ResetTimeout: 120}),
+		}
+		if p := NewMonarchProviderByName(name, provDeps); p != nil {
+			providers[name] = p
+		}
+	}
+	return providers
+}

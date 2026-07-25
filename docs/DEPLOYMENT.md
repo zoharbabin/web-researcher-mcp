@@ -522,6 +522,7 @@ DAILY_QUOTA_PER_TENANT=10000
 | `ALLOW_PRIVATE_IPS` | Disable SSRF protection | `false` |
 | `ALLOWED_DOMAINS` | Domain whitelist (comma-separated) | — (all allowed) |
 | `CHROME_PATH` | Custom Chrome/Chromium binary path; set to `"disabled"` to turn the browser tier off entirely (no autodetect, no download) | auto-detect |
+| `JINA_READER_DISABLED` | Set `true` to turn off the Jina Reader scrape tier (r.jina.ai) entirely, e.g. for hardened deploys or network-free tests | `false` |
 | `MAX_SCRAPE_CONCURRENCY` | Parallel scrape limit | `5` |
 | `MAX_HTML_BYTES` | Decompressed HTML body read cap per scrape tier | `8388608` (8 MB) |
 | `MAX_DOCUMENT_BYTES` | Document (PDF/DOCX/PPTX) download cap | `52428800` (50 MB) |
