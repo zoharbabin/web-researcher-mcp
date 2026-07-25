@@ -126,7 +126,7 @@ func registerCompanyRecon(srv *mcp.Server, deps Dependencies) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				entries, err := deps.CTLogResolver.Lookup(ctx, domain, companyReconClamp(numResults, 1, 1000))
+				entries, err := deps.CTLogResolver.Lookup(ctx, domain, companyReconClamp(numResults, 1, 25))
 				if err != nil {
 					return
 				}

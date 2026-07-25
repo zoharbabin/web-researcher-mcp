@@ -104,6 +104,49 @@ func TestCompanyReconPhaseErrorDegradesSoft(t *testing.T) {
 	}
 }
 
+// recordingCTLogResolver captures the maxResults value it was called with, so
+// tests can assert on company_recon's per-phase clamp without a live crt.sh.
+type recordingCTLogResolver struct {
+	gotMaxResults int
+}
+
+func (m *recordingCTLogResolver) Name() string { return "crt.sh" }
+func (m *recordingCTLogResolver) Lookup(_ context.Context, _ string, maxResults int) ([]search.CertEntry, error) {
+	m.gotMaxResults = maxResults
+	return nil, nil
+}
+
+// recordingArchiveResolver mirrors recordingCTLogResolver for the archives phase.
+type recordingArchiveResolver struct {
+	gotMaxResults int
+}
+
+func (m *recordingArchiveResolver) Name() string { return "wayback-cdx" }
+func (m *recordingArchiveResolver) Lookup(_ context.Context, _ string, maxResults int) ([]search.ArchiveEntry, error) {
+	m.gotMaxResults = maxResults
+	return nil, nil
+}
+
+func TestCompanyReconNumResultsClampedPerPhase(t *testing.T) {
+	t.Parallel()
+	deps := setupTestDeps()
+	ctLog := &recordingCTLogResolver{}
+	archive := &recordingArchiveResolver{}
+	deps.CTLogResolver = ctLog
+	deps.ArchiveResolver = archive
+
+	_, res := callTool(t, deps, "company_recon", map[string]any{"target": "acme.com", "num_results": 1000})
+	if res.IsError {
+		t.Fatalf("unexpected tool error: %v", res.Content)
+	}
+	if ctLog.gotMaxResults != 25 {
+		t.Errorf("ct_logs maxResults = %d, want 25 (per the tool's documented cap)", ctLog.gotMaxResults)
+	}
+	if archive.gotMaxResults != 1000 {
+		t.Errorf("archives maxResults = %d, want 1000", archive.gotMaxResults)
+	}
+}
+
 func TestCompanyReconNilResolverSkipsPhase(t *testing.T) {
 	t.Parallel()
 	deps := setupTestDeps()
