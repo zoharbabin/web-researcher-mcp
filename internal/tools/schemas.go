@@ -144,6 +144,7 @@ var academicSearchOutputSchema = map[string]any{
 					"isInfluential":   map[string]any{"type": "boolean", "description": "Citation-edge only (citation_graph): the citing/cited work is a highly influential citation."},
 					"citationIntents": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Citation-edge only: intent labels (background/methodology/result)."},
 					"isInDoaj":        map[string]any{"type": "boolean", "description": "OpenAlex-only: journal is listed in the Directory of Open Access Journals (DOAJ) — a peer-reviewed OA quality signal."},
+					"fullText":        map[string]any{"type": "string", "description": "PubMed-only: full article text extracted from PubMed Central. Present only when full_text=true and a PMCID is available."},
 				},
 			},
 		},
@@ -196,7 +197,7 @@ var scrapePageOutputSchema = map[string]any{
 		"estimatedTokens":   map[string]any{"type": "integer"},
 		"sizeCategory":      map[string]any{"type": "string"},
 		"raw":               map[string]any{"type": "boolean"},
-		"extractedBy":       map[string]any{"type": "string", "description": "Which extraction tier produced the content (markdown, stealth, html, browser, or exa:cached/exa:crawled for the paid Exa fallback). Provenance only; omitted when unknown."},
+		"extractedBy":       map[string]any{"type": "string", "description": "Which extraction tier produced the content (markdown, stealth, jina, html, browser, or exa:cached/exa:crawled for the paid Exa fallback). Provenance only; omitted when unknown."},
 		"citation": map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -241,7 +242,7 @@ var scrapePageOutputSchema = map[string]any{
 		},
 		"forumSignals": map[string]any{
 			"type":        "object",
-			"description": "Reddit engagement signals extracted from JSON-LD (#247): upvotes, comment count, credibility note. Present only for Reddit posts where the HTML extraction tier ran; absent for all other URLs, raw mode, and non-HTML tiers.",
+			"description": "Reddit engagement signals extracted from JSON-LD (#247): upvotes, comment count, credibility note, and (best-effort) top comments (#283). Present only for Reddit posts where the HTML extraction tier ran; absent for all other URLs, raw mode, and non-HTML tiers.",
 			"properties": map[string]any{
 				"platform":        map[string]any{"type": "string", "description": "Forum platform (e.g. 'reddit')."},
 				"upvotes":         map[string]any{"type": "integer", "description": "Vote count (upvotes) from the JSON-LD interaction stats."},
@@ -249,6 +250,20 @@ var scrapePageOutputSchema = map[string]any{
 				"datePublished":   map[string]any{"type": "string", "description": "ISO 8601 publish date when available."},
 				"authorName":      map[string]any{"type": "string", "description": "Original poster name when available."},
 				"credibilityNote": map[string]any{"type": "string", "description": "Contextual note about the reliability of this forum signal (e.g. vote manipulation risk on Reddit)."},
+				"topComments": map[string]any{
+					"type":        "array",
+					"description": "Up to 5 top comments (by score descending), fetched best-effort from Reddit's unauthenticated shreddit endpoint. Absent when the fetch failed or timed out — never treated as an error.",
+					"items": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"author":    map[string]any{"type": "string", "description": "Comment author's username."},
+							"score":     map[string]any{"type": "integer", "description": "Comment score (upvotes minus downvotes)."},
+							"body":      map[string]any{"type": "string", "description": "Comment body, plain text, truncated to 500 characters."},
+							"permalink": map[string]any{"type": "string", "description": "Relative permalink to the comment on reddit.com."},
+							"created":   map[string]any{"type": "string", "description": "Comment creation timestamp as reported by the shreddit endpoint."},
+						},
+					},
+				},
 			},
 		},
 		"sourceType":     sourceTypeSchema,
@@ -263,6 +278,18 @@ var scrapePageOutputSchema = map[string]any{
 		"retractionStatus": map[string]any{
 			"type":        "object",
 			"description": "Crossref (Retraction Watch + publisher) integrity status for detectedDoi when retracted/corrected/flagged — the same object academic_search and verify_citation return ({retracted, kind, date?, noticeDoi?, source?}). Omitted when clean, when no DOI was detected, or when the resolver is unavailable. Captured at scrape time (shares the scrape cache TTL); best-effort external data, never a guess.",
+		},
+		"highlights": map[string]any{
+			"type":        "array",
+			"description": "Up to 5 top-scored YouTube transcript segments (#284), scored by structural signals (digit presence, all-caps word, question ending) and normalized to [0,1]. Present only for YouTube videos with a successfully extracted transcript of at least 5 segments; omitted for non-YouTube URLs, the description-only fallback, and shorter transcripts.",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"text":      map[string]any{"type": "string", "description": "The '[M:SS] text' formatted transcript segment."},
+					"score":     map[string]any{"type": "number", "description": "Normalized highlight score in [0,1]."},
+					"startTime": map[string]any{"type": "string", "description": "Segment start time as 'M:SS'; omitted when unavailable."},
+				},
+			},
 		},
 	},
 }
@@ -1078,6 +1105,97 @@ var econSearchOutputSchema = map[string]any{
 	},
 }
 
+var syllabusSearchOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"query":       map[string]any{"type": "string"},
+		"sortBy":      map[string]any{"type": "string", "description": "frequency, recency, or institution_count."},
+		"resultCount": map[string]any{"type": "integer"},
+		"provider":    map[string]any{"type": "string", "description": "Always opensyllabus."},
+		"hints":       map[string]any{"type": "object"},
+		"trust":       trustUntrustedExternal,
+		"corpusNote":  map[string]any{"type": "string", "description": "Coverage-bias caveat: the corpus is ~65% US/Anglophone."},
+		"results": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"title":            map[string]any{"type": "string"},
+					"author":           map[string]any{"type": "string"},
+					"institution":      map[string]any{"type": "string"},
+					"country":          map[string]any{"type": "string"},
+					"field":            map[string]any{"type": "string"},
+					"year":             map[string]any{"type": "integer"},
+					"frequency":        map[string]any{"type": "integer", "description": "Assignment count across the corpus."},
+					"institutionCount": map[string]any{"type": "integer", "description": "Number of distinct institutions assigning this text."},
+					"coAssignedWith":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"url":              map[string]any{"type": "string"},
+				},
+			},
+		},
+	},
+}
+
+var gagOrderSearchOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"resultCount": map[string]any{"type": "integer"},
+		"provider":    map[string]any{"type": "string", "description": "Always pen_america."},
+		"hints":       map[string]any{"type": "object"},
+		"trust":       trustUntrustedExternal,
+		"results": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"state":    map[string]any{"type": "string"},
+					"billName": map[string]any{"type": "string"},
+					"status":   map[string]any{"type": "string", "description": "enacted, pending, failed, or vetoed."},
+					"targets":  map[string]any{"type": "string", "description": "higher_education, k12, or both."},
+					"year":     map[string]any{"type": "integer", "description": "Bill introduction year."},
+					"summary":  map[string]any{"type": "string"},
+					"url":      map[string]any{"type": "string"},
+				},
+			},
+		},
+	},
+}
+
+var monarchSearchOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"operation":   map[string]any{"type": "string", "enum": []any{"semsim", "entity", "associations", "compare", "annotate"}, "description": "Echoed operation."},
+		"resultCount": map[string]any{"type": "integer"},
+		"provider":    map[string]any{"type": "string", "description": "Which biomedical-knowledge-graph provider answered (monarch)."},
+		"hints":       map[string]any{"type": "object"},
+		"trust":       trustUntrustedExternal,
+		"results": map[string]any{
+			"type":        "array",
+			"description": "Element shape varies by operation: semsim/compare use score/ancestorId/ancestorLabel; entity uses description/crossReferences; associations uses the subject/object pair; annotate uses text alongside id/label.",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":                     map[string]any{"type": "string", "description": "Entity CURIE (semsim/entity/annotate)."},
+					"label":                  map[string]any{"type": "string"},
+					"category":               map[string]any{"type": "string", "description": "Biolink category, e.g. biolink:Disease (semsim/entity/associations)."},
+					"score":                  map[string]any{"type": "number", "description": "Similarity score (semsim/compare)."},
+					"ancestorId":             map[string]any{"type": "string", "description": "Shared ontology ancestor CURIE explaining the match (semsim/compare)."},
+					"ancestorLabel":          map[string]any{"type": "string"},
+					"description":            map[string]any{"type": "string", "description": "Entity description (entity)."},
+					"crossReferences":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Equivalent CURIEs in other ontologies (entity)."},
+					"subjectId":              map[string]any{"type": "string", "description": "Association subject CURIE (associations)."},
+					"subjectLabel":           map[string]any{"type": "string"},
+					"objectId":               map[string]any{"type": "string", "description": "Association object CURIE (associations)."},
+					"objectLabel":            map[string]any{"type": "string"},
+					"primaryKnowledgeSource": map[string]any{"type": "string", "description": "Originating knowledge source infores id (associations)."},
+					"text":                   map[string]any{"type": "string", "description": "Grounded text span (annotate)."},
+					"source":                 map[string]any{"type": "string"},
+				},
+			},
+		},
+	},
+}
+
 var localSearchOutputSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{
@@ -1306,5 +1424,52 @@ var brandResearchOutputSchema = map[string]any{
 		},
 		"cache_age": map[string]any{"type": "integer"},
 		"trust":     trustUntrustedExternal,
+	},
+}
+
+var paperFulltextOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"identifier":    map[string]any{"type": "string", "description": "The input identifier, echoed back."},
+		"resolvedUrl":   map[string]any{"type": "string", "description": "The URL that was actually scraped: the open-access PDF, the Semantic Scholar landing page, the doi.org redirect, or the input URL verbatim."},
+		"content":       map[string]any{"type": "string"},
+		"title":         map[string]any{"type": "string"},
+		"trust":         trustUntrustedExternal,
+		"truncated":     map[string]any{"type": "boolean"},
+		"scrapeTier":    map[string]any{"type": "string", "description": "Which extraction tier produced the content (markdown, stealth, html, browser). Provenance only; omitted when unknown."},
+		"source":        map[string]any{"type": "string", "enum": []any{"semanticscholar", "direct-url"}, "description": "Where metadata came from: 'semanticscholar' when a DOI/paper-ID lookup succeeded, 'direct-url' when the identifier was a URL or no metadata could be resolved."},
+		"authors":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+		"year":          map[string]any{"type": "integer"},
+		"doi":           map[string]any{"type": "string"},
+		"pdfUrl":        map[string]any{"type": "string", "description": "The open-access PDF URL Semantic Scholar reports, when known."},
+		"openAccess":    map[string]any{"type": "boolean"},
+		"citationCount": map[string]any{"type": "integer"},
+		"abstract":      map[string]any{"type": "string"},
+		"journal":       map[string]any{"type": "string"},
+		"tldr":          map[string]any{"type": "string", "description": "AI-generated one-sentence summary (Semantic Scholar)."},
+		"citation": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"url":          map[string]any{"type": "string"},
+				"accessedDate": map[string]any{"type": "string"},
+				"metadata": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"title":  map[string]any{"type": "string"},
+						"author": map[string]any{"type": "string"},
+						"site":   map[string]any{"type": "string"},
+						"date":   map[string]any{"type": "string"},
+					},
+				},
+				"formatted": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"apa":    map[string]any{"type": "string"},
+						"mla":    map[string]any{"type": "string"},
+						"bibtex": map[string]any{"type": "string"},
+					},
+				},
+			},
+		},
 	},
 }

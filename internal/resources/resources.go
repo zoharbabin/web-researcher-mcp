@@ -558,6 +558,155 @@ func registerPrompts(srv *mcp.Server) {
 			},
 		}, nil
 	})
+
+	srv.AddPrompt(&mcp.Prompt{
+		Name:        "curriculum-research",
+		Description: "Research a subject's academic curriculum footprint, institutional free-speech climate, and country-level academic-freedom context. Orchestrates syllabus_search, gag_order_search, and web_search (lens: curriculum) across five steps to produce a cited overview.",
+		Arguments: []*mcp.PromptArgument{
+			{Name: "subject", Description: "Author, text, discipline, or topic to research (e.g. 'Marx', 'critical race theory', 'evolutionary biology')", Required: true},
+			{Name: "scope", Description: "Geographic or institutional scope, e.g. a country, US state, or institution name — narrows steps 2-5 (default: no scope restriction)"},
+			{Name: "time_range", Description: "Year or year range to filter legislation/incident coverage, e.g. '2023-2026' (default: no restriction)"},
+		},
+	}, func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+		subject := sanitizePromptArg(req.Params.Arguments["subject"], 256)
+		if strings.TrimSpace(subject) == "" {
+			return nil, fmt.Errorf("subject is required")
+		}
+		scope := sanitizePromptArg(req.Params.Arguments["scope"], 128)
+		timeRange := sanitizePromptArg(req.Params.Arguments["time_range"], 32)
+		prompt := buildCurriculumResearchPrompt(subject, scope, timeRange)
+		return &mcp.GetPromptResult{
+			Description: "Curriculum research: " + subject,
+			Messages: []*mcp.PromptMessage{
+				{Role: "user", Content: &mcp.TextContent{Text: prompt}},
+			},
+		}, nil
+	})
+
+	srv.AddPrompt(&mcp.Prompt{
+		Name:        "rare-disease-research",
+		Description: "Differential-diagnosis and gene-disease research over the Monarch Initiative biomedical knowledge graph, corroborated with published literature and active trials.",
+		Arguments: []*mcp.PromptArgument{
+			{Name: "topic", Description: "Disease name or a set of phenotypes (e.g. HPO term IDs) to research", Required: true},
+			{Name: "focus", Description: "differential diagnosis | causal genes | phenotype overlap — adjusts which monarch_search operation to lead with"},
+		},
+	}, func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+		topic := sanitizePromptArg(req.Params.Arguments["topic"], 512)
+		if strings.TrimSpace(topic) == "" {
+			return nil, fmt.Errorf("topic is required")
+		}
+		focus := sanitizePromptArg(req.Params.Arguments["focus"], 128)
+		prompt := buildRareDiseaseResearchPrompt(topic, focus)
+		return &mcp.GetPromptResult{
+			Description: "Rare-disease research: " + topic,
+			Messages: []*mcp.PromptMessage{
+				{Role: "user", Content: &mcp.TextContent{Text: prompt}},
+			},
+		}, nil
+	})
+}
+
+// buildCurriculumResearchPrompt constructs the five-step curriculum research
+// prompt for a subject, optionally narrowed by scope and time_range.
+func buildCurriculumResearchPrompt(subject, scope, timeRange string) string {
+	scopeNote := "no scope restriction — cover all institutions/countries the evidence surfaces"
+	if scope != "" {
+		scopeNote = scope
+	}
+	timeNote := "no restriction — cover all years the evidence surfaces"
+	if timeRange != "" {
+		timeNote = timeRange
+	}
+
+	p := "Research the academic curriculum footprint and free-speech climate for: " + subject + "\n" +
+		"Scope: " + scopeNote + " | Time range: " + timeNote + "\n\n" +
+		"Available tools: syllabus_search, gag_order_search, web_search, scrape_page. " +
+		"Use lens: curriculum for web_search calls that target curriculum, academic-freedom, or campus-climate data sources. " +
+		"syllabus_search and gag_order_search are each only registered when their upstream credentials are configured — " +
+		"if either is not in your active tool list, skip its step and note the gap in your final summary.\n\n" +
+
+		"=== Step 1 — Syllabus Coverage ===\n" +
+		"syllabus_search: query=\"" + subject + "\"" + curriculumScopeSuffix(scope, "institution", "country") + "\n" +
+		"Goal: how widely is this subject/author/text assigned, at which institutions, and how has assignment frequency shifted over time.\n" +
+		"Note: the Open Syllabus corpus is ~65% US/Anglophone — a sparse or absent result means 'not indexed in this corpus,' not 'never assigned.'\n\n" +
+
+		"=== Step 2 — US Institutional Climate ===\n" +
+		"web_search lens=curriculum: \"" + subject + "\" academic freedom site:fire.org OR site:aaup.org OR site:heterodoxacademy.org\n" +
+		"web_search lens=curriculum: \"" + subject + "\" site:pen.org\n" +
+		"Goal: identify institutional policy statements, faculty free-speech rankings, or advocacy positions bearing on this subject.\n\n" +
+
+		"=== Step 3 — Country-Level Academic Freedom Context ===\n" +
+		"web_search lens=curriculum: academic freedom index " + curriculumScopeOrSubject(scope, subject) + " site:academic-freedom-index.net OR site:v-dem.net OR site:scholarsatrisk.org OR site:freedomhouse.org\n" +
+		"Goal: place any findings in the context of the relevant country's academic-freedom trend — improving, stable, or declining.\n\n" +
+
+		"=== Step 4 — Policy / Legislation ===\n" +
+		"gag_order_search: state=\"" + scope + "\"" + curriculumTimeRangeNote(timeRange) + "\n" +
+		"web_search lens=curriculum: \"" + subject + "\" bill legislation classroom restriction\n" +
+		"Goal: surface any enacted, pending, failed, or vetoed legislation that would restrict teaching this subject, and its current status.\n" +
+		"Note: gag_order_search's field names are matched fuzzily against PEN America's live Airtable schema — treat an unmapped field as absent, not as evidence a bill lacks that attribute.\n\n" +
+
+		"=== Step 5 — Watchdog / Incident Coverage ===\n" +
+		"web_search lens=curriculum: \"" + subject + "\" incident OR controversy site:adl.org OR site:amchainitiative.org OR site:hillel.org OR site:campusreform.org OR site:nas.org OR site:palestinelegal.org\n" +
+		"web_search lens=curriculum: \"" + subject + "\" site:hrw.org OR site:amnesty.org OR site:ohchr.org\n" +
+		"Goal: surface incident reports and watchdog commentary spanning the political spectrum — cite each source's known orientation (advocacy group, civil-liberties monitor, etc.) rather than presenting any single watchdog as neutral.\n\n" +
+
+		"=== Synthesis ===\n" +
+		"Produce a cited summary covering: syllabus assignment frequency and coverage gaps, institutional climate signals, the relevant country's academic-freedom trend, any bearing legislation and its status, and watchdog/incident coverage with source orientation noted. " +
+		"Flag any step skipped because its tool was unavailable, and any claim resting on a single source.\n"
+
+	return p
+}
+
+// curriculumScopeSuffix appends institution/country filter args to a
+// syllabus_search call description when scope is set.
+func curriculumScopeSuffix(scope, institutionLabel, countryLabel string) string {
+	if scope == "" {
+		return ""
+	}
+	return fmt.Sprintf(", %s/%s=\"%s\" (whichever applies)", institutionLabel, countryLabel, scope)
+}
+
+// curriculumScopeOrSubject returns scope if set, else falls back to subject —
+// used where a country-level query needs some anchor term.
+func curriculumScopeOrSubject(scope, subject string) string {
+	if scope != "" {
+		return scope
+	}
+	return subject
+}
+
+// curriculumTimeRangeNote appends a year_from/year_to note to a
+// gag_order_search call description when time_range is set.
+func curriculumTimeRangeNote(timeRange string) string {
+	if timeRange == "" {
+		return ""
+	}
+	return fmt.Sprintf(", year_from/year_to=\"%s\"", timeRange)
+}
+
+// buildRareDiseaseResearchPrompt constructs a research plan over
+// monarch_search (semsim for phenotype-driven differential diagnosis,
+// associations for gene-disease edges), corroborated with academic_search and
+// clinical_search, and verified with verify_citation.
+func buildRareDiseaseResearchPrompt(topic, focus string) string {
+	p := "Research the following rare-disease / phenotype topic using the Monarch Initiative biomedical knowledge graph: " + topic + "\n"
+	if focus != "" {
+		p += "Focus: " + focus + "\n"
+	}
+	p += "\nAvailable tools: monarch_search (Monarch Initiative KG — operations: semsim, entity, associations, compare, annotate), " +
+		"academic_search, clinical_search (ClinicalTrials.gov), verify_citation, scrape_page.\n\n" +
+		"Approach:\n" +
+		"- If the topic is a set of phenotypes (HPO term IDs) rather than a named disease, call monarch_search with operation=semsim, group=\"Human Diseases\" " +
+		"to get a ranked differential of candidate diseases, each with the shared ontology ancestor explaining the match.\n" +
+		"- If the topic is a named disease or gene, call monarch_search with operation=entity to resolve it to a stable CURIE (MONDO/OMIM/Orphanet/HGNC), " +
+		"then operation=associations with category=biolink:CausalGeneToDiseaseAssociation to find causal genes, or the reverse direction for gene-to-disease.\n" +
+		"- Cross-species leads: semsim against group=\"Mouse Genes\", \"Zebrafish Genes\", or \"C. Elegans Genes\" can surface model-organism orthologs for a human phenotype set.\n" +
+		"- Corroborate any candidate disease or gene with academic_search for published evidence, and with clinical_search for active interventional trials.\n" +
+		"- Verify any cited paper or finding with verify_citation before including it in your summary.\n" +
+		"- Do not submit identifiable patient data to monarch_search's annotate operation.\n\n" +
+		"Caution: for ultra-rare diseases, case data derived from published phenopackets (specific HPO combinations, age at onset, sex, PMID) " +
+		"may retain enough quasi-identifiers to re-identify the source patient. Do not use this research for patient matching without IRB approval.\n"
+	return p
 }
 
 // sanitizePromptArg strips control characters and newlines from a user-supplied

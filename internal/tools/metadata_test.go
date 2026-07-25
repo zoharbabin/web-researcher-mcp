@@ -37,6 +37,7 @@ var expectedTools = []string{
 	"clinical_search",
 	"awesome_list_search",
 	"local_search",
+	"monarch_search",
 	"answer",
 	"structured_search",
 	"get_my_analytics",
@@ -45,6 +46,9 @@ var expectedTools = []string{
 	"workspace_contribute",
 	"workspace_read",
 	"brand_research",
+	"syllabus_search",
+	"gag_order_search",
+	"paper_fulltext",
 	"company_recon",
 }
 
@@ -188,6 +192,15 @@ func TestAllToolsHaveAnnotations(t *testing.T) {
 				if !*tool.Annotations.OpenWorldHint {
 					t.Error("company_recon should be open-world")
 				}
+			case "syllabus_search":
+				// Corpus-side ranking/frequency data can shift between identical
+				// calls as Open Syllabus's corpus is updated: NOT idempotent.
+				if tool.Annotations.IdempotentHint {
+					t.Error("syllabus_search should NOT be idempotent")
+				}
+				if !*tool.Annotations.OpenWorldHint {
+					t.Error("syllabus_search should be open-world")
+				}
 			default:
 				if !tool.Annotations.IdempotentHint {
 					t.Errorf("%s should be idempotent", tool.Name)
@@ -274,7 +287,11 @@ func TestOutputSchemaMatchesResponse(t *testing.T) {
 		"clinical_search":     {"condition": "covid-19"},
 		"awesome_list_search": {"topic": "osint"},
 		"local_search":        {"query": "coffee near me"},
+		"monarch_search":      {"operation": "entity", "query": "Marfan syndrome"},
 		"brand_research":      {"url": "example.com"},
+		"syllabus_search":     {"query": "Marx"},
+		"gag_order_search":    {},
+		"paper_fulltext":      {"identifier": "https://example.com/paper.pdf"},
 		"company_recon":       {"target": "example.com"},
 	}
 
@@ -361,6 +378,10 @@ func TestExternalContentToolsCarryTrustMarker(t *testing.T) {
 		"clinical_search":     "untrusted-external-content",
 		"awesome_list_search": "untrusted-external-content",
 		"local_search":        "untrusted-external-content",
+		"syllabus_search":     "untrusted-external-content",
+		"gag_order_search":    "untrusted-external-content",
+		"paper_fulltext":      "untrusted-external-content",
+		"monarch_search":      "untrusted-external-content",
 	}
 	args := map[string]map[string]any{
 		"web_search":          {"query": "test"},
@@ -382,6 +403,10 @@ func TestExternalContentToolsCarryTrustMarker(t *testing.T) {
 		"clinical_search":     {"condition": "covid-19"},
 		"awesome_list_search": {"topic": "osint"},
 		"local_search":        {"query": "coffee near me"},
+		"syllabus_search":     {"query": "Marx"},
+		"gag_order_search":    {},
+		"paper_fulltext":      {"identifier": "https://example.com/paper.pdf"},
+		"monarch_search":      {"operation": "entity", "query": "Marfan syndrome"},
 	}
 
 	for name, wantTrust := range want {
@@ -472,8 +497,11 @@ var structuredDomainDocTools = map[string]bool{
 	"econ_search":         true,
 	"clinical_search":     true,
 	"awesome_list_search": true,
+	"monarch_search":      true,
 	"archive_source":      true,
 	"brand_research":      true,
+	"syllabus_search":     true,
+	"gag_order_search":    true,
 	"company_recon":       true,
 }
 

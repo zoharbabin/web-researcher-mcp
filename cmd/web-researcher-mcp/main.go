@@ -259,6 +259,7 @@ func main() {
 		SemanticScholarAPIKey: cfg.Search.SemanticScholarAPIKey,
 		PubMedAPIKey:          cfg.Search.PubMedAPIKey,
 		PubMedEmail:           cfg.Search.PubMedEmail,
+		COREAPIKey:            cfg.Search.COREAPIKey,
 	}
 	academicProviders := search.AvailableAcademicProviders(academicCfg, searchDeps)
 
@@ -292,6 +293,10 @@ func main() {
 	// Local place search (#259): Brave Local Search API. Requires BRAVE_API_KEY;
 	// local_search is registered only when the key is present.
 	localProviders := search.AvailableLocalProviders(cfg.Search.BraveAPIKey, searchDeps)
+
+	// Monarch Initiative biomedical knowledge graph (#318): keyless, so always
+	// built — monarch_search is part of the default tool surface.
+	monarchProviders := search.AvailableMonarchProviders(searchDeps)
 
 	// LLM Context (#257): Brave's /res/v1/llm/context endpoint for server-side
 	// provenance-rich context assembly. Requires BRAVE_API_KEY and a Brave Data
@@ -395,7 +400,9 @@ func main() {
 		AllowPrivateIPs:  cfg.AllowPrivateIPs,
 		AllowedDomains:   cfg.AllowedDomains,
 		ChromePath:       cfg.ChromePath,
-		ExaAPIKey:        cfg.Search.ExaAPIKey, // enables the paid Exa /contents fallback tier
+		ExaAPIKey:        cfg.Search.ExaAPIKey,  // enables the paid Exa /contents fallback tier
+		JinaAPIKey:       cfg.Search.JinaAPIKey, // raises the keyless Jina Reader tier's rate limit
+		JinaDisabled:     cfg.JinaDisabled,      // JINA_READER_DISABLED: opt out of the Jina Reader tier entirely
 		MaxHTMLBytes:     cfg.MaxHTMLBytes,
 		MaxDocumentBytes: cfg.MaxDocumentBytes,
 		GitHubToken:      cfg.Search.GitHubToken, // raises GitHub's unauth rate limit for native README/blob/gist routing (#395)
@@ -466,6 +473,7 @@ func main() {
 		TrialProviders:       trialProviders,
 		AwesomeListProviders: awesomeListProviders,
 		LocalProviders:       localProviders,
+		MonarchProviders:     monarchProviders,
 		ContextProviders:     contextProviders,
 		AnswerProviders:      answerProviders,
 		StructuredProviders:  structuredProviders,
@@ -483,14 +491,17 @@ func main() {
 			SourceRecommendations: cfg.Features.SourceRecommendations,
 			GenerativeUI:          cfg.Features.GenerativeUI,
 		},
-		Consent:            consentManager,
-		UserAnalytics:      userAnalytics,
-		Memory:             memoryStore,
-		Workspaces:         workspaceStore,
-		BrandFetchAPIKey:   cfg.Search.BrandFetchAPIKey,
-		BrandFetchClientID: cfg.Search.BrandFetchClientID,
-		CTLogResolver:      ctLogResolver,
-		ArchiveResolver:    archiveResolver,
+		Consent:                 consentManager,
+		UserAnalytics:           userAnalytics,
+		Memory:                  memoryStore,
+		Workspaces:              workspaceStore,
+		BrandFetchAPIKey:        cfg.Search.BrandFetchAPIKey,
+		BrandFetchClientID:      cfg.Search.BrandFetchClientID,
+		OpenSyllabusAPIKey:      cfg.Search.OpenSyllabusAPIKey,
+		OpenSyllabusAPIURL:      cfg.Search.OpenSyllabusAPIURL,
+		PENAmericaAirtableToken: cfg.Search.PENAmericaAirtableToken,
+		CTLogResolver:           ctLogResolver,
+		ArchiveResolver:         archiveResolver,
 	}
 
 	// Completion suppliers (#193): the live value sets the server can autocomplete
@@ -826,6 +837,9 @@ func completionProviderNames(deps tools.Dependencies) []string {
 		add(name)
 	}
 	for name := range deps.LocalProviders {
+		add(name)
+	}
+	for name := range deps.MonarchProviders {
 		add(name)
 	}
 	for name := range deps.AnswerProviders {

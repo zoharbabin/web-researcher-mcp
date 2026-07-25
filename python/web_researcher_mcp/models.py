@@ -28,6 +28,7 @@ class AcademicSearchPaper:
     citationCount: Optional[int] = None
     citationIntents: list[str] = field(default_factory=list)
     doi: Optional[str] = None
+    fullText: Optional[str] = None
     isInDoaj: Optional[bool] = None
     isInfluential: Optional[bool] = None
     journal: Optional[str] = None
@@ -49,6 +50,7 @@ class AcademicSearchPaper:
             citationCount=d.get('citationCount'),
             citationIntents=list(d.get('citationIntents') or []),
             doi=d.get('doi'),
+            fullText=d.get('fullText'),
             isInDoaj=d.get('isInDoaj'),
             isInfluential=d.get('isInfluential'),
             journal=d.get('journal'),
@@ -926,6 +928,7 @@ class ForumSignals:
     credibilityNote: Optional[str] = None
     datePublished: Optional[str] = None
     platform: Optional[str] = None
+    topComments: list[ScrapePageTopcomment] = field(default_factory=list)
     upvotes: Optional[int] = None
 
     @classmethod
@@ -938,7 +941,52 @@ class ForumSignals:
             credibilityNote=d.get('credibilityNote'),
             datePublished=d.get('datePublished'),
             platform=d.get('platform'),
+            topComments=[ScrapePageTopcomment.from_dict(i) for i in (d.get('topComments') or [])],
             upvotes=d.get('upvotes'),
+        )
+
+@dataclass
+class GagOrderSearchResponse:
+    hints: dict[str, Any] = field(default_factory=dict)
+    provider: Optional[str] = None
+    resultCount: Optional[int] = None
+    results: list[GagOrderSearchResult] = field(default_factory=list)
+    trust: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "GagOrderSearchResponse | None":
+        if d is None:
+            return None
+        return cls(
+            hints=dict(d.get('hints') or {}),
+            provider=d.get('provider'),
+            resultCount=d.get('resultCount'),
+            results=[GagOrderSearchResult.from_dict(i) for i in (d.get('results') or [])],
+            trust=d.get('trust'),
+        )
+
+@dataclass
+class GagOrderSearchResult:
+    billName: Optional[str] = None
+    state: Optional[str] = None
+    status: Optional[str] = None
+    summary: Optional[str] = None
+    targets: Optional[str] = None
+    url: Optional[str] = None
+    year: Optional[int] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "GagOrderSearchResult | None":
+        if d is None:
+            return None
+        return cls(
+            billName=d.get('billName'),
+            state=d.get('state'),
+            status=d.get('status'),
+            summary=d.get('summary'),
+            targets=d.get('targets'),
+            url=d.get('url'),
+            year=d.get('year'),
         )
 
 @dataclass
@@ -1388,6 +1436,68 @@ class Metadata:
         )
 
 @dataclass
+class MonarchSearchResponse:
+    hints: dict[str, Any] = field(default_factory=dict)
+    operation: Optional[str] = None
+    provider: Optional[str] = None
+    resultCount: Optional[int] = None
+    results: list[MonarchSearchResult] = field(default_factory=list)
+    trust: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "MonarchSearchResponse | None":
+        if d is None:
+            return None
+        return cls(
+            hints=dict(d.get('hints') or {}),
+            operation=d.get('operation'),
+            provider=d.get('provider'),
+            resultCount=d.get('resultCount'),
+            results=[MonarchSearchResult.from_dict(i) for i in (d.get('results') or [])],
+            trust=d.get('trust'),
+        )
+
+@dataclass
+class MonarchSearchResult:
+    ancestorId: Optional[str] = None
+    ancestorLabel: Optional[str] = None
+    category: Optional[str] = None
+    crossReferences: list[str] = field(default_factory=list)
+    description: Optional[str] = None
+    id: Optional[str] = None
+    label: Optional[str] = None
+    objectId: Optional[str] = None
+    objectLabel: Optional[str] = None
+    primaryKnowledgeSource: Optional[str] = None
+    score: Optional[float] = None
+    source: Optional[str] = None
+    subjectId: Optional[str] = None
+    subjectLabel: Optional[str] = None
+    text: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "MonarchSearchResult | None":
+        if d is None:
+            return None
+        return cls(
+            ancestorId=d.get('ancestorId'),
+            ancestorLabel=d.get('ancestorLabel'),
+            category=d.get('category'),
+            crossReferences=list(d.get('crossReferences') or []),
+            description=d.get('description'),
+            id=d.get('id'),
+            label=d.get('label'),
+            objectId=d.get('objectId'),
+            objectLabel=d.get('objectLabel'),
+            primaryKnowledgeSource=d.get('primaryKnowledgeSource'),
+            score=d.get('score'),
+            source=d.get('source'),
+            subjectId=d.get('subjectId'),
+            subjectLabel=d.get('subjectLabel'),
+            text=d.get('text'),
+        )
+
+@dataclass
 class NewsSearchArticle:
     engagement: Optional[Engagement] = None
     publishedAt: Optional[str] = None
@@ -1427,6 +1537,52 @@ class NewsSearchResponse:
             query=d.get('query'),
             resultCount=d.get('resultCount'),
             trust=d.get('trust'),
+        )
+
+@dataclass
+class PaperFulltextResponse:
+    abstract: Optional[str] = None
+    authors: list[str] = field(default_factory=list)
+    citation: Optional[Citation] = None
+    citationCount: Optional[int] = None
+    content: Optional[str] = None
+    doi: Optional[str] = None
+    identifier: Optional[str] = None
+    journal: Optional[str] = None
+    openAccess: Optional[bool] = None
+    pdfUrl: Optional[str] = None
+    resolvedUrl: Optional[str] = None
+    scrapeTier: Optional[str] = None
+    source: Optional[str] = None
+    title: Optional[str] = None
+    tldr: Optional[str] = None
+    truncated: Optional[bool] = None
+    trust: Optional[str] = None
+    year: Optional[int] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "PaperFulltextResponse | None":
+        if d is None:
+            return None
+        return cls(
+            abstract=d.get('abstract'),
+            authors=list(d.get('authors') or []),
+            citation=Citation.from_dict(d.get('citation')) if d.get('citation') else None,
+            citationCount=d.get('citationCount'),
+            content=d.get('content'),
+            doi=d.get('doi'),
+            identifier=d.get('identifier'),
+            journal=d.get('journal'),
+            openAccess=d.get('openAccess'),
+            pdfUrl=d.get('pdfUrl'),
+            resolvedUrl=d.get('resolvedUrl'),
+            scrapeTier=d.get('scrapeTier'),
+            source=d.get('source'),
+            title=d.get('title'),
+            tldr=d.get('tldr'),
+            truncated=d.get('truncated'),
+            trust=d.get('trust'),
+            year=d.get('year'),
         )
 
 @dataclass
@@ -1528,6 +1684,22 @@ class ResearchExportResponse:
         )
 
 @dataclass
+class ScrapePageHighlight:
+    score: Optional[float] = None
+    startTime: Optional[str] = None
+    text: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "ScrapePageHighlight | None":
+        if d is None:
+            return None
+        return cls(
+            score=d.get('score'),
+            startTime=d.get('startTime'),
+            text=d.get('text'),
+        )
+
+@dataclass
 class ScrapePageMetadata:
     author: Optional[str] = None
     title: Optional[str] = None
@@ -1554,6 +1726,7 @@ class ScrapePageResponse:
     extractedBy: Optional[str] = None
     extractionQuality: Optional[str] = None
     forumSignals: Optional[ForumSignals] = None
+    highlights: list[ScrapePageHighlight] = field(default_factory=list)
     metadata: Optional[ScrapePageMetadata] = None
     raw: Optional[bool] = None
     retractionStatus: Optional[Any] = None
@@ -1582,6 +1755,7 @@ class ScrapePageResponse:
             extractedBy=d.get('extractedBy'),
             extractionQuality=d.get('extractionQuality'),
             forumSignals=ForumSignals.from_dict(d.get('forumSignals')) if d.get('forumSignals') else None,
+            highlights=[ScrapePageHighlight.from_dict(i) for i in (d.get('highlights') or [])],
             metadata=ScrapePageMetadata.from_dict(d.get('metadata')) if d.get('metadata') else None,
             raw=d.get('raw'),
             retractionStatus=d.get('retractionStatus') or None,
@@ -1593,6 +1767,26 @@ class ScrapePageResponse:
             trust=d.get('trust'),
             url=d.get('url'),
             wordCount=d.get('wordCount'),
+        )
+
+@dataclass
+class ScrapePageTopcomment:
+    author: Optional[str] = None
+    body: Optional[str] = None
+    created: Optional[str] = None
+    permalink: Optional[str] = None
+    score: Optional[int] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "ScrapePageTopcomment | None":
+        if d is None:
+            return None
+        return cls(
+            author=d.get('author'),
+            body=d.get('body'),
+            created=d.get('created'),
+            permalink=d.get('permalink'),
+            score=d.get('score'),
         )
 
 @dataclass
@@ -1963,6 +2157,62 @@ class Summary:
             urlsFailed=d.get('urlsFailed'),
             urlsScraped=d.get('urlsScraped'),
             urlsSearched=d.get('urlsSearched'),
+        )
+
+@dataclass
+class SyllabusSearchResponse:
+    corpusNote: Optional[str] = None
+    hints: dict[str, Any] = field(default_factory=dict)
+    provider: Optional[str] = None
+    query: Optional[str] = None
+    resultCount: Optional[int] = None
+    results: list[SyllabusSearchResult] = field(default_factory=list)
+    sortBy: Optional[str] = None
+    trust: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "SyllabusSearchResponse | None":
+        if d is None:
+            return None
+        return cls(
+            corpusNote=d.get('corpusNote'),
+            hints=dict(d.get('hints') or {}),
+            provider=d.get('provider'),
+            query=d.get('query'),
+            resultCount=d.get('resultCount'),
+            results=[SyllabusSearchResult.from_dict(i) for i in (d.get('results') or [])],
+            sortBy=d.get('sortBy'),
+            trust=d.get('trust'),
+        )
+
+@dataclass
+class SyllabusSearchResult:
+    author: Optional[str] = None
+    coAssignedWith: list[str] = field(default_factory=list)
+    country: Optional[str] = None
+    field: Optional[str] = None
+    frequency: Optional[int] = None
+    institution: Optional[str] = None
+    institutionCount: Optional[int] = None
+    title: Optional[str] = None
+    url: Optional[str] = None
+    year: Optional[int] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "SyllabusSearchResult | None":
+        if d is None:
+            return None
+        return cls(
+            author=d.get('author'),
+            coAssignedWith=list(d.get('coAssignedWith') or []),
+            country=d.get('country'),
+            field=d.get('field'),
+            frequency=d.get('frequency'),
+            institution=d.get('institution'),
+            institutionCount=d.get('institutionCount'),
+            title=d.get('title'),
+            url=d.get('url'),
+            year=d.get('year'),
         )
 
 @dataclass

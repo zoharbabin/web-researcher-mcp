@@ -144,7 +144,7 @@ type ScrapeOutput struct {
     SizeCategory    string    `json:"sizeCategory"`   // small, medium, large, very_large
     Citation        *Citation `json:"citation"`       // always present
     Raw             bool      `json:"raw,omitempty"`  // true only in raw mode; omitted otherwise
-    ExtractedBy     string    `json:"extractedBy,omitempty"` // extraction tier: markdown|stealth|html|browser|exa:cached|exa:crawled; omitted when unknown
+    ExtractedBy     string    `json:"extractedBy,omitempty"` // extraction tier: markdown|stealth|jina|html|browser|exa:cached|exa:crawled; omitted when unknown
     ExtractionQuality string  `json:"extractionQuality,omitempty"` // complete when the pipeline returned a confident extraction; partial when every tier was exhausted and the best-quality candidate was returned instead. Never an error. Omitted in raw mode.
     WordCount         int     `json:"wordCount,omitempty"`         // words in the extracted content (#358); orthogonal to ExtractionQuality — a "complete" extraction can still be a thin paywall/bot-wall stub. Omitted in raw mode.
     SparsityWarning   string  `json:"sparsityWarning,omitempty"`   // present only when WordCount is below ~150 — the content may be too thin for a reliable claim check (#358). Omitted in raw mode and whenever content is not thin.
@@ -156,6 +156,13 @@ type ScrapeOutput struct {
     DomainCategory  string    `json:"domainCategory"` // subject area: academic|legal|medical|financial|technical|general
     DetectedDOI      string            `json:"detectedDoi,omitempty"`      // a scholarly DOI the page declares (#199); peer-reviewed pages only; omitted when none
     RetractionStatus *RetractionStatus `json:"retractionStatus,omitempty"` // Crossref integrity status for detectedDoi; omitted when clean/unresolved — never a guess
+    Highlights       []TranscriptHighlight `json:"highlights,omitempty"`   // top ≤5 scored YouTube transcript segments (#284); omitted for non-YouTube URLs and transcripts under 5 segments
+}
+
+type TranscriptHighlight struct {
+    Text      string  `json:"text"`                // "[M:SS] text" formatted transcript segment
+    Score     float64 `json:"score"`                // normalized score in [0,1]; highest-scored segment is 1.0
+    StartTime string  `json:"startTime,omitempty"`  // segment start time as "M:SS"
 }
 
 type RetractionStatus struct {
@@ -172,12 +179,21 @@ type Metadata struct {
 }
 
 type ForumSignals struct {
-    Platform        string `json:"platform"`                  // Forum platform: "reddit" or "bluesky"
-    Upvotes         int    `json:"upvotes"`                   // Vote count from JSON-LD interactionStatistic
-    Comments        int    `json:"comments"`                  // Comment count
-    DatePublished   string `json:"datePublished,omitempty"`   // ISO 8601 publish date when available
-    AuthorName      string `json:"authorName,omitempty"`      // Original poster name when available
-    CredibilityNote string `json:"credibilityNote,omitempty"` // Contextual note, e.g. vote-manipulation risk when Upvotes < 20
+    Platform        string         `json:"platform"`                  // Forum platform: "reddit" or "bluesky"
+    Upvotes         int            `json:"upvotes"`                   // Vote count from JSON-LD interactionStatistic
+    Comments        int            `json:"comments"`                  // Comment count
+    DatePublished   string         `json:"datePublished,omitempty"`   // ISO 8601 publish date when available
+    AuthorName      string         `json:"authorName,omitempty"`      // Original poster name when available
+    CredibilityNote string         `json:"credibilityNote,omitempty"` // Contextual note, e.g. vote-manipulation risk when Upvotes < 20
+    TopComments     []ForumComment `json:"topComments,omitempty"`     // top ≤5 comments by score, fetched best-effort (Reddit only)
+}
+
+type ForumComment struct {
+    Author    string `json:"author"`
+    Score     int    `json:"score"`
+    Body      string `json:"body"`                 // plain text, max 500 chars
+    Permalink string `json:"permalink,omitempty"`
+    Created   string `json:"created,omitempty"`
 }
 
 type StructuredData struct {
@@ -212,17 +228,19 @@ In `raw` mode the output additionally carries `"raw": true`, and `contentType` i
 
 **Tables in content (#48).** HTML `<table>` elements are rendered as GitHub-flavored markdown pipe tables inside `content` (header row + `---` separator + data rows), preserving row/column structure instead of flattening cells into disconnected fragments. Pipe characters in cells are escaped and multi-line cells are collapsed to a single row. Layout, malformed, single-column, and nested tables degrade gracefully to plain text — never an error, never a panic.
 
-**Forum engagement signals (#247).** For Reddit posts where the HTML extraction tier ran, the response carries a `forumSignals` object: `platform` (`"reddit"`), `upvotes` (vote count from JSON-LD `interactionStatistic`), `comments` (comment count), `datePublished` (ISO 8601), `authorName` (original poster), and `credibilityNote` (set when `upvotes < 20`, noting vote-manipulation risk). The field is **omitted entirely** for non-Reddit/non-Bluesky URLs, `raw` mode, and any non-HTML extraction tier (markdown, browser, document, YouTube, Twitter) — never `null`, only present-or-absent. For Twitter/X tweets (`contentType: "twitter"`), engagement signals (likes, retweets, replies, quotes, views) are embedded in the plain-text `content` string by the FxTwitter path — they are not surfaced as a separate structured field. For Bluesky posts (bsky.app), `forumSignals` carries `platform: "bluesky"`, `upvotes` (like count), `comments` (reply count), and `authorName` (displayName from the AT Protocol author record) — read natively via `app.bsky.feed.getPostThread`, not extracted from HTML (#285).
+**Forum engagement signals (#247).** For Reddit posts where the HTML extraction tier ran, the response carries a `forumSignals` object: `platform` (`"reddit"`), `upvotes` (vote count from JSON-LD `interactionStatistic`), `comments` (comment count), `datePublished` (ISO 8601), `authorName` (original poster), and `credibilityNote` (set when `upvotes < 20`, noting vote-manipulation risk). The field is **omitted entirely** for non-Reddit/non-Bluesky URLs, `raw` mode, and any non-HTML extraction tier (markdown, browser, document, YouTube, Twitter) — never `null`, only present-or-absent. For Twitter/X tweets (`contentType: "twitter"`), engagement signals (likes, retweets, replies, quotes, views) are embedded in the plain-text `content` string by the FxTwitter path — they are not surfaced as a separate structured field. For Bluesky posts (bsky.app), `forumSignals` carries `platform: "bluesky"`, `upvotes` (like count), `comments` (reply count), and `authorName` (displayName from the AT Protocol author record) — read natively via `app.bsky.feed.getPostThread`, not extracted from HTML (#285). When available, `topComments` carries up to 5 top comments (by score descending) fetched from the Reddit shreddit endpoint — each with `author`, `score`, `body` (plain text, max 500 chars; `[deleted]`/`[removed]` bodies are skipped), `permalink`, and `created`. The comment fetch is best-effort: a timeout (5 s), 429, or parse error silently omits the field without affecting the rest of the result.
 
 **Structured data (#46).** When the page embeds machine-readable metadata, the response carries a `structuredData` object alongside `content`: `jsonLd` (each `<script type="application/ld+json">` block, kept verbatim — invalid JSON is skipped, never failing the scrape), `openGraph` (`og:*`/`article:*` meta, keys keep their prefix), and `citation` (Highwire `citation_*` meta — DOI, authors, journal). The whole object is omitted when no such markup is present, and each sub-field is omitted when empty. It is produced by the HTML-extraction tiers only (absent for `raw` mode, PDFs, YouTube, and markdown-tier results), is independently size-bounded so a pathological page cannot blow the response budget, and is **untrusted external data** under the same trust boundary as `content`.
 
-**Extraction provenance (`extractedBy`).** When known, the response names the tier that produced the content: `markdown`, `stealth`, `html`, `browser`, `github:raw`/`github:contents-api`/`github:gist-api`, or — for the paid Exa fallback — `exa:cached` / `exa:crawled`. It lets a caller see whether content came from a free local tier or the metered Exa `/contents` API (Tier 5, present only when `EXA_API_KEY` is set). Omitted when unknown (e.g. document/YouTube routes).
+**Extraction provenance (`extractedBy`).** When known, the response names the tier that produced the content: `markdown`, `stealth`, `jina`, `html`, `browser`, `github:raw`/`github:contents-api`/`github:gist-api`, or — for the paid Exa fallback — `exa:cached` / `exa:crawled`. It lets a caller see whether content came from a free local tier or the metered Exa `/contents` API (Tier 5, present only when `EXA_API_KEY` is set). Omitted when unknown (e.g. document/YouTube routes).
 
 **Content-volume signal (#358).** `wordCount` is emitted for every non-raw scrape and is a cheap, deterministic proxy for how much prose was actually extracted — it is **orthogonal** to `extractionQuality`, which reflects pipeline tier exhaustion, not content volume: a `complete` extraction can still be a thin paywall/bot-wall stub (a few sentences behind a subscribe wall) if that stub was returned confidently by an early tier. When `wordCount` falls below ~150, `sparsityWarning` is added with a human-readable note that claim checks against this source may be unreliable. Both fields are omitted in raw mode. `verify_citation`, `audit_bibliography`, and `search_and_scrape` surface the same signal (see their sections below) so a caller can tell a thin stub from a genuinely well-supported claim check.
 
 **Typed source classification (#62).** Every scrape response (full and raw) carries three categorical fields alongside the numeric content: `sourceType` (the kind of source — derived from Schema.org `@type` / Highwire `citation_*` meta when present, else a domain heuristic, else `unknown`), `authorityTier` (`high`/`medium`/`low`, a banding of the internal authority score), and `domainCategory` (`academic`/`legal`/`medical`/`financial`/`technical`/`general`, from a domain heuristic). They let the model hedge in natural language by source type. They are best-effort hints derived from untrusted page data — treat them as signals, not guarantees. (In raw mode, with no structured-data extraction, `sourceType` falls back to the host heuristic.)
 
 **Scholarly DOI + integrity status (#199).** When a page classifies as `peer_reviewed` **or** sits on a known academic-journal host (the latter so detection still engages when an extraction tier strips the citation metadata, e.g. the cached-text fallback), the response surfaces `detectedDoi` — the DOI the page declares, read (in descending order of authority) from its Highwire `citation_doi` `<head>` metadata, then a DOI embedded in the request URL path itself (the publisher's canonical article identifier, e.g. `nejm.org/doi/full/10.1056/…` — present even on extraction tiers that strip the citation metadata, such as the cached-text fallback), then the first few KB of the cleaned text (the front matter, above any references list, so a references-list DOI is never mistaken for the page's own). It is **evidence, never a verdict and never an identity claim**: it says "this DOI appears on the page; here is its recorded integrity status," not "the page *is* this record" — you confirm the document's identity. When the DOI resolves to a Crossref/Retraction-Watch integrity record, `retractionStatus` is attached (the same object `verify_citation` and `academic_search` return); an `expression_of_concern`/`correction` is reported but is **not** a retraction (`retracted` stays `false`), and `retractionStatus.source` names `retraction-watch` vs `publisher`. The status is captured at scrape time and shares the one-hour scrape cache TTL — re-scrape or use `verify_citation` for a point-in-time check. Both fields are omitted on non-scholarly pages, in raw mode, and when no DOI is found or the resolver is unavailable. Use `verify_citation` to verify one citation and `audit_bibliography` to audit a whole reference list.
+
+**Transcript highlights (YouTube, #284).** When a YouTube transcript is successfully extracted (Strategy 1 or 2) and has at least 5 lines, the response carries `highlights` — up to 5 top-scored transcript segments, each with `text` (the `"[M:SS] text"` formatted line), `score` (normalized to `[0,1]` against the batch's highest-scoring segment, or `0` for every segment when none score above zero), and `startTime` (`"M:SS"`). Scoring is purely structural: a digit anywhere in a word (+2), an all-caps word like "NASA" (+1), and a question-ending line (+1) — no query or keyword weighting is applied from this tool. `highlights` is omitted for non-YouTube URLs, the description-only fallback (Strategy 3), and transcripts shorter than 5 lines. Transcripts are now fetched in WebVTT format (`fmt=vtt`) rather than the legacy `srv3` XML dialect; VTT entities (if any) pass through unmodified rather than being HTML-decoded.
 
 **Trust boundary marker.** Every scrape response (full, preview, and raw) carries `"trust": "untrusted-external-content"` in the JSON envelope — an explicit, machine-readable boundary marker. It is deliberately placed in the structured output, never inside the `content` string (where a malicious page could forge or close it), and signals that `content` is external data to be treated as data, never as instructions (OWASP LLM01, indirect prompt injection). The server cannot enforce the prompt boundary itself — the model and agent loop live in the host application — so this marker exists to make the untrusted provenance unmissable to that host.
 
@@ -245,9 +263,10 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
 
 2. CONTENT TYPE DETECTION
    ├─ YouTube URL → YouTube extractor (3-strategy fallback):
-   │     Strategy 1: Player response captions (primary + alt regex)
-   │     Strategy 2: Direct timedtext API (en, en-US, en-GB)
+   │     Strategy 1: Player response captions (primary + alt regex), fmt=vtt (WebVTT)
+   │     Strategy 2: Direct timedtext API (en, en-US, en-GB), fmt=vtt (WebVTT)
    │     Strategy 3: Video description (shortDescription JSON field)
+   │     Strategies 1-2 additionally score the transcript into up to 5 highlights (#284)
    ├─ news.ycombinator.com → native HN API (Firebase REST + Algolia; no API key required):
    │     /item/<id>  → story metadata (title, URL, score, author, date) + top 10 comments
    │     /           → top 20 stories from the HN top-stories list (parallel Firebase fetch)
@@ -272,7 +291,7 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
    ├─ .docx / application/vnd.openxmlformats* → DOCX parser
    └─ .pptx / application/vnd.ms-powerpoint → PPTX parser
 
-3. WEB PAGE EXTRACTION (4 free tiers, ordered by speed; + optional paid Exa tier last)
+3. WEB PAGE EXTRACTION (5 free tiers, ordered by speed; + optional paid Exa tier last)
    a) Tier 1: MARKDOWN NEGOTIATION (fastest, ~200ms)
       ├─ Send GET with Accept: text/markdown
       ├─ 5-second timeout
@@ -287,7 +306,15 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
       ├─ SSRF protection via safe dialer when AllowPrivateIPs=false
       └─ If below 100-char threshold → next tier
 
-   c) Tier 3: HTML EXTRACTION via goquery (standard, ~500ms)
+   c) Tier 2.5: JINA READER (cloud proxy, free/keyless, ~1-3s) — skipped when
+      JINA_READER_DISABLED is set (#270)
+      ├─ POST to r.jina.ai with the target URL; returns clean extracted markdown
+      ├─ Recovers Cloudflare/JS-heavy pages the local HTTP tiers (a, b) cannot,
+      │  without paying for the browser tier
+      ├─ Keyless free tier; optional JINA_API_KEY only raises the rate limit
+      └─ If empty content or HTTP error → next tier
+
+   d) Tier 3: HTML EXTRACTION via goquery (standard, ~500ms)
       ├─ Fetch page with standard Accept header
       ├─ Parse with goquery
       ├─ Extract: article > main > body (priority order)
@@ -295,7 +322,7 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
       ├─ Minimum content: 100 bytes, 10% meaningful text ratio
       └─ If below threshold → next tier
 
-   d) Tier 4: HEADLESS BROWSER via go-rod + stealth (slow, ~5s)
+   e) Tier 4: HEADLESS BROWSER via go-rod + stealth (slow, ~5s)
       ├─ Browser pool with lazy init + singleton pattern
       ├─ go-rod/stealth plugin (navigator spoofing, WebGL masking)
       ├─ Used for: Known SPA domains, JS-rendered content, bot challenges
@@ -303,7 +330,7 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
       ├─ Extract: rendered DOM via JavaScript evaluation
       └─ Graceful cleanup via Pipeline.Close()
 
-   e) Tier 5: EXA /contents (PAID, opt-in, last resort) — only when EXA_API_KEY is set
+   f) Tier 5: EXA /contents (PAID, opt-in, last resort) — only when EXA_API_KEY is set
       ├─ Neural extractor: POST https://api.exa.ai/contents (x-api-key auth)
       ├─ Runs ONLY after every free tier above failed to extract >100 bytes,
       │  so the common path never incurs Exa cost
@@ -602,7 +629,8 @@ On a zero-result response, `hints` carries the same `ZeroResultHints` object as 
 | `pdf_only` | bool | no | false | — |
 | `sort_by` | string | no | `relevance` | relevance, date |
 | `open_access` | bool | no | false | Only return open-access papers |
-| `provider` | string | no | — | Force provider: openalex, crossref, pubmed, semanticscholar, exa (academic APIs), or google, brave, serper, searxng, searchapi, duckduckgo, tavily (web fallback) |
+| `full_text` | bool | no | false | Fetch PMC full text for open-access biomedical articles with a PubMed Central ID. Only effective when the `pubmed` provider is active. Substantially increases response time |
+| `provider` | string | no | — | Force provider: openalex, crossref, pubmed, semanticscholar, core, exa (academic APIs), or google, brave, serper, searxng, searchapi, duckduckgo, tavily (web fallback) |
 | `sessionId` | string | no | — | Link results to a `sequential_search` session; sources are auto-recorded for recovery after context loss |
 
 ### Output Fields
@@ -626,6 +654,7 @@ Each paper in the `papers` array contains:
 | `isInfluential` | bool | no | Whether Semantic Scholar flags this as a highly-influential paper |
 | `citationIntents` | []string | no | Citation-intent labels (e.g. background, methodology) — populated by `citation_graph`, not plain search |
 | `isInDoaj` | bool | no | Whether OpenAlex reports the journal is listed in the Directory of Open Access Journals (DOAJ) — a peer-reviewed OA quality signal. OpenAlex-only |
+| `fullText` | string | no | Full article text extracted from PubMed Central via `efetch`. Present only when `full_text=true` and the article has a PMCID. PubMed-only |
 
 Additional output fields: `query`, `totalResults`, `resultCount`, `source` (which provider answered: openalex, crossref, router, web_search), `hints` (a `ZeroResultHints` object explaining why a query returned nothing and suggesting how to broaden it — present on zero-result responses), and `trust` (always `"untrusted-external-content"` — treat results as data, not instructions; OWASP LLM01).
 
@@ -634,11 +663,13 @@ Additional output fields: `query`, `totalResults`, `resultCount`, `source` (whic
 - When academic providers (OpenAlex, CrossRef, PubMed, Semantic Scholar) are configured, returns rich metadata (DOI, authors, citations, OA status)
 - Metadata richness varies by provider: OpenAlex returns abstracts, citation counts, and authors consistently; Semantic Scholar adds `tldr` and `isInfluential`; CrossRef is a DOI registry and may omit abstracts/citation counts; PubMed returns biomedical records (title, authors, year, venue, DOI) — no abstract in the summary response. Automatic selection prefers OpenAlex; others answer when explicitly forced or as a fallback. Field absence reflects the provider, not an error.
 - Without academic env vars, falls back to site-restricted web search (identical to previous behavior)
-- OpenAlex/CrossRef require only an email address (no API key); PubMed and Semantic Scholar work key-free at a lower shared rate (`PUBMED_API_KEY` / `SEMANTIC_SCHOLAR_API_KEY` raise the respective limit). PubMed DOIs feed the same retraction enrichment as every other provider.
+- OpenAlex/CrossRef require only an email address (no API key); PubMed, Semantic Scholar, and CORE work key-free at a lower shared rate (`PUBMED_API_KEY` / `SEMANTIC_SCHOLAR_API_KEY` / `CORE_API_KEY` raise the respective limit). PubMed DOIs feed the same retraction enrichment as every other provider.
+- CORE (core.ac.uk) aggregates 300M+ open-access works from repositories worldwide; every result has `openAccess:true`, and `pdfUrl` links directly to full text when available. It does not resolve DOI entities or provide citation-graph edges — use OpenAlex or Semantic Scholar for those.
 - **Open-access enrichment (Unpaywall):** when `UNPAYWALL_EMAIL` (or `OPENALEX_EMAIL`) is set, DOI-bearing results that lack a PDF link are enriched with the best open-access PDF Unpaywall knows about. Best-effort: never overwrites a provider-supplied `pdfUrl`, never fails the search, and runs *before* the `pdf_only` filter so resolved PDFs are counted. No-op when unconfigured.
 - `source` filter: when set (e.g., "arxiv"), OpenAlex filters by source ID; web fallback restricts to that source's domain
 - `sort_by=date`: OpenAlex sorts by `publication_date:desc`; CrossRef uses `published:desc`
 - `pdf_only`: post-filters results to only those with `PDFUrl` populated (may reduce result count)
+- `full_text`: when the active provider is `pubmed`, extracts the PMCID already present in each result's `esummary` metadata and fetches PMC's `efetch` JATS XML for that article, populating `fullText` with the extracted abstract + body paragraphs. Best-effort per-article (an article without a PMCID, or an efetch failure, is returned without `fullText` — the search never fails because full text was unavailable). No effect with other providers.
 
 ### Academic Site Pool (web search fallback)
 arxiv.org, pubmed.ncbi.nlm.nih.gov, scholar.google.com, ieeexplore.ieee.org, dl.acm.org, nature.com, sciencedirect.com, link.springer.com, researchgate.net, plos.org, frontiersin.org, mdpi.com, wiley.com, jstor.org, semanticscholar.org, biorxiv.org, medrxiv.org
@@ -1731,7 +1762,153 @@ Each `lists[]` item: `name`, `fullName` (owner/repo of the list's source reposit
 
 ---
 
-## Tool 31: `company_recon`
+## Tool 31: `monarch_search`
+
+Query the **Monarch Initiative** biomedical knowledge graph — rank diseases and genes by phenotype similarity, look up disease/gene/phenotype entities, and traverse gene-disease-phenotype associations. One tool, five operations selected by the required `operation` field. The Monarch API is keyless, so this tool is always registered. For published literature on a condition, combine with `academic_search`; for active interventional trials, use `clinical_search`. Discovery only — not medical advice, and the `annotate` operation must never be sent identifiable patient data (it forwards free text to a public third-party API with no BAA).
+
+### Input Schema
+
+| Field | Type | Required | Default | Constraints |
+|-------|------|----------|---------|-------------|
+| `operation` | string | yes | — | One of: `semsim`, `entity`, `associations`, `compare`, `annotate` |
+| `phenotypes` | []string | yes* | — | `semsim`/`compare`: HPO term IDs, e.g. `["HP:0001166","HP:0001083"]`. Max 20 |
+| `group` | string | no | `Human Diseases` | `semsim`: one of `Human Genes`, `Mouse Genes`, `Rat Genes`, `Zebrafish Genes`, `C. Elegans Genes`, `Human Diseases` |
+| `compareTo` | []string | yes* | — | `compare`: second list of HPO term IDs to compare `phenotypes` against. Max 20 |
+| `query` | string | yes* | — | `entity`: free-text search term, e.g. `"Marfan syndrome"` |
+| `entityId` | string | yes* | — | `entity`/`associations`: an entity CURIE, e.g. `MONDO:0007947`, `HGNC:3603`, `HP:0001166`. Must match `^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$` |
+| `assocSubject` | string | yes* | — | `associations`: subject-side entity CURIE to filter edges by |
+| `assocObject` | string | yes* | — | `associations`: object-side entity CURIE to filter edges by |
+| `category` | string | no | — | `associations`: Biolink association category enum, e.g. `biolink:CausalGeneToDiseaseAssociation` |
+| `text` | string | yes* | — | `annotate`: short clinical text to ground to HPO terms. Max 2000 characters. Never patient-identifiable |
+| `numResults` | int | no | 20 | 1–200 (the API caps association pages at 200) |
+| `provider` | string | no | — | Force a Monarch provider: `monarch` |
+| `sessionId` | string | no | — | Record results as sources on a `sequential_search` session |
+
+\*Required per `operation`: `semsim` needs `phenotypes`; `entity` needs `query` or `entityId`; `associations` needs one of `entityId`/`assocSubject`/`assocObject`; `compare` needs both `phenotypes` and `compareTo`; `annotate` needs `text`.
+
+### Output Fields
+
+Each `results[]` item carries only the fields relevant to its operation: `source` (always `monarch`), plus — `semsim`: `id`, `label`, `category`, `score`, `ancestorId`, `ancestorLabel`; `entity`: `id`, `label`, `category`, `description`, `crossReferences` (array); `associations`: `subjectId`, `subjectLabel`, `objectId`, `objectLabel`, `category`, `primaryKnowledgeSource`; `compare`: `score`, `ancestorId`, `ancestorLabel`; `annotate`: `id`, `label`, `text` (the matched span, sanitized). Plus `operation` (echo), `resultCount`, `provider`, `hints` (when empty), and `trust` (`untrusted-external-content`).
+
+### Behavior
+- **Operation discriminator.** `operation` selects one of five distinct API calls; each has its own required-field validation, enforced before any HTTP call is made.
+- **CURIE injection guard.** `entityId` is validated against a strict CURIE pattern pre-flight for both `entity` and `associations`; a path-traversal or otherwise malformed ID (e.g. `../etc/passwd`) is rejected with a validation error, never sent upstream. Association filter values (`assocSubject`/`assocObject`/`category`/`entityId`) are additionally checked for `&`/`?`/`#`/`/` characters as defense in depth beyond URL encoding.
+- **Caps.** `phenotypes`/`compareTo` are capped at 20 HPO terms per query; `text` is capped at 2000 characters — both enforced before the call.
+- **Sanitization.** `annotate`'s matched-span `text` is passed through `content.Processor.SanitizeText()` before being returned, since it is derived from third-party HTML.
+- **Provider honoring**: an explicit `provider` is used exclusively; otherwise the first configured provider answers. An error/empty returns a structured zero-result with hints (no silent fallback).
+- A `404`/no-match from the API is an empty result, never a panic; a `429` surfaces as a rate-limited error.
+- **Auth**: keyless — the Monarch Initiative API needs no API key.
+- **No identifiable patient data.** The `annotate` operation forwards its `text` argument to a public third-party API with no Business Associate Agreement — callers must never submit real patient data.
+
+### Annotations
+- ReadOnly: true · Idempotent: true · OpenWorld: true (queries the live Monarch Initiative API)
+
+### Cache
+- TTL: 6 hours (only for non-empty results)
+
+---
+
+## Tool 32: `paper_fulltext`
+
+### Purpose
+
+Retrieve the full text of an academic paper from a single identifier — a DOI, a Semantic Scholar paper ID, or a direct URL — collapsing the two-call `academic_search` → `scrape_page` workflow into one. For a DOI or paper ID it fetches Semantic Scholar metadata (title, authors, abstract, citation count, TLDR) and scrapes the open-access PDF when one is known, falling back to the DOI resolver landing page when no PDF is indexed or no Semantic Scholar provider is configured. A direct URL is scraped as-is, with no metadata enrichment. Use `academic_search` first to discover papers by topic, or `citation_graph` to explore a paper's citation neighborhood — `paper_fulltext` is the follow-up call once you already have an identifier.
+
+### Input Schema
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `identifier` | string | yes | — | A DOI (e.g. `10.1038/nature12373`), a Semantic Scholar paper ID, or a direct URL to the paper or its PDF. The type is auto-detected. |
+| `max_length` | int | no | 50000 | Maximum characters of content to return. Clamped to 1000–200000. |
+
+### Output Schema
+
+`identifier` (echo), `resolvedUrl` (the URL actually scraped — the open-access PDF, the Semantic Scholar landing page, the doi.org redirect, or the input URL verbatim), `content`, `title`, `trust` (`untrusted-external-content`), `truncated`, `scrapeTier` (which extraction tier produced the content, when known), `source` (`semanticscholar` when a DOI/paper-ID lookup succeeded, `direct-url` for a URL input or when no metadata could be resolved), `citation` (the same `url`/`accessedDate`/`metadata`/`formatted` shape as `scrape_page`'s citation object). When `source:"semanticscholar"`: `authors`, `year`, `doi`, `pdfUrl`, `openAccess`, `citationCount`, `abstract`, `journal`, `tldr` (AI-generated one-sentence summary — attribute as AI-generated).
+
+### Behavior
+
+- **Identifier auto-detection.** A value that parses as a URL is scraped directly with no metadata lookup. Otherwise it's checked for a DOI shape (`10.xxxx/...`); a DOI or a bare Semantic Scholar paper ID is resolved via a Semantic Scholar `FetchPaper` lookup when a `semanticscholar` (or any other `PaperFetcher`-capable) academic provider is configured.
+- **URL resolution order** for a resolved paper: the open-access PDF URL Semantic Scholar reports, then the Semantic Scholar/DOI/arXiv landing page URL, then (DOI input only) the `https://doi.org/{doi}` redirect.
+- **Paywalled papers** return whatever the landing page or abstract makes available — full text is only retrievable for open-access papers. This is expected, not an error.
+- **Graceful degradation.** With no `PaperFetcher`-capable provider configured, a DOI identifier still resolves via the doi.org redirect (metadata fields are simply omitted, `source:"direct-url"`); a bare paper ID with no provider configured returns a validation error, since there is no URL to fall back to. An upstream `FetchPaper` failure (rate limit, network, 5xx) is reported as an upstream/rate-limited error rather than folded into the "not configured" case — except for a DOI identifier, which still degrades to the doi.org redirect (the failure is recorded for audit/metrics visibility but does not block the response).
+- **No provider-construction wiring needed.** `PaperFetcher` is a capability interface (like `DOIResolver`/`CitationSearcher`) satisfied via type assertion on the existing Semantic Scholar `AcademicProvider` — no separate provider or env var is introduced.
+- **Identifier size cap.** `identifier` is bounded at 2048 bytes (mirrors `archive_source`'s URL cap) — an oversized value is a validation error, never sent upstream.
+
+### Annotations
+- ReadOnly: true · Idempotent: true · OpenWorld: true
+
+### Cache
+- TTL: 1 hour. Key: SHA-256 of identifier + max_length.
+
+---
+
+## Tool 33: `syllabus_search`
+
+Query the Open Syllabus Project's corpus of 32.9M university syllabi for structured author/title assignment data — which institutions assign a given author or text, assignment frequency, and co-assignment patterns. Requires a research agreement with Open Syllabus (research@opensyllabus.org); registers only when `OPEN_SYLLABUS_API_KEY` and `OPEN_SYLLABUS_API_URL` are both set.
+
+### Input Schema
+
+| Field | Type | Required | Default | Constraints |
+|-------|------|----------|---------|-------------|
+| `query` | string | yes | — | Author name, title, or keyword to find in the syllabus corpus |
+| `institution` | string | no | — | Filter by institution name or partial name |
+| `country` | string | no | — | ISO 3166-1 alpha-2 country code (e.g. `US`, `GB`, `DE`) |
+| `field` | string | no | — | Academic field or discipline (e.g. economics, history, biology) |
+| `year_from` | int | no | — | Earliest syllabus year |
+| `year_to` | int | no | — | Latest syllabus year |
+| `sort_by` | string | no | `frequency` | `frequency`, `recency`, or `institution_count` |
+| `max_results` | int | no | 10 | 1–50 |
+
+### Output Fields
+
+Each `results[]` item: `title`, `author`, `institution`, `country`, `field`, `year`, `frequency` (assignment count across the corpus), `institutionCount` (distinct institutions assigning this text), `coAssignedWith` (array, optional), `url` (optional). Plus `query`, `sortBy`, `resultCount`, `provider` (always `opensyllabus`), `hints` (when empty), `corpusNote` (coverage-bias caveat), and `trust` (`untrusted-external-content`).
+
+### Behavior
+- The corpus is ~65% US/Anglophone — absence of a result means "not indexed in this corpus," not "never assigned." The `corpusNote` field restates this on every response.
+- Use lens `curriculum` with `web_search` for broader curriculum-related discovery; use this tool for structured, sortable queries against the corpus itself.
+- Results can shift between identical calls as the corpus is updated — not idempotent.
+
+### Annotations
+- ReadOnly: true · Idempotent: false · OpenWorld: true (queries the live Open Syllabus API)
+
+### Cache
+- TTL: 6 hours (only for non-empty results)
+
+---
+
+## Tool 34: `gag_order_search`
+
+Query PEN America's live educational gag order tracker — state legislation restricting what public school and university instructors may teach, sourced from PEN America's public Airtable base. Registers only when `PEN_AMERICA_AIRTABLE_TOKEN` is set.
+
+### Input Schema
+
+| Field | Type | Required | Default | Constraints |
+|-------|------|----------|---------|-------------|
+| `state` | string | no | — | US state abbreviation (e.g. `FL`, `TX`); omit for all states |
+| `status` | string | no | — | Bill status: `enacted`, `pending`, `failed`, `vetoed` |
+| `targets` | string | no | — | Scope: `higher_education`, `k12`, `both` |
+| `year_from` | int | no | — | Earliest bill introduction year |
+| `year_to` | int | no | — | Latest bill introduction year |
+| `max_results` | int | no | 25 | 1–200 |
+
+### Output Fields
+
+Each `results[]` item: `state`, `billName`, `status`, `targets`, `year`, `summary`, `url` (all optional, present when found). Plus `resultCount`, `provider` (always `pen_america`), `hints` (when empty), and `trust` (`untrusted-external-content`).
+
+### Behavior
+- The target Airtable table is resolved at runtime via Airtable's Metadata API (matched by name against "bill"/"gag"/"legislation"/"tracker", falling back to the base's first table) rather than a hardcoded table ID, since PEN America may restructure the base without notice.
+- Record fields are matched fuzzily against a list of candidate names (e.g. `state`/`jurisdiction`) for the same reason — treat an unmapped field as absent, not as evidence a bill lacks that attribute.
+- The tracker updates frequently, so results cache for a short TTL.
+
+### Annotations
+- ReadOnly: true · Idempotent: true · OpenWorld: true (queries the live PEN America Airtable base)
+
+### Cache
+- TTL: 30 minutes (only for non-empty results)
+
+---
+
+## Tool 35: `company_recon`
 
 OSINT company reconnaissance with typed structured output: Certificate Transparency log SANs (crt.sh), a Wayback Machine CDX historical URL inventory (with inferred `login`/`api`/`admin`/`asset`/`doc` categories), a derived subdomain list, and a lightweight web-search company summary. This is the programmatic complement to the `company-recon` MCP Prompt: use that prompt for an AI-orchestrated deep-dive across many tools; use this tool when you need machine-readable OSINT data directly, without an agent parsing crt.sh's JSON or Wayback's array-of-arrays itself. Both crt.sh and the Wayback CDX API are keyless, so this tool is always registered.
 
@@ -1924,6 +2101,7 @@ Every tool declares annotations for client consumption (`readOnlyAnnotations(ide
 | workspace_contribute | **false (write)** | false | false |
 | workspace_read | true | true | false |
 | brand_research | true | true | true |
+| paper_fulltext | true | true | true |
 
 Notes: `sequential_search` is non-idempotent because it writes session state to disk on every call. `memory_save`, `workspace_contribute`, and `archive_source` are the three **write** tools (`ReadOnly:false`). `memory_save` and `workspace_contribute` are non-idempotent (each call appends a new record); `archive_source` is idempotent (archiving the same URL twice is safe). `OpenWorld:false` marks tools that touch only local/server state (sessions, memory, analytics, workspaces, exports) rather than the open web. `Destructive` is uniformly false — no tool is annotated destructive.
 
@@ -2019,3 +2197,32 @@ No new Go dependencies — all data comes from free, publicly accessible endpoin
 - **Censys and BuiltWith depth** is limited without API keys — infrastructure data comes from web-searchable pages only.
 - **GitHub Code Search** gives higher recall than `web_search` on `github.com`; use it if separately available.
 - **`filing_search` is only available when `EDGAR_CONTACT_EMAIL` is set** — without it, the tool is not registered and Phase 8 SEC filing lookup should be skipped.
+
+### `curriculum-research`
+
+Research a subject's academic curriculum footprint, institutional free-speech climate, and country-level academic-freedom context. Orchestrates `syllabus_search`, `gag_order_search`, and `web_search` (lens: `curriculum`) across five steps to produce a cited overview.
+
+#### Arguments
+
+| Argument | Required | Default | Description |
+|---|---|---|---|
+| `subject` | yes | — | Author, text, discipline, or topic to research (e.g. `Marx`, `critical race theory`, `evolutionary biology`) |
+| `scope` | no | (no restriction) | Geographic or institutional scope, e.g. a country, US state, or institution name — narrows steps 1–4 |
+| `time_range` | no | (no restriction) | Year or year range to filter legislation/incident coverage, e.g. `2023-2026` |
+
+#### Step map
+
+| Step | Tools | Goal |
+|---|---|---|
+| 1 — Syllabus Coverage | `syllabus_search` | Assignment frequency, institution spread, and trend over time |
+| 2 — US Institutional Climate | `web_search` (curriculum lens) | Policy statements and free-speech rankings from FIRE, AAUP, Heterodox Academy, PEN America |
+| 3 — Country-Level Academic Freedom Context | `web_search` (curriculum lens) | Academic-freedom index trend for the relevant country |
+| 4 — Policy / Legislation | `gag_order_search`, `web_search` (curriculum lens) | Enacted/pending/failed/vetoed legislation bearing on the subject |
+| 5 — Watchdog / Incident Coverage | `web_search` (curriculum lens) | Incident reports across the political spectrum, source orientation noted |
+
+#### Known limitations
+
+- **`syllabus_search` requires a research agreement with Open Syllabus** — without `OPEN_SYLLABUS_API_KEY`/`OPEN_SYLLABUS_API_URL` set, the tool is not registered and Step 1 should be skipped.
+- **`gag_order_search` requires a PEN America Airtable token** — without `PEN_AMERICA_AIRTABLE_TOKEN` set, the tool is not registered and Step 4's structured lookup should be skipped (the `web_search` half of Step 4 still applies).
+- **Open Syllabus corpus skew**: ~65% US/Anglophone — a sparse or absent Step 1 result means "not indexed," not "never assigned."
+- **Watchdog source orientation**: Step 5 sources span the political spectrum (advocacy groups, civil-liberties monitors) — cite each source's known orientation rather than treating any as neutral.

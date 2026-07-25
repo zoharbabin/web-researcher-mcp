@@ -139,6 +139,184 @@ func TestPubMedSearchError(t *testing.T) {
 	}
 }
 
+func TestPubMedPMCID(t *testing.T) {
+	tests := []struct {
+		name string
+		ids  []pubmedArticleID
+		want string
+	}{
+		{"present", []pubmedArticleID{{IDType: "pmc", Value: "PMC3539452"}}, "PMC3539452"},
+		{"mixed types", []pubmedArticleID{{IDType: "pubmed", Value: "42266835"}, {IDType: "doi", Value: "10.1/x"}, {IDType: "pmc", Value: "PMC123"}}, "PMC123"},
+		{"absent", []pubmedArticleID{{IDType: "pubmed", Value: "42266835"}}, ""},
+		{"nil", nil, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := pubmedPMCID(tt.ids); got != tt.want {
+				t.Errorf("pubmedPMCID(%v) = %q, want %q", tt.ids, got, tt.want)
+			}
+		})
+	}
+}
+
+const jatsFixture = `<?xml version="1.0"?>
+<pmc-articleset><article>
+<front><article-meta><abstract><p>This is the abstract.</p></abstract></article-meta></front>
+<body><sec><p>This is body paragraph one.</p></sec><sec><p>This is body paragraph two.</p></sec></body>
+</article></pmc-articleset>`
+
+func TestPubMedFetchFullTextSuccess(t *testing.T) {
+	p := newPubMedTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "/efetch.fcgi") {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		if r.URL.Query().Get("id") != "PMC3539452" {
+			t.Errorf("id = %q, want PMC3539452", r.URL.Query().Get("id"))
+		}
+		if r.URL.Query().Get("db") != "pmc" {
+			t.Errorf("db = %q, want pmc", r.URL.Query().Get("db"))
+		}
+		w.Write([]byte(jatsFixture))
+	})
+	text, err := p.FetchFullText(context.Background(), "PMC3539452")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(text, "This is the abstract.") {
+		t.Errorf("text missing abstract: %q", text)
+	}
+	if !strings.Contains(text, "This is body paragraph one.") || !strings.Contains(text, "This is body paragraph two.") {
+		t.Errorf("text missing body paragraphs: %q", text)
+	}
+}
+
+const jatsFixtureLeadInAndNested = `<?xml version="1.0"?>
+<pmc-articleset><article>
+<front><article-meta><abstract><p>This is the abstract.</p></abstract></article-meta></front>
+<body><p>Lead-in paragraph directly under body.</p><sec><p>Top-level section paragraph.</p><sec><p>Nested subsection paragraph.</p></sec></sec></body>
+</article></pmc-articleset>`
+
+// TestPubMedFetchFullTextLeadInAndNestedSections is a regression test: real
+// PMC JATS XML commonly has a lead-in <p> directly under <body> before any
+// <sec>, and <sec> can nest arbitrarily deep. Both must be captured, not just
+// paragraphs one level under a single <sec>.
+func TestPubMedFetchFullTextLeadInAndNestedSections(t *testing.T) {
+	p := newPubMedTestProvider(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(jatsFixtureLeadInAndNested))
+	})
+	text, err := p.FetchFullText(context.Background(), "PMC1111111")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(text, "Lead-in paragraph directly under body.") {
+		t.Errorf("text missing lead-in paragraph: %q", text)
+	}
+	if !strings.Contains(text, "Top-level section paragraph.") {
+		t.Errorf("text missing top-level section paragraph: %q", text)
+	}
+	if !strings.Contains(text, "Nested subsection paragraph.") {
+		t.Errorf("text missing nested subsection paragraph: %q", text)
+	}
+}
+
+func TestPubMedFetchFullTextEmpty(t *testing.T) {
+	p := newPubMedTestProvider(t, func(_ http.ResponseWriter, _ *http.Request) {
+		t.Error("empty PMCID must not make an HTTP call")
+	})
+	text, err := p.FetchFullText(context.Background(), "")
+	if err != nil || text != "" {
+		t.Errorf("empty PMCID should be a no-op, got text=%q err=%v", text, err)
+	}
+}
+
+func TestPubMedFetchFullTextHTTPError(t *testing.T) {
+	p := newPubMedTestProvider(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+	text, err := p.FetchFullText(context.Background(), "PMC0000000")
+	if err != nil {
+		t.Errorf("HTTP error should be a soft failure (nil err), got %v", err)
+	}
+	if text != "" {
+		t.Errorf("text = %q, want empty on HTTP error", text)
+	}
+}
+
+func TestPubMedFetchFullTextBadXML(t *testing.T) {
+	p := newPubMedTestProvider(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`<<<not xml>>>`))
+	})
+	text, err := p.FetchFullText(context.Background(), "PMC1234567")
+	if err != nil {
+		t.Errorf("malformed XML should be a soft failure (nil err), got %v", err)
+	}
+	if text != "" {
+		t.Errorf("text = %q, want empty on malformed XML", text)
+	}
+}
+
+func pubmedFullTextMux(t *testing.T, efetchCalled *bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/esearch.fcgi"):
+			w.Write([]byte(`{"esearchresult":{"count":"1","idlist":["42266835"]}}`))
+		case strings.Contains(r.URL.Path, "/esummary.fcgi"):
+			w.Write([]byte(`{"result":{
+				"uids":["42266835"],
+				"42266835":{
+					"uid":"42266835",
+					"title":"CRISPR base editing in practice.",
+					"authors":[{"name":"Smith J","authtype":"Author"}],
+					"sortpubdate":"2026/06/01 00:00",
+					"source":"Curr Opin Biomed Eng",
+					"articleids":[
+						{"idtype":"pubmed","value":"42266835"},
+						{"idtype":"pmc","value":"PMC3539452"}
+					]
+				}
+			}}`))
+		case strings.Contains(r.URL.Path, "/efetch.fcgi"):
+			*efetchCalled = true
+			w.Write([]byte(jatsFixture))
+		default:
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+	}
+}
+
+func TestPubMedSearchFullTextSkippedWhenFalse(t *testing.T) {
+	var efetchCalled bool
+	p := newPubMedTestProvider(t, pubmedFullTextMux(t, &efetchCalled))
+	res, err := p.Scholarly(context.Background(), AcademicSearchParams{Query: "CRISPR", NumResults: 5, FullText: false})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if efetchCalled {
+		t.Error("efetch should not be called when FullText is false")
+	}
+	if len(res) != 1 || res[0].FullText != "" {
+		t.Errorf("FullText should be empty when not requested, got %q", res[0].FullText)
+	}
+}
+
+func TestPubMedSearchFullTextCalledWhenTrue(t *testing.T) {
+	var efetchCalled bool
+	p := newPubMedTestProvider(t, pubmedFullTextMux(t, &efetchCalled))
+	res, err := p.Scholarly(context.Background(), AcademicSearchParams{Query: "CRISPR", NumResults: 5, FullText: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !efetchCalled {
+		t.Error("efetch should be called when FullText is true and a PMCID is present")
+	}
+	if len(res) != 1 || res[0].FullText == "" {
+		t.Fatalf("FullText should be populated, got %q", res[0].FullText)
+	}
+	if !strings.Contains(res[0].FullText, "This is the abstract.") {
+		t.Errorf("FullText missing abstract: %q", res[0].FullText)
+	}
+}
+
 func TestPubMedAuthParams(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("api_key") != "k123" {

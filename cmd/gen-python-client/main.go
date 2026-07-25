@@ -87,10 +87,11 @@ func buildDeps() tools.Dependencies {
 	trial := &mockTrialProvider{}
 	awesome := &mockAwesomeListProvider{}
 	local := &mockLocalProvider{}
+	monarch := &mockMonarchProvider{}
 
 	mgr, _ := session.NewManager(session.Config{MaxSessions: 100})
 
-	return tools.Dependencies{
+	return tools.Dependencies{ // #nosec G101 -- fixed schema-generation placeholders, not real credentials
 		Cache:                cache.NewNoop(),
 		Search:               &mockProvider{},
 		SearchProviders:      map[string]search.Provider{"mock": &mockProvider{}},
@@ -102,6 +103,7 @@ func buildDeps() tools.Dependencies {
 		TrialProviders:       map[string]search.TrialProvider{trial.Name(): trial},
 		AwesomeListProviders: map[string]search.AwesomeListProvider{awesome.Name(): awesome},
 		LocalProviders:       map[string]search.LocalProvider{local.Name(): local},
+		MonarchProviders:     map[string]search.MonarchProvider{monarch.Name(): monarch},
 		AnswerProviders:      map[string]search.AnswerProvider{synth.Name(): synth},
 		StructuredProviders:  map[string]search.StructuredProvider{synth.Name(): synth},
 		Scraper:              scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2}),
@@ -114,6 +116,11 @@ func buildDeps() tools.Dependencies {
 		UserAnalytics:        useranalytics.NewStoreRecorder(persist.NewMemoryStore()),
 		Memory:               memory.NewStore(persist.NewMemoryStore(), 0),
 		Workspaces:           workspace.NewStore(persist.NewMemoryStore(), 0),
+		// Bare-field-gated tools: a non-empty value is all that's needed to
+		// register them so their schemas appear in the generated client.
+		OpenSyllabusAPIKey:      "gen-schema-key",
+		OpenSyllabusAPIURL:      "https://gen-schema.invalid",
+		PENAmericaAirtableToken: "gen-schema-token",
 	}
 }
 
@@ -227,4 +234,14 @@ func (m *mockLocalProvider) Metadata() search.ProviderMeta {
 }
 func (m *mockLocalProvider) Local(_ context.Context, _ search.LocalSearchParams) ([]search.LocalResult, error) {
 	return []search.LocalResult{{ID: "x", Name: "Mock Place", Source: "brave"}}, nil
+}
+
+type mockMonarchProvider struct{}
+
+func (m *mockMonarchProvider) Name() string { return "monarch" }
+func (m *mockMonarchProvider) Metadata() search.ProviderMeta {
+	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "free"}
+}
+func (m *mockMonarchProvider) Search(_ context.Context, _ search.MonarchSearchParams) ([]search.MonarchResult, error) {
+	return []search.MonarchResult{{ID: "MONDO:0007947", Label: "Marfan syndrome", Source: "monarch"}}, nil
 }

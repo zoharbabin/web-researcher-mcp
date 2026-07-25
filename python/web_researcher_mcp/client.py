@@ -46,6 +46,7 @@ from web_researcher_mcp.models import (
     EconSearchResponse,
     FilingSearchResponse,
     FormatBibliographyResponse,
+    GagOrderSearchResponse,
     GetMyAnalyticsResponse,
     GetResearchSessionResponse,
     ImageSearchResponse,
@@ -54,13 +55,16 @@ from web_researcher_mcp.models import (
     MCPError,
     MemoryRecallResponse,
     MemorySaveResponse,
+    MonarchSearchResponse,
     NewsSearchResponse,
+    PaperFulltextResponse,
     PatentSearchResponse,
     ResearchExportResponse,
     ScrapePageResponse,
     SearchAndScrapeResponse,
     SequentialSearchResponse,
     StructuredSearchResponse,
+    SyllabusSearchResponse,
     VerifyCitationResponse,
     VerifyRecommendationResponse,
     WebSearchResponse,
@@ -309,6 +313,7 @@ class WebResearcherClient:
     async def academic_search(
         self,
         query: str,
+        full_text: bool = False,
         num_results: int = 5,
         open_access: bool = False,
         pdf_only: bool = False,
@@ -324,6 +329,7 @@ class WebResearcherClient:
             "academic_search",
             {
                 "query": query,
+                "full_text": full_text,
                 "num_results": num_results,
                 "open_access": open_access,
                 "pdf_only": pdf_only,
@@ -564,6 +570,28 @@ class WebResearcherClient:
             },
         )
         return FormatBibliographyResponse.from_dict(d)
+    async def gag_order_search(
+        self,
+        max_results: int = None,
+        state: str = None,
+        status: str = None,
+        targets: str = None,
+        year_from: int = None,
+        year_to: int = None,
+    ) -> GagOrderSearchResponse:
+        """Query PEN America's live educational gag order tracker — state legislation restricting what public school and university instructors may teach, sourced from PEN America's public Airtable base"""
+        d = await self._call_tool(
+            "gag_order_search",
+            {
+                "max_results": max_results,
+                "state": state,
+                "status": status,
+                "targets": targets,
+                "year_from": year_from,
+                "year_to": year_to,
+            },
+        )
+        return GagOrderSearchResponse.from_dict(d)
     async def get_my_analytics(
         self,) -> GetMyAnalyticsResponse:
         """Return YOUR OWN usage analytics (which tools you used such as web_search or sequential_search, counts, first/last seen) for this tenant"""
@@ -706,6 +734,42 @@ class WebResearcherClient:
             },
         )
         return MemorySaveResponse.from_dict(d)
+    async def monarch_search(
+        self,
+        operation: str,
+        assocObject: str = None,
+        assocSubject: str = None,
+        category: str = None,
+        compareTo: Optional[list] = None,
+        entityId: str = None,
+        group: str = None,
+        numResults: int = None,
+        phenotypes: Optional[list] = None,
+        provider: str = None,
+        query: str = None,
+        sessionId: str = None,
+        text: str = None,
+    ) -> MonarchSearchResponse:
+        """Query the Monarch Initiative biomedical knowledge graph: rank diseases and genes by phenotype similarity (semsim), look up disease/gene/phenotype entities, and traverse gene-disease-phenotype associations"""
+        d = await self._call_tool(
+            "monarch_search",
+            {
+                "operation": operation,
+                "assocObject": assocObject,
+                "assocSubject": assocSubject,
+                "category": category,
+                "compareTo": compareTo,
+                "entityId": entityId,
+                "group": group,
+                "numResults": numResults,
+                "phenotypes": phenotypes,
+                "provider": provider,
+                "query": query,
+                "sessionId": sessionId,
+                "text": text,
+            },
+        )
+        return MonarchSearchResponse.from_dict(d)
     async def news_search(
         self,
         query: str,
@@ -736,6 +800,20 @@ class WebResearcherClient:
             },
         )
         return NewsSearchResponse.from_dict(d)
+    async def paper_fulltext(
+        self,
+        identifier: str,
+        max_length: int = None,
+    ) -> PaperFulltextResponse:
+        """Retrieve the full text of an academic paper from its DOI, Semantic Scholar paper ID, or a direct URL — one call instead of chaining academic_search then scrape_page"""
+        d = await self._call_tool(
+            "paper_fulltext",
+            {
+                "identifier": identifier,
+                "max_length": max_length,
+            },
+        )
+        return PaperFulltextResponse.from_dict(d)
     async def patent_search(
         self,
         assignee: str = None,
@@ -896,6 +974,32 @@ class WebResearcherClient:
             },
         )
         return StructuredSearchResponse.from_dict(d)
+    async def syllabus_search(
+        self,
+        query: str,
+        country: str = None,
+        field: str = None,
+        institution: str = None,
+        max_results: int = None,
+        sort_by: str = None,
+        year_from: int = None,
+        year_to: int = None,
+    ) -> SyllabusSearchResponse:
+        """Query the Open Syllabus Project's corpus of 32"""
+        d = await self._call_tool(
+            "syllabus_search",
+            {
+                "query": query,
+                "country": country,
+                "field": field,
+                "institution": institution,
+                "max_results": max_results,
+                "sort_by": sort_by,
+                "year_from": year_from,
+                "year_to": year_to,
+            },
+        )
+        return SyllabusSearchResponse.from_dict(d)
     async def verify_citation(
         self,
         citation: str,
@@ -1176,6 +1280,7 @@ class SyncWebResearcherClient:
     def academic_search(
         self,
         query: str,
+        full_text: bool = False,
         num_results: int = 5,
         open_access: bool = False,
         pdf_only: bool = False,
@@ -1189,6 +1294,7 @@ class SyncWebResearcherClient:
         return self._run(
             self._async_client.academic_search(
             query=query,
+            full_text=full_text,
             num_results=num_results,
             open_access=open_access,
             pdf_only=pdf_only,
@@ -1395,6 +1501,25 @@ class SyncWebResearcherClient:
             style=style,
             )
         )
+    def gag_order_search(
+        self,
+        max_results: int = None,
+        state: str = None,
+        status: str = None,
+        targets: str = None,
+        year_from: int = None,
+        year_to: int = None,
+    ) -> GagOrderSearchResponse:
+        return self._run(
+            self._async_client.gag_order_search(
+            max_results=max_results,
+            state=state,
+            status=status,
+            targets=targets,
+            year_from=year_from,
+            year_to=year_to,
+            )
+        )
     def get_my_analytics(
         self,) -> GetMyAnalyticsResponse:
         return self._run(
@@ -1516,6 +1641,39 @@ class SyncWebResearcherClient:
             url=url,
             )
         )
+    def monarch_search(
+        self,
+        operation: str,
+        assocObject: str = None,
+        assocSubject: str = None,
+        category: str = None,
+        compareTo: Optional[list] = None,
+        entityId: str = None,
+        group: str = None,
+        numResults: int = None,
+        phenotypes: Optional[list] = None,
+        provider: str = None,
+        query: str = None,
+        sessionId: str = None,
+        text: str = None,
+    ) -> MonarchSearchResponse:
+        return self._run(
+            self._async_client.monarch_search(
+            operation=operation,
+            assocObject=assocObject,
+            assocSubject=assocSubject,
+            category=category,
+            compareTo=compareTo,
+            entityId=entityId,
+            group=group,
+            numResults=numResults,
+            phenotypes=phenotypes,
+            provider=provider,
+            query=query,
+            sessionId=sessionId,
+            text=text,
+            )
+        )
     def news_search(
         self,
         query: str,
@@ -1541,6 +1699,17 @@ class SyncWebResearcherClient:
             sessionId=sessionId,
             sort_by=sort_by,
             time_range=time_range,
+            )
+        )
+    def paper_fulltext(
+        self,
+        identifier: str,
+        max_length: int = None,
+    ) -> PaperFulltextResponse:
+        return self._run(
+            self._async_client.paper_fulltext(
+            identifier=identifier,
+            max_length=max_length,
             )
         )
     def patent_search(
@@ -1683,6 +1852,29 @@ class SyncWebResearcherClient:
             num_results=num_results,
             provider=provider,
             schema=schema,
+            )
+        )
+    def syllabus_search(
+        self,
+        query: str,
+        country: str = None,
+        field: str = None,
+        institution: str = None,
+        max_results: int = None,
+        sort_by: str = None,
+        year_from: int = None,
+        year_to: int = None,
+    ) -> SyllabusSearchResponse:
+        return self._run(
+            self._async_client.syllabus_search(
+            query=query,
+            country=country,
+            field=field,
+            institution=institution,
+            max_results=max_results,
+            sort_by=sort_by,
+            year_from=year_from,
+            year_to=year_to,
             )
         )
     def verify_citation(

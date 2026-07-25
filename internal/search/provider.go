@@ -22,6 +22,10 @@ type WebSearchParams struct {
 	Offset       int      // pagination offset (provider-specific, ignored when 0)
 	ResultFilter string   // comma-separated types to return: web, news, images, videos, discussions, faq (Brave only)
 	Goggles      []string // Brave Goggles re-ranking URLs (Brave only; up to 3; ignored by other providers)
+	// Depth hints to the router which NumResults tier to apply when NumResults<=0.
+	// Values: "quick" (6), "" (12, default), "deep" (20).
+	// Providers that do not implement depth tiering silently ignore this field.
+	Depth string
 }
 
 type ImageSearchParams struct {

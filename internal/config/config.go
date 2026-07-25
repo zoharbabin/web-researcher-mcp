@@ -30,6 +30,7 @@ type Config struct {
 	AllowPrivateIPs        bool
 	AllowedDomains         []string
 	ChromePath             string
+	JinaDisabled           bool
 	MaxScrapeConcurrency   int
 	MaxHTMLBytes           int
 	MaxDocumentBytes       int
@@ -135,6 +136,7 @@ type SearchConfig struct {
 	SearchAPIKey       string
 	TavilyAPIKey       string
 	ExaAPIKey          string
+	JinaAPIKey         string // optional; the Jina Reader scraper tier works keyless, a key raises its rate limit
 	SearXNGURL         string
 	SearXNGBasicAuth   string            // raw "user:password" for a SearXNG behind HTTP Basic auth; "" => none (never logged)
 	SearXNGHeaders     map[string]string // validated static request headers for SearXNG; nil/empty => none
@@ -154,6 +156,7 @@ type SearchConfig struct {
 	UnpaywallEmail        string // open-access PDF resolution; falls back to OpenAlexEmail when unset
 	PubMedAPIKey          string // optional; PubMed E-utilities work keyless (~3 req/s), a key raises it (~10 req/s)
 	PubMedEmail           string // optional NCBI contact (tool/email params) — falls back to OpenAlexEmail
+	COREAPIKey            string // optional; CORE.ac.uk works keyless at a lower shared rate, a key raises the limit
 
 	// Structured-domain providers (optional, enable filing/case/economic search)
 	EDGARContactEmail  string // SEC EDGAR requires a contact email for its required User-Agent
@@ -185,6 +188,16 @@ type SearchConfig struct {
 	// works unauthenticated (GitHub's own public rate limits); a token only
 	// raises the ceiling, it never gates functionality. Never logged.
 	GitHubToken string // GITHUB_TOKEN
+
+	// OpenSyllabus optional credentials for syllabus_search. Requires a
+	// research agreement (contact research@opensyllabus.org); the tool
+	// registers only when both are set.
+	OpenSyllabusAPIKey string // OPEN_SYLLABUS_API_KEY
+	OpenSyllabusAPIURL string // OPEN_SYLLABUS_API_URL — configurable base URL
+
+	// PENAmericaAirtableToken is optional for gag_order_search. The tool
+	// registers only when this is set.
+	PENAmericaAirtableToken string // PEN_AMERICA_AIRTABLE_TOKEN
 }
 
 type OAuthConfig struct {
@@ -351,41 +364,46 @@ func Load() (*Config, error) {
 		GoogleAPIKey: googleKey,
 		GoogleCX:     googleCX,
 		Search: SearchConfig{
-			Provider:              provider,
-			Routing:               os.Getenv("SEARCH_ROUTING"),
-			GoogleAPIKey:          googleKey,
-			GoogleCX:              googleCX,
-			BraveAPIKey:           braveKey,
-			BraveExtraSnippets:    braveExtraSnippets,
-			SerperAPIKey:          serperKey,
-			SearchAPIKey:          searchAPIKey,
-			TavilyAPIKey:          tavilyKey,
-			ExaAPIKey:             exaKey,
-			SearXNGURL:            searxngURL,
-			SearXNGBasicAuth:      searxngBasicAuth,
-			SearXNGHeaders:        searxngHeaders,
-			CustomLensesPath:      os.Getenv("CUSTOM_LENSES_PATH"),
-			ThinThreshold:         envInt("SEARCH_THIN_THRESHOLD", 1),
-			USPTOAPIKey:           os.Getenv("USPTO_API_KEY"),
-			EPOConsumerKey:        os.Getenv("EPO_OPS_CONSUMER_KEY"),
-			EPOConsumerSecret:     os.Getenv("EPO_OPS_CONSUMER_SECRET"),
-			LensAPIToken:          os.Getenv("LENS_API_TOKEN"),
-			OpenAlexEmail:         os.Getenv("OPENALEX_EMAIL"),
-			CrossRefEmail:         os.Getenv("CROSSREF_EMAIL"),
-			SemanticScholarAPIKey: os.Getenv("SEMANTIC_SCHOLAR_API_KEY"),
-			UnpaywallEmail:        envOrDefault("UNPAYWALL_EMAIL", os.Getenv("OPENALEX_EMAIL")),
-			PubMedAPIKey:          os.Getenv("PUBMED_API_KEY"),
-			PubMedEmail:           envOrDefault("PUBMED_EMAIL", os.Getenv("OPENALEX_EMAIL")),
-			EDGARContactEmail:     envOrDefault("EDGAR_CONTACT_EMAIL", os.Getenv("OPENALEX_EMAIL")),
-			CourtListenerToken:    os.Getenv("COURTLISTENER_API_TOKEN"),
-			FREDAPIKey:            os.Getenv("FRED_API_KEY"),
-			IAAccessKey:           os.Getenv("IA_ACCESS_KEY"),
-			IASecretKey:           os.Getenv("IA_SECRET_KEY"),
-			BrandFetchAPIKey:      os.Getenv("BRANDFETCH_API_KEY"),
-			BrandFetchClientID:    os.Getenv("BRANDFETCH_CLIENT_ID"),
-			EcosystemsAPIKey:      os.Getenv("ECOSYSTEMS_API_KEY"),
-			EcosystemsEmail:       envOrDefault("ECOSYSTEMS_EMAIL", os.Getenv("OPENALEX_EMAIL")),
-			GitHubToken:           os.Getenv("GITHUB_TOKEN"),
+			Provider:                provider,
+			Routing:                 os.Getenv("SEARCH_ROUTING"),
+			GoogleAPIKey:            googleKey,
+			GoogleCX:                googleCX,
+			BraveAPIKey:             braveKey,
+			BraveExtraSnippets:      braveExtraSnippets,
+			SerperAPIKey:            serperKey,
+			SearchAPIKey:            searchAPIKey,
+			TavilyAPIKey:            tavilyKey,
+			ExaAPIKey:               exaKey,
+			JinaAPIKey:              os.Getenv("JINA_API_KEY"),
+			SearXNGURL:              searxngURL,
+			SearXNGBasicAuth:        searxngBasicAuth,
+			SearXNGHeaders:          searxngHeaders,
+			CustomLensesPath:        os.Getenv("CUSTOM_LENSES_PATH"),
+			ThinThreshold:           envInt("SEARCH_THIN_THRESHOLD", 1),
+			USPTOAPIKey:             os.Getenv("USPTO_API_KEY"),
+			EPOConsumerKey:          os.Getenv("EPO_OPS_CONSUMER_KEY"),
+			EPOConsumerSecret:       os.Getenv("EPO_OPS_CONSUMER_SECRET"),
+			LensAPIToken:            os.Getenv("LENS_API_TOKEN"),
+			OpenAlexEmail:           os.Getenv("OPENALEX_EMAIL"),
+			CrossRefEmail:           os.Getenv("CROSSREF_EMAIL"),
+			SemanticScholarAPIKey:   os.Getenv("SEMANTIC_SCHOLAR_API_KEY"),
+			UnpaywallEmail:          envOrDefault("UNPAYWALL_EMAIL", os.Getenv("OPENALEX_EMAIL")),
+			PubMedAPIKey:            os.Getenv("PUBMED_API_KEY"),
+			PubMedEmail:             envOrDefault("PUBMED_EMAIL", os.Getenv("OPENALEX_EMAIL")),
+			COREAPIKey:              os.Getenv("CORE_API_KEY"),
+			EDGARContactEmail:       envOrDefault("EDGAR_CONTACT_EMAIL", os.Getenv("OPENALEX_EMAIL")),
+			CourtListenerToken:      os.Getenv("COURTLISTENER_API_TOKEN"),
+			FREDAPIKey:              os.Getenv("FRED_API_KEY"),
+			IAAccessKey:             os.Getenv("IA_ACCESS_KEY"),
+			IASecretKey:             os.Getenv("IA_SECRET_KEY"),
+			BrandFetchAPIKey:        os.Getenv("BRANDFETCH_API_KEY"),
+			BrandFetchClientID:      os.Getenv("BRANDFETCH_CLIENT_ID"),
+			EcosystemsAPIKey:        os.Getenv("ECOSYSTEMS_API_KEY"),
+			EcosystemsEmail:         envOrDefault("ECOSYSTEMS_EMAIL", os.Getenv("OPENALEX_EMAIL")),
+			GitHubToken:             os.Getenv("GITHUB_TOKEN"),
+			OpenSyllabusAPIKey:      os.Getenv("OPEN_SYLLABUS_API_KEY"),
+			OpenSyllabusAPIURL:      os.Getenv("OPEN_SYLLABUS_API_URL"),
+			PENAmericaAirtableToken: os.Getenv("PEN_AMERICA_AIRTABLE_TOKEN"),
 		},
 		Port: port,
 		OAuth: OAuthConfig{
@@ -431,6 +449,7 @@ func Load() (*Config, error) {
 		AllowPrivateIPs:      envBool("ALLOW_PRIVATE_IPS", false),
 		AllowedDomains:       splitCSV(os.Getenv("ALLOWED_DOMAINS")),
 		ChromePath:           os.Getenv("CHROME_PATH"),
+		JinaDisabled:         envBool("JINA_READER_DISABLED", false),
 		MaxScrapeConcurrency: envInt("MAX_SCRAPE_CONCURRENCY", 5),
 		MaxHTMLBytes:         envInt("MAX_HTML_BYTES", 8<<20),
 		MaxDocumentBytes:     envInt("MAX_DOCUMENT_BYTES", 50<<20),

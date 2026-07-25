@@ -38,6 +38,10 @@ type Dependencies struct {
 	// so AvailableAwesomeListProviders always builds it and awesome_list_search
 	// is always registered. Empty ⇒ the tool is not registered.
 	AwesomeListProviders map[string]search.AwesomeListProvider
+	// MonarchProviders back monarch_search (Monarch Initiative biomedical
+	// knowledge graph, #318). Keyless, so AvailableMonarchProviders always builds
+	// it and monarch_search is always registered. Empty ⇒ the tool is not registered.
+	MonarchProviders map[string]search.MonarchProvider
 	// LocalProviders back local_search (#259). Brave is the sole provider today;
 	// requires BRAVE_API_KEY. Empty ⇒ the tool is not registered.
 	LocalProviders map[string]search.LocalProvider
@@ -106,6 +110,13 @@ type Dependencies struct {
 	// by the Brand API. Empty → that resolution step is skipped (falls back to
 	// deps.Search.Web()).
 	BrandFetchClientID string
+	// OpenSyllabusAPIKey / OpenSyllabusAPIURL gate syllabus_search. Both must be
+	// set (a research agreement with Open Syllabus is required) or the tool
+	// does not register.
+	OpenSyllabusAPIKey string
+	OpenSyllabusAPIURL string
+	// PENAmericaAirtableToken gates gag_order_search. Empty ⇒ tool not registered.
+	PENAmericaAirtableToken string
 	// CTLogResolver backs company_recon's Certificate Transparency phase
 	// (crt.sh, #323). Keyless, so main.go always constructs it — non-nil in
 	// production. A nil value in tests degrades that phase to a soft skip.
@@ -155,6 +166,11 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	// verifiable. Always registered; degrades to status:"unavailable" when no link
 	// verifier is configured.
 	registerArchiveSource(srv, deps)
+	// paper_fulltext (#269) — collapses academic_search + scrape_page into one
+	// call for a DOI/paper-ID/URL. Always registered; degrades to a doi.org
+	// redirect or the input URL verbatim when no Semantic Scholar provider is
+	// configured.
+	registerPaperFulltext(srv, deps)
 	// verify_recommendation — audits AI recommendations (listicles, product
 	// lists) for anti-sloptimization signals: self-promotion, conflicts of interest,
 	// domain reputation, dead links. Always registered as part of the trust suite.
@@ -197,6 +213,11 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	if len(deps.LocalProviders) > 0 {
 		registerLocal(srv, deps)
 	}
+	// monarch_search (#318) — Monarch Initiative API is keyless, so
+	// AvailableMonarchProviders always builds it and the tool is always registered.
+	if len(deps.MonarchProviders) > 0 {
+		registerMonarchSearch(srv, deps)
+	}
 
 	// Synthesis tools — provider-independent (like academic/patent search).
 	// Each registers only when at least one provider offers the capability, so
@@ -225,6 +246,17 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	// extraction + brand-page probe + optional web search tiers run
 	// unconditionally without BRANDFETCH_API_KEY/BRANDFETCH_CLIENT_ID.
 	registerBrandResearch(srv, deps)
+
+	// syllabus_search (#352) — requires a research agreement with Open
+	// Syllabus; registers only when both the key and base URL are set.
+	if deps.OpenSyllabusAPIKey != "" && deps.OpenSyllabusAPIURL != "" {
+		registerSyllabusSearch(srv, deps)
+	}
+	// gag_order_search (#352) — PEN America's educational gag order tracker
+	// via Airtable; registers only when a token is set.
+	if deps.PENAmericaAirtableToken != "" {
+		registerGagOrderSearch(srv, deps)
+	}
 	// company_recon (#323) — always registered; every phase's data source
 	// (crt.sh, Wayback CDX, homepage probing, web search) is keyless. Individual
 	// phases soft-skip when their resolver dependency is nil (e.g. in a minimal

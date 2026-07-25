@@ -27,6 +27,17 @@ type PipelineConfig struct {
 	// pages, and Exa only spends a request on the hard pages they cannot extract.
 	// Empty (default) ⇒ the tier is absent and no Exa request is ever made.
 	ExaAPIKey string
+	// JinaAPIKey is optional (#270): the Jina Reader tier ("jina") is always
+	// present in the pipeline, keyless free tier included — JinaAPIKey only
+	// raises the free-tier rate limit via the Authorization header. Empty
+	// (default) ⇒ requests are sent unauthenticated.
+	JinaAPIKey string
+	// JinaDisabled turns the Jina Reader tier off entirely (JINA_READER_DISABLED
+	// env var), mirroring ChromePath=disabled for the browser tier. Unlike Exa
+	// (opt-in via an API key), Jina runs unconditionally by default, so this is
+	// the only way to remove its outbound dependency on r.jina.ai — e.g. for
+	// hardened deployments or e2e tests that must stay network-free.
+	JinaDisabled bool
 	// MaxHTMLBytes bounds the decompressed HTML body each HTML-parsing tier reads
 	// before extraction (stealth, html, patents). Zero ⇒ the NewPipeline default.
 	MaxHTMLBytes int
@@ -53,6 +64,9 @@ type PipelineConfig struct {
 	// BskyAPIBase overrides the production Bluesky AT Protocol base URL (for
 	// tests). Empty (default) ⇒ https://public.api.bsky.app/xrpc
 	BskyAPIBase string
+	// ShredditBase overrides the production Reddit shreddit base URL (for
+	// tests). Empty (default) ⇒ https://www.reddit.com
+	ShredditBase string
 }
 
 // ForumSignals holds engagement metadata extracted from forum pages (Reddit,
@@ -72,6 +86,21 @@ type ForumSignals struct {
 	// CredibilityNote is a human-readable note for the AI when signals suggest
 	// low engagement. Empty when engagement is normal.
 	CredibilityNote string `json:"credibilityNote,omitempty"`
+	// TopComments carries up to 5 top comments (by score descending) fetched
+	// from Reddit's unauthenticated shreddit endpoint. Best-effort: nil when
+	// unavailable (timeout, rate limit, parse error) — never blocks or errors
+	// the parent scrape.
+	TopComments []ForumComment `json:"topComments,omitempty"`
+}
+
+// ForumComment holds per-comment engagement data extracted from the Reddit
+// shreddit endpoint. Body is plain text, truncated to 500 chars.
+type ForumComment struct {
+	Author    string `json:"author"`
+	Score     int    `json:"score"`
+	Body      string `json:"body"`
+	Permalink string `json:"permalink,omitempty"`
+	Created   string `json:"created,omitempty"`
 }
 
 type ScrapeResult struct {
@@ -117,6 +146,11 @@ type ScrapeResult struct {
 	// ForumSignals holds engagement metadata (upvotes, comments, credibility) for
 	// Reddit posts extracted from JSON-LD (#247). Nil for non-Reddit URLs.
 	ForumSignals *ForumSignals
+	// Highlights holds up to 5 top-scored transcript segments for YouTube videos
+	// with a successfully extracted transcript of >= minHighlightSegments lines
+	// (#284). Nil for non-YouTube URLs, the description-only fallback, and short
+	// transcripts.
+	Highlights []TranscriptHighlight
 	// rawHTMLBytes is the size of the decompressed HTML the HTML-parsing tiers
 	// (stealth, html) read before extraction. The pipeline reads it to detect a
 	// JavaScript-rendered SPA shell — a large HTML payload that yielded little
@@ -335,6 +369,7 @@ func (p *Pipeline) tieredFallback(ctx context.Context, url string, maxLength, de
 	tiers := []namedTier{
 		{"markdown", p.scrapeMarkdown},
 		{"stealth", p.scrapeStealth},
+		{"jina", p.scrapeJina},
 		{"html", p.scrapeHTML},
 	}
 

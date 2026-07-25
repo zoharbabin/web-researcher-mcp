@@ -152,12 +152,14 @@ Which tools each web search provider enables. `—` means the provider returns e
 | **[CrossRef](https://www.crossref.org/)** | ✓ | ✓ (authoritative) | — | — | — | No (email for polite pool) |
 | **[Semantic Scholar](https://www.semanticscholar.org/)** | ✓ | — | ✓ (rich edges) | — | ✓ (tldr) | No (key raises limits) |
 | **[PubMed](https://pubmed.ncbi.nlm.nih.gov/)** | ✓ | — | — | — | — | No (key raises limits) |
+| **[CORE](https://core.ac.uk/)** | ✓ | — | — | ✓ (native `fullText`) | — | No (key raises limits) |
 | **[Exa](https://exa.ai/)** | ✓ | — | — | — | — | Yes (`EXA_API_KEY`) |
 
 **Notes:**
 - CrossRef is the official DOI registration agency — the authoritative source for DOI metadata. Every DOI-registered work appears here.
 - Semantic Scholar enriches results with AI-generated `tldr` summaries and citation intent/influence edges, which power `citation_graph`. OpenAlex also implements `citation_graph` support with citation-count edges as a fallback.
-- Only OpenAlex implements the `DOIResolver` interface (exact-entity lookup via `/works/doi:{doi}`). CrossRef, Semantic Scholar, and PubMed do not.
+- Only OpenAlex implements the `DOIResolver` interface (exact-entity lookup via `/works/doi:{doi}`). CrossRef, Semantic Scholar, PubMed, and CORE do not.
+- CORE's every result is open access by definition — it aggregates OA repositories exclusively — and its `pdfUrl` links directly to full text, no Unpaywall enrichment needed.
 - Exa routes academic queries using its `research-paper` category — useful when its neural index surfaces papers the bibliographic databases miss.
 - [Unpaywall](https://unpaywall.org/) OA enrichment runs as a post-processing step on any DOI-bearing result — not a separate provider to select.
 
@@ -169,6 +171,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 | **[CrossRef](https://www.crossref.org/)** | 140M+ DOI-registered works | Peer-reviewed literature; authoritative DOI metadata |
 | **[Semantic Scholar](https://www.semanticscholar.org/)** | 200M+ papers | Broad; strong on CS, medicine, biology |
 | **[PubMed](https://pubmed.ncbi.nlm.nih.gov/)** | 35M+ citations | Biomedical and life science only |
+| **[CORE](https://core.ac.uk/)** | 300M+ OA outputs | Open-access works aggregated from repositories worldwide; all results are OA |
 | **[Exa](https://exa.ai/)** | Neural web index | Research-paper category; surfaces papers outside bibliographic DBs |
 
 ### Academic Routing
@@ -223,14 +226,18 @@ These providers back dedicated tools and are independent of the web search provi
 | `econ_search` | **[FRED](https://fred.stlouisfed.org/)** | 800K+ US macro series (GDP, CPI, unemployment, rates) | Yes (free) |
 | `clinical_search` | **[ClinicalTrials.gov](https://clinicaltrials.gov/)** | 400K+ NIH-registered clinical trials | No |
 | `awesome_list_search` | **[ecosyste.ms](https://ecosyste.ms/)** | Community-curated "awesome list" discovery by topic — stars, project counts, archived status | No (`ECOSYSTEMS_EMAIL` optional, raises rate-limit tier via the "polite pool") |
+| `monarch_search` | **[Monarch Initiative](https://monarchinitiative.org/)** | Biomedical knowledge graph — phenotype-to-disease/gene similarity, entity lookup, gene-disease-phenotype associations | No |
 | `archive_source` | **[Internet Archive SPN](https://web.archive.org/save/)** | Save Page Now capture | No (keys raise reliability/limits) |
 | `brand_research` | **[BrandFetch](https://brandfetch.com/)** | Brand colors, fonts, logos, tagline, tone of voice (homepage meta + brand-page probing run unconditionally without a key) | No (`BRANDFETCH_API_KEY` optional) |
 | `company_recon` | **[crt.sh](https://crt.sh/)** + **[Wayback CDX](https://web.archive.org/cdx/search/cdx)** | Certificate Transparency log SANs, historical URL inventory, derived subdomains, lightweight web-search company summary | No |
+| `syllabus_search` | **[Open Syllabus](https://opensyllabus.org/)** | University syllabus assignment data — 32.9M syllabi, author/title frequency, co-assignment | Yes (research agreement — contact research@opensyllabus.org) |
+| `gag_order_search` | **[PEN America](https://pen.org/)** | Educational gag order legislation tracker (state bills restricting classroom instruction) | Yes (Airtable personal access token) |
 
 **Notes:**
-- World Bank, OECD, Eurostat, ClinicalTrials.gov, CourtListener, ecosyste.ms, crt.sh, and Wayback CDX are always available — no configuration required. Setting `ECOSYSTEMS_EMAIL` (falls back to `OPENALEX_EMAIL`) opts ecosyste.ms calls into the "polite pool," raising the per-caller rate-limit tier above the shared "anonymous" pool. `ECOSYSTEMS_API_KEY` is also sent but only takes effect on ecosyste.ms's paid plans.
+- World Bank, OECD, Eurostat, ClinicalTrials.gov, CourtListener, ecosyste.ms, the Monarch Initiative, crt.sh, and Wayback CDX are always available — no configuration required. Setting `ECOSYSTEMS_EMAIL` (falls back to `OPENALEX_EMAIL`) opts ecosyste.ms calls into the "polite pool," raising the per-caller rate-limit tier above the shared "anonymous" pool. `ECOSYSTEMS_API_KEY` is also sent but only takes effect on ecosyste.ms's paid plans.
 - SEC EDGAR and FRED activate on their respective env vars (`EDGAR_CONTACT_EMAIL` / `FRED_API_KEY`). `EDGAR_CONTACT_EMAIL` falls back to `OPENALEX_EMAIL`.
 - `brand_research` is always available — without `BRANDFETCH_API_KEY` it runs homepage meta/structured-data extraction and brand-page probing; the key adds a concurrent BrandFetch enrichment tier on top, never a replacement.
+- `syllabus_search` registers only when both `OPEN_SYLLABUS_API_KEY` and `OPEN_SYLLABUS_API_URL` are set. `gag_order_search` registers only when `PEN_AMERICA_AIRTABLE_TOKEN` is set.
 - `archive_source`, `memory_save`, and `workspace_contribute` are the write tools in the suite. `archive_source` triggers a live internet capture; `memory_save` and `workspace_contribute` are opt-in regulated features.
 
 ---
