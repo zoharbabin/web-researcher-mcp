@@ -179,12 +179,21 @@ type Metadata struct {
 }
 
 type ForumSignals struct {
-    Platform        string `json:"platform"`                  // Forum platform: "reddit" or "bluesky"
-    Upvotes         int    `json:"upvotes"`                   // Vote count from JSON-LD interactionStatistic
-    Comments        int    `json:"comments"`                  // Comment count
-    DatePublished   string `json:"datePublished,omitempty"`   // ISO 8601 publish date when available
-    AuthorName      string `json:"authorName,omitempty"`      // Original poster name when available
-    CredibilityNote string `json:"credibilityNote,omitempty"` // Contextual note, e.g. vote-manipulation risk when Upvotes < 20
+    Platform        string         `json:"platform"`                  // Forum platform: "reddit" or "bluesky"
+    Upvotes         int            `json:"upvotes"`                   // Vote count from JSON-LD interactionStatistic
+    Comments        int            `json:"comments"`                  // Comment count
+    DatePublished   string         `json:"datePublished,omitempty"`   // ISO 8601 publish date when available
+    AuthorName      string         `json:"authorName,omitempty"`      // Original poster name when available
+    CredibilityNote string         `json:"credibilityNote,omitempty"` // Contextual note, e.g. vote-manipulation risk when Upvotes < 20
+    TopComments     []ForumComment `json:"topComments,omitempty"`     // top ≤5 comments by score, fetched best-effort (Reddit only)
+}
+
+type ForumComment struct {
+    Author    string `json:"author"`
+    Score     int    `json:"score"`
+    Body      string `json:"body"`                 // plain text, max 500 chars
+    Permalink string `json:"permalink,omitempty"`
+    Created   string `json:"created,omitempty"`
 }
 
 type StructuredData struct {
@@ -219,7 +228,7 @@ In `raw` mode the output additionally carries `"raw": true`, and `contentType` i
 
 **Tables in content (#48).** HTML `<table>` elements are rendered as GitHub-flavored markdown pipe tables inside `content` (header row + `---` separator + data rows), preserving row/column structure instead of flattening cells into disconnected fragments. Pipe characters in cells are escaped and multi-line cells are collapsed to a single row. Layout, malformed, single-column, and nested tables degrade gracefully to plain text — never an error, never a panic.
 
-**Forum engagement signals (#247).** For Reddit posts where the HTML extraction tier ran, the response carries a `forumSignals` object: `platform` (`"reddit"`), `upvotes` (vote count from JSON-LD `interactionStatistic`), `comments` (comment count), `datePublished` (ISO 8601), `authorName` (original poster), and `credibilityNote` (set when `upvotes < 20`, noting vote-manipulation risk). The field is **omitted entirely** for non-Reddit/non-Bluesky URLs, `raw` mode, and any non-HTML extraction tier (markdown, browser, document, YouTube, Twitter) — never `null`, only present-or-absent. For Twitter/X tweets (`contentType: "twitter"`), engagement signals (likes, retweets, replies, quotes, views) are embedded in the plain-text `content` string by the FxTwitter path — they are not surfaced as a separate structured field. For Bluesky posts (bsky.app), `forumSignals` carries `platform: "bluesky"`, `upvotes` (like count), `comments` (reply count), and `authorName` (displayName from the AT Protocol author record) — read natively via `app.bsky.feed.getPostThread`, not extracted from HTML (#285).
+**Forum engagement signals (#247).** For Reddit posts where the HTML extraction tier ran, the response carries a `forumSignals` object: `platform` (`"reddit"`), `upvotes` (vote count from JSON-LD `interactionStatistic`), `comments` (comment count), `datePublished` (ISO 8601), `authorName` (original poster), and `credibilityNote` (set when `upvotes < 20`, noting vote-manipulation risk). The field is **omitted entirely** for non-Reddit/non-Bluesky URLs, `raw` mode, and any non-HTML extraction tier (markdown, browser, document, YouTube, Twitter) — never `null`, only present-or-absent. For Twitter/X tweets (`contentType: "twitter"`), engagement signals (likes, retweets, replies, quotes, views) are embedded in the plain-text `content` string by the FxTwitter path — they are not surfaced as a separate structured field. For Bluesky posts (bsky.app), `forumSignals` carries `platform: "bluesky"`, `upvotes` (like count), `comments` (reply count), and `authorName` (displayName from the AT Protocol author record) — read natively via `app.bsky.feed.getPostThread`, not extracted from HTML (#285). When available, `topComments` carries up to 5 top comments (by score descending) fetched from the Reddit shreddit endpoint — each with `author`, `score`, `body` (plain text, max 500 chars; `[deleted]`/`[removed]` bodies are skipped), `permalink`, and `created`. The comment fetch is best-effort: a timeout (5 s), 429, or parse error silently omits the field without affecting the rest of the result.
 
 **Structured data (#46).** When the page embeds machine-readable metadata, the response carries a `structuredData` object alongside `content`: `jsonLd` (each `<script type="application/ld+json">` block, kept verbatim — invalid JSON is skipped, never failing the scrape), `openGraph` (`og:*`/`article:*` meta, keys keep their prefix), and `citation` (Highwire `citation_*` meta — DOI, authors, journal). The whole object is omitted when no such markup is present, and each sub-field is omitted when empty. It is produced by the HTML-extraction tiers only (absent for `raw` mode, PDFs, YouTube, and markdown-tier results), is independently size-bounded so a pathological page cannot blow the response budget, and is **untrusted external data** under the same trust boundary as `content`.
 
