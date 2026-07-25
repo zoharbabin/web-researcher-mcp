@@ -14,11 +14,15 @@ import (
 )
 
 var (
-	videoIDRegex      = regexp.MustCompile(`(?:v=|youtu\.be/|embed/|shorts/|live/|/v/)([a-zA-Z0-9_-]{11})`)
-	playerRespRegex   = regexp.MustCompile(`ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;`)
-	playerRespAlt     = regexp.MustCompile(`var\s+ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;`)
-	descriptionRe     = regexp.MustCompile(`"shortDescription"\s*:\s*"((?:[^"\\]|\\.)*)"`)
-	vttInlineTimingRe = regexp.MustCompile(`<\d{2}:\d{2}:\d{2}\.\d+>`)
+	videoIDRegex    = regexp.MustCompile(`(?:v=|youtu\.be/|embed/|shorts/|live/|/v/)([a-zA-Z0-9_-]{11})`)
+	playerRespRegex = regexp.MustCompile(`ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;`)
+	playerRespAlt   = regexp.MustCompile(`var\s+ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;`)
+	descriptionRe   = regexp.MustCompile(`"shortDescription"\s*:\s*"((?:[^"\\]|\\.)*)"`)
+	// vttTagRe strips every WebVTT cue-text tag: inline timing (<00:00:00.000>),
+	// voice (<v Speaker>), and styling (<c>, <c.className>, <b>, <i>, ...). YouTube's
+	// auto-generated captions interleave <c>...</c> word-role tags with timing tags,
+	// so both must be stripped or literal tag markup leaks into the transcript text.
+	vttTagRe = regexp.MustCompile(`</?[a-zA-Z][^>]*>|<\d{2}:\d{2}:\d{2}\.\d+>`)
 )
 
 const (
@@ -283,16 +287,9 @@ func findCaptionURL(playerResp map[string]any) string {
 	return u
 }
 
-func formatTimestamp(seconds float64) string {
-	d := time.Duration(seconds * float64(time.Second))
-	m := int(d.Minutes())
-	s := int(d.Seconds()) % 60
-	return fmt.Sprintf("%d:%02d", m, s)
-}
-
 // parseTranscriptVTT extracts clean plain text from a WebVTT transcript.
 // Skips the WEBVTT header, blank lines, and timestamp lines ("HH:MM:SS.mmm --> ...").
-// Inline timing tags (<00:00:00.000>) are stripped from text lines. Each cue is
+// Inline cue tags (timing, <c>, <v>, etc.) are stripped from text lines. Each cue is
 // prefixed with its start timestamp in "[M:SS]" format.
 func parseTranscriptVTT(vtt string) string {
 	lines := strings.Split(vtt, "\n")
@@ -337,7 +334,7 @@ func parseTranscriptVTT(vtt string) string {
 			continue
 		}
 
-		text := vttInlineTimingRe.ReplaceAllString(line, "")
+		text := vttTagRe.ReplaceAllString(line, "")
 		text = strings.TrimSpace(text)
 		if text != "" {
 			textLines = append(textLines, text)
