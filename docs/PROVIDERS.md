@@ -72,7 +72,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 - `answer` and `structured_search` are provider-independent tools, but Exa is the only web provider that backs them with its native API. They remain unavailable if no Exa key is set.
 - `local_search` is Brave-only — it requires `BRAVE_API_KEY`. No other web provider supports the three-call local pipeline (locations → POIs → descriptions).
 - Brave also exposes a LLM context endpoint (`/res/v1/llm/context`) consumed by `search_and_scrape` as a fast-path for RAG/grounding workflows. When Brave is the active provider, `search_and_scrape` tries the server-assembled context first; if that fails, it falls back to the standard search-then-scrape pipeline. Requires `BRAVE_DATA_FOR_AI` plan access.
-- Exa's scrape fallback tier (`/contents`) fires only when all four free tiers (markdown → stealth → HTML → browser) have failed. It charges an Exa credit per call.
+- Exa's scrape fallback tier (`/contents`) fires only when all free tiers (markdown → stealth → Jina Reader → HTML → browser) have failed. It charges an Exa credit per call.
 - Tavily's time-range filter is aggressive on web search — for recent content, `news_search` works better; `web_search` may return nothing for narrow windows.
 
 ---
@@ -151,7 +151,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 | **[OpenAlex](https://openalex.org/)** | ✓ | ✓ | ✓ | via Unpaywall | — | No (email for polite pool) |
 | **[CrossRef](https://www.crossref.org/)** | ✓ | ✓ (authoritative) | — | — | — | No (email for polite pool) |
 | **[Semantic Scholar](https://www.semanticscholar.org/)** | ✓ | — | ✓ (rich edges) | — | ✓ (tldr) | No (key raises limits) |
-| **[PubMed](https://pubmed.ncbi.nlm.nih.gov/)** | ✓ | — | — | — | — | No (key raises limits) |
+| **[PubMed](https://pubmed.ncbi.nlm.nih.gov/)** | ✓ | — | — | ✓ (PMC full text, `full_text=true`) | — | No (key raises limits) |
 | **[CORE](https://core.ac.uk/)** | ✓ | — | — | ✓ (native `fullText`) | — | No (key raises limits) |
 | **[Exa](https://exa.ai/)** | ✓ | — | — | — | — | Yes (`EXA_API_KEY`) |
 
@@ -160,6 +160,8 @@ Which tools each web search provider enables. `—` means the provider returns e
 - Semantic Scholar enriches results with AI-generated `tldr` summaries and citation intent/influence edges, which power `citation_graph`. OpenAlex also implements `citation_graph` support with citation-count edges as a fallback.
 - Only OpenAlex implements the `DOIResolver` interface (exact-entity lookup via `/works/doi:{doi}`). CrossRef, Semantic Scholar, PubMed, and CORE do not.
 - CORE's every result is open access by definition — it aggregates OA repositories exclusively — and its `pdfUrl` links directly to full text, no Unpaywall enrichment needed.
+- PubMed fetches full text from PubMed Central when `full_text=true` and a result carries a PMCID: a third call (`efetch` against PMC) retrieves the JATS XML, populating `fullText`. Best-effort — an article without a PMCID, or an efetch failure, is returned without `fullText`.
+- Semantic Scholar also implements `PaperFetcher` (fetch full metadata by DOI/paper ID), behind the single-call `paper_fulltext` tool rather than `academic_search`.
 - Exa routes academic queries using its `research-paper` category — useful when its neural index surfaces papers the bibliographic databases miss.
 - [Unpaywall](https://unpaywall.org/) OA enrichment runs as a post-processing step on any DOI-bearing result — not a separate provider to select.
 
