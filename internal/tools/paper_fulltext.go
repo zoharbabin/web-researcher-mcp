@@ -28,6 +28,9 @@ const (
 	paperFulltextDefaultMaxLength = 50000
 	paperFulltextMinMaxLength     = 1000
 	paperFulltextMaxMaxLength     = 200000
+	// maxPaperFulltextIdentifierBytes bounds the submitted identifier (a
+	// boundary check; mirrors archive_source.go's maxArchiveURLBytes).
+	maxPaperFulltextIdentifierBytes = 2048
 )
 
 func registerPaperFulltext(srv *mcp.Server, deps Dependencies) {
@@ -42,6 +45,10 @@ func registerPaperFulltext(srv *mcp.Server, deps Dependencies) {
 		identifier := strings.TrimSpace(input.Identifier)
 		if identifier == "" {
 			return toolError("identifier is required (a DOI, Semantic Scholar paper ID, or URL)"), nil, nil
+		}
+		if len(identifier) > maxPaperFulltextIdentifierBytes {
+			auditToolDenial(ctx, deps, "paper_fulltext", time.Since(start), "identifier_too_large")
+			return toolError("identifier too large"), nil, nil
 		}
 
 		maxLength := input.MaxLength
@@ -62,10 +69,28 @@ func registerPaperFulltext(srv *mcp.Server, deps Dependencies) {
 			return cachedResultWithMeta(cached, meta), nil, nil
 		}
 
-		scrapeURL, meta, errResult := resolvePaperURL(ctx, deps, identifier)
+		scrapeURL, meta, errResult, fetchErr := resolvePaperURL(ctx, deps, identifier)
 		if errResult != nil {
 			recordToolCall(deps, "paper_fulltext", time.Since(start), nil, "config_error", false)
 			return errResult, nil, nil
+		}
+		if fetchErr != nil {
+			errCode := "upstream_error"
+			if isRateLimitError(fetchErr) {
+				errCode = "rate_limited"
+			}
+			if scrapeURL == "" {
+				// No DOI to fall back to and no metadata resolved: this is a
+				// genuine upstream failure (rate limit, network, 5xx), not a
+				// config gap.
+				recordToolCall(deps, "paper_fulltext", time.Since(start), fetchErr, errCode, false)
+				auditToolCall(ctx, deps, "paper_fulltext", time.Since(start), fetchErr, errCode)
+				return upstreamErrorResponse("paper fulltext", fetchErr), nil, nil
+			}
+			// A DOI still degrades to the doi.org redirect, but record the
+			// upstream failure so it's visible rather than silently absorbed
+			// into a plain "direct-url" outcome.
+			auditToolCall(ctx, deps, "paper_fulltext", time.Since(start), fetchErr, errCode)
 		}
 
 		result, err := deps.Scraper.Scrape(ctx, scrapeURL, maxLength)
@@ -142,37 +167,52 @@ func registerPaperFulltext(srv *mcp.Server, deps Dependencies) {
 // returns the Semantic Scholar metadata when one was fetched (nil for a direct
 // URL, or when no PaperFetcher is configured). Resolution order for a DOI or S2
 // paper ID: the fetched open-access PDF URL, then the S2 landing page URL, then
-// (DOI only) the doi.org redirect. Returns a non-nil *mcp.CallToolResult only
-// when the identifier cannot be resolved at all (not a URL, not a DOI, and no
-// PaperFetcher configured to resolve an S2 paper ID).
-func resolvePaperURL(ctx context.Context, deps Dependencies, identifier string) (string, *search.AcademicResult, *mcp.CallToolResult) {
+// (DOI only) the doi.org redirect. FetchPaper already normalizes a 404 to
+// (nil, nil), so any non-nil err returned here is a genuine upstream failure
+// (rate limit, network, 5xx) — it is surfaced as fetchErr rather than folded
+// into the "not configured" case. A DOI identifier still degrades to the
+// doi.org redirect on fetchErr (fetchErr is returned alongside the URL purely
+// as an audit/metrics signal); a non-DOI identifier with no resolvable URL
+// returns fetchErr with an empty URL so the caller reports it as an upstream
+// error. errResult is non-nil only when the identifier cannot be resolved at
+// all AND no upstream call was attempted (not a URL, not a DOI, and no
+// PaperFetcher configured to resolve an S2 paper ID) — the true config gap.
+// (Return order: url, meta, errResult, fetchErr — error last per staticcheck ST1008.)
+func resolvePaperURL(ctx context.Context, deps Dependencies, identifier string) (string, *search.AcademicResult, *mcp.CallToolResult, error) {
 	if looksLikeURL(identifier) {
-		return identifier, nil, nil
+		return identifier, nil, nil, nil
 	}
 
 	doi := detectDOI(identifier)
 	fetcher := resolvePaperFetcher(deps)
+	var fetchErr error
 	if fetcher != nil {
 		lookupID := identifier
 		if doi != "" {
 			lookupID = doi
 		}
 		result, err := fetcher.FetchPaper(ctx, lookupID)
-		if err == nil && result != nil {
+		if err != nil {
+			fetchErr = err
+		} else if result != nil {
 			switch {
 			case result.PDFUrl != "":
-				return result.PDFUrl, result, nil
+				return result.PDFUrl, result, nil, nil
 			case result.URL != "":
-				return result.URL, result, nil
+				return result.URL, result, nil, nil
 			}
 		}
 	}
 
 	if doi != "" {
-		return "https://doi.org/" + doi, nil, nil
+		return "https://doi.org/" + doi, nil, nil, fetchErr
 	}
 
-	return "", nil, toolError("identifier is not a URL or DOI, and no Semantic Scholar provider is configured to resolve a paper ID")
+	if fetchErr != nil {
+		return "", nil, nil, fetchErr
+	}
+
+	return "", nil, toolError("identifier is not a URL or DOI, and no Semantic Scholar provider is configured to resolve a paper ID"), nil
 }
 
 // resolvePaperFetcher returns the first configured PaperFetcher from

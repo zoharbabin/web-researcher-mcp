@@ -3,8 +3,10 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -12,6 +14,24 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
+
+// failingPaperFetcher implements search.AcademicProvider + search.PaperFetcher,
+// with FetchPaper always returning a non-nil, non-not-found error — modeling a
+// genuine upstream failure (rate limit, network, 5xx) as opposed to "no record".
+type failingPaperFetcher struct {
+	err error
+}
+
+func (f *failingPaperFetcher) Name() string { return "semanticscholar" }
+func (f *failingPaperFetcher) Metadata() search.ProviderMeta {
+	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "free", Description: "mock failing S2"}
+}
+func (f *failingPaperFetcher) Scholarly(_ context.Context, _ search.AcademicSearchParams) ([]search.AcademicResult, error) {
+	return nil, f.err
+}
+func (f *failingPaperFetcher) FetchPaper(_ context.Context, _ string) (*search.AcademicResult, error) {
+	return nil, f.err
+}
 
 // callPaperFulltext calls paper_fulltext through the in-memory MCP client and
 // returns the parsed result (or fails the test on a tool-level error).
@@ -91,9 +111,12 @@ func TestPaperFulltextDOIFallback(t *testing.T) {
 		t.Fatal("precondition: mockAcademicProvider must NOT implement PaperFetcher")
 	}
 
-	url, _, errResult := resolvePaperURL(context.Background(), deps, "10.1038/nature12373")
+	url, _, errResult, fetchErr := resolvePaperURL(context.Background(), deps, "10.1038/nature12373")
 	if errResult != nil {
 		t.Fatalf("unexpected error result: %+v", errResult)
+	}
+	if fetchErr != nil {
+		t.Fatalf("unexpected fetch error: %v", fetchErr)
 	}
 	if url != "https://doi.org/10.1038/nature12373" {
 		t.Errorf("resolved URL = %q, want the doi.org redirect", url)
@@ -167,5 +190,81 @@ func TestPaperFulltextWithMockS2(t *testing.T) {
 	}
 	if out["trust"] != "untrusted-external-content" {
 		t.Errorf("trust marker missing: %v", out["trust"])
+	}
+}
+
+// TestPaperFulltextUpstreamErrorNotMisclassifiedAsConfigError: a bare (non-DOI)
+// identifier whose PaperFetcher call fails with a genuine upstream error (rate
+// limit) must surface as an upstream/rate-limited error, not the generic
+// "no provider configured" config_error — the two are not the same failure.
+func TestPaperFulltextUpstreamErrorNotMisclassifiedAsConfigError(t *testing.T) {
+	deps := setupTestDeps()
+	deps.AcademicProviders = map[string]search.AcademicProvider{
+		"semanticscholar": &failingPaperFetcher{err: errors.New("rate limited: 429")},
+	}
+
+	ctx := context.Background()
+	srv := createTestServer(deps)
+	client := connectTestClient(ctx, t, srv)
+	defer client.Close()
+
+	res, err := client.CallTool(ctx, &mcp.CallToolParams{Name: "paper_fulltext", Arguments: map[string]any{"identifier": "abc123"}})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected an error result for an upstream FetchPaper failure")
+	}
+	text := res.Content[0].(*mcp.TextContent).Text
+	if !strings.Contains(strings.ToLower(text), "rate limit") {
+		t.Errorf("expected a rate-limit error message, got: %s", text)
+	}
+	if strings.Contains(strings.ToLower(text), "no semantic scholar provider is configured") {
+		t.Errorf("upstream failure must not be reported as a config gap, got: %s", text)
+	}
+}
+
+// TestPaperFulltextDOIUpstreamErrorStillDegradesButErrIsNotLost verifies the DOI
+// path still falls back to the doi.org redirect on an upstream FetchPaper
+// failure (existing graceful-degradation contract), while resolvePaperURL
+// itself surfaces the error to the caller for audit/metrics visibility.
+func TestPaperFulltextDOIUpstreamErrorStillDegradesButErrIsNotLost(t *testing.T) {
+	deps := setupTestDeps()
+	wantErr := errors.New("upstream 500")
+	deps.AcademicProviders = map[string]search.AcademicProvider{
+		"semanticscholar": &failingPaperFetcher{err: wantErr},
+	}
+
+	url, meta, errResult, fetchErr := resolvePaperURL(context.Background(), deps, "10.1038/nature12373")
+	if errResult != nil {
+		t.Fatalf("unexpected error result: %+v", errResult)
+	}
+	if url != "https://doi.org/10.1038/nature12373" {
+		t.Errorf("resolved URL = %q, want the doi.org redirect", url)
+	}
+	if meta != nil {
+		t.Errorf("meta = %+v, want nil (fetch failed)", meta)
+	}
+	if fetchErr == nil {
+		t.Fatal("expected fetchErr to be surfaced instead of silently dropped")
+	}
+}
+
+// TestPaperFulltextIdentifierTooLarge: an identifier beyond the size cap is a
+// validation error, not a call into any provider.
+func TestPaperFulltextIdentifierTooLarge(t *testing.T) {
+	ctx := context.Background()
+	deps := scrapeTestDeps()
+	srv := createTestServer(deps)
+	client := connectTestClient(ctx, t, srv)
+	defer client.Close()
+
+	huge := strings.Repeat("a", maxPaperFulltextIdentifierBytes+1)
+	res, err := client.CallTool(ctx, &mcp.CallToolParams{Name: "paper_fulltext", Arguments: map[string]any{"identifier": huge}})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected a validation error for an oversized identifier")
 	}
 }
