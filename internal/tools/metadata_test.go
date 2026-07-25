@@ -45,6 +45,7 @@ var expectedTools = []string{
 	"workspace_contribute",
 	"workspace_read",
 	"brand_research",
+	"company_recon",
 }
 
 func listTools(t *testing.T) []*mcp.Tool {
@@ -178,6 +179,15 @@ func TestAllToolsHaveAnnotations(t *testing.T) {
 				if *tool.Annotations.OpenWorldHint {
 					t.Error("workspace_read should NOT be open-world")
 				}
+			case "company_recon":
+				// Not idempotent: crt.sh/Wayback CDX results grow over time (new
+				// certs logged, new captures archived) between two identical calls.
+				if tool.Annotations.IdempotentHint {
+					t.Error("company_recon should NOT be idempotent")
+				}
+				if !*tool.Annotations.OpenWorldHint {
+					t.Error("company_recon should be open-world")
+				}
 			default:
 				if !tool.Annotations.IdempotentHint {
 					t.Errorf("%s should be idempotent", tool.Name)
@@ -265,6 +275,7 @@ func TestOutputSchemaMatchesResponse(t *testing.T) {
 		"awesome_list_search": {"topic": "osint"},
 		"local_search":        {"query": "coffee near me"},
 		"brand_research":      {"url": "example.com"},
+		"company_recon":       {"target": "example.com"},
 	}
 
 	tools := listTools(t)
@@ -463,6 +474,7 @@ var structuredDomainDocTools = map[string]bool{
 	"awesome_list_search": true,
 	"archive_source":      true,
 	"brand_research":      true,
+	"company_recon":       true,
 }
 
 // TestProvidersDocStructuredDomainTable is a doc-drift guard for docs/PROVIDERS.md's

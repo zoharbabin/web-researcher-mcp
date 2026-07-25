@@ -280,6 +280,24 @@ func (m *mockLocalProvider) Local(_ context.Context, _ search.LocalSearchParams)
 	}}, nil
 }
 
+// mockCTLogResolver and mockArchiveResolver back company_recon's two
+// resolver-dependent phases in tests, mirroring the other mock*Provider types
+// above — a minimal fixed result so the tool's fan-out and merge logic (not
+// the live crt.sh/Wayback CDX APIs) is what's under test.
+type mockCTLogResolver struct{}
+
+func (m *mockCTLogResolver) Name() string { return "crt.sh" }
+func (m *mockCTLogResolver) Lookup(_ context.Context, domain string, _ int) ([]search.CertEntry, error) {
+	return []search.CertEntry{{Domain: "www." + domain, Issuer: "Mock CA", NotBefore: "2026-01-01", NotAfter: "2027-01-01", LoggedAt: "2026-01-01T00:00:00Z"}}, nil
+}
+
+type mockArchiveResolver struct{}
+
+func (m *mockArchiveResolver) Name() string { return "wayback-cdx" }
+func (m *mockArchiveResolver) Lookup(_ context.Context, domain string, _ int) ([]search.ArchiveEntry, error) {
+	return []search.ArchiveEntry{{URL: "https://" + domain + "/api/status", Timestamp: "20260101000000", StatusCode: "200", MimeType: "application/json", Category: "api"}}, nil
+}
+
 func setupTestDeps() Dependencies {
 	synth := &mockSynthProvider{}
 	academic := &mockAcademicProvider{}
@@ -311,10 +329,12 @@ func setupTestDeps() Dependencies {
 		// conditionally-registered tool is visible to the CI drift tests
 		// (TestToolsDocMatchesRegistry / TestAllToolsHaveAnnotations /
 		// TestOutputSchemaMatchesResponse). Production gates these by feature flag.
-		Consent:       consent.NewStoreManager(persist.NewMemoryStore()),
-		UserAnalytics: useranalytics.NewStoreRecorder(persist.NewMemoryStore()),
-		Memory:        memory.NewStore(persist.NewMemoryStore(), 0),
-		Workspaces:    workspace.NewStore(persist.NewMemoryStore(), 0),
+		Consent:         consent.NewStoreManager(persist.NewMemoryStore()),
+		UserAnalytics:   useranalytics.NewStoreRecorder(persist.NewMemoryStore()),
+		Memory:          memory.NewStore(persist.NewMemoryStore(), 0),
+		Workspaces:      workspace.NewStore(persist.NewMemoryStore(), 0),
+		CTLogResolver:   &mockCTLogResolver{},
+		ArchiveResolver: &mockArchiveResolver{},
 	}
 }
 

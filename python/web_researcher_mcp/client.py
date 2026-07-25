@@ -42,6 +42,7 @@ from web_researcher_mcp.models import (
     BrandResearchResponse,
     CitationGraphResponse,
     ClinicalSearchResponse,
+    CompanyReconResponse,
     EconSearchResponse,
     FilingSearchResponse,
     FormatBibliographyResponse,
@@ -473,6 +474,24 @@ class WebResearcherClient:
             },
         )
         return ClinicalSearchResponse.from_dict(d)
+    async def company_recon(
+        self,
+        target: str,
+        num_results: int = None,
+        phases: Optional[list] = None,
+        sessionId: str = None,
+    ) -> CompanyReconResponse:
+        """OSINT company reconnaissance with typed structured output: Certificate Transparency log SANs (crt"""
+        d = await self._call_tool(
+            "company_recon",
+            {
+                "target": target,
+                "num_results": num_results,
+                "phases": phases,
+                "sessionId": sessionId,
+            },
+        )
+        return CompanyReconResponse.from_dict(d)
     async def econ_search(
         self,
         country: str = None,
@@ -1296,6 +1315,21 @@ class SyncWebResearcherClient:
             sessionId=sessionId,
             sponsor=sponsor,
             status=status,
+            )
+        )
+    def company_recon(
+        self,
+        target: str,
+        num_results: int = None,
+        phases: Optional[list] = None,
+        sessionId: str = None,
+    ) -> CompanyReconResponse:
+        return self._run(
+            self._async_client.company_recon(
+            target=target,
+            num_results=num_results,
+            phases=phases,
+            sessionId=sessionId,
             )
         )
     def econ_search(

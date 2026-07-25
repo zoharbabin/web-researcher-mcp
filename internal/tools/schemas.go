@@ -1110,6 +1110,74 @@ var localSearchOutputSchema = map[string]any{
 	},
 }
 
+var companyReconOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"target":    map[string]any{"type": "string", "description": "The target as submitted (echo)."},
+		"domain":    map[string]any{"type": "string", "description": "Resolved canonical domain."},
+		"cache_age": map[string]any{"type": "integer"},
+		"trust":     trustUntrustedExternal,
+		"profile": map[string]any{
+			"type":        "object",
+			"description": "Present only when the profiling phase ran and found a web-search hit.",
+			"properties": map[string]any{
+				"summary": map[string]any{"type": "string", "description": "One-line company summary drawn from the top web_search result snippet."},
+			},
+		},
+		"cert_sans": map[string]any{
+			"type":        "array",
+			"description": "Certificate Transparency log SANs from crt.sh, deduplicated. Present only when the ct_logs phase ran.",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"domain":     map[string]any{"type": "string"},
+					"issuer":     map[string]any{"type": "string"},
+					"not_before": map[string]any{"type": "string"},
+					"not_after":  map[string]any{"type": "string"},
+					"logged_at":  map[string]any{"type": "string"},
+				},
+			},
+		},
+		"archive_urls": map[string]any{
+			"type":        "array",
+			"description": "Wayback Machine CDX historical URL inventory, filtered to 200/301/302 captures. Present only when the archives phase ran.",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"url":         map[string]any{"type": "string"},
+					"timestamp":   map[string]any{"type": "string", "description": "yyyyMMddHHmmss capture time."},
+					"status_code": map[string]any{"type": "string"},
+					"mime_type":   map[string]any{"type": "string"},
+					"category":    map[string]any{"type": "string", "enum": []any{"login", "api", "admin", "asset", "doc", "other"}, "description": "Inferred from URL path patterns."},
+				},
+			},
+		},
+		"subdomains": map[string]any{
+			"type":        "array",
+			"description": "Deduplicated subdomains derived from cert_sans and archive_urls.",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"subdomain": map[string]any{"type": "string"},
+					"source":    map[string]any{"type": "string", "enum": []any{"ct_logs", "archive"}},
+				},
+			},
+		},
+		"sources": map[string]any{
+			"type":        "array",
+			"description": "Which phases actually ran and contributed data — check this to see what was skipped (e.g. a resolver dependency absent, or an upstream error).",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"phase": map[string]any{"type": "string", "enum": []any{"profiling", "ct_logs", "archives", "web"}},
+					"name":  map[string]any{"type": "string"},
+					"url":   map[string]any{"type": "string"},
+				},
+			},
+		},
+	},
+}
+
 var brandResearchOutputSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{
