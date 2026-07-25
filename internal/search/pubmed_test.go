@@ -190,6 +190,35 @@ func TestPubMedFetchFullTextSuccess(t *testing.T) {
 	}
 }
 
+const jatsFixtureLeadInAndNested = `<?xml version="1.0"?>
+<pmc-articleset><article>
+<front><article-meta><abstract><p>This is the abstract.</p></abstract></article-meta></front>
+<body><p>Lead-in paragraph directly under body.</p><sec><p>Top-level section paragraph.</p><sec><p>Nested subsection paragraph.</p></sec></sec></body>
+</article></pmc-articleset>`
+
+// TestPubMedFetchFullTextLeadInAndNestedSections is a regression test: real
+// PMC JATS XML commonly has a lead-in <p> directly under <body> before any
+// <sec>, and <sec> can nest arbitrarily deep. Both must be captured, not just
+// paragraphs one level under a single <sec>.
+func TestPubMedFetchFullTextLeadInAndNestedSections(t *testing.T) {
+	p := newPubMedTestProvider(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(jatsFixtureLeadInAndNested))
+	})
+	text, err := p.FetchFullText(context.Background(), "PMC1111111")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(text, "Lead-in paragraph directly under body.") {
+		t.Errorf("text missing lead-in paragraph: %q", text)
+	}
+	if !strings.Contains(text, "Top-level section paragraph.") {
+		t.Errorf("text missing top-level section paragraph: %q", text)
+	}
+	if !strings.Contains(text, "Nested subsection paragraph.") {
+		t.Errorf("text missing nested subsection paragraph: %q", text)
+	}
+}
+
 func TestPubMedFetchFullTextEmpty(t *testing.T) {
 	p := newPubMedTestProvider(t, func(_ http.ResponseWriter, _ *http.Request) {
 		t.Error("empty PMCID must not make an HTTP call")

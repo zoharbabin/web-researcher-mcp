@@ -272,10 +272,33 @@ func pubmedPMCID(ids []pubmedArticleID) string {
 
 // jatsArticle models the minimal subset of PMC's JATS XML we extract text
 // from: the abstract and body paragraphs. efetch (db=pmc) wraps the article in
-// a <pmc-articleset> root, hence the leading "article>" path segment.
+// a <pmc-articleset> root, hence the leading "article>" path segment. Body
+// paragraphs can appear as a lead-in directly under <body> before any <sec>,
+// or nested arbitrarily deep inside <sec><sec>...; jatsSection recurses to
+// collect both, since Go's xml chained-path tags only match a fixed depth.
 type jatsArticle struct {
 	Abstract []jatsParagraph `xml:"article>front>article-meta>abstract>p"`
-	Body     []jatsParagraph `xml:"article>body>sec>p"`
+	Body     jatsSection     `xml:"article>body"`
+}
+
+type jatsSection struct {
+	Paragraphs  []jatsParagraph `xml:"p"`
+	Subsections []jatsSection   `xml:"sec"`
+}
+
+// paragraphText returns the trimmed, non-empty text of every paragraph in
+// this section and all nested subsections, depth-first.
+func (s jatsSection) paragraphText() []string {
+	var out []string
+	for _, p := range s.Paragraphs {
+		if t := strings.TrimSpace(p.Text); t != "" {
+			out = append(out, t)
+		}
+	}
+	for _, sub := range s.Subsections {
+		out = append(out, sub.paragraphText()...)
+	}
+	return out
 }
 
 type jatsParagraph struct {
@@ -331,11 +354,7 @@ func (p *PubMedProvider) FetchFullText(ctx context.Context, pmcid string) (strin
 			parts = append(parts, t)
 		}
 	}
-	for _, p := range article.Body {
-		if t := strings.TrimSpace(p.Text); t != "" {
-			parts = append(parts, t)
-		}
-	}
+	parts = append(parts, article.Body.paragraphText()...)
 	return strings.Join(parts, "\n\n"), nil
 }
 
