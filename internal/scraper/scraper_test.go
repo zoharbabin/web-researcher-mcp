@@ -1403,6 +1403,110 @@ ytInitialPlayerResponse = {"playabilityStatus":{"status":"OK"},"videoDetails":{"
 	}
 }
 
+// TestYouTubeScrape_InnerTubeStrategy0Success verifies the ANDROID_VR InnerTube
+// path (Strategy 0): GET the ANDROID_VR watch page for the API key, POST
+// youtubei/v1/player for a player response, then fetch the caption track's
+// baseUrl as VTT — all served by one test server, all ahead of the legacy web
+// player-response scrape.
+func TestYouTubeScrape_InnerTubeStrategy0Success(t *testing.T) {
+	captionVTT := "WEBVTT\n\n" +
+		"00:00:00.000 --> 00:00:03.000\nInnerTube ANDROID_VR caption text here.\n\n" +
+		"00:00:03.000 --> 00:00:07.000\nThis came from the youtubei player endpoint.\n\n" +
+		"00:00:07.000 --> 00:00:10.000\nNot from the legacy web scrape strategy.\n"
+
+	var sawPlayerPOST bool
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "youtubei/v1/player") && r.Method == http.MethodPost:
+			sawPlayerPOST = true
+			captionURL := "http://" + r.Host + "/captions"
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `{"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"baseUrl":%q,"languageCode":"en"}]}}}`, captionURL)
+		case strings.Contains(r.URL.Path, "captions"):
+			w.Header().Set("Content-Type", "text/vtt")
+			w.Write([]byte(captionVTT))
+		case strings.Contains(r.URL.Path, "watch"):
+			w.Header().Set("Content-Type", "text/html")
+			// Legacy web scrape would find no ytInitialPlayerResponse here — the
+			// InnerTube API key is present so Strategy 0 must resolve the
+			// transcript without ever needing this page's captions.
+			w.Write([]byte(`<!DOCTYPE html><html><head><title>InnerTube Video - YouTube</title></head>
+<body><script>var ytcfg = {"INNERTUBE_API_KEY":"test-api-key","VISITOR_DATA":"visitor-abc"};</script></body></html>`))
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	p.client = ts.Client()
+	p.client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		req.URL.Scheme = "http"
+		req.URL.Host = ts.Listener.Addr().String()
+		return http.DefaultTransport.RoundTrip(req)
+	})
+
+	result, err := p.scrapeYouTube(context.Background(), "https://www.youtube.com/watch?v=abc123def45", 50000)
+	if err != nil {
+		t.Fatalf("scrapeYouTube error: %v", err)
+	}
+	if !sawPlayerPOST {
+		t.Fatal("expected a POST to youtubei/v1/player")
+	}
+	if !strings.Contains(result.Content, "InnerTube ANDROID_VR caption text") {
+		t.Errorf("expected InnerTube-sourced transcript, got %q", result.Content)
+	}
+}
+
+// TestYouTubeScrape_InnerTubeFailureFallsBackToWebStrategy verifies that when
+// the InnerTube ANDROID_VR path fails (no API key resolvable), scrapeYouTube
+// falls through to the legacy web player-response strategy rather than
+// erroring out.
+func TestYouTubeScrape_InnerTubeFailureFallsBackToWebStrategy(t *testing.T) {
+	captionVTT := "WEBVTT\n\n" +
+		"00:00:00.000 --> 00:00:03.000\nLegacy web strategy caption text.\n\n" +
+		"00:00:03.000 --> 00:00:07.000\nUsed because InnerTube had no API key.\n\n" +
+		"00:00:07.000 --> 00:00:10.000\nFallthrough must still succeed.\n"
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "youtubei/v1/player"):
+			w.WriteHeader(500) // must not be reached: no API key was found
+		case strings.Contains(r.URL.Path, "captions"):
+			w.Header().Set("Content-Type", "text/vtt")
+			w.Write([]byte(captionVTT))
+		case strings.Contains(r.URL.Path, "watch") || r.URL.Query().Get("v") != "":
+			captionURL := "http://" + r.Host + "/captions"
+			playerResp := `{"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"baseUrl":"` + captionURL + `","languageCode":"en"}]}}}`
+			html := `<!DOCTYPE html><html><head><title>Legacy Path - YouTube</title></head><body>
+<script>ytInitialPlayerResponse = ` + playerResp + `;</script>
+</body></html>`
+			// No INNERTUBE_API_KEY anywhere on this host's pages — Strategy 0 must fail cleanly.
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte(html))
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	p.client = ts.Client()
+	p.client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		req.URL.Scheme = "http"
+		req.URL.Host = ts.Listener.Addr().String()
+		return http.DefaultTransport.RoundTrip(req)
+	})
+
+	result, err := p.scrapeYouTube(context.Background(), "https://www.youtube.com/watch?v=abc123def45", 50000)
+	if err != nil {
+		t.Fatalf("scrapeYouTube error: %v", err)
+	}
+	if !strings.Contains(result.Content, "Legacy web strategy caption text") {
+		t.Errorf("expected fallback to legacy web strategy, got %q", result.Content)
+	}
+}
+
 func TestYouTubeScrape_TranscriptStrategy1(t *testing.T) {
 	captionVTT := "WEBVTT\n\n" +
 		"00:00:00.000 --> 00:00:03.000\nWelcome to this video about testing strategies in Go.\n\n" +

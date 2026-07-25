@@ -262,11 +262,12 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
    └─ Block: loopback, link-local, RFC1918, metadata endpoints
 
 2. CONTENT TYPE DETECTION
-   ├─ YouTube URL → YouTube extractor (3-strategy fallback):
+   ├─ YouTube URL → YouTube extractor (4-strategy fallback):
+   │     Strategy 0: InnerTube ANDROID_VR client (youtubei/v1/player) — not PO-Token-gated, tried first
    │     Strategy 1: Player response captions (primary + alt regex), fmt=vtt (WebVTT)
    │     Strategy 2: Direct timedtext API (en, en-US, en-GB), fmt=vtt (WebVTT)
    │     Strategy 3: Video description (shortDescription JSON field)
-   │     Strategies 1-2 additionally score the transcript into up to 5 highlights (#284)
+   │     Strategies 0-2 additionally score the transcript into up to 5 highlights (#284)
    ├─ news.ycombinator.com → native HN API (Firebase REST + Algolia; no API key required):
    │     /item/<id>  → story metadata (title, URL, score, author, date) + top 10 comments
    │     /           → top 20 stories from the HN top-stories list (parallel Firebase fetch)
