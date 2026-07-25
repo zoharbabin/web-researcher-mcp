@@ -14,7 +14,11 @@ func TestScrapeErrors_E2E(t *testing.T) {
 	// These subtests point the scraper at local httptest servers (127.0.0.1) to
 	// exercise per-status error handling. Allow private IPs so the SSRF guard
 	// doesn't block the loopback target before the scraper sees the response.
-	h := newMCPTestHarness(t, "ALLOW_PRIVATE_IPS=true")
+	// Disable the Jina Reader tier: it would otherwise make a genuine outbound
+	// call to production r.jina.ai for these fixtures, which is both slow and
+	// non-deterministic (Jina's own anti-abuse network checks can 403 requests
+	// unrelated to the fixture's actual response).
+	h := newMCPTestHarness(t, "ALLOW_PRIVATE_IPS=true", "JINA_READER_DISABLED=true")
 
 	// Initialize
 	h.send(jsonRPCRequest{

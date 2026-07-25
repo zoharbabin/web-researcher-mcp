@@ -30,6 +30,7 @@ type Config struct {
 	AllowPrivateIPs        bool
 	AllowedDomains         []string
 	ChromePath             string
+	JinaDisabled           bool
 	MaxScrapeConcurrency   int
 	MaxHTMLBytes           int
 	MaxDocumentBytes       int
@@ -135,6 +136,7 @@ type SearchConfig struct {
 	SearchAPIKey       string
 	TavilyAPIKey       string
 	ExaAPIKey          string
+	JinaAPIKey         string // optional; the Jina Reader scraper tier works keyless, a key raises its rate limit
 	SearXNGURL         string
 	SearXNGBasicAuth   string            // raw "user:password" for a SearXNG behind HTTP Basic auth; "" => none (never logged)
 	SearXNGHeaders     map[string]string // validated static request headers for SearXNG; nil/empty => none
@@ -362,6 +364,7 @@ func Load() (*Config, error) {
 			SearchAPIKey:          searchAPIKey,
 			TavilyAPIKey:          tavilyKey,
 			ExaAPIKey:             exaKey,
+			JinaAPIKey:            os.Getenv("JINA_API_KEY"),
 			SearXNGURL:            searxngURL,
 			SearXNGBasicAuth:      searxngBasicAuth,
 			SearXNGHeaders:        searxngHeaders,
@@ -433,6 +436,7 @@ func Load() (*Config, error) {
 		AllowPrivateIPs:      envBool("ALLOW_PRIVATE_IPS", false),
 		AllowedDomains:       splitCSV(os.Getenv("ALLOWED_DOMAINS")),
 		ChromePath:           os.Getenv("CHROME_PATH"),
+		JinaDisabled:         envBool("JINA_READER_DISABLED", false),
 		MaxScrapeConcurrency: envInt("MAX_SCRAPE_CONCURRENCY", 5),
 		MaxHTMLBytes:         envInt("MAX_HTML_BYTES", 8<<20),
 		MaxDocumentBytes:     envInt("MAX_DOCUMENT_BYTES", 50<<20),
