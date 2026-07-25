@@ -93,9 +93,14 @@ run_gate "SAST (gosec) + pattern checks (rules 2.1/2.2/2.3/2.4/2.5, 4.1/4.4)" \
     ! grep -rn "TODO\|FIXME" internal/search/core.go internal/search/monarch.go internal/search/ct_logs.go internal/search/wayback_cdx.go internal/scraper/jina.go internal/tools/paper_fulltext.go internal/tools/monarchsearch.go internal/tools/syllabus_search.go internal/tools/gag_order_search.go internal/tools/company_recon.go 2>/dev/null
   '
 
+# internal/tools is deliberately excluded here: tool handlers hold zero
+# per-instance state (Design Rule 1 — deps flow through Dependencies,
+# constructed once in main.go), so no sub-issue's isolation rule requires a
+# dedicated multi-instance test there; the pattern below targets the
+# provider/router state that rule 1.1-1.3 actually concerns.
 run_gate_requiring_tests "Multi-instance isolation tests (rule 1.1/1.2/1.3)" \
   "$OUT_DIR/03-isolation.log" \
-  go test ./internal/search/... ./internal/scraper/... ./internal/tools/... -run 'TestMultiInstance.*|TestAvailableAcademicProviders|TestAvailableProviders|TestConcurrentAccess|TestRouter_WebPerProviderCap_DoesNotMutateOriginalParams' -v -count=1
+  go test ./internal/search/... ./internal/scraper/... -run 'TestMultiInstance.*|TestAvailableAcademicProviders|TestAvailableProviders|TestConcurrentAccess|TestRouter_WebPerProviderCap_DoesNotMutateOriginalParams' -v -count=1
 
 run_gate "Dead-code scan (go vet + staticcheck via lint)" \
   "$OUT_DIR/04-deadcode.log" \
