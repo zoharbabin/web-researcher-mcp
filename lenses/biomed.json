@@ -1,0 +1,22 @@
+{
+  "name": "biomed",
+  "description": "Rare-disease and biomedical knowledge-graph sources: ontology portals, gene-disease databases, and curated rare-disease registries",
+  "domains": [
+    "monarchinitiative.org",
+    "omim.org",
+    "orpha.net",
+    "hpo.jax.org",
+    "clinicalgenome.org",
+    "rarediseases.info.nih.gov",
+    "nord.org",
+    "clinvar.ncbi.nlm.nih.gov",
+    "disgenet.org",
+    "genecards.org",
+    "pubmed.ncbi.nlm.nih.gov",
+    "ncbi.nlm.nih.gov",
+    "reactome.org",
+    "linkml.io",
+    "ebi.ac.uk"
+  ],
+  "cx": ""
+}

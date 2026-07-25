@@ -146,6 +146,9 @@ type AcademicSearchParams struct {
 	NumResults int
 	OpenAccess bool
 	SortBy     string // "relevance" (default) or "date"
+	// FullText requests provider-side full-text enrichment when supported (e.g.
+	// PubMed PMC efetch). Best-effort: providers that don't support it ignore it.
+	FullText bool
 }
 
 // AcademicResult represents a scholarly paper from an academic search provider.
@@ -177,6 +180,10 @@ type AcademicResult struct {
 	// in the Directory of Open Access Journals (DOAJ) — a peer-reviewed OA
 	// quality signal. OpenAlex-only; omitted for all other providers.
 	IsInDoaj bool `json:"isInDoaj,omitempty"`
+	// FullText is the extracted full text of a PMC open-access article, populated
+	// only when AcademicSearchParams.FullText is true and a PMCID is available.
+	// Empty when the provider does not support full-text or the article is not in PMC.
+	FullText string `json:"fullText,omitempty"`
 }
 
 // RetractionStatus is the operator/model-facing integrity signal for a scholarly
@@ -213,15 +220,17 @@ type AcademicProviderConfig struct {
 	SemanticScholarAPIKey string // Semantic Scholar — optional; works keyless at a lower shared rate
 	PubMedAPIKey          string // PubMed E-utilities — optional; keyless by default, a key raises the rate
 	PubMedEmail           string // PubMed — optional NCBI contact (tool/email params), recommended not required
+	COREAPIKey            string // CORE.ac.uk — optional; keyless by default at a lower shared rate, a key raises the rate
 }
 
 // SupportedAcademicProviders lists all academic provider names. openalex and
 // crossref are authoritative bibliographic databases; pubmed is the biomedical
 // authority (NCBI E-utilities, keyless); semanticscholar adds AI-enrichment
-// (TLDR, citation intent/influence); exa is a neural-web alternate (research-paper
+// (TLDR, citation intent/influence); core is the largest OA full-text
+// aggregator (keyless); exa is a neural-web alternate (research-paper
 // category) — listed last so it sorts after them when no explicit routing is
 // configured.
-var SupportedAcademicProviders = []string{"openalex", "crossref", "pubmed", "semanticscholar", "exa"}
+var SupportedAcademicProviders = []string{"openalex", "crossref", "pubmed", "semanticscholar", "core", "exa"}
 
 // NewAcademicProviderByName creates an academic provider by name if configured.
 // Semantic Scholar is constructed even without an API key (it works at a lower
@@ -241,6 +250,9 @@ func NewAcademicProviderByName(name string, cfg AcademicProviderConfig, deps Dep
 		return NewPubMedProvider(cfg.PubMedAPIKey, cfg.PubMedEmail, deps)
 	case "semanticscholar":
 		return NewSemanticScholarProvider(cfg.SemanticScholarAPIKey, deps)
+	case "core":
+		// Keyless by default at a lower shared rate; a key raises it.
+		return NewCOREProvider(cfg.COREAPIKey, deps)
 	case "exa":
 		if cfg.ExaAPIKey != "" {
 			return NewExaProvider(cfg.ExaAPIKey, deps)

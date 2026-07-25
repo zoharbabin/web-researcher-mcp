@@ -28,6 +28,7 @@ class AcademicSearchPaper:
     citationCount: Optional[int] = None
     citationIntents: list[str] = field(default_factory=list)
     doi: Optional[str] = None
+    fullText: Optional[str] = None
     isInDoaj: Optional[bool] = None
     isInfluential: Optional[bool] = None
     journal: Optional[str] = None
@@ -49,6 +50,7 @@ class AcademicSearchPaper:
             citationCount=d.get('citationCount'),
             citationIntents=list(d.get('citationIntents') or []),
             doi=d.get('doi'),
+            fullText=d.get('fullText'),
             isInDoaj=d.get('isInDoaj'),
             isInfluential=d.get('isInfluential'),
             journal=d.get('journal'),
@@ -1287,6 +1289,68 @@ class Metadata:
             date=d.get('date'),
             site=d.get('site'),
             title=d.get('title'),
+        )
+
+@dataclass
+class MonarchSearchResponse:
+    hints: dict[str, Any] = field(default_factory=dict)
+    operation: Optional[str] = None
+    provider: Optional[str] = None
+    resultCount: Optional[int] = None
+    results: list[MonarchSearchResult] = field(default_factory=list)
+    trust: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "MonarchSearchResponse | None":
+        if d is None:
+            return None
+        return cls(
+            hints=dict(d.get('hints') or {}),
+            operation=d.get('operation'),
+            provider=d.get('provider'),
+            resultCount=d.get('resultCount'),
+            results=[MonarchSearchResult.from_dict(i) for i in (d.get('results') or [])],
+            trust=d.get('trust'),
+        )
+
+@dataclass
+class MonarchSearchResult:
+    ancestorId: Optional[str] = None
+    ancestorLabel: Optional[str] = None
+    category: Optional[str] = None
+    crossReferences: list[str] = field(default_factory=list)
+    description: Optional[str] = None
+    id: Optional[str] = None
+    label: Optional[str] = None
+    objectId: Optional[str] = None
+    objectLabel: Optional[str] = None
+    primaryKnowledgeSource: Optional[str] = None
+    score: Optional[float] = None
+    source: Optional[str] = None
+    subjectId: Optional[str] = None
+    subjectLabel: Optional[str] = None
+    text: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "MonarchSearchResult | None":
+        if d is None:
+            return None
+        return cls(
+            ancestorId=d.get('ancestorId'),
+            ancestorLabel=d.get('ancestorLabel'),
+            category=d.get('category'),
+            crossReferences=list(d.get('crossReferences') or []),
+            description=d.get('description'),
+            id=d.get('id'),
+            label=d.get('label'),
+            objectId=d.get('objectId'),
+            objectLabel=d.get('objectLabel'),
+            primaryKnowledgeSource=d.get('primaryKnowledgeSource'),
+            score=d.get('score'),
+            source=d.get('source'),
+            subjectId=d.get('subjectId'),
+            subjectLabel=d.get('subjectLabel'),
+            text=d.get('text'),
         )
 
 @dataclass

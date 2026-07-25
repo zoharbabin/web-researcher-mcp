@@ -3,6 +3,7 @@ package search
 import (
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
@@ -26,9 +27,12 @@ import (
 // The DOI lives in result[pmid].articleids[] where idtype=="doi". Authors are in
 // result[pmid].authors[].name ("Surname Initials"). Year is the first 4 chars of
 // sortpubdate. Both calls return HTTP 200 even for errors/empty, so the JSON body
-// is inspected (esearchresult.ERROR, empty idlist, per-record error). Abstracts
-// are intentionally NOT fetched (that needs a third efetch call); summary fields
-// are sufficient for an academic record.
+// is inspected (esearchresult.ERROR, empty idlist, per-record error).
+//
+// When AcademicSearchParams.FullText is true and a result has a PMCID (present in
+// articleids[] when the article is deposited in PubMed Central), a third call —
+// efetch.fcgi against PMC — fetches the JATS XML full text. Best-effort: articles
+// without a PMCID or with an efetch failure are returned without FullText set.
 type PubMedProvider struct {
 	baseURL string
 	apiKey  string
@@ -84,7 +88,24 @@ func (p *PubMedProvider) doScholarly(ctx context.Context, params AcademicSearchP
 	if len(pmids) == 0 {
 		return nil, nil // valid query, no matches
 	}
-	return p.esummary(ctx, pmids)
+	results, pmcids, err := p.esummary(ctx, pmids)
+	if err != nil {
+		return nil, err
+	}
+	if params.FullText {
+		for i := range results {
+			pmcid, ok := pmcids[results[i].URL]
+			if !ok || pmcid == "" {
+				continue
+			}
+			text, ferr := p.FetchFullText(ctx, pmcid)
+			if ferr != nil || text == "" {
+				continue // best-effort: full text is an enrichment, not required
+			}
+			results[i].FullText = text
+		}
+	}
+	return results, nil
 }
 
 // esearchResponse models the esearch JSON we read.
@@ -159,7 +180,9 @@ type pubmedDocSummary struct {
 }
 
 // esummary fetches document summaries for the PMIDs and maps them to records.
-func (p *PubMedProvider) esummary(ctx context.Context, pmids []string) ([]AcademicResult, error) {
+// The second return value maps each result's URL to its PMCID (when the article
+// is deposited in PubMed Central); entries are absent when no PMCID is present.
+func (p *PubMedProvider) esummary(ctx context.Context, pmids []string) ([]AcademicResult, map[string]string, error) {
 	q := url.Values{}
 	q.Set("db", "pubmed")
 	q.Set("id", strings.Join(pmids, ","))
@@ -168,7 +191,7 @@ func (p *PubMedProvider) esummary(ctx context.Context, pmids []string) ([]Academ
 
 	body, err := p.get(ctx, "/esummary.fcgi?"+q.Encode())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// "result" is a heterogeneous object: "uids":[…] plus one object per PMID.
@@ -176,10 +199,11 @@ func (p *PubMedProvider) esummary(ctx context.Context, pmids []string) ([]Academ
 		Result map[string]json.RawMessage `json:"result"`
 	}
 	if err := json.Unmarshal(body, &envelope); err != nil {
-		return nil, fmt.Errorf("pubmed: esummary parse: %w", err)
+		return nil, nil, fmt.Errorf("pubmed: esummary parse: %w", err)
 	}
 
 	out := make([]AcademicResult, 0, len(pmids))
+	pmcids := make(map[string]string)
 	for _, pmid := range pmids { // preserve esearch (relevance/date) order
 		raw, ok := envelope.Result[pmid]
 		if !ok {
@@ -192,9 +216,13 @@ func (p *PubMedProvider) esummary(ctx context.Context, pmids []string) ([]Academ
 		if doc.Error != "" {
 			continue // per-record error (e.g. bad PMID) — skip, keep the rest
 		}
-		out = append(out, p.toResult(pmid, doc))
+		result := p.toResult(pmid, doc)
+		if pmcid := pubmedPMCID(doc.ArticleIDs); pmcid != "" {
+			pmcids[result.URL] = pmcid
+		}
+		out = append(out, result)
 	}
-	return out, nil
+	return out, pmcids, nil
 }
 
 // toResult maps one PubMed document summary to an AcademicResult.
@@ -229,6 +257,105 @@ func pubmedDOI(ids []pubmedArticleID) string {
 		}
 	}
 	return ""
+}
+
+// pubmedPMCID extracts the PubMed Central ID from the articleids list
+// (idtype=="pmc"). Returns "" when the article isn't deposited in PMC.
+func pubmedPMCID(ids []pubmedArticleID) string {
+	for _, id := range ids {
+		if id.IDType == "pmc" {
+			return strings.TrimSpace(id.Value)
+		}
+	}
+	return ""
+}
+
+// jatsArticle models the minimal subset of PMC's JATS XML we extract text
+// from: the abstract and body paragraphs. efetch (db=pmc) wraps the article in
+// a <pmc-articleset> root, hence the leading "article>" path segment. Body
+// paragraphs can appear as a lead-in directly under <body> before any <sec>,
+// or nested arbitrarily deep inside <sec><sec>...; jatsSection recurses to
+// collect both, since Go's xml chained-path tags only match a fixed depth.
+type jatsArticle struct {
+	Abstract []jatsParagraph `xml:"article>front>article-meta>abstract>p"`
+	Body     jatsSection     `xml:"article>body"`
+}
+
+type jatsSection struct {
+	Paragraphs  []jatsParagraph `xml:"p"`
+	Subsections []jatsSection   `xml:"sec"`
+}
+
+// paragraphText returns the trimmed, non-empty text of every paragraph in
+// this section and all nested subsections, depth-first.
+func (s jatsSection) paragraphText() []string {
+	var out []string
+	for _, p := range s.Paragraphs {
+		if t := strings.TrimSpace(p.Text); t != "" {
+			out = append(out, t)
+		}
+	}
+	for _, sub := range s.Subsections {
+		out = append(out, sub.paragraphText()...)
+	}
+	return out
+}
+
+type jatsParagraph struct {
+	Text string `xml:",chardata"`
+}
+
+// FetchFullText retrieves and extracts the full text of a PMC open-access
+// article via efetch (JATS XML). Returns ("", nil) on a soft failure (not
+// found, unparsable XML) — full text is best-effort enrichment, never a hard
+// requirement for a search result. Returns a non-nil error only on network
+// failure, so callers can distinguish "try again" from "no full text exists".
+func (p *PubMedProvider) FetchFullText(ctx context.Context, pmcid string) (string, error) {
+	pmcid = strings.TrimSpace(pmcid)
+	if pmcid == "" {
+		return "", nil
+	}
+	q := url.Values{}
+	q.Set("db", "pmc")
+	q.Set("id", pmcid)
+	q.Set("rettype", "xml")
+	q.Set("retmode", "xml")
+	p.addAuth(q)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.baseURL+"/efetch.fcgi?"+q.Encode(), nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "application/xml")
+	resp, err := p.deps.HTTPClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("pubmed: efetch request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == 429 {
+		return "", fmt.Errorf("pubmed: efetch rate limited (set PUBMED_API_KEY to raise the limit): %w", circuit.ErrRateLimit)
+	}
+	if resp.StatusCode >= 400 {
+		return "", nil // not found / not OA in PMC — soft failure
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 8*1024*1024))
+	if err != nil {
+		return "", fmt.Errorf("pubmed: efetch read body: %w", err)
+	}
+
+	var article jatsArticle
+	if err := xml.Unmarshal(body, &article); err != nil {
+		return "", nil // malformed XML — soft failure, not propagated
+	}
+
+	var parts []string
+	for _, p := range article.Abstract {
+		if t := strings.TrimSpace(p.Text); t != "" {
+			parts = append(parts, t)
+		}
+	}
+	parts = append(parts, article.Body.paragraphText()...)
+	return strings.Join(parts, "\n\n"), nil
 }
 
 // pubmedYear parses a 4-digit year from sortpubdate ("2026/06/01 00:00") or, as a

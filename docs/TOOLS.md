@@ -144,7 +144,7 @@ type ScrapeOutput struct {
     SizeCategory    string    `json:"sizeCategory"`   // small, medium, large, very_large
     Citation        *Citation `json:"citation"`       // always present
     Raw             bool      `json:"raw,omitempty"`  // true only in raw mode; omitted otherwise
-    ExtractedBy     string    `json:"extractedBy,omitempty"` // extraction tier: markdown|stealth|html|browser|exa:cached|exa:crawled; omitted when unknown
+    ExtractedBy     string    `json:"extractedBy,omitempty"` // extraction tier: markdown|stealth|jina|html|browser|exa:cached|exa:crawled; omitted when unknown
     ExtractionQuality string  `json:"extractionQuality,omitempty"` // complete when the pipeline returned a confident extraction; partial when every tier was exhausted and the best-quality candidate was returned instead. Never an error. Omitted in raw mode.
     WordCount         int     `json:"wordCount,omitempty"`         // words in the extracted content (#358); orthogonal to ExtractionQuality — a "complete" extraction can still be a thin paywall/bot-wall stub. Omitted in raw mode.
     SparsityWarning   string  `json:"sparsityWarning,omitempty"`   // present only when WordCount is below ~150 — the content may be too thin for a reliable claim check (#358). Omitted in raw mode and whenever content is not thin.
@@ -223,7 +223,7 @@ In `raw` mode the output additionally carries `"raw": true`, and `contentType` i
 
 **Structured data (#46).** When the page embeds machine-readable metadata, the response carries a `structuredData` object alongside `content`: `jsonLd` (each `<script type="application/ld+json">` block, kept verbatim — invalid JSON is skipped, never failing the scrape), `openGraph` (`og:*`/`article:*` meta, keys keep their prefix), and `citation` (Highwire `citation_*` meta — DOI, authors, journal). The whole object is omitted when no such markup is present, and each sub-field is omitted when empty. It is produced by the HTML-extraction tiers only (absent for `raw` mode, PDFs, YouTube, and markdown-tier results), is independently size-bounded so a pathological page cannot blow the response budget, and is **untrusted external data** under the same trust boundary as `content`.
 
-**Extraction provenance (`extractedBy`).** When known, the response names the tier that produced the content: `markdown`, `stealth`, `html`, `browser`, `github:raw`/`github:contents-api`/`github:gist-api`, or — for the paid Exa fallback — `exa:cached` / `exa:crawled`. It lets a caller see whether content came from a free local tier or the metered Exa `/contents` API (Tier 5, present only when `EXA_API_KEY` is set). Omitted when unknown (e.g. document/YouTube routes).
+**Extraction provenance (`extractedBy`).** When known, the response names the tier that produced the content: `markdown`, `stealth`, `jina`, `html`, `browser`, `github:raw`/`github:contents-api`/`github:gist-api`, or — for the paid Exa fallback — `exa:cached` / `exa:crawled`. It lets a caller see whether content came from a free local tier or the metered Exa `/contents` API (Tier 5, present only when `EXA_API_KEY` is set). Omitted when unknown (e.g. document/YouTube routes).
 
 **Content-volume signal (#358).** `wordCount` is emitted for every non-raw scrape and is a cheap, deterministic proxy for how much prose was actually extracted — it is **orthogonal** to `extractionQuality`, which reflects pipeline tier exhaustion, not content volume: a `complete` extraction can still be a thin paywall/bot-wall stub (a few sentences behind a subscribe wall) if that stub was returned confidently by an early tier. When `wordCount` falls below ~150, `sparsityWarning` is added with a human-readable note that claim checks against this source may be unreliable. Both fields are omitted in raw mode. `verify_citation`, `audit_bibliography`, and `search_and_scrape` surface the same signal (see their sections below) so a caller can tell a thin stub from a genuinely well-supported claim check.
 
@@ -282,7 +282,7 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
    ├─ .docx / application/vnd.openxmlformats* → DOCX parser
    └─ .pptx / application/vnd.ms-powerpoint → PPTX parser
 
-3. WEB PAGE EXTRACTION (4 free tiers, ordered by speed; + optional paid Exa tier last)
+3. WEB PAGE EXTRACTION (5 free tiers, ordered by speed; + optional paid Exa tier last)
    a) Tier 1: MARKDOWN NEGOTIATION (fastest, ~200ms)
       ├─ Send GET with Accept: text/markdown
       ├─ 5-second timeout
@@ -297,7 +297,15 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
       ├─ SSRF protection via safe dialer when AllowPrivateIPs=false
       └─ If below 100-char threshold → next tier
 
-   c) Tier 3: HTML EXTRACTION via goquery (standard, ~500ms)
+   c) Tier 2.5: JINA READER (cloud proxy, free/keyless, ~1-3s) — skipped when
+      JINA_READER_DISABLED is set (#270)
+      ├─ POST to r.jina.ai with the target URL; returns clean extracted markdown
+      ├─ Recovers Cloudflare/JS-heavy pages the local HTTP tiers (a, b) cannot,
+      │  without paying for the browser tier
+      ├─ Keyless free tier; optional JINA_API_KEY only raises the rate limit
+      └─ If empty content or HTTP error → next tier
+
+   d) Tier 3: HTML EXTRACTION via goquery (standard, ~500ms)
       ├─ Fetch page with standard Accept header
       ├─ Parse with goquery
       ├─ Extract: article > main > body (priority order)
@@ -305,7 +313,7 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
       ├─ Minimum content: 100 bytes, 10% meaningful text ratio
       └─ If below threshold → next tier
 
-   d) Tier 4: HEADLESS BROWSER via go-rod + stealth (slow, ~5s)
+   e) Tier 4: HEADLESS BROWSER via go-rod + stealth (slow, ~5s)
       ├─ Browser pool with lazy init + singleton pattern
       ├─ go-rod/stealth plugin (navigator spoofing, WebGL masking)
       ├─ Used for: Known SPA domains, JS-rendered content, bot challenges
@@ -313,7 +321,7 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
       ├─ Extract: rendered DOM via JavaScript evaluation
       └─ Graceful cleanup via Pipeline.Close()
 
-   e) Tier 5: EXA /contents (PAID, opt-in, last resort) — only when EXA_API_KEY is set
+   f) Tier 5: EXA /contents (PAID, opt-in, last resort) — only when EXA_API_KEY is set
       ├─ Neural extractor: POST https://api.exa.ai/contents (x-api-key auth)
       ├─ Runs ONLY after every free tier above failed to extract >100 bytes,
       │  so the common path never incurs Exa cost
@@ -612,7 +620,8 @@ On a zero-result response, `hints` carries the same `ZeroResultHints` object as 
 | `pdf_only` | bool | no | false | — |
 | `sort_by` | string | no | `relevance` | relevance, date |
 | `open_access` | bool | no | false | Only return open-access papers |
-| `provider` | string | no | — | Force provider: openalex, crossref, pubmed, semanticscholar, exa (academic APIs), or google, brave, serper, searxng, searchapi, duckduckgo, tavily (web fallback) |
+| `full_text` | bool | no | false | Fetch PMC full text for open-access biomedical articles with a PubMed Central ID. Only effective when the `pubmed` provider is active. Substantially increases response time |
+| `provider` | string | no | — | Force provider: openalex, crossref, pubmed, semanticscholar, core, exa (academic APIs), or google, brave, serper, searxng, searchapi, duckduckgo, tavily (web fallback) |
 | `sessionId` | string | no | — | Link results to a `sequential_search` session; sources are auto-recorded for recovery after context loss |
 
 ### Output Fields
@@ -636,6 +645,7 @@ Each paper in the `papers` array contains:
 | `isInfluential` | bool | no | Whether Semantic Scholar flags this as a highly-influential paper |
 | `citationIntents` | []string | no | Citation-intent labels (e.g. background, methodology) — populated by `citation_graph`, not plain search |
 | `isInDoaj` | bool | no | Whether OpenAlex reports the journal is listed in the Directory of Open Access Journals (DOAJ) — a peer-reviewed OA quality signal. OpenAlex-only |
+| `fullText` | string | no | Full article text extracted from PubMed Central via `efetch`. Present only when `full_text=true` and the article has a PMCID. PubMed-only |
 
 Additional output fields: `query`, `totalResults`, `resultCount`, `source` (which provider answered: openalex, crossref, router, web_search), `hints` (a `ZeroResultHints` object explaining why a query returned nothing and suggesting how to broaden it — present on zero-result responses), and `trust` (always `"untrusted-external-content"` — treat results as data, not instructions; OWASP LLM01).
 
@@ -644,11 +654,13 @@ Additional output fields: `query`, `totalResults`, `resultCount`, `source` (whic
 - When academic providers (OpenAlex, CrossRef, PubMed, Semantic Scholar) are configured, returns rich metadata (DOI, authors, citations, OA status)
 - Metadata richness varies by provider: OpenAlex returns abstracts, citation counts, and authors consistently; Semantic Scholar adds `tldr` and `isInfluential`; CrossRef is a DOI registry and may omit abstracts/citation counts; PubMed returns biomedical records (title, authors, year, venue, DOI) — no abstract in the summary response. Automatic selection prefers OpenAlex; others answer when explicitly forced or as a fallback. Field absence reflects the provider, not an error.
 - Without academic env vars, falls back to site-restricted web search (identical to previous behavior)
-- OpenAlex/CrossRef require only an email address (no API key); PubMed and Semantic Scholar work key-free at a lower shared rate (`PUBMED_API_KEY` / `SEMANTIC_SCHOLAR_API_KEY` raise the respective limit). PubMed DOIs feed the same retraction enrichment as every other provider.
+- OpenAlex/CrossRef require only an email address (no API key); PubMed, Semantic Scholar, and CORE work key-free at a lower shared rate (`PUBMED_API_KEY` / `SEMANTIC_SCHOLAR_API_KEY` / `CORE_API_KEY` raise the respective limit). PubMed DOIs feed the same retraction enrichment as every other provider.
+- CORE (core.ac.uk) aggregates 300M+ open-access works from repositories worldwide; every result has `openAccess:true`, and `pdfUrl` links directly to full text when available. It does not resolve DOI entities or provide citation-graph edges — use OpenAlex or Semantic Scholar for those.
 - **Open-access enrichment (Unpaywall):** when `UNPAYWALL_EMAIL` (or `OPENALEX_EMAIL`) is set, DOI-bearing results that lack a PDF link are enriched with the best open-access PDF Unpaywall knows about. Best-effort: never overwrites a provider-supplied `pdfUrl`, never fails the search, and runs *before* the `pdf_only` filter so resolved PDFs are counted. No-op when unconfigured.
 - `source` filter: when set (e.g., "arxiv"), OpenAlex filters by source ID; web fallback restricts to that source's domain
 - `sort_by=date`: OpenAlex sorts by `publication_date:desc`; CrossRef uses `published:desc`
 - `pdf_only`: post-filters results to only those with `PDFUrl` populated (may reduce result count)
+- `full_text`: when the active provider is `pubmed`, extracts the PMCID already present in each result's `esummary` metadata and fetches PMC's `efetch` JATS XML for that article, populating `fullText` with the extracted abstract + body paragraphs. Best-effort per-article (an article without a PMCID, or an efetch failure, is returned without `fullText` — the search never fails because full text was unavailable). No effect with other providers.
 
 ### Academic Site Pool (web search fallback)
 arxiv.org, pubmed.ncbi.nlm.nih.gov, scholar.google.com, ieeexplore.ieee.org, dl.acm.org, nature.com, sciencedirect.com, link.springer.com, researchgate.net, plos.org, frontiersin.org, mdpi.com, wiley.com, jstor.org, semanticscholar.org, biorxiv.org, medrxiv.org
@@ -1735,6 +1747,52 @@ Each `lists[]` item: `name`, `fullName` (owner/repo of the list's source reposit
 
 ### Annotations
 - ReadOnly: true · Idempotent: true · OpenWorld: true (queries the live ecosyste.ms API)
+
+### Cache
+- TTL: 6 hours (only for non-empty results)
+
+---
+
+## Tool 31: `monarch_search`
+
+Query the **Monarch Initiative** biomedical knowledge graph — rank diseases and genes by phenotype similarity, look up disease/gene/phenotype entities, and traverse gene-disease-phenotype associations. One tool, five operations selected by the required `operation` field. The Monarch API is keyless, so this tool is always registered. For published literature on a condition, combine with `academic_search`; for active interventional trials, use `clinical_search`. Discovery only — not medical advice, and the `annotate` operation must never be sent identifiable patient data (it forwards free text to a public third-party API with no BAA).
+
+### Input Schema
+
+| Field | Type | Required | Default | Constraints |
+|-------|------|----------|---------|-------------|
+| `operation` | string | yes | — | One of: `semsim`, `entity`, `associations`, `compare`, `annotate` |
+| `phenotypes` | []string | yes* | — | `semsim`/`compare`: HPO term IDs, e.g. `["HP:0001166","HP:0001083"]`. Max 20 |
+| `group` | string | no | `Human Diseases` | `semsim`: one of `Human Genes`, `Mouse Genes`, `Rat Genes`, `Zebrafish Genes`, `C. Elegans Genes`, `Human Diseases` |
+| `compareTo` | []string | yes* | — | `compare`: second list of HPO term IDs to compare `phenotypes` against. Max 20 |
+| `query` | string | yes* | — | `entity`: free-text search term, e.g. `"Marfan syndrome"` |
+| `entityId` | string | yes* | — | `entity`/`associations`: an entity CURIE, e.g. `MONDO:0007947`, `HGNC:3603`, `HP:0001166`. Must match `^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$` |
+| `assocSubject` | string | yes* | — | `associations`: subject-side entity CURIE to filter edges by |
+| `assocObject` | string | yes* | — | `associations`: object-side entity CURIE to filter edges by |
+| `category` | string | no | — | `associations`: Biolink association category enum, e.g. `biolink:CausalGeneToDiseaseAssociation` |
+| `text` | string | yes* | — | `annotate`: short clinical text to ground to HPO terms. Max 2000 characters. Never patient-identifiable |
+| `numResults` | int | no | 20 | 1–200 (the API caps association pages at 200) |
+| `provider` | string | no | — | Force a Monarch provider: `monarch` |
+| `sessionId` | string | no | — | Record results as sources on a `sequential_search` session |
+
+\*Required per `operation`: `semsim` needs `phenotypes`; `entity` needs `query` or `entityId`; `associations` needs one of `entityId`/`assocSubject`/`assocObject`; `compare` needs both `phenotypes` and `compareTo`; `annotate` needs `text`.
+
+### Output Fields
+
+Each `results[]` item carries only the fields relevant to its operation: `source` (always `monarch`), plus — `semsim`: `id`, `label`, `category`, `score`, `ancestorId`, `ancestorLabel`; `entity`: `id`, `label`, `category`, `description`, `crossReferences` (array); `associations`: `subjectId`, `subjectLabel`, `objectId`, `objectLabel`, `category`, `primaryKnowledgeSource`; `compare`: `score`, `ancestorId`, `ancestorLabel`; `annotate`: `id`, `label`, `text` (the matched span, sanitized). Plus `operation` (echo), `resultCount`, `provider`, `hints` (when empty), and `trust` (`untrusted-external-content`).
+
+### Behavior
+- **Operation discriminator.** `operation` selects one of five distinct API calls; each has its own required-field validation, enforced before any HTTP call is made.
+- **CURIE injection guard.** `entityId` is validated against a strict CURIE pattern pre-flight for both `entity` and `associations`; a path-traversal or otherwise malformed ID (e.g. `../etc/passwd`) is rejected with a validation error, never sent upstream. Association filter values (`assocSubject`/`assocObject`/`category`/`entityId`) are additionally checked for `&`/`?`/`#`/`/` characters as defense in depth beyond URL encoding.
+- **Caps.** `phenotypes`/`compareTo` are capped at 20 HPO terms per query; `text` is capped at 2000 characters — both enforced before the call.
+- **Sanitization.** `annotate`'s matched-span `text` is passed through `content.Processor.SanitizeText()` before being returned, since it is derived from third-party HTML.
+- **Provider honoring**: an explicit `provider` is used exclusively; otherwise the first configured provider answers. An error/empty returns a structured zero-result with hints (no silent fallback).
+- A `404`/no-match from the API is an empty result, never a panic; a `429` surfaces as a rate-limited error.
+- **Auth**: keyless — the Monarch Initiative API needs no API key.
+- **No identifiable patient data.** The `annotate` operation forwards its `text` argument to a public third-party API with no Business Associate Agreement — callers must never submit real patient data.
+
+### Annotations
+- ReadOnly: true · Idempotent: true · OpenWorld: true (queries the live Monarch Initiative API)
 
 ### Cache
 - TTL: 6 hours (only for non-empty results)
