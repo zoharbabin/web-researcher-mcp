@@ -1482,6 +1482,22 @@ class ResearchExportResponse:
         )
 
 @dataclass
+class ScrapePageHighlight:
+    score: Optional[float] = None
+    startTime: Optional[str] = None
+    text: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "ScrapePageHighlight | None":
+        if d is None:
+            return None
+        return cls(
+            score=d.get('score'),
+            startTime=d.get('startTime'),
+            text=d.get('text'),
+        )
+
+@dataclass
 class ScrapePageMetadata:
     author: Optional[str] = None
     title: Optional[str] = None
@@ -1508,6 +1524,7 @@ class ScrapePageResponse:
     extractedBy: Optional[str] = None
     extractionQuality: Optional[str] = None
     forumSignals: Optional[ForumSignals] = None
+    highlights: list[ScrapePageHighlight] = field(default_factory=list)
     metadata: Optional[ScrapePageMetadata] = None
     raw: Optional[bool] = None
     retractionStatus: Optional[Any] = None
@@ -1536,6 +1553,7 @@ class ScrapePageResponse:
             extractedBy=d.get('extractedBy'),
             extractionQuality=d.get('extractionQuality'),
             forumSignals=ForumSignals.from_dict(d.get('forumSignals')) if d.get('forumSignals') else None,
+            highlights=[ScrapePageHighlight.from_dict(i) for i in (d.get('highlights') or [])],
             metadata=ScrapePageMetadata.from_dict(d.get('metadata')) if d.get('metadata') else None,
             raw=d.get('raw'),
             retractionStatus=d.get('retractionStatus') or None,
