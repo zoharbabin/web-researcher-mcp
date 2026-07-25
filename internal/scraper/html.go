@@ -132,7 +132,7 @@ func (p *Pipeline) scrapeHTML(ctx context.Context, url string, maxLength int) (*
 	}
 	// Extract forum signals (Reddit upvotes, comments, etc.) from JSON-LD
 	if res.StructuredData != nil && len(res.StructuredData.JSONLD) > 0 {
-		res.ForumSignals = extractForumSignals(ctx, url, res.StructuredData.JSONLD, p.client, "")
+		res.ForumSignals = extractForumSignals(ctx, url, res.StructuredData.JSONLD, p.client, p.config.ShredditBase)
 	}
 	return res, nil
 }
