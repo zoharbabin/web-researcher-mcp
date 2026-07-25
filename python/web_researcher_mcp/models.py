@@ -1398,6 +1398,52 @@ class NewsSearchResponse:
         )
 
 @dataclass
+class PaperFulltextResponse:
+    abstract: Optional[str] = None
+    authors: list[str] = field(default_factory=list)
+    citation: Optional[Citation] = None
+    citationCount: Optional[int] = None
+    content: Optional[str] = None
+    doi: Optional[str] = None
+    identifier: Optional[str] = None
+    journal: Optional[str] = None
+    openAccess: Optional[bool] = None
+    pdfUrl: Optional[str] = None
+    resolvedUrl: Optional[str] = None
+    scrapeTier: Optional[str] = None
+    source: Optional[str] = None
+    title: Optional[str] = None
+    tldr: Optional[str] = None
+    truncated: Optional[bool] = None
+    trust: Optional[str] = None
+    year: Optional[int] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "PaperFulltextResponse | None":
+        if d is None:
+            return None
+        return cls(
+            abstract=d.get('abstract'),
+            authors=list(d.get('authors') or []),
+            citation=Citation.from_dict(d.get('citation')) if d.get('citation') else None,
+            citationCount=d.get('citationCount'),
+            content=d.get('content'),
+            doi=d.get('doi'),
+            identifier=d.get('identifier'),
+            journal=d.get('journal'),
+            openAccess=d.get('openAccess'),
+            pdfUrl=d.get('pdfUrl'),
+            resolvedUrl=d.get('resolvedUrl'),
+            scrapeTier=d.get('scrapeTier'),
+            source=d.get('source'),
+            title=d.get('title'),
+            tldr=d.get('tldr'),
+            truncated=d.get('truncated'),
+            trust=d.get('trust'),
+            year=d.get('year'),
+        )
+
+@dataclass
 class PatentSearchPatent:
     abstract: Optional[str] = None
     assignee: Optional[str] = None

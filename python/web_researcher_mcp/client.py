@@ -55,6 +55,7 @@ from web_researcher_mcp.models import (
     MemorySaveResponse,
     MonarchSearchResponse,
     NewsSearchResponse,
+    PaperFulltextResponse,
     PatentSearchResponse,
     ResearchExportResponse,
     ScrapePageResponse,
@@ -756,6 +757,20 @@ class WebResearcherClient:
             },
         )
         return NewsSearchResponse.from_dict(d)
+    async def paper_fulltext(
+        self,
+        identifier: str,
+        max_length: int = None,
+    ) -> PaperFulltextResponse:
+        """Retrieve the full text of an academic paper from its DOI, Semantic Scholar paper ID, or a direct URL — one call instead of chaining academic_search then scrape_page"""
+        d = await self._call_tool(
+            "paper_fulltext",
+            {
+                "identifier": identifier,
+                "max_length": max_length,
+            },
+        )
+        return PaperFulltextResponse.from_dict(d)
     async def patent_search(
         self,
         assignee: str = None,
@@ -1581,6 +1596,17 @@ class SyncWebResearcherClient:
             sessionId=sessionId,
             sort_by=sort_by,
             time_range=time_range,
+            )
+        )
+    def paper_fulltext(
+        self,
+        identifier: str,
+        max_length: int = None,
+    ) -> PaperFulltextResponse:
+        return self._run(
+            self._async_client.paper_fulltext(
+            identifier=identifier,
+            max_length=max_length,
             )
         )
     def patent_search(
