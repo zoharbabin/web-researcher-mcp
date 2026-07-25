@@ -30,9 +30,16 @@ var blockedHostnames = []string{
 }
 
 func NewSSRFSafeClient(allowPrivate bool) *http.Client {
+	return NewSSRFSafeClientWithTimeout(allowPrivate, 30*time.Second)
+}
+
+// NewSSRFSafeClientWithTimeout is NewSSRFSafeClient with a caller-chosen
+// timeout, for upstreams whose observed latency (e.g. Wayback CDX under load)
+// regularly exceeds the 30s default.
+func NewSSRFSafeClientWithTimeout(allowPrivate bool, timeout time.Duration) *http.Client {
 	return &http.Client{
 		Transport: newSSRFSafeTransport(allowPrivate),
-		Timeout:   30 * time.Second,
+		Timeout:   timeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 5 {
 				return fmt.Errorf("too many redirects")

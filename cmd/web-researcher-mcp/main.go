@@ -343,8 +343,11 @@ func main() {
 		HTTPClient: searchDeps.HTTPClient,
 		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
 	})
+	// Wayback CDX's observed p50-p99 latency (30-60s+) regularly exceeds the
+	// 30s shared SSRF client timeout, so this resolver gets its own longer-
+	// timeout client rather than starving on searchDeps.HTTPClient's deadline.
 	archiveResolver := search.NewWaybackCDXResolver(search.Deps{
-		HTTPClient: searchDeps.HTTPClient,
+		HTTPClient: scraper.NewSSRFSafeClientWithTimeout(cfg.AllowPrivateIPs, 90*time.Second),
 		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
 	})
 
