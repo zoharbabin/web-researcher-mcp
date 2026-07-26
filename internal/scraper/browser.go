@@ -179,9 +179,48 @@ func (p *Pipeline) scrapeBrowser(ctx context.Context, url string, maxLength int,
 		slog.Warn("browser timezone override failed", "url", url, "error", err)
 	}
 
+	// Subscribe to the CDP events proving the main document's HTTP status
+	// before triggering navigation — CDP events are asynchronous, so a
+	// subscription started after Navigate() can race and miss them. Track
+	// every Document-type response for this page's top-level frame (a
+	// redirect chain fires responseReceived once per hop, all with the SAME
+	// FrameID) and keep only the LAST one — the final response once redirects
+	// settle. Stop once PageFrameNavigated confirms the frame's navigation
+	// committed, mirroring the same pattern Page.Reload() already uses to
+	// detect navigation completion.
+	var mainStatus int
+	var gotMainStatus bool
+	waitNav := page.EachEvent(
+		func(e *proto.NetworkResponseReceived) bool {
+			if e.Type == proto.NetworkResourceTypeDocument && e.FrameID == page.FrameID && e.Response != nil {
+				mainStatus = e.Response.Status
+				gotMainStatus = true
+			}
+			return false
+		},
+		func(e *proto.PageFrameNavigated) bool {
+			return e.Frame.ID == page.FrameID
+		},
+	)
+
 	err = page.Navigate(url)
 	if err != nil {
 		return nil, networkError(url, "browser", fmt.Errorf("navigation failed: %w", err))
+	}
+	waitNav()
+
+	// A genuine HTTP 4xx/5xx on the main document (e.g. a dead DOI-resolver
+	// landing page) must be reported as a definite scrape failure — the three
+	// HTTP-based tiers already do this via classifyHTTPStatus (markdown.go,
+	// html.go, stealth.go). Unlike them, CDP navigation never surfaces a
+	// status code through page.Navigate()'s own return value, so without this
+	// check a 404's "Page Not Found" HTML was silently returned as if it were
+	// real content (issue #432). gotMainStatus can be false when the main
+	// document's responseReceived event never fired (rare CDP timing edge) —
+	// in that case there is no signal either way, so extraction proceeds as
+	// before rather than guessing.
+	if gotMainStatus && mainStatus >= 400 {
+		return nil, classifyHTTPStatus(mainStatus, url, "browser")
 	}
 
 	// Wait for the page to reach a stable DOM state. SPAs need longer — they

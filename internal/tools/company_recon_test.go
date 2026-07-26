@@ -214,6 +214,61 @@ func TestCompanyReconSessionTracking(t *testing.T) {
 	}
 }
 
+// TestCompanyReconWebPhaseAloneProducesSummary is the regression test for
+// issue #432: the tool description promises phases "profiling|ct_logs|
+// archives|web" are independently selectable, but "web" alone used to be a
+// no-op placeholder. selecting "web" without "profiling" must produce the
+// same web-search company summary "profiling" alone would.
+func TestCompanyReconWebPhaseAloneProducesSummary(t *testing.T) {
+	t.Parallel()
+	out, res := callTool(t, setupTestDeps(), "company_recon", map[string]any{
+		"target": "acme.com",
+		"phases": []any{"web"},
+	})
+	if res.IsError {
+		t.Fatalf("unexpected tool error: %v", res.Content)
+	}
+	profile, ok := out["profile"].(map[string]any)
+	if !ok || profile["summary"] == "" {
+		t.Fatalf("phases:[web] alone should populate profile.summary, got: %v", out["profile"])
+	}
+	if _, ok := out["cert_sans"]; ok {
+		t.Error("ct_logs phase was not selected; cert_sans should be absent")
+	}
+	if _, ok := out["archive_urls"]; ok {
+		t.Error("archives phase was not selected; archive_urls should be absent")
+	}
+	sources, ok := out["sources"].([]any)
+	if !ok || len(sources) != 1 {
+		t.Fatalf("sources = %v, want exactly 1 entry (the web-search summary)", out["sources"])
+	}
+	s0 := sources[0].(map[string]any)
+	if s0["phase"] != "web" {
+		t.Errorf("sole source phase = %v, want %q", s0["phase"], "web")
+	}
+	if s0["name"] != "web_search" {
+		t.Errorf("sole source name = %v, want web_search (not a placeholder note)", s0["name"])
+	}
+}
+
+// TestCompanyReconWebAndProfilingNoDuplicateSource proves selecting both
+// "web" and "profiling" together records the source once, not twice — the
+// two phase names share one underlying web-search call.
+func TestCompanyReconWebAndProfilingNoDuplicateSource(t *testing.T) {
+	t.Parallel()
+	out, res := callTool(t, setupTestDeps(), "company_recon", map[string]any{
+		"target": "acme.com",
+		"phases": []any{"web", "profiling"},
+	})
+	if res.IsError {
+		t.Fatalf("unexpected tool error: %v", res.Content)
+	}
+	sources, ok := out["sources"].([]any)
+	if !ok || len(sources) != 1 {
+		t.Fatalf("sources = %v, want exactly 1 entry (no duplicate web-search source)", out["sources"])
+	}
+}
+
 func TestCompanyReconCompanyNameFallsBackToWebSearch(t *testing.T) {
 	t.Parallel()
 	out, res := callTool(t, setupTestDeps(), "company_recon", map[string]any{"target": "Acme Corp"})

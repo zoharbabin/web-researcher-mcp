@@ -1938,7 +1938,7 @@ OSINT company reconnaissance with typed structured output: Certificate Transpare
 |-------|------|-------------|
 | `target` | string | The target as submitted (echo) |
 | `domain` | string | Resolved canonical domain |
-| `profile` | object | `summary` — one-line company summary from the top `web_search` hit. Present only when the `profiling` phase ran and found a result |
+| `profile` | object | `summary` — one-line company summary from the top `web_search` hit. Present only when the `profiling` or `web` phase ran and found a result (either phase alone triggers the same web-search summary) |
 | `cert_sans` | array | Certificate Transparency SANs from crt.sh, deduplicated: `domain`, `issuer`, `not_before`, `not_after`, `logged_at`. Present only when the `ct_logs` phase ran |
 | `archive_urls` | array | Wayback CDX historical URLs, filtered to 200/301/302 captures: `url`, `timestamp`, `status_code`, `mime_type`, `category` (`login`/`api`/`admin`/`asset`/`doc`/`other`). Present only when the `archives` phase ran |
 | `subdomains` | array | Deduplicated subdomains derived from `cert_sans` + `archive_urls`: `subdomain`, `source` (`ct_logs`/`archive`) |

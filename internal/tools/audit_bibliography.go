@@ -409,7 +409,16 @@ func auditOneEntry(ctx context.Context, deps Dependencies, e content.BibEntry, r
 	if r.DOI != "" && deps.RetractionResolver != nil {
 		if status, found, err := deps.RetractionResolver.Resolve(ctx, r.DOI); err == nil {
 			r.ExistChecked = true
-			r.Exists = &found
+			// Crossref found=true is authoritative existence — record it. But
+			// found=false is NOT authoritative absence: Crossref does not index
+			// every registrant (notably arXiv DOIs, 10.48550/*, registered
+			// through DataCite and 404 in Crossref while the work is real).
+			// Leave Exists unset on found=false so the doi.org handle-registry
+			// fallback below gets a chance to confirm existence honestly,
+			// mirroring verify_citation.go's verifyByDOI (issue #226, #432).
+			if found {
+				r.Exists = &found
+			}
 			if status != nil {
 				r.Retraction = status
 			}
@@ -421,6 +430,21 @@ func auditOneEntry(ctx context.Context, deps Dependencies, e content.BibEntry, r
 					r.URL = bestClaimURL(rec, r.DOI)
 				}
 			}
+			// Authoritative cross-registrar existence (#226, #432): consulted
+			// only when Crossref left existence unknown (found=false); never
+			// overrides a resolver that already confirmed existence. Resolves
+			// DOIs Crossref doesn't index, notably arXiv preprints, while
+			// still reporting a genuinely fabricated DOI as not-found.
+			if r.Exists == nil && deps.DOIRegistry != nil {
+				if registered, rerr := deps.DOIRegistry.IsRegistered(ctx, r.DOI); rerr == nil {
+					r.Exists = &registered
+				}
+			}
+			// If existence is STILL unknown here (no DOIRegistry configured, or
+			// it errored), do NOT default to Exists=false: auditFlags's doiMiss
+			// check requires Exists!=nil, so leaving it nil correctly routes the
+			// entry to unchecked (absence of evidence) rather than a false
+			// not_found (evidence of absence) — see spec rule 3.3, issue #432.
 			return
 		}
 	}
