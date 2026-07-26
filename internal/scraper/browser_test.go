@@ -97,7 +97,7 @@ func TestScrapeBrowserNotFoundDetected(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{AllowPrivateIPs: true})
-	result, err := p.scrapeBrowser(context.Background(), ts.URL, 10000)
+	result, err := p.scrapeBrowser(context.Background(), ts.URL, 10000, false)
 	if err == nil {
 		t.Fatalf("expected an error for a 404 main document, got a successful result: %+v", result)
 	}
@@ -129,7 +129,7 @@ func TestScrapeBrowserSuccessStillWorks(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{AllowPrivateIPs: true})
-	result, err := p.scrapeBrowser(context.Background(), ts.URL, 10000)
+	result, err := p.scrapeBrowser(context.Background(), ts.URL, 10000, false)
 	if err != nil {
 		t.Fatalf("unexpected error for a 200 response: %v", err)
 	}
