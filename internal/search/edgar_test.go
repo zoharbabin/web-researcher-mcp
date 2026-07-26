@@ -271,7 +271,7 @@ func TestEDGARCompanyNameResolution(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			cik, _ := p.resolveByCompanyName(tc.query)
+			cik, _, _ := p.resolveByCompanyName(tc.query)
 			if tc.wantHit && cik != tc.wantCIK {
 				t.Errorf("resolveByCompanyName(%q) = %q, want %q", tc.query, cik, tc.wantCIK)
 			}
@@ -312,5 +312,78 @@ func TestEDGARQueryRoutesViaNameMap(t *testing.T) {
 	}
 	if len(res) == 0 {
 		t.Error("expected at least 1 submission result via nameMap resolution")
+	}
+}
+
+// appleMultiFormSubmissions fixtures two filings of different form types under
+// the same CIK, so a form-type filter (inferred or explicit) is actually
+// exercised — a single-form fixture can't distinguish "filtered" from "no-op".
+func appleMultiFormSubmissionsHandler(t *testing.T) http.HandlerFunc {
+	t.Helper()
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "company_tickers.json"):
+			w.Write([]byte(`{"0":{"cik_str":320193,"ticker":"AAPL","title":"APPLE INC"}}`))
+		case strings.Contains(r.URL.Path, "submissions/CIK0000320193.json"):
+			w.Write([]byte(`{"name":"Apple Inc.","filings":{"recent":{
+				"accessionNumber":["0000320193-24-000001","0000320193-24-000002"],
+				"form":["10-K","8-K"],
+				"filingDate":["2024-11-01","2024-08-01"],
+				"reportDate":["2024-09-28","2024-08-01"],
+				"primaryDocument":["aapl-10k.htm","aapl-8k.htm"],
+				"primaryDocDescription":["10-K","8-K"]}}}`))
+		default:
+			w.WriteHeader(404)
+		}
+	}
+}
+
+// TestEDGARFormTypeInferredFromQuery (#434 Rule 1): a free-text query naming a
+// recognized form type ("Apple Inc 10-K") must filter company-submission
+// results to that form, even though no explicit form_type param was set.
+func TestEDGARFormTypeInferredFromQuery(t *testing.T) {
+	t.Parallel()
+	p := newEDGARTestProvider(t, appleMultiFormSubmissionsHandler(t))
+
+	res, err := p.Filings(context.Background(), FilingSearchParams{Query: "Apple Inc 10-K", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res) != 1 || res[0].FormType != "10-K" {
+		t.Fatalf("expected exactly 1 filtered 10-K result, got %+v", res)
+	}
+}
+
+// TestEDGARExplicitFormTypeWinsOverInferred (#434 Rule 2): an explicitly-set
+// form_type must never be overridden by a stripped-token inference.
+func TestEDGARExplicitFormTypeWinsOverInferred(t *testing.T) {
+	t.Parallel()
+	p := newEDGARTestProvider(t, appleMultiFormSubmissionsHandler(t))
+
+	res, err := p.Filings(context.Background(), FilingSearchParams{
+		Query:      "Apple Inc 10-K",
+		FormType:   "8-K",
+		NumResults: 5,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res) != 1 || res[0].FormType != "8-K" {
+		t.Fatalf("explicit form_type=8-K should win over inferred 10-K, got %+v", res)
+	}
+}
+
+// TestEDGARAmbiguousFormTypeTakesFirst (#434 Rule 3): a query naming more than
+// one recognized form-type token takes the first one and does not guess further.
+func TestEDGARAmbiguousFormTypeTakesFirst(t *testing.T) {
+	t.Parallel()
+	p := newEDGARTestProvider(t, appleMultiFormSubmissionsHandler(t))
+
+	res, err := p.Filings(context.Background(), FilingSearchParams{Query: "Apple 10-K 8-K", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res) != 1 || res[0].FormType != "10-K" {
+		t.Fatalf("ambiguous form tokens should take the first (10-K), got %+v", res)
 	}
 }

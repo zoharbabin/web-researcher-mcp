@@ -68,11 +68,17 @@ func (f *FREDProvider) doEcon(ctx context.Context, params EconSearchParams) ([]E
 	return f.seriesSearch(ctx, params)
 }
 
+// seriesSearch ranks by FRED's own popularity signal (order_by=popularity,
+// sort_order=desc — see #434) so a canonical, heavily-referenced series (e.g.
+// "GDP") surfaces ahead of a series that merely matches the query text more
+// closely by coincidence.
 func (f *FREDProvider) seriesSearch(ctx context.Context, params EconSearchParams) ([]EconResult, error) {
 	num := clamp(params.NumResults, 1, 25)
 	q := f.baseParams()
 	q.Set("search_text", params.Query)
 	q.Set("limit", strconv.Itoa(num))
+	q.Set("order_by", "popularity")
+	q.Set("sort_order", "desc")
 
 	body, err := f.get(ctx, "/series/search?"+q.Encode())
 	if err != nil {
@@ -86,6 +92,7 @@ func (f *FREDProvider) seriesSearch(ctx context.Context, params EconSearchParams
 			Frequency   string `json:"frequency"`
 			LastUpdated string `json:"last_updated"`
 			Notes       string `json:"notes"`
+			Popularity  int    `json:"popularity"`
 		} `json:"seriess"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
@@ -100,6 +107,7 @@ func (f *FREDProvider) seriesSearch(ctx context.Context, params EconSearchParams
 			Frequency:   s.Frequency,
 			LastUpdated: s.LastUpdated,
 			Notes:       truncateText(s.Notes, 500),
+			Popularity:  s.Popularity,
 			Source:      "fred",
 		})
 	}

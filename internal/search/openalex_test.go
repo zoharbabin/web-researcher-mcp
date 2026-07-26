@@ -427,3 +427,107 @@ func TestOpenAlexTitleSeedStartingWithW(t *testing.T) {
 func TestOpenAlexCitationInterface(t *testing.T) {
 	var _ CitationSearcher = (*OpenAlexProvider)(nil)
 }
+
+// TestCitationGraphOpenAlexDOIToTitleFallback proves the #434 fix: when
+// OpenAlex's own DOI-entity endpoint 404s, fetchWork attempts exactly one
+// bounded DOI→title resolution against doi.org and retries as a title search —
+// never a retry loop, never dropping the seed entirely.
+func TestCitationGraphOpenAlexDOIToTitleFallback(t *testing.T) {
+	var openAlexHits, doiOrgHits int
+	openAlexSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		openAlexHits++
+		if strings.Contains(r.URL.Path, "/works/doi:") {
+			w.WriteHeader(404)
+			return
+		}
+		if r.URL.Query().Get("search") != "Attention Is All You Need" {
+			t.Errorf("title search got unexpected query: %q", r.URL.Query().Get("search"))
+			w.WriteHeader(400)
+			return
+		}
+		_, _ = w.Write([]byte(`{"results":[{"id":"https://openalex.org/W100","display_name":"Attention Is All You Need","publication_year":2017}]}`))
+	}))
+	defer openAlexSrv.Close()
+
+	doiOrgSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		doiOrgHits++
+		if got := r.Header.Get("Accept"); got != "application/vnd.citationstyles.csl+json" {
+			t.Errorf("doi.org request Accept header = %q, want CSL-JSON", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"title":"Attention Is All You Need"}`))
+	}))
+	defer doiOrgSrv.Close()
+
+	p := NewOpenAlexProvider("e@x.com", newOpenAlexTestDeps())
+	p.SetBaseURL(openAlexSrv.URL)
+	p.SetDOIBaseURL(doiOrgSrv.URL)
+
+	w, err := p.fetchWork(context.Background(), "10.48550/arXiv.1706.03762")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if w == nil || w.Title != "Attention Is All You Need" {
+		t.Fatalf("expected title-search retry to resolve the work, got %+v", w)
+	}
+	if doiOrgHits != 1 {
+		t.Errorf("doi.org hits = %d, want exactly 1 (bounded, no retry loop)", doiOrgHits)
+	}
+	if openAlexHits != 2 {
+		t.Errorf("openalex hits = %d, want 2 (failed entity lookup + title-search retry)", openAlexHits)
+	}
+}
+
+// TestCitationGraphOpenAlexDOIEntityFoundNoDOIOrgCall proves the fallback never
+// fires when the entity lookup succeeds — the doi.org host must not be touched
+// on the common path.
+func TestCitationGraphOpenAlexDOIEntityFoundNoDOIOrgCall(t *testing.T) {
+	openAlexSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"id":"https://openalex.org/W100","display_name":"Seed","publication_year":2020}`))
+	}))
+	defer openAlexSrv.Close()
+
+	doiOrgSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("doi.org must not be called when the OpenAlex entity lookup succeeds")
+	}))
+	defer doiOrgSrv.Close()
+
+	p := NewOpenAlexProvider("e@x.com", newOpenAlexTestDeps())
+	p.SetBaseURL(openAlexSrv.URL)
+	p.SetDOIBaseURL(doiOrgSrv.URL)
+
+	w, err := p.fetchWork(context.Background(), "10.1/seed")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if w == nil || w.Title != "Seed" {
+		t.Fatalf("unexpected work: %+v", w)
+	}
+}
+
+// TestCitationGraphOpenAlexDOIToTitleFallbackBothFail proves that when the
+// doi.org lookup itself fails (or has no title), the original entity-lookup
+// 404 is returned unchanged — no fabricated result, no swallowed error.
+func TestCitationGraphOpenAlexDOIToTitleFallbackBothFail(t *testing.T) {
+	openAlexSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(404)
+	}))
+	defer openAlexSrv.Close()
+
+	doiOrgSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(404)
+	}))
+	defer doiOrgSrv.Close()
+
+	p := NewOpenAlexProvider("e@x.com", newOpenAlexTestDeps())
+	p.SetBaseURL(openAlexSrv.URL)
+	p.SetDOIBaseURL(doiOrgSrv.URL)
+
+	_, err := p.fetchWork(context.Background(), "10.48550/arXiv.9999999")
+	if err == nil {
+		t.Fatal("expected the original entity-lookup error when doi.org also fails")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected the original 'not found' error to survive, got: %v", err)
+	}
+}

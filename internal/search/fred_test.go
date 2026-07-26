@@ -50,6 +50,40 @@ func TestFREDSeriesSearch(t *testing.T) {
 	}
 }
 
+// TestFREDSeriesSearchOrdersByPopularity (#434 Finding C Rule 1): keyword
+// series search must ask FRED for popularity-ranked results, not raw
+// text-match order.
+func TestFREDSeriesSearchOrdersByPopularity(t *testing.T) {
+	p := newFREDTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("order_by"); got != "popularity" {
+			t.Errorf("order_by = %q, want popularity", got)
+		}
+		if got := r.URL.Query().Get("sort_order"); got != "desc" {
+			t.Errorf("sort_order = %q, want desc", got)
+		}
+		w.Write([]byte(`{"seriess":[{"id":"GDP","title":"Gross Domestic Product","units":"Billions","frequency":"Quarterly","popularity":90}]}`))
+	})
+	_, err := p.Econ(context.Background(), EconSearchParams{Query: "gdp", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestFREDSeriesSearchDecodesPopularity (#434 Finding C Rule 2): FRED's
+// popularity value must round-trip into EconResult.Popularity.
+func TestFREDSeriesSearchDecodesPopularity(t *testing.T) {
+	p := newFREDTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"seriess":[{"id":"GDP","title":"Gross Domestic Product","units":"Billions","frequency":"Quarterly","popularity":90}]}`))
+	})
+	res, err := p.Econ(context.Background(), EconSearchParams{Query: "gdp", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res) != 1 || res[0].Popularity != 90 {
+		t.Fatalf("expected popularity=90 to round-trip, got %+v", res)
+	}
+}
+
 func TestFREDObservations(t *testing.T) {
 	p := newFREDTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.URL.Path, "/series/observations") {

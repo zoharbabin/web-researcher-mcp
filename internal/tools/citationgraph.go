@@ -81,6 +81,11 @@ func registerCitationGraph(srv *mcp.Server, deps Dependencies) {
 				if fb, fbName, ok := fallbackCitationSearcher(deps, providerName); ok {
 					if cb, rf, ferr := traverseCitations(ctx, fb, input.Paper, direction, num); ferr == nil {
 						citedBy, references, providerName, err = cb, rf, fbName, nil
+					} else {
+						// Both providers failed (#434): name both providers and both
+						// underlying errors — never silently drop the fallback's own
+						// (diagnostically distinct) error in favor of the stale primary.
+						err = fmt.Errorf("%s: %w; %s: %w", providerName, err, fbName, ferr)
 					}
 				}
 			}

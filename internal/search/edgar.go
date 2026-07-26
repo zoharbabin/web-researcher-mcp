@@ -81,7 +81,7 @@ func (e *EDGARProvider) doFilings(ctx context.Context, params FilingSearchParams
 
 	// Facts mode: resolve the entity to a CIK and return XBRL company facts.
 	if params.Facts {
-		cik, company, err := e.resolveCIK(ctx, params)
+		cik, company, _, err := e.resolveCIK(ctx, params)
 		if err != nil {
 			return nil, err
 		}
@@ -94,14 +94,20 @@ func (e *EDGARProvider) doFilings(ctx context.Context, params FilingSearchParams
 	// If the query resolves to a specific company (ticker/CIK/name), list its
 	// recent filings from the submissions API (precise, structured). Otherwise
 	// run a full-text search across all filings.
-	if cik, company, _ := e.resolveCIK(ctx, params); cik != "" {
+	if cik, company, inferredForm, _ := e.resolveCIK(ctx, params); cik != "" {
+		// #434 Rule 2: an explicitly-set FormType always wins over inference.
+		if params.FormType == "" && inferredForm != "" {
+			params.FormType = inferredForm
+		}
 		return e.companySubmissions(ctx, cik, company, params, num)
 	}
 	return e.fullTextSearch(ctx, params, num)
 }
 
 // resolveCIK maps a ticker/CIK/company-name to a 10-digit CIK. Returns ("", "",
-// nil) when the entity can't be resolved (caller falls back to full-text search).
+// "", nil) when the entity can't be resolved (caller falls back to full-text
+// search). The third return value is a form-type inferred from a stripped
+// query token (see resolveByCompanyName) — "" unless the company-name path fired.
 //
 // Resolution order:
 //  1. params.Ticker — exact ticker map lookup (always trusted; used when ticker is explicit)
@@ -112,35 +118,35 @@ func (e *EDGARProvider) doFilings(ctx context.Context, params FilingSearchParams
 //     then does an exact match against the SEC title map and a prefix match for
 //     single-token queries. Falls through to full-text search when no confident
 //     match is found — never guesses.
-func (e *EDGARProvider) resolveCIK(ctx context.Context, params FilingSearchParams) (string, string, error) {
+func (e *EDGARProvider) resolveCIK(ctx context.Context, params FilingSearchParams) (string, string, string, error) {
 	seed := strings.TrimSpace(params.Ticker)
 	if seed == "" {
 		seed = strings.TrimSpace(params.Query)
 	}
 	if seed == "" {
-		return "", "", nil
+		return "", "", "", nil
 	}
 	// A bare numeric seed is a CIK already.
 	if isAllDigits(seed) {
-		return padCIK(seed), "", nil
+		return padCIK(seed), "", "", nil
 	}
 	if err := e.loadTickerMap(ctx); err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	// Exact ticker match.
 	if cik, ok := e.tickerMap[strings.ToUpper(seed)]; ok {
-		return cik, "", nil
+		return cik, "", "", nil
 	}
 	// Company-name resolution: only attempted when the query came from params.Query
 	// (not an explicit ticker), so we don't misfire on a valid ticker that happens
 	// to look like a stop-word. Strip known noise words to isolate the company name.
 	if params.Ticker == "" {
-		cik, company := e.resolveByCompanyName(seed)
+		cik, company, formType := e.resolveByCompanyName(seed)
 		if cik != "" {
-			return cik, company, nil
+			return cik, company, formType, nil
 		}
 	}
-	return "", "", nil // fall through to full-text search
+	return "", "", "", nil // fall through to full-text search
 }
 
 // queryStopWords are words that appear in natural-language filing queries but
@@ -154,31 +160,55 @@ var queryStopWords = map[string]bool{
 	"corp": true, "company": true, "quarterly": true, "latest": true,
 }
 
+// formTypeTokens maps a lower-cased query token to its canonical SEC form-type
+// string (see #434 Finding B). Checked before the generic queryStopWords strip
+// so a recognized form-type token both (a) is removed from the company-name
+// candidate and (b) populates the inferred form type — the token detection the
+// original stop-word strip discarded. "def" and "14a" both canonicalize to the
+// combined "DEF 14A" proxy-statement form.
+var formTypeTokens = map[string]string{
+	"10-k": "10-K",
+	"10-q": "10-Q",
+	"8-k":  "8-K",
+	"s-1":  "S-1",
+	"def":  "DEF 14A",
+	"14a":  "DEF 14A",
+}
+
 // resolveByCompanyName strips stop-words from the raw query, then tries:
 //  1. Exact upper-case match of the cleaned phrase against the SEC title map
 //     (handles "Apple Inc", "NVIDIA Corp", "Meta Platforms Inc")
 //  2. Prefix scan for single-token candidates (e.g. "Apple" matches "APPLE INC")
 //
-// Returns ("", "") when no confident match is found so the caller falls through
-// to full-text search rather than guessing.
-func (e *EDGARProvider) resolveByCompanyName(rawQuery string) (cik, company string) {
+// Also infers a form-type from any recognized form-type token encountered while
+// stripping (#434 Rule 1) — the first recognized token wins when the query
+// names more than one form type (#434 Rule 3, e.g. "Apple 10-K or 10-Q").
+// Returns ("", "", "") when no confident company match is found so the caller
+// falls through to full-text search rather than guessing.
+func (e *EDGARProvider) resolveByCompanyName(rawQuery string) (cik, company, formType string) {
 	// Split on whitespace, discard stop-words and form-type tokens.
 	tokens := strings.Fields(rawQuery)
 	var nameTokens []string
 	for _, t := range tokens {
 		lower := strings.ToLower(t)
+		if canonical, ok := formTypeTokens[lower]; ok {
+			if formType == "" {
+				formType = canonical
+			}
+			continue
+		}
 		if !queryStopWords[lower] {
 			nameTokens = append(nameTokens, t)
 		}
 	}
 	if len(nameTokens) == 0 {
-		return "", ""
+		return "", "", ""
 	}
 	candidate := strings.ToUpper(strings.Join(nameTokens, " "))
 
 	// Exact match first (e.g. "APPLE INC" or "NVIDIA CORP").
 	if cikVal, ok := e.nameMap[candidate]; ok {
-		return cikVal, strings.Title(strings.ToLower(candidate)) //nolint:staticcheck
+		return cikVal, strings.Title(strings.ToLower(candidate)), formType //nolint:staticcheck
 	}
 
 	// Single-token prefix scan: "APPLE" → finds "APPLE INC", "APPLE HOSPITALITY REIT INC", etc.
@@ -189,7 +219,7 @@ func (e *EDGARProvider) resolveByCompanyName(rawQuery string) (cik, company stri
 		for title, cikVal := range e.nameMap {
 			// Exact match takes precedence (already handled above, but guard anyway).
 			if title == candidate {
-				return cikVal, strings.Title(strings.ToLower(title)) //nolint:staticcheck
+				return cikVal, strings.Title(strings.ToLower(title)), formType //nolint:staticcheck
 			}
 			// Take the shortest prefix-matching title so "APPLE INC" wins over
 			// "APPLE HOSPITALITY REIT INC" for query "Apple".
@@ -201,10 +231,10 @@ func (e *EDGARProvider) resolveByCompanyName(rawQuery string) (cik, company stri
 			}
 		}
 		if bestCIK != "" {
-			return bestCIK, strings.Title(strings.ToLower(bestName)) //nolint:staticcheck
+			return bestCIK, strings.Title(strings.ToLower(bestName)), formType //nolint:staticcheck
 		}
 	}
-	return "", ""
+	return "", "", ""
 }
 
 func (e *EDGARProvider) loadTickerMap(ctx context.Context) error {

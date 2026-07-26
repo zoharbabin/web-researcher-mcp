@@ -210,5 +210,8 @@ func econResultToMap(r search.EconResult, mode string) map[string]any {
 	if r.Notes != "" {
 		m["notes"] = r.Notes
 	}
+	if r.Popularity != 0 {
+		m["popularity"] = r.Popularity
+	}
 	return m
 }
