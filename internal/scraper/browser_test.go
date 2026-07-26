@@ -1,7 +1,12 @@
 package scraper
 
 import (
+	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 
@@ -74,5 +79,61 @@ func TestBrowserPoolCleanupRemovesUserDataDir(t *testing.T) {
 
 	if _, err := os.Stat(userDataDir); !os.IsNotExist(err) {
 		t.Errorf("expected UserDataDir %q to be removed after close, stat err = %v", userDataDir, err)
+	}
+}
+
+// TestScrapeBrowserNotFoundDetected is the regression test for issue #432:
+// a genuine HTTP 404 on the main document (e.g. a dead DOI-resolver landing
+// page) rendered by the browser tier must be reported as ErrNotFound, not
+// returned as if the dead page's HTML were real content.
+func TestScrapeBrowserNotFoundDetected(t *testing.T) {
+	skipIfNoChrome(t)
+	resetPool(t)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("<html><body><h1>Page Not Found</h1><p>The requested article could not be located.</p></body></html>"))
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{AllowPrivateIPs: true})
+	result, err := p.scrapeBrowser(context.Background(), ts.URL, 10000, false)
+	if err == nil {
+		t.Fatalf("expected an error for a 404 main document, got a successful result: %+v", result)
+	}
+	var se *ScrapeError
+	if !errors.As(err, &se) {
+		t.Fatalf("expected a *ScrapeError, got %T: %v", err, err)
+	}
+	if se.Kind != ErrNotFound {
+		t.Errorf("Kind = %v, want ErrNotFound", se.Kind)
+	}
+	if se.Tier != "browser" {
+		t.Errorf("Tier = %q, want browser", se.Tier)
+	}
+}
+
+// TestScrapeBrowserSuccessStillWorks proves the 404-detection subscription
+// added for issue #432 does not regress the ordinary 200 path — content is
+// still extracted normally.
+func TestScrapeBrowserSuccessStillWorks(t *testing.T) {
+	skipIfNoChrome(t)
+	resetPool(t)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><article><p>` +
+			strings.Repeat("Real article content that is long enough to extract. ", 5) +
+			`</p></article></body></html>`))
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{AllowPrivateIPs: true})
+	result, err := p.scrapeBrowser(context.Background(), ts.URL, 10000, false)
+	if err != nil {
+		t.Fatalf("unexpected error for a 200 response: %v", err)
+	}
+	if result == nil || len(result.Content) < 100 {
+		t.Fatalf("expected extracted content, got: %+v", result)
 	}
 }

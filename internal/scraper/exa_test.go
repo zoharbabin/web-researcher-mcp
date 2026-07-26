@@ -38,7 +38,7 @@ func TestScrapeExaSuccess(t *testing.T) {
 
 	// AllowPrivateIPs so the SSRF-safe client can reach the 127.0.0.1 test server.
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, ExaAPIKey: "k"})
-	res, err := p.scrapeExa(context.Background(), "https://x.example", 5000)
+	res, err := p.scrapeExa(context.Background(), "https://x.example", 5000, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestScrapeExaCachedProvenance(t *testing.T) {
 	withExaEndpoint(t, srv.URL)
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, ExaAPIKey: "k"})
-	res, err := p.scrapeExa(context.Background(), "https://x.example", 5000)
+	res, err := p.scrapeExa(context.Background(), "https://x.example", 5000, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestScrapeExaEmptyContent(t *testing.T) {
 	withExaEndpoint(t, srv.URL)
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, ExaAPIKey: "k"})
-	_, err := p.scrapeExa(context.Background(), "https://x.example", 5000)
+	_, err := p.scrapeExa(context.Background(), "https://x.example", 5000, false)
 	if err == nil {
 		t.Fatal("empty content should error so the orchestrator can keep falling back")
 	}
@@ -96,7 +96,7 @@ func TestScrapeExaRateLimit(t *testing.T) {
 	withExaEndpoint(t, srv.URL)
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, ExaAPIKey: "k"})
-	_, err := p.scrapeExa(context.Background(), "https://x.example", 5000)
+	_, err := p.scrapeExa(context.Background(), "https://x.example", 5000, false)
 	se, ok := err.(*ScrapeError)
 	if !ok || se.Kind != ErrRateLimit {
 		t.Errorf("429 should map to ErrRateLimit, got %v", err)
@@ -105,7 +105,7 @@ func TestScrapeExaRateLimit(t *testing.T) {
 
 func TestScrapeExaNotConfigured(t *testing.T) {
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2})
-	_, err := p.scrapeExa(context.Background(), "https://x.example", 5000)
+	_, err := p.scrapeExa(context.Background(), "https://x.example", 5000, false)
 	if err == nil {
 		t.Fatal("unconfigured Exa tier should error")
 	}

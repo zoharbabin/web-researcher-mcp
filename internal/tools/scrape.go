@@ -235,12 +235,15 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 	})
 }
 
-// scrapeRaw handles mode=="raw": it fetches the page bytes verbatim through the
-// same SSRF-safe client, domain allowlist, and size limit as Scrape, but skips
-// the extraction pipeline and content.Process sanitization entirely. The
-// returned content is UNTRUSTED — it may contain active <script>/HTML or other
-// injection payloads — so callers must never execute or render it; raw mode is
-// intended only for inspecting source (JSON, HTML, plain text). The reported
+// scrapeRaw handles mode=="raw": it reuses the exact same tiered fetch
+// pipeline as full mode (markdown -> stealth -> html -> browser, with the same
+// anti-bot header spoofing, bot-wall detection, and tier escalation), through
+// the same SSRF-safe client, domain allowlist, and size limit — and skips only
+// the final extraction/content.Process sanitization step, returning the
+// winning tier's pre-extraction bytes instead. The returned content is
+// UNTRUSTED — it may contain active <script>/HTML or other injection
+// payloads — so callers must never execute or render it; raw mode is intended
+// only for inspecting source (JSON, HTML, plain text). The reported
 // contentType is the server's real Content-Type header (may be "").
 func scrapeRaw(ctx context.Context, deps Dependencies, input scrapePageInput, maxLength int, start time.Time) (*mcp.CallToolResult, any, error) {
 	cacheKey := scrapeCacheKey(input.URL, "raw", maxLength)
@@ -254,9 +257,11 @@ func scrapeRaw(ctx context.Context, deps Dependencies, input scrapePageInput, ma
 
 	// Negative-cache short-circuit. URL-level failures (SSRF/blocked/auth/browser/
 	// network/rate-limit) are mode-independent, so a cached full-mode failure
-	// applies to raw too. ErrContent is the exception: it means extraction found
-	// nothing, but raw skips extraction and may still return bytes — so never let
-	// a cached ErrContent short-circuit raw mode.
+	// applies to raw too. ErrContent is the exception: raw mode's tier-acceptance
+	// bar is lower than full mode's (any non-empty, non-bot-walled rawBody wins —
+	// see tieredFallback's raw branch), so a body that failed every tier's
+	// full-mode extraction can still succeed under raw mode's looser bar. Never
+	// let a cached full-mode ErrContent short-circuit raw mode.
 	if neg := negCacheLookup(ctx, deps, input.URL); neg != nil && neg.Kind != scraper.ErrContent {
 		recordToolCall(deps, "scrape_page", time.Since(start), neg, "upstream_error", true)
 		auditToolCall(ctx, deps, "scrape_page", time.Since(start), neg, "upstream_error")

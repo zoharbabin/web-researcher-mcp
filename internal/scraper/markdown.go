@@ -8,7 +8,11 @@ import (
 	"time"
 )
 
-func (p *Pipeline) scrapeMarkdown(ctx context.Context, url string, maxLength int) (*ScrapeResult, error) {
+// raw is unused here: this tier's Content is already the server's verbatim
+// markdown/plain-text body (no extraction step to skip), so full and raw mode
+// behave identically. The parameter exists only to satisfy the uniform tier
+// function signature shared with stealth/html/browser (see tieredFallback).
+func (p *Pipeline) scrapeMarkdown(ctx context.Context, url string, maxLength int, raw bool) (*ScrapeResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
@@ -52,10 +56,12 @@ func (p *Pipeline) scrapeMarkdown(ctx context.Context, url string, maxLength int
 	}
 
 	return &ScrapeResult{
-		URL:         url,
-		Content:     content,
-		ContentType: "markdown",
-		Truncated:   truncated,
+		URL:            url,
+		Content:        content,
+		ContentType:    "markdown",
+		Truncated:      truncated,
+		rawBody:        content,
+		rawContentType: ct,
 	}, nil
 }
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os/exec"
@@ -169,6 +168,25 @@ type ScrapeResult struct {
 	// wrapper (e.g. a HuggingFace Space). Unexported: pipeline-internal
 	// provenance, never serialized.
 	iframeCandidates []string
+	// rawBody is the tier's pre-extraction bytes: the decompressed HTML body
+	// for stealth/html (before extractArticleContent/extractMainContent
+	// strip it down to Content), the downloaded document bytes for
+	// document/scrapeBodyAsPDF, the rendered DOM for browser (page.HTML()),
+	// or simply a copy of Content for tiers with no separate extraction step
+	// (markdown, jina, exa — their Content is already the tier's native,
+	// unprocessed output). ScrapeRaw prefers this over Content so raw mode
+	// returns unfiltered bytes while reusing the exact same tier-selection
+	// logic (bot-wall/shell detection, escalation) as full mode, which
+	// operates on Content throughout. Empty only for the native routes with
+	// no HTTP body at all (YouTube, Twitter, Hacker News, Bluesky, GitHub
+	// content) — ScrapeRaw falls back to Content for those. Unexported:
+	// pipeline-internal, never serialized.
+	rawBody string
+	// rawContentType is the real HTTP Content-Type header (or equivalent)
+	// paired with rawBody, reported by ScrapeRaw instead of Content's coarse
+	// constant ("html", "markdown", "pdf"). Unexported: pipeline-internal,
+	// never serialized.
+	rawContentType string
 }
 
 // StructuredData is page-embedded, machine-readable metadata lifted verbatim
@@ -348,20 +366,33 @@ func stampSparsity(r *ScrapeResult) {
 // original 3-arg signature for its existing call sites; depth-aware
 // recursion lives in tieredFallback.
 func (p *Pipeline) scrapeWithTieredFallback(ctx context.Context, url string, maxLength int) (*ScrapeResult, error) {
-	return p.tieredFallback(ctx, url, maxLength, 0)
+	return p.tieredFallback(ctx, url, maxLength, 0, false)
 }
 
-func (p *Pipeline) tieredFallback(ctx context.Context, url string, maxLength, depth int) (*ScrapeResult, error) {
+// tieredFallback runs the same tier ladder and escalation logic (bot-wall/
+// shell detection, iframe-follow) for both full and raw mode — raw's whole
+// point is to reuse this exact anti-bot escalation rather than a separate,
+// weaker single-shot fetch. raw=true only changes which tiers participate:
+// jina and exa are cloud proxies that never see the target's own bytes (their
+// "content" is already a third party's processed output, not the page's
+// verbatim response), so they are excluded — every remaining tier
+// (markdown/stealth/html/browser) populates rawBody/rawContentType alongside
+// its normal extracted Content, which ScrapeRaw prefers once a winner is
+// picked. The escalation decisions themselves (bot-wall, shell, best-of)
+// still key off Content, exactly as in full mode: a tier that got past an
+// anti-bot wall produces real extracted text, so Content remains a faithful
+// proxy for "did this tier's raw fetch actually succeed."
+func (p *Pipeline) tieredFallback(ctx context.Context, url string, maxLength, depth int, raw bool) (*ScrapeResult, error) {
 	type namedTier struct {
 		name string
-		fn   func(context.Context, string, int) (*ScrapeResult, error)
+		fn   func(context.Context, string, int, bool) (*ScrapeResult, error)
 	}
 
 	hasBrowser := p.browserEnabled()
 
 	// For known SPA domains, prefer the browser scraper first
 	if hasBrowser && isSPADomain(url) {
-		if result, err := p.scrapeBrowser(ctx, url, maxLength); err == nil && result != nil && len(result.Content) > 100 && !looksLikeBotWall(result.Content) {
+		if result, err := p.scrapeBrowser(ctx, url, maxLength, raw); err == nil && result != nil && len(result.Content) > 100 && !looksLikeBotWall(result.Content) {
 			return stampTier(result, "browser"), nil
 		}
 	}
@@ -369,9 +400,18 @@ func (p *Pipeline) tieredFallback(ctx context.Context, url string, maxLength, de
 	tiers := []namedTier{
 		{"markdown", p.scrapeMarkdown},
 		{"stealth", p.scrapeStealth},
-		{"jina", p.scrapeJina},
-		{"html", p.scrapeHTML},
 	}
+
+	// jina and exa are cloud proxies: they fetch the target URL themselves and
+	// hand back their own processed extraction, never the target's verbatim
+	// response bytes. Raw mode's contract is "unfiltered bytes from the
+	// regular pipeline" — a third party's rendering doesn't satisfy that, so
+	// both are excluded when raw=true rather than mislabeling their output as
+	// the page's own raw body.
+	if !raw {
+		tiers = append(tiers, namedTier{"jina", p.scrapeJina})
+	}
+	tiers = append(tiers, namedTier{"html", p.scrapeHTML})
 
 	if hasBrowser {
 		tiers = append(tiers, namedTier{"browser", p.scrapeBrowser})
@@ -383,8 +423,10 @@ func (p *Pipeline) tieredFallback(ctx context.Context, url string, maxLength, de
 	// path never incurs Exa cost. Skipped on a recursive iframe-follow call
 	// (depth > 0, #399): the paid tier is reserved for the top-level URL the
 	// caller actually asked for, not spent on a candidate the pipeline chose
-	// to follow speculatively.
-	if p.config.ExaAPIKey != "" && depth == 0 {
+	// to follow speculatively. Also skipped entirely in raw mode (see jina
+	// above — same cloud-proxy incompatibility, plus it is a paid tier raw
+	// mode must never trigger).
+	if p.config.ExaAPIKey != "" && depth == 0 && !raw {
 		tiers = append(tiers, namedTier{"exa", p.scrapeExa})
 	}
 
@@ -409,7 +451,7 @@ func (p *Pipeline) tieredFallback(ctx context.Context, url string, maxLength, de
 	var iframeSeen map[string]bool
 
 	for _, tier := range tiers {
-		result, err := tier.fn(ctx, url, maxLength)
+		result, err := tier.fn(ctx, url, maxLength, raw)
 		// A bot/JS-wall interstitial (e.g. "Checking your browser…", a CAPTCHA shell)
 		// is returned with a 200 and short placeholder text. Do NOT accept it as
 		// content — record it as a blocked outcome so the composite error is
@@ -417,6 +459,19 @@ func (p *Pipeline) tieredFallback(ctx context.Context, url string, maxLength, de
 		if err == nil && result != nil && looksLikeBotWall(result.Content) {
 			outcomes = append(outcomes, tierOutcome{tier.name, nil, blockedError(url, tier.name, nil, "bot/JS-wall interstitial")})
 			continue
+		}
+		// In raw mode, Content's length is not the right success signal: a
+		// non-prose body (JSON, plain text) legitimately extracts almost no
+		// Content on a fully successful fetch, since extraction looks for prose
+		// elements such a response simply has none of. rawBody is what raw mode
+		// actually returns, so any non-empty rawBody from a tier that wasn't
+		// bot-walled and doesn't look like a JS-rendered SPA shell (still
+		// detected via looksLikePartialShell's Content/rawHTMLBytes signals,
+		// which stay meaningful regardless of mode) is accepted immediately —
+		// raw mode has no "confidently complete text" quality bar to clear, so
+		// there is nothing to gain by escalating further once real bytes exist.
+		if err == nil && result != nil && raw && result.rawBody != "" && !looksLikePartialShell(result) {
+			return stampTier(result, tier.name), nil
 		}
 		// A shell's own extracted text is often well under 100 bytes (e.g. a
 		// one-line "Refreshing" blurb) — the byte-count floor below exists to
@@ -443,7 +498,7 @@ func (p *Pipeline) tieredFallback(ctx context.Context, url string, maxLength, de
 					if iframeSeen == nil {
 						iframeSeen = make(map[string]bool)
 					}
-					if inner := p.followIframeCandidates(ctx, stamped, maxLength, depth, iframeSeen); inner != nil {
+					if inner := p.followIframeCandidates(ctx, stamped, maxLength, depth, iframeSeen, raw); inner != nil {
 						merged := betterResult(stamped, inner)
 						if merged == inner && !looksLikePartialShell(inner) {
 							// Recovered content beat the shell on quality AND is itself
@@ -569,7 +624,7 @@ func (p *Pipeline) tieredFallback(ctx context.Context, url string, maxLength, de
 // betterResult/contentQuality — so a decorative candidate (ad slot, payment
 // frame) loses to a real-content candidate on its own merits, with no
 // denylist needed. Returns nil if no candidate produced usable content.
-func (p *Pipeline) followIframeCandidates(ctx context.Context, shell *ScrapeResult, maxLength, depth int, seen map[string]bool) *ScrapeResult {
+func (p *Pipeline) followIframeCandidates(ctx context.Context, shell *ScrapeResult, maxLength, depth int, seen map[string]bool, raw bool) *ScrapeResult {
 	tried := 0
 	var best *ScrapeResult
 	for _, candidate := range shell.iframeCandidates {
@@ -587,7 +642,7 @@ func (p *Pipeline) followIframeCandidates(ctx context.Context, shell *ScrapeResu
 			continue
 		}
 		tried++
-		inner, ierr := p.tieredFallback(ctx, candidate, maxLength, depth+1)
+		inner, ierr := p.tieredFallback(ctx, candidate, maxLength, depth+1, raw)
 		if ierr != nil || inner == nil || looksLikeBotWall(inner.Content) {
 			continue
 		}
@@ -708,17 +763,29 @@ func betterResult(incumbent, candidate *ScrapeResult) *ScrapeResult {
 	return incumbent
 }
 
-// ScrapeRaw fetches a URL once and returns the raw response body verbatim,
-// SKIPPING the tiered extraction pipeline and content.Process sanitization.
-// It still enforces the SAME security guards as Scrape: validateScrapeURL,
-// the SSRF-safe HTTP client, the domain allowlist, and io.LimitReader(maxLength)
-// to bound memory. The returned ContentType is the server's real MIME type
-// (Content-Type header, "" if absent). Callers MUST treat the body as untrusted
-// (it may contain active <script>/HTML) — raw mode is opt-in for scrape_page only.
+// ScrapeRaw returns the page's unfiltered bytes by reusing the exact same
+// tiered pipeline as Scrape (markdown -> stealth -> html -> browser, with the
+// SPA-domain-first and iframe-follow escalation logic, all under the same
+// anti-bot header spoofing) and SKIPPING ONLY the final extraction/
+// content.Process sanitization step. This is deliberate: a bare single-shot
+// fetch with weak headers gets CAPTCHA-walled on sites the tiered pipeline's
+// stealth tier bypasses, so raw mode must get the same bot-wall detection and
+// tier escalation as full mode — it must not run a separate, weaker path.
+//
+// It still enforces the same security guards as Scrape: validateScrapeURL,
+// the SSRF-safe HTTP client, the domain allowlist, and a maxLength bound on
+// the returned body. The returned ContentType is the server's real MIME type
+// where available ("" for the handful of native routes with no HTTP body —
+// YouTube, Twitter, Hacker News, Bluesky, GitHub content — which fall back to
+// their normal extracted Content since they have no separate raw body to
+// return). Callers MUST treat the body as untrusted (it may contain active
+// <script>/HTML) — raw mode is opt-in for scrape_page only.
 func (p *Pipeline) ScrapeRaw(ctx context.Context, rawURL string, maxLength int) (*ScrapeResult, error) {
 	if err := validateScrapeURL(rawURL); err != nil {
 		return nil, validationError(rawURL, "", err, err.Error())
 	}
+
+	url := rawURL
 
 	select {
 	case p.semaphore <- struct{}{}:
@@ -727,49 +794,43 @@ func (p *Pipeline) ScrapeRaw(ctx context.Context, rawURL string, maxLength int) 
 		return nil, ctx.Err()
 	}
 
-	if !p.isDomainAllowed(rawURL) {
-		return nil, blockedError(rawURL, "", nil, "domain not in allowed list")
+	if !p.isDomainAllowed(url) {
+		return nil, blockedError(url, "", nil, "domain not in allowed list")
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
+	var result *ScrapeResult
+	var err error
 
-	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, nil)
+	switch {
+	case isYouTubeURL(url):
+		result, err = p.scrapeYouTube(ctx, url, maxLength)
+	case isTwitterURL(url):
+		result, err = p.scrapeTwitter(ctx, url, maxLength)
+	case isHNURL(url):
+		result, err = p.scrapeHN(ctx, url, maxLength)
+	case isBskyURL(url):
+		result, err = p.scrapeBsky(ctx, url, maxLength)
+	case isGitHubContentURL(url):
+		result, err = p.scrapeGitHubContent(ctx, url, maxLength)
+	case isDocumentURL(url):
+		result, err = p.scrapeDocument(ctx, url, maxLength)
+	default:
+		result, err = p.tieredFallback(ctx, url, maxLength, 0, true)
+	}
+
 	if err != nil {
-		return nil, classifyRawError(err, rawURL)
-	}
-	req.Header.Set("Accept", "*/*")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; web-researcher-mcp/1.0)")
-
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return nil, networkError(rawURL, "raw", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		return nil, classifyHTTPStatus(resp.StatusCode, rawURL, "raw")
+		return nil, classifyRawError(err, url)
 	}
 
-	limit := maxLength
-	if limit <= 0 {
-		limit = 1
+	// Prefer the tier's pre-extraction bytes; fall back to Content for the
+	// native routes above (document included — scrapeDocument has no raw-mode
+	// path of its own) that never populate rawBody.
+	if result.rawBody != "" {
+		result.Content = result.rawBody
+		result.ContentType = result.rawContentType
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, int64(limit)))
-	if err != nil {
-		return nil, networkError(rawURL, "raw", err)
-	}
-
-	contentType := resp.Header.Get("Content-Type")
-	// Reading up to the limit means more data likely remained on the wire.
-	truncated := len(body) >= limit
-
-	return &ScrapeResult{
-		URL:         rawURL,
-		Content:     string(body),
-		ContentType: contentType,
-		Truncated:   truncated,
-	}, nil
+	result.Tier = "raw:" + result.Tier
+	return result, nil
 }
 
 func (p *Pipeline) Close() {

@@ -25,8 +25,13 @@ func looksLikePDF(body []byte) bool {
 // scrapeBodyAsPDF parses already-downloaded bytes as a PDF document (#206), so
 // the stealth and HTML tiers can re-route a PDF response without a second
 // round-trip when the URL does not end in .pdf but the Content-Type or magic
-// bytes reveal it is one.
-func (p *Pipeline) scrapeBodyAsPDF(rawURL string, body []byte, maxLength int) (*ScrapeResult, error) {
+// bytes reveal it is one. rawContentType is the server's real Content-Type
+// header, threaded through only to stamp rawContentType on the result (raw
+// mode's own bytes are the same PDF bytes as full mode — a PDF has no
+// separate "unfiltered" representation beyond the file itself — so raw is
+// accepted but unused: it exists to keep this call symmetric with the other
+// raw-aware tier helpers).
+func (p *Pipeline) scrapeBodyAsPDF(rawURL string, body []byte, maxLength int, raw bool, rawContentType string) (*ScrapeResult, error) {
 	text, meta, err := documents.Parse(body, "pdf")
 	if err != nil {
 		return nil, fmt.Errorf("document parse error: %w", err)
@@ -36,14 +41,23 @@ func (p *Pipeline) scrapeBodyAsPDF(rawURL string, body []byte, maxLength int) (*
 		text = truncateBytes(text, maxLength)
 		truncated = true
 	}
+	// Raw mode's returned body must respect the caller's maxLength the same
+	// way Content does, even though the underlying PDF bytes may be larger.
+	rawBody := string(body)
+	if len(rawBody) > maxLength {
+		rawBody = rawBody[:maxLength]
+		truncated = true
+	}
 	return &ScrapeResult{
-		URL:         rawURL,
-		Content:     text,
-		ContentType: "pdf",
-		Title:       meta.Title,
-		Author:      meta.Author,
-		Truncated:   truncated,
-		Tier:        "document",
+		URL:            rawURL,
+		Content:        text,
+		ContentType:    "pdf",
+		Title:          meta.Title,
+		Author:         meta.Author,
+		Truncated:      truncated,
+		Tier:           "document",
+		rawBody:        rawBody,
+		rawContentType: rawContentType,
 	}, nil
 }
 

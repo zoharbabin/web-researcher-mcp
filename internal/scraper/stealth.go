@@ -13,7 +13,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int) (*ScrapeResult, error) {
+func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int, raw bool) (*ScrapeResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 
@@ -55,8 +55,9 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int)
 	// URL path suffix, so PDFs served at HTML-path URLs (e.g. PLoS printable
 	// views, journal download links) slip through to this tier where binary
 	// bytes fed into goquery's HTML parser produce empty or garbled output.
-	if isPDFContentType(resp.Header.Get("Content-Type")) || looksLikePDF(body) {
-		return p.scrapeBodyAsPDF(url, body, maxLength)
+	ct := resp.Header.Get("Content-Type")
+	if isPDFContentType(ct) || looksLikePDF(body) {
+		return p.scrapeBodyAsPDF(url, body, maxLength, raw, ct)
 	}
 
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(string(body)))
@@ -78,7 +79,15 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int)
 	// fall through and build the result anyway: the shell's own thin content
 	// is exactly the case the pipeline needs iframeCandidates to escalate past
 	// (issue #399) — returning nil here would silently discard that signal.
-	if len(content) < 100 && len(iframes) == 0 {
+	//
+	// In raw mode, a thin extraction is expected and NOT a failure for
+	// non-prose bodies (JSON, plain text) — extractArticleContent looks for
+	// prose elements that a JSON/plain-text response simply has none of, even
+	// though the tier's raw fetch (with this tier's spoofed browser headers,
+	// bypassing anti-bot walls the html tier's plain client cannot) succeeded
+	// perfectly well. Only bail when the raw body itself came back empty, i.e.
+	// there is truly nothing here to return either way.
+	if len(content) < 100 && len(iframes) == 0 && (!raw || len(body) == 0) {
 		return nil, nil
 	}
 
@@ -88,6 +97,15 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int)
 	truncated := false
 	if len(content) > maxLength {
 		content = truncateBytes(content, maxLength)
+		truncated = true
+	}
+
+	// Raw mode's returned body must respect the caller's maxLength the same
+	// way Content does — body itself is only bounded by MaxHTMLBytes, which is
+	// deliberately larger so extraction reaches the real article text.
+	rawBody := string(body)
+	if len(rawBody) > maxLength {
+		rawBody = truncateBytes(rawBody, maxLength)
 		truncated = true
 	}
 
@@ -102,6 +120,11 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int)
 		// escalating to the browser tier (see looksLikePartialShell).
 		rawHTMLBytes:     len(body),
 		iframeCandidates: iframes,
+		// The undecoded HTML body this tier already fetched, before
+		// extractArticleContent stripped it down to Content — raw mode
+		// returns this instead of Content once tieredFallback picks a winner.
+		rawBody:        rawBody,
+		rawContentType: ct,
 	}
 	if !sd.IsEmpty() {
 		res.StructuredData = sd

@@ -293,12 +293,21 @@ func TestAuditBibliography_TitleOnlySubsetContainmentUnchecked(t *testing.T) {
 }
 
 func TestAuditBibliography_NotFoundDOI(t *testing.T) {
-	// A DOI authoritatively absent from Crossref (404 → found=false) is not_found
-	// (a possible fabrication), distinct from unchecked.
+	// A DOI absent from BOTH Crossref (404 → found=false) AND the cross-registrar
+	// doi.org handle registry (not registered anywhere) is not_found (a possible
+	// fabrication), distinct from unchecked. Crossref 404 alone is NOT
+	// authoritative absence (#432 — arXiv DOIs 404 in Crossref while being real);
+	// the doi.org registry is the tie-breaker, mirroring verify_citation's
+	// verifyByDOI.
 	crossref := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(404)
 	}))
 	defer crossref.Close()
+	doiRegistry := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(404)
+	}))
+	defer doiRegistry.Close()
+
 	deps := setupTestDeps()
 	rr := search.NewCrossrefRetractionResolver("t@e.com", search.Deps{
 		HTTPClient: crossref.Client(),
@@ -306,6 +315,12 @@ func TestAuditBibliography_NotFoundDOI(t *testing.T) {
 	})
 	rr.SetBaseURL(crossref.URL)
 	deps.RetractionResolver = rr
+	reg := search.NewHandleDOIRegistry(search.Deps{
+		HTTPClient: doiRegistry.Client(),
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+	})
+	reg.SetBaseURL(doiRegistry.URL)
+	deps.DOIRegistry = reg
 
 	out, isErr := callAudit(t, deps, map[string]any{
 		"entries": []any{map[string]any{"doi": "10.9999/fabricated.does.not.exist"}},
@@ -315,14 +330,103 @@ func TestAuditBibliography_NotFoundDOI(t *testing.T) {
 	}
 	s := summaryOf(t, out)
 	if s["notFound"].(float64) != 1 {
-		t.Errorf("a DOI Crossref returns 404 for should be not_found, got %v", s)
+		t.Errorf("a DOI absent from both Crossref and the doi.org registry should be not_found, got %v", s)
 	}
 	if s["unchecked"].(float64) != 0 {
 		t.Errorf("a checked-and-absent DOI must not be counted unchecked: %v", s)
 	}
 	e0 := out["entries"].([]any)[0].(map[string]any)
 	if e0["exists"] != false {
-		t.Errorf("a 404 DOI should report exists=false: %v", e0)
+		t.Errorf("a DOI absent from both resolvers should report exists=false: %v", e0)
+	}
+}
+
+// TestAuditBibliography_CrossrefMissDOIRegistryConfirms is the regression test
+// for issue #432 finding 3: a real arXiv-style DOI (10.48550/arXiv.*) that 404s
+// in Crossref (Crossref does not index DataCite-registered arXiv DOIs) but IS
+// registered in the doi.org handle registry must NOT be flagged not_found —
+// that was the exact false-positive found against 10.48550/arXiv.1706.03762
+// ("Attention Is All You Need").
+func TestAuditBibliography_CrossrefMissDOIRegistryConfirms(t *testing.T) {
+	crossref := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(404)
+	}))
+	defer crossref.Close()
+	doiRegistry := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"responseCode":1}`))
+	}))
+	defer doiRegistry.Close()
+
+	deps := setupTestDeps()
+	rr := search.NewCrossrefRetractionResolver("t@e.com", search.Deps{
+		HTTPClient: crossref.Client(),
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+	})
+	rr.SetBaseURL(crossref.URL)
+	deps.RetractionResolver = rr
+	reg := search.NewHandleDOIRegistry(search.Deps{
+		HTTPClient: doiRegistry.Client(),
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+	})
+	reg.SetBaseURL(doiRegistry.URL)
+	deps.DOIRegistry = reg
+
+	out, isErr := callAudit(t, deps, map[string]any{
+		"entries": []any{map[string]any{"doi": "10.48550/arXiv.1706.03762", "title": "Attention Is All You Need"}},
+	})
+	if isErr {
+		t.Fatal("unexpected tool error")
+	}
+	s := summaryOf(t, out)
+	if s["notFound"].(float64) != 0 {
+		t.Errorf("a Crossref-404 DOI confirmed by the doi.org registry must NOT be not_found, got %v", s)
+	}
+	e0 := out["entries"].([]any)[0].(map[string]any)
+	if e0["exists"] != true {
+		t.Errorf("doi.org registry confirmation should set exists=true: %v", e0)
+	}
+}
+
+// TestAuditBibliography_DOIRegistryUnavailableDegradesUnchecked is the
+// regression test for issue #432 spec rule 3.3: when Crossref 404s AND the
+// doi.org registry is unavailable/unconfigured (no fallback answer either
+// way), the entry must degrade to unchecked (absence of evidence), never a
+// false not_found (evidence of absence) — DOIRegistry is nil here, mirroring a
+// deployment that never configured it.
+func TestAuditBibliography_DOIRegistryUnavailableDegradesUnchecked(t *testing.T) {
+	crossref := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(404)
+	}))
+	defer crossref.Close()
+
+	deps := setupTestDeps()
+	rr := search.NewCrossrefRetractionResolver("t@e.com", search.Deps{
+		HTTPClient: crossref.Client(),
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+	})
+	rr.SetBaseURL(crossref.URL)
+	deps.RetractionResolver = rr
+	deps.DOIRegistry = nil
+
+	out, isErr := callAudit(t, deps, map[string]any{
+		"entries": []any{map[string]any{"doi": "10.48550/arXiv.1706.03762"}},
+	})
+	if isErr {
+		t.Fatal("unexpected tool error")
+	}
+	s := summaryOf(t, out)
+	if s["notFound"].(float64) != 0 {
+		t.Errorf("with no DOIRegistry to confirm absence, a Crossref 404 must NOT be not_found: %v", s)
+	}
+	if s["unchecked"].(float64) != 1 {
+		t.Errorf("a Crossref 404 with no DOIRegistry fallback should degrade to unchecked, got %v", s)
+	}
+	e0 := out["entries"].([]any)[0].(map[string]any)
+	if e0["exists"] == true {
+		t.Errorf("existence must not be confirmed when no resolver answered: %v", e0)
+	}
+	if e0["reason"] == nil || e0["reason"] == "" {
+		t.Error("an unchecked entry must carry a reason so it isn't read as fake")
 	}
 }
 

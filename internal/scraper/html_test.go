@@ -370,7 +370,7 @@ func TestScrapeHTML_StructuredDataCapturedBeforeScriptRemove(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-	res, err := p.scrapeHTML(context.Background(), ts.URL, 50000)
+	res, err := p.scrapeHTML(context.Background(), ts.URL, 50000, false)
 	if err != nil {
 		t.Fatalf("scrapeHTML: %v", err)
 	}
@@ -408,7 +408,7 @@ func TestScrapeStealth_RendersTableAndStructuredData(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-	res, err := p.scrapeStealth(context.Background(), ts.URL, 50000)
+	res, err := p.scrapeStealth(context.Background(), ts.URL, 50000, false)
 	if err != nil {
 		t.Fatalf("scrapeStealth: %v", err)
 	}
@@ -443,7 +443,7 @@ func TestScrapeStealth_DivSoupContentPreserved(t *testing.T) {
 	defer ts.Close()
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-	res, err := p.scrapeStealth(context.Background(), ts.URL, 50000)
+	res, err := p.scrapeStealth(context.Background(), ts.URL, 50000, false)
 	if err != nil {
 		t.Fatalf("scrapeStealth: %v", err)
 	}
