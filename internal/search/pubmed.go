@@ -29,10 +29,12 @@ import (
 // sortpubdate. Both calls return HTTP 200 even for errors/empty, so the JSON body
 // is inspected (esearchresult.ERROR, empty idlist, per-record error).
 //
-// When AcademicSearchParams.FullText is true and a result has a PMCID (present in
-// articleids[] when the article is deposited in PubMed Central), a third call —
-// efetch.fcgi against PMC — fetches the JATS XML full text. Best-effort: articles
-// without a PMCID or with an efetch failure are returned without FullText set.
+// When AcademicSearchParams.FullText is true, the esearch term is narrowed with
+// PubMed's "pubmed pmc"[sb] filter so results are biased toward PMC-deposited
+// papers, and a third call — efetch.fcgi against PMC — fetches the JATS XML full
+// text for any result with a PMCID (present in articleids[]). Best-effort:
+// articles without a PMCID or with an efetch failure are returned without
+// FullText set.
 type PubMedProvider struct {
 	baseURL string
 	apiKey  string
@@ -117,12 +119,20 @@ type esearchResponse struct {
 	} `json:"esearchresult"`
 }
 
-// esearch maps a query (+ optional year range) to a list of PMIDs.
+// esearch maps a query (+ optional year range) to a list of PMIDs. When
+// FullText is requested, the query is narrowed with PubMed's own "pubmed
+// pmc"[sb] search field — documented at pubmed.ncbi.nlm.nih.gov/help/ — so the
+// search itself surfaces PMC-deposited (full-text-available) papers instead of
+// leaving full-text attachment to chance in doScholarly.
 func (p *PubMedProvider) esearch(ctx context.Context, params AcademicSearchParams) ([]string, error) {
 	num := clamp(params.NumResults, 1, 50)
+	term := params.Query
+	if params.FullText {
+		term += ` AND "pubmed pmc"[sb]`
+	}
 	q := url.Values{}
 	q.Set("db", "pubmed")
-	q.Set("term", params.Query)
+	q.Set("term", term)
 	q.Set("retmode", "json")
 	q.Set("retmax", strconv.Itoa(num))
 	if params.SortBy == "date" {
