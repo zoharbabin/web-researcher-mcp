@@ -262,11 +262,12 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
    └─ Block: loopback, link-local, RFC1918, metadata endpoints
 
 2. CONTENT TYPE DETECTION
-   ├─ YouTube URL → YouTube extractor (3-strategy fallback):
+   ├─ YouTube URL → YouTube extractor (4-strategy fallback):
+   │     Strategy 0: InnerTube ANDROID_VR client (youtubei/v1/player) — not PO-Token-gated, tried first
    │     Strategy 1: Player response captions (primary + alt regex), fmt=vtt (WebVTT)
    │     Strategy 2: Direct timedtext API (en, en-US, en-GB), fmt=vtt (WebVTT)
    │     Strategy 3: Video description (shortDescription JSON field)
-   │     Strategies 1-2 additionally score the transcript into up to 5 highlights (#284)
+   │     Strategies 0-2 additionally score the transcript into up to 5 highlights (#284)
    ├─ news.ycombinator.com → native HN API (Firebase REST + Algolia; no API key required):
    │     /item/<id>  → story metadata (title, URL, score, author, date) + top 10 comments
    │     /           → top 20 stories from the HN top-stories list (parallel Firebase fetch)
@@ -1748,6 +1749,7 @@ Each `lists[]` item: `name`, `fullName` (owner/repo of the list's source reposit
 - Provide `topic` and/or `query` — at least one is required. `query` feeds the same underlying topic match when `topic` is empty.
 - The input is lowercased and hyphenated before matching (`"Mental Health"` → `mental-health`), since ecosyste.ms's topic matching is exact-string and case-sensitive with no normalization of its own.
 - If a multi-word input misses as one compound slug, each substantive word (2+ characters, stopwords like "a"/"of"/"the" skipped) is retried independently against the API and the hits are merged and deduped by repository — recovers cases like `personal finance` (no such compound slug exists, but `finance` does) without a caller having to know to split it themselves. A genuine single-word miss (e.g. `parenting` — the real upstream slug is `parent`) is not retried further; there's nothing left to split.
+- If ecosyste.ms itself is unreachable or erroring (outage, timeout, 5xx) rather than cleanly returning "topic not found," a GitHub Search API fallback (`topic:awesome topic:<X>`, independent of ecosyste.ms) is tried before giving up; results from this tier carry `source: "github"`. If that also finds nothing, the original ecosyste.ms error is surfaced rather than masked as an empty result.
 - Archived source repositories are excluded from results.
 - `min_stars`/`min_projects` filter by the list repository's stars and curated-entry count; results are sorted (descending) by `sort_by`, default `stars`.
 - **Provider honoring**: an explicit `provider` is used exclusively; otherwise the first configured provider answers. An error/empty returns a structured zero-result with hints (no silent fallback).

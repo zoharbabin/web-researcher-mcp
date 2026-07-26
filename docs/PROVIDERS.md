@@ -160,7 +160,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 - Semantic Scholar enriches results with AI-generated `tldr` summaries and citation intent/influence edges, which power `citation_graph`. OpenAlex also implements `citation_graph` support with citation-count edges as a fallback.
 - Only OpenAlex implements the `DOIResolver` interface (exact-entity lookup via `/works/doi:{doi}`). CrossRef, Semantic Scholar, PubMed, and CORE do not.
 - CORE's every result is open access by definition — it aggregates OA repositories exclusively — and its `pdfUrl` links directly to full text, no Unpaywall enrichment needed.
-- PubMed fetches full text from PubMed Central when `full_text=true` and a result carries a PMCID: a third call (`efetch` against PMC) retrieves the JATS XML, populating `fullText`. Best-effort — an article without a PMCID, or an efetch failure, is returned without `fullText`.
+- PubMed fetches full text from PubMed Central when `full_text=true`: the search itself is narrowed with PubMed's `"pubmed pmc"[sb]` filter to bias results toward PMC-deposited papers, then a third call (`efetch` against PMC) retrieves the JATS XML for any result with a PMCID, populating `fullText`. Best-effort — an article without a PMCID, or an efetch failure, is returned without `fullText`.
 - Semantic Scholar also implements `PaperFetcher` (fetch full metadata by DOI/paper ID), behind the single-call `paper_fulltext` tool rather than `academic_search`.
 - Exa routes academic queries using its `research-paper` category — useful when its neural index surfaces papers the bibliographic databases miss.
 - [Unpaywall](https://unpaywall.org/) OA enrichment runs as a post-processing step on any DOI-bearing result — not a separate provider to select.

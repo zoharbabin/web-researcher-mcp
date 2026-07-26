@@ -317,6 +317,37 @@ func TestPubMedSearchFullTextCalledWhenTrue(t *testing.T) {
 	}
 }
 
+func TestPubMedEsearchPMCFilter(t *testing.T) {
+	tests := []struct {
+		name     string
+		fullText bool
+		want     bool
+	}{
+		{"appended when full text requested", true, true},
+		{"absent when full text not requested", false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := newPubMedTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+				if !strings.Contains(r.URL.Path, "/esearch.fcgi") {
+					t.Errorf("unexpected path: %s", r.URL.Path)
+					return
+				}
+				term := r.URL.Query().Get("term")
+				got := strings.Contains(term, `"pubmed pmc"[sb]`)
+				if got != tt.want {
+					t.Errorf("term = %q, want pmc filter present=%v", term, tt.want)
+				}
+				w.Write([]byte(`{"esearchresult":{"count":"0","idlist":[]}}`))
+			})
+			_, err := p.Scholarly(context.Background(), AcademicSearchParams{Query: "CRISPR", NumResults: 5, FullText: tt.fullText})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
 func TestPubMedAuthParams(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("api_key") != "k123" {
