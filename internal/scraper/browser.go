@@ -115,7 +115,7 @@ func (bp *browserPool) close() {
 	}
 }
 
-func (p *Pipeline) scrapeBrowser(ctx context.Context, url string, maxLength int) (*ScrapeResult, error) {
+func (p *Pipeline) scrapeBrowser(ctx context.Context, url string, maxLength int, raw bool) (*ScrapeResult, error) {
 	// Defensive: callers gate on browserEnabled(), but never let the "disabled"
 	// sentinel reach the browser pool as if it were a real binary path.
 	if p.config.ChromePath == chromeDisabled {
@@ -236,13 +236,31 @@ func (p *Pipeline) scrapeBrowser(ctx context.Context, url string, maxLength int)
 		truncated = true
 	}
 
-	return &ScrapeResult{
+	res := &ScrapeResult{
 		URL:         url,
 		Content:     content,
 		ContentType: "html",
 		Title:       title,
 		Truncated:   truncated,
-	}, nil
+	}
+
+	// Raw mode's "unfiltered" bytes for this tier are the rendered DOM
+	// (page.HTML(), post-JS-execution) rather than the JS-extracted text in
+	// Content — there is no pre-render HTTP body to fall back to once the
+	// browser tier ran. Best-effort only: a failure here just leaves rawBody
+	// empty, and ScrapeRaw falls back to Content in that case.
+	if raw {
+		if html, herr := page.HTML(); herr == nil {
+			if len(html) > maxLength {
+				html = truncateBytes(html, maxLength)
+				res.Truncated = true
+			}
+			res.rawBody = html
+			res.rawContentType = "text/html; charset=utf-8"
+		}
+	}
+
+	return res, nil
 }
 
 func extractPageContent(page *rod.Page) (string, error) {

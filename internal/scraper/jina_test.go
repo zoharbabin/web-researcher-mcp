@@ -50,7 +50,7 @@ func TestScrapeJinaSuccess(t *testing.T) {
 	withJinaEndpoint(t, srv.URL+"/")
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-	res, err := p.scrapeJina(context.Background(), "https://x.example", 5000)
+	res, err := p.scrapeJina(context.Background(), "https://x.example", 5000, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestScrapeJinaWithAPIKey(t *testing.T) {
 	withJinaEndpoint(t, srv.URL+"/")
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, JinaAPIKey: "k123"})
-	res, err := p.scrapeJina(context.Background(), "https://x.example", 5000)
+	res, err := p.scrapeJina(context.Background(), "https://x.example", 5000, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestScrapeJinaEmptyContent(t *testing.T) {
 	withJinaEndpoint(t, srv.URL+"/")
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-	_, err := p.scrapeJina(context.Background(), "https://x.example", 5000)
+	_, err := p.scrapeJina(context.Background(), "https://x.example", 5000, false)
 	if err == nil {
 		t.Fatal("empty content should error so the orchestrator can keep falling back")
 	}
@@ -107,7 +107,7 @@ func TestScrapeJinaRateLimit(t *testing.T) {
 	withJinaEndpoint(t, srv.URL+"/")
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-	_, err := p.scrapeJina(context.Background(), "https://x.example", 5000)
+	_, err := p.scrapeJina(context.Background(), "https://x.example", 5000, false)
 	se, ok := err.(*ScrapeError)
 	if !ok || se.Kind != ErrRateLimit {
 		t.Errorf("429 should map to ErrRateLimit, got %v", err)
@@ -122,7 +122,7 @@ func TestScrapeJinaHTTPError(t *testing.T) {
 	withJinaEndpoint(t, srv.URL+"/")
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-	_, err := p.scrapeJina(context.Background(), "https://x.example", 5000)
+	_, err := p.scrapeJina(context.Background(), "https://x.example", 5000, false)
 	se, ok := err.(*ScrapeError)
 	if !ok || se.Kind != ErrBlocked {
 		t.Errorf("403 should map to ErrBlocked, got %v", err)
@@ -141,7 +141,7 @@ func TestScrapeJinaTruncation(t *testing.T) {
 	withJinaEndpoint(t, srv.URL+"/")
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-	res, err := p.scrapeJina(context.Background(), "https://x.example", 50)
+	res, err := p.scrapeJina(context.Background(), "https://x.example", 50, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestScrapeJinaNetworkError(t *testing.T) {
 	withJinaEndpoint(t, "http://127.0.0.1:1/")
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
-	_, err := p.scrapeJina(context.Background(), "https://x.example", 5000)
+	_, err := p.scrapeJina(context.Background(), "https://x.example", 5000, false)
 	se, ok := err.(*ScrapeError)
 	if !ok || se.Kind != ErrNetwork {
 		t.Errorf("connection refused should map to ErrNetwork, got %v", err)
@@ -177,7 +177,7 @@ func TestScrapeJinaDisabled(t *testing.T) {
 	withJinaEndpoint(t, srv.URL+"/")
 
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, JinaDisabled: true})
-	_, err := p.scrapeJina(context.Background(), "https://x.example", 5000)
+	_, err := p.scrapeJina(context.Background(), "https://x.example", 5000, false)
 	if err == nil {
 		t.Fatal("expected error when Jina tier is disabled")
 	}
