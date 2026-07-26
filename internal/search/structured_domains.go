@@ -211,7 +211,11 @@ type EconResult struct {
 	Date        string  `json:"date,omitempty"`  // observation date (series mode)
 	Value       float64 `json:"value,omitempty"` // observation value (series mode)
 	HasValue    bool    `json:"-"`               // distinguishes a real 0.0 from "missing"
-	Source      string  `json:"source"`
+	// Popularity is FRED's own relevance ranking for keyword series search
+	// (see #434) — higher means more widely referenced/canonical. 0 when the
+	// provider doesn't supply the signal (observation mode, non-FRED providers).
+	Popularity int    `json:"popularity,omitempty"`
+	Source     string `json:"source"`
 }
 
 // EconProviderConfig holds economic-data provider auth.

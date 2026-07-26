@@ -783,6 +783,7 @@ class EconSearchResult:
     frequency: Optional[str] = None
     lastUpdated: Optional[str] = None
     notes: Optional[str] = None
+    popularity: Optional[int] = None
     seriesId: Optional[str] = None
     source: Optional[str] = None
     title: Optional[str] = None
@@ -798,6 +799,7 @@ class EconSearchResult:
             frequency=d.get('frequency'),
             lastUpdated=d.get('lastUpdated'),
             notes=d.get('notes'),
+            popularity=d.get('popularity'),
             seriesId=d.get('seriesId'),
             source=d.get('source'),
             title=d.get('title'),

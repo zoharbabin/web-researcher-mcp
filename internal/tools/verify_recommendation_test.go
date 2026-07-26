@@ -329,3 +329,36 @@ func TestVerifyRecommendationCorroborationCatchesTitleOnlyRefutation(t *testing.
 		}
 	}
 }
+
+// TestVerifyRecommendationLensSelectionTechClaim (#434 Finding D Rule 1): a
+// generic tech/product claim must route to {news, tech}, not the mislabeled
+// gov/legal "journalism" lens.
+func TestVerifyRecommendationLensSelectionTechClaim(t *testing.T) {
+	lenses := selectCorroborationLenses("Shopify", "best e-commerce platforms for small businesses")
+	if !containsString(lenses, "news") {
+		t.Errorf("expected tech/product claim to include %q, got %v", "news", lenses)
+	}
+	if containsString(lenses, "journalism") {
+		t.Errorf("expected tech/product claim to exclude %q, got %v", "journalism", lenses)
+	}
+}
+
+// TestVerifyRecommendationLensSelectionLegalClaim (#434 Finding D Rule 1): a
+// claim about corporate/gov/legal/financial matters must still route to the
+// journalism lens (gov/public-record/filing sources) in addition to the
+// generic set.
+func TestVerifyRecommendationLensSelectionLegalClaim(t *testing.T) {
+	lenses := selectCorroborationLenses("Glass Lewis", "best proxy advisory firms")
+	if !containsString(lenses, "journalism") {
+		t.Errorf("expected legal/financial claim to include %q, got %v", "journalism", lenses)
+	}
+}
+
+func containsString(list []string, target string) bool {
+	for _, s := range list {
+		if s == target {
+			return true
+		}
+	}
+	return false
+}

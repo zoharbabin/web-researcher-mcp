@@ -3,7 +3,10 @@ package tools
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
@@ -138,6 +141,50 @@ func TestCitationGraphExplicitProviderNoFallback(t *testing.T) {
 	})
 	if !res.IsError {
 		t.Error("explicit semanticscholar must surface its error, not silently fall back to OpenAlex")
+	}
+}
+
+// failingOpenAlexProvider implements AcademicProvider + CitationSearcher and
+// always 404s, modeling OpenAlex's own DOI-entity lookup also failing after the
+// #228 fallback fires. Named "openalex" so fallbackCitationSearcher picks it.
+type failingOpenAlexProvider struct{}
+
+func (f *failingOpenAlexProvider) Name() string { return "openalex" }
+func (f *failingOpenAlexProvider) Metadata() search.ProviderMeta {
+	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "free", Description: "mock OpenAlex (always 404)"}
+}
+func (f *failingOpenAlexProvider) Scholarly(_ context.Context, _ search.AcademicSearchParams) ([]search.AcademicResult, error) {
+	return nil, fmt.Errorf("openalex: not found")
+}
+func (f *failingOpenAlexProvider) Citations(_ context.Context, _ string, _ int) ([]search.AcademicResult, error) {
+	return nil, fmt.Errorf("openalex: not found")
+}
+func (f *failingOpenAlexProvider) References(_ context.Context, _ string, _ int) ([]search.AcademicResult, error) {
+	return nil, fmt.Errorf("openalex: not found")
+}
+
+// TestCitationGraphBothProvidersFailErrorNamesBoth (#434, Clean-code Rule 2):
+// when the auto-select fallback ALSO fails, the surfaced error must name both
+// providers and both underlying errors — never silently drop the fallback's own
+// diagnostically distinct error in favor of the stale primary error.
+func TestCitationGraphBothProvidersFailErrorNamesBoth(t *testing.T) {
+	deps := setupTestDeps()
+	deps.AcademicProviders = map[string]search.AcademicProvider{
+		"semanticscholar": &failingS2Provider{},
+		"openalex":        &failingOpenAlexProvider{},
+	}
+	_, res := callTool(t, deps, "citation_graph", map[string]any{"paper": "10.1038/nature14539"})
+	if !res.IsError {
+		t.Fatal("expected an error result when both providers fail")
+	}
+	var text string
+	for _, c := range res.Content {
+		if tc, ok := c.(*mcp.TextContent); ok {
+			text += tc.Text
+		}
+	}
+	if !strings.Contains(text, "semanticscholar") || !strings.Contains(text, "openalex") {
+		t.Errorf("error text must name both providers, got: %q", text)
 	}
 }
 

@@ -1095,6 +1095,7 @@ var econSearchOutputSchema = map[string]any{
 					"frequency":   map[string]any{"type": "string"},
 					"lastUpdated": map[string]any{"type": "string"},
 					"notes":       map[string]any{"type": "string"},
+					"popularity":  map[string]any{"type": "integer", "description": "FRED's own relevance ranking (higher = more widely referenced/canonical). Only present for FRED series-search results."},
 					// observations mode
 					"date":   map[string]any{"type": "string"},
 					"value":  map[string]any{"type": "number", "description": "Observation value, exactly as returned — no rounding."},

@@ -16,17 +16,24 @@ import (
 // OpenAlexProvider searches the OpenAlex API for scholarly works.
 // Coverage: 287M+ works across all academic disciplines (CC0 data).
 type OpenAlexProvider struct {
-	email   string
-	baseURL string
-	deps    Deps
+	email      string
+	baseURL    string
+	doiBaseURL string // doi.org content-negotiation base; defaults to doiOrgDefaultBaseURL
+	deps       Deps
 }
+
+// doiOrgDefaultBaseURL is doi.org's content-negotiation endpoint, used by the
+// DOI-to-title fallback (see #434) — the same keyless host already relied on by
+// HandleDOIRegistry, just a different (Accept-negotiated) representation.
+const doiOrgDefaultBaseURL = "https://doi.org"
 
 // NewOpenAlexProvider creates an OpenAlex provider using the given email for polite pool access.
 func NewOpenAlexProvider(email string, deps Deps) *OpenAlexProvider {
 	return &OpenAlexProvider{
-		email:   email,
-		baseURL: "https://api.openalex.org",
-		deps:    deps,
+		email:      email,
+		baseURL:    "https://api.openalex.org",
+		doiBaseURL: doiOrgDefaultBaseURL,
+		deps:       deps,
 	}
 }
 
@@ -112,6 +119,9 @@ func (p *OpenAlexProvider) doSearch(ctx context.Context, params AcademicSearchPa
 // SetBaseURL overrides API base URL (testing).
 func (p *OpenAlexProvider) SetBaseURL(base string) { p.baseURL = base }
 
+// SetDOIBaseURL overrides the doi.org content-negotiation base URL (testing).
+func (p *OpenAlexProvider) SetDOIBaseURL(base string) { p.doiBaseURL = base }
+
 // Citations returns works that CITE the seed (forward edges), via the
 // `cites:<openAlexID>` filter. OpenAlex supplies no citation-intent/influence
 // signal, so the returned AcademicResults carry counts/metadata only — the
@@ -196,31 +206,43 @@ func (p *OpenAlexProvider) fetchWork(ctx context.Context, seedID string) (*openA
 	if seedID == "" {
 		return nil, nil
 	}
-	var path string
 	switch {
 	case isDOI(seedID):
-		path = "/works/doi:" + url.PathEscape(seedID) + "?mailto=" + url.QueryEscape(p.email)
+		return p.fetchWorkByDOI(ctx, seedID)
 	case strings.Contains(seedID, "openalex.org/") || isOpenAlexWorkID(seedID):
-		path = "/works/" + url.PathEscape(shortOpenAlexID(seedID)) + "?mailto=" + url.QueryEscape(p.email)
+		path := "/works/" + url.PathEscape(shortOpenAlexID(seedID)) + "?mailto=" + url.QueryEscape(p.email)
+		return p.fetchWorkByPath(ctx, path)
 	default:
-		// Title seed → search, take top match.
-		q := url.Values{}
-		q.Set("search", seedID)
-		q.Set("per_page", "1")
-		q.Set("mailto", p.email)
-		body, err := p.get(ctx, "/works?"+q.Encode())
-		if err != nil {
-			return nil, err
-		}
-		var resp openAlexResponse
-		if err := json.Unmarshal(body, &resp); err != nil {
-			return nil, fmt.Errorf("openalex: parse: %w", err)
-		}
-		if len(resp.Results) == 0 {
-			return nil, nil
-		}
-		return &resp.Results[0], nil
+		return p.fetchWorkByTitle(ctx, seedID)
 	}
+}
+
+// fetchWorkByDOI resolves a DOI-shaped seed via the direct /works/doi: entity
+// endpoint. When OpenAlex has no entity for the DOI (a 404 — e.g. it re-minted
+// its own DOI for the work, or the DOI is DataCite/arXiv-registered and outside
+// OpenAlex's index, distinct from Crossref's already-documented arXiv-DOI gap in
+// doi_registry.go), it attempts exactly one bounded keyless DOI→title resolution
+// via doi.org's content-negotiated representation (see #434) and retries once as
+// a title search — never a loop. If the title resolution itself fails or yields
+// nothing, the original entity-lookup error is returned unchanged.
+func (p *OpenAlexProvider) fetchWorkByDOI(ctx context.Context, doi string) (*openAlexWork, error) {
+	path := "/works/doi:" + url.PathEscape(doi) + "?mailto=" + url.QueryEscape(p.email)
+	w, err := p.fetchWorkByPath(ctx, path)
+	if err == nil {
+		return w, nil
+	}
+	if !isOpenAlexNotFoundErr(err) {
+		return nil, err
+	}
+	title, terr := p.titleFromDOIOrg(ctx, doi)
+	if terr != nil || title == "" {
+		return nil, err
+	}
+	return p.fetchWorkByTitle(ctx, title)
+}
+
+// fetchWorkByPath fetches a single OpenAlex work entity at the given path.
+func (p *OpenAlexProvider) fetchWorkByPath(ctx context.Context, path string) (*openAlexWork, error) {
 	body, err := p.get(ctx, path)
 	if err != nil {
 		return nil, err
@@ -230,6 +252,69 @@ func (p *OpenAlexProvider) fetchWork(ctx context.Context, seedID string) (*openA
 		return nil, fmt.Errorf("openalex: parse: %w", err)
 	}
 	return &w, nil
+}
+
+// fetchWorkByTitle searches OpenAlex for the given title text, taking the top
+// match. Returns (nil, nil) when nothing matches.
+func (p *OpenAlexProvider) fetchWorkByTitle(ctx context.Context, title string) (*openAlexWork, error) {
+	q := url.Values{}
+	q.Set("search", title)
+	q.Set("per_page", "1")
+	q.Set("mailto", p.email)
+	body, err := p.get(ctx, "/works?"+q.Encode())
+	if err != nil {
+		return nil, err
+	}
+	var resp openAlexResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("openalex: parse: %w", err)
+	}
+	if len(resp.Results) == 0 {
+		return nil, nil
+	}
+	return &resp.Results[0], nil
+}
+
+// isOpenAlexNotFoundErr reports whether err is the "not found" 404 this
+// provider's own get() produces — as opposed to a transient failure (rate
+// limit, network, 5xx) that should never trigger the DOI→title fallback.
+func isOpenAlexNotFoundErr(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "openalex: not found")
+}
+
+// titleFromDOIOrg resolves a DOI to its bibliographic title via doi.org's
+// content-negotiated CSL-JSON representation (see #434) — a keyless,
+// registrar-agnostic lookup that works for DataCite/arXiv-registered DOIs
+// OpenAlex's own entity endpoint has no record for. The same doi.org host
+// HandleDOIRegistry already relies on, just a different Accept-negotiated
+// representation; no new external dependency. Best-effort: a transport or
+// parse failure returns ("", err), never a fabricated title.
+func (p *OpenAlexProvider) titleFromDOIOrg(ctx context.Context, doi string) (string, error) {
+	reqURL := p.doiBaseURL + "/" + crossrefEscapeDOI(doi)
+	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "application/vnd.citationstyles.csl+json")
+	resp, err := p.deps.HTTPClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("doi.org: request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("doi.org: %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	if err != nil {
+		return "", err
+	}
+	var rec struct {
+		Title string `json:"title"`
+	}
+	if err := json.Unmarshal(body, &rec); err != nil {
+		return "", fmt.Errorf("doi.org: parse: %w", err)
+	}
+	return rec.Title, nil
 }
 
 // get performs a bare GET against the OpenAlex API (no breaker — callers wrap).

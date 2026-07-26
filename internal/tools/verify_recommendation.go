@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -204,16 +205,48 @@ func detectSelfPromotionForURL(ctx context.Context, deps Dependencies, rawURL st
 	return content.DetectSelfPromotion(host, res.Content)
 }
 
-// corroborationLenses are the lens names searched in order. journalism covers
-// government/public-record/filing sources (sec.gov, courtlistener.com,
-// data.gov, ...); tech covers independent tech press. Both are independent of
-// the recommendation author's domain, making them resistant to brand-controlled
-// or sponsored content.
-var corroborationLenses = []string{"journalism", "tech"}
+// genericCorroborationLenses are searched for every claim: news (Reuters, AP,
+// BBC, NYT, The Guardian, ...) and tech (Ars Technica, TechCrunch, The Verge,
+// Wired, ...) — both independent of the recommendation author's domain, making
+// them resistant to brand-controlled or sponsored content.
+var genericCorroborationLenses = []string{"news", "tech"}
 
-// corroborateRecommendation issues one web search per corroborationLens for
-// the recommended item title within the caller's claim context. It counts how
-// many results address the recommendation positively (agree), negatively
+// corporateGovLegalKeywords trigger routing to the journalism lens in addition
+// to the generic set (see #434 Finding D). Despite its name, lenses/journalism.json
+// is scoped to government/public-record/corporate-filing domains (sec.gov,
+// courtlistener.com, opencorporates.com, data.gov, census.gov, federalregister.gov,
+// opensecrets.org, foia.gov, congress.gov, gao.gov) — the right lens for claims
+// about corporate, governmental, legal, or financial matters, not generic
+// tech/product claims. The lens's file/name is left untouched (it is also a
+// public, user-facing lens name exercised by internal/search/geo_eval_live_test.go's
+// gold-set containment tests) — only this selection logic changes.
+var corporateGovLegalKeywords = []string{
+	"sec filing", "10-k", "10-q", "8-k", "proxy advisory", "proxy advisor",
+	"shareholder", "securities", "lawsuit", "litigation", "court", "regulator",
+	"regulatory", "compliance", "antitrust", "merger", "acquisition", "earnings",
+	"financial statement", "audit", "fraud", "sanction", "congress", "legislation",
+	"government contract", "federal", "sec.gov", "ftc", "doj", "esg",
+}
+
+// selectCorroborationLenses classifies claim+title text and returns the lens
+// set to search (#434 Finding D): generic/tech/product claims use
+// {news, tech}; claims about corporate/gov/legal/financial matters
+// additionally route to journalism.
+func selectCorroborationLenses(title, claim string) []string {
+	lenses := append([]string{}, genericCorroborationLenses...)
+	text := strings.ToLower(title + " " + claim)
+	for _, kw := range corporateGovLegalKeywords {
+		if strings.Contains(text, kw) {
+			return append(lenses, "journalism")
+		}
+	}
+	return lenses
+}
+
+// corroborateRecommendation issues one web search per lens selected by
+// selectCorroborationLenses for the recommended item title within the
+// caller's claim context. It counts how many results address the
+// recommendation positively (agree), negatively
 // (disagree), or neutrally/silently (silent). Each result's claimSignal is the
 // single most claim-relevant snippet sentence (content.ExtractClaimEvidence),
 // not a fixed enum: an empty signal means no sentence mentioned the title
@@ -241,7 +274,7 @@ func corroborateRecommendation(ctx context.Context, deps Dependencies, title, cl
 	}
 	registry := search.GetLensRegistry()
 	var corroborations []corroborationResult
-	for _, lensName := range corroborationLenses {
+	for _, lensName := range selectCorroborationLenses(title, claim) {
 		lensData, ok := registry.Get(lensName)
 		if !ok {
 			continue
@@ -318,12 +351,12 @@ var verifyRecommendationOutputSchema = map[string]any{
 					"httpStatus": map[string]any{"type": "integer", "description": "Live HTTP status for the URL (0 = unreachable/timeout)."},
 					"corroborationSearches": map[string]any{
 						"type":        "array",
-						"description": "Present when the `claim` field was supplied. One entry per corroboration lens (journalism, tech). Shows whether independent sources agree, disagree, or are silent about this recommendation in the context of the claim.",
+						"description": "Present when the `claim` field was supplied. One entry per corroboration lens, selected by classifying the claim/title text: generic/tech/product claims search {news, tech}; claims about corporate/government/legal/financial matters additionally search {journalism} (gov/public-record/filing sources — sec.gov, courtlistener.com, data.gov, ...). Shows whether independent sources agree, disagree, or are silent about this recommendation in the context of the claim.",
 						"items": map[string]any{
 							"type": "object",
 							"properties": map[string]any{
 								"query":         map[string]any{"type": "string", "description": "The site-scoped query issued against this lens."},
-								"lens":          map[string]any{"type": "string", "description": "Lens name used (e.g. 'journalism', 'tech')."},
+								"lens":          map[string]any{"type": "string", "description": "Lens name used (e.g. 'news', 'tech', 'journalism')."},
 								"resultCount":   map[string]any{"type": "integer", "description": "Total results returned by the search."},
 								"agreeCount":    map[string]any{"type": "integer", "description": "Results whose snippet addresses the recommendation positively in context of the claim."},
 								"disagreeCount": map[string]any{"type": "integer", "description": "Results whose snippet or title contradicts or does not address the recommendation." + languageHeuristicCaveat},
