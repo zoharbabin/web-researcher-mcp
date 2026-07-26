@@ -152,7 +152,12 @@ func registerCompanyRecon(srv *mcp.Server, deps Dependencies) {
 			}()
 		}
 
-		if phaseSet["profiling"] && deps.Search != nil {
+		// "profiling" and "web" both trigger the same web-search company
+		// summary (issue #432): they are documented as independently
+		// selectable, so either alone must produce the summary, not just
+		// "profiling". When both are selected, the source is recorded once
+		// under "profiling" (arbitrary but stable) rather than duplicated.
+		if (phaseSet["profiling"] || phaseSet["web"]) && deps.Search != nil {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -160,23 +165,18 @@ func registerCompanyRecon(srv *mcp.Server, deps Dependencies) {
 				if summary == "" {
 					return
 				}
+				phase := "web"
+				if phaseSet["profiling"] {
+					phase = "profiling"
+				}
 				mu.Lock()
 				result.Profile = &companyProfile{Summary: summary}
-				result.Sources = append(result.Sources, companySourceRef{Phase: "profiling", Name: "web_search"})
+				result.Sources = append(result.Sources, companySourceRef{Phase: phase, Name: "web_search"})
 				mu.Unlock()
 			}()
 		}
 
 		wg.Wait()
-
-		if phaseSet["web"] {
-			// "web" is descriptive metadata about profiling's own web_search
-			// contribution — record it as its own source only when profiling
-			// itself did not already run (phases can be selected independently).
-			if !phaseSet["profiling"] {
-				result.Sources = append(result.Sources, companySourceRef{Phase: "web", Name: "note", URL: "select the profiling phase to include a web-search summary"})
-			}
-		}
 
 		result.Subdomains = deriveSubdomains(domain, result.CertSANs, result.ArchiveURLs)
 
