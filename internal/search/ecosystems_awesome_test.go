@@ -339,6 +339,52 @@ func TestEcosystemsAwesomeRateLimited(t *testing.T) {
 	}
 }
 
+// TestEcosystemsAwesomeOutageFallsBackToGitHub verifies that when ecosyste.ms
+// itself is erroring (outage, not a clean "topic not found"), the GitHub
+// topic-search fallback — independent of ecosyste.ms — is tried instead of
+// immediately surfacing the ecosystems error.
+func TestEcosystemsAwesomeOutageFallsBackToGitHub(t *testing.T) {
+	p := newEcosystemsTestProviderWithGitHub(t, "", "", "",
+		func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("upstream outage"))
+		},
+		func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(`{"total_count":1,"items":[
+				{"full_name":"a/awesome-go","html_url":"https://github.com/a/awesome-go","description":"d","stargazers_count":99,"topics":["go","awesome"],"archived":false,"pushed_at":"2026-01-01T00:00:00Z"}
+			]}`))
+		},
+	)
+
+	res, err := p.AwesomeLists(context.Background(), AwesomeListSearchParams{Topic: "go", NumResults: 5})
+	if err != nil {
+		t.Fatalf("outage should recover via GitHub fallback, not error: %v", err)
+	}
+	if len(res) != 1 || res[0].FullName != "a/awesome-go" || res[0].Source != "github" {
+		t.Errorf("unexpected result: %+v", res)
+	}
+}
+
+// TestEcosystemsAwesomeOutageSurfacesErrorWhenGitHubAlsoEmpty verifies that
+// when both ecosyste.ms is down AND the GitHub fallback finds nothing, the
+// original ecosystems error is surfaced rather than a masked empty result —
+// an outage should be visible, not silently indistinguishable from a
+// genuine no-match.
+func TestEcosystemsAwesomeOutageSurfacesErrorWhenGitHubAlsoEmpty(t *testing.T) {
+	p := newEcosystemsTestProviderWithGitHub(t, "", "", "",
+		func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("upstream outage"))
+		},
+		emptyGitHubSearchHandler,
+	)
+
+	_, err := p.AwesomeLists(context.Background(), AwesomeListSearchParams{Topic: "go", NumResults: 5})
+	if err == nil || !strings.Contains(err.Error(), "500") {
+		t.Errorf("outage with no GitHub recovery should surface the original error, got %v", err)
+	}
+}
+
 func TestEcosystemsAwesomeInterface(t *testing.T) {
 	var _ AwesomeListProvider = (*EcosystemsAwesomeProvider)(nil)
 }

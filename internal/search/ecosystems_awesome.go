@@ -146,6 +146,17 @@ func (e *EcosystemsAwesomeProvider) doSearch(ctx context.Context, params Awesome
 
 	parsed, err := e.fetchRaw(ctx, normalized, num)
 	if err != nil {
+		// ecosyste.ms itself is unreachable or erroring (outage, timeout,
+		// 5xx) — distinct from a clean "topic not found" (fetchRaw returns
+		// nil, nil for that case, handled below). Tier 3's GitHub Search API
+		// fallback indexes the same "topic:awesome" tagging convention
+		// independently of ecosyste.ms, so it works even when ecosyste.ms is
+		// down; try it before giving up. If it also comes back empty,
+		// surface the original ecosystems error rather than masking an
+		// outage as a silent zero-result.
+		if gh := e.fetchGitHubTopicFallback(ctx, topic, params, num); len(gh) > 0 {
+			return finishAwesomeResults(gh, params, num), nil
+		}
 		return nil, err
 	}
 
@@ -199,11 +210,19 @@ func (e *EcosystemsAwesomeProvider) doSearch(ctx context.Context, params Awesome
 		out = e.fetchGitHubTopicFallback(ctx, topic, params, num)
 	}
 
+	return finishAwesomeResults(out, params, num), nil
+}
+
+// finishAwesomeResults applies the sort order and result-count cap shared by
+// every tier (ecosyste.ms primary/word-fallback and the GitHub outage
+// fallback), so a result reaching the caller always has the same ordering
+// and truncation contract regardless of which tier produced it.
+func finishAwesomeResults(out []AwesomeListResult, params AwesomeListSearchParams, num int) []AwesomeListResult {
 	sortAwesomeLists(out, params.SortBy)
 	if len(out) > num {
 		out = out[:num]
 	}
-	return out, nil
+	return out
 }
 
 // githubSearchRepoItem mirrors one element of GitHub's
