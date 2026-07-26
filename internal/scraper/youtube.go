@@ -1,10 +1,12 @@
 package scraper
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -28,6 +30,27 @@ var (
 const (
 	maxHighlights        = 5
 	minHighlightSegments = 5
+)
+
+// InnerTube ANDROID_VR client identity. As of 2026, YouTube's `web` client
+// requires a BotGuard-attested PO Token for caption/player requests (see
+// yt-dlp's PO Token Guide), which this unauthenticated scraper cannot
+// generate. ANDROID_VR is one of the InnerTube client contexts that does NOT
+// require a PO Token, so Strategy 0 impersonates it via the public
+// youtubei/v1/player endpoint instead of scraping the (POT-gated) web
+// watch-page captions. clientVersion is pinned to a known-good build; YouTube
+// tolerates a stale-but-valid version far longer than it tolerates a missing
+// PO Token.
+const (
+	innertubeBaseURL       = "https://m.youtube.com"
+	androidVRClientName    = "ANDROID_VR"
+	androidVRClientVersion = "1.65.10"
+	androidVRUserAgent     = "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip"
+)
+
+var (
+	innertubeAPIKeyRe      = regexp.MustCompile(`"INNERTUBE_API_KEY":"([^"]+)"`)
+	innertubeVisitorDataRe = regexp.MustCompile(`"VISITOR_DATA":"([^"]+)"`)
 )
 
 // TranscriptHighlight is a top-scored transcript segment returned by
@@ -75,39 +98,31 @@ func (p *Pipeline) scrapeYouTube(ctx context.Context, rawURL string, maxLength i
 	pageHTML := string(body)
 	title := extractYouTubeTitle(pageHTML)
 
-	// Strategy 1: Extract transcript from player response captions
-	transcript, err := extractTranscript(ctx, p.client, pageHTML)
+	// Strategy 0: InnerTube ANDROID_VR client (not PO-Token-gated; see the
+	// androidVRClientVersion doc comment). Tried first because the `web`
+	// client strategies below (1-2) are known to be blocked by YouTube's PO
+	// Token enforcement as of 2026 and return an empty caption body rather
+	// than an error, so they cannot be distinguished from "no captions exist"
+	// without this independent, differently-gated path.
+	transcript, err := fetchInnerTubeCaptions(ctx, p.client, videoID)
 	if err == nil && len(transcript) > 100 {
-		highlights := scoreTranscriptHighlights(transcript, "")
-		content := transcript
-		if len(content) > maxLength {
-			content = truncateBytes(content, maxLength)
-		}
-		return &ScrapeResult{
-			URL:         rawURL,
-			Content:     content,
-			ContentType: "youtube",
-			Title:       title,
-			Highlights:  highlights,
-		}, nil
+		return youtubeTranscriptResult(rawURL, title, transcript, maxLength), nil
 	}
+	logYouTubeStrategyFailure(videoID, "innertube_android_vr", transcript, err)
+
+	// Strategy 1: Extract transcript from player response captions
+	transcript, err = extractTranscript(ctx, p.client, pageHTML)
+	if err == nil && len(transcript) > 100 {
+		return youtubeTranscriptResult(rawURL, title, transcript, maxLength), nil
+	}
+	logYouTubeStrategyFailure(videoID, "web_player_response", transcript, err)
 
 	// Strategy 2: Direct timedtext API
 	transcript, err = fetchTimedTextAPI(ctx, p.client, videoID)
 	if err == nil && len(transcript) > 100 {
-		highlights := scoreTranscriptHighlights(transcript, "")
-		content := transcript
-		if len(content) > maxLength {
-			content = truncateBytes(content, maxLength)
-		}
-		return &ScrapeResult{
-			URL:         rawURL,
-			Content:     content,
-			ContentType: "youtube",
-			Title:       title,
-			Highlights:  highlights,
-		}, nil
+		return youtubeTranscriptResult(rawURL, title, transcript, maxLength), nil
 	}
+	logYouTubeStrategyFailure(videoID, "timedtext_api", transcript, err)
 
 	// Strategy 3: Fall back to video description
 	description := extractDescription(pageHTML)
@@ -125,6 +140,158 @@ func (p *Pipeline) scrapeYouTube(ctx context.Context, rawURL string, maxLength i
 	}
 
 	return nil, fmt.Errorf("no transcript or description available for %s", videoID)
+}
+
+func youtubeTranscriptResult(rawURL, title, transcript string, maxLength int) *ScrapeResult {
+	highlights := scoreTranscriptHighlights(transcript, "")
+	content := transcript
+	if len(content) > maxLength {
+		content = truncateBytes(content, maxLength)
+	}
+	return &ScrapeResult{
+		URL:         rawURL,
+		Content:     content,
+		ContentType: "youtube",
+		Title:       title,
+		Highlights:  highlights,
+	}
+}
+
+// logYouTubeStrategyFailure records why a caption strategy did not produce a
+// usable transcript, distinguishing a hard error from the "request succeeded
+// but returned an empty/short body" symptom of PO Token enforcement — the
+// two look identical to the caller (both just fall through) but are very
+// different failures to diagnose from logs alone.
+func logYouTubeStrategyFailure(videoID, strategy, transcript string, err error) {
+	if err != nil {
+		slog.Debug("youtube caption strategy failed", "videoId", videoID, "strategy", strategy, "error", err)
+		return
+	}
+	slog.Debug("youtube caption strategy returned no usable transcript", "videoId", videoID, "strategy", strategy, "transcriptLen", len(transcript))
+}
+
+// innerTubeWatchContext holds the values scraped from the ANDROID_VR watch
+// page that the youtubei/v1/player call needs: the InnerTube API key
+// (required) and visitor data (optional, improves acceptance).
+type innerTubeWatchContext struct {
+	apiKey      string
+	visitorData string
+}
+
+// fetchInnerTubeCaptions retrieves captions via YouTube's InnerTube API using
+// the ANDROID_VR client context, which YouTube does not currently gate behind
+// a PO Token (unlike the public `web` client the other two strategies use).
+// Two calls: (1) GET the ANDROID_VR watch page to harvest the API key/visitor
+// data YouTube ties to that client identity, (2) POST youtubei/v1/player with
+// a matching client context to get a player response whose caption track
+// baseUrl is fetched the same way as the web-client strategy.
+func fetchInnerTubeCaptions(ctx context.Context, client *http.Client, videoID string) (string, error) {
+	watchCtx, err := fetchInnerTubeWatchContext(ctx, client, videoID)
+	if err != nil {
+		return "", err
+	}
+	playerResp, err := fetchInnerTubePlayerResponse(ctx, client, videoID, watchCtx)
+	if err != nil {
+		return "", err
+	}
+	captionURL := findCaptionURL(playerResp)
+	if captionURL == "" {
+		return "", fmt.Errorf("innertube: no captions in player response")
+	}
+	return fetchCaptionTrackVTT(ctx, client, captionURL)
+}
+
+func fetchInnerTubeWatchContext(ctx context.Context, client *http.Client, videoID string) (innerTubeWatchContext, error) {
+	watchURL := innertubeBaseURL + "/watch?v=" + url.QueryEscape(videoID) + "&hl=en"
+	req, err := http.NewRequestWithContext(ctx, "GET", watchURL, nil)
+	if err != nil {
+		return innerTubeWatchContext{}, err
+	}
+	req.Header.Set("User-Agent", androidVRUserAgent)
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return innerTubeWatchContext{}, fmt.Errorf("innertube: watch page request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return innerTubeWatchContext{}, fmt.Errorf("innertube: watch page returned %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
+	if err != nil {
+		return innerTubeWatchContext{}, err
+	}
+	html := string(body)
+
+	apiKey := firstSubmatch(innertubeAPIKeyRe, html)
+	if apiKey == "" {
+		return innerTubeWatchContext{}, fmt.Errorf("innertube: API key not found in watch page")
+	}
+	return innerTubeWatchContext{
+		apiKey:      apiKey,
+		visitorData: firstSubmatch(innertubeVisitorDataRe, html),
+	}, nil
+}
+
+func fetchInnerTubePlayerResponse(ctx context.Context, client *http.Client, videoID string, watchCtx innerTubeWatchContext) (map[string]any, error) {
+	clientCtx := map[string]any{
+		"clientName":    androidVRClientName,
+		"clientVersion": androidVRClientVersion,
+		"hl":            "en",
+		"gl":            "US",
+	}
+	if watchCtx.visitorData != "" {
+		clientCtx["visitorData"] = watchCtx.visitorData
+	}
+	payload := map[string]any{
+		"context": map[string]any{"client": clientCtx},
+		"videoId": videoID,
+	}
+	jsonBody, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("innertube: marshal player request: %w", err)
+	}
+
+	endpoint := innertubeBaseURL + "/youtubei/v1/player?key=" + url.QueryEscape(watchCtx.apiKey)
+	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", androidVRUserAgent)
+	if watchCtx.visitorData != "" {
+		req.Header.Set("X-Goog-Visitor-Id", watchCtx.visitorData)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("innertube: player request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("innertube: player request returned %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
+	if err != nil {
+		return nil, err
+	}
+	var playerResp map[string]any
+	if err := json.Unmarshal(body, &playerResp); err != nil {
+		return nil, fmt.Errorf("innertube: failed to parse player response: %w", err)
+	}
+	return playerResp, nil
+}
+
+func firstSubmatch(re *regexp.Regexp, s string) string {
+	m := re.FindStringSubmatch(s)
+	if len(m) < 2 {
+		return ""
+	}
+	return m[1]
 }
 
 func extractVideoID(rawURL string) string {
@@ -166,11 +333,27 @@ func extractTranscript(ctx context.Context, client *http.Client, pageHTML string
 	if captionURL == "" {
 		return "", fmt.Errorf("no captions found")
 	}
-	if strings.Contains(captionURL, "?") {
-		captionURL += "&fmt=vtt"
-	} else {
-		captionURL += "?fmt=vtt"
+	return fetchCaptionTrackVTT(ctx, client, captionURL)
+}
+
+// fetchCaptionTrackVTT fetches a caption track's baseUrl as VTT and returns
+// the parsed plain-text transcript. Shared by the web-player-response
+// strategy and the InnerTube ANDROID_VR strategy, since both parse the same
+// captionTracks[].baseUrl shape from a player response. The baseUrl from the
+// InnerTube ANDROID_VR player response already carries its own fmt=srv3
+// param, so fmt=vtt must be set via query-param mutation (override), not
+// naive string concatenation — appending "&fmt=vtt" would leave two "fmt"
+// params, and YouTube honors the first (srv3 XML), not the last, silently
+// returning JATS-like XML instead of VTT.
+func fetchCaptionTrackVTT(ctx context.Context, client *http.Client, captionURL string) (string, error) {
+	parsed, err := url.Parse(captionURL)
+	if err != nil {
+		return "", fmt.Errorf("caption url parse: %w", err)
 	}
+	q := parsed.Query()
+	q.Set("fmt", "vtt")
+	parsed.RawQuery = q.Encode()
+	captionURL = parsed.String()
 
 	req, err := http.NewRequestWithContext(ctx, "GET", captionURL, nil)
 	if err != nil {
