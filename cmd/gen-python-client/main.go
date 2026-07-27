@@ -118,6 +118,9 @@ func buildDeps() tools.Dependencies {
 		OpenSyllabusAPIKey:      "gen-schema-key",
 		OpenSyllabusAPIURL:      "https://gen-schema.invalid",
 		PENAmericaAirtableToken: "gen-schema-token",
+		// research_panel registers only when at least one panel member is
+		// present — a placeholder mock is enough for schema generation.
+		ResearchPanelProviders: []tools.ModelProvider{&mockModelProvider{}},
 	}
 }
 
@@ -136,6 +139,14 @@ func (m *mockProvider) Images(_ context.Context, _ search.ImageSearchParams) ([]
 }
 func (m *mockProvider) News(_ context.Context, _ search.NewsSearchParams) ([]search.NewsResult, error) {
 	return nil, nil
+}
+
+type mockModelProvider struct{}
+
+func (m *mockModelProvider) Name() string    { return "mock" }
+func (m *mockModelProvider) ModelID() string { return "mock-model" }
+func (m *mockModelProvider) Ask(_ context.Context, _ string) (tools.ModelResponse, error) {
+	return tools.ModelResponse{Text: "mock response"}, nil
 }
 
 type mockAcademicProvider struct{}
