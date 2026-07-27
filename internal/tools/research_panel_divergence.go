@@ -76,14 +76,18 @@ func AnalyzeDivergence(responses map[string]string) PanelDivergence {
 				continue
 			}
 			overlap := sentenceOverlap(claim.text, other.text)
+			polarityDiffers := content.HasContrastCue([]string{claim.lower}) != content.HasContrastCue([]string{other.lower})
+			// Check contradiction first: two near-identical sentences that differ
+			// only by a negation cue ("X" vs "X is not...") have very HIGH
+			// lexical overlap, not a middling one — if the consensus check ran
+			// first it would wrongly count the pair as agreement.
+			if overlap >= contradictionOverlapFloor && polarityDiffers {
+				hasContradictionPartner = true
+				contradictionPartner = other
+				continue
+			}
 			if overlap >= consensusOverlapThreshold {
 				otherModels[other.modelID] = true
-			}
-			if overlap >= contradictionOverlapFloor && overlap < consensusOverlapThreshold {
-				if content.HasContrastCue([]string{claim.lower}) != content.HasContrastCue([]string{other.lower}) {
-					hasContradictionPartner = true
-					contradictionPartner = other
-				}
 			}
 		}
 
