@@ -23,35 +23,5 @@
     "web-search",
     "patents",
     "news"
-  ],
-  "userConfig": {
-    "google_api_key": {
-      "type": "string",
-      "title": "Google Custom Search API Key",
-      "description": "Get one free at https://console.cloud.google.com (optional if using Brave or other providers)",
-      "sensitive": true
-    },
-    "google_cx": {
-      "type": "string",
-      "title": "Google Custom Search Engine ID",
-      "description": "Create at https://programmablesearchengine.google.com (optional if using Brave or other providers)"
-    },
-    "brave_api_key": {
-      "type": "string",
-      "title": "Brave Search API Key",
-      "description": "Get one free at https://brave.com/search/api/ (optional alternative to Google)",
-      "sensitive": true
-    },
-    "search_provider": {
-      "type": "string",
-      "title": "Search Provider",
-      "description": "Which search engine to use: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, or hackernews",
-      "default": "google"
-    },
-    "search_routing": {
-      "type": "string",
-      "title": "Multi-Provider Routing",
-      "description": "Use multiple providers with automatic switching (e.g. brave,google,serper)"
-    }
-  }
+  ]
 }

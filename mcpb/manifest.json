@@ -33,7 +33,7 @@
     },
     "SEARCH_PROVIDER": {
       "type": "string",
-      "description": "Search provider (google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews)",
+      "description": "Search provider (google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github)",
       "required": false,
       "default": "google"
     },
@@ -44,6 +44,7 @@
       "is_secret": true
     }
   },
+  "tools_note": "Illustrative sample of the 11 most common tools — the full server exposes 35+ tools; see docs/TOOLS.md for the complete registry.",
   "tools": [
     {
       "name": "web_search",
@@ -115,7 +116,7 @@
         "type": "object",
         "properties": {
           "query": {"type": "string", "description": "Academic search query"},
-          "source": {"type": "string", "description": "Academic source (scholar, arxiv, pubmed, openalex, crossref)"}
+          "source": {"type": "string", "description": "Restrict to an academic source: all (default), arxiv, pubmed, ieee, nature, springer"}
         },
         "required": ["query"]
       }
