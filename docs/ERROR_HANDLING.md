@@ -164,7 +164,7 @@ Rate limited (google). Wait 60 seconds and retry, or try a different provider.
 | `rate_limited` | HTTP 429, quota exceeded | true | `retry_after_delay` |
 | `auth_required` | Provider HTTP 401 / invalid API key → `check_api_key`; scrape login wall (`ErrAuth`) → `inform_user` | false | `check_api_key` (provider) or `inform_user` (scrape) |
 | `blocked` | HTTP 403, remote bot detection | false | `inform_user` |
-| `validation` | Invalid input params, unsupported scheme, SSRF / private-IP / blocked-host / allowlist denial, or a provider-side rejection (`search.InvalidParamsError` — bad `category` / out-of-spec `schema` in `structured_search`) | false | `inform_user` |
+| `validation` | Invalid input params, unsupported scheme, or SSRF / private-IP / blocked-host / allowlist denial | false | `inform_user` |
 | `network` | DNS failure, timeout, connection refused | true | `retry_after_delay` |
 | `content_empty` | Page loaded but no text extracted | true | `report_bug` |
 | `not_found` | HTTP 404/410 — page does not exist (dead link) | false | `inform_user` |

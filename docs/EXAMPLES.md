@@ -652,50 +652,6 @@ For precise radius filtering, pass `latitude`, `longitude`, and `radius` (in met
 
 ---
 
-## Synthesized Answer (answer)
-
-Get a single synthesized answer with citations — the provider searches the live web and distills it for you. Requires a provider that supports synthesis (e.g., Exa).
-
-```json
-{
-  "tool": "answer",
-  "arguments": {
-    "query": "What is the current federal funds rate?"
-  }
-}
-```
-
-**Response** carries: `answer` (the synthesized text), `citations` (sources backing the answer), and `provider`. Use this for quick factual lookups; use `sequential_search` + `scrape_page` for deep investigation.
-
----
-
-## Structured Entity Search (structured_search)
-
-Extract structured data about entities — companies, people, papers — from search results. Requires a provider that supports structured extraction (e.g., Exa).
-
-```json
-{
-  "tool": "structured_search",
-  "arguments": {
-    "query": "Stripe",
-    "category": "company",
-    "num_results": 3,
-    "schema": {
-      "type": "object",
-      "properties": {
-        "founded": { "type": "string" },
-        "headquarters": { "type": "string" },
-        "ceo": { "type": "string" }
-      }
-    }
-  }
-}
-```
-
-**Response** carries `results` (each with `title`, `url`, `highlights` — verbatim source snippets, and `summary` — JSON conforming to your schema if supplied). The `schema` field is optional; omit it for plain text summaries. Extraction is best-effort — treat `highlights` as the authoritative payload and `summary` as a convenience. Provider-specific limits on schema complexity apply.
-
----
-
 ## Exporting a Research Session (research_export)
 
 Turn a `sequential_search` session into a shareable report.

@@ -8,11 +8,11 @@ import (
 
 // This file defines the ContextSearcher/ContextProvider capability: a
 // provenance-rich LLM grounding context assembled server-side (Brave's
-// /res/v1/llm/context endpoint). It follows the same shape as LocalSearcher /
-// AnswerSearcher: interface + provider wrapper + SupportedContextProviders list
-// + factory functions. The search_and_scrape tool layer depends only on
-// ContextSearcher (via a type assertion), so adding a new provider here requires
-// no tool-layer change.
+// /res/v1/llm/context endpoint). It follows the same shape as LocalSearcher:
+// interface + provider wrapper + SupportedContextProviders list + factory
+// functions. The search_and_scrape tool layer depends only on ContextSearcher
+// (via a type assertion), so adding a new provider here requires no
+// tool-layer change.
 
 // ContextSearcher assembles a grounding context — a pre-structured text block
 // with per-snippet source provenance — designed for RAG/grounding workflows.

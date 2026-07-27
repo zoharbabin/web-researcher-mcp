@@ -371,12 +371,6 @@ func main() {
 		IASecretKey:     cfg.Search.IASecretKey,
 	})
 
-	// Synthesis capabilities (provider-independent): grounded answers and
-	// structured extraction. Discovered from config like every other provider
-	// family — a new implementer appears automatically.
-	answerProviders := search.AvailableAnswerProviders(cfg.Search, searchDeps)
-	structuredProviders := search.AvailableStructuredProviders(cfg.Search, searchDeps)
-
 	allProviders := search.AvailableProviders(cfg.Search, searchDeps)
 
 	var searchProvider search.Provider
@@ -488,8 +482,6 @@ func main() {
 		LocalProviders:            localProviders,
 		MonarchProviders:          monarchProviders,
 		ContextProviders:          contextProviders,
-		AnswerProviders:           answerProviders,
-		StructuredProviders:       structuredProviders,
 		OAResolver:                oaResolver,
 		RetractionResolver:        retractionResolver,
 		DOIRegistry:               doiRegistry,
@@ -565,12 +557,6 @@ func main() {
 	}
 	for name := range localProviders {
 		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "local"})
-	}
-	for name := range answerProviders {
-		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "answer"})
-	}
-	for name := range structuredProviders {
-		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "structured"})
 	}
 	// Live provider/breaker health for diagnostics://health (#81) is available
 	// only when a multi-provider Router is in play; a single configured provider
@@ -854,12 +840,6 @@ func completionProviderNames(deps tools.Dependencies) []string {
 		add(name)
 	}
 	for name := range deps.MonarchProviders {
-		add(name)
-	}
-	for name := range deps.AnswerProviders {
-		add(name)
-	}
-	for name := range deps.StructuredProviders {
 		add(name)
 	}
 	names := make([]string, 0, len(seen))

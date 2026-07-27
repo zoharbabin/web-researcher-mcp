@@ -719,59 +719,6 @@ var getSessionOutputSchema = map[string]any{
 	},
 }
 
-var answerOutputSchema = map[string]any{
-	"type": "object",
-	"properties": map[string]any{
-		"answer":   map[string]any{"type": "string", "description": "The synthesized natural-language answer."},
-		"provider": map[string]any{"type": "string", "description": "Which provider produced the answer."},
-		"costUsd":  map[string]any{"type": "number", "description": "Estimated cost of this call in USD for metered providers (an estimate, not an invoice); 0 for free providers."},
-		"trust":    trustUntrustedExternal,
-		"hints":    map[string]any{"type": "object", "description": "Present only on a low-confidence result: a weak query↔answer term overlap heads-up (the answer may address a loosely-related reading of the query)."},
-		"citations": map[string]any{
-			"type":        "array",
-			"description": "Sources the answer is grounded in.",
-			"items": map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"title":         map[string]any{"type": "string"},
-					"url":           map[string]any{"type": "string"},
-					"publishedDate": map[string]any{"type": "string"},
-				},
-			},
-		},
-	},
-}
-
-var structuredSearchOutputSchema = map[string]any{
-	"type": "object",
-	"properties": map[string]any{
-		"query":       map[string]any{"type": "string"},
-		"category":    map[string]any{"type": "string"},
-		"resultCount": map[string]any{"type": "integer"},
-		"provider":    map[string]any{"type": "string", "description": "Which provider produced the results."},
-		"costUsd":     map[string]any{"type": "number", "description": "Estimated cost of this call in USD for metered providers (an estimate, not an invoice); 0 for free providers."},
-		"trust":       trustUntrustedExternal,
-		"hints":       map[string]any{"type": "object", "description": "Present only on a low-confidence result: a weak query↔result term overlap heads-up (the results may match a loosely-related reading of the query)."},
-		"results": map[string]any{
-			"type": "array",
-			"items": map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"title":         map[string]any{"type": "string"},
-					"url":           map[string]any{"type": "string"},
-					"publishedDate": map[string]any{"type": "string"},
-					"author":        map[string]any{"type": "string"},
-					// summary is JSON conforming to the caller's schema when one was
-					// supplied, else a plain text summary; type left unconstrained.
-					"summary":    map[string]any{"description": "Extracted JSON (matching the supplied schema) or a plain text summary."},
-					"highlights": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-					"entities":   map[string]any{"type": "array", "description": "Structured entities (company/person), present only for category 'company'."},
-				},
-			},
-		},
-	},
-}
-
 // academicPaperItemSchema is the per-paper object shape shared by academic_search
 // (papers[]) and citation_graph (citedBy[]/references[]).
 var academicPaperItemSchema = map[string]any{

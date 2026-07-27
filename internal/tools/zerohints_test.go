@@ -10,6 +10,29 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
+// callTool invokes a tool and decodes its JSON body when non-error, returning
+// both the decoded body and the raw result so callers can also assert on
+// IsError.
+func callTool(t *testing.T, deps Dependencies, name string, args map[string]any) (map[string]any, *mcp.CallToolResult) {
+	t.Helper()
+	ctx := context.Background()
+	srv := createTestServer(deps)
+	sess := connectTestClient(ctx, t, srv)
+	defer sess.Close()
+
+	res, err := sess.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
+	if err != nil {
+		t.Fatalf("CallTool(%s) failed: %v", name, err)
+	}
+	var out map[string]any
+	if !res.IsError {
+		if e := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &out); e != nil {
+			t.Fatalf("parse(%s): %v", name, e)
+		}
+	}
+	return out, res
+}
+
 // callToolJSON invokes a tool and decodes its (non-error) JSON body.
 func callToolJSON(t *testing.T, deps Dependencies, name string, args map[string]any) map[string]any {
 	t.Helper()

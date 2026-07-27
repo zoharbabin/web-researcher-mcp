@@ -6,7 +6,6 @@ package search
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"os"
 	"testing"
@@ -73,42 +72,4 @@ func TestExaLiveIntegration(t *testing.T) {
 		t.Logf("got %d papers", len(results))
 	})
 
-	t.Run("answer returns grounded answer with citations", func(t *testing.T) {
-		res, err := provider.Answer(context.Background(), AnswerParams{
-			Query: "What year was the Eiffel Tower completed?",
-		})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if res.Answer == "" || len(res.Citations) == 0 {
-			t.Errorf("expected an answer with citations, got %+v", res)
-		}
-		t.Logf("answer cost: $%.4f, %d citations", res.CostUSD, len(res.Citations))
-	})
-
-	t.Run("structured search with schema returns JSON summaries", func(t *testing.T) {
-		schema := json.RawMessage(`{"type":"object","properties":{"completionYear":{"type":"number"}}}`)
-		res, err := provider.StructuredSearch(context.Background(), StructuredParams{
-			Query: "Eiffel Tower completion year", NumResults: 2, Schema: schema,
-		})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(res.Results) == 0 {
-			t.Fatal("expected at least one result")
-		}
-		t.Logf("structured cost: $%.4f, summary[0]: %s", res.CostUSD, res.Results[0].Summary)
-	})
-
-	t.Run("company category returns entities", func(t *testing.T) {
-		res, err := provider.StructuredSearch(context.Background(), StructuredParams{
-			Query: "Anthropic", Category: "company", NumResults: 1,
-		})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(res.Results) > 0 {
-			t.Logf("entities present: %v", len(res.Results[0].Entities) > 0)
-		}
-	})
 }

@@ -1093,116 +1093,7 @@ Membership is host-owned via admin endpoints (not MCP tools): `POST /admin/works
 
 ---
 
-## Tool 15: `answer`
-
-**Provider-independent.** Registered only when at least one answer provider is configured (currently Exa via `EXA_API_KEY`; future providers register the same way). Read-only, open-world, idempotent.
-
-### Purpose
-
-Ask a factual question and get one grounded, synthesized answer with source citations. Unlike `web_search` (a list of links) or `search_and_scrape` (raw page text), this returns a direct written answer plus the URLs it relied on. The backing provider is pluggable — set `provider` to choose one when several are configured. The result names the answering provider, and `costUsd` reports the per-call estimate for metered providers (0 for free ones).
-
-**Epistemic caveat (#357).** The synthesized answer may be incomplete or outdated — verify the cited URLs before asserting the answer as fact. An empty or unusually short answer does not confirm the fact's absence; it may reflect a provider gap rather than a true negative.
-
-### Input Schema
-
-| Field | Type | Required | Default | Constraints |
-|-------|------|----------|---------|-------------|
-| `query` | string | yes | — | The question to answer |
-| `provider` | string | no | — | Force a provider (e.g. `exa`); required only when more than one is configured |
-
-### Output Schema
-
-```go
-type AnswerOutput struct {
-    Answer    string         `json:"answer"`
-    Citations []Citation     `json:"citations"`
-    Provider  string         `json:"provider"`          // which provider answered
-    CostUsd   float64        `json:"costUsd,omitempty"` // per-call estimate for metered providers (not an invoice)
-    Trust     string         `json:"trust"`             // "untrusted-external-content"
-    Hints     map[string]any `json:"hints,omitempty"`   // present only on weak query↔answer term overlap (#235) — see Behavior
-}
-
-type Citation struct {
-    Title         string `json:"title,omitempty"`
-    URL           string `json:"url"`
-    PublishedDate string `json:"publishedDate,omitempty"`
-}
-```
-
-### Behavior
-
-1. Resolve the `search.AnswerSearcher` for the requested `provider` (or the sole configured one).
-2. Call the provider; map its grounded answer + citations + cost into the output.
-3. `costUsd` and the resolved provider are surfaced into audit metadata (`cost_usd`, `provider`).
-4. The answer is external content — `trust` is always `"untrusted-external-content"`.
-5. **`hints` (#235):** the answer provider routes any query to a plausible interpretation. So an off-target or ambiguous query still returns a real, non-fabricated answer — just possibly to a loosely-related question. `hints` gets added when fewer than half of the query's significant terms (2+ required) appear in the synthesized answer text: `{"confidence": "low", "reason": "weak_query_result_overlap", "message": "...", "termsMatched": N, "termsTotal": M}`. Omitted when overlap is adequate, or the query's too short to judge.
-
-### Cache
-- TTL: 1 hour (keyed by query + provider)
-
----
-
-## Tool 16: `structured_search`
-
-**Provider-independent.** Registered only when at least one structured-search provider is configured (currently Exa via `EXA_API_KEY`). Read-only, open-world, idempotent.
-
-### Purpose
-
-Search the web and extract structured data from each result. Supply a JSON `schema` to pull specific fields back as JSON per result, and/or a `category` to focus the search. The backing provider is pluggable (`provider` field). Valid `category` values and any `schema` limits are provider-specific and validated by the chosen provider — an unsupported value returns an error listing the valid options. The result names the provider, and `costUsd` reports the per-call estimate for metered providers.
-
-### Input Schema
-
-| Field | Type | Required | Default | Constraints |
-|-------|------|----------|---------|-------------|
-| `query` | string | yes | — | What to search for (entity name for entity lookups) |
-| `category` | string | no | — | Provider-specific result category (validated by the provider) |
-| `num_results` | int | no | 5 | 1-10 |
-| `schema` | object | no | — | JSON Schema for per-result field extraction; provider-specific limits apply |
-| `provider` | string | no | — | Force a provider (e.g. `exa`); required only when more than one is configured |
-
-### Output Schema
-
-```go
-type StructuredOutput struct {
-    Query       string           `json:"query"`
-    Category    string           `json:"category"`
-    ResultCount int              `json:"resultCount"`
-    Results     []StructuredItem `json:"results"`
-    Provider    string           `json:"provider"`          // which provider answered
-    CostUsd     float64          `json:"costUsd,omitempty"` // per-call estimate for metered providers
-    Trust       string           `json:"trust"`             // "untrusted-external-content"
-    Hints       map[string]any   `json:"hints,omitempty"`   // present only on weak query↔results term overlap (#235) — see Behavior
-}
-
-type StructuredItem struct {
-    Title         string          `json:"title,omitempty"`
-    URL           string          `json:"url"`
-    PublishedDate string          `json:"publishedDate,omitempty"`
-    Author        string          `json:"author,omitempty"`
-    Summary       json.RawMessage `json:"summary,omitempty"`    // schema-conforming JSON (best-effort), or plain text summary
-    Highlights    []string        `json:"highlights,omitempty"` // verbatim source snippets — the authoritative payload
-    Entities      json.RawMessage `json:"entities,omitempty"`   // provider-specific structured entities, when available
-}
-```
-
-### Behavior
-
-1. Resolve the `search.StructuredSearcher` for the requested `provider` (or the sole configured one).
-2. The provider validates its own constraints (category vocabulary, schema limits) **before** any paid call; a violation returns a validation tool-error, never a wasted upstream request.
-3. When `schema` is set, each result's `summary` is JSON conforming to it; otherwise it is a plain text summary. **Schema extraction is best-effort and provider-side:** the provider's extractor fills each field from the page, and a value it can't confidently resolve comes back `null` even when that value is visible in `highlights`. Treat `highlights` (verbatim source snippets) as the authoritative payload and `summary` as a convenience — do not assume every schema field is populated. Providers may populate per-result `entities` for entity categories (e.g. Exa's `company`).
-4. `costUsd` and the resolved provider are surfaced into audit metadata. Results are external content — `trust` is always `"untrusted-external-content"`.
-5. **`hints` (#235):** same weak-relevance signal as `answer`. `hints` flags `{"confidence": "low", "reason": "weak_query_result_overlap", ...}` when fewer than half the query's significant terms (2+ required) appear across the combined result text. Omitted when overlap is adequate, or the query's too short to judge.
-
-### Provider notes
-
-- **Exa**: `category` ∈ company, people, research paper, news, pdf, github, financial report, personal site; `schema` must be a flat object (root `object`, ≤10 properties, nesting depth ≤2, primitive array items); `category:"company"` returns structured company entities.
-
-### Cache
-- TTL: 1 hour (keyed by query + category + num_results + schema + provider)
-
----
-
-## Tool 17: `citation_graph`
+## Tool 15: `citation_graph`
 
 Map a seed paper's citation neighborhood: works that **cite** it (forward edges, `cited_by`) and works it **cites** (backward edges, `references`). Single-hop per call — multi-hop traversal is the caller's to orchestrate (the server stays infrastructure, not an autonomous crawler). Registered only when a citation-capable academic provider (Semantic Scholar or OpenAlex) is configured.
 
@@ -1246,7 +1137,7 @@ Each work in `citedBy`/`references` carries the same fields as an `academic_sear
 
 ---
 
-## Tool 18: `research_export`
+## Tool 16: `research_export`
 
 Export a completed `sequential_search` session as a shareable deliverable — a human-readable **markdown** report or the full structured **json** session. Read-only and idempotent: it renders existing session state, never mutates it. Scoped to the caller's own `(tenant, user)`.
 
@@ -1292,7 +1183,7 @@ Export a completed `sequential_search` session as a shareable deliverable — a 
 
 ---
 
-## Tool 19: `format_bibliography`
+## Tool 17: `format_bibliography`
 
 Turn a set of sources into a formatted bibliography. Pick a human-readable style (**APA**, **MLA**) or a reference-manager interchange format (**BibTeX**, **RIS**, **CSL-JSON**) that imports straight into Zotero / EndNote / Mendeley. Sources come from either a `sequential_search` session (its recorded sources) or an explicit list the caller supplies (e.g. `academic_search` / `citation_graph` results — pass their `doi` so the persistent id survives). Read-only and idempotent.
 
@@ -1332,7 +1223,7 @@ Turn a set of sources into a formatted bibliography. Pick a human-readable style
 
 ---
 
-## Tool 20: `filing_search`
+## Tool 18: `filing_search`
 
 Search SEC EDGAR — the authoritative primary source for US public-company disclosures (10-K/10-Q/8-K/S-1/DEF 14A/…). Registered only when a filing provider is configured (`edgar`, which needs a contact email for SEC's required User-Agent).
 
@@ -1369,7 +1260,7 @@ Each item in `filings[]`: `company`, `cik`, `formType`, `filingDate`, `periodOfR
 
 ---
 
-## Tool 21: `legal_search`
+## Tool 19: `legal_search`
 
 Search US court opinions (federal + state) via CourtListener for case-law research and precedent tracing. Registered only when a case provider is configured (`courtlistener`, which works keyless at a lower rate).
 
@@ -1402,7 +1293,7 @@ Each item in `cases[]`: `caseName`, `citation` (Bluebook), `court`, `courtId`, `
 
 ---
 
-## Tool 22: `econ_search`
+## Tool 20: `econ_search`
 
 Look up macroeconomic and development data. **FRED** (Federal Reserve Economic Data) — 800K+ US time series (GDP, CPI, unemployment, rates); **World Bank Open Data** — global development indicators for 200+ economies; **OECD** (SDMX) — economic indicators for OECD economies (national accounts, prices, labour, trade); **Eurostat** — official European statistics. World Bank, OECD, and Eurostat are keyless, so `econ_search` is always registered; FRED adds the US macro series when `FRED_API_KEY` is set.
 
@@ -1440,7 +1331,7 @@ Look up macroeconomic and development data. **FRED** (Federal Reserve Economic D
 
 ---
 
-## Tool 23: `verify_citation`
+## Tool 21: `verify_citation`
 
 ### Purpose
 
@@ -1476,7 +1367,7 @@ Verify a single citation before relying on it — confirm it **exists**, matches
 
 ---
 
-## Tool 24: `verify_recommendation`
+## Tool 22: `verify_recommendation`
 
 ### Purpose
 
@@ -1514,7 +1405,7 @@ Audit an AI-generated recommendation list (a listicle, product ranking, or compa
 
 ---
 
-## Tool 25: `clinical_search`
+## Tool 23: `clinical_search`
 
 Search **ClinicalTrials.gov** — the NIH registry of 400K+ clinical studies — for evidence-based-medicine and systematic-review research. ClinicalTrials.gov is keyless, so this tool is always registered. Discovery + primary-source retrieval only — not medical advice.
 
@@ -1549,7 +1440,7 @@ Each `trials[]` item: `nctId`, `title`, `status`, `phases` (array), `conditions`
 
 ---
 
-## Tool 26: `local_search`
+## Tool 24: `local_search`
 
 Search for **physical places** (restaurants, cafes, shops, services, points of interest) by local intent query. Backed by Brave's three-call local pipeline: web search with `result_filter=locations` to collect ephemeral location IDs, then `local/pois` for structured POI details, then `local/descriptions` for AI-generated descriptions (best-effort). Requires `BRAVE_API_KEY`; the tool is not registered when the key is absent. Location IDs are ephemeral — never persisted beyond the request lifecycle.
 
@@ -1590,7 +1481,7 @@ Each `places[]` item: `id` (ephemeral), `name`, `address`, `lat`, `lon`, `phone`
 
 ---
 
-## Tool 27: `audit_bibliography`
+## Tool 25: `audit_bibliography`
 
 ### Purpose
 
@@ -1628,7 +1519,7 @@ Precedence when more than one is supplied: `entries` → `bibliography` → `ses
 
 ---
 
-## Tool 28: `archive_source`
+## Tool 26: `archive_source`
 
 ### Purpose
 
@@ -1662,7 +1553,7 @@ Capture a **fresh** Internet Archive (Wayback Machine) snapshot of a URL via Sav
 
 ---
 
-## Tool 29: `brand_research`
+## Tool 27: `brand_research`
 
 ### Purpose
 
@@ -1727,7 +1618,7 @@ Use `brand_research` when you need structured brand JSON. Use `brand-guidelines`
 
 ---
 
-## Tool 30: `awesome_list_search`
+## Tool 28: `awesome_list_search`
 
 Search the **ecosyste.ms Awesome API** for community-curated "awesome-\*" lists on a GitHub topic — structured, filterable coverage of the awesome-list ecosystem beyond what the `web_search` awesome-lists lens offers via free-text search alone. ecosyste.ms is keyless, so this tool is always registered; an optional `ECOSYSTEMS_EMAIL` raises the caller's rate-limit tier via the "polite pool."
 
@@ -1767,7 +1658,7 @@ Each `lists[]` item: `name`, `fullName` (owner/repo of the list's source reposit
 
 ---
 
-## Tool 31: `monarch_search`
+## Tool 29: `monarch_search`
 
 Query the **Monarch Initiative** biomedical knowledge graph — rank diseases and genes by phenotype similarity, look up disease/gene/phenotype entities, and traverse gene-disease-phenotype associations. One tool, five operations selected by the required `operation` field. The Monarch API is keyless, so this tool is always registered. For published literature on a condition, combine with `academic_search`; for active interventional trials, use `clinical_search`. Discovery only — not medical advice, and the `annotate` operation must never be sent identifiable patient data (it forwards free text to a public third-party API with no BAA).
 
@@ -1813,7 +1704,7 @@ Each `results[]` item carries only the fields relevant to its operation: `source
 
 ---
 
-## Tool 32: `paper_fulltext`
+## Tool 30: `paper_fulltext`
 
 ### Purpose
 
@@ -1847,7 +1738,7 @@ Retrieve the full text of an academic paper from a single identifier — a DOI, 
 
 ---
 
-## Tool 33: `syllabus_search`
+## Tool 31: `syllabus_search`
 
 Query the Open Syllabus Project's corpus of 32.9M university syllabi for structured author/title assignment data — which institutions assign a given author or text, assignment frequency, and co-assignment patterns. Requires a research agreement with Open Syllabus (research@opensyllabus.org); registers only when `OPEN_SYLLABUS_API_KEY` and `OPEN_SYLLABUS_API_URL` are both set.
 
@@ -1881,7 +1772,7 @@ Each `results[]` item: `title`, `author`, `institution`, `country`, `field`, `ye
 
 ---
 
-## Tool 34: `gag_order_search`
+## Tool 32: `gag_order_search`
 
 Query PEN America's live educational gag order tracker — state legislation restricting what public school and university instructors may teach, sourced from PEN America's public Airtable base. Registers only when `PEN_AMERICA_AIRTABLE_TOKEN` is set.
 
@@ -1913,7 +1804,7 @@ Each `results[]` item: `state`, `billName`, `status`, `targets`, `year`, `summar
 
 ---
 
-## Tool 35: `company_recon`
+## Tool 33: `company_recon`
 
 OSINT company reconnaissance with typed structured output: Certificate Transparency log SANs (crt.sh), a Wayback Machine CDX historical URL inventory (with inferred `login`/`api`/`admin`/`asset`/`doc` categories), a derived subdomain list, and a lightweight web-search company summary. This is the programmatic complement to the `company-recon` MCP Prompt: use that prompt for an AI-orchestrated deep-dive across many tools; use this tool when you need machine-readable OSINT data directly, without an agent parsing crt.sh's JSON or Wayback's array-of-arrays itself. Both crt.sh and the Wayback CDX API are keyless, so this tool is always registered.
 
@@ -2032,7 +1923,7 @@ This is **operator/debug data, not content.** It is LLM-invisible (a sibling of 
 | `cache_hit` | bool | `true` when served from cache (provider attribution is then omitted — the cached blob's provenance is not this call's routing) |
 | `latency_ms` | int | Server-side end-to-end latency for the call |
 
-The provider **name** is the disclosure boundary: no upstream URLs, credentials, or breaker internals appear. The block is **omitted entirely** when there is nothing to observe — a single-provider / no-routing deployment, or a non-routed capability. Routing applies to the Router-routed capabilities only (web / images / news / patents / academic); the synthesis (`answer`, `structured_search`), `citation_graph`, and structured-domain (`filing_search`, `legal_search`, `econ_search`, `clinical_search`) tools resolve a single provider directly and already name it in the result body's `source`/`provider` field — they have no fallback ladder to observe. The same routing summary is also recorded under `audit.AuditEvent.Metadata["routing"]`.
+The provider **name** is the disclosure boundary: no upstream URLs, credentials, or breaker internals appear. The block is **omitted entirely** when there is nothing to observe — a single-provider / no-routing deployment, or a non-routed capability. Routing applies to the Router-routed capabilities only (web / images / news / patents / academic); `citation_graph` and the structured-domain (`filing_search`, `legal_search`, `econ_search`, `clinical_search`) tools resolve a single provider directly and already name it in the result body's `source`/`provider` field — they have no fallback ladder to observe. The same routing summary is also recorded under `audit.AuditEvent.Metadata["routing"]`.
 
 For the aggregate, on-demand operator views (recent errors, live provider/breaker health) see the `diagnostics://` MCP Resources and the HTTP-mode dashboard in `docs/DEPLOYMENT.md`.
 
@@ -2086,8 +1977,6 @@ Every tool declares annotations for client consumption (`readOnlyAnnotations(ide
 | patent_search | true | true | true |
 | sequential_search | true | **false** | false |
 | get_research_session | true | true | false |
-| answer | true | true | true |
-| structured_search | true | true | true |
 | citation_graph | true | true | true |
 | research_export | true | true | false |
 | format_bibliography | true | true | false |

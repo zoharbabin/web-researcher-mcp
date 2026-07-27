@@ -341,7 +341,7 @@ Note: Google keys are validated as required only when you explicitly select `SEA
 | `SERPER_API_KEY` | Serper.dev API key | — |
 | `SEARCHAPI_API_KEY` | SearchAPI.io API key | — |
 | `TAVILY_API_KEY` | Tavily API key (AI-agent search; sent as a Bearer token) | — |
-| `EXA_API_KEY` | Exa API key (neural/semantic search; sent as `x-api-key`). Also backs `academic_search`, the `answer`/`structured_search` tools, and a paid `/contents` scrape fallback tier | — |
+| `EXA_API_KEY` | Exa API key (neural/semantic search; sent as `x-api-key`). Also backs `academic_search` and a paid `/contents` scrape fallback tier | — |
 | `SEARXNG_URL` | SearXNG instance URL | — |
 | `SEARXNG_BASIC_AUTH` | HTTP Basic credential `user:password` for a SearXNG behind Basic auth (malformed value fails startup; never logged) | — |
 | `SEARXNG_HEADERS` | Static request headers for SearXNG as comma-separated `Name: Value` pairs (no commas/newlines in a value; a custom `Authorization` overrides `SEARXNG_BASIC_AUTH`) | — |

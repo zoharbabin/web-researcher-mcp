@@ -49,7 +49,7 @@ func registerEconSearch(srv *mcp.Server, deps Dependencies) {
 			return errResult, nil, nil
 		}
 		if searcher == nil {
-			return synthesisUnconfiguredError("econ_search", search.SupportedEconProviders), nil, nil
+			return unconfiguredProviderError("econ_search", search.SupportedEconProviders), nil, nil
 		}
 
 		mode := "series"
