@@ -698,6 +698,26 @@ class Dark:
         )
 
 @dataclass
+class Divergence:
+    confidence: Optional[str] = None
+    confidence_rationale: Optional[str] = None
+    consensus_points: list[str] = field(default_factory=list)
+    contradictions: list[ResearchPanelContradiction] = field(default_factory=list)
+    unique_to_model: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "Divergence | None":
+        if d is None:
+            return None
+        return cls(
+            confidence=d.get('confidence'),
+            confidence_rationale=d.get('confidence_rationale'),
+            consensus_points=list(d.get('consensus_points') or []),
+            contradictions=[ResearchPanelContradiction.from_dict(i) for i in (d.get('contradictions') or [])],
+            unique_to_model=dict(d.get('unique_to_model') or {}),
+        )
+
+@dataclass
 class DosAndDonts:
     donts: list[str] = field(default_factory=list)
     dos: list[str] = field(default_factory=list)
@@ -1382,6 +1402,26 @@ class MemorySaveResponse:
         )
 
 @dataclass
+class Meta:
+    cached: Optional[bool] = None
+    models_failed: Optional[int] = None
+    models_queried: Optional[int] = None
+    models_succeeded: Optional[int] = None
+    total_tokens_used: Optional[int] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "Meta | None":
+        if d is None:
+            return None
+        return cls(
+            cached=d.get('cached'),
+            models_failed=d.get('models_failed'),
+            models_queried=d.get('models_queried'),
+            models_succeeded=d.get('models_succeeded'),
+            total_tokens_used=d.get('total_tokens_used'),
+        )
+
+@dataclass
 class Metadata:
     author: Optional[str] = None
     date: Optional[str] = None
@@ -1644,6 +1684,62 @@ class ResearchExportResponse:
             startedAt=d.get('startedAt'),
             stepCount=d.get('stepCount'),
             tenantId=d.get('tenantId'),
+            trust=d.get('trust'),
+        )
+
+@dataclass
+class ResearchPanelContradiction:
+    claim: Optional[str] = None
+    positions: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "ResearchPanelContradiction | None":
+        if d is None:
+            return None
+        return cls(
+            claim=d.get('claim'),
+            positions=dict(d.get('positions') or {}),
+        )
+
+@dataclass
+class ResearchPanelPanel:
+    error: Optional[str] = None
+    latency_ms: Optional[int] = None
+    model_id: Optional[str] = None
+    provider: Optional[str] = None
+    response: Optional[str] = None
+    tokens_used: Optional[int] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "ResearchPanelPanel | None":
+        if d is None:
+            return None
+        return cls(
+            error=d.get('error'),
+            latency_ms=d.get('latency_ms'),
+            model_id=d.get('model_id'),
+            provider=d.get('provider'),
+            response=d.get('response'),
+            tokens_used=d.get('tokens_used'),
+        )
+
+@dataclass
+class ResearchPanelResponse:
+    _meta: Optional[Meta] = None
+    divergence: Optional[Divergence] = None
+    panel: list[ResearchPanelPanel] = field(default_factory=list)
+    question: Optional[str] = None
+    trust: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "ResearchPanelResponse | None":
+        if d is None:
+            return None
+        return cls(
+            _meta=Meta.from_dict(d.get('_meta')) if d.get('_meta') else None,
+            divergence=Divergence.from_dict(d.get('divergence')) if d.get('divergence') else None,
+            panel=[ResearchPanelPanel.from_dict(i) for i in (d.get('panel') or [])],
+            question=d.get('question'),
             trust=d.get('trust'),
         )
 

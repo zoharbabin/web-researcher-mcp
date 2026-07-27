@@ -126,6 +126,12 @@ type Dependencies struct {
 	// so main.go always constructs it — non-nil in production. A nil value in
 	// tests degrades that phase to a soft skip.
 	ArchiveResolver search.ArchiveResolver
+	// ResearchPanelProviders backs research_panel (#302): a fixed set of
+	// pre-constructed model providers, auto-detected at startup from whatever
+	// LLM credentials (OpenRouter/direct keys/Bedrock/Ollama/LM Studio) are
+	// configured via AvailableModelProviders(). Empty ⇒ the tool is not
+	// registered — a research panel with zero members can't run.
+	ResearchPanelProviders []ModelProvider
 }
 
 // Features mirrors config.FeatureConfig for the tool layer (kept local so the
@@ -176,6 +182,10 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	// lists) for anti-sloptimization signals: self-promotion, conflicts of interest,
 	// domain reputation, dead links. Always registered as part of the trust suite.
 	registerVerifyRecommendation(srv, deps)
+	// research_panel (#302) — multi-model committee with structured divergence.
+	// Registered only when at least one panel member is configured
+	// (deps.ResearchPanelProviders non-empty); a zero-member panel can't run.
+	registerResearchPanel(srv, deps)
 
 	// citation_graph (#47) — registered only when a citation-capable academic
 	// provider (semanticscholar or openalex) is configured.

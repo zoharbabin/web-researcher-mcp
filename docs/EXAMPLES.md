@@ -633,6 +633,23 @@ Pull Certificate Transparency log SANs, a Wayback Machine historical URL invento
 
 ---
 
+## Multi-Model Committee (research_panel)
+
+Ask the same question to a panel of independently configured LLMs and see where they agree or disagree, without a synthesis LLM call smoothing over the disagreement. The panel is auto-detected at startup from whatever LLM credentials are configured (OpenRouter, direct OpenAI/Anthropic/Google keys, AWS Bedrock, or local Ollama/LM Studio); the tool is not registered when none resolve.
+
+```json
+{
+  "tool": "research_panel",
+  "arguments": {
+    "question": "What caused the 2008 financial crisis?"
+  }
+}
+```
+
+**Response** carries: `question` (echo), `panel` (array of `model_id`, `provider`, `latency_ms`, and either `response`+`tokens_used` on success or `error` on failure), `divergence` (`consensus_points`, `contradictions` with `claim`+`positions`, `unique_to_model`, `confidence`, `confidence_rationale`), `_meta` (`cached`, `models_queried`, `models_succeeded`, `models_failed`, `total_tokens_used`), and `trust`. Override the panel with `models` (each `<provider>/<model-id>`) or cap its size with `max_models`. Pair with the `research-panel-factcheck` MCP Prompt to chase contradictions before citing a claim, or `research-panel-synthesis` to write up a single answer that surfaces disagreement instead of hiding it. Cost tracking (per-call USD estimates, spend caps) is deferred to a follow-on issue.
+
+---
+
 ## Local Place Search (local_search)
 
 Find places near a location — restaurants, services, venues — with distance ranking and coordinate support. Requires `BRAVE_API_KEY`.

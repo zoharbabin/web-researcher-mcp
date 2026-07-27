@@ -59,6 +59,7 @@ from web_researcher_mcp.models import (
     PaperFulltextResponse,
     PatentSearchResponse,
     ResearchExportResponse,
+    ResearchPanelResponse,
     ScrapePageResponse,
     SearchAndScrapeResponse,
     SequentialSearchResponse,
@@ -846,6 +847,26 @@ class WebResearcherClient:
             },
         )
         return ResearchExportResponse.from_dict(d)
+    async def research_panel(
+        self,
+        question: str,
+        max_models: int = None,
+        models: Optional[list] = None,
+        timeout_secs: int = None,
+        use_cache: Optional[bool] = None,
+    ) -> ResearchPanelResponse:
+        """Ask the same research question to a panel of independently configured LLMs (auto-detected from configured credentials: OpenRouter, direct OpenAI/Anthropic/Google keys, AWS Bedrock, or local Ollama/LM Studio) and compare their answers"""
+        d = await self._call_tool(
+            "research_panel",
+            {
+                "question": question,
+                "max_models": max_models,
+                "models": models,
+                "timeout_secs": timeout_secs,
+                "use_cache": use_cache,
+            },
+        )
+        return ResearchPanelResponse.from_dict(d)
     async def scrape_page(
         self,
         url: str,
@@ -1705,6 +1726,23 @@ class SyncWebResearcherClient:
             sessionId=sessionId,
             format=format,
             verify_links=verify_links,
+            )
+        )
+    def research_panel(
+        self,
+        question: str,
+        max_models: int = None,
+        models: Optional[list] = None,
+        timeout_secs: int = None,
+        use_cache: Optional[bool] = None,
+    ) -> ResearchPanelResponse:
+        return self._run(
+            self._async_client.research_panel(
+            question=question,
+            max_models=max_models,
+            models=models,
+            timeout_secs=timeout_secs,
+            use_cache=use_cache,
             )
         )
     def scrape_page(

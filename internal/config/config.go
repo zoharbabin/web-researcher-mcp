@@ -44,6 +44,7 @@ type Config struct {
 	DataRegion             string
 	Features               FeatureConfig
 	Audit                  AuditConfig
+	ResearchPanel          ResearchPanelConfig
 
 	// StdioUserID names the single local user for STDIO transport, where there
 	// is no OAuth identity (the launching app owns the process, so it IS one
@@ -220,6 +221,21 @@ type RateLimitConfig struct {
 	// applies in STDIO (where the HTTP rate limits / DailyQuota don't run).
 	// 0 (default) disables it. See MAX_CALLS_PER_DAY in .env.example.
 	MaxCallsPerDay int
+}
+
+// ResearchPanelConfig holds credentials/endpoints for the research_panel tool
+// (#302). Every field is optional; AvailableModelProviders() auto-detects a
+// panel from whatever is set and degrades gracefully to an empty panel
+// (tool not registered) when nothing is configured.
+type ResearchPanelConfig struct {
+	OpenRouterAPIKey string // OPENROUTER_API_KEY — unlocks 400+ models via one key, highest auto-detect priority
+	OpenAIAPIKey     string // OPENAI_API_KEY — direct OpenAI
+	AnthropicAPIKey  string // ANTHROPIC_API_KEY — direct Anthropic
+	GoogleAIAPIKey   string // GOOGLE_AI_API_KEY — direct Google Gemini
+	OllamaBaseURL    string // OLLAMA_BASE_URL — local Ollama, requires AllowPrivateIPs unless pointed at a public host
+	LMStudioBaseURL  string // LM_STUDIO_BASE_URL — local LM Studio, same gating as Ollama
+	DefaultModels    []string
+	MaxModels        int
 }
 
 func Load() (*Config, error) {
@@ -478,6 +494,16 @@ func Load() (*Config, error) {
 			IncludeRequestBody: envBool("AUDIT_INCLUDE_REQUEST_BODY", false),
 			MaxBytes:           envInt("AUDIT_MAX_BYTES", 100<<20),
 			RetentionDays:      retentionDays,
+		},
+		ResearchPanel: ResearchPanelConfig{
+			OpenRouterAPIKey: os.Getenv("OPENROUTER_API_KEY"),
+			OpenAIAPIKey:     os.Getenv("OPENAI_API_KEY"),
+			AnthropicAPIKey:  os.Getenv("ANTHROPIC_API_KEY"),
+			GoogleAIAPIKey:   os.Getenv("GOOGLE_AI_API_KEY"),
+			OllamaBaseURL:    os.Getenv("OLLAMA_BASE_URL"),
+			LMStudioBaseURL:  os.Getenv("LM_STUDIO_BASE_URL"),
+			DefaultModels:    splitCSV(os.Getenv("RESEARCH_PANEL_DEFAULT_MODELS")),
+			MaxModels:        envInt("RESEARCH_PANEL_MAX_MODELS", 3),
 		},
 		Warnings: warnings,
 	}

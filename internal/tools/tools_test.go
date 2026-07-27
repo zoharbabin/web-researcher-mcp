@@ -291,6 +291,20 @@ func (m *mockLocalProvider) Local(_ context.Context, _ search.LocalSearchParams)
 	}}, nil
 }
 
+// mockModelProvider backs research_panel in tests — a fixed panel member that
+// answers instantly without a real LLM credential.
+type mockModelProvider struct {
+	name    string
+	modelID string
+	text    string
+}
+
+func (m *mockModelProvider) Name() string    { return m.name }
+func (m *mockModelProvider) ModelID() string { return m.modelID }
+func (m *mockModelProvider) Ask(_ context.Context, _ string) (ModelResponse, error) {
+	return ModelResponse{Text: m.text, InputTokens: 10, OutputTokens: 20, LatencyMs: 5}, nil
+}
+
 // mockCTLogResolver and mockArchiveResolver back company_recon's two
 // resolver-dependent phases in tests, mirroring the other mock*Provider types
 // above — a minimal fixed result so the tool's fan-out and merge logic (not
@@ -350,6 +364,10 @@ func setupTestDeps() Dependencies {
 		PENAmericaAirtableToken: "test-token",
 		CTLogResolver:           &mockCTLogResolver{},
 		ArchiveResolver:         &mockArchiveResolver{},
+		ResearchPanelProviders: []ModelProvider{
+			&mockModelProvider{name: "mock-a", modelID: "model-a", text: "The sky is blue."},
+			&mockModelProvider{name: "mock-b", modelID: "model-b", text: "The sky is blue."},
+		},
 	}
 }
 

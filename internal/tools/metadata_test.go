@@ -48,6 +48,7 @@ var expectedTools = []string{
 	"gag_order_search",
 	"paper_fulltext",
 	"company_recon",
+	"research_panel",
 }
 
 func listTools(t *testing.T) []*mcp.Tool {
@@ -289,6 +290,7 @@ func TestOutputSchemaMatchesResponse(t *testing.T) {
 		"gag_order_search":    {},
 		"paper_fulltext":      {"identifier": "https://example.com/paper.pdf"},
 		"company_recon":       {"target": "example.com"},
+		"research_panel":      {"question": "test"},
 	}
 
 	tools := listTools(t)
@@ -376,6 +378,7 @@ func TestExternalContentToolsCarryTrustMarker(t *testing.T) {
 		"gag_order_search":    "untrusted-external-content",
 		"paper_fulltext":      "untrusted-external-content",
 		"monarch_search":      "untrusted-external-content",
+		"research_panel":      "untrusted-external-content",
 	}
 	args := map[string]map[string]any{
 		"web_search":          {"query": "test"},
@@ -399,6 +402,7 @@ func TestExternalContentToolsCarryTrustMarker(t *testing.T) {
 		"gag_order_search":    {},
 		"paper_fulltext":      {"identifier": "https://example.com/paper.pdf"},
 		"monarch_search":      {"operation": "entity", "query": "Marfan syndrome"},
+		"research_panel":      {"question": "test"},
 	}
 
 	for name, wantTrust := range want {
