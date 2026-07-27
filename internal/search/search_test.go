@@ -2172,6 +2172,64 @@ func TestRouter_ScholarlyNoProviders(t *testing.T) {
 	}
 }
 
+// TestRouter_ScholarlyExcludesExplicitOnlyFromAutoFallback proves issue #266's
+// requirement that a paid, metered academic provider (e.g. scholarapi) never
+// gets pulled into the automatic fallback ladder just because it's registered
+// — only an explicit SEARCH_ROUTING academic entry (or a direct
+// AcademicProviderByName lookup) may reach it, since auto-fallback would burn
+// credits on every failed attempt at another provider.
+func TestRouter_ScholarlyExcludesExplicitOnlyFromAutoFallback(t *testing.T) {
+	t.Parallel()
+
+	failing := &mockAcademicProvider{name: "openalex", err: fmt.Errorf("openalex: down")}
+	explicitOnly := &mockAcademicProvider{
+		name:    "scholarapi",
+		results: []AcademicResult{{Title: "Should Not Auto-Fallback Here", Source: "scholarapi"}},
+	}
+
+	router := NewRouter(
+		map[string]Provider{"brave": &successProvider{name: "brave"}},
+		RouterConfig{
+			// No explicit Routing.Academic — this is the "unconfigured" case where
+			// academicPriority() previously auto-filled every registered provider.
+			AcademicProviders: map[string]AcademicProvider{"openalex": failing, "scholarapi": explicitOnly},
+		},
+	)
+
+	_, err := router.Scholarly(context.Background(), AcademicSearchParams{Query: "test"})
+	if err == nil {
+		t.Fatal("expected an error — the only non-explicit-only provider failed and scholarapi must not be tried")
+	}
+}
+
+// TestRouter_ScholarlyReachesExplicitOnlyWhenRouted proves the converse: an
+// explicit-only provider IS reachable when the caller configures it directly
+// in SEARCH_ROUTING's academic list.
+func TestRouter_ScholarlyReachesExplicitOnlyWhenRouted(t *testing.T) {
+	t.Parallel()
+
+	explicitOnly := &mockAcademicProvider{
+		name:    "scholarapi",
+		results: []AcademicResult{{Title: "Explicitly Routed", Source: "scholarapi"}},
+	}
+
+	router := NewRouter(
+		map[string]Provider{"brave": &successProvider{name: "brave"}},
+		RouterConfig{
+			Routing:           RoutingConfig{Academic: []string{"scholarapi"}},
+			AcademicProviders: map[string]AcademicProvider{"scholarapi": explicitOnly},
+		},
+	)
+
+	results, err := router.Scholarly(context.Background(), AcademicSearchParams{Query: "test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 1 || results[0].Source != "scholarapi" {
+		t.Errorf("expected explicit-only provider to serve when explicitly routed, got: %v", results)
+	}
+}
+
 func TestRouter_AcademicProviderByName(t *testing.T) {
 	t.Parallel()
 

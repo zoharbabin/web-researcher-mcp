@@ -158,6 +158,7 @@ type SearchConfig struct {
 	PubMedAPIKey          string // optional; PubMed E-utilities work keyless (~3 req/s), a key raises it (~10 req/s)
 	PubMedEmail           string // optional NCBI contact (tool/email params) — falls back to OpenAlexEmail
 	COREAPIKey            string // optional; CORE.ac.uk works keyless at a lower shared rate, a key raises the limit
+	ScholarAPIKey         string // ScholarAPI — paid academic search with full-text access (scholarapi.net); excluded from auto-routing, use provider=scholarapi explicitly
 
 	// Structured-domain providers (optional, enable filing/case/economic search)
 	EDGARContactEmail  string // SEC EDGAR requires a contact email for its required User-Agent
@@ -407,6 +408,7 @@ func Load() (*Config, error) {
 			PubMedAPIKey:            os.Getenv("PUBMED_API_KEY"),
 			PubMedEmail:             envOrDefault("PUBMED_EMAIL", os.Getenv("OPENALEX_EMAIL")),
 			COREAPIKey:              os.Getenv("CORE_API_KEY"),
+			ScholarAPIKey:           os.Getenv("SCHOLAR_API_KEY"),
 			EDGARContactEmail:       envOrDefault("EDGAR_CONTACT_EMAIL", os.Getenv("OPENALEX_EMAIL")),
 			CourtListenerToken:      os.Getenv("COURTLISTENER_API_TOKEN"),
 			FREDAPIKey:              os.Getenv("FRED_API_KEY"),

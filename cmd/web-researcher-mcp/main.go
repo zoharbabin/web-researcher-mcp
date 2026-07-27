@@ -260,6 +260,7 @@ func main() {
 		PubMedAPIKey:          cfg.Search.PubMedAPIKey,
 		PubMedEmail:           cfg.Search.PubMedEmail,
 		COREAPIKey:            cfg.Search.COREAPIKey,
+		ScholarAPIKey:         cfg.Search.ScholarAPIKey,
 	}
 	academicProviders := search.AvailableAcademicProviders(academicCfg, searchDeps)
 

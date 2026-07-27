@@ -150,17 +150,19 @@ Which tools each web search provider enables. `—` means the provider returns e
 | **[CrossRef](https://www.crossref.org/)** | ✓ | ✓ (authoritative) | — | — | — | No (email for polite pool) |
 | **[Semantic Scholar](https://www.semanticscholar.org/)** | ✓ | — | ✓ (rich edges) | — | ✓ (tldr) | No (key raises limits) |
 | **[PubMed](https://pubmed.ncbi.nlm.nih.gov/)** | ✓ | — | — | ✓ (PMC full text, `full_text=true`) | — | No (key raises limits) |
+| **[ScholarAPI](https://scholarapi.net/)** | ✓ | fuzzy (validated) | — | — (full-text instead) | — | Yes (`SCHOLAR_API_KEY`; 10 credits/search, not in auto-routing) |
 | **[CORE](https://core.ac.uk/)** | ✓ | — | — | ✓ (native `fullText`) | — | No (key raises limits) |
 | **[Exa](https://exa.ai/)** | ✓ | — | — | — | — | Yes (`EXA_API_KEY`) |
 
 **Notes:**
 - CrossRef is the official DOI registration agency — the authoritative source for DOI metadata. Every DOI-registered work appears here.
 - Semantic Scholar enriches results with AI-generated `tldr` summaries and citation intent/influence edges, which power `citation_graph`. OpenAlex also implements `citation_graph` support with citation-count edges as a fallback.
-- Only OpenAlex implements the `DOIResolver` interface (exact-entity lookup via `/works/doi:{doi}`). CrossRef, Semantic Scholar, PubMed, and CORE do not.
+- Only OpenAlex implements the `DOIResolver` interface (exact-entity lookup via `/works/doi:{doi}`). CrossRef, Semantic Scholar, PubMed, and CORE do not. ScholarAPI implements it too, but only as a fuzzy search with an exact-match validation step (no entity-lookup endpoint exists) — a mismatched top hit returns no result rather than the wrong paper.
 - CORE's every result is open access by definition — it aggregates OA repositories exclusively — and its `pdfUrl` links directly to full text, no Unpaywall enrichment needed.
 - PubMed fetches full text from PubMed Central when `full_text=true`: the search itself is narrowed with PubMed's `"pubmed pmc"[sb]` filter to bias results toward PMC-deposited papers, then a third call (`efetch` against PMC) retrieves the JATS XML for any result with a PMCID, populating `fullText`. Best-effort — an article without a PMCID, or an efetch failure, is returned without `fullText`.
 - Semantic Scholar also implements `PaperFetcher` (fetch full metadata by DOI/paper ID), behind the single-call `paper_fulltext` tool rather than `academic_search`.
 - Exa routes academic queries using its `research-paper` category — useful when its neural index surfaces papers the bibliographic databases miss.
+- ScholarAPI is paid and metered (10 credits/search call), so it is excluded from automatic routing/fallback entirely — reach it only with `provider=scholarapi`. Its differentiator is full-text: `hasText`/`hasPdf` on each result signal availability, and full text is fetched via the provider's own `FetchText`/`FetchTexts` methods (not yet exposed as a standalone tool). It has no retraction signal of its own — the standard Crossref enrichment still covers any DOI-bearing result — and abstract coverage is intermittent (publisher-dependent).
 - [Unpaywall](https://unpaywall.org/) OA enrichment runs as a post-processing step on any DOI-bearing result — not a separate provider to select.
 
 ### Coverage
@@ -171,6 +173,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 | **[CrossRef](https://www.crossref.org/)** | 140M+ DOI-registered works | Peer-reviewed literature; authoritative DOI metadata |
 | **[Semantic Scholar](https://www.semanticscholar.org/)** | 200M+ papers | Broad; strong on CS, medicine, biology |
 | **[PubMed](https://pubmed.ncbi.nlm.nih.gov/)** | 35M+ citations | Biomedical and life science only |
+| **[ScholarAPI](https://scholarapi.net/)** | Unpublished; publisher breadth unverified | Full-text retrieval; live audit showed Nature Publishing Group bias |
 | **[CORE](https://core.ac.uk/)** | 300M+ OA outputs | Open-access works aggregated from repositories worldwide; all results are OA |
 | **[Exa](https://exa.ai/)** | Neural web index | Research-paper category; surfaces papers outside bibliographic DBs |
 
