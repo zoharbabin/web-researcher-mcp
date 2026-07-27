@@ -1,3 +1,5 @@
+[![MCP Toplist](https://mcptoplist.com/badge/io.github.zoharbabin%2Fweb-researcher-mcp.svg)](https://mcptoplist.com/server/io.github.zoharbabin%2Fweb-researcher-mcp)
+
 <!-- mcp-name: io.github.zoharbabin/web-researcher-mcp -->
 <p align="center">
   <img src="assets/logo-final.svg" width="120" height="120" alt="web-researcher-mcp logo">
