@@ -37,11 +37,15 @@ run_gate() {
 }
 
 # go test with -run exits 0 and prints "no tests to run" when the pattern
-# matches nothing — a silent no-op that would let this gate rubber-stamp
-# tests that were never written. Treat that output as an explicit failure.
+# matches nothing in a given package — a silent no-op that would let this
+# gate rubber-stamp tests that were never written. A single invocation here
+# spans multiple packages, and some legitimately have zero matches (e.g. a
+# pattern targeting only internal/tools also gets pointed at internal/config
+# for other rules in the same gate) — so only fail if NOT EVEN ONE test
+# actually ran anywhere in the invocation.
 require_tests_ran() {
-  if grep -q "no tests to run" "$1"; then
-    echo "no tests matched the -run pattern (target tests not written yet)" >>"$1"
+  if ! grep -q -- '--- PASS:\|--- FAIL:' "$1"; then
+    echo "no tests matched the -run pattern in any package (target tests not written yet)" >>"$1"
     return 1
   fi
   return 0
