@@ -71,6 +71,12 @@ type Dependencies struct {
 	// as existing while a fabricated DOI reads as not-found. nil ⇒ skipped (no-op).
 	// Best-effort: a transport failure leaves existence unknown, never asserts it.
 	DOIRegistry search.DOIRegistry
+	// WikidataOwnershipResolver enriches self-promotion detection with corporate
+	// ownership: when lexical matching fails, a Wikidata P749 lookup checks whether
+	// the brand's corporate parent is distinct from the recommending domain (#248).
+	// nil → ownership check skipped (no-op). Best-effort: a lookup failure leaves
+	// the signal absent, never fails the audit.
+	WikidataOwnershipResolver search.OwnershipResolver
 	// LinkVerifier checks source-URL liveness + Wayback archive fallback for the
 	// opt-in verify_links flag (#157) and verify_citation. nil ⇒ verification is
 	// skipped (no-op). Best-effort + bounded; never fails a tool call.

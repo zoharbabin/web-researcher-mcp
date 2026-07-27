@@ -2357,6 +2357,7 @@ class VerifyRecommendationCorroborationsearch:
 class VerifyRecommendationRecommendation:
     author: Optional[str] = None
     conflictOfInterest: Optional[VerifyRecommendationConflictOfInterest] = None
+    corporateOwnershipSignal: dict[str, Any] = field(default_factory=dict)
     corroborationSearches: list[VerifyRecommendationCorroborationsearch] = field(default_factory=list)
     domainReputation: dict[str, Any] = field(default_factory=dict)
     flags: list[str] = field(default_factory=list)
@@ -2374,6 +2375,7 @@ class VerifyRecommendationRecommendation:
         return cls(
             author=d.get('author'),
             conflictOfInterest=VerifyRecommendationConflictOfInterest.from_dict(d.get('conflictOfInterest')) if d.get('conflictOfInterest') else None,
+            corporateOwnershipSignal=dict(d.get('corporateOwnershipSignal') or {}),
             corroborationSearches=[VerifyRecommendationCorroborationsearch.from_dict(i) for i in (d.get('corroborationSearches') or [])],
             domainReputation=dict(d.get('domainReputation') or {}),
             flags=list(d.get('flags') or []),
