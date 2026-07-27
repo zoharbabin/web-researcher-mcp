@@ -232,6 +232,8 @@ docker run -p 3000:3000 \
 
 **For headless browser (go-rod):** The bundled images already ship Chromium and set `CHROME_PATH`. Override `CHROME_PATH` only if you mount a different Chromium/Chrome binary.
 
+**Full HTTPS + OAuth + regulated-feature e2e pass:** `scripts/e2e-oauth-docker.sh` builds the image, fronts it with a Caddy HTTPS proxy and a throwaway RS256 JWKS issuer, and drives `memory_save`/`memory_recall`, `get_my_analytics`, `monitor_query_save`/`monitor_query_check`, cross-user isolation, and `/admin/data` export+erasure end-to-end over real MCP-over-HTTPS calls. Manual/local only (needs a Docker daemon) — not part of `make verify` or CI, which is what `make docker-smoke` covers instead (plain HTTP, no OAuth).
+
 ---
 
 ## Kubernetes

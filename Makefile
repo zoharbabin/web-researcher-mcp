@@ -1,5 +1,5 @@
 .PHONY: build build-fips sync-lenses test test-race test-cover test-e2e test-live test-eval test-geo-eval test-concurrency test-bench test-python test-python-live \
-        lint fmt fmt-check vet vuln sec tools hooks precommit verify clean run dev docker docker-smoke release version-sync rebuild-local help all \
+        lint fmt fmt-check vet vuln sec tools hooks precommit verify clean run dev docker docker-smoke e2e-oauth-docker release version-sync rebuild-local help all \
         gen-python-client check-python-drift
 
 BINARY = web-researcher-mcp
@@ -184,6 +184,12 @@ docker:
 docker-smoke:
 	bash scripts/docker-smoke.sh $(BINARY):smoke
 
+# Full local e2e pass: HTTPS reverse proxy + throwaway OAuth issuer + the real
+# regulated-feature surface (memory/analytics/monitoring) + isolation + GDPR
+# export/erasure. Manual only — needs a Docker daemon; not run in CI.
+e2e-oauth-docker:
+	bash scripts/e2e-oauth-docker.sh
+
 release:
 	goreleaser release --snapshot --clean
 
@@ -199,7 +205,7 @@ rebuild-local:
 	bash scripts/rebuild-local.sh $(ARGS)
 
 help:
-	@grep -E '^[a-zA-Z_-]+:.*' Makefile | grep -v '^\.PHONY' | sort | \
+	@grep -E '^[a-zA-Z0-9_-]+:.*' Makefile | grep -v '^\.PHONY' | sort | \
 		awk -F: '{printf "  %-18s\n", $$1}'
 
 all: verify
