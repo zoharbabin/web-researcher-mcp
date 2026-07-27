@@ -1473,3 +1473,42 @@ var paperFulltextOutputSchema = map[string]any{
 		},
 	},
 }
+
+var monitorQuerySaveOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"status":    map[string]any{"type": "string", "enum": []any{"ok", "no_consent", "unavailable", "limit_reached"}},
+		"reason":    map[string]any{"type": "string"},
+		"query":     map[string]any{"type": "string"},
+		"provider":  map[string]any{"type": "string"},
+		"seenCount": map[string]any{"type": "integer", "description": "Number of result URLs captured as the baseline."},
+		"savedAt":   map[string]any{"type": "string", "description": "RFC3339 timestamp this monitor was saved."},
+		"ttlDays":   map[string]any{"type": "integer", "description": "Retention period in days before this monitor is silently dropped."},
+	},
+}
+
+var monitorQueryCheckOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"status":    map[string]any{"type": "string", "enum": []any{"ok", "not_found", "no_consent", "unavailable"}},
+		"reason":    map[string]any{"type": "string"},
+		"query":     map[string]any{"type": "string"},
+		"provider":  map[string]any{"type": "string"},
+		"newCount":  map[string]any{"type": "integer", "description": "Number of results not previously seen by this monitor."},
+		"lastRunAt": map[string]any{"type": "string", "description": "RFC3339 timestamp of the previous check (or the save, if this is the first check)."},
+		"trust":     trustUntrustedExternal,
+		"newResults": map[string]any{
+			"type":        "array",
+			"description": "Only the results whose URL was not already in this monitor's seen set. Empty when nothing is new — that is a normal, expected outcome, not an error.",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"title":       map[string]any{"type": "string"},
+					"url":         map[string]any{"type": "string"},
+					"snippet":     map[string]any{"type": "string"},
+					"publishedAt": map[string]any{"type": "string"},
+				},
+			},
+		},
+	},
+}

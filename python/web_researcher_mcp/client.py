@@ -55,6 +55,8 @@ from web_researcher_mcp.models import (
     MemoryRecallResponse,
     MemorySaveResponse,
     MonarchSearchResponse,
+    MonitorQueryCheckResponse,
+    MonitorQuerySaveResponse,
     NewsSearchResponse,
     PaperFulltextResponse,
     PatentSearchResponse,
@@ -755,6 +757,36 @@ class WebResearcherClient:
             },
         )
         return MonarchSearchResponse.from_dict(d)
+    async def monitor_query_check(
+        self,
+        query: str,
+        provider: str = None,
+    ) -> MonitorQueryCheckResponse:
+        """Check a query saved with monitor_query_save for new results since the last check (or since it was saved, on the first check)"""
+        d = await self._call_tool(
+            "monitor_query_check",
+            {
+                "query": query,
+                "provider": provider,
+            },
+        )
+        return MonitorQueryCheckResponse.from_dict(d)
+    async def monitor_query_save(
+        self,
+        query: str,
+        provider: str = None,
+        ttl_days: int = None,
+    ) -> MonitorQuerySaveResponse:
+        """Save a search query to monitor for new results over time"""
+        d = await self._call_tool(
+            "monitor_query_save",
+            {
+                "query": query,
+                "provider": provider,
+                "ttl_days": ttl_days,
+            },
+        )
+        return MonitorQuerySaveResponse.from_dict(d)
     async def news_search(
         self,
         query: str,
@@ -1646,6 +1678,30 @@ class SyncWebResearcherClient:
             query=query,
             sessionId=sessionId,
             text=text,
+            )
+        )
+    def monitor_query_check(
+        self,
+        query: str,
+        provider: str = None,
+    ) -> MonitorQueryCheckResponse:
+        return self._run(
+            self._async_client.monitor_query_check(
+            query=query,
+            provider=provider,
+            )
+        )
+    def monitor_query_save(
+        self,
+        query: str,
+        provider: str = None,
+        ttl_days: int = None,
+    ) -> MonitorQuerySaveResponse:
+        return self._run(
+            self._async_client.monitor_query_save(
+            query=query,
+            provider=provider,
+            ttl_days=ttl_days,
             )
         )
     def news_search(

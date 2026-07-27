@@ -1502,6 +1502,74 @@ class MonarchSearchResult:
         )
 
 @dataclass
+class MonitorQueryCheckNewresult:
+    publishedAt: Optional[str] = None
+    snippet: Optional[str] = None
+    title: Optional[str] = None
+    url: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "MonitorQueryCheckNewresult | None":
+        if d is None:
+            return None
+        return cls(
+            publishedAt=d.get('publishedAt'),
+            snippet=d.get('snippet'),
+            title=d.get('title'),
+            url=d.get('url'),
+        )
+
+@dataclass
+class MonitorQueryCheckResponse:
+    lastRunAt: Optional[str] = None
+    newCount: Optional[int] = None
+    newResults: list[MonitorQueryCheckNewresult] = field(default_factory=list)
+    provider: Optional[str] = None
+    query: Optional[str] = None
+    reason: Optional[str] = None
+    status: Optional[str] = None
+    trust: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "MonitorQueryCheckResponse | None":
+        if d is None:
+            return None
+        return cls(
+            lastRunAt=d.get('lastRunAt'),
+            newCount=d.get('newCount'),
+            newResults=[MonitorQueryCheckNewresult.from_dict(i) for i in (d.get('newResults') or [])],
+            provider=d.get('provider'),
+            query=d.get('query'),
+            reason=d.get('reason'),
+            status=d.get('status'),
+            trust=d.get('trust'),
+        )
+
+@dataclass
+class MonitorQuerySaveResponse:
+    provider: Optional[str] = None
+    query: Optional[str] = None
+    reason: Optional[str] = None
+    savedAt: Optional[str] = None
+    seenCount: Optional[int] = None
+    status: Optional[str] = None
+    ttlDays: Optional[int] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "MonitorQuerySaveResponse | None":
+        if d is None:
+            return None
+        return cls(
+            provider=d.get('provider'),
+            query=d.get('query'),
+            reason=d.get('reason'),
+            savedAt=d.get('savedAt'),
+            seenCount=d.get('seenCount'),
+            status=d.get('status'),
+            ttlDays=d.get('ttlDays'),
+        )
+
+@dataclass
 class NewsSearchArticle:
     engagement: Optional[Engagement] = None
     publishedAt: Optional[str] = None

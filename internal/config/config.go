@@ -100,6 +100,7 @@ type FeatureConfig struct {
 	Memory        bool // #88 opt-in long-term cross-session memory
 	UserAnalytics bool // #92 opt-in per-user analytics
 	Workspaces    bool // #96 opt-in shared research workspaces
+	Monitoring    bool // #273 opt-in saved query-monitor persistence
 
 	// MemoryRetention bounds how long a saved memory lives before auto-expiry
 	// (#88). 0 → the store's default (90 days). "Data doesn't exist after TTL"
@@ -109,12 +110,16 @@ type FeatureConfig struct {
 	// WorkspaceTTL bounds how long shared-workspace data lives (#96).
 	// 0 → the store's default (30 days).
 	WorkspaceTTL time.Duration
+
+	// MonitoringTTL bounds the maximum lifetime of a saved query monitor
+	// (#273). 0 → the tool's default (30 days).
+	MonitoringTTL time.Duration
 }
 
 // RegulatedEnabled reports whether any consent-gated feature is on, which is
 // the sole trigger for activating the consent subsystem.
 func (f FeatureConfig) RegulatedEnabled() bool {
-	return f.Memory || f.UserAnalytics || f.Workspaces
+	return f.Memory || f.UserAnalytics || f.Workspaces || f.Monitoring
 }
 
 type AuditConfig struct {
@@ -486,8 +491,10 @@ func Load() (*Config, error) {
 			Memory:                envBool("MEMORY_ENABLED", false),
 			UserAnalytics:         envBool("USER_ANALYTICS_ENABLED", false),
 			Workspaces:            envBool("WORKSPACES_ENABLED", false),
+			Monitoring:            envBool("MONITORING_ENABLED", false),
 			MemoryRetention:       envDuration("MEMORY_RETENTION", 90*24*time.Hour),
 			WorkspaceTTL:          envDuration("WORKSPACE_TTL", 30*24*time.Hour),
+			MonitoringTTL:         envDuration("MONITORING_TTL", 30*24*time.Hour),
 		},
 		Audit: AuditConfig{
 			Enabled:            envBool("AUDIT_ENABLED", true),

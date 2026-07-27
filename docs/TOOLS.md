@@ -1893,6 +1893,86 @@ Ask the same research question to a panel of independently configured LLMs and c
 
 ---
 
+## Tool 35: `monitor_query_save`
+
+**Opt-in, consent-gated (#273). Registered only when `MONITORING_ENABLED=true`.** This is a **write** tool (`ReadOnlyHint: false`, `DestructiveHint: false`).
+
+### Purpose
+
+Save a search query to monitor for new results over time. Runs the query once now via the configured search provider and stores the resulting URLs as the "seen" baseline — nothing is reported as new until you later call `monitor_query_check`. There are no background jobs: the caller is responsible for calling `monitor_query_check` whenever they want to see what changed. Bounded to 100 monitors per user and a max 90-day retention (`ttl_days`).
+
+### Input Schema
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `query` | string | yes | The search query to monitor (1-500 chars) |
+| `provider` | string | no | Search provider to use. Must match what's passed to `monitor_query_check` for the same monitor. Empty uses the configured default |
+| `ttl_days` | int | no | Retention in days (1-90, default 30). After expiry the monitor is silently dropped |
+
+### Output Schema
+
+```go
+type MonitorQuerySaveOutput struct {
+    Status    string `json:"status"`    // "ok" | "no_consent" | "unavailable" | "limit_reached"
+    Reason    string `json:"reason,omitempty"`
+    Query     string `json:"query,omitempty"`
+    Provider  string `json:"provider,omitempty"`
+    SeenCount int    `json:"seenCount,omitempty"` // result URLs captured as the baseline
+    SavedAt   string `json:"savedAt,omitempty"`   // RFC3339
+    TTLDays   int    `json:"ttlDays,omitempty"`
+}
+```
+
+### Behavior
+
+Requires an authenticated user and recorded consent for the `monitoring` purpose; otherwise returns `unavailable` / `no_consent` and persists nothing. Returns `limit_reached` if the user already has 100 saved monitors and this query/provider pair isn't one of them. Saving the same `query`+`provider` pair again re-seeds the baseline from a fresh live search (existing "seen" state is replaced, not merged).
+
+### Cache
+
+- Not cached (a write; always issues a live search).
+
+---
+
+## Tool 36: `monitor_query_check`
+
+**Opt-in, consent-gated (#273). Registered only when `MONITORING_ENABLED=true`.** Read-only, but **not idempotent** — every call mutates the monitor's stored baseline.
+
+### Purpose
+
+Check a query saved with `monitor_query_save` for new results since the last check (or since the save, on the first check). Re-runs the query live and returns only the results whose URL hasn't been seen before, then folds those URLs into the baseline — calling this twice in a row with no upstream change returns zero new results the second time.
+
+### Input Schema
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `query` | string | yes | Must match the query passed to `monitor_query_save` |
+| `provider` | string | no | Must match the provider used in `monitor_query_save` (or both empty for the default) |
+
+### Output Schema
+
+```go
+type MonitorQueryCheckOutput struct {
+    Status     string         `json:"status"`    // "ok" | "not_found" | "no_consent" | "unavailable"
+    Reason     string         `json:"reason,omitempty"`
+    Query      string         `json:"query,omitempty"`
+    Provider   string         `json:"provider,omitempty"`
+    NewCount   int            `json:"newCount,omitempty"`
+    LastRunAt  string         `json:"lastRunAt,omitempty"` // RFC3339, previous check (or save, if first check)
+    NewResults []SearchResult `json:"newResults,omitempty"`
+    Trust      string         `json:"trust,omitempty"`     // "untrusted-external-content"
+}
+```
+
+### Behavior
+
+Requires an authenticated user and recorded consent for the `monitoring` purpose; otherwise returns `unavailable` / `no_consent`. Returns `not_found` if the `query`/`provider` pair was never saved with `monitor_query_save` (or its record has expired/is corrupt). An empty `newResults` array is a normal outcome — it means nothing new turned up since the last check, not an error.
+
+### Cache
+
+- Not cached (always issues a live search to diff against the stored baseline).
+
+---
+
 ## Cross-Cutting Concerns
 
 ### Timeouts
@@ -2001,7 +2081,7 @@ Full details: see `docs/ERROR_HANDLING.md` — covers the three-layer architectu
 
 ### Tool Annotations (MCP Protocol)
 
-Every tool declares annotations for client consumption (`readOnlyAnnotations(idempotent, openWorld)` for read tools, `writeAnnotations(idempotent)` for the three write tools (`memory_save`, `workspace_contribute`, `archive_source`) — all in `internal/tools/registry.go`). CI enforces tool↔doc consistency via `TestAllToolsHaveAnnotations`, `TestToolsDocMatchesRegistry`, `TestOutputSchemaMatchesResponse`, and `TestToolDescriptionQuality` (`internal/tools/metadata_test.go`) — including on docs-only PRs via the standalone `docs-drift` CI job. No tool is `Destructive` — deletion is the `/admin/data` erasure endpoint, never a tool flag (see `docs/DEPLOYMENT.md`).
+Every tool declares annotations for client consumption (`readOnlyAnnotations(idempotent, openWorld)` for read tools, `writeAnnotations(idempotent)` for the four write tools (`memory_save`, `workspace_contribute`, `archive_source`, `monitor_query_save`) — all in `internal/tools/registry.go`). CI enforces tool↔doc consistency via `TestAllToolsHaveAnnotations`, `TestToolsDocMatchesRegistry`, `TestOutputSchemaMatchesResponse`, and `TestToolDescriptionQuality` (`internal/tools/metadata_test.go`) — including on docs-only PRs via the standalone `docs-drift` CI job. No tool is `Destructive` — deletion is the `/admin/data` erasure endpoint, never a tool flag (see `docs/DEPLOYMENT.md`).
 
 | Tool | ReadOnly | Idempotent | OpenWorld |
 |------|----------|------------|-----------|
@@ -2033,8 +2113,10 @@ Every tool declares annotations for client consumption (`readOnlyAnnotations(ide
 | workspace_read | true | true | false |
 | brand_research | true | true | true |
 | paper_fulltext | true | true | true |
+| monitor_query_save | **false (write)** | false | false |
+| monitor_query_check | true | **false** | true |
 
-Notes: `sequential_search` is non-idempotent because it writes session state to disk on every call. `memory_save`, `workspace_contribute`, and `archive_source` are the three **write** tools (`ReadOnly:false`). `memory_save` and `workspace_contribute` are non-idempotent (each call appends a new record); `archive_source` is idempotent (archiving the same URL twice is safe). `OpenWorld:false` marks tools that touch only local/server state (sessions, memory, analytics, workspaces, exports) rather than the open web. `Destructive` is uniformly false — no tool is annotated destructive.
+Notes: `sequential_search` is non-idempotent because it writes session state to disk on every call. `memory_save`, `workspace_contribute`, `archive_source`, and `monitor_query_save` are the four **write** tools (`ReadOnly:false`). `memory_save`, `workspace_contribute`, and `monitor_query_save` are non-idempotent (each call appends/reseeds a record); `archive_source` is idempotent (archiving the same URL twice is safe). `monitor_query_check` is read-only but non-idempotent — it mutates the monitor's stored baseline on every call. `OpenWorld:false` marks tools that touch only local/server state (sessions, memory, analytics, workspaces, exports) rather than the open web. `Destructive` is uniformly false — no tool is annotated destructive.
 
 ### Provider Resolution
 

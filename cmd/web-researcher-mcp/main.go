@@ -198,6 +198,16 @@ func main() {
 		logger.Info("shared workspaces enabled", "consent", "required", "membership", "host-managed")
 	}
 
+	// Saved query monitoring (#273): consent-gated, off by default. Backed by
+	// the shared persistStore (already covered by the /admin/data export/erasure
+	// path); no dedicated per-tool Exporter/Eraser is registered — a documented
+	// gap the issue explicitly allows deferring to a follow-up.
+	var monitorStore persist.Store
+	if cfg.Features.Monitoring {
+		monitorStore = persistStore
+		logger.Info("query monitoring enabled", "consent", "required", "ttl", cfg.Features.MonitoringTTL)
+	}
+
 	metricsCollector := metrics.NewCollector()
 	rateLimiter := ratelimit.NewWithStore(cfg.RateLimit, persistStore)
 	if redisBackends != nil {
@@ -502,6 +512,7 @@ func main() {
 		UserAnalytics:           userAnalytics,
 		Memory:                  memoryStore,
 		Workspaces:              workspaceStore,
+		Monitor:                 monitorStore,
 		BrandFetchAPIKey:        cfg.Search.BrandFetchAPIKey,
 		BrandFetchClientID:      cfg.Search.BrandFetchClientID,
 		OpenSyllabusAPIKey:      cfg.Search.OpenSyllabusAPIKey,
@@ -629,6 +640,9 @@ func main() {
 			}
 			if cfg.Features.UserAnalytics {
 				grant(consent.PurposeAnalytics)
+			}
+			if cfg.Features.Monitoring {
+				grant(consent.PurposeMonitoring)
 			}
 			// PurposeWorkspace is intentionally never auto-granted.
 		}
