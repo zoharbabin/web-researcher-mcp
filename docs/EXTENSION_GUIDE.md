@@ -178,7 +178,7 @@ An MCP Resource exposes read-only server-side state via a URI scheme. Resources 
 - The data changes in response to input → use **Tool**
 
 **Integration checklist:**
-1. `internal/resources/resources.go` — register the URI template + handler
+1. `internal/resources/resources.go` — register the URI template + handler. Exception: a resource that serves a payload a specific tool produces (e.g. `research://artifact/{id}`) is registered next to that tool instead — see `registerArtifactResource` in `internal/tools/artifacts.go`.
 2. If adding a new URI scheme, document it in `docs/DEPLOYMENT.md` (operator-facing) or `docs/TOOLS.md` (if surfaced in tool output)
 
 ---
