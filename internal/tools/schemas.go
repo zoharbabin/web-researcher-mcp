@@ -1375,6 +1375,58 @@ var brandResearchOutputSchema = map[string]any{
 	},
 }
 
+var researchPanelOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"question": map[string]any{"type": "string"},
+		"trust":    trustUntrustedExternal,
+		"panel": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"model_id":    map[string]any{"type": "string"},
+					"provider":    map[string]any{"type": "string"},
+					"response":    map[string]any{"type": "string", "description": "Present only when this panel member answered successfully."},
+					"latency_ms":  map[string]any{"type": "integer"},
+					"tokens_used": map[string]any{"type": "integer", "description": "Present only alongside response (input + output tokens)."},
+					"error":       map[string]any{"type": "string", "description": "Present only when this panel member failed (timeout, upstream error) instead of answering."},
+				},
+			},
+		},
+		"divergence": map[string]any{
+			"type":        "object",
+			"description": "Deterministic, model-free agreement/disagreement summary across panel responses — no synthesis LLM call.",
+			"properties": map[string]any{
+				"consensus_points": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Claims restated (≥0.8 term-overlap) by at least 80% of the other panel members."},
+				"contradictions": map[string]any{
+					"type": "array",
+					"items": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"claim":     map[string]any{"type": "string"},
+							"positions": map[string]any{"type": "object", "description": "model_id -> that model's conflicting sentence.", "additionalProperties": map[string]any{"type": "string"}},
+						},
+					},
+				},
+				"unique_to_model":      map[string]any{"type": "object", "description": "model_id -> claims no other panel member restated.", "additionalProperties": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}},
+				"confidence":           map[string]any{"type": "string", "enum": []any{"high", "medium", "low"}},
+				"confidence_rationale": map[string]any{"type": "string"},
+			},
+		},
+		"_meta": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"cached":            map[string]any{"type": "boolean"},
+				"models_queried":    map[string]any{"type": "integer"},
+				"models_succeeded":  map[string]any{"type": "integer"},
+				"models_failed":     map[string]any{"type": "integer"},
+				"total_tokens_used": map[string]any{"type": "integer"},
+			},
+		},
+	},
+}
+
 var paperFulltextOutputSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{

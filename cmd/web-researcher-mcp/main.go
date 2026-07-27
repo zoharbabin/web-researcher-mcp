@@ -508,6 +508,7 @@ func main() {
 		PENAmericaAirtableToken: cfg.Search.PENAmericaAirtableToken,
 		CTLogResolver:           ctLogResolver,
 		ArchiveResolver:         archiveResolver,
+		ResearchPanelProviders:  tools.AvailableModelProviders(cfg.ResearchPanel, cfg.AllowPrivateIPs),
 	}
 
 	// Completion suppliers (#193): the live value sets the server can autocomplete
