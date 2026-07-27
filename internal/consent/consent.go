@@ -31,10 +31,12 @@ const (
 	PurposeAnalytics Purpose = "analytics"
 	// PurposeWorkspace covers opt-in shared research workspaces (#96).
 	PurposeWorkspace Purpose = "workspace"
+	// PurposeMonitoring covers opt-in saved-query monitoring (#273).
+	PurposeMonitoring Purpose = "monitoring"
 )
 
 // AllPurposes is the canonical set, used for validation and enumeration.
-var AllPurposes = []Purpose{PurposeMemory, PurposeAnalytics, PurposeWorkspace}
+var AllPurposes = []Purpose{PurposeMemory, PurposeAnalytics, PurposeWorkspace, PurposeMonitoring}
 
 // Audit event types for consent changes (dotted-namespace convention, shared
 // across the codebase). Emitted by the consent admin/tool surface, not by the

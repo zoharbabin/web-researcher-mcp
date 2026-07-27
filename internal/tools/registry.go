@@ -11,6 +11,7 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 	"github.com/zoharbabin/web-researcher-mcp/internal/memory"
 	"github.com/zoharbabin/web-researcher-mcp/internal/metrics"
+	"github.com/zoharbabin/web-researcher-mcp/internal/persist"
 	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
@@ -99,6 +100,10 @@ type Dependencies struct {
 	// Noop (no membership, no data). The workspace_contribute/workspace_read
 	// tools are registered only when a non-Noop store is present.
 	Workspaces workspace.Store
+	// Monitor is the consent-gated query-monitoring store (#273). Defaults to nil
+	// (unregistered). monitor_query_save and monitor_query_check register only
+	// when non-nil.
+	Monitor persist.Store
 	// BrandFetchAPIKey enables Tier 1 BrandFetch Brand API + Context API
 	// enrichment in brand_research (Bearer auth). It only fills fields the
 	// always-on no-key tiers (homepage meta/structured-data + brand-page
@@ -242,6 +247,12 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	if _, isNoop := deps.Workspaces.(*workspace.Noop); deps.Workspaces != nil && !isNoop {
 		registerWorkspaceContribute(srv, deps)
 		registerWorkspaceRead(srv, deps)
+	}
+	// monitor_query_save/monitor_query_check (#273) — registered only when a
+	// query-monitor store is present.
+	if deps.Monitor != nil {
+		registerMonitorQuerySave(srv, deps)
+		registerMonitorQueryCheck(srv, deps)
 	}
 	// brand_research — always registered; the homepage meta/structured-data
 	// extraction + brand-page probe + optional web search tiers run

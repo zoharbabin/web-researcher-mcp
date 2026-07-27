@@ -49,6 +49,8 @@ var expectedTools = []string{
 	"paper_fulltext",
 	"company_recon",
 	"research_panel",
+	"monitor_query_save",
+	"monitor_query_check",
 }
 
 func listTools(t *testing.T) []*mcp.Tool {
@@ -89,7 +91,7 @@ func TestAllToolsHaveAnnotations(t *testing.T) {
 			// memory_save is the one WRITE tool (it persists a memory). Every
 			// other tool is read-only. No tool is ever destructive — deletion is
 			// the separate #85 erasure endpoint, never a tool flag.
-			writeTools := map[string]bool{"memory_save": true, "workspace_contribute": true, "archive_source": true}
+			writeTools := map[string]bool{"memory_save": true, "workspace_contribute": true, "archive_source": true, "monitor_query_save": true}
 			if writeTools[tool.Name] {
 				if tool.Annotations.ReadOnlyHint {
 					t.Errorf("%s writes state; ReadOnlyHint should be false", tool.Name)
@@ -200,6 +202,26 @@ func TestAllToolsHaveAnnotations(t *testing.T) {
 				if !*tool.Annotations.OpenWorldHint {
 					t.Error("syllabus_search should be open-world")
 				}
+			case "monitor_query_save":
+				// A write (seeds/updates a monitor baseline); not idempotent
+				// (re-running with the same query re-seeds the baseline from a
+				// fresh live search), not open-world (writeAnnotations forces false).
+				if tool.Annotations.IdempotentHint {
+					t.Error("monitor_query_save should NOT be idempotent")
+				}
+				if *tool.Annotations.OpenWorldHint {
+					t.Error("monitor_query_save should NOT be open-world")
+				}
+			case "monitor_query_check":
+				// Read-only but mutates the stored baseline on every call (marks
+				// found URLs as seen), so a second identical call returns zero new
+				// results: NOT idempotent. Open-world (live upstream search).
+				if tool.Annotations.IdempotentHint {
+					t.Error("monitor_query_check should NOT be idempotent")
+				}
+				if !*tool.Annotations.OpenWorldHint {
+					t.Error("monitor_query_check should be open-world")
+				}
 			default:
 				if !tool.Annotations.IdempotentHint {
 					t.Errorf("%s should be idempotent", tool.Name)
@@ -291,6 +313,11 @@ func TestOutputSchemaMatchesResponse(t *testing.T) {
 		"paper_fulltext":      {"identifier": "https://example.com/paper.pdf"},
 		"company_recon":       {"target": "example.com"},
 		"research_panel":      {"question": "test"},
+		// Anonymous test client has no auth context, so both return status:
+		// "unavailable" rather than exercising the content path (covered by
+		// monitor_test.go's authenticated-context tests).
+		"monitor_query_save":  {"query": "test"},
+		"monitor_query_check": {"query": "test"},
 	}
 
 	tools := listTools(t)
