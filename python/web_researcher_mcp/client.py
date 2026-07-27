@@ -35,7 +35,6 @@ from typing import Any, Optional
 
 from web_researcher_mcp.models import (
     AcademicSearchResponse,
-    AnswerResponse,
     ArchiveSourceResponse,
     AuditBibliographyResponse,
     AwesomeListSearchResponse,
@@ -63,7 +62,6 @@ from web_researcher_mcp.models import (
     ScrapePageResponse,
     SearchAndScrapeResponse,
     SequentialSearchResponse,
-    StructuredSearchResponse,
     SyllabusSearchResponse,
     VerifyCitationResponse,
     VerifyRecommendationResponse,
@@ -342,20 +340,6 @@ class WebResearcherClient:
             },
         )
         return AcademicSearchResponse.from_dict(d)
-    async def answer(
-        self,
-        query: str,
-        provider: str = None,
-    ) -> AnswerResponse:
-        """Ask a factual question and get one grounded, synthesized answer with source citations"""
-        d = await self._call_tool(
-            "answer",
-            {
-                "query": query,
-                "provider": provider,
-            },
-        )
-        return AnswerResponse.from_dict(d)
     async def archive_source(
         self,
         url: str,
@@ -954,26 +938,6 @@ class WebResearcherClient:
             },
         )
         return SequentialSearchResponse.from_dict(d)
-    async def structured_search(
-        self,
-        query: str,
-        category: str = None,
-        num_results: int = None,
-        provider: str = None,
-        schema: Optional[dict] = None,
-    ) -> StructuredSearchResponse:
-        """Search the web and extract structured data from each result"""
-        d = await self._call_tool(
-            "structured_search",
-            {
-                "query": query,
-                "category": category,
-                "num_results": num_results,
-                "provider": provider,
-                "schema": schema,
-            },
-        )
-        return StructuredSearchResponse.from_dict(d)
     async def syllabus_search(
         self,
         query: str,
@@ -1304,17 +1268,6 @@ class SyncWebResearcherClient:
             source=source,
             year_from=year_from,
             year_to=year_to,
-            )
-        )
-    def answer(
-        self,
-        query: str,
-        provider: str = None,
-    ) -> AnswerResponse:
-        return self._run(
-            self._async_client.answer(
-            query=query,
-            provider=provider,
             )
         )
     def archive_source(
@@ -1835,23 +1788,6 @@ class SyncWebResearcherClient:
             sessionId=sessionId,
             sessionSummary=sessionSummary,
             totalStepsEstimate=totalStepsEstimate,
-            )
-        )
-    def structured_search(
-        self,
-        query: str,
-        category: str = None,
-        num_results: int = None,
-        provider: str = None,
-        schema: Optional[dict] = None,
-    ) -> StructuredSearchResponse:
-        return self._run(
-            self._async_client.structured_search(
-            query=query,
-            category=category,
-            num_results=num_results,
-            provider=provider,
-            schema=schema,
             )
         )
     def syllabus_search(

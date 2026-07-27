@@ -59,7 +59,7 @@ func registerMonarchSearch(srv *mcp.Server, deps Dependencies) {
 			return errResult, nil, nil
 		}
 		if searcher == nil {
-			return synthesisUnconfiguredError("monarch_search", search.SupportedMonarchProviders), nil, nil
+			return unconfiguredProviderError("monarch_search", search.SupportedMonarchProviders), nil, nil
 		}
 
 		cacheKey := searchCacheKey("monarch", params.Operation, params.Group,

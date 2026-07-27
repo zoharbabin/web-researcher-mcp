@@ -197,10 +197,8 @@ The key is sent as an `Authorization: Bearer` header (never in the request body)
 
 **Free tier**: 1,000 requests/month; paid per call beyond that
 
-Exa is a neural/semantic search API. Beyond ordinary web and news search, an Exa key unlocks several capabilities no other provider offers here:
+Exa is a neural/semantic search API. Beyond ordinary web and news search, an Exa key unlocks capabilities no other provider offers here:
 
-- **Grounded answers** — backs the provider-independent `answer` tool (one synthesized answer with citations).
-- **Structured extraction** — backs the provider-independent `structured_search` tool (schema-defined fields and company/people entities, as JSON per result).
 - **Academic search** — `academic_search` can route to Exa via the research-paper category.
 - **A paid scrape fallback** — Exa's `/contents` API becomes the last-resort extraction tier for `scrape_page`, recovering hard pages the free tiers can't (only when the local tiers all fail).
 
@@ -221,7 +219,7 @@ The key is sent as the `x-api-key` header (never in the request body or logs).
 
 ### Good to know
 
-- **Paid per call.** Exa charges per request (free tier: 1,000/month). Each `answer` / `structured_search` response (when served by Exa) reports the estimated `costUsd` of that call, and the cost is recorded in the audit trail as `cost_usd`. The estimate is not an invoice.
+- **Paid per call.** Exa charges per request (free tier: 1,000/month).
 - **No image search.** `image_search` with Exa returns empty (no error) — keep an image-capable provider (Google, Brave, SearchAPI) in `SEARCH_ROUTING` if you need images.
 - **Search type is fixed to `auto`.** The expensive deep/deep-reasoning tiers are deliberately not exposed; `auto` is the balanced, predictable-cost default.
 - **The scrape fallback is opt-in by cost.** The Exa `/contents` tier runs only when the free scrape tiers (markdown → stealth → HTML → browser, when Chrome is configured) all fail to extract content — the common path never spends an Exa credit on scraping.

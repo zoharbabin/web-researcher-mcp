@@ -79,7 +79,6 @@ func main() {
 // conditionally-registered tool is included in the schema dump.
 // This mirrors setupTestDeps() in internal/tools/tools_test.go.
 func buildDeps() tools.Dependencies {
-	synth := &mockSynthProvider{}
 	academic := &mockAcademicProvider{}
 	filing := &mockFilingProvider{}
 	caseProv := &mockCaseProvider{}
@@ -104,8 +103,6 @@ func buildDeps() tools.Dependencies {
 		AwesomeListProviders: map[string]search.AwesomeListProvider{awesome.Name(): awesome},
 		LocalProviders:       map[string]search.LocalProvider{local.Name(): local},
 		MonarchProviders:     map[string]search.MonarchProvider{monarch.Name(): monarch},
-		AnswerProviders:      map[string]search.AnswerProvider{synth.Name(): synth},
-		StructuredProviders:  map[string]search.StructuredProvider{synth.Name(): synth},
 		Scraper:              scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2}),
 		Content:              content.NewProcessor(),
 		Sessions:             mgr,
@@ -139,19 +136,6 @@ func (m *mockProvider) Images(_ context.Context, _ search.ImageSearchParams) ([]
 }
 func (m *mockProvider) News(_ context.Context, _ search.NewsSearchParams) ([]search.NewsResult, error) {
 	return nil, nil
-}
-
-type mockSynthProvider struct{}
-
-func (m *mockSynthProvider) Name() string { return "mocksynth" }
-func (m *mockSynthProvider) Metadata() search.ProviderMeta {
-	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "free"}
-}
-func (m *mockSynthProvider) Answer(_ context.Context, _ search.AnswerParams) (*search.AnswerResult, error) {
-	return &search.AnswerResult{Answer: "a", Provider: "mocksynth"}, nil
-}
-func (m *mockSynthProvider) StructuredSearch(_ context.Context, _ search.StructuredParams) (*search.StructuredResult, error) {
-	return &search.StructuredResult{Provider: "mocksynth"}, nil
 }
 
 type mockAcademicProvider struct{}

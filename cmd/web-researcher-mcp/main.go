@@ -335,6 +335,16 @@ func main() {
 		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
 	})
 
+	// Corporate ownership enrichment (#248): when verify_recommendation's lexical
+	// self-promotion check finds nothing, a Wikidata P749 ("parent organization")
+	// lookup checks whether the domain's brand is a subsidiary of a distinct
+	// corporate parent. Keyless, so always constructed; own breaker isolates
+	// failures; enrichment is best-effort and fail-open.
+	wikidataResolver := search.NewWikidataOwnershipResolver(search.Deps{
+		HTTPClient: searchDeps.HTTPClient,
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+	})
+
 	// OSINT recon enrichment (#323): Certificate Transparency log lookups (crt.sh)
 	// and Wayback CDX historical URL inventories, both keyless so always
 	// constructed. Own breakers isolate failures from every other subsystem;
@@ -360,12 +370,6 @@ func main() {
 		IAAccessKey:     cfg.Search.IAAccessKey,
 		IASecretKey:     cfg.Search.IASecretKey,
 	})
-
-	// Synthesis capabilities (provider-independent): grounded answers and
-	// structured extraction. Discovered from config like every other provider
-	// family — a new implementer appears automatically.
-	answerProviders := search.AvailableAnswerProviders(cfg.Search, searchDeps)
-	structuredProviders := search.AvailableStructuredProviders(cfg.Search, searchDeps)
 
 	allProviders := search.AvailableProviders(cfg.Search, searchDeps)
 
@@ -465,31 +469,30 @@ func main() {
 	defer auditor.Close()
 
 	toolDeps := tools.Dependencies{
-		Cache:                cacheStore,
-		Search:               searchProvider,
-		SearchProviders:      allProviders,
-		PatentProviders:      patentProviders,
-		AcademicProviders:    academicProviders,
-		FilingProviders:      filingProviders,
-		CaseProviders:        caseProviders,
-		EconProviders:        econProviders,
-		TrialProviders:       trialProviders,
-		AwesomeListProviders: awesomeListProviders,
-		LocalProviders:       localProviders,
-		MonarchProviders:     monarchProviders,
-		ContextProviders:     contextProviders,
-		AnswerProviders:      answerProviders,
-		StructuredProviders:  structuredProviders,
-		OAResolver:           oaResolver,
-		RetractionResolver:   retractionResolver,
-		DOIRegistry:          doiRegistry,
-		LinkVerifier:         linkVerifier,
-		Scraper:              scraperPipeline,
-		Content:              contentProcessor,
-		Sessions:             sessionManager,
-		Metrics:              metricsCollector,
-		Auditor:              auditor,
-		Logger:               logger,
+		Cache:                     cacheStore,
+		Search:                    searchProvider,
+		SearchProviders:           allProviders,
+		PatentProviders:           patentProviders,
+		AcademicProviders:         academicProviders,
+		FilingProviders:           filingProviders,
+		CaseProviders:             caseProviders,
+		EconProviders:             econProviders,
+		TrialProviders:            trialProviders,
+		AwesomeListProviders:      awesomeListProviders,
+		LocalProviders:            localProviders,
+		MonarchProviders:          monarchProviders,
+		ContextProviders:          contextProviders,
+		OAResolver:                oaResolver,
+		RetractionResolver:        retractionResolver,
+		DOIRegistry:               doiRegistry,
+		WikidataOwnershipResolver: wikidataResolver,
+		LinkVerifier:              linkVerifier,
+		Scraper:                   scraperPipeline,
+		Content:                   contentProcessor,
+		Sessions:                  sessionManager,
+		Metrics:                   metricsCollector,
+		Auditor:                   auditor,
+		Logger:                    logger,
 		Features: tools.Features{
 			SourceRecommendations: cfg.Features.SourceRecommendations,
 			GenerativeUI:          cfg.Features.GenerativeUI,
@@ -554,12 +557,6 @@ func main() {
 	}
 	for name := range localProviders {
 		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "local"})
-	}
-	for name := range answerProviders {
-		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "answer"})
-	}
-	for name := range structuredProviders {
-		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "structured"})
 	}
 	// Live provider/breaker health for diagnostics://health (#81) is available
 	// only when a multi-provider Router is in play; a single configured provider
@@ -843,12 +840,6 @@ func completionProviderNames(deps tools.Dependencies) []string {
 		add(name)
 	}
 	for name := range deps.MonarchProviders {
-		add(name)
-	}
-	for name := range deps.AnswerProviders {
-		add(name)
-	}
-	for name := range deps.StructuredProviders {
 		add(name)
 	}
 	names := make([]string, 0, len(seen))

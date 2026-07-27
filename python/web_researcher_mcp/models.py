@@ -112,44 +112,6 @@ class Analytics:
         )
 
 @dataclass
-class AnswerCitation:
-    publishedDate: Optional[str] = None
-    title: Optional[str] = None
-    url: Optional[str] = None
-
-    @classmethod
-    def from_dict(cls, d: dict[str, Any] | None) -> "AnswerCitation | None":
-        if d is None:
-            return None
-        return cls(
-            publishedDate=d.get('publishedDate'),
-            title=d.get('title'),
-            url=d.get('url'),
-        )
-
-@dataclass
-class AnswerResponse:
-    answer: Optional[str] = None
-    citations: list[AnswerCitation] = field(default_factory=list)
-    costUsd: Optional[float] = None
-    hints: dict[str, Any] = field(default_factory=dict)
-    provider: Optional[str] = None
-    trust: Optional[str] = None
-
-    @classmethod
-    def from_dict(cls, d: dict[str, Any] | None) -> "AnswerResponse | None":
-        if d is None:
-            return None
-        return cls(
-            answer=d.get('answer'),
-            citations=[AnswerCitation.from_dict(i) for i in (d.get('citations') or [])],
-            costUsd=d.get('costUsd'),
-            hints=dict(d.get('hints') or {}),
-            provider=d.get('provider'),
-            trust=d.get('trust'),
-        )
-
-@dataclass
 class ArchiveSourceResponse:
     archivedAt: Optional[str] = None
     captured: Optional[bool] = None
@@ -2092,56 +2054,6 @@ class StructuredData:
         )
 
 @dataclass
-class StructuredSearchResponse:
-    category: Optional[str] = None
-    costUsd: Optional[float] = None
-    hints: dict[str, Any] = field(default_factory=dict)
-    provider: Optional[str] = None
-    query: Optional[str] = None
-    resultCount: Optional[int] = None
-    results: list[StructuredSearchResult] = field(default_factory=list)
-    trust: Optional[str] = None
-
-    @classmethod
-    def from_dict(cls, d: dict[str, Any] | None) -> "StructuredSearchResponse | None":
-        if d is None:
-            return None
-        return cls(
-            category=d.get('category'),
-            costUsd=d.get('costUsd'),
-            hints=dict(d.get('hints') or {}),
-            provider=d.get('provider'),
-            query=d.get('query'),
-            resultCount=d.get('resultCount'),
-            results=[StructuredSearchResult.from_dict(i) for i in (d.get('results') or [])],
-            trust=d.get('trust'),
-        )
-
-@dataclass
-class StructuredSearchResult:
-    author: Optional[str] = None
-    entities: list[Any] = field(default_factory=list)
-    highlights: list[str] = field(default_factory=list)
-    publishedDate: Optional[str] = None
-    summary: Optional[str] = None
-    title: Optional[str] = None
-    url: Optional[str] = None
-
-    @classmethod
-    def from_dict(cls, d: dict[str, Any] | None) -> "StructuredSearchResult | None":
-        if d is None:
-            return None
-        return cls(
-            author=d.get('author'),
-            entities=list(d.get('entities') or []),
-            highlights=list(d.get('highlights') or []),
-            publishedDate=d.get('publishedDate'),
-            summary=d.get('summary'),
-            title=d.get('title'),
-            url=d.get('url'),
-        )
-
-@dataclass
 class Summary:
     processingTimeMs: Optional[int] = None
     sparseSources: Optional[int] = None
@@ -2357,6 +2269,7 @@ class VerifyRecommendationCorroborationsearch:
 class VerifyRecommendationRecommendation:
     author: Optional[str] = None
     conflictOfInterest: Optional[VerifyRecommendationConflictOfInterest] = None
+    corporateOwnershipSignal: dict[str, Any] = field(default_factory=dict)
     corroborationSearches: list[VerifyRecommendationCorroborationsearch] = field(default_factory=list)
     domainReputation: dict[str, Any] = field(default_factory=dict)
     flags: list[str] = field(default_factory=list)
@@ -2374,6 +2287,7 @@ class VerifyRecommendationRecommendation:
         return cls(
             author=d.get('author'),
             conflictOfInterest=VerifyRecommendationConflictOfInterest.from_dict(d.get('conflictOfInterest')) if d.get('conflictOfInterest') else None,
+            corporateOwnershipSignal=dict(d.get('corporateOwnershipSignal') or {}),
             corroborationSearches=[VerifyRecommendationCorroborationsearch.from_dict(i) for i in (d.get('corroborationSearches') or [])],
             domainReputation=dict(d.get('domainReputation') or {}),
             flags=list(d.get('flags') or []),

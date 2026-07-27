@@ -83,7 +83,7 @@ func registerLocal(srv *mcp.Server, deps Dependencies) {
 			return errResult, nil, nil
 		}
 		if searcher == nil {
-			return synthesisUnconfiguredError("local_search", search.SupportedLocalProviders), nil, nil
+			return unconfiguredProviderError("local_search", search.SupportedLocalProviders), nil, nil
 		}
 
 		cacheKey := searchCacheKey("local", input.Query, input.Near, input.Country, input.Units, num, providerName, coordCacheKey(lat, lon), input.Radius)

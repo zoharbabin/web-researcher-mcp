@@ -52,11 +52,6 @@ type Dependencies struct {
 	// scraping on failure or empty result. Requires a Brave Data for AI plan.
 	// Empty ⇒ the ContextSearcher path is never attempted.
 	ContextProviders map[string]search.ContextProvider
-	// AnswerProviders / StructuredProviders back the provider-independent
-	// `answer` and `structured_search` tools. Any provider implementing the
-	// capability appears here (Exa today). Empty ⇒ the tool is not registered.
-	AnswerProviders     map[string]search.AnswerProvider
-	StructuredProviders map[string]search.StructuredProvider
 	// OAResolver enriches DOI-bearing academic_search results with open-access
 	// PDF links (Unpaywall, #45). nil ⇒ enrichment is skipped (no-op). Best-effort:
 	// never fails a search.
@@ -71,6 +66,12 @@ type Dependencies struct {
 	// as existing while a fabricated DOI reads as not-found. nil ⇒ skipped (no-op).
 	// Best-effort: a transport failure leaves existence unknown, never asserts it.
 	DOIRegistry search.DOIRegistry
+	// WikidataOwnershipResolver enriches self-promotion detection with corporate
+	// ownership: when lexical matching fails, a Wikidata P749 lookup checks whether
+	// the brand's corporate parent is distinct from the recommending domain (#248).
+	// nil → ownership check skipped (no-op). Best-effort: a lookup failure leaves
+	// the signal absent, never fails the audit.
+	WikidataOwnershipResolver search.OwnershipResolver
 	// LinkVerifier checks source-URL liveness + Wayback archive fallback for the
 	// opt-in verify_links flag (#157) and verify_citation. nil ⇒ verification is
 	// skipped (no-op). Best-effort + bounded; never fails a tool call.
@@ -217,16 +218,6 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	// AvailableMonarchProviders always builds it and the tool is always registered.
 	if len(deps.MonarchProviders) > 0 {
 		registerMonarchSearch(srv, deps)
-	}
-
-	// Synthesis tools — provider-independent (like academic/patent search).
-	// Each registers only when at least one provider offers the capability, so
-	// the default tool surface is unchanged until such a provider is configured.
-	if len(deps.AnswerProviders) > 0 {
-		registerAnswer(srv, deps)
-	}
-	if len(deps.StructuredProviders) > 0 {
-		registerStructuredSearch(srv, deps)
 	}
 
 	// Regulated, opt-in tools — registered only when their feature is wired in

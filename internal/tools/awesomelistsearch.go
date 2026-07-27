@@ -58,7 +58,7 @@ func registerAwesomeListSearch(srv *mcp.Server, deps Dependencies) {
 			return errResult, nil, nil
 		}
 		if searcher == nil {
-			return synthesisUnconfiguredError("awesome_list_search", search.SupportedAwesomeListProviders), nil, nil
+			return unconfiguredProviderError("awesome_list_search", search.SupportedAwesomeListProviders), nil, nil
 		}
 
 		cacheKey := searchCacheKey("awesome", input.Topic, input.Query, input.MinStars, input.MinProjects, input.SortBy, num, providerName)

@@ -176,14 +176,12 @@ Works with Claude, Claude Desktop, Cursor, and any AI assistant that supports to
 | `audit_bibliography` | Audit a whole reference list in one pass — paste a CSL-JSON/RIS/BibTeX file (or a session) and get per-entry + corpus-level flags for retracted, dead-link, and unverifiable citations |
 | `verify_recommendation` | Audit an AI-generated recommendation list (listicle, product ranking) for self-promotion, author conflicts of interest, domain reputation, and dead links — catches GEO-gamed picks. Evidence, not a verdict |
 | `archive_source` | Capture a fresh Internet Archive (Wayback Machine) snapshot of a URL via Save Page Now so a cited source stays verifiable if the page later changes or disappears — returns snapshot URL + timestamp (write tool) |
-| `answer` | Ask a factual question and get one synthesized answer **with citations** — the direct answer, not a reading list |
-| `structured_search` | Search and extract structured JSON per result (supply a schema), or pull entities by category (company, people, …) |
 | `sequential_search` | Multi-step deep research — your AI remembers what it already found and builds on it |
 | `get_research_session` | Recover a research session after context loss — picks up right where you left off |
 | `research_export` | Export a research session as a shareable report (markdown or JSON), with full per-step provenance |
 | `format_bibliography` | Turn collected sources into a formatted bibliography — APA, MLA, BibTeX, RIS, or CSL-JSON (Zotero/EndNote/Mendeley-ready) |
 
-Most tools above are always available. A few activate only when the right provider or config is present: `citation_graph` requires a citation-capable academic provider (OpenAlex or Semantic Scholar); `filing_search` requires `EDGAR_CONTACT_EMAIL`; `local_search` requires `BRAVE_API_KEY`; `answer` and `structured_search` require a provider that supports those capabilities (e.g. Exa). Operators can also enable opt-in, consent-gated tools (per-user analytics, long-term memory, shared workspaces) that appear only when their feature is turned on — see [`docs/TOOLS.md`](docs/TOOLS.md) for the authoritative, CI-verified tool list and full schemas.
+Most tools above are always available. A few activate only when the right provider or config is present: `citation_graph` requires a citation-capable academic provider (OpenAlex or Semantic Scholar); `filing_search` requires `EDGAR_CONTACT_EMAIL`; `local_search` requires `BRAVE_API_KEY`. Operators can also enable opt-in, consent-gated tools (per-user analytics, long-term memory, shared workspaces) that appear only when their feature is turned on — see [`docs/TOOLS.md`](docs/TOOLS.md) for the authoritative, CI-verified tool list and full schemas.
 
 ### Ready-made research templates
 
@@ -427,7 +425,7 @@ You choose which search engine powers your research. All of them work with lense
 | **SearXNG** | Yes | Yes | Yes | Self-hosted, privacy-first, air-gapped deployments |
 | **SearchAPI.io** | Yes | Yes | Yes | Unified API with multiple engine backends |
 | **Tavily** | Yes | — | Yes | AI-agent search; clean, LLM-ready content |
-| **Exa** | Yes | — | Yes | Neural/semantic search; also backs `answer` & `structured_search` and the optional paid scrape tier |
+| **Exa** | Yes | — | Yes | Neural/semantic search; also backs `academic_search` and the optional paid scrape tier |
 | **Hacker News** | HN only | — | Yes | Zero-config (HN Algolia index); searches HN threads, not the full web |
 
 ### Multiple Providers (recommended)
@@ -470,7 +468,7 @@ export SEARCH_PROVIDER=searxng
 export SEARXNG_URL=http://localhost:8080
 ```
 
-**Single provider — Exa (also unlocks the `answer` & `structured_search` tools):**
+**Single provider — Exa:**
 ```bash
 export SEARCH_PROVIDER=exa
 export EXA_API_KEY=...

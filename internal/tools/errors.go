@@ -15,6 +15,18 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
+// unconfiguredProviderError builds the structured config error a
+// structured-domain tool returns when none of its providers are configured
+// (e.g. no EDGAR_CONTACT_EMAIL for filing_search). Shared by every
+// structured-domain tool (filing_search, legal_search, econ_search,
+// clinical_search, awesome_list_search, local_search, monarch_search,
+// citation_graph).
+func unconfiguredProviderError(tool string, supported []string) *mcp.CallToolResult {
+	return structuredError(
+		fmt.Sprintf("No provider is configured for %s. Configure one of: %s. See docs/API_SETUP.md.", tool, strings.Join(supported, ", ")),
+		ToolError{Kind: ErrKindConfig, Retryable: false, SuggestedAction: ActionCheckAPIKey, Alternatives: supported})
+}
+
 // ErrorKind classifies tool errors for programmatic handling by LLM clients.
 type ErrorKind string
 
