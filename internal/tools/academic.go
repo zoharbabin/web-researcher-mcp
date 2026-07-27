@@ -48,7 +48,7 @@ type academicSearchInput struct {
 	Source     string `json:"source,omitempty" jsonschema:"Restrict to an academic source: all (default), arxiv, pubmed, ieee, nature, springer."`
 	PDFOnly    bool   `json:"pdf_only,omitempty" jsonschema:"Only return papers with direct PDF links (default: false). Useful when you plan to scrape the full paper."`
 	SortBy     string `json:"sort_by,omitempty" jsonschema:"Sort order: relevance (default) or date (newest first)."`
-	Provider   string `json:"provider,omitempty" jsonschema:"Force a specific provider. Academic: openalex, crossref, pubmed, semanticscholar, core, exa. Web fallback: google, brave, serper, searxng, searchapi, duckduckgo, tavily. Omit to use automatic selection (recommended)."`
+	Provider   string `json:"provider,omitempty" jsonschema:"Force a specific provider. Academic: openalex, crossref, pubmed, semanticscholar, core, exa, scholarapi (paid, full-text; not used by automatic selection — must be requested explicitly). Web fallback: google, brave, serper, searxng, searchapi, duckduckgo, tavily. Omit to use automatic selection (recommended)."`
 	OpenAccess bool   `json:"open_access,omitempty" jsonschema:"Only return open-access papers with free full-text (default: false)."`
 	FullText   bool   `json:"full_text,omitempty" jsonschema:"Fetch PMC full text for open-access biomedical articles with a PubMed Central ID (default: false). Only effective when the pubmed provider is active. Substantially increases response time."`
 	SessionID  string `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. Sources are automatically recorded for recovery after context loss."`
@@ -357,34 +357,53 @@ func resolveAcademicSearcher(deps Dependencies, providerName string) (search.Aca
 		return nil, nil
 	}
 
-	// Check if it's a known academic provider
-	for _, name := range search.SupportedAcademicProviders {
-		if name == providerName {
-			// Try router first
-			if router, ok := deps.Search.(*search.Router); ok {
-				if as, found := router.AcademicProviderByName(providerName); found {
-					return as, nil
-				}
+	// isKnownAcademicName covers both auto-routed names (SupportedAcademicProviders)
+	// and explicit-only names (academicProvidersExplicitOnly, e.g. "scholarapi",
+	// #266) — the latter are still a real, resolvable academic provider when
+	// requested by name; they are only excluded from *automatic* fallback.
+	if isKnownAcademicName(providerName) {
+		// Try router first
+		if router, ok := deps.Search.(*search.Router); ok {
+			if as, found := router.AcademicProviderByName(providerName); found {
+				return as, nil
 			}
-			// Try direct academic providers
-			if ap, ok := deps.AcademicProviders[providerName]; ok {
-				return ap, nil
-			}
-			envHint := academicProviderEnvHint(providerName)
-			return nil, structuredError(
-				fmt.Sprintf("Academic provider %q is not configured. %s", providerName, envHint),
-				ToolError{
-					Kind:            ErrKindConfig,
-					Retryable:       false,
-					SuggestedAction: ActionCheckAPIKey,
-					Provider:        providerName,
-				})
 		}
+		// Try direct academic providers
+		if ap, ok := deps.AcademicProviders[providerName]; ok {
+			return ap, nil
+		}
+		envHint := academicProviderEnvHint(providerName)
+		return nil, structuredError(
+			fmt.Sprintf("Academic provider %q is not configured. %s", providerName, envHint),
+			ToolError{
+				Kind:            ErrKindConfig,
+				Retryable:       false,
+				SuggestedAction: ActionCheckAPIKey,
+				Provider:        providerName,
+			})
 	}
 
 	// Not an academic-specific provider — it might be a web search provider for fallback
 	// Return nil so caller falls through to web search fallback
 	return nil, nil
+}
+
+// isKnownAcademicName reports whether providerName names an academic provider
+// this server knows how to construct — either auto-routed or explicit-only
+// (#266) — as opposed to a web-search provider name, which resolveAcademicSearcher
+// must fall through on instead of returning a "not configured" error for.
+func isKnownAcademicName(providerName string) bool {
+	for _, name := range search.SupportedAcademicProviders {
+		if name == providerName {
+			return true
+		}
+	}
+	for _, name := range search.AcademicProvidersExplicitOnly {
+		if name == providerName {
+			return true
+		}
+	}
+	return false
 }
 
 func academicProviderEnvHint(name string) string {
@@ -399,6 +418,8 @@ func academicProviderEnvHint(name string) string {
 		return "CORE works without a key at a lower shared rate; set CORE_API_KEY to raise the limit."
 	case "exa":
 		return "Set EXA_API_KEY to your Exa API key."
+	case "scholarapi":
+		return "Set SCHOLAR_API_KEY to your ScholarAPI key (scholarapi.net). Paid, metered — not included in automatic routing."
 	default:
 		return ""
 	}
@@ -455,6 +476,12 @@ func academicResultToMap(r search.AcademicResult) map[string]any {
 	}
 	if r.FullText != "" {
 		paper["fullText"] = r.FullText
+	}
+	if r.HasText {
+		paper["hasText"] = true
+	}
+	if r.HasPDF {
+		paper["hasPdf"] = true
 	}
 	return paper
 }

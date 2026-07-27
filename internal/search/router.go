@@ -568,13 +568,20 @@ func (r *Router) academicPriority() []string {
 		}
 	}
 
-	// Add any registered providers not already in the priority list
+	// Add any registered providers not already in the priority list, excluding
+	// explicit-only providers (e.g. scholarapi) — those are paid/metered and must
+	// only be reached via an explicit provider= request or explicit routing config,
+	// never auto-fallback.
 	seen := make(map[string]bool, len(priority))
 	for _, name := range priority {
 		seen[name] = true
 	}
+	explicitOnly := make(map[string]bool, len(AcademicProvidersExplicitOnly))
+	for _, name := range AcademicProvidersExplicitOnly {
+		explicitOnly[name] = true
+	}
 	for name := range r.academicProviders {
-		if !seen[name] {
+		if !seen[name] && !explicitOnly[name] {
 			priority = append(priority, name)
 		}
 	}
