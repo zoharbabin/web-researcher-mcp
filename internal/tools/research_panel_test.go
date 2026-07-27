@@ -3,6 +3,8 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"sync/atomic"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -43,6 +45,90 @@ func TestResearchPanelTool(t *testing.T) {
 	}
 	if out["trust"] != untrustedContentTrust {
 		t.Errorf("expected trust marker %q, got %v", untrustedContentTrust, out["trust"])
+	}
+}
+
+// TestResearchPanelPartialFailure proves rule 3.2 (issue #441): one panel
+// member erroring must not fail the whole call — the tool returns the
+// surviving responses and records the failure in _meta, never a tool error,
+// as long as at least one model succeeds.
+func TestResearchPanelPartialFailure(t *testing.T) {
+	ctx := context.Background()
+	deps := setupTestDeps()
+	deps.ResearchPanelProviders = []ModelProvider{
+		&mockModelProvider{name: "mock-a", modelID: "model-a", text: "The sky is blue."},
+		&mockModelProvider{name: "mock-b", modelID: "model-b", err: errors.New("simulated timeout")},
+	}
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "research_panel",
+		Arguments: map[string]any{"question": "What color is the sky?", "use_cache": false},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("one failed panel member must not fail the whole call when another succeeds, got error: %v", res.Content)
+	}
+
+	var out map[string]any
+	if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	meta, _ := out["_meta"].(map[string]any)
+	if meta["models_succeeded"].(float64) != 1 {
+		t.Errorf("expected 1 succeeded model, got %v", meta["models_succeeded"])
+	}
+	if meta["models_failed"].(float64) != 1 {
+		t.Errorf("expected 1 failed model recorded in _meta, got %v", meta["models_failed"])
+	}
+	panel, _ := out["panel"].([]any)
+	if len(panel) != 2 {
+		t.Fatalf("expected both panel entries present (one success, one error), got %d", len(panel))
+	}
+	var sawError bool
+	for _, p := range panel {
+		entry := p.(map[string]any)
+		if entry["provider"] == "mock-b" {
+			if entry["error"] == nil {
+				t.Errorf("failed panel member should carry an error field, got %v", entry)
+			}
+			sawError = true
+		}
+	}
+	if !sawError {
+		t.Fatal("expected the mock-b entry to be present with its error recorded")
+	}
+}
+
+// TestResearchPanelNoSynthesisCall proves rule 4.4 (issue #441): divergence
+// analysis is pure Go (AnalyzeDivergence), so the total number of Ask calls
+// equals exactly the panel size — no additional judge/synthesis model call is
+// made on top of the panel members themselves.
+func TestResearchPanelNoSynthesisCall(t *testing.T) {
+	ctx := context.Background()
+	var calls atomic.Int64
+	deps := setupTestDeps()
+	deps.ResearchPanelProviders = []ModelProvider{
+		&mockModelProvider{name: "mock-a", modelID: "model-a", text: "The sky is blue.", calls: &calls},
+		&mockModelProvider{name: "mock-b", modelID: "model-b", text: "The sky appears blue.", calls: &calls},
+	}
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "research_panel",
+		Arguments: map[string]any{"question": "What color is the sky?", "use_cache": false},
+	})
+	if err != nil || res.IsError {
+		t.Fatalf("CallTool failed: err=%v isError=%v content=%v", err, res.IsError, res.Content)
+	}
+	if got := calls.Load(); got != int64(len(deps.ResearchPanelProviders)) {
+		t.Errorf("expected exactly %d Ask calls (one per panel member, no extra synthesis call), got %d", len(deps.ResearchPanelProviders), got)
 	}
 }
 
