@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -292,16 +293,26 @@ func (m *mockLocalProvider) Local(_ context.Context, _ search.LocalSearchParams)
 }
 
 // mockModelProvider backs research_panel in tests — a fixed panel member that
-// answers instantly without a real LLM credential.
+// answers instantly without a real LLM credential. A non-nil err makes Ask
+// fail instead, and calls (when set) counts every Ask invocation so a test
+// can assert no extra call beyond the panel members themselves.
 type mockModelProvider struct {
 	name    string
 	modelID string
 	text    string
+	err     error
+	calls   *atomic.Int64
 }
 
 func (m *mockModelProvider) Name() string    { return m.name }
 func (m *mockModelProvider) ModelID() string { return m.modelID }
 func (m *mockModelProvider) Ask(_ context.Context, _ string) (ModelResponse, error) {
+	if m.calls != nil {
+		m.calls.Add(1)
+	}
+	if m.err != nil {
+		return ModelResponse{}, m.err
+	}
 	return ModelResponse{Text: m.text, InputTokens: 10, OutputTokens: 20, LatencyMs: 5}, nil
 }
 
