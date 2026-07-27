@@ -368,6 +368,9 @@ Set `SEARCH_PROVIDER=<name>` and supply that provider's key. Every provider work
 | Tavily | `tavily` | `TAVILY_API_KEY` | [app.tavily.com](https://app.tavily.com/) |
 | Exa | `exa` | `EXA_API_KEY` | [dashboard.exa.ai](https://dashboard.exa.ai/) |
 | Hacker News | `hackernews` | none | Built in — zero config (HN Algolia index) |
+| Reddit | `reddit` | none | Built in — zero config (public RSS) |
+| Bluesky | `bluesky` | none | Built in — zero config (public AT Protocol API) |
+| GitHub | `github` | none (`GITHUB_TOKEN` optional, raises rate limit) | Built in — zero config (public REST Search API) |
 
 > Each provider has its own free tier, signup flow, and capability mix (images, news, freshness). See **[docs/PROVIDERS.md](docs/PROVIDERS.md)** for a full comparison (index classification, capability matrix, quick-pick guide) and **[docs/API_SETUP.md](docs/API_SETUP.md)** for step-by-step key setup. Set up more than one and the server fails over automatically — see [Search Providers](#search-providers).
 
@@ -431,6 +434,9 @@ You choose which search engine powers your research. All of them work with lense
 | **Tavily** | Yes | — | Yes | AI-agent search; clean, LLM-ready content |
 | **Exa** | Yes | — | Yes | Neural/semantic search; also backs `academic_search` and the optional paid scrape tier |
 | **Hacker News** | HN only | — | Yes | Zero-config (HN Algolia index); searches HN threads, not the full web |
+| **Reddit** | Reddit only | — | Yes | Zero-config (public RSS); searches Reddit posts, not the full web |
+| **Bluesky** | Bluesky only | — | — | Zero-config (public AT Protocol API); searches Bluesky posts, not the full web |
+| **GitHub** | GitHub only | — | Yes | Zero-config (public REST Search API); searches issues/PRs, not the full web |
 
 ### Multiple Providers (recommended)
 
