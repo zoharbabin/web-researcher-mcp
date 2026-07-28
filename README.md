@@ -1,5 +1,3 @@
-[![MCP Toplist](https://mcptoplist.com/badge/io.github.zoharbabin%2Fweb-researcher-mcp.svg)](https://mcptoplist.com/server/io.github.zoharbabin%2Fweb-researcher-mcp)
-
 <!-- mcp-name: io.github.zoharbabin/web-researcher-mcp -->
 <p align="center">
   <img src="assets/logo-final.svg" width="120" height="120" alt="web-researcher-mcp logo">
@@ -25,10 +23,10 @@
   <a href="https://pypi.org/project/web-researcher-mcp/"><img src="https://img.shields.io/pypi/v/web-researcher-mcp?label=PyPI" height="20" alt="PyPI"></a>
   <a href="https://glama.ai/mcp/servers/zoharbabin/web-researcher-mcp"><img src="https://glama.ai/mcp/servers/zoharbabin/web-researcher-mcp/badges/score.svg" height="20" alt="web-researcher-mcp MCP server"></a>
   <a href="https://github.com/zoharbabin/web-researcher-mcp/stargazers"><img src="https://img.shields.io/github/stars/zoharbabin/web-researcher-mcp?style=social" height="20" alt="GitHub Stars"></a>
+<a href="https://mcptoplist.com/server/io.github.zoharbabin%2Fweb-researcher-mcp"><img src="https://mcptoplist.com/badge/io.github.zoharbabin%2Fweb-researcher-mcp.svg" height="20" alt="MCP Toplist"></a>
 </p>
-<p align="center">
-  Built by <a href="https://zoharbabin.com">Zohar Babin</a>
-</p>
+
+⭐ If you're tired of AI making things up, and [web-researcher-mcp](https://github.com/zoharbabin/web-researcher-mcp/) helps you, give us a star ⭐ — it helps more teams discover the project.  
 
 ### Get started in 30 seconds
 
@@ -782,7 +780,5 @@ Contributions are welcome. Please see [CONTRIBUTING.md](CONTRIBUTING.md) for cod
 ---
 
 <p align="center">
-  Built with <a href="https://go.dev">Go</a> and the <a href="https://modelcontextprotocol.io/">Model Context Protocol</a>
-  <br/><br/>
-  If you're tired of AI making things up, give this a try — and a ⭐ if it helps.
+  Built by <a href="https://zoharbabin.com">Zohar Babin</a>, with <a href="https://go.dev">Go</a> and the <a href="https://modelcontextprotocol.io/">Model Context Protocol</a>
 </p>
