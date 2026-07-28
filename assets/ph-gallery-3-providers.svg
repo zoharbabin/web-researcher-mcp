@@ -1,135 +1,201 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg viewBox="0 0 1270 760" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- PH Gallery Image 3: Multi-provider routing with failover, grouped by domain -->
-  <rect width="1270" height="760" fill="#0F172A"/>
-
-  <defs>
-    <linearGradient id="g1" x1="200" y1="300" x2="1070" y2="500" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#22F0E8"/>
-      <stop offset="100%" stop-color="#5B4CFF"/>
-    </linearGradient>
-  </defs>
+  <!-- PH Gallery Image 3: 30+ providers across every research domain, grouped by category -->
+  <rect width="1270" height="760" fill="#FFFFFF"/>
 
   <!-- Header -->
-  <text x="635" y="70"
+  <text x="635" y="50"
         font-family="'Inter', 'SF Pro Display', sans-serif"
-        font-size="32" font-weight="700" fill="#FFFFFF" letter-spacing="-1"
-        text-anchor="middle" text-rendering="optimizeLegibility">30+ providers across every research domain. Never goes down.</text>
+        font-size="30" font-weight="700" fill="#0F172A" letter-spacing="-1"
+        text-anchor="middle" text-rendering="optimizeLegibility">30+ providers. Every domain of knowledge.</text>
 
-  <text x="635" y="100"
+  <text x="635" y="80"
         font-family="'Inter', 'SF Pro Display', sans-serif"
-        font-size="17" font-weight="400" fill="#64748B"
-        text-anchor="middle" text-rendering="optimizeLegibility">If one provider has issues, your research automatically switches to the next one — no config change needed.</text>
+        font-size="15" font-weight="400" fill="#64748B"
+        text-anchor="middle" text-rendering="optimizeLegibility">If one provider has an issue, your research automatically switches to the next — no config change needed.</text>
 
-  <!-- AI box on the left -->
-  <rect x="50" y="330" width="150" height="70" rx="16" fill="#1E293B" stroke="#334155" stroke-width="2"/>
-  <text x="125" y="371"
-        font-family="'Inter', sans-serif" font-size="16" font-weight="600" fill="#E2E8F0"
-        text-anchor="middle">AI Assistant</text>
+  <!-- ============ COLUMN 1: WEB SEARCH ============ -->
+  <g font-family="'Inter', sans-serif" text-rendering="optimizeLegibility">
+    <rect x="35" y="112" width="285" height="36" rx="18" fill="#2563EB"/>
+    <text x="177" y="135" font-size="14" font-weight="700" letter-spacing="0.5" fill="#FFFFFF" text-anchor="middle">WEB SEARCH</text>
 
-  <!-- MCP Server box in center -->
-  <rect x="290" y="290" width="200" height="150" rx="16" fill="#1E293B" stroke="url(#g1)" stroke-width="2"/>
-  <text x="390" y="345"
-        font-family="'Inter', sans-serif" font-size="13" font-weight="500" fill="#22F0E8"
-        text-anchor="middle">web-researcher-mcp</text>
-  <text x="390" y="373"
-        font-family="'Inter', sans-serif" font-size="15" font-weight="600" fill="#E2E8F0"
-        text-anchor="middle">Smart Router</text>
-  <text x="390" y="398"
-        font-family="'Inter', sans-serif" font-size="12" font-weight="400" fill="#64748B"
-        text-anchor="middle">Per-provider circuit breakers</text>
-  <text x="390" y="416"
-        font-family="'Inter', sans-serif" font-size="12" font-weight="400" fill="#64748B"
-        text-anchor="middle">Failover is automatic</text>
+    <!-- Brave Search -->
+    <rect x="35" y="158" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="53" cy="174" r="5" fill="#2563EB"/>
+    <text x="69" y="178" font-size="13" font-weight="600" fill="#0F172A">Brave Search</text>
+    <text x="306" y="178" font-size="11" fill="#64748B" text-anchor="end">primary</text>
 
-  <!-- Arrow: AI → MCP -->
-  <path d="M200 365 L280 365" stroke="#475569" stroke-width="2" stroke-dasharray="6 4"/>
-  <polygon points="280,360 290,365 280,370" fill="#475569"/>
+    <!-- Google CSE -->
+    <rect x="35" y="198" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="53" cy="214" r="5" fill="#2563EB"/>
+    <text x="69" y="218" font-size="13" font-weight="600" fill="#0F172A">Google CSE</text>
+    <text x="306" y="218" font-size="11" fill="#64748B" text-anchor="end">fallback</text>
 
-  <!-- Domain group columns on the right: 6 categories, each a stacked card -->
-  <!-- Column 1: Web Search (12 providers) -->
-  <g transform="translate(560, 150)">
-    <rect width="220" height="130" rx="14" fill="#1E293B" stroke="#334155" stroke-width="1.5"/>
-    <circle cx="22" cy="26" r="6" fill="#22C55E"/>
-    <text x="38" y="31" font-family="'Inter', sans-serif" font-size="15" font-weight="600" fill="#E2E8F0">Web Search</text>
-    <text x="20" y="58" font-family="'Inter', sans-serif" font-size="12" fill="#94A3B8">Brave · Google CSE · Serper</text>
-    <text x="20" y="78" font-family="'Inter', sans-serif" font-size="12" fill="#94A3B8">SearXNG · SearchAPI · Tavily</text>
-    <text x="20" y="98" font-family="'Inter', sans-serif" font-size="12" fill="#94A3B8">Exa · DuckDuckGo · HN · Reddit</text>
-    <text x="20" y="118" font-family="'Inter', sans-serif" font-size="12" fill="#94A3B8">Bluesky · GitHub</text>
+    <!-- Serper -->
+    <rect x="35" y="238" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="53" cy="254" r="5" fill="#2563EB"/>
+    <text x="69" y="258" font-size="13" font-weight="600" fill="#0F172A">Serper</text>
+    <text x="306" y="258" font-size="11" fill="#64748B" text-anchor="end">fallback</text>
+
+    <!-- SearXNG -->
+    <rect x="35" y="278" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="53" cy="294" r="5" fill="#2563EB"/>
+    <text x="69" y="298" font-size="13" font-weight="600" fill="#0F172A">SearXNG</text>
+    <text x="306" y="298" font-size="11" fill="#64748B" text-anchor="end">self-hosted</text>
+
+    <!-- DuckDuckGo + FREE badge -->
+    <rect x="35" y="318" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="53" cy="334" r="5" fill="#2563EB"/>
+    <text x="69" y="338" font-size="13" font-weight="600" fill="#0F172A">DuckDuckGo</text>
+    <rect x="270" y="326" width="38" height="16" rx="8" fill="#DCFCE7"/>
+    <text x="289" y="337" font-size="9" font-weight="700" fill="#16A34A" text-anchor="middle">FREE</text>
+
+    <!-- +7 more (tall pill, 2 lines) -->
+    <rect x="35" y="358" width="285" height="44" rx="18" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="53" cy="374" r="5" fill="#93C5FD"/>
+    <text x="69" y="378" font-size="13" font-weight="600" fill="#0F172A">+ 7 more providers</text>
+    <text x="69" y="394" font-size="10" fill="#94A3B8">Tavily · Exa · SearchAPI · +4 more</text>
   </g>
 
-  <!-- Column 2: Academic + Patents -->
-  <g transform="translate(560, 300)">
-    <rect width="220" height="130" rx="14" fill="#1E293B" stroke="#334155" stroke-width="1.5"/>
-    <circle cx="22" cy="26" r="6" fill="#22C55E"/>
-    <text x="38" y="31" font-family="'Inter', sans-serif" font-size="15" font-weight="600" fill="#E2E8F0">Academic &amp; Patents</text>
-    <text x="20" y="58" font-family="'Inter', sans-serif" font-size="12" fill="#94A3B8">OpenAlex · CrossRef · PubMed</text>
-    <text x="20" y="78" font-family="'Inter', sans-serif" font-size="12" fill="#94A3B8">Semantic Scholar · CORE</text>
-    <text x="20" y="98" font-family="'Inter', sans-serif" font-size="12" fill="#94A3B8">USPTO · EPO · Lens · SearchAPI</text>
+  <!-- ============ COLUMN 2: ACADEMIC ============ -->
+  <g font-family="'Inter', sans-serif" text-rendering="optimizeLegibility">
+    <rect x="340" y="112" width="285" height="36" rx="18" fill="#7C3AED"/>
+    <text x="482" y="135" font-size="14" font-weight="700" letter-spacing="0.5" fill="#FFFFFF" text-anchor="middle">ACADEMIC</text>
+
+    <rect x="340" y="158" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="358" cy="174" r="5" fill="#7C3AED"/>
+    <text x="374" y="178" font-size="13" font-weight="600" fill="#0F172A">OpenAlex</text>
+    <text x="611" y="178" font-size="11" fill="#64748B" text-anchor="end">250M+ works</text>
+
+    <rect x="340" y="198" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="358" cy="214" r="5" fill="#7C3AED"/>
+    <text x="374" y="218" font-size="13" font-weight="600" fill="#0F172A">Crossref</text>
+    <text x="611" y="218" font-size="11" fill="#64748B" text-anchor="end">DOI metadata</text>
+
+    <rect x="340" y="238" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="358" cy="254" r="5" fill="#7C3AED"/>
+    <text x="374" y="258" font-size="13" font-weight="600" fill="#0F172A">PubMed</text>
+    <text x="611" y="258" font-size="11" fill="#64748B" text-anchor="end">biomedical</text>
+
+    <rect x="340" y="278" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="358" cy="294" r="5" fill="#7C3AED"/>
+    <text x="374" y="298" font-size="13" font-weight="600" fill="#0F172A">Semantic Scholar</text>
+    <text x="611" y="298" font-size="11" fill="#64748B" text-anchor="end">citations</text>
+
+    <rect x="340" y="318" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="358" cy="334" r="5" fill="#7C3AED"/>
+    <text x="374" y="338" font-size="13" font-weight="600" fill="#0F172A">CORE</text>
+    <text x="611" y="338" font-size="11" fill="#64748B" text-anchor="end">open access</text>
+
+    <text x="342" y="373" font-size="10" font-weight="700" letter-spacing="1.2" fill="#94A3B8">CITATION INTEGRITY</text>
+
+    <rect x="340" y="386" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="358" cy="402" r="5" fill="#7C3AED"/>
+    <text x="374" y="406" font-size="13" font-weight="600" fill="#0F172A">Unpaywall</text>
+    <text x="611" y="406" font-size="11" fill="#64748B" text-anchor="end">open-access check</text>
+
+    <rect x="340" y="426" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="358" cy="442" r="5" fill="#7C3AED"/>
+    <text x="374" y="446" font-size="13" font-weight="600" fill="#0F172A">Retraction Watch</text>
+    <text x="611" y="446" font-size="11" fill="#64748B" text-anchor="end">via Crossref</text>
   </g>
 
-  <!-- Column 3: Legal, Filings, Econ, Clinical -->
-  <g transform="translate(560, 450)">
-    <rect width="220" height="130" rx="14" fill="#1E293B" stroke="#334155" stroke-width="1.5"/>
-    <circle cx="22" cy="26" r="6" fill="#22C55E"/>
-    <text x="38" y="31" font-family="'Inter', sans-serif" font-size="15" font-weight="600" fill="#E2E8F0">Filings, Legal &amp; Econ</text>
-    <text x="20" y="58" font-family="'Inter', sans-serif" font-size="12" fill="#94A3B8">SEC EDGAR · CourtListener</text>
-    <text x="20" y="78" font-family="'Inter', sans-serif" font-size="12" fill="#94A3B8">FRED · World Bank · OECD</text>
-    <text x="20" y="98" font-family="'Inter', sans-serif" font-size="12" fill="#94A3B8">Eurostat · ClinicalTrials.gov</text>
+  <!-- ============ COLUMN 3: PATENTS ============ -->
+  <g font-family="'Inter', sans-serif" text-rendering="optimizeLegibility">
+    <rect x="645" y="112" width="285" height="36" rx="18" fill="#D97706"/>
+    <text x="787" y="135" font-size="14" font-weight="700" letter-spacing="0.5" fill="#FFFFFF" text-anchor="middle">PATENTS</text>
+
+    <rect x="645" y="158" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="663" cy="174" r="5" fill="#D97706"/>
+    <text x="679" y="178" font-size="13" font-weight="600" fill="#0F172A">USPTO</text>
+    <text x="916" y="178" font-size="11" fill="#64748B" text-anchor="end">US patents</text>
+
+    <rect x="645" y="198" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="663" cy="214" r="5" fill="#D97706"/>
+    <text x="679" y="218" font-size="13" font-weight="600" fill="#0F172A">EPO</text>
+    <text x="916" y="218" font-size="11" fill="#64748B" text-anchor="end">European patents</text>
+
+    <rect x="645" y="238" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="663" cy="254" r="5" fill="#D97706"/>
+    <text x="679" y="258" font-size="13" font-weight="600" fill="#0F172A">Lens.org</text>
+    <text x="916" y="258" font-size="11" fill="#64748B" text-anchor="end">global patents</text>
+
+    <rect x="645" y="278" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="663" cy="294" r="5" fill="#D97706"/>
+    <text x="679" y="298" font-size="13" font-weight="600" fill="#0F172A">SearchAPI</text>
+    <text x="916" y="298" font-size="11" fill="#64748B" text-anchor="end">Google Patents</text>
+
+    <text x="647" y="345" font-size="10" font-weight="700" letter-spacing="1.2" fill="#94A3B8">GLOBAL COVERAGE</text>
+    <rect x="645" y="358" width="285" height="44" rx="18" fill="#FFFBEB" stroke="#FDE68A" stroke-width="1.5"/>
+    <text x="787" y="378" font-size="12" font-weight="600" fill="#92400E" text-anchor="middle">Searches all four in parallel</text>
+    <text x="787" y="394" font-size="10" fill="#B45309" text-anchor="middle">US · Europe · WIPO · 100+ countries</text>
   </g>
 
-  <!-- Column 4: Curated & Structured -->
-  <g transform="translate(850, 150)">
-    <rect width="220" height="130" rx="14" fill="#1E293B" stroke="#334155" stroke-width="1.5"/>
-    <circle cx="22" cy="26" r="6" fill="#22C55E"/>
-    <text x="38" y="31" font-family="'Inter', sans-serif" font-size="15" font-weight="600" fill="#E2E8F0">Curated &amp; Structured</text>
-    <text x="20" y="58" font-family="'Inter', sans-serif" font-size="12" fill="#94A3B8">Awesome-list discovery</text>
-    <text x="20" y="78" font-family="'Inter', sans-serif" font-size="12" fill="#94A3B8">Local business search</text>
-    <text x="20" y="98" font-family="'Inter', sans-serif" font-size="12" fill="#94A3B8">Page context · Monarch biomed</text>
-  </g>
+  <!-- ============ COLUMN 4: SPECIALIZED ============ -->
+  <g font-family="'Inter', sans-serif" text-rendering="optimizeLegibility">
+    <rect x="950" y="112" width="285" height="36" rx="18" fill="#16A34A"/>
+    <text x="1092" y="135" font-size="14" font-weight="700" letter-spacing="0.5" fill="#FFFFFF" text-anchor="middle">SPECIALIZED</text>
 
-  <!-- Column 5: Search Lenses -->
-  <g transform="translate(850, 300)">
-    <rect width="220" height="130" rx="14" fill="#1E293B" stroke="url(#g1)" stroke-width="1.5"/>
-    <circle cx="22" cy="26" r="6" fill="#22F0E8"/>
-    <text x="38" y="31" font-family="'Inter', sans-serif" font-size="15" font-weight="600" fill="#22F0E8">Search Lenses</text>
-    <text x="20" y="58" font-family="'Inter', sans-serif" font-size="12" fill="#94A3B8">Restrict any provider above</text>
-    <text x="20" y="78" font-family="'Inter', sans-serif" font-size="12" fill="#94A3B8">to a curated domain allowlist</text>
-    <text x="20" y="98" font-family="'Inter', sans-serif" font-size="12" fill="#94A3B8">medical, legal, academic...</text>
-  </g>
+    <text x="952" y="173" font-size="10" font-weight="700" letter-spacing="1.2" fill="#94A3B8">LEGAL</text>
+    <rect x="950" y="186" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="968" cy="202" r="5" fill="#16A34A"/>
+    <text x="984" y="206" font-size="13" font-weight="600" fill="#0F172A">CourtListener</text>
+    <text x="1221" y="206" font-size="11" fill="#64748B" text-anchor="end">case law</text>
 
-  <!-- Column 6: Citation Enrichment -->
-  <g transform="translate(850, 450)">
-    <rect width="220" height="130" rx="14" fill="#1E293B" stroke="#334155" stroke-width="1.5"/>
-    <circle cx="22" cy="26" r="6" fill="#22C55E"/>
-    <text x="38" y="31" font-family="'Inter', sans-serif" font-size="15" font-weight="600" fill="#E2E8F0">Citation Enrichment</text>
-    <text x="20" y="58" font-family="'Inter', sans-serif" font-size="12" fill="#94A3B8">DOI existence checks</text>
-    <text x="20" y="78" font-family="'Inter', sans-serif" font-size="12" fill="#94A3B8">Open-access resolution</text>
-    <text x="20" y="98" font-family="'Inter', sans-serif" font-size="12" fill="#94A3B8">Retraction Watch status</text>
-  </g>
+    <text x="952" y="241" font-size="10" font-weight="700" letter-spacing="1.2" fill="#94A3B8">FINANCIAL</text>
+    <rect x="950" y="254" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="968" cy="270" r="5" fill="#16A34A"/>
+    <text x="984" y="274" font-size="13" font-weight="600" fill="#0F172A">SEC EDGAR</text>
+    <text x="1221" y="274" font-size="11" fill="#64748B" text-anchor="end">filings</text>
 
-  <!-- Arrows: MCP → domain columns -->
-  <path d="M490 340 L555 215" stroke="#22F0E8" stroke-width="2"/>
-  <path d="M490 365 L555 365" stroke="#22F0E8" stroke-width="2"/>
-  <path d="M490 390 L555 515" stroke="#64748B" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <text x="952" y="309" font-size="10" font-weight="700" letter-spacing="1.2" fill="#94A3B8">ECONOMIC</text>
+    <rect x="950" y="322" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="968" cy="338" r="5" fill="#16A34A"/>
+    <text x="984" y="342" font-size="13" font-weight="600" fill="#0F172A">FRED · World Bank</text>
+    <text x="1221" y="342" font-size="11" fill="#64748B" text-anchor="end">+ OECD, Eurostat</text>
+
+    <text x="952" y="377" font-size="10" font-weight="700" letter-spacing="1.2" fill="#94A3B8">CLINICAL</text>
+    <rect x="950" y="390" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="968" cy="406" r="5" fill="#16A34A"/>
+    <text x="984" y="410" font-size="13" font-weight="600" fill="#0F172A">ClinicalTrials.gov</text>
+    <text x="1221" y="410" font-size="11" fill="#64748B" text-anchor="end">trial registry</text>
+
+    <text x="952" y="445" font-size="10" font-weight="700" letter-spacing="1.2" fill="#94A3B8">LOCAL SEARCH</text>
+    <rect x="950" y="458" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="968" cy="474" r="5" fill="#16A34A"/>
+    <text x="984" y="478" font-size="13" font-weight="600" fill="#0F172A">Brave Local</text>
+    <text x="1221" y="478" font-size="11" fill="#64748B" text-anchor="end">business search</text>
+
+    <text x="952" y="513" font-size="10" font-weight="700" letter-spacing="1.2" fill="#94A3B8">DISCOVERY</text>
+    <rect x="950" y="526" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="968" cy="542" r="5" fill="#16A34A"/>
+    <text x="984" y="546" font-size="13" font-weight="600" fill="#0F172A">Ecosystems · Monarch</text>
+    <text x="1221" y="546" font-size="11" fill="#64748B" text-anchor="end">lists · biomedical</text>
+  </g>
 
   <!-- Bottom feature callouts -->
   <g font-family="'Inter', sans-serif" text-rendering="optimizeLegibility">
-    <rect x="140" y="620" width="240" height="44" rx="22" fill="#1E293B"/>
-    <text x="260" y="647" font-size="14" font-weight="500" fill="#22F0E8" text-anchor="middle">No single point of failure</text>
+    <rect x="250" y="585" width="240" height="40" rx="20" fill="#EFF6FF"/>
+    <text x="370" y="610" font-size="14" font-weight="600" fill="#2563EB" text-anchor="middle">No single point of failure</text>
 
-    <rect x="410" y="620" width="260" height="44" rx="22" fill="#1E293B"/>
-    <text x="540" y="647" font-size="14" font-weight="500" fill="#22F0E8" text-anchor="middle">Switches providers instantly</text>
+    <rect x="510" y="585" width="270" height="40" rx="20" fill="#F0FDF4"/>
+    <text x="645" y="610" font-size="14" font-weight="600" fill="#16A34A" text-anchor="middle">Switches providers instantly</text>
 
-    <rect x="700" y="620" width="230" height="44" rx="22" fill="#1E293B"/>
-    <text x="815" y="647" font-size="14" font-weight="500" fill="#22F0E8" text-anchor="middle">You're never locked in</text>
+    <rect x="800" y="585" width="220" height="40" rx="20" fill="#F8FAFC"/>
+    <text x="910" y="610" font-size="14" font-weight="600" fill="#475569" text-anchor="middle">You're never locked in</text>
+  </g>
 
-    <rect x="960" y="620" width="180" height="44" rx="22" fill="#1E293B"/>
-    <text x="1050" y="647" font-size="14" font-weight="500" fill="#22F0E8" text-anchor="middle">One config, six domains</text>
+  <!-- Deployment mode badges -->
+  <g font-family="'Inter', sans-serif" text-rendering="optimizeLegibility">
+    <rect x="265" y="645" width="300" height="36" rx="18" fill="#F1F5F9"/>
+    <text x="415" y="668" font-size="13" font-weight="500" fill="#334155" text-anchor="middle">STDIO — Local install · zero config</text>
+
+    <rect x="585" y="645" width="420" height="36" rx="18" fill="#F1F5F9"/>
+    <text x="795" y="668" font-size="13" font-weight="500" fill="#334155" text-anchor="middle">HTTP · Docker — Multi-tenant · secure corporate envs</text>
   </g>
 
   <!-- Bottom note -->
-  <text x="635" y="715"
-        font-family="'Inter', sans-serif" font-size="15" fill="#475569"
-        text-anchor="middle">Set it up once. Your research keeps working no matter what.</text>
+  <text x="635" y="725"
+        font-family="'Inter', sans-serif" font-size="15" fill="#64748B"
+        text-anchor="middle" text-rendering="optimizeLegibility">Set it up once. Your research keeps working across every domain, no matter what.</text>
 </svg>
