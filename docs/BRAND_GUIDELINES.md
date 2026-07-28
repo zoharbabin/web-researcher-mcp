@@ -2,6 +2,8 @@
 
 How to represent web-researcher-mcp visually and verbally. Follow these guidelines when contributing to docs, creating assets, or writing about the project.
 
+This covers voice, logo, color tokens, and typography. For the visual system governing marketing/info graphics (`assets/ph-gallery-*.svg`, layout patterns, component rules), see [Design Guidelines](DESIGN.md).
+
 ---
 
 ## Voice & Messaging
@@ -72,7 +74,8 @@ The logo is an abstract geometric mark — a faceted prism/lens shape in indigo 
 ### Rules
 
 - The mark uses at most 2 colors (primary + accent, or single color)
-- Design dark-mode first — developers and researchers both live in dark themes
+- The logo mark's primary form is the dark rounded-square tile (`#0F172A` background) — this is the icon's identity, distinct from the canvas rule for marketing graphics below
+- Marketing and info graphics (`ph-gallery-*`, `social-preview`) use a **light canvas** as the default — see [Design Guidelines](DESIGN.md#canvas) for the full rule and its rationale
 - The flat single-color version is the canonical form; gradients are decorative only
 - The logo must be fully recognizable in monochrome
 
