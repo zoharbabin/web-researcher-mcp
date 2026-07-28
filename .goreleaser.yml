@@ -322,23 +322,23 @@ changelog:
   use: github
   groups:
     - title: "New Features"
-      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      regexp: '^.*?feat(\([-[:word:], ]+\))??!?:.+$'
       order: 0
     - title: "Bug Fixes"
-      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      regexp: '^.*?fix(\([-[:word:], ]+\))??!?:.+$'
       order: 1
     - title: "Performance"
-      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      regexp: '^.*?perf(\([-[:word:], ]+\))??!?:.+$'
       order: 2
     - title: "Other"
       order: 999
   filters:
     exclude:
-      - "^docs:"
-      - "^test:"
-      - "^ci:"
-      - "^chore:"
-      - "^style:"
+      - "^docs(\\(.+\\))?:"
+      - "^test(\\(.+\\))?:"
+      - "^ci(\\(.+\\))?:"
+      - "^chore(\\(.+\\))?:"
+      - "^style(\\(.+\\))?:"
 
 release:
   github:
