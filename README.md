@@ -155,6 +155,8 @@ Works with Claude, Claude Desktop, Cursor, and any AI assistant that supports to
 
 ## What your AI can do with this
 
+![37 tools organized by outcome — catch fake citations, cross-check models, track topics over time, search filings and case law](assets/ph-gallery-4-tools.png)
+
 | Tool | What it does |
 |------|-------------|
 | `web_search` | Search the web — optionally restricted to only the sources you trust via lenses |
