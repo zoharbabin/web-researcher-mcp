@@ -163,15 +163,18 @@ Works with Claude, Claude Desktop, Cursor, and any AI assistant that supports to
 | `image_search` | Find images by size, type, color, or format |
 | `news_search` | Search recent news with date controls and source filtering |
 | `academic_search` | Find real papers with real DOIs — authors, citation counts, open-access links |
+| `paper_fulltext` | Fetch a paper's full text in one call from its DOI, Semantic Scholar ID, or URL — no need to chain `academic_search` then `scrape_page` |
 | `citation_graph` | Walk a paper's citation neighborhood — works it cites and works that cite it, with intent/influence signals |
 | `patent_search` | Search patent offices (US, Europe, international) with classification codes |
 | `filing_search` | Search SEC EDGAR for US public-company filings (10-K, 10-Q, 8-K, …) — or pull structured XBRL company facts |
 | `legal_search` | Search US court opinions and dockets via CourtListener — real cases with real citations |
 | `econ_search` | Look up economic data — World Bank global development indicators, OECD economic indicators, Eurostat European statistics (all keyless), and FRED US macro series (GDP, CPI, unemployment, rates; requires FRED_API_KEY) |
 | `clinical_search` | Search ClinicalTrials.gov — clinical-trial registrations with status, phase, sponsor, and whether results are posted (discovery, not medical advice) |
+| `monarch_search` | Query the Monarch Initiative biomedical knowledge graph — rank diseases and genes by phenotype similarity, look up disease/gene/phenotype entities, traverse gene-disease-phenotype associations |
 | `awesome_list_search` | Search the ecosyste.ms Awesome API for community-curated "awesome-*" lists on a GitHub topic — structured, filterable coverage (stars, curated-entry count, topics) beyond free-text search |
 | `local_search` | Search for physical places (restaurants, shops, services, points of interest) by local intent query — structured POI details and descriptions. Requires `BRAVE_API_KEY` |
 | `brand_research` | Research a company's complete brand identity — colors (hex), logos, typography, tone of voice, and social handles — from any domain or company name. Returns structured JSON for AI content generation. No API key required; BrandFetch key optional for richer data |
+| `company_recon` | OSINT company reconnaissance — Certificate Transparency log SANs, Wayback Machine historical URL inventory, derived subdomains, and a web-search company summary. Each phase fails soft and is independently selectable |
 | `verify_citation` | Check a citation before you rely on it — does it exist, match a real record, and is it retracted or a dead link? Evidence, not a verdict |
 | `audit_bibliography` | Audit a whole reference list in one pass — paste a CSL-JSON/RIS/BibTeX file (or a session) and get per-entry + corpus-level flags for retracted, dead-link, and unverifiable citations |
 | `verify_recommendation` | Audit an AI-generated recommendation list (listicle, product ranking) for self-promotion, author conflicts of interest, domain reputation, and dead links — catches GEO-gamed picks. Evidence, not a verdict |
@@ -180,8 +183,9 @@ Works with Claude, Claude Desktop, Cursor, and any AI assistant that supports to
 | `get_research_session` | Recover a research session after context loss — picks up right where you left off |
 | `research_export` | Export a research session as a shareable report (markdown or JSON), with full per-step provenance |
 | `format_bibliography` | Turn collected sources into a formatted bibliography — APA, MLA, BibTeX, RIS, or CSL-JSON (Zotero/EndNote/Mendeley-ready) |
+| `research_panel` | Ask the same question to a panel of independently configured LLMs and compare answers — consensus, contradictions, and model-unique points, computed deterministically, never smoothed over by an arbiter model |
 
-Most tools above are always available. A few activate only when the right provider or config is present: `citation_graph` requires a citation-capable academic provider (OpenAlex or Semantic Scholar); `filing_search` requires `EDGAR_CONTACT_EMAIL`; `local_search` requires `BRAVE_API_KEY`. Operators can also enable opt-in, consent-gated tools (per-user analytics, long-term memory, shared workspaces) that appear only when their feature is turned on — see [`docs/TOOLS.md`](docs/TOOLS.md) for the authoritative, CI-verified tool list and full schemas.
+Most tools above are always available. A few activate only when the right provider or config is present: `citation_graph` and `research_panel` require at least one configured backing provider; `filing_search` requires `EDGAR_CONTACT_EMAIL`; `local_search` requires `BRAVE_API_KEY`; `syllabus_search` and `gag_order_search` (used by the curriculum-research template below) require their own provider credentials. Operators can also enable opt-in, consent-gated tools (per-user analytics, long-term memory, shared workspaces, saved-query monitoring) that appear only when their feature is turned on — see [`docs/TOOLS.md`](docs/TOOLS.md) for the authoritative, CI-verified tool list and full schemas.
 
 ### Ready-made research templates
 
@@ -364,6 +368,9 @@ Set `SEARCH_PROVIDER=<name>` and supply that provider's key. Every provider work
 | Tavily | `tavily` | `TAVILY_API_KEY` | [app.tavily.com](https://app.tavily.com/) |
 | Exa | `exa` | `EXA_API_KEY` | [dashboard.exa.ai](https://dashboard.exa.ai/) |
 | Hacker News | `hackernews` | none | Built in — zero config (HN Algolia index) |
+| Reddit | `reddit` | none | Built in — zero config (public RSS) |
+| Bluesky | `bluesky` | none | Built in — zero config (public AT Protocol API) |
+| GitHub | `github` | none (`GITHUB_TOKEN` optional, raises rate limit) | Built in — zero config (public REST Search API) |
 
 > Each provider has its own free tier, signup flow, and capability mix (images, news, freshness). See **[docs/PROVIDERS.md](docs/PROVIDERS.md)** for a full comparison (index classification, capability matrix, quick-pick guide) and **[docs/API_SETUP.md](docs/API_SETUP.md)** for step-by-step key setup. Set up more than one and the server fails over automatically — see [Search Providers](#search-providers).
 
@@ -427,6 +434,9 @@ You choose which search engine powers your research. All of them work with lense
 | **Tavily** | Yes | — | Yes | AI-agent search; clean, LLM-ready content |
 | **Exa** | Yes | — | Yes | Neural/semantic search; also backs `academic_search` and the optional paid scrape tier |
 | **Hacker News** | HN only | — | Yes | Zero-config (HN Algolia index); searches HN threads, not the full web |
+| **Reddit** | Reddit only | — | Yes | Zero-config (public RSS); searches Reddit posts, not the full web |
+| **Bluesky** | Bluesky only | — | — | Zero-config (public AT Protocol API); searches Bluesky posts, not the full web |
+| **GitHub** | GitHub only | — | Yes | Zero-config (public REST Search API); searches issues/PRs, not the full web |
 
 ### Multiple Providers (recommended)
 
@@ -498,7 +508,9 @@ Search lenses let you control which websites your AI is allowed to search. Inste
 | `docs` | Official documentation and API references only |
 | `academic` | Preprint servers, repositories, open-access journals |
 | `academic-extended` | Preprint servers, OA aggregators, and repositories beyond core journal indexes |
+| `biomed` | Rare-disease and biomedical knowledge-graph sources — ontology portals, gene-disease databases, curated rare-disease registries |
 | `clinical` | Clinical trials, drug safety, evidence-based medicine |
+| `curriculum` | Academic curriculum data, institutional free speech climate, and global education statistics |
 | `security` | CVEs, advisories, vulnerability research |
 | `journalism` | Public records, corporate filings, FOIA |
 | `programming` | Code docs, tutorials, Q&A |
