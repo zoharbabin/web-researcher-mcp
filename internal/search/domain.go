@@ -145,6 +145,17 @@ type PaperFetcher interface {
 	FetchPaper(ctx context.Context, id string) (*AcademicResult, error)
 }
 
+// FullTextFetcher is an optional capability for providers that return the full
+// plain-text body of a paper by provider-internal ID (e.g. ScholarAPI's
+// /text/{id}, #266). Type-assert at the tool layer when full-text content is
+// needed without scraping the publisher page. FetchText returns ("", nil) when
+// the ID has no record (not an error); FetchTexts omits IDs with no text from
+// the returned map rather than failing the whole batch.
+type FullTextFetcher interface {
+	FetchText(ctx context.Context, id string) (string, error)
+	FetchTexts(ctx context.Context, ids []string) (map[string]string, error)
+}
+
 // AcademicSearchParams defines parameters for scholarly paper search.
 type AcademicSearchParams struct {
 	Query      string
@@ -192,6 +203,14 @@ type AcademicResult struct {
 	// only when AcademicSearchParams.FullText is true and a PMCID is available.
 	// Empty when the provider does not support full-text or the article is not in PMC.
 	FullText string `json:"fullText,omitempty"`
+	// HasText indicates the provider can supply the full plain-text body via
+	// FullTextFetcher (#266). ScholarAPI-only signal — omitted for every other
+	// provider, which never populate it.
+	HasText bool `json:"hasText,omitempty"`
+	// HasPDF indicates the provider has a raw PDF available for this result.
+	// ScholarAPI-only signal — not a URL, just an availability flag; fetching
+	// the PDF itself is out of scope (no provider method for it).
+	HasPDF bool `json:"hasPdf,omitempty"`
 }
 
 // RetractionStatus is the operator/model-facing integrity signal for a scholarly
@@ -229,15 +248,25 @@ type AcademicProviderConfig struct {
 	PubMedAPIKey          string // PubMed E-utilities — optional; keyless by default, a key raises the rate
 	PubMedEmail           string // PubMed — optional NCBI contact (tool/email params), recommended not required
 	COREAPIKey            string // CORE.ac.uk — optional; keyless by default at a lower shared rate, a key raises the rate
+	// ScholarAPIKey — scholarapi.net, a paid full-text academic search API
+	// (#266). Deliberately excluded from SupportedAcademicProviders (see below);
+	// reachable only via explicit provider=scholarapi.
+	ScholarAPIKey string
 }
 
-// SupportedAcademicProviders lists all academic provider names. openalex and
-// crossref are authoritative bibliographic databases; pubmed is the biomedical
-// authority (NCBI E-utilities, keyless); semanticscholar adds AI-enrichment
-// (TLDR, citation intent/influence); core is the largest OA full-text
-// aggregator (keyless); exa is a neural-web alternate (research-paper
-// category) — listed last so it sorts after them when no explicit routing is
-// configured.
+// SupportedAcademicProviders lists all academic provider names eligible for
+// auto-routing (the Router's fallback ladder and academic_search's Strategy 3
+// direct-iteration). openalex and crossref are authoritative bibliographic
+// databases; pubmed is the biomedical authority (NCBI E-utilities, keyless);
+// semanticscholar adds AI-enrichment (TLDR, citation intent/influence); core is
+// the largest OA full-text aggregator (keyless); exa is a neural-web alternate
+// (research-paper category) — listed last so it sorts after them when no
+// explicit routing is configured.
+//
+// scholarapi is deliberately NOT listed here (#266): it is a 10-credit-per-call
+// metered API, and auto-routing would burn credits on every fallback pass. It
+// is constructed by AvailableAcademicProviders below (so provider=scholarapi
+// resolves) but never appears in this slice, so it is never tried automatically.
 var SupportedAcademicProviders = []string{"openalex", "crossref", "pubmed", "semanticscholar", "core", "exa"}
 
 // NewAcademicProviderByName creates an academic provider by name if configured.
@@ -265,14 +294,31 @@ func NewAcademicProviderByName(name string, cfg AcademicProviderConfig, deps Dep
 		if cfg.ExaAPIKey != "" {
 			return NewExaProvider(cfg.ExaAPIKey, deps)
 		}
+	case "scholarapi":
+		if cfg.ScholarAPIKey != "" {
+			return NewScholarAPIProvider(cfg.ScholarAPIKey, deps)
+		}
 	}
 	return nil
 }
 
-// AvailableAcademicProviders returns all academic providers that can be constructed.
+// AcademicProvidersExplicitOnly lists provider names that AvailableAcademicProviders
+// constructs (so they land in the returned map and are reachable via a direct
+// provider=<name> request) but that SupportedAcademicProviders excludes from
+// auto-routing. scholarapi is the only member today (#266).
+var AcademicProvidersExplicitOnly = []string{"scholarapi"}
+
+// AvailableAcademicProviders returns all academic providers that can be
+// constructed: every auto-routed name in SupportedAcademicProviders, plus every
+// explicit-only name in AcademicProvidersExplicitOnly. Explicit-only providers
+// still land in the map (so a direct provider=<name> lookup finds them and a
+// Router built from this map can serve them via AcademicProviderByName); they
+// are simply never selected by the Router's or academic_search's automatic
+// fallback ladders, which iterate SupportedAcademicProviders only.
 func AvailableAcademicProviders(cfg AcademicProviderConfig, deps Deps) map[string]AcademicProvider {
 	providers := make(map[string]AcademicProvider)
-	for _, name := range SupportedAcademicProviders {
+	names := append(append([]string{}, SupportedAcademicProviders...), AcademicProvidersExplicitOnly...)
+	for _, name := range names {
 		provDeps := Deps{
 			HTTPClient: deps.HTTPClient,
 			Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),

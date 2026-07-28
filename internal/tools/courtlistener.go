@@ -49,7 +49,7 @@ func registerLegalSearch(srv *mcp.Server, deps Dependencies) {
 			return errResult, nil, nil
 		}
 		if searcher == nil {
-			return synthesisUnconfiguredError("legal_search", search.SupportedCaseProviders), nil, nil
+			return unconfiguredProviderError("legal_search", search.SupportedCaseProviders), nil, nil
 		}
 
 		cacheKey := searchCacheKey("legal", input.Query, input.Jurisdiction, input.DateFrom, input.DateTo, num, providerName)

@@ -60,7 +60,7 @@ func registerCitationGraph(srv *mcp.Server, deps Dependencies) {
 			return errResult, nil, nil
 		}
 		if searcher == nil {
-			return synthesisUnconfiguredError("citation_graph", []string{"semanticscholar", "openalex"}), nil, nil
+			return unconfiguredProviderError("citation_graph", []string{"semanticscholar", "openalex"}), nil, nil
 		}
 
 		cacheKey := searchCacheKey("citation_graph", input.Paper, direction, num, input.InfluentialOnly, providerName)

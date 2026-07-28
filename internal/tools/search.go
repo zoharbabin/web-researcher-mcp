@@ -595,8 +595,6 @@ func allSupportedProviders() []string {
 		search.SupportedProviders,
 		search.SupportedPatentProviders,
 		search.SupportedAcademicProviders,
-		search.SupportedAnswerProviders,
-		search.SupportedStructuredProviders,
 		search.SupportedLocalProviders,
 		search.SupportedContextProviders,
 	} {

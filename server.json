@@ -69,7 +69,7 @@
         },
         {
           "name": "EXA_API_KEY",
-          "description": "Exa API key (also enables the answer and structured_search tools)",
+          "description": "Exa API key (neural/semantic web search provider)",
           "isRequired": false,
           "isSecret": true
         },

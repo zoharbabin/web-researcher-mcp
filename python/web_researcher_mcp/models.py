@@ -112,44 +112,6 @@ class Analytics:
         )
 
 @dataclass
-class AnswerCitation:
-    publishedDate: Optional[str] = None
-    title: Optional[str] = None
-    url: Optional[str] = None
-
-    @classmethod
-    def from_dict(cls, d: dict[str, Any] | None) -> "AnswerCitation | None":
-        if d is None:
-            return None
-        return cls(
-            publishedDate=d.get('publishedDate'),
-            title=d.get('title'),
-            url=d.get('url'),
-        )
-
-@dataclass
-class AnswerResponse:
-    answer: Optional[str] = None
-    citations: list[AnswerCitation] = field(default_factory=list)
-    costUsd: Optional[float] = None
-    hints: dict[str, Any] = field(default_factory=dict)
-    provider: Optional[str] = None
-    trust: Optional[str] = None
-
-    @classmethod
-    def from_dict(cls, d: dict[str, Any] | None) -> "AnswerResponse | None":
-        if d is None:
-            return None
-        return cls(
-            answer=d.get('answer'),
-            citations=[AnswerCitation.from_dict(i) for i in (d.get('citations') or [])],
-            costUsd=d.get('costUsd'),
-            hints=dict(d.get('hints') or {}),
-            provider=d.get('provider'),
-            trust=d.get('trust'),
-        )
-
-@dataclass
 class ArchiveSourceResponse:
     archivedAt: Optional[str] = None
     captured: Optional[bool] = None
@@ -733,6 +695,26 @@ class Dark:
             height=d.get('height'),
             url=d.get('url'),
             width=d.get('width'),
+        )
+
+@dataclass
+class Divergence:
+    confidence: Optional[str] = None
+    confidence_rationale: Optional[str] = None
+    consensus_points: list[str] = field(default_factory=list)
+    contradictions: list[ResearchPanelContradiction] = field(default_factory=list)
+    unique_to_model: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "Divergence | None":
+        if d is None:
+            return None
+        return cls(
+            confidence=d.get('confidence'),
+            confidence_rationale=d.get('confidence_rationale'),
+            consensus_points=list(d.get('consensus_points') or []),
+            contradictions=[ResearchPanelContradiction.from_dict(i) for i in (d.get('contradictions') or [])],
+            unique_to_model=dict(d.get('unique_to_model') or {}),
         )
 
 @dataclass
@@ -1420,6 +1402,26 @@ class MemorySaveResponse:
         )
 
 @dataclass
+class Meta:
+    cached: Optional[bool] = None
+    models_failed: Optional[int] = None
+    models_queried: Optional[int] = None
+    models_succeeded: Optional[int] = None
+    total_tokens_used: Optional[int] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "Meta | None":
+        if d is None:
+            return None
+        return cls(
+            cached=d.get('cached'),
+            models_failed=d.get('models_failed'),
+            models_queried=d.get('models_queried'),
+            models_succeeded=d.get('models_succeeded'),
+            total_tokens_used=d.get('total_tokens_used'),
+        )
+
+@dataclass
 class Metadata:
     author: Optional[str] = None
     date: Optional[str] = None
@@ -1497,6 +1499,74 @@ class MonarchSearchResult:
             subjectId=d.get('subjectId'),
             subjectLabel=d.get('subjectLabel'),
             text=d.get('text'),
+        )
+
+@dataclass
+class MonitorQueryCheckNewresult:
+    publishedAt: Optional[str] = None
+    snippet: Optional[str] = None
+    title: Optional[str] = None
+    url: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "MonitorQueryCheckNewresult | None":
+        if d is None:
+            return None
+        return cls(
+            publishedAt=d.get('publishedAt'),
+            snippet=d.get('snippet'),
+            title=d.get('title'),
+            url=d.get('url'),
+        )
+
+@dataclass
+class MonitorQueryCheckResponse:
+    lastRunAt: Optional[str] = None
+    newCount: Optional[int] = None
+    newResults: list[MonitorQueryCheckNewresult] = field(default_factory=list)
+    provider: Optional[str] = None
+    query: Optional[str] = None
+    reason: Optional[str] = None
+    status: Optional[str] = None
+    trust: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "MonitorQueryCheckResponse | None":
+        if d is None:
+            return None
+        return cls(
+            lastRunAt=d.get('lastRunAt'),
+            newCount=d.get('newCount'),
+            newResults=[MonitorQueryCheckNewresult.from_dict(i) for i in (d.get('newResults') or [])],
+            provider=d.get('provider'),
+            query=d.get('query'),
+            reason=d.get('reason'),
+            status=d.get('status'),
+            trust=d.get('trust'),
+        )
+
+@dataclass
+class MonitorQuerySaveResponse:
+    provider: Optional[str] = None
+    query: Optional[str] = None
+    reason: Optional[str] = None
+    savedAt: Optional[str] = None
+    seenCount: Optional[int] = None
+    status: Optional[str] = None
+    ttlDays: Optional[int] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "MonitorQuerySaveResponse | None":
+        if d is None:
+            return None
+        return cls(
+            provider=d.get('provider'),
+            query=d.get('query'),
+            reason=d.get('reason'),
+            savedAt=d.get('savedAt'),
+            seenCount=d.get('seenCount'),
+            status=d.get('status'),
+            ttlDays=d.get('ttlDays'),
         )
 
 @dataclass
@@ -1682,6 +1752,62 @@ class ResearchExportResponse:
             startedAt=d.get('startedAt'),
             stepCount=d.get('stepCount'),
             tenantId=d.get('tenantId'),
+            trust=d.get('trust'),
+        )
+
+@dataclass
+class ResearchPanelContradiction:
+    claim: Optional[str] = None
+    positions: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "ResearchPanelContradiction | None":
+        if d is None:
+            return None
+        return cls(
+            claim=d.get('claim'),
+            positions=dict(d.get('positions') or {}),
+        )
+
+@dataclass
+class ResearchPanelPanel:
+    error: Optional[str] = None
+    latency_ms: Optional[int] = None
+    model_id: Optional[str] = None
+    provider: Optional[str] = None
+    response: Optional[str] = None
+    tokens_used: Optional[int] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "ResearchPanelPanel | None":
+        if d is None:
+            return None
+        return cls(
+            error=d.get('error'),
+            latency_ms=d.get('latency_ms'),
+            model_id=d.get('model_id'),
+            provider=d.get('provider'),
+            response=d.get('response'),
+            tokens_used=d.get('tokens_used'),
+        )
+
+@dataclass
+class ResearchPanelResponse:
+    _meta: Optional[Meta] = None
+    divergence: Optional[Divergence] = None
+    panel: list[ResearchPanelPanel] = field(default_factory=list)
+    question: Optional[str] = None
+    trust: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "ResearchPanelResponse | None":
+        if d is None:
+            return None
+        return cls(
+            _meta=Meta.from_dict(d.get('_meta')) if d.get('_meta') else None,
+            divergence=Divergence.from_dict(d.get('divergence')) if d.get('divergence') else None,
+            panel=[ResearchPanelPanel.from_dict(i) for i in (d.get('panel') or [])],
+            question=d.get('question'),
             trust=d.get('trust'),
         )
 
@@ -2092,56 +2218,6 @@ class StructuredData:
         )
 
 @dataclass
-class StructuredSearchResponse:
-    category: Optional[str] = None
-    costUsd: Optional[float] = None
-    hints: dict[str, Any] = field(default_factory=dict)
-    provider: Optional[str] = None
-    query: Optional[str] = None
-    resultCount: Optional[int] = None
-    results: list[StructuredSearchResult] = field(default_factory=list)
-    trust: Optional[str] = None
-
-    @classmethod
-    def from_dict(cls, d: dict[str, Any] | None) -> "StructuredSearchResponse | None":
-        if d is None:
-            return None
-        return cls(
-            category=d.get('category'),
-            costUsd=d.get('costUsd'),
-            hints=dict(d.get('hints') or {}),
-            provider=d.get('provider'),
-            query=d.get('query'),
-            resultCount=d.get('resultCount'),
-            results=[StructuredSearchResult.from_dict(i) for i in (d.get('results') or [])],
-            trust=d.get('trust'),
-        )
-
-@dataclass
-class StructuredSearchResult:
-    author: Optional[str] = None
-    entities: list[Any] = field(default_factory=list)
-    highlights: list[str] = field(default_factory=list)
-    publishedDate: Optional[str] = None
-    summary: Optional[str] = None
-    title: Optional[str] = None
-    url: Optional[str] = None
-
-    @classmethod
-    def from_dict(cls, d: dict[str, Any] | None) -> "StructuredSearchResult | None":
-        if d is None:
-            return None
-        return cls(
-            author=d.get('author'),
-            entities=list(d.get('entities') or []),
-            highlights=list(d.get('highlights') or []),
-            publishedDate=d.get('publishedDate'),
-            summary=d.get('summary'),
-            title=d.get('title'),
-            url=d.get('url'),
-        )
-
-@dataclass
 class Summary:
     processingTimeMs: Optional[int] = None
     sparseSources: Optional[int] = None
@@ -2357,6 +2433,7 @@ class VerifyRecommendationCorroborationsearch:
 class VerifyRecommendationRecommendation:
     author: Optional[str] = None
     conflictOfInterest: Optional[VerifyRecommendationConflictOfInterest] = None
+    corporateOwnershipSignal: dict[str, Any] = field(default_factory=dict)
     corroborationSearches: list[VerifyRecommendationCorroborationsearch] = field(default_factory=list)
     domainReputation: dict[str, Any] = field(default_factory=dict)
     flags: list[str] = field(default_factory=list)
@@ -2374,6 +2451,7 @@ class VerifyRecommendationRecommendation:
         return cls(
             author=d.get('author'),
             conflictOfInterest=VerifyRecommendationConflictOfInterest.from_dict(d.get('conflictOfInterest')) if d.get('conflictOfInterest') else None,
+            corporateOwnershipSignal=dict(d.get('corporateOwnershipSignal') or {}),
             corroborationSearches=[VerifyRecommendationCorroborationsearch.from_dict(i) for i in (d.get('corroborationSearches') or [])],
             domainReputation=dict(d.get('domainReputation') or {}),
             flags=list(d.get('flags') or []),

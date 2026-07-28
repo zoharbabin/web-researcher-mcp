@@ -11,6 +11,7 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 	"github.com/zoharbabin/web-researcher-mcp/internal/memory"
 	"github.com/zoharbabin/web-researcher-mcp/internal/metrics"
+	"github.com/zoharbabin/web-researcher-mcp/internal/persist"
 	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
@@ -52,11 +53,6 @@ type Dependencies struct {
 	// scraping on failure or empty result. Requires a Brave Data for AI plan.
 	// Empty ⇒ the ContextSearcher path is never attempted.
 	ContextProviders map[string]search.ContextProvider
-	// AnswerProviders / StructuredProviders back the provider-independent
-	// `answer` and `structured_search` tools. Any provider implementing the
-	// capability appears here (Exa today). Empty ⇒ the tool is not registered.
-	AnswerProviders     map[string]search.AnswerProvider
-	StructuredProviders map[string]search.StructuredProvider
 	// OAResolver enriches DOI-bearing academic_search results with open-access
 	// PDF links (Unpaywall, #45). nil ⇒ enrichment is skipped (no-op). Best-effort:
 	// never fails a search.
@@ -71,6 +67,12 @@ type Dependencies struct {
 	// as existing while a fabricated DOI reads as not-found. nil ⇒ skipped (no-op).
 	// Best-effort: a transport failure leaves existence unknown, never asserts it.
 	DOIRegistry search.DOIRegistry
+	// WikidataOwnershipResolver enriches self-promotion detection with corporate
+	// ownership: when lexical matching fails, a Wikidata P749 lookup checks whether
+	// the brand's corporate parent is distinct from the recommending domain (#248).
+	// nil → ownership check skipped (no-op). Best-effort: a lookup failure leaves
+	// the signal absent, never fails the audit.
+	WikidataOwnershipResolver search.OwnershipResolver
 	// LinkVerifier checks source-URL liveness + Wayback archive fallback for the
 	// opt-in verify_links flag (#157) and verify_citation. nil ⇒ verification is
 	// skipped (no-op). Best-effort + bounded; never fails a tool call.
@@ -98,6 +100,10 @@ type Dependencies struct {
 	// Noop (no membership, no data). The workspace_contribute/workspace_read
 	// tools are registered only when a non-Noop store is present.
 	Workspaces workspace.Store
+	// Monitor is the consent-gated query-monitoring store (#273). Defaults to nil
+	// (unregistered). monitor_query_save and monitor_query_check register only
+	// when non-nil.
+	Monitor persist.Store
 	// BrandFetchAPIKey enables Tier 1 BrandFetch Brand API + Context API
 	// enrichment in brand_research (Bearer auth). It only fills fields the
 	// always-on no-key tiers (homepage meta/structured-data + brand-page
@@ -125,6 +131,12 @@ type Dependencies struct {
 	// so main.go always constructs it — non-nil in production. A nil value in
 	// tests degrades that phase to a soft skip.
 	ArchiveResolver search.ArchiveResolver
+	// ResearchPanelProviders backs research_panel (#302): a fixed set of
+	// pre-constructed model providers, auto-detected at startup from whatever
+	// LLM credentials (OpenRouter/direct keys/Bedrock/Ollama/LM Studio) are
+	// configured via AvailableModelProviders(). Empty ⇒ the tool is not
+	// registered — a research panel with zero members can't run.
+	ResearchPanelProviders []ModelProvider
 }
 
 // Features mirrors config.FeatureConfig for the tool layer (kept local so the
@@ -175,6 +187,10 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	// lists) for anti-sloptimization signals: self-promotion, conflicts of interest,
 	// domain reputation, dead links. Always registered as part of the trust suite.
 	registerVerifyRecommendation(srv, deps)
+	// research_panel (#302) — multi-model committee with structured divergence.
+	// Registered only when at least one panel member is configured
+	// (deps.ResearchPanelProviders non-empty); a zero-member panel can't run.
+	registerResearchPanel(srv, deps)
 
 	// citation_graph (#47) — registered only when a citation-capable academic
 	// provider (semanticscholar or openalex) is configured.
@@ -219,16 +235,6 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 		registerMonarchSearch(srv, deps)
 	}
 
-	// Synthesis tools — provider-independent (like academic/patent search).
-	// Each registers only when at least one provider offers the capability, so
-	// the default tool surface is unchanged until such a provider is configured.
-	if len(deps.AnswerProviders) > 0 {
-		registerAnswer(srv, deps)
-	}
-	if len(deps.StructuredProviders) > 0 {
-		registerStructuredSearch(srv, deps)
-	}
-
 	// Regulated, opt-in tools — registered only when their feature is wired in
 	// (a non-Noop dependency present), so the default tool surface is unchanged.
 	if _, isNoop := deps.UserAnalytics.(*useranalytics.Noop); deps.UserAnalytics != nil && !isNoop {
@@ -241,6 +247,12 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	if _, isNoop := deps.Workspaces.(*workspace.Noop); deps.Workspaces != nil && !isNoop {
 		registerWorkspaceContribute(srv, deps)
 		registerWorkspaceRead(srv, deps)
+	}
+	// monitor_query_save/monitor_query_check (#273) — registered only when a
+	// query-monitor store is present.
+	if deps.Monitor != nil {
+		registerMonitorQuerySave(srv, deps)
+		registerMonitorQueryCheck(srv, deps)
 	}
 	// brand_research — always registered; the homepage meta/structured-data
 	// extraction + brand-page probe + optional web search tiers run

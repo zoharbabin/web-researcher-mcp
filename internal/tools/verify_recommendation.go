@@ -2,7 +2,9 @@ package tools
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -52,17 +54,23 @@ type corroborationResult struct {
 }
 
 type recommendationResult struct {
-	Title                 string                            `json:"title"`
-	URL                   string                            `json:"url,omitempty"`
-	Author                string                            `json:"author,omitempty"`
-	SelfPromotionSignal   *content.SelfPromotionSignal      `json:"selfPromotionSignal,omitempty"`
-	ConflictOfInterest    *content.ConflictOfInterestSignal `json:"conflictOfInterest,omitempty"`
-	DomainReputation      *content.DomainReputation         `json:"domainReputation,omitempty"`
-	LinkLive              *bool                             `json:"linkLive,omitempty"`
-	HTTPStatus            int                               `json:"httpStatus,omitempty"`
-	CorroborationSearches []corroborationResult             `json:"corroborationSearches,omitempty"`
-	Flags                 []string                          `json:"flags"`
-	Reasons               []string                          `json:"reasons"`
+	Title               string                       `json:"title"`
+	URL                 string                       `json:"url,omitempty"`
+	Author              string                       `json:"author,omitempty"`
+	SelfPromotionSignal *content.SelfPromotionSignal `json:"selfPromotionSignal,omitempty"`
+	// CorporateOwnershipSignal is present when lexical self-promotion was not
+	// detected but a Wikidata P749 lookup found the domain brand is owned by a
+	// distinct corporate parent (e.g. marketo.com → owner "Adobe Inc."). Evidence
+	// only — the caller decides whether the corporate parent's recommendation is
+	// self-interested.
+	CorporateOwnershipSignal *content.SelfPromotionSignal      `json:"corporateOwnershipSignal,omitempty"`
+	ConflictOfInterest       *content.ConflictOfInterestSignal `json:"conflictOfInterest,omitempty"`
+	DomainReputation         *content.DomainReputation         `json:"domainReputation,omitempty"`
+	LinkLive                 *bool                             `json:"linkLive,omitempty"`
+	HTTPStatus               int                               `json:"httpStatus,omitempty"`
+	CorroborationSearches    []corroborationResult             `json:"corroborationSearches,omitempty"`
+	Flags                    []string                          `json:"flags"`
+	Reasons                  []string                          `json:"reasons"`
 }
 
 func registerVerifyRecommendation(srv *mcp.Server, deps Dependencies) {
@@ -172,6 +180,16 @@ func verifyOneRecommendation(ctx context.Context, deps Dependencies, rec recomme
 			result.Flags = append(result.Flags, "self_promotion")
 			result.Reasons = append(result.Reasons,
 				"Source ranks its own brand (\""+sp.BrandToken+"\") at position "+strconv.Itoa(sp.RankPosition)+" in its list")
+		} else {
+			// Lexical check found no self-promotion; try the Wikidata corporate
+			// ownership fallback (#248). Only runs when the resolver is configured.
+			if ownerSignal := detectCorporateOwnershipForURL(ctx, deps, rec.URL); ownerSignal != nil {
+				result.CorporateOwnershipSignal = ownerSignal
+				result.Flags = append(result.Flags, "corporate_ownership")
+				result.Reasons = append(result.Reasons,
+					"Domain brand (\""+ownerSignal.BrandToken+"\") is owned by \""+
+						ownerSignal.CorporateOwner+"\" (Wikidata P749)")
+			}
 		}
 	}
 
@@ -203,6 +221,102 @@ func detectSelfPromotionForURL(ctx context.Context, deps Dependencies, rawURL st
 		return nil
 	}
 	return content.DetectSelfPromotion(host, res.Content)
+}
+
+// wikidataOwnershipCacheTTL is how long a Wikidata P749 lookup result — found
+// or not-found — is cached. Ownership rarely changes, and negative caching
+// avoids hammering Wikidata for domains with no corporate parent.
+const wikidataOwnershipCacheTTL = 7 * 24 * time.Hour
+
+// wikidataOwnershipCacheEntry is the cached shape for a corporate-ownership
+// lookup, capturing both positive and negative (Found=false) results so a
+// repeat call never re-invokes the resolver within the TTL.
+type wikidataOwnershipCacheEntry struct {
+	Found  bool                    `json:"found"`
+	Result *search.OwnershipResult `json:"result,omitempty"`
+}
+
+// wikidataOwnershipCacheKey derives the cache key for a brand token's
+// ownership lookup, namespaced from any other cache use of the same token.
+func wikidataOwnershipCacheKey(brandToken string) string {
+	h := sha256.Sum256([]byte("wikidata-ownership:" + brandToken))
+	return fmt.Sprintf("%x", h)
+}
+
+// brandTokenFromHost extracts the registrable stem from a hostname.
+// "marketo.com" → "marketo", "mail.marketo.com" → "marketo", "go.dev" → "go".
+// Returns "" when the token is a single character (too ambiguous, e.g.
+// "x.co" → ""). Mirrors DetectSelfPromotion's own brandToken derivation in
+// classify.go.
+func brandTokenFromHost(host string) string {
+	parts := strings.Split(host, ".")
+	if len(parts) < 2 {
+		return ""
+	}
+	token := strings.ToLower(parts[len(parts)-2])
+	if len(token) < 2 {
+		return ""
+	}
+	return token
+}
+
+// detectCorporateOwnershipForURL resolves the URL's domain brand token against
+// Wikidata P749 (parent organization). Returns nil when: resolver is nil, no
+// Wikidata entity found, no P749 parent, or any error (fail-open). Results are
+// cached under "wikidata-ownership:{brandToken}" with a 7-day TTL, including
+// negative (not-found) results.
+func detectCorporateOwnershipForURL(ctx context.Context, deps Dependencies, rawURL string) *content.SelfPromotionSignal {
+	if deps.WikidataOwnershipResolver == nil || rawURL == "" {
+		return nil
+	}
+	host := hostForURL(rawURL)
+	if host == "" {
+		return nil
+	}
+	brandToken := brandTokenFromHost(host)
+	if brandToken == "" {
+		return nil
+	}
+
+	cacheKey := wikidataOwnershipCacheKey(brandToken)
+	if deps.Cache != nil {
+		if cached, ok := deps.Cache.Get(ctx, cacheKey); ok {
+			var entry wikidataOwnershipCacheEntry
+			if json.Unmarshal(cached, &entry) == nil {
+				if !entry.Found || entry.Result == nil {
+					return nil
+				}
+				return &content.SelfPromotionSignal{
+					Detected:          true,
+					BrandDomain:       host,
+					BrandToken:        brandToken,
+					CorporateOwner:    entry.Result.OwnerLabel,
+					CorporateOwnerQID: entry.Result.OwnerQID,
+					Confidence:        "medium",
+				}
+			}
+		}
+	}
+
+	result, found, err := deps.WikidataOwnershipResolver.Resolve(ctx, brandToken)
+	if deps.Cache != nil && err == nil {
+		entry := wikidataOwnershipCacheEntry{Found: found, Result: result}
+		if b, merr := json.Marshal(entry); merr == nil {
+			deps.Cache.Set(ctx, cacheKey, b, wikidataOwnershipCacheTTL)
+		}
+	}
+	if err != nil || !found || result == nil {
+		return nil
+	}
+
+	return &content.SelfPromotionSignal{
+		Detected:          true,
+		BrandDomain:       host,
+		BrandToken:        brandToken,
+		CorporateOwner:    result.OwnerLabel,
+		CorporateOwnerQID: result.OwnerQID,
+		Confidence:        "medium",
+	}
 }
 
 // genericCorroborationLenses are searched for every claim: news (Reuters, AP,
@@ -327,10 +441,11 @@ var verifyRecommendationOutputSchema = map[string]any{
 			"items": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"title":               map[string]any{"type": "string", "description": "The recommended item (echoed)."},
-					"url":                 map[string]any{"type": "string", "description": "URL of the recommendation (echoed when provided)."},
-					"author":              map[string]any{"type": "string", "description": "Author name (echoed when provided)."},
-					"selfPromotionSignal": map[string]any{"type": "object", "description": "Present when the linked page is a ranking list that places its own host's brand first (e.g. a brand blog ranking itself #1). Detected by fetching the URL."},
+					"title":                    map[string]any{"type": "string", "description": "The recommended item (echoed)."},
+					"url":                      map[string]any{"type": "string", "description": "URL of the recommendation (echoed when provided)."},
+					"author":                   map[string]any{"type": "string", "description": "Author name (echoed when provided)."},
+					"selfPromotionSignal":      map[string]any{"type": "object", "description": "Present when the linked page is a ranking list that places its own host's brand first (e.g. a brand blog ranking itself #1). Detected by fetching the URL."},
+					"corporateOwnershipSignal": map[string]any{"type": "object", "description": "Present when lexical self-promotion was not detected but a Wikidata P749 lookup found the domain brand is owned by a distinct corporate parent (e.g. marketo.com → owner \"Adobe Inc.\"). Evidence only. Results are cached 7 days."},
 					"conflictOfInterest": map[string]any{
 						"type":        "object",
 						"description": "Present when the author has a detected financial stake in the recommended entity. Employment / funding / equity connections." + languageHeuristicCaveat,
@@ -367,7 +482,7 @@ var verifyRecommendationOutputSchema = map[string]any{
 					},
 					"flags": map[string]any{
 						"type":        "array",
-						"items":       map[string]any{"type": "string", "enum": []any{"self_promotion", "conflict_of_interest", "dead_link", "unknown_reputation", "low_reputation"}},
+						"items":       map[string]any{"type": "string", "enum": []any{"self_promotion", "corporate_ownership", "conflict_of_interest", "dead_link", "unknown_reputation", "low_reputation"}},
 						"description": "Per-item audit flags. Empty = no issues detected. Treat as evidence, not verdicts.",
 					},
 					"reasons": map[string]any{

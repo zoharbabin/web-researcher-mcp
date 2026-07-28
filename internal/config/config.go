@@ -44,6 +44,7 @@ type Config struct {
 	DataRegion             string
 	Features               FeatureConfig
 	Audit                  AuditConfig
+	ResearchPanel          ResearchPanelConfig
 
 	// StdioUserID names the single local user for STDIO transport, where there
 	// is no OAuth identity (the launching app owns the process, so it IS one
@@ -99,6 +100,7 @@ type FeatureConfig struct {
 	Memory        bool // #88 opt-in long-term cross-session memory
 	UserAnalytics bool // #92 opt-in per-user analytics
 	Workspaces    bool // #96 opt-in shared research workspaces
+	Monitoring    bool // #273 opt-in saved query-monitor persistence
 
 	// MemoryRetention bounds how long a saved memory lives before auto-expiry
 	// (#88). 0 → the store's default (90 days). "Data doesn't exist after TTL"
@@ -108,12 +110,16 @@ type FeatureConfig struct {
 	// WorkspaceTTL bounds how long shared-workspace data lives (#96).
 	// 0 → the store's default (30 days).
 	WorkspaceTTL time.Duration
+
+	// MonitoringTTL bounds the maximum lifetime of a saved query monitor
+	// (#273). 0 → the tool's default (30 days).
+	MonitoringTTL time.Duration
 }
 
 // RegulatedEnabled reports whether any consent-gated feature is on, which is
 // the sole trigger for activating the consent subsystem.
 func (f FeatureConfig) RegulatedEnabled() bool {
-	return f.Memory || f.UserAnalytics || f.Workspaces
+	return f.Memory || f.UserAnalytics || f.Workspaces || f.Monitoring
 }
 
 type AuditConfig struct {
@@ -157,6 +163,7 @@ type SearchConfig struct {
 	PubMedAPIKey          string // optional; PubMed E-utilities work keyless (~3 req/s), a key raises it (~10 req/s)
 	PubMedEmail           string // optional NCBI contact (tool/email params) — falls back to OpenAlexEmail
 	COREAPIKey            string // optional; CORE.ac.uk works keyless at a lower shared rate, a key raises the limit
+	ScholarAPIKey         string // ScholarAPI — paid academic search with full-text access (scholarapi.net); excluded from auto-routing, use provider=scholarapi explicitly
 
 	// Structured-domain providers (optional, enable filing/case/economic search)
 	EDGARContactEmail  string // SEC EDGAR requires a contact email for its required User-Agent
@@ -220,6 +227,21 @@ type RateLimitConfig struct {
 	// applies in STDIO (where the HTTP rate limits / DailyQuota don't run).
 	// 0 (default) disables it. See MAX_CALLS_PER_DAY in .env.example.
 	MaxCallsPerDay int
+}
+
+// ResearchPanelConfig holds credentials/endpoints for the research_panel tool
+// (#302). Every field is optional; AvailableModelProviders() auto-detects a
+// panel from whatever is set and degrades gracefully to an empty panel
+// (tool not registered) when nothing is configured.
+type ResearchPanelConfig struct {
+	OpenRouterAPIKey string // OPENROUTER_API_KEY — unlocks 400+ models via one key, highest auto-detect priority
+	OpenAIAPIKey     string // OPENAI_API_KEY — direct OpenAI
+	AnthropicAPIKey  string // ANTHROPIC_API_KEY — direct Anthropic
+	GoogleAIAPIKey   string // GOOGLE_AI_API_KEY — direct Google Gemini
+	OllamaBaseURL    string // OLLAMA_BASE_URL — local Ollama, requires AllowPrivateIPs unless pointed at a public host
+	LMStudioBaseURL  string // LM_STUDIO_BASE_URL — local LM Studio, same gating as Ollama
+	DefaultModels    []string
+	MaxModels        int
 }
 
 func Load() (*Config, error) {
@@ -391,6 +413,7 @@ func Load() (*Config, error) {
 			PubMedAPIKey:            os.Getenv("PUBMED_API_KEY"),
 			PubMedEmail:             envOrDefault("PUBMED_EMAIL", os.Getenv("OPENALEX_EMAIL")),
 			COREAPIKey:              os.Getenv("CORE_API_KEY"),
+			ScholarAPIKey:           os.Getenv("SCHOLAR_API_KEY"),
 			EDGARContactEmail:       envOrDefault("EDGAR_CONTACT_EMAIL", os.Getenv("OPENALEX_EMAIL")),
 			CourtListenerToken:      os.Getenv("COURTLISTENER_API_TOKEN"),
 			FREDAPIKey:              os.Getenv("FRED_API_KEY"),
@@ -468,8 +491,10 @@ func Load() (*Config, error) {
 			Memory:                envBool("MEMORY_ENABLED", false),
 			UserAnalytics:         envBool("USER_ANALYTICS_ENABLED", false),
 			Workspaces:            envBool("WORKSPACES_ENABLED", false),
+			Monitoring:            envBool("MONITORING_ENABLED", false),
 			MemoryRetention:       envDuration("MEMORY_RETENTION", 90*24*time.Hour),
 			WorkspaceTTL:          envDuration("WORKSPACE_TTL", 30*24*time.Hour),
+			MonitoringTTL:         envDuration("MONITORING_TTL", 30*24*time.Hour),
 		},
 		Audit: AuditConfig{
 			Enabled:            envBool("AUDIT_ENABLED", true),
@@ -478,6 +503,16 @@ func Load() (*Config, error) {
 			IncludeRequestBody: envBool("AUDIT_INCLUDE_REQUEST_BODY", false),
 			MaxBytes:           envInt("AUDIT_MAX_BYTES", 100<<20),
 			RetentionDays:      retentionDays,
+		},
+		ResearchPanel: ResearchPanelConfig{
+			OpenRouterAPIKey: os.Getenv("OPENROUTER_API_KEY"),
+			OpenAIAPIKey:     os.Getenv("OPENAI_API_KEY"),
+			AnthropicAPIKey:  os.Getenv("ANTHROPIC_API_KEY"),
+			GoogleAIAPIKey:   os.Getenv("GOOGLE_AI_API_KEY"),
+			OllamaBaseURL:    os.Getenv("OLLAMA_BASE_URL"),
+			LMStudioBaseURL:  os.Getenv("LM_STUDIO_BASE_URL"),
+			DefaultModels:    splitCSV(os.Getenv("RESEARCH_PANEL_DEFAULT_MODELS")),
+			MaxModels:        envInt("RESEARCH_PANEL_MAX_MODELS", 3),
 		},
 		Warnings: warnings,
 	}

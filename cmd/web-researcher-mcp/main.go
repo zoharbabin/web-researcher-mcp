@@ -198,6 +198,16 @@ func main() {
 		logger.Info("shared workspaces enabled", "consent", "required", "membership", "host-managed")
 	}
 
+	// Saved query monitoring (#273): consent-gated, off by default. Backed by
+	// the shared persistStore (already covered by the /admin/data export/erasure
+	// path); no dedicated per-tool Exporter/Eraser is registered — a documented
+	// gap the issue explicitly allows deferring to a follow-up.
+	var monitorStore persist.Store
+	if cfg.Features.Monitoring {
+		monitorStore = persistStore
+		logger.Info("query monitoring enabled", "consent", "required", "ttl", cfg.Features.MonitoringTTL)
+	}
+
 	metricsCollector := metrics.NewCollector()
 	rateLimiter := ratelimit.NewWithStore(cfg.RateLimit, persistStore)
 	if redisBackends != nil {
@@ -260,6 +270,7 @@ func main() {
 		PubMedAPIKey:          cfg.Search.PubMedAPIKey,
 		PubMedEmail:           cfg.Search.PubMedEmail,
 		COREAPIKey:            cfg.Search.COREAPIKey,
+		ScholarAPIKey:         cfg.Search.ScholarAPIKey,
 	}
 	academicProviders := search.AvailableAcademicProviders(academicCfg, searchDeps)
 
@@ -335,6 +346,16 @@ func main() {
 		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
 	})
 
+	// Corporate ownership enrichment (#248): when verify_recommendation's lexical
+	// self-promotion check finds nothing, a Wikidata P749 ("parent organization")
+	// lookup checks whether the domain's brand is a subsidiary of a distinct
+	// corporate parent. Keyless, so always constructed; own breaker isolates
+	// failures; enrichment is best-effort and fail-open.
+	wikidataResolver := search.NewWikidataOwnershipResolver(search.Deps{
+		HTTPClient: searchDeps.HTTPClient,
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+	})
+
 	// OSINT recon enrichment (#323): Certificate Transparency log lookups (crt.sh)
 	// and Wayback CDX historical URL inventories, both keyless so always
 	// constructed. Own breakers isolate failures from every other subsystem;
@@ -360,12 +381,6 @@ func main() {
 		IAAccessKey:     cfg.Search.IAAccessKey,
 		IASecretKey:     cfg.Search.IASecretKey,
 	})
-
-	// Synthesis capabilities (provider-independent): grounded answers and
-	// structured extraction. Discovered from config like every other provider
-	// family — a new implementer appears automatically.
-	answerProviders := search.AvailableAnswerProviders(cfg.Search, searchDeps)
-	structuredProviders := search.AvailableStructuredProviders(cfg.Search, searchDeps)
 
 	allProviders := search.AvailableProviders(cfg.Search, searchDeps)
 
@@ -465,31 +480,30 @@ func main() {
 	defer auditor.Close()
 
 	toolDeps := tools.Dependencies{
-		Cache:                cacheStore,
-		Search:               searchProvider,
-		SearchProviders:      allProviders,
-		PatentProviders:      patentProviders,
-		AcademicProviders:    academicProviders,
-		FilingProviders:      filingProviders,
-		CaseProviders:        caseProviders,
-		EconProviders:        econProviders,
-		TrialProviders:       trialProviders,
-		AwesomeListProviders: awesomeListProviders,
-		LocalProviders:       localProviders,
-		MonarchProviders:     monarchProviders,
-		ContextProviders:     contextProviders,
-		AnswerProviders:      answerProviders,
-		StructuredProviders:  structuredProviders,
-		OAResolver:           oaResolver,
-		RetractionResolver:   retractionResolver,
-		DOIRegistry:          doiRegistry,
-		LinkVerifier:         linkVerifier,
-		Scraper:              scraperPipeline,
-		Content:              contentProcessor,
-		Sessions:             sessionManager,
-		Metrics:              metricsCollector,
-		Auditor:              auditor,
-		Logger:               logger,
+		Cache:                     cacheStore,
+		Search:                    searchProvider,
+		SearchProviders:           allProviders,
+		PatentProviders:           patentProviders,
+		AcademicProviders:         academicProviders,
+		FilingProviders:           filingProviders,
+		CaseProviders:             caseProviders,
+		EconProviders:             econProviders,
+		TrialProviders:            trialProviders,
+		AwesomeListProviders:      awesomeListProviders,
+		LocalProviders:            localProviders,
+		MonarchProviders:          monarchProviders,
+		ContextProviders:          contextProviders,
+		OAResolver:                oaResolver,
+		RetractionResolver:        retractionResolver,
+		DOIRegistry:               doiRegistry,
+		WikidataOwnershipResolver: wikidataResolver,
+		LinkVerifier:              linkVerifier,
+		Scraper:                   scraperPipeline,
+		Content:                   contentProcessor,
+		Sessions:                  sessionManager,
+		Metrics:                   metricsCollector,
+		Auditor:                   auditor,
+		Logger:                    logger,
 		Features: tools.Features{
 			SourceRecommendations: cfg.Features.SourceRecommendations,
 			GenerativeUI:          cfg.Features.GenerativeUI,
@@ -498,6 +512,7 @@ func main() {
 		UserAnalytics:           userAnalytics,
 		Memory:                  memoryStore,
 		Workspaces:              workspaceStore,
+		Monitor:                 monitorStore,
 		BrandFetchAPIKey:        cfg.Search.BrandFetchAPIKey,
 		BrandFetchClientID:      cfg.Search.BrandFetchClientID,
 		OpenSyllabusAPIKey:      cfg.Search.OpenSyllabusAPIKey,
@@ -505,6 +520,7 @@ func main() {
 		PENAmericaAirtableToken: cfg.Search.PENAmericaAirtableToken,
 		CTLogResolver:           ctLogResolver,
 		ArchiveResolver:         archiveResolver,
+		ResearchPanelProviders:  tools.AvailableModelProviders(cfg.ResearchPanel, cfg.AllowPrivateIPs),
 	}
 
 	// Completion suppliers (#193): the live value sets the server can autocomplete
@@ -554,12 +570,6 @@ func main() {
 	}
 	for name := range localProviders {
 		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "local"})
-	}
-	for name := range answerProviders {
-		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "answer"})
-	}
-	for name := range structuredProviders {
-		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "structured"})
 	}
 	// Live provider/breaker health for diagnostics://health (#81) is available
 	// only when a multi-provider Router is in play; a single configured provider
@@ -630,6 +640,9 @@ func main() {
 			}
 			if cfg.Features.UserAnalytics {
 				grant(consent.PurposeAnalytics)
+			}
+			if cfg.Features.Monitoring {
+				grant(consent.PurposeMonitoring)
 			}
 			// PurposeWorkspace is intentionally never auto-granted.
 		}
@@ -843,12 +856,6 @@ func completionProviderNames(deps tools.Dependencies) []string {
 		add(name)
 	}
 	for name := range deps.MonarchProviders {
-		add(name)
-	}
-	for name := range deps.AnswerProviders {
-		add(name)
-	}
-	for name := range deps.StructuredProviders {
 		add(name)
 	}
 	names := make([]string, 0, len(seen))

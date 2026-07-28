@@ -79,7 +79,6 @@ func main() {
 // conditionally-registered tool is included in the schema dump.
 // This mirrors setupTestDeps() in internal/tools/tools_test.go.
 func buildDeps() tools.Dependencies {
-	synth := &mockSynthProvider{}
 	academic := &mockAcademicProvider{}
 	filing := &mockFilingProvider{}
 	caseProv := &mockCaseProvider{}
@@ -104,8 +103,6 @@ func buildDeps() tools.Dependencies {
 		AwesomeListProviders: map[string]search.AwesomeListProvider{awesome.Name(): awesome},
 		LocalProviders:       map[string]search.LocalProvider{local.Name(): local},
 		MonarchProviders:     map[string]search.MonarchProvider{monarch.Name(): monarch},
-		AnswerProviders:      map[string]search.AnswerProvider{synth.Name(): synth},
-		StructuredProviders:  map[string]search.StructuredProvider{synth.Name(): synth},
 		Scraper:              scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2}),
 		Content:              content.NewProcessor(),
 		Sessions:             mgr,
@@ -116,11 +113,15 @@ func buildDeps() tools.Dependencies {
 		UserAnalytics:        useranalytics.NewStoreRecorder(persist.NewMemoryStore()),
 		Memory:               memory.NewStore(persist.NewMemoryStore(), 0),
 		Workspaces:           workspace.NewStore(persist.NewMemoryStore(), 0),
+		Monitor:              persist.NewMemoryStore(),
 		// Bare-field-gated tools: a non-empty value is all that's needed to
 		// register them so their schemas appear in the generated client.
 		OpenSyllabusAPIKey:      "gen-schema-key",
 		OpenSyllabusAPIURL:      "https://gen-schema.invalid",
 		PENAmericaAirtableToken: "gen-schema-token",
+		// research_panel registers only when at least one panel member is
+		// present — a placeholder mock is enough for schema generation.
+		ResearchPanelProviders: []tools.ModelProvider{&mockModelProvider{}},
 	}
 }
 
@@ -141,17 +142,12 @@ func (m *mockProvider) News(_ context.Context, _ search.NewsSearchParams) ([]sea
 	return nil, nil
 }
 
-type mockSynthProvider struct{}
+type mockModelProvider struct{}
 
-func (m *mockSynthProvider) Name() string { return "mocksynth" }
-func (m *mockSynthProvider) Metadata() search.ProviderMeta {
-	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "free"}
-}
-func (m *mockSynthProvider) Answer(_ context.Context, _ search.AnswerParams) (*search.AnswerResult, error) {
-	return &search.AnswerResult{Answer: "a", Provider: "mocksynth"}, nil
-}
-func (m *mockSynthProvider) StructuredSearch(_ context.Context, _ search.StructuredParams) (*search.StructuredResult, error) {
-	return &search.StructuredResult{Provider: "mocksynth"}, nil
+func (m *mockModelProvider) Name() string    { return "mock" }
+func (m *mockModelProvider) ModelID() string { return "mock-model" }
+func (m *mockModelProvider) Ask(_ context.Context, _ string) (tools.ModelResponse, error) {
+	return tools.ModelResponse{Text: "mock response"}, nil
 }
 
 type mockAcademicProvider struct{}

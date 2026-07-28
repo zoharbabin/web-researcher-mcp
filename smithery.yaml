@@ -35,7 +35,7 @@ startCommand:
         description: "Tavily Search API key (required if using tavily provider)"
       exa_api_key:
         type: string
-        description: "Exa API key (required if using exa provider; also enables answer and structured_search)"
+        description: "Exa API key (required if using exa provider)"
       edgar_contact_email:
         type: string
         description: "Contact email for SEC EDGAR (enables filing_search); falls back to OPENALEX_EMAIL"

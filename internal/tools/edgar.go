@@ -49,7 +49,7 @@ func registerFilingSearch(srv *mcp.Server, deps Dependencies) {
 			return errResult, nil, nil
 		}
 		if searcher == nil {
-			return synthesisUnconfiguredError("filing_search", search.SupportedFilingProviders), nil, nil
+			return unconfiguredProviderError("filing_search", search.SupportedFilingProviders), nil, nil
 		}
 
 		cacheKey := searchCacheKey("filing", input.Query, input.Ticker, input.FormType, input.DateFrom, input.DateTo, input.Facts, num, providerName)

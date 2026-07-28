@@ -38,8 +38,6 @@ var expectedTools = []string{
 	"awesome_list_search",
 	"local_search",
 	"monarch_search",
-	"answer",
-	"structured_search",
 	"get_my_analytics",
 	"memory_save",
 	"memory_recall",
@@ -50,6 +48,9 @@ var expectedTools = []string{
 	"gag_order_search",
 	"paper_fulltext",
 	"company_recon",
+	"research_panel",
+	"monitor_query_save",
+	"monitor_query_check",
 }
 
 func listTools(t *testing.T) []*mcp.Tool {
@@ -90,7 +91,7 @@ func TestAllToolsHaveAnnotations(t *testing.T) {
 			// memory_save is the one WRITE tool (it persists a memory). Every
 			// other tool is read-only. No tool is ever destructive — deletion is
 			// the separate #85 erasure endpoint, never a tool flag.
-			writeTools := map[string]bool{"memory_save": true, "workspace_contribute": true, "archive_source": true}
+			writeTools := map[string]bool{"memory_save": true, "workspace_contribute": true, "archive_source": true, "monitor_query_save": true}
 			if writeTools[tool.Name] {
 				if tool.Annotations.ReadOnlyHint {
 					t.Errorf("%s writes state; ReadOnlyHint should be false", tool.Name)
@@ -201,6 +202,26 @@ func TestAllToolsHaveAnnotations(t *testing.T) {
 				if !*tool.Annotations.OpenWorldHint {
 					t.Error("syllabus_search should be open-world")
 				}
+			case "monitor_query_save":
+				// A write (seeds/updates a monitor baseline); not idempotent
+				// (re-running with the same query re-seeds the baseline from a
+				// fresh live search), not open-world (writeAnnotations forces false).
+				if tool.Annotations.IdempotentHint {
+					t.Error("monitor_query_save should NOT be idempotent")
+				}
+				if *tool.Annotations.OpenWorldHint {
+					t.Error("monitor_query_save should NOT be open-world")
+				}
+			case "monitor_query_check":
+				// Read-only but mutates the stored baseline on every call (marks
+				// found URLs as seen), so a second identical call returns zero new
+				// results: NOT idempotent. Open-world (live upstream search).
+				if tool.Annotations.IdempotentHint {
+					t.Error("monitor_query_check should NOT be idempotent")
+				}
+				if !*tool.Annotations.OpenWorldHint {
+					t.Error("monitor_query_check should be open-world")
+				}
 			default:
 				if !tool.Annotations.IdempotentHint {
 					t.Errorf("%s should be idempotent", tool.Name)
@@ -272,8 +293,6 @@ func TestOutputSchemaMatchesResponse(t *testing.T) {
 		"patent_search":       {"query": "test"},
 		"sequential_search":   {"searchStep": "initial research", "stepNumber": 1, "nextStepNeeded": false},
 		"citation_graph":      {"paper": "10.1/x"},
-		"answer":              {"query": "test"},
-		"structured_search":   {"query": "test"},
 		"format_bibliography": {"sources": []any{map[string]any{"url": "https://example.com/a", "title": "A", "author": "Smith, J.", "date": "2024"}}},
 		"audit_bibliography":  {"entries": []any{map[string]any{"url": "https://example.com/a", "title": "A", "doi": "10.1/x"}}},
 		// setupTestDeps has a nil LinkVerifier → archive_source returns status:"unavailable",
@@ -293,6 +312,12 @@ func TestOutputSchemaMatchesResponse(t *testing.T) {
 		"gag_order_search":    {},
 		"paper_fulltext":      {"identifier": "https://example.com/paper.pdf"},
 		"company_recon":       {"target": "example.com"},
+		"research_panel":      {"question": "test"},
+		// Anonymous test client has no auth context, so both return status:
+		// "unavailable" rather than exercising the content path (covered by
+		// monitor_test.go's authenticated-context tests).
+		"monitor_query_save":  {"query": "test"},
+		"monitor_query_check": {"query": "test"},
 	}
 
 	tools := listTools(t)
@@ -370,8 +395,6 @@ func TestExternalContentToolsCarryTrustMarker(t *testing.T) {
 		"citation_graph":      "untrusted-external-content",
 		"verify_citation":     "untrusted-external-content",
 		"audit_bibliography":  "untrusted-external-content",
-		"answer":              "untrusted-external-content",
-		"structured_search":   "untrusted-external-content",
 		"filing_search":       "untrusted-external-content",
 		"legal_search":        "untrusted-external-content",
 		"econ_search":         "untrusted-external-content",
@@ -382,6 +405,7 @@ func TestExternalContentToolsCarryTrustMarker(t *testing.T) {
 		"gag_order_search":    "untrusted-external-content",
 		"paper_fulltext":      "untrusted-external-content",
 		"monarch_search":      "untrusted-external-content",
+		"research_panel":      "untrusted-external-content",
 	}
 	args := map[string]map[string]any{
 		"web_search":          {"query": "test"},
@@ -395,8 +419,6 @@ func TestExternalContentToolsCarryTrustMarker(t *testing.T) {
 		"citation_graph":      {"paper": "10.1/x"},
 		"verify_citation":     {"citation": "https://example.com/paper"},
 		"audit_bibliography":  {"entries": []any{map[string]any{"url": "https://example.com/paper", "title": "A"}}},
-		"answer":              {"query": "test"},
-		"structured_search":   {"query": "test"},
 		"filing_search":       {"query": "AAPL"},
 		"legal_search":        {"query": "miranda"},
 		"econ_search":         {"series_id": "GDP"},
@@ -407,6 +429,7 @@ func TestExternalContentToolsCarryTrustMarker(t *testing.T) {
 		"gag_order_search":    {},
 		"paper_fulltext":      {"identifier": "https://example.com/paper.pdf"},
 		"monarch_search":      {"operation": "entity", "query": "Marfan syndrome"},
+		"research_panel":      {"question": "test"},
 	}
 
 	for name, wantTrust := range want {

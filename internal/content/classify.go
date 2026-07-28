@@ -13,6 +13,12 @@ type SelfPromotionSignal struct {
 	BrandToken   string `json:"brandToken"`   // e.g. "shopify"
 	RankPosition int    `json:"rankPosition"` // 1-based position of brand in list
 	Confidence   string `json:"confidence"`   // "high" | "medium" | "low"
+	// CorporateOwner is the Wikidata-resolved corporate parent when the domain
+	// brand is a subsidiary of a distinct parent entity (P749). e.g. marketo.com →
+	// brand "marketo" → owner "Adobe Inc." Populated at the tool layer only, never
+	// by DetectSelfPromotion itself. Omitted when no corporate parent was found.
+	CorporateOwner    string `json:"corporateOwner,omitempty"`
+	CorporateOwnerQID string `json:"corporateOwnerQID,omitempty"`
 }
 
 // ConflictOfInterestSignal detects when an author has a financial stake in the

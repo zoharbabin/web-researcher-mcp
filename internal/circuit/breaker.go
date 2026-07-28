@@ -13,6 +13,13 @@ var ErrCircuitOpen = errors.New("circuit breaker open")
 // for FailureThreshold generic failures to accumulate.
 var ErrRateLimit = errors.New("rate limited")
 
+// ErrNonTripping is the sentinel a provider wraps an error with when it must
+// never count toward the breaker's failure threshold at all — e.g. a 402
+// payment-required response (credits exhausted), which is a billing/quota
+// state, not a service-health signal. Execute still returns the original error
+// to the caller; only the breaker's internal accounting ignores it.
+var ErrNonTripping = errors.New("non-tripping error")
+
 type State int
 
 const (
@@ -96,9 +103,15 @@ func (b *Breaker) onSuccess() {
 
 // onFailure records a failure and updates the circuit state. A wrapped
 // ErrRateLimit opens the circuit immediately, bypassing FailureThreshold — a
-// 429 is an unambiguous saturation signal, unlike a generic transient error.
+// 429 is an unambiguous saturation signal, unlike a generic transient error. A
+// wrapped ErrNonTripping is recorded as a failure timestamp but never
+// increments the counter or changes state — it is not a service-health signal.
 func (b *Breaker) onFailure(err error) {
 	b.lastFailure = time.Now()
+
+	if errors.Is(err, ErrNonTripping) {
+		return
+	}
 
 	if errors.Is(err, ErrRateLimit) {
 		b.state = StateOpen

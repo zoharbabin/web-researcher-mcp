@@ -35,7 +35,6 @@ from typing import Any, Optional
 
 from web_researcher_mcp.models import (
     AcademicSearchResponse,
-    AnswerResponse,
     ArchiveSourceResponse,
     AuditBibliographyResponse,
     AwesomeListSearchResponse,
@@ -56,14 +55,16 @@ from web_researcher_mcp.models import (
     MemoryRecallResponse,
     MemorySaveResponse,
     MonarchSearchResponse,
+    MonitorQueryCheckResponse,
+    MonitorQuerySaveResponse,
     NewsSearchResponse,
     PaperFulltextResponse,
     PatentSearchResponse,
     ResearchExportResponse,
+    ResearchPanelResponse,
     ScrapePageResponse,
     SearchAndScrapeResponse,
     SequentialSearchResponse,
-    StructuredSearchResponse,
     SyllabusSearchResponse,
     VerifyCitationResponse,
     VerifyRecommendationResponse,
@@ -342,20 +343,6 @@ class WebResearcherClient:
             },
         )
         return AcademicSearchResponse.from_dict(d)
-    async def answer(
-        self,
-        query: str,
-        provider: str = None,
-    ) -> AnswerResponse:
-        """Ask a factual question and get one grounded, synthesized answer with source citations"""
-        d = await self._call_tool(
-            "answer",
-            {
-                "query": query,
-                "provider": provider,
-            },
-        )
-        return AnswerResponse.from_dict(d)
     async def archive_source(
         self,
         url: str,
@@ -770,6 +757,36 @@ class WebResearcherClient:
             },
         )
         return MonarchSearchResponse.from_dict(d)
+    async def monitor_query_check(
+        self,
+        query: str,
+        provider: str = None,
+    ) -> MonitorQueryCheckResponse:
+        """Check a query saved with monitor_query_save for new results since the last check (or since it was saved, on the first check)"""
+        d = await self._call_tool(
+            "monitor_query_check",
+            {
+                "query": query,
+                "provider": provider,
+            },
+        )
+        return MonitorQueryCheckResponse.from_dict(d)
+    async def monitor_query_save(
+        self,
+        query: str,
+        provider: str = None,
+        ttl_days: int = None,
+    ) -> MonitorQuerySaveResponse:
+        """Save a search query to monitor for new results over time"""
+        d = await self._call_tool(
+            "monitor_query_save",
+            {
+                "query": query,
+                "provider": provider,
+                "ttl_days": ttl_days,
+            },
+        )
+        return MonitorQuerySaveResponse.from_dict(d)
     async def news_search(
         self,
         query: str,
@@ -862,6 +879,26 @@ class WebResearcherClient:
             },
         )
         return ResearchExportResponse.from_dict(d)
+    async def research_panel(
+        self,
+        question: str,
+        max_models: int = None,
+        models: Optional[list] = None,
+        timeout_secs: int = None,
+        use_cache: Optional[bool] = None,
+    ) -> ResearchPanelResponse:
+        """Ask the same research question to a panel of independently configured LLMs (auto-detected from configured credentials: OpenRouter, direct OpenAI/Anthropic/Google keys, AWS Bedrock, or local Ollama/LM Studio) and compare their answers"""
+        d = await self._call_tool(
+            "research_panel",
+            {
+                "question": question,
+                "max_models": max_models,
+                "models": models,
+                "timeout_secs": timeout_secs,
+                "use_cache": use_cache,
+            },
+        )
+        return ResearchPanelResponse.from_dict(d)
     async def scrape_page(
         self,
         url: str,
@@ -954,26 +991,6 @@ class WebResearcherClient:
             },
         )
         return SequentialSearchResponse.from_dict(d)
-    async def structured_search(
-        self,
-        query: str,
-        category: str = None,
-        num_results: int = None,
-        provider: str = None,
-        schema: Optional[dict] = None,
-    ) -> StructuredSearchResponse:
-        """Search the web and extract structured data from each result"""
-        d = await self._call_tool(
-            "structured_search",
-            {
-                "query": query,
-                "category": category,
-                "num_results": num_results,
-                "provider": provider,
-                "schema": schema,
-            },
-        )
-        return StructuredSearchResponse.from_dict(d)
     async def syllabus_search(
         self,
         query: str,
@@ -1304,17 +1321,6 @@ class SyncWebResearcherClient:
             source=source,
             year_from=year_from,
             year_to=year_to,
-            )
-        )
-    def answer(
-        self,
-        query: str,
-        provider: str = None,
-    ) -> AnswerResponse:
-        return self._run(
-            self._async_client.answer(
-            query=query,
-            provider=provider,
             )
         )
     def archive_source(
@@ -1674,6 +1680,30 @@ class SyncWebResearcherClient:
             text=text,
             )
         )
+    def monitor_query_check(
+        self,
+        query: str,
+        provider: str = None,
+    ) -> MonitorQueryCheckResponse:
+        return self._run(
+            self._async_client.monitor_query_check(
+            query=query,
+            provider=provider,
+            )
+        )
+    def monitor_query_save(
+        self,
+        query: str,
+        provider: str = None,
+        ttl_days: int = None,
+    ) -> MonitorQuerySaveResponse:
+        return self._run(
+            self._async_client.monitor_query_save(
+            query=query,
+            provider=provider,
+            ttl_days=ttl_days,
+            )
+        )
     def news_search(
         self,
         query: str,
@@ -1752,6 +1782,23 @@ class SyncWebResearcherClient:
             sessionId=sessionId,
             format=format,
             verify_links=verify_links,
+            )
+        )
+    def research_panel(
+        self,
+        question: str,
+        max_models: int = None,
+        models: Optional[list] = None,
+        timeout_secs: int = None,
+        use_cache: Optional[bool] = None,
+    ) -> ResearchPanelResponse:
+        return self._run(
+            self._async_client.research_panel(
+            question=question,
+            max_models=max_models,
+            models=models,
+            timeout_secs=timeout_secs,
+            use_cache=use_cache,
             )
         )
     def scrape_page(
@@ -1835,23 +1882,6 @@ class SyncWebResearcherClient:
             sessionId=sessionId,
             sessionSummary=sessionSummary,
             totalStepsEstimate=totalStepsEstimate,
-            )
-        )
-    def structured_search(
-        self,
-        query: str,
-        category: str = None,
-        num_results: int = None,
-        provider: str = None,
-        schema: Optional[dict] = None,
-    ) -> StructuredSearchResponse:
-        return self._run(
-            self._async_client.structured_search(
-            query=query,
-            category=category,
-            num_results=num_results,
-            provider=provider,
-            schema=schema,
             )
         )
     def syllabus_search(
