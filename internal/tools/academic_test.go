@@ -117,6 +117,73 @@ func TestAcademicSearchFullText(t *testing.T) {
 	}
 }
 
+// scholarAPIStubProvider is a mock standing in for the real ScholarAPI
+// provider (#266) — named "scholarapi" so resolveAcademicSearcher's
+// isKnownAcademicName/explicit-only path picks it by name.
+type scholarAPIStubProvider struct{}
+
+func (p *scholarAPIStubProvider) Name() string { return "scholarapi" }
+func (p *scholarAPIStubProvider) Metadata() search.ProviderMeta {
+	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "metered", Description: "mock (scholarapi)"}
+}
+func (p *scholarAPIStubProvider) Scholarly(_ context.Context, _ search.AcademicSearchParams) ([]search.AcademicResult, error) {
+	return []search.AcademicResult{
+		{Title: "Full-Text Paper", DOI: "10.1/ft", Source: "scholarapi", HasText: true, HasPDF: false},
+	}, nil
+}
+
+// TestAcademicSearchScholarAPIExplicitProvider is the #266 integration guard:
+// a provider only listed in AcademicProvidersExplicitOnly (never
+// SupportedAcademicProviders) must still resolve and serve results when
+// requested by name via provider=scholarapi, and its hasText/hasPdf fields
+// must reach the tool's JSON output.
+func TestAcademicSearchScholarAPIExplicitProvider(t *testing.T) {
+	deps := setupTestDeps()
+	deps.AcademicProviders = map[string]search.AcademicProvider{"scholarapi": &scholarAPIStubProvider{}}
+
+	out, res := callTool(t, deps, "academic_search", map[string]any{
+		"query": "gene editing", "provider": "scholarapi",
+	})
+	if res.IsError {
+		t.Fatalf("unexpected error result")
+	}
+	papers, _ := out["papers"].([]any)
+	if len(papers) != 1 {
+		t.Fatalf("expected 1 paper, got %d", len(papers))
+	}
+	paper := papers[0].(map[string]any)
+	if paper["hasText"] != true {
+		t.Errorf("hasText = %v, want true", paper["hasText"])
+	}
+	if _, ok := paper["hasPdf"]; ok {
+		t.Errorf("hasPdf should be omitted when false, got %v", paper["hasPdf"])
+	}
+}
+
+// TestAcademicSearchScholarAPINotAutoSelected proves scholarapi is never
+// chosen when no provider is requested — isKnownAcademicName gates it out of
+// the default (empty-provider) strategies just as SupportedAcademicProviders
+// gates auto-routing elsewhere.
+func TestAcademicSearchScholarAPINotAutoSelected(t *testing.T) {
+	deps := setupTestDeps()
+	deps.AcademicProviders = map[string]search.AcademicProvider{"scholarapi": &scholarAPIStubProvider{}}
+
+	out, res := callTool(t, deps, "academic_search", map[string]any{"query": "gene editing"})
+	if res.IsError {
+		t.Fatalf("unexpected error result")
+	}
+	// No provider requested and no auto-routed provider configured: must not
+	// silently reach scholarapi. Result should fall through to the web-search
+	// strategy (empty papers here since setupTestDeps' default search stub
+	// returns none), never scholarapi's stubbed paper.
+	papers, _ := out["papers"].([]any)
+	for _, p := range papers {
+		if paper, ok := p.(map[string]any); ok && paper["source"] == "scholarapi" {
+			t.Fatalf("scholarapi must not be auto-selected without an explicit provider request: %v", paper)
+		}
+	}
+}
+
 func TestAcademicSearchPlaceholderTriggersHints(t *testing.T) {
 	deps := setupTestDeps()
 	deps.AcademicProviders = map[string]search.AcademicProvider{"openalex": &placeholderAcademicProvider{}}

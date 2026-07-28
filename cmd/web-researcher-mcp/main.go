@@ -198,6 +198,16 @@ func main() {
 		logger.Info("shared workspaces enabled", "consent", "required", "membership", "host-managed")
 	}
 
+	// Saved query monitoring (#273): consent-gated, off by default. Backed by
+	// the shared persistStore (already covered by the /admin/data export/erasure
+	// path); no dedicated per-tool Exporter/Eraser is registered — a documented
+	// gap the issue explicitly allows deferring to a follow-up.
+	var monitorStore persist.Store
+	if cfg.Features.Monitoring {
+		monitorStore = persistStore
+		logger.Info("query monitoring enabled", "consent", "required", "ttl", cfg.Features.MonitoringTTL)
+	}
+
 	metricsCollector := metrics.NewCollector()
 	rateLimiter := ratelimit.NewWithStore(cfg.RateLimit, persistStore)
 	if redisBackends != nil {
@@ -260,6 +270,7 @@ func main() {
 		PubMedAPIKey:          cfg.Search.PubMedAPIKey,
 		PubMedEmail:           cfg.Search.PubMedEmail,
 		COREAPIKey:            cfg.Search.COREAPIKey,
+		ScholarAPIKey:         cfg.Search.ScholarAPIKey,
 	}
 	academicProviders := search.AvailableAcademicProviders(academicCfg, searchDeps)
 
@@ -370,12 +381,6 @@ func main() {
 		IAAccessKey:     cfg.Search.IAAccessKey,
 		IASecretKey:     cfg.Search.IASecretKey,
 	})
-
-	// Synthesis capabilities (provider-independent): grounded answers and
-	// structured extraction. Discovered from config like every other provider
-	// family — a new implementer appears automatically.
-	answerProviders := search.AvailableAnswerProviders(cfg.Search, searchDeps)
-	structuredProviders := search.AvailableStructuredProviders(cfg.Search, searchDeps)
 
 	allProviders := search.AvailableProviders(cfg.Search, searchDeps)
 
@@ -488,8 +493,6 @@ func main() {
 		LocalProviders:            localProviders,
 		MonarchProviders:          monarchProviders,
 		ContextProviders:          contextProviders,
-		AnswerProviders:           answerProviders,
-		StructuredProviders:       structuredProviders,
 		OAResolver:                oaResolver,
 		RetractionResolver:        retractionResolver,
 		DOIRegistry:               doiRegistry,
@@ -509,6 +512,7 @@ func main() {
 		UserAnalytics:           userAnalytics,
 		Memory:                  memoryStore,
 		Workspaces:              workspaceStore,
+		Monitor:                 monitorStore,
 		BrandFetchAPIKey:        cfg.Search.BrandFetchAPIKey,
 		BrandFetchClientID:      cfg.Search.BrandFetchClientID,
 		OpenSyllabusAPIKey:      cfg.Search.OpenSyllabusAPIKey,
@@ -516,6 +520,7 @@ func main() {
 		PENAmericaAirtableToken: cfg.Search.PENAmericaAirtableToken,
 		CTLogResolver:           ctLogResolver,
 		ArchiveResolver:         archiveResolver,
+		ResearchPanelProviders:  tools.AvailableModelProviders(cfg.ResearchPanel, cfg.AllowPrivateIPs),
 	}
 
 	// Completion suppliers (#193): the live value sets the server can autocomplete
@@ -565,12 +570,6 @@ func main() {
 	}
 	for name := range localProviders {
 		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "local"})
-	}
-	for name := range answerProviders {
-		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "answer"})
-	}
-	for name := range structuredProviders {
-		providerInfos = append(providerInfos, resources.ProviderInfo{Name: name, Type: "structured"})
 	}
 	// Live provider/breaker health for diagnostics://health (#81) is available
 	// only when a multi-provider Router is in play; a single configured provider
@@ -641,6 +640,9 @@ func main() {
 			}
 			if cfg.Features.UserAnalytics {
 				grant(consent.PurposeAnalytics)
+			}
+			if cfg.Features.Monitoring {
+				grant(consent.PurposeMonitoring)
 			}
 			// PurposeWorkspace is intentionally never auto-granted.
 		}
@@ -854,12 +856,6 @@ func completionProviderNames(deps tools.Dependencies) []string {
 		add(name)
 	}
 	for name := range deps.MonarchProviders {
-		add(name)
-	}
-	for name := range deps.AnswerProviders {
-		add(name)
-	}
-	for name := range deps.StructuredProviders {
 		add(name)
 	}
 	names := make([]string, 0, len(seen))

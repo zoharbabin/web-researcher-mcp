@@ -719,59 +719,6 @@ var getSessionOutputSchema = map[string]any{
 	},
 }
 
-var answerOutputSchema = map[string]any{
-	"type": "object",
-	"properties": map[string]any{
-		"answer":   map[string]any{"type": "string", "description": "The synthesized natural-language answer."},
-		"provider": map[string]any{"type": "string", "description": "Which provider produced the answer."},
-		"costUsd":  map[string]any{"type": "number", "description": "Estimated cost of this call in USD for metered providers (an estimate, not an invoice); 0 for free providers."},
-		"trust":    trustUntrustedExternal,
-		"hints":    map[string]any{"type": "object", "description": "Present only on a low-confidence result: a weak query↔answer term overlap heads-up (the answer may address a loosely-related reading of the query)."},
-		"citations": map[string]any{
-			"type":        "array",
-			"description": "Sources the answer is grounded in.",
-			"items": map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"title":         map[string]any{"type": "string"},
-					"url":           map[string]any{"type": "string"},
-					"publishedDate": map[string]any{"type": "string"},
-				},
-			},
-		},
-	},
-}
-
-var structuredSearchOutputSchema = map[string]any{
-	"type": "object",
-	"properties": map[string]any{
-		"query":       map[string]any{"type": "string"},
-		"category":    map[string]any{"type": "string"},
-		"resultCount": map[string]any{"type": "integer"},
-		"provider":    map[string]any{"type": "string", "description": "Which provider produced the results."},
-		"costUsd":     map[string]any{"type": "number", "description": "Estimated cost of this call in USD for metered providers (an estimate, not an invoice); 0 for free providers."},
-		"trust":       trustUntrustedExternal,
-		"hints":       map[string]any{"type": "object", "description": "Present only on a low-confidence result: a weak query↔result term overlap heads-up (the results may match a loosely-related reading of the query)."},
-		"results": map[string]any{
-			"type": "array",
-			"items": map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"title":         map[string]any{"type": "string"},
-					"url":           map[string]any{"type": "string"},
-					"publishedDate": map[string]any{"type": "string"},
-					"author":        map[string]any{"type": "string"},
-					// summary is JSON conforming to the caller's schema when one was
-					// supplied, else a plain text summary; type left unconstrained.
-					"summary":    map[string]any{"description": "Extracted JSON (matching the supplied schema) or a plain text summary."},
-					"highlights": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-					"entities":   map[string]any{"type": "array", "description": "Structured entities (company/person), present only for category 'company'."},
-				},
-			},
-		},
-	},
-}
-
 // academicPaperItemSchema is the per-paper object shape shared by academic_search
 // (papers[]) and citation_graph (citedBy[]/references[]).
 var academicPaperItemSchema = map[string]any{
@@ -1428,6 +1375,58 @@ var brandResearchOutputSchema = map[string]any{
 	},
 }
 
+var researchPanelOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"question": map[string]any{"type": "string"},
+		"trust":    trustUntrustedExternal,
+		"panel": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"model_id":    map[string]any{"type": "string"},
+					"provider":    map[string]any{"type": "string"},
+					"response":    map[string]any{"type": "string", "description": "Present only when this panel member answered successfully."},
+					"latency_ms":  map[string]any{"type": "integer"},
+					"tokens_used": map[string]any{"type": "integer", "description": "Present only alongside response (input + output tokens)."},
+					"error":       map[string]any{"type": "string", "description": "Present only when this panel member failed (timeout, upstream error) instead of answering."},
+				},
+			},
+		},
+		"divergence": map[string]any{
+			"type":        "object",
+			"description": "Deterministic, model-free agreement/disagreement summary across panel responses — no synthesis LLM call.",
+			"properties": map[string]any{
+				"consensus_points": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Claims restated (≥0.8 term-overlap) by at least 80% of the other panel members."},
+				"contradictions": map[string]any{
+					"type": "array",
+					"items": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"claim":     map[string]any{"type": "string"},
+							"positions": map[string]any{"type": "object", "description": "model_id -> that model's conflicting sentence.", "additionalProperties": map[string]any{"type": "string"}},
+						},
+					},
+				},
+				"unique_to_model":      map[string]any{"type": "object", "description": "model_id -> claims no other panel member restated.", "additionalProperties": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}},
+				"confidence":           map[string]any{"type": "string", "enum": []any{"high", "medium", "low"}},
+				"confidence_rationale": map[string]any{"type": "string"},
+			},
+		},
+		"_meta": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"cached":            map[string]any{"type": "boolean"},
+				"models_queried":    map[string]any{"type": "integer"},
+				"models_succeeded":  map[string]any{"type": "integer"},
+				"models_failed":     map[string]any{"type": "integer"},
+				"total_tokens_used": map[string]any{"type": "integer"},
+			},
+		},
+	},
+}
+
 var paperFulltextOutputSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{
@@ -1469,6 +1468,45 @@ var paperFulltextOutputSchema = map[string]any{
 						"mla":    map[string]any{"type": "string"},
 						"bibtex": map[string]any{"type": "string"},
 					},
+				},
+			},
+		},
+	},
+}
+
+var monitorQuerySaveOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"status":    map[string]any{"type": "string", "enum": []any{"ok", "no_consent", "unavailable", "limit_reached"}},
+		"reason":    map[string]any{"type": "string"},
+		"query":     map[string]any{"type": "string"},
+		"provider":  map[string]any{"type": "string"},
+		"seenCount": map[string]any{"type": "integer", "description": "Number of result URLs captured as the baseline."},
+		"savedAt":   map[string]any{"type": "string", "description": "RFC3339 timestamp this monitor was saved."},
+		"ttlDays":   map[string]any{"type": "integer", "description": "Retention period in days before this monitor is silently dropped."},
+	},
+}
+
+var monitorQueryCheckOutputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"status":    map[string]any{"type": "string", "enum": []any{"ok", "not_found", "no_consent", "unavailable"}},
+		"reason":    map[string]any{"type": "string"},
+		"query":     map[string]any{"type": "string"},
+		"provider":  map[string]any{"type": "string"},
+		"newCount":  map[string]any{"type": "integer", "description": "Number of results not previously seen by this monitor."},
+		"lastRunAt": map[string]any{"type": "string", "description": "RFC3339 timestamp of the previous check (or the save, if this is the first check)."},
+		"trust":     trustUntrustedExternal,
+		"newResults": map[string]any{
+			"type":        "array",
+			"description": "Only the results whose URL was not already in this monitor's seen set. Empty when nothing is new — that is a normal, expected outcome, not an error.",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"title":       map[string]any{"type": "string"},
+					"url":         map[string]any{"type": "string"},
+					"snippet":     map[string]any{"type": "string"},
+					"publishedAt": map[string]any{"type": "string"},
 				},
 			},
 		},

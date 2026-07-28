@@ -3,7 +3,6 @@ package search
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -232,85 +231,6 @@ func TestExaScholarly(t *testing.T) {
 	}
 }
 
-func TestExaAnswer(t *testing.T) {
-	p, _ := newExaTestServer(t, func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasSuffix(r.URL.Path, "/answer") {
-			t.Errorf("Answer must POST /answer, got %s", r.URL.Path)
-		}
-		_, _ = w.Write([]byte(`{
-			"answer":"42",
-			"citations":[{"title":"Src","url":"https://s.example","publishedDate":"2026-01-01"}],
-			"costDollars":{"total":0.005}
-		}`))
-	})
-	res, err := p.Answer(context.Background(), AnswerParams{Query: "meaning of life"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if res.Answer != "42" || len(res.Citations) != 1 || res.CostUSD != 0.005 {
-		t.Errorf("unexpected answer result: %+v", res)
-	}
-}
-
-func TestExaStructuredSearchWithSchema(t *testing.T) {
-	var gotBody map[string]any
-	p, _ := newExaTestServer(t, func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		_ = json.Unmarshal(body, &gotBody)
-		// summary returned as a JSON STRING conforming to the supplied schema
-		_, _ = w.Write([]byte(`{
-			"results":[{"title":"Co","url":"https://co.example","summary":"{\"founded\":2021}","entities":[{"type":"company","properties":{"name":"Co"}}]}],
-			"costDollars":{"total":0.01}
-		}`))
-	})
-	schema := json.RawMessage(`{"type":"object","properties":{"founded":{"type":"number"}}}`)
-	res, err := p.StructuredSearch(context.Background(), StructuredParams{
-		Query: "Co", Category: "company", NumResults: 3, Schema: schema,
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	contents, _ := gotBody["contents"].(map[string]any)
-	summary, _ := contents["summary"].(map[string]any)
-	if summary["schema"] == nil {
-		t.Errorf("schema must be nested under contents.summary.schema, got %v", contents["summary"])
-	}
-	if gotBody["category"] != "company" {
-		t.Errorf("category should pass through, got %v", gotBody["category"])
-	}
-	if len(res.Results) != 1 {
-		t.Fatalf("want 1 result, got %d", len(res.Results))
-	}
-	// summary is embedded verbatim as JSON (not double-encoded as a string)
-	if string(res.Results[0].Summary) != `{"founded":2021}` {
-		t.Errorf("schema-conforming summary should embed as JSON, got %s", res.Results[0].Summary)
-	}
-	if len(res.Results[0].Entities) == 0 {
-		t.Errorf("entities should be surfaced for category=company")
-	}
-}
-
-func TestExaStructuredSearchNoSchemaPlainSummary(t *testing.T) {
-	var gotBody map[string]any
-	p, _ := newExaTestServer(t, func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		_ = json.Unmarshal(body, &gotBody)
-		_, _ = w.Write([]byte(`{"results":[{"title":"T","url":"https://t.example","summary":"plain text"}],"costDollars":{"total":0.01}}`))
-	})
-	res, err := p.StructuredSearch(context.Background(), StructuredParams{Query: "x", NumResults: 2})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	contents, _ := gotBody["contents"].(map[string]any)
-	if contents["summary"] != true {
-		t.Errorf("no schema ⇒ contents.summary should be true, got %v", contents["summary"])
-	}
-	// plain text summary is JSON-encoded as a string
-	if string(res.Results[0].Summary) != `"plain text"` {
-		t.Errorf("plain summary should be JSON string, got %s", res.Results[0].Summary)
-	}
-}
-
 func TestExaRateLimitClassified(t *testing.T) {
 	p, _ := newExaTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(429)
@@ -333,54 +253,9 @@ func TestExaUpstreamError(t *testing.T) {
 	}
 }
 
-func TestExaValidateStructured(t *testing.T) {
-	p := NewExaProvider("k", newExaTestDeps())
-	cases := []struct {
-		name    string
-		params  StructuredParams
-		wantErr bool
-	}{
-		{"no category no schema", StructuredParams{Query: "x"}, false},
-		{"valid category", StructuredParams{Query: "x", Category: "company"}, false},
-		{"bad category", StructuredParams{Query: "x", Category: "tweet"}, true},
-		{"valid flat schema", StructuredParams{Query: "x", Schema: json.RawMessage(`{"type":"object","properties":{"a":{"type":"string"}}}`)}, false},
-		{"non-object root", StructuredParams{Query: "x", Schema: json.RawMessage(`{"type":"array"}`)}, true},
-		{"nested object", StructuredParams{Query: "x", Schema: json.RawMessage(`{"type":"object","properties":{"a":{"type":"object"}}}`)}, true},
-		{"array of objects", StructuredParams{Query: "x", Schema: json.RawMessage(`{"type":"object","properties":{"a":{"type":"array","items":{"type":"object"}}}}`)}, true},
-		{"array of primitives", StructuredParams{Query: "x", Schema: json.RawMessage(`{"type":"object","properties":{"a":{"type":"array","items":{"type":"string"}}}}`)}, false},
-		{"invalid json schema", StructuredParams{Query: "x", Schema: json.RawMessage(`{not json`)}, true},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			msg := p.validateStructured(c.params)
-			if (msg != "") != c.wantErr {
-				t.Errorf("validateStructured = %q, wantErr=%v", msg, c.wantErr)
-			}
-		})
-	}
-}
-
-func TestExaStructuredSearchRejectsBadParamsWithoutCall(t *testing.T) {
-	called := false
-	p, _ := newExaTestServer(t, func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		_, _ = w.Write([]byte(`{"results":[]}`))
-	})
-	_, err := p.StructuredSearch(context.Background(), StructuredParams{Query: "x", Category: "bogus"})
-	var ipe *InvalidParamsError
-	if !errors.As(err, &ipe) {
-		t.Fatalf("expected InvalidParamsError, got %v", err)
-	}
-	if called {
-		t.Error("a bad request must NOT reach the network (no paid call)")
-	}
-}
-
 func TestExaInterfaces(t *testing.T) {
 	var _ Provider = (*ExaProvider)(nil)
 	var _ AcademicProvider = (*ExaProvider)(nil)
-	var _ AnswerProvider = (*ExaProvider)(nil)
-	var _ StructuredProvider = (*ExaProvider)(nil)
 }
 
 func TestFreshnessToStartDate(t *testing.T) {
@@ -406,34 +281,6 @@ func TestPublishYear(t *testing.T) {
 	for in, want := range cases {
 		if got := publishYear(in); got != want {
 			t.Errorf("publishYear(%q) = %d, want %d", in, got, want)
-		}
-	}
-}
-
-func TestJSONOrString(t *testing.T) {
-	cases := []struct {
-		in   string
-		want string // "" means nil
-	}{
-		{"", ""},
-		{`{"a":1}`, `{"a":1}`},         // object embeds verbatim
-		{`[1,2]`, `[1,2]`},             // array embeds verbatim
-		{"plain text", `"plain text"`}, // plain → JSON string
-		{"null", `"null"`},             // bare scalar → JSON string (not dropped)
-		{"123", `"123"`},               // bare number → JSON string (type contract held)
-		{"true", `"true"`},             // bare bool → JSON string
-		{`  {"a":1}  `, `  {"a":1}  `}, // leading ws still recognized as object
-	}
-	for _, c := range cases {
-		got := jsonOrString(c.in)
-		if c.want == "" {
-			if got != nil {
-				t.Errorf("jsonOrString(%q) = %s, want nil", c.in, got)
-			}
-			continue
-		}
-		if string(got) != c.want {
-			t.Errorf("jsonOrString(%q) = %s, want %s", c.in, got, c.want)
 		}
 	}
 }

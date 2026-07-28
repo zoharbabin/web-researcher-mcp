@@ -1596,3 +1596,189 @@ func TestBuildRareDiseaseResearchPromptUnit(t *testing.T) {
 		}
 	}
 }
+
+// ── research-panel-factcheck prompt tests ──────────────────────────────────
+
+func TestResearchPanelFactcheckPromptRegistered(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	prompts, err := cs.ListPrompts(ctx, &mcp.ListPromptsParams{})
+	if err != nil {
+		t.Fatalf("ListPrompts failed: %v", err)
+	}
+	found := false
+	for _, pr := range prompts.Prompts {
+		if pr.Name == "research-panel-factcheck" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected 'research-panel-factcheck' in prompt list")
+	}
+}
+
+func TestResearchPanelFactcheckPrompt(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "research-panel-factcheck",
+		Arguments: map[string]string{"claim": "vaccines cause autism"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	if len(result.Messages) == 0 {
+		t.Fatal("expected at least one message")
+	}
+	msg := requireFirstMessageText(t, result)
+	if !strings.Contains(msg, "vaccines cause autism") {
+		t.Errorf("expected supplied claim in prompt output, got: %.200s", msg)
+	}
+	if strings.Contains(msg, "{{") {
+		t.Errorf("prompt output contains an unresolved template placeholder: %.200s", msg)
+	}
+	for _, want := range []string{"research_panel", "divergence.contradictions", "divergence.unique_to_model", "confidence"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("expected %q mentioned in prompt output", want)
+		}
+	}
+}
+
+func TestResearchPanelFactcheckPromptEmptyClaim(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	_, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "research-panel-factcheck",
+		Arguments: map[string]string{"claim": ""},
+	})
+	if err == nil {
+		t.Error("expected error for empty claim, got nil")
+	}
+}
+
+// TestBuildResearchPanelFactcheckPromptUnit is a direct unit test for
+// buildResearchPanelFactcheckPrompt.
+func TestBuildResearchPanelFactcheckPromptUnit(t *testing.T) {
+	t.Parallel()
+	got := buildResearchPanelFactcheckPrompt("the moon landing was faked")
+	if got == "" {
+		t.Fatal("expected non-empty prompt")
+	}
+	for _, want := range []string{"the moon landing was faked", "research_panel", "verify_citation", "divergence.contradictions", "divergence.unique_to_model", "confidence_rationale"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q in prompt output", want)
+		}
+	}
+}
+
+// ── research-panel-synthesis prompt tests ──────────────────────────────────
+
+func TestResearchPanelSynthesisPromptRegistered(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	prompts, err := cs.ListPrompts(ctx, &mcp.ListPromptsParams{})
+	if err != nil {
+		t.Fatalf("ListPrompts failed: %v", err)
+	}
+	found := false
+	for _, pr := range prompts.Prompts {
+		if pr.Name == "research-panel-synthesis" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected 'research-panel-synthesis' in prompt list")
+	}
+}
+
+func TestResearchPanelSynthesisPrompt(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	result, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "research-panel-synthesis",
+		Arguments: map[string]string{"question": "what causes inflation"},
+	})
+	if err != nil {
+		t.Fatalf("GetPrompt failed: %v", err)
+	}
+	if len(result.Messages) == 0 {
+		t.Fatal("expected at least one message")
+	}
+	msg := requireFirstMessageText(t, result)
+	if !strings.Contains(msg, "what causes inflation") {
+		t.Errorf("expected supplied question in prompt output, got: %.200s", msg)
+	}
+	if strings.Contains(msg, "{{") {
+		t.Errorf("prompt output contains an unresolved template placeholder: %.200s", msg)
+	}
+	for _, want := range []string{"research_panel", "divergence.consensus_points", "divergence.contradictions", "divergence.unique_to_model"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("expected %q mentioned in prompt output", want)
+		}
+	}
+}
+
+func TestResearchPanelSynthesisPromptEmptyQuestion(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := metrics.NewCollector()
+	s, _ := session.NewManager(session.Config{MaxSessions: 10})
+	srv := createTestServer(m, s)
+	cs := connectTestClient(ctx, t, srv)
+	defer cs.Close()
+
+	_, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{
+		Name:      "research-panel-synthesis",
+		Arguments: map[string]string{"question": ""},
+	})
+	if err == nil {
+		t.Error("expected error for empty question, got nil")
+	}
+}
+
+// TestBuildResearchPanelSynthesisPromptUnit is a direct unit test for
+// buildResearchPanelSynthesisPrompt.
+func TestBuildResearchPanelSynthesisPromptUnit(t *testing.T) {
+	t.Parallel()
+	got := buildResearchPanelSynthesisPrompt("what causes inflation")
+	if got == "" {
+		t.Fatal("expected non-empty prompt")
+	}
+	for _, want := range []string{"what causes inflation", "research_panel", "divergence.consensus_points", "divergence.contradictions", "divergence.unique_to_model", "confidence_rationale"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q in prompt output", want)
+		}
+	}
+}

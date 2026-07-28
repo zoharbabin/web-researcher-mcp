@@ -307,6 +307,45 @@ func TestHalfOpenRateLimitReopensImmediately(t *testing.T) {
 	}
 }
 
+// TestNonTrippingErrorLeavesStateUnchanged (#266): a wrapped ErrNonTripping
+// (e.g. ScholarAPI's 402 credits-exhausted) must be returned to the caller but
+// never increment the failure counter or change state — repeated 402s are a
+// billing condition a human must resolve, not a service-health signal the
+// breaker should act on.
+func TestNonTrippingErrorLeavesStateUnchanged(t *testing.T) {
+	b := New(Config{FailureThreshold: 2, ResetTimeout: 60})
+
+	wrapped := fmt.Errorf("scholarapi: credits exhausted (402): %w", ErrNonTripping)
+	for i := 0; i < 10; i++ {
+		err := b.Execute(func() error { return wrapped })
+		if !errors.Is(err, ErrNonTripping) {
+			t.Fatalf("call %d: expected wrapped ErrNonTripping, got %v", i, err)
+		}
+	}
+
+	if b.State() != StateClosed {
+		t.Errorf("expected Closed after repeated ErrNonTripping, got %v", b.State())
+	}
+	if b.failures != 0 {
+		t.Errorf("expected failures counter untouched (0), got %d", b.failures)
+	}
+}
+
+// TestNonTrippingCheckedBeforeRateLimit (#266): if a caller ever wraps both
+// sentinels (shouldn't happen in practice, but the precedence must be
+// deterministic), ErrNonTripping wins — the non-tripping check runs first in
+// onFailure.
+func TestNonTrippingCheckedBeforeRateLimit(t *testing.T) {
+	b := New(Config{FailureThreshold: 2, ResetTimeout: 60})
+
+	wrapped := fmt.Errorf("both: %w: %w", ErrNonTripping, ErrRateLimit)
+	_ = b.Execute(func() error { return wrapped })
+
+	if b.State() != StateClosed {
+		t.Errorf("expected Closed — ErrNonTripping must take precedence over ErrRateLimit, got %v", b.State())
+	}
+}
+
 func TestConcurrentAccess(t *testing.T) {
 	b := New(Config{FailureThreshold: 100, ResetTimeout: 1})
 

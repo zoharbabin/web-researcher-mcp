@@ -78,12 +78,10 @@ type FallbackNotifier func(op Operation, from, to, reason string)
 //
 // Capability coverage: the Router routes Web/Images/News (Provider),
 // Patents (PatentSearcher), and Scholarly (AcademicSearcher) with per-provider
-// breaker fallback. It deliberately does NOT route the synthesis capabilities
-// (AnswerSearcher/StructuredSearcher) — those are resolved directly from the
-// Dependencies maps in the tool layer (resolveAnswerSearcher /
-// resolveStructuredSearcher), since a single synthesis provider needs no
-// fallback ladder. Add Answer/StructuredSearch methods here if/when multiple
-// synthesis providers warrant routed fallback.
+// breaker fallback. Structured-domain capabilities (filing/case/econ/trial/
+// monarch/awesome-list/local/context) are resolved directly from the
+// Dependencies maps in the tool layer, since each has at most one active
+// provider today and needs no fallback ladder.
 type Router struct {
 	mu                  sync.RWMutex
 	providers           map[string]Provider
@@ -100,8 +98,7 @@ type Router struct {
 }
 
 // Compile-time proof the Router satisfies every capability it routes. These
-// also document, at the type, exactly which capabilities the Router covers (and
-// visibly exclude AnswerSearcher/StructuredSearcher — see the Router doc above).
+// also document, at the type, exactly which capabilities the Router covers.
 var (
 	_ Provider         = (*Router)(nil)
 	_ PatentSearcher   = (*Router)(nil)
@@ -571,13 +568,20 @@ func (r *Router) academicPriority() []string {
 		}
 	}
 
-	// Add any registered providers not already in the priority list
+	// Add any registered providers not already in the priority list, excluding
+	// explicit-only providers (e.g. scholarapi) — those are paid/metered and must
+	// only be reached via an explicit provider= request or explicit routing config,
+	// never auto-fallback.
 	seen := make(map[string]bool, len(priority))
 	for _, name := range priority {
 		seen[name] = true
 	}
+	explicitOnly := make(map[string]bool, len(AcademicProvidersExplicitOnly))
+	for _, name := range AcademicProvidersExplicitOnly {
+		explicitOnly[name] = true
+	}
 	for name := range r.academicProviders {
-		if !seen[name] {
+		if !seen[name] && !explicitOnly[name] {
 			priority = append(priority, name)
 		}
 	}

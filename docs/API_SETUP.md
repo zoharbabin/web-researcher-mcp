@@ -197,10 +197,8 @@ The key is sent as an `Authorization: Bearer` header (never in the request body)
 
 **Free tier**: 1,000 requests/month; paid per call beyond that
 
-Exa is a neural/semantic search API. Beyond ordinary web and news search, an Exa key unlocks several capabilities no other provider offers here:
+Exa is a neural/semantic search API. Beyond ordinary web and news search, an Exa key unlocks capabilities no other provider offers here:
 
-- **Grounded answers** — backs the provider-independent `answer` tool (one synthesized answer with citations).
-- **Structured extraction** — backs the provider-independent `structured_search` tool (schema-defined fields and company/people entities, as JSON per result).
 - **Academic search** — `academic_search` can route to Exa via the research-paper category.
 - **A paid scrape fallback** — Exa's `/contents` API becomes the last-resort extraction tier for `scrape_page`, recovering hard pages the free tiers can't (only when the local tiers all fail).
 
@@ -221,7 +219,7 @@ The key is sent as the `x-api-key` header (never in the request body or logs).
 
 ### Good to know
 
-- **Paid per call.** Exa charges per request (free tier: 1,000/month). Each `answer` / `structured_search` response (when served by Exa) reports the estimated `costUsd` of that call, and the cost is recorded in the audit trail as `cost_usd`. The estimate is not an invoice.
+- **Paid per call.** Exa charges per request (free tier: 1,000/month).
 - **No image search.** `image_search` with Exa returns empty (no error) — keep an image-capable provider (Google, Brave, SearchAPI) in `SEARCH_ROUTING` if you need images.
 - **Search type is fixed to `auto`.** The expensive deep/deep-reasoning tiers are deliberately not exposed; `auto` is the balanced, predictable-cost default.
 - **The scrape fallback is opt-in by cost.** The Exa `/contents` tier runs only when the free scrape tiers (markdown → stealth → HTML → browser, when Chrome is configured) all fail to extract content — the common path never spends an Exa credit on scraping.
@@ -470,6 +468,20 @@ export PUBMED_EMAIL=you@example.com     # NCBI contact param; falls back to OPEN
 ```
 
 **Notes**: Keyless use works out of the box. A key is recommended for sustained or high-volume use. `PUBMED_EMAIL` falls back to `OPENALEX_EMAIL` — setting the OpenAlex email is sufficient to cover both. Also selectable as an `academic_search` provider via `provider: pubmed`.
+
+### ScholarAPI (Full-Text Retrieval — Paid, Explicit Only)
+
+A paid, metered academic search API (10 credits/search call) whose differentiator is full-text access: results carry `hasText`/`hasPdf` availability signals, and full text can be fetched separately. Because it costs credits on every call, it is **excluded from automatic routing and fallback** — it is only ever used when a caller passes `provider: scholarapi` explicitly.
+
+**Step 1**: Create an account and obtain an API key at [scholarapi.net](https://scholarapi.net/).
+
+**Step 2**: Configure
+
+```bash
+export SCHOLAR_API_KEY=your-key
+```
+
+**Notes**: Never included in `SEARCH_ROUTING`'s automatic academic fallback ladder — set the key and pass `provider: scholarapi` to `academic_search` to use it. DOI resolution is a fuzzy search validated against an exact-match check, not a dedicated lookup endpoint. It has no retraction signal of its own (the standard Crossref retraction enrichment still applies to any DOI-bearing result), and abstract coverage is intermittent. A `402` response means credits are exhausted — this is a billing state, not a service failure, and does not trip the provider's circuit breaker.
 
 ### Unpaywall (Open-Access Enrichment)
 

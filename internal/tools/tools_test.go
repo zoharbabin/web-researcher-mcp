@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -128,36 +129,6 @@ func (m *mockProviderWithURL) Name() string { return "mock-with-url" }
 
 func newTestBreaker() *circuit.Breaker {
 	return circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60})
-}
-
-// mockSynthProvider implements the provider-independent AnswerProvider and
-// StructuredProvider interfaces, so wiring it into AnswerProviders/
-// StructuredProviders makes the conditionally-registered `answer` and
-// `structured_search` tools visible to the CI drift tests. It is vendor-neutral
-// (Name "mocksynth") — the tools must work for any provider, not just Exa.
-type mockSynthProvider struct{}
-
-func (m *mockSynthProvider) Name() string { return "mocksynth" }
-
-func (m *mockSynthProvider) Metadata() search.ProviderMeta {
-	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "free", Description: "mock synthesis provider"}
-}
-
-func (m *mockSynthProvider) Answer(_ context.Context, _ search.AnswerParams) (*search.AnswerResult, error) {
-	return &search.AnswerResult{
-		Answer:    "A test answer.",
-		Citations: []search.Citation{{Title: "Source", URL: "https://example.com", PublishedDate: "2026-01-01"}},
-		Provider:  "mocksynth",
-		CostUSD:   0.005,
-	}, nil
-}
-
-func (m *mockSynthProvider) StructuredSearch(_ context.Context, p search.StructuredParams) (*search.StructuredResult, error) {
-	return &search.StructuredResult{
-		Results:  []search.StructuredItem{{Title: "Item", URL: "https://example.com"}},
-		Provider: "mocksynth",
-		CostUSD:  0.007,
-	}, nil
 }
 
 // mockAcademicProvider implements AcademicProvider + CitationSearcher, so wiring
@@ -321,6 +292,30 @@ func (m *mockLocalProvider) Local(_ context.Context, _ search.LocalSearchParams)
 	}}, nil
 }
 
+// mockModelProvider backs research_panel in tests — a fixed panel member that
+// answers instantly without a real LLM credential. A non-nil err makes Ask
+// fail instead, and calls (when set) counts every Ask invocation so a test
+// can assert no extra call beyond the panel members themselves.
+type mockModelProvider struct {
+	name    string
+	modelID string
+	text    string
+	err     error
+	calls   *atomic.Int64
+}
+
+func (m *mockModelProvider) Name() string    { return m.name }
+func (m *mockModelProvider) ModelID() string { return m.modelID }
+func (m *mockModelProvider) Ask(_ context.Context, _ string) (ModelResponse, error) {
+	if m.calls != nil {
+		m.calls.Add(1)
+	}
+	if m.err != nil {
+		return ModelResponse{}, m.err
+	}
+	return ModelResponse{Text: m.text, InputTokens: 10, OutputTokens: 20, LatencyMs: 5}, nil
+}
+
 // mockCTLogResolver and mockArchiveResolver back company_recon's two
 // resolver-dependent phases in tests, mirroring the other mock*Provider types
 // above — a minimal fixed result so the tool's fan-out and merge logic (not
@@ -340,7 +335,6 @@ func (m *mockArchiveResolver) Lookup(_ context.Context, domain string, _ int) ([
 }
 
 func setupTestDeps() Dependencies {
-	synth := &mockSynthProvider{}
 	academic := &mockAcademicProvider{}
 	filing := &mockFilingProvider{}
 	caseProv := &mockCaseProvider{}
@@ -352,8 +346,6 @@ func setupTestDeps() Dependencies {
 	return Dependencies{
 		Cache:                cache.NewNoop(),
 		Search:               &mockProvider{},
-		AnswerProviders:      map[string]search.AnswerProvider{synth.Name(): synth},
-		StructuredProviders:  map[string]search.StructuredProvider{synth.Name(): synth},
 		AcademicProviders:    map[string]search.AcademicProvider{academic.Name(): academic},
 		FilingProviders:      map[string]search.FilingProvider{filing.Name(): filing},
 		CaseProviders:        map[string]search.CaseProvider{caseProv.Name(): caseProv},
@@ -376,6 +368,7 @@ func setupTestDeps() Dependencies {
 		UserAnalytics: useranalytics.NewStoreRecorder(persist.NewMemoryStore()),
 		Memory:        memory.NewStore(persist.NewMemoryStore(), 0),
 		Workspaces:    workspace.NewStore(persist.NewMemoryStore(), 0),
+		Monitor:       persist.NewMemoryStore(),
 		// Bare-field-gated tools (#352): a non-empty value is all that's needed
 		// to register them under test — no mock provider map involved.
 		OpenSyllabusAPIKey:      "test-key",
@@ -383,6 +376,10 @@ func setupTestDeps() Dependencies {
 		PENAmericaAirtableToken: "test-token",
 		CTLogResolver:           &mockCTLogResolver{},
 		ArchiveResolver:         &mockArchiveResolver{},
+		ResearchPanelProviders: []ModelProvider{
+			&mockModelProvider{name: "mock-a", modelID: "model-a", text: "The sky is blue."},
+			&mockModelProvider{name: "mock-b", modelID: "model-b", text: "The sky is blue."},
+		},
 	}
 }
 

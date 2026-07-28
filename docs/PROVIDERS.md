@@ -53,23 +53,22 @@ Understanding what backs each provider helps you reason about result overlap and
 
 Which tools each web search provider enables. `—` means the provider returns empty (no error) for that capability — image-capable providers in `SEARCH_ROUTING` will handle the fallback automatically.
 
-| Provider | `web_search` | `image_search` | `news_search` | `answer` | `structured_search` | `local_search` | Scrape fallback tier |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **[DuckDuckGo](https://duckduckgo.com/)** | ✓ | ✓ | ✓ | — | — | — | — |
-| **[Google PSE](https://programmablesearchengine.google.com/)** | ✓ | ✓ | ✓ | — | — | — | — |
-| **[Serper](https://serper.dev/)** | ✓ | ✓ | ✓ | — | — | — | — |
-| **[SearchAPI.io](https://www.searchapi.io/)** | ✓ | ✓ | ✓ | — | — | — | — |
-| **[Brave](https://brave.com/search/api/)** | ✓ | ✓ | ✓ | — | — | ✓ | — |
-| **[Exa](https://exa.ai/)** | ✓ | — | ✓ | ✓ | ✓ | — | ✓ (paid, last-resort) |
-| **[Tavily](https://app.tavily.com/)** | ✓ | — | ✓ | — | — | — | — |
-| **[SearXNG](https://docs.searxng.org/)** | ✓ | ✓ | ✓ | — | — | — | — |
-| **[HackerNews](https://hn.algolia.com/)** | ✓ | — | ✓ | — | — | — | — |
-| **[Reddit](https://www.reddit.com/)** | ✓ | — | ✓ | — | — | — | — |
-| **[Bluesky](https://bsky.app/)** | ✓ | — | — | — | — | — | — |
-| **[GitHub](https://docs.github.com/en/rest/search/search)** | ✓ | — | ✓ | — | — | — | — |
+| Provider | `web_search` | `image_search` | `news_search` | `local_search` | Scrape fallback tier |
+|---|:---:|:---:|:---:|:---:|:---:|
+| **[DuckDuckGo](https://duckduckgo.com/)** | ✓ | ✓ | ✓ | — | — |
+| **[Google PSE](https://programmablesearchengine.google.com/)** | ✓ | ✓ | ✓ | — | — |
+| **[Serper](https://serper.dev/)** | ✓ | ✓ | ✓ | — | — |
+| **[SearchAPI.io](https://www.searchapi.io/)** | ✓ | ✓ | ✓ | — | — |
+| **[Brave](https://brave.com/search/api/)** | ✓ | ✓ | ✓ | ✓ | — |
+| **[Exa](https://exa.ai/)** | ✓ | — | ✓ | — | ✓ (paid, last-resort) |
+| **[Tavily](https://app.tavily.com/)** | ✓ | — | ✓ | — | — |
+| **[SearXNG](https://docs.searxng.org/)** | ✓ | ✓ | ✓ | — | — |
+| **[HackerNews](https://hn.algolia.com/)** | ✓ | — | ✓ | — | — |
+| **[Reddit](https://www.reddit.com/)** | ✓ | — | ✓ | — | — |
+| **[Bluesky](https://bsky.app/)** | ✓ | — | — | — | — |
+| **[GitHub](https://docs.github.com/en/rest/search/search)** | ✓ | — | ✓ | — | — |
 
 **Notes:**
-- `answer` and `structured_search` are provider-independent tools, but Exa is the only web provider that backs them with its native API. They remain unavailable if no Exa key is set.
 - `local_search` is Brave-only — it requires `BRAVE_API_KEY`. No other web provider supports the three-call local pipeline (locations → POIs → descriptions).
 - Brave also exposes a LLM context endpoint (`/res/v1/llm/context`) consumed by `search_and_scrape` as a fast-path for RAG/grounding workflows. When Brave is the active provider, `search_and_scrape` tries the server-assembled context first; if that fails, it falls back to the standard search-then-scrape pipeline. Requires `BRAVE_DATA_FOR_AI` plan access.
 - Exa's scrape fallback tier (`/contents`) fires only when all free tiers (markdown → stealth → Jina Reader → HTML → browser) have failed. It charges an Exa credit per call.
@@ -106,7 +105,6 @@ Which tools each web search provider enables. `—` means the provider returns e
 | Independent results alongside Google | [Brave](https://brave.com/search/api/) or [Exa](https://exa.ai/) (different indices, no overlap) |
 | Semantic / conceptual search | [Exa](https://exa.ai/) |
 | LLM-ready extracted content | [Tavily](https://app.tavily.com/) |
-| `answer` or `structured_search` tools | [Exa](https://exa.ai/) (required) |
 | Air-gapped or no vendor lock-in | [SearXNG](https://docs.searxng.org/) (self-hosted) |
 | Tech/developer community signal | [HackerNews](https://hn.algolia.com/) |
 | Reddit / community discussion signal | [Reddit](https://www.reddit.com/) |
@@ -126,7 +124,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 
 **[Brave](https://brave.com/search/api/)** — Own crawler, own index, privacy-first. Best all-purpose choice when you want index independence from Google/Bing and a generous free tier. Supports web, image, news, and Goggles-based custom result weighting. Also exposes local/map results via `local_search` (the only provider that does) and a LLM context endpoint used by `search_and_scrape` for faster grounding when you're on Brave's Data for AI plan.
 
-**[Exa](https://exa.ai/)** — Neural/semantic index. Results are ranked by embedding similarity, not just keyword match — better for conceptual or research queries. The only provider that backs `answer` (grounded synthesis with citations) and `structured_search` (schema-defined entity extraction). Also provides a paid `/contents` scrape tier as a last-resort fallback for `scrape_page`. Most expensive per-call but uniquely capable.
+**[Exa](https://exa.ai/)** — Neural/semantic index. Results are ranked by embedding similarity, not just keyword match — better for conceptual or research queries. Also backs `academic_search` scholarly lookups and provides a paid `/contents` scrape tier as a last-resort fallback for `scrape_page`. Most expensive per-call but uniquely capable.
 
 **[Tavily](https://app.tavily.com/)** — Aggregates from multiple existing search engines at query time, then scrapes the top results and applies AI re-ranking. No proprietary index — similar in architecture to SearXNG, but hosted/commercial with an AI synthesis layer. Returns pre-extracted LLM-ready content. Closest comparison: SearXNG (open-source, self-hosted, no synthesis layer) or Exa (own index, deeper semantic capabilities). Best used as a routing member rather than the sole provider since it lacks image search.
 
@@ -152,17 +150,19 @@ Which tools each web search provider enables. `—` means the provider returns e
 | **[CrossRef](https://www.crossref.org/)** | ✓ | ✓ (authoritative) | — | — | — | No (email for polite pool) |
 | **[Semantic Scholar](https://www.semanticscholar.org/)** | ✓ | — | ✓ (rich edges) | — | ✓ (tldr) | No (key raises limits) |
 | **[PubMed](https://pubmed.ncbi.nlm.nih.gov/)** | ✓ | — | — | ✓ (PMC full text, `full_text=true`) | — | No (key raises limits) |
+| **[ScholarAPI](https://scholarapi.net/)** | ✓ | fuzzy (validated) | — | — (full-text instead) | — | Yes (`SCHOLAR_API_KEY`; 10 credits/search, not in auto-routing) |
 | **[CORE](https://core.ac.uk/)** | ✓ | — | — | ✓ (native `fullText`) | — | No (key raises limits) |
 | **[Exa](https://exa.ai/)** | ✓ | — | — | — | — | Yes (`EXA_API_KEY`) |
 
 **Notes:**
 - CrossRef is the official DOI registration agency — the authoritative source for DOI metadata. Every DOI-registered work appears here.
 - Semantic Scholar enriches results with AI-generated `tldr` summaries and citation intent/influence edges, which power `citation_graph`. OpenAlex also implements `citation_graph` support with citation-count edges as a fallback.
-- Only OpenAlex implements the `DOIResolver` interface (exact-entity lookup via `/works/doi:{doi}`). CrossRef, Semantic Scholar, PubMed, and CORE do not.
+- Only OpenAlex implements the `DOIResolver` interface (exact-entity lookup via `/works/doi:{doi}`). CrossRef, Semantic Scholar, PubMed, and CORE do not. ScholarAPI implements it too, but only as a fuzzy search with an exact-match validation step (no entity-lookup endpoint exists) — a mismatched top hit returns no result rather than the wrong paper.
 - CORE's every result is open access by definition — it aggregates OA repositories exclusively — and its `pdfUrl` links directly to full text, no Unpaywall enrichment needed.
 - PubMed fetches full text from PubMed Central when `full_text=true`: the search itself is narrowed with PubMed's `"pubmed pmc"[sb]` filter to bias results toward PMC-deposited papers, then a third call (`efetch` against PMC) retrieves the JATS XML for any result with a PMCID, populating `fullText`. Best-effort — an article without a PMCID, or an efetch failure, is returned without `fullText`.
 - Semantic Scholar also implements `PaperFetcher` (fetch full metadata by DOI/paper ID), behind the single-call `paper_fulltext` tool rather than `academic_search`.
 - Exa routes academic queries using its `research-paper` category — useful when its neural index surfaces papers the bibliographic databases miss.
+- ScholarAPI is paid and metered (10 credits/search call), so it is excluded from automatic routing/fallback entirely — reach it only with `provider=scholarapi`. Its differentiator is full-text: `hasText`/`hasPdf` on each result signal availability, and full text is fetched via the provider's own `FetchText`/`FetchTexts` methods (not yet exposed as a standalone tool). It has no retraction signal of its own — the standard Crossref enrichment still covers any DOI-bearing result — and abstract coverage is intermittent (publisher-dependent).
 - [Unpaywall](https://unpaywall.org/) OA enrichment runs as a post-processing step on any DOI-bearing result — not a separate provider to select.
 
 ### Coverage
@@ -173,6 +173,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 | **[CrossRef](https://www.crossref.org/)** | 140M+ DOI-registered works | Peer-reviewed literature; authoritative DOI metadata |
 | **[Semantic Scholar](https://www.semanticscholar.org/)** | 200M+ papers | Broad; strong on CS, medicine, biology |
 | **[PubMed](https://pubmed.ncbi.nlm.nih.gov/)** | 35M+ citations | Biomedical and life science only |
+| **[ScholarAPI](https://scholarapi.net/)** | Unpublished; publisher breadth unverified | Full-text retrieval; live audit showed Nature Publishing Group bias |
 | **[CORE](https://core.ac.uk/)** | 300M+ OA outputs | Open-access works aggregated from repositories worldwide; all results are OA |
 | **[Exa](https://exa.ai/)** | Neural web index | Research-paper category; surfaces papers outside bibliographic DBs |
 

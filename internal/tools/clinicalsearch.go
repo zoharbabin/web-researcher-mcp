@@ -56,7 +56,7 @@ func registerClinicalSearch(srv *mcp.Server, deps Dependencies) {
 			return errResult, nil, nil
 		}
 		if searcher == nil {
-			return synthesisUnconfiguredError("clinical_search", search.SupportedTrialProviders), nil, nil
+			return unconfiguredProviderError("clinical_search", search.SupportedTrialProviders), nil, nil
 		}
 
 		cacheKey := searchCacheKey("clinical", input.Query, input.Condition, input.Intervention, input.Sponsor, input.Status, num, providerName)
