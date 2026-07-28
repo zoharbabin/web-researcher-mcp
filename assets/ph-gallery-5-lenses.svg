@@ -1,101 +1,112 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg viewBox="0 0 1270 760" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- PH Gallery Image 5: Search Lenses -->
-  <rect width="1270" height="760" fill="#0F172A"/>
-
-  <defs>
-    <linearGradient id="g1" x1="100" y1="200" x2="1170" y2="600" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#22F0E8" stop-opacity="0.1"/>
-      <stop offset="100%" stop-color="#5B4CFF" stop-opacity="0.1"/>
-    </linearGradient>
-  </defs>
+  <!-- PH Gallery Image 5: Search Lenses — light canvas, pill layout -->
+  <rect width="1270" height="760" fill="#FFFFFF"/>
 
   <!-- Header -->
-  <text x="635" y="80"
+  <text x="635" y="55"
         font-family="'Inter', 'SF Pro Display', sans-serif"
-        font-size="36" font-weight="700" fill="#FFFFFF" letter-spacing="-1"
-        text-anchor="middle" text-rendering="optimizeLegibility">Search Lenses: You choose which sources to trust</text>
+        font-size="30" font-weight="700" fill="#0F172A" letter-spacing="-1"
+        text-anchor="middle" text-rendering="optimizeLegibility">Search Lenses: you choose which sources to trust</text>
 
-  <text x="635" y="120"
+  <text x="635" y="85"
         font-family="'Inter', 'SF Pro Display', sans-serif"
-        font-size="20" font-weight="400" fill="#64748B"
-        text-anchor="middle" text-rendering="optimizeLegibility">Each lens limits your AI to searching only the websites you actually trust for that topic.</text>
+        font-size="15" font-weight="400" fill="#64748B"
+        text-anchor="middle" text-rendering="optimizeLegibility">Each lens limits your AI to searching only the websites you actually trust for that topic. 20 included — create your own in seconds.</text>
 
   <!-- Lens cards: 2 rows x 3 columns -->
   <!-- Row 1 -->
-  <g transform="translate(90, 160)">
-    <rect width="360" height="220" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
-    <text x="30" y="45" font-family="'Inter', sans-serif" font-size="20" font-weight="600" fill="#22F0E8">Programming</text>
-    <text x="30" y="75" font-family="'Inter', sans-serif" font-size="14" fill="#94A3B8">Only authoritative dev sources:</text>
-    <text x="30" y="105" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">stackoverflow.com</text>
-    <text x="30" y="125" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">pkg.go.dev</text>
-    <text x="30" y="145" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">docs.python.org</text>
-    <text x="30" y="165" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">developer.mozilla.org</text>
-    <text x="30" y="185" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">github.com + 30 more...</text>
+  <g transform="translate(80, 120)">
+    <rect width="370" height="230" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <rect width="370" height="46" rx="16" fill="#2563EB"/>
+    <rect y="30" width="370" height="16" fill="#2563EB"/>
+    <text x="24" y="30" font-family="'Inter', sans-serif" font-size="17" font-weight="700" fill="#FFFFFF">Programming</text>
+    <text x="24" y="76" font-family="'Inter', sans-serif" font-size="13" fill="#64748B">Only authoritative dev sources</text>
+    <text x="24" y="104" font-family="'JetBrains Mono', monospace" font-size="12" fill="#334155">stackoverflow.com</text>
+    <text x="24" y="126" font-family="'JetBrains Mono', monospace" font-size="12" fill="#334155">pkg.go.dev</text>
+    <text x="24" y="148" font-family="'JetBrains Mono', monospace" font-size="12" fill="#334155">docs.python.org</text>
+    <text x="24" y="170" font-family="'JetBrains Mono', monospace" font-size="12" fill="#334155">developer.mozilla.org</text>
+    <text x="24" y="196" font-family="'Inter', sans-serif" font-size="12" fill="#94A3B8">+ 30 more sources</text>
   </g>
 
-  <g transform="translate(470, 160)">
-    <rect width="360" height="220" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
-    <text x="30" y="45" font-family="'Inter', sans-serif" font-size="20" font-weight="600" fill="#A78BFA">Medical</text>
-    <text x="30" y="75" font-family="'Inter', sans-serif" font-size="14" fill="#94A3B8">Peer-reviewed medical sources:</text>
-    <text x="30" y="105" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">pubmed.ncbi.nlm.nih.gov</text>
-    <text x="30" y="125" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">who.int</text>
-    <text x="30" y="145" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">nejm.org</text>
-    <text x="30" y="165" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">nature.com/nm</text>
-    <text x="30" y="185" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">cochranelibrary.com + more</text>
+  <g transform="translate(460, 120)">
+    <rect width="370" height="230" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <rect width="370" height="46" rx="16" fill="#7C3AED"/>
+    <rect y="30" width="370" height="16" fill="#7C3AED"/>
+    <text x="24" y="30" font-family="'Inter', sans-serif" font-size="17" font-weight="700" fill="#FFFFFF">Medical</text>
+    <text x="24" y="76" font-family="'Inter', sans-serif" font-size="13" fill="#64748B">Peer-reviewed medical sources</text>
+    <text x="24" y="104" font-family="'JetBrains Mono', monospace" font-size="12" fill="#334155">pubmed.ncbi.nlm.nih.gov</text>
+    <text x="24" y="126" font-family="'JetBrains Mono', monospace" font-size="12" fill="#334155">who.int</text>
+    <text x="24" y="148" font-family="'JetBrains Mono', monospace" font-size="12" fill="#334155">nejm.org</text>
+    <text x="24" y="170" font-family="'JetBrains Mono', monospace" font-size="12" fill="#334155">cochranelibrary.com</text>
+    <text x="24" y="196" font-family="'Inter', sans-serif" font-size="12" fill="#94A3B8">+ more biomedical sources</text>
   </g>
 
-  <g transform="translate(850, 160)">
-    <rect width="360" height="220" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
-    <text x="30" y="45" font-family="'Inter', sans-serif" font-size="20" font-weight="600" fill="#F59E0B">Legal</text>
-    <text x="30" y="75" font-family="'Inter', sans-serif" font-size="14" fill="#94A3B8">Official legal databases:</text>
-    <text x="30" y="105" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">law.cornell.edu</text>
-    <text x="30" y="125" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">scholar.google.com</text>
-    <text x="30" y="145" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">supremecourt.gov</text>
-    <text x="30" y="165" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">eur-lex.europa.eu</text>
-    <text x="30" y="185" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">westlaw.com + more</text>
+  <g transform="translate(840, 120)">
+    <rect width="350" height="230" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <rect width="350" height="46" rx="16" fill="#D97706"/>
+    <rect y="30" width="350" height="16" fill="#D97706"/>
+    <text x="24" y="30" font-family="'Inter', sans-serif" font-size="17" font-weight="700" fill="#FFFFFF">Legal</text>
+    <text x="24" y="76" font-family="'Inter', sans-serif" font-size="13" fill="#64748B">Official legal databases</text>
+    <text x="24" y="104" font-family="'JetBrains Mono', monospace" font-size="12" fill="#334155">law.cornell.edu</text>
+    <text x="24" y="126" font-family="'JetBrains Mono', monospace" font-size="12" fill="#334155">supremecourt.gov</text>
+    <text x="24" y="148" font-family="'JetBrains Mono', monospace" font-size="12" fill="#334155">eur-lex.europa.eu</text>
+    <text x="24" y="170" font-family="'JetBrains Mono', monospace" font-size="12" fill="#334155">courtlistener.com</text>
+    <text x="24" y="196" font-family="'Inter', sans-serif" font-size="12" fill="#94A3B8">+ more legal sources</text>
   </g>
 
   <!-- Row 2 -->
-  <g transform="translate(90, 410)">
-    <rect width="360" height="220" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
-    <text x="30" y="45" font-family="'Inter', sans-serif" font-size="20" font-weight="600" fill="#22C55E">Science</text>
-    <text x="30" y="75" font-family="'Inter', sans-serif" font-size="14" fill="#94A3B8">Scientific journals and databases:</text>
-    <text x="30" y="105" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">arxiv.org</text>
-    <text x="30" y="125" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">nature.com</text>
-    <text x="30" y="145" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">science.org</text>
-    <text x="30" y="165" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">ieeexplore.ieee.org</text>
-    <text x="30" y="185" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">sciencedirect.com + more</text>
+  <g transform="translate(80, 380)">
+    <rect width="370" height="230" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <rect width="370" height="46" rx="16" fill="#16A34A"/>
+    <rect y="30" width="370" height="16" fill="#16A34A"/>
+    <text x="24" y="30" font-family="'Inter', sans-serif" font-size="17" font-weight="700" fill="#FFFFFF">Science</text>
+    <text x="24" y="76" font-family="'Inter', sans-serif" font-size="13" fill="#64748B">Scientific journals and databases</text>
+    <text x="24" y="104" font-family="'JetBrains Mono', monospace" font-size="12" fill="#334155">arxiv.org</text>
+    <text x="24" y="126" font-family="'JetBrains Mono', monospace" font-size="12" fill="#334155">nature.com</text>
+    <text x="24" y="148" font-family="'JetBrains Mono', monospace" font-size="12" fill="#334155">science.org</text>
+    <text x="24" y="170" font-family="'JetBrains Mono', monospace" font-size="12" fill="#334155">ieeexplore.ieee.org</text>
+    <text x="24" y="196" font-family="'Inter', sans-serif" font-size="12" fill="#94A3B8">+ more science sources</text>
   </g>
 
-  <g transform="translate(470, 410)">
-    <rect width="360" height="220" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
-    <text x="30" y="45" font-family="'Inter', sans-serif" font-size="20" font-weight="600" fill="#EC4899">News</text>
-    <text x="30" y="75" font-family="'Inter', sans-serif" font-size="14" fill="#94A3B8">Quality journalism sources:</text>
-    <text x="30" y="105" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">reuters.com</text>
-    <text x="30" y="125" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">apnews.com</text>
-    <text x="30" y="145" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">bbc.com</text>
-    <text x="30" y="165" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">nytimes.com</text>
-    <text x="30" y="185" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">theguardian.com + more</text>
+  <g transform="translate(460, 380)">
+    <rect width="370" height="230" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <rect width="370" height="46" rx="16" fill="#DB2777"/>
+    <rect y="30" width="370" height="16" fill="#DB2777"/>
+    <text x="24" y="30" font-family="'Inter', sans-serif" font-size="17" font-weight="700" fill="#FFFFFF">News</text>
+    <text x="24" y="76" font-family="'Inter', sans-serif" font-size="13" fill="#64748B">Quality journalism sources</text>
+    <text x="24" y="104" font-family="'JetBrains Mono', monospace" font-size="12" fill="#334155">reuters.com</text>
+    <text x="24" y="126" font-family="'JetBrains Mono', monospace" font-size="12" fill="#334155">apnews.com</text>
+    <text x="24" y="148" font-family="'JetBrains Mono', monospace" font-size="12" fill="#334155">bbc.com</text>
+    <text x="24" y="170" font-family="'JetBrains Mono', monospace" font-size="12" fill="#334155">nytimes.com</text>
+    <text x="24" y="196" font-family="'Inter', sans-serif" font-size="12" fill="#94A3B8">+ more news sources</text>
   </g>
 
-  <g transform="translate(850, 410)">
-    <rect width="360" height="220" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
-    <text x="30" y="45" font-family="'Inter', sans-serif" font-size="20" font-weight="600" fill="#06B6D4">Custom</text>
-    <text x="30" y="75" font-family="'Inter', sans-serif" font-size="14" fill="#94A3B8">Create your own lenses:</text>
-    <text x="30" y="110" font-family="'JetBrains Mono', monospace" font-size="12" fill="#64748B">// lenses/my-lens.json</text>
-    <text x="30" y="135" font-family="'JetBrains Mono', monospace" font-size="12" fill="#E2E8F0">{</text>
-    <text x="30" y="155" font-family="'JetBrains Mono', monospace" font-size="12" fill="#E2E8F0">  "domains": [...]</text>
-    <text x="30" y="175" font-family="'JetBrains Mono', monospace" font-size="12" fill="#E2E8F0">  "provider": "brave"</text>
-    <text x="30" y="195" font-family="'JetBrains Mono', monospace" font-size="12" fill="#E2E8F0">}</text>
+  <g transform="translate(840, 380)">
+    <rect width="350" height="230" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <rect width="350" height="46" rx="16" fill="#0891B2"/>
+    <rect y="30" width="350" height="16" fill="#0891B2"/>
+    <text x="24" y="30" font-family="'Inter', sans-serif" font-size="17" font-weight="700" fill="#FFFFFF">Custom</text>
+    <text x="24" y="76" font-family="'Inter', sans-serif" font-size="13" fill="#64748B">Create your own lenses</text>
+    <rect x="24" y="94" width="302" height="112" rx="8" fill="#0F172A"/>
+    <text x="38" y="116" font-family="'JetBrains Mono', monospace" font-size="11" fill="#64748B">// lenses/my-lens.json</text>
+    <text x="38" y="138" font-family="'JetBrains Mono', monospace" font-size="11" fill="#E2E8F0">{</text>
+    <text x="38" y="158" font-family="'JetBrains Mono', monospace" font-size="11" fill="#E2E8F0">  "domains": [...]</text>
+    <text x="38" y="178" font-family="'JetBrains Mono', monospace" font-size="11" fill="#E2E8F0">  "provider": "brave"</text>
+    <text x="38" y="198" font-family="'JetBrains Mono', monospace" font-size="11" fill="#E2E8F0">}</text>
   </g>
 
-  <!-- Bottom -->
-  <text x="635" y="700"
-        font-family="'Inter', sans-serif" font-size="18" fill="#475569"
-        text-anchor="middle" text-rendering="optimizeLegibility">No more SEO spam or random blogs in your research. Only sources that matter.</text>
+  <!-- Bottom feature callouts -->
+  <g font-family="'Inter', sans-serif" text-rendering="optimizeLegibility">
+    <rect x="345" y="645" width="270" height="40" rx="20" fill="#EFF6FF"/>
+    <text x="480" y="670" font-size="14" font-weight="600" fill="#2563EB" text-anchor="middle">No more SEO spam</text>
 
-  <text x="635" y="735"
-        font-family="'Inter', sans-serif" font-size="16" fill="#64748B"
-        text-anchor="middle">13 lenses included. Create your own in seconds.</text>
+    <rect x="635" y="645" width="290" height="40" rx="20" fill="#F0FDF4"/>
+    <text x="780" y="670" font-size="14" font-weight="600" fill="#16A34A" text-anchor="middle">Only sources that matter</text>
+  </g>
+
+  <!-- Bottom note -->
+  <text x="635" y="725"
+        font-family="'Inter', sans-serif" font-size="15" fill="#64748B"
+        text-anchor="middle" text-rendering="optimizeLegibility">20 lenses included. Create your own in seconds.</text>
 </svg>

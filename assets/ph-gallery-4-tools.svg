@@ -1,123 +1,160 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg viewBox="0 0 1270 760" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- PH Gallery Image 4: 37 tools, organized by outcome, not by name. -->
-  <rect width="1270" height="760" fill="#0F172A"/>
+  <!-- PH Gallery Image 4: 37 tools, organized by outcome, not by name -->
+  <rect width="1270" height="760" fill="#FFFFFF"/>
 
   <!-- Header -->
-  <text x="635" y="72"
+  <text x="635" y="50"
         font-family="'Inter', 'SF Pro Display', sans-serif"
-        font-size="34" font-weight="700" fill="#FFFFFF" letter-spacing="-1"
+        font-size="30" font-weight="700" fill="#0F172A" letter-spacing="-1"
         text-anchor="middle" text-rendering="optimizeLegibility">37 tools. One question at a time.</text>
 
-  <text x="635" y="104"
+  <text x="635" y="80"
         font-family="'Inter', 'SF Pro Display', sans-serif"
-        font-size="18" font-weight="400" fill="#64748B"
-        text-anchor="middle" text-rendering="optimizeLegibility">Your AI picks the right one automatically. Here's what you actually get out of it.</text>
+        font-size="15" font-weight="400" fill="#64748B"
+        text-anchor="middle" text-rendering="optimizeLegibility">Your AI picks the right one automatically. No tool names to memorize.</text>
 
-  <!-- Outcome grid: 2 rows x 4 columns -->
-  <!-- Row 1 -->
-  <g transform="translate(90, 150)">
-    <rect width="255" height="210" rx="16" fill="#1E293B" stroke="url(#gAcc)" stroke-width="1.5"/>
-    <text x="128" y="48" font-family="'Inter', sans-serif" font-size="28" text-anchor="middle" fill="#22F0E8">✓</text>
-    <text x="128" y="80" font-family="'Inter', sans-serif" font-size="16" font-weight="600" fill="#E2E8F0" text-anchor="middle">Catch a fake citation</text>
-    <text x="128" y="108" font-family="'Inter', sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">before it ships</text>
-    <text x="128" y="140" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">verify_citation checks a claim</text>
-    <text x="128" y="160" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">against the source. audit_</text>
-    <text x="128" y="180" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">bibliography sweeps a whole</text>
-    <text x="128" y="200" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">reference list for dead DOIs.</text>
+  <!-- ============ COLUMN 1: VERIFY & TRACK ============ -->
+  <g font-family="'Inter', sans-serif" text-rendering="optimizeLegibility">
+    <rect x="35" y="112" width="285" height="36" rx="18" fill="#2563EB"/>
+    <text x="177" y="135" font-size="14" font-weight="700" letter-spacing="0.5" fill="#FFFFFF" text-anchor="middle">VERIFY &amp; TRACK</text>
+
+    <text x="37" y="173" font-size="10" font-weight="700" letter-spacing="1.2" fill="#94A3B8">CATCH A FAKE CITATION</text>
+    <rect x="35" y="186" width="285" height="44" rx="18" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="53" cy="202" r="5" fill="#2563EB"/>
+    <text x="69" y="206" font-size="13" font-weight="600" fill="#0F172A">verify_citation</text>
+    <text x="69" y="222" font-size="10" fill="#64748B">checks a claim against the real source</text>
+
+    <rect x="35" y="238" width="285" height="44" rx="18" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="53" cy="254" r="5" fill="#2563EB"/>
+    <text x="69" y="258" font-size="13" font-weight="600" fill="#0F172A">audit_bibliography</text>
+    <text x="69" y="274" font-size="10" fill="#64748B">sweeps a reference list for dead DOIs</text>
+
+    <text x="37" y="313" font-size="10" font-weight="700" letter-spacing="1.2" fill="#94A3B8">SEE WHERE MODELS DISAGREE</text>
+    <rect x="35" y="326" width="285" height="44" rx="18" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="53" cy="342" r="5" fill="#2563EB"/>
+    <text x="69" y="346" font-size="13" font-weight="600" fill="#0F172A">research_panel</text>
+    <text x="69" y="362" font-size="10" fill="#64748B">asks multiple LLMs, flags contradictions</text>
+
+    <text x="37" y="401" font-size="10" font-weight="700" letter-spacing="1.2" fill="#94A3B8">TRACK A TOPIC OVER TIME</text>
+    <rect x="35" y="414" width="285" height="44" rx="18" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="53" cy="430" r="5" fill="#2563EB"/>
+    <text x="69" y="434" font-size="13" font-weight="600" fill="#0F172A">monitor_query_save</text>
+    <text x="69" y="450" font-size="10" fill="#64748B">watches a saved query for new results</text>
   </g>
 
-  <g transform="translate(365, 150)">
-    <rect width="255" height="210" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
-    <text x="128" y="48" font-family="'Inter', sans-serif" font-size="28" text-anchor="middle" fill="#22F0E8">⚖️</text>
-    <text x="128" y="80" font-family="'Inter', sans-serif" font-size="16" font-weight="600" fill="#E2E8F0" text-anchor="middle">See where models</text>
-    <text x="128" y="104" font-family="'Inter', sans-serif" font-size="16" font-weight="600" fill="#E2E8F0" text-anchor="middle">disagree</text>
-    <text x="128" y="140" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">research_panel asks the same</text>
-    <text x="128" y="160" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">question to multiple LLMs and</text>
-    <text x="128" y="180" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">flags contradictions — not</text>
-    <text x="128" y="200" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">just one model's confidence.</text>
+  <!-- ============ COLUMN 2: STRUCTURED DOMAINS ============ -->
+  <g font-family="'Inter', sans-serif" text-rendering="optimizeLegibility">
+    <rect x="340" y="112" width="285" height="36" rx="18" fill="#7C3AED"/>
+    <text x="482" y="135" font-size="14" font-weight="700" letter-spacing="0.5" fill="#FFFFFF" text-anchor="middle">STRUCTURED DOMAINS</text>
+
+    <text x="342" y="173" font-size="10" font-weight="700" letter-spacing="1.2" fill="#94A3B8">FILINGS, CASE LAW &amp; TRIALS</text>
+    <rect x="340" y="186" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="358" cy="202" r="5" fill="#7C3AED"/>
+    <text x="374" y="206" font-size="13" font-weight="600" fill="#0F172A">filing_search</text>
+    <text x="611" y="206" font-size="11" fill="#64748B" text-anchor="end">SEC EDGAR</text>
+
+    <rect x="340" y="226" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="358" cy="242" r="5" fill="#7C3AED"/>
+    <text x="374" y="246" font-size="13" font-weight="600" fill="#0F172A">legal_search</text>
+    <text x="611" y="246" font-size="11" fill="#64748B" text-anchor="end">case law</text>
+
+    <rect x="340" y="266" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="358" cy="282" r="5" fill="#7C3AED"/>
+    <text x="374" y="286" font-size="13" font-weight="600" fill="#0F172A">clinical_search</text>
+    <text x="611" y="286" font-size="11" fill="#64748B" text-anchor="end">trial registry</text>
+
+    <rect x="340" y="306" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="358" cy="322" r="5" fill="#7C3AED"/>
+    <text x="374" y="326" font-size="13" font-weight="600" fill="#0F172A">econ_search</text>
+    <text x="611" y="326" font-size="11" fill="#64748B" text-anchor="end">FRED, OECD</text>
+
+    <text x="342" y="365" font-size="10" font-weight="700" letter-spacing="1.2" fill="#94A3B8">PULL REAL PAPERS</text>
+    <rect x="340" y="378" width="285" height="44" rx="18" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="358" cy="394" r="5" fill="#7C3AED"/>
+    <text x="374" y="398" font-size="13" font-weight="600" fill="#0F172A">academic_search</text>
+    <text x="374" y="414" font-size="10" fill="#64748B">arXiv, PubMed, OpenAlex, CrossRef</text>
+
+    <rect x="340" y="430" width="285" height="44" rx="18" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="358" cy="446" r="5" fill="#7C3AED"/>
+    <text x="374" y="450" font-size="13" font-weight="600" fill="#0F172A">paper_fulltext</text>
+    <text x="374" y="466" font-size="10" fill="#64748B">reads the actual PDF, not an abstract</text>
   </g>
 
-  <g transform="translate(640, 150)">
-    <rect width="255" height="210" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
-    <text x="128" y="48" font-family="'Inter', sans-serif" font-size="28" text-anchor="middle" fill="#22F0E8">📡</text>
-    <text x="128" y="80" font-family="'Inter', sans-serif" font-size="16" font-weight="600" fill="#E2E8F0" text-anchor="middle">Track a topic</text>
-    <text x="128" y="104" font-family="'Inter', sans-serif" font-size="16" font-weight="600" fill="#E2E8F0" text-anchor="middle">over time</text>
-    <text x="128" y="140" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">monitor_query_save watches a</text>
-    <text x="128" y="160" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">saved query for new results,</text>
-    <text x="128" y="180" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">so you check back instead of</text>
-    <text x="128" y="200" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">re-searching from scratch.</text>
+  <!-- ============ COLUMN 3: INVESTIGATE & READ ============ -->
+  <g font-family="'Inter', sans-serif" text-rendering="optimizeLegibility">
+    <rect x="645" y="112" width="285" height="36" rx="18" fill="#D97706"/>
+    <text x="787" y="135" font-size="14" font-weight="700" letter-spacing="0.5" fill="#FFFFFF" text-anchor="middle">INVESTIGATE &amp; READ</text>
+
+    <text x="647" y="173" font-size="10" font-weight="700" letter-spacing="1.2" fill="#94A3B8">MULTI-STEP INVESTIGATION</text>
+    <rect x="645" y="186" width="285" height="44" rx="18" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="663" cy="202" r="5" fill="#D97706"/>
+    <text x="679" y="206" font-size="13" font-weight="600" fill="#0F172A">sequential_search</text>
+    <text x="679" y="222" font-size="10" fill="#64748B">keeps state across steps, flags gaps</text>
+
+    <rect x="645" y="238" width="285" height="44" rx="18" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="663" cy="254" r="5" fill="#D97706"/>
+    <text x="679" y="258" font-size="13" font-weight="600" fill="#0F172A">company_recon</text>
+    <text x="679" y="274" font-size="10" fill="#64748B">builds a full profile from public sources</text>
+
+    <text x="647" y="313" font-size="10" font-weight="700" letter-spacing="1.2" fill="#94A3B8">READ THE WHOLE PAGE</text>
+    <rect x="645" y="326" width="285" height="44" rx="18" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="663" cy="342" r="5" fill="#D97706"/>
+    <text x="679" y="346" font-size="13" font-weight="600" fill="#0F172A">scrape_page</text>
+    <text x="679" y="362" font-size="10" fill="#64748B">PDF, DOCX, YouTube, JS-rendered pages</text>
+
+    <rect x="645" y="378" width="285" height="44" rx="18" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="663" cy="394" r="5" fill="#D97706"/>
+    <text x="679" y="398" font-size="13" font-weight="600" fill="#0F172A">search_and_scrape</text>
+    <text x="679" y="414" font-size="10" fill="#64748B">search results, fully extracted in one call</text>
   </g>
 
-  <g transform="translate(915, 150)">
-    <rect width="255" height="210" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
-    <text x="128" y="48" font-family="'Inter', sans-serif" font-size="28" text-anchor="middle" fill="#22F0E8">🏛️</text>
-    <text x="128" y="80" font-family="'Inter', sans-serif" font-size="16" font-weight="600" fill="#E2E8F0" text-anchor="middle">Search filings,</text>
-    <text x="128" y="104" font-family="'Inter', sans-serif" font-size="16" font-weight="600" fill="#E2E8F0" text-anchor="middle">case law &amp; trials</text>
-    <text x="128" y="140" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">filing_search (SEC EDGAR),</text>
-    <text x="128" y="160" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">legal_search (case law),</text>
-    <text x="128" y="180" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">clinical_search (trials),</text>
-    <text x="128" y="200" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">econ_search (FRED, OECD).</text>
+  <!-- ============ COLUMN 4: CITE & EXPORT ============ -->
+  <g font-family="'Inter', sans-serif" text-rendering="optimizeLegibility">
+    <rect x="950" y="112" width="285" height="36" rx="18" fill="#16A34A"/>
+    <text x="1092" y="135" font-size="14" font-weight="700" letter-spacing="0.5" fill="#FFFFFF" text-anchor="middle">CITE &amp; EXPORT</text>
+
+    <text x="952" y="173" font-size="10" font-weight="700" letter-spacing="1.2" fill="#94A3B8">EXPORT A BIBLIOGRAPHY</text>
+    <rect x="950" y="186" width="285" height="44" rx="18" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="968" cy="202" r="5" fill="#16A34A"/>
+    <text x="984" y="206" font-size="13" font-weight="600" fill="#0F172A">format_bibliography</text>
+    <text x="984" y="222" font-size="10" fill="#64748B">APA, MLA, BibTeX, RIS, CSL-JSON</text>
+
+    <rect x="950" y="238" width="285" height="44" rx="18" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="968" cy="254" r="5" fill="#16A34A"/>
+    <text x="984" y="258" font-size="13" font-weight="600" fill="#0F172A">archive_source</text>
+    <text x="984" y="274" font-size="10" fill="#64748B">snapshots a page so a citation survives a 404</text>
+
+    <text x="952" y="313" font-size="10" font-weight="700" letter-spacing="1.2" fill="#94A3B8">DOUBLE-CHECK A RECOMMENDATION</text>
+    <rect x="950" y="326" width="285" height="44" rx="18" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="968" cy="342" r="5" fill="#16A34A"/>
+    <text x="984" y="346" font-size="13" font-weight="600" fill="#0F172A">verify_recommendation</text>
+    <text x="984" y="362" font-size="10" fill="#64748B">corroborates a claim across sources</text>
+
+    <text x="952" y="401" font-size="10" font-weight="700" letter-spacing="1.2" fill="#94A3B8">EVERYTHING ELSE</text>
+    <rect x="950" y="414" width="285" height="44" rx="18" fill="#F0FDF4" stroke="#BBF7D0" stroke-width="1.5"/>
+    <text x="1092" y="434" font-size="12" font-weight="600" fill="#15803D" text-anchor="middle">+ 27 more tools</text>
+    <text x="1092" y="450" font-size="10" fill="#16A34A" text-anchor="middle">web, image &amp; news search, memory, workspaces</text>
   </g>
 
-  <!-- Row 2 -->
-  <g transform="translate(90, 390)">
-    <rect width="255" height="210" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
-    <text x="128" y="48" font-family="'Inter', sans-serif" font-size="28" text-anchor="middle" fill="#22F0E8">🎓</text>
-    <text x="128" y="80" font-family="'Inter', sans-serif" font-size="16" font-weight="600" fill="#E2E8F0" text-anchor="middle">Pull real papers,</text>
-    <text x="128" y="104" font-family="'Inter', sans-serif" font-size="16" font-weight="600" fill="#E2E8F0" text-anchor="middle">not made-up ones</text>
-    <text x="128" y="140" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">academic_search across arXiv,</text>
-    <text x="128" y="160" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">PubMed, OpenAlex, CrossRef.</text>
-    <text x="128" y="180" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">paper_fulltext reads the</text>
-    <text x="128" y="200" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">actual PDF, not an abstract.</text>
+  <!-- Bottom feature callouts -->
+  <g font-family="'Inter', sans-serif" text-rendering="optimizeLegibility">
+    <rect x="270" y="585" width="230" height="40" rx="20" fill="#EFF6FF"/>
+    <text x="385" y="610" font-size="14" font-weight="600" fill="#2563EB" text-anchor="middle">No tool names to memorize</text>
+
+    <rect x="520" y="585" width="220" height="40" rx="20" fill="#F5F3FF"/>
+    <text x="630" y="610" font-size="14" font-weight="600" fill="#7C3AED" text-anchor="middle">37 tools, one interface</text>
+
+    <rect x="760" y="585" width="240" height="40" rx="20" fill="#F0FDF4"/>
+    <text x="880" y="610" font-size="14" font-weight="600" fill="#16A34A" text-anchor="middle">Your AI picks the right one</text>
   </g>
 
-  <g transform="translate(365, 390)">
-    <rect width="255" height="210" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
-    <text x="128" y="48" font-family="'Inter', sans-serif" font-size="28" text-anchor="middle" fill="#22F0E8">🔬</text>
-    <text x="128" y="80" font-family="'Inter', sans-serif" font-size="16" font-weight="600" fill="#E2E8F0" text-anchor="middle">Run a multi-step</text>
-    <text x="128" y="104" font-family="'Inter', sans-serif" font-size="16" font-weight="600" fill="#E2E8F0" text-anchor="middle">investigation</text>
-    <text x="128" y="140" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">sequential_search keeps state</text>
-    <text x="128" y="160" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">across steps and flags gaps.</text>
-    <text x="128" y="180" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">company_recon builds a full</text>
-    <text x="128" y="200" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">profile from public sources.</text>
-  </g>
-
-  <g transform="translate(640, 390)">
-    <rect width="255" height="210" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
-    <text x="128" y="48" font-family="'Inter', sans-serif" font-size="28" text-anchor="middle" fill="#22F0E8">📄</text>
-    <text x="128" y="80" font-family="'Inter', sans-serif" font-size="16" font-weight="600" fill="#E2E8F0" text-anchor="middle">Read the whole</text>
-    <text x="128" y="104" font-family="'Inter', sans-serif" font-size="16" font-weight="600" fill="#E2E8F0" text-anchor="middle">page, not a snippet</text>
-    <text x="128" y="140" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">scrape_page and search_and_</text>
-    <text x="128" y="160" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">scrape extract full text from</text>
-    <text x="128" y="180" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">PDFs, DOCX, YouTube, and</text>
-    <text x="128" y="200" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">JS-rendered pages.</text>
-  </g>
-
-  <g transform="translate(915, 390)">
-    <rect width="255" height="210" rx="16" fill="#1E293B" stroke="#334155" stroke-width="1"/>
-    <text x="128" y="48" font-family="'Inter', sans-serif" font-size="28" text-anchor="middle" fill="#22F0E8">📚</text>
-    <text x="128" y="80" font-family="'Inter', sans-serif" font-size="16" font-weight="600" fill="#E2E8F0" text-anchor="middle">Export a bibliography,</text>
-    <text x="128" y="104" font-family="'Inter', sans-serif" font-size="16" font-weight="600" fill="#E2E8F0" text-anchor="middle">not a link dump</text>
-    <text x="128" y="140" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">format_bibliography exports</text>
-    <text x="128" y="160" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">APA/MLA/BibTeX/RIS. archive_</text>
-    <text x="128" y="180" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">source snapshots a page so</text>
-    <text x="128" y="200" font-family="'Inter', sans-serif" font-size="12" fill="#64748B" text-anchor="middle">the citation survives a 404.</text>
-  </g>
-
-  <!-- Bottom -->
-  <text x="635" y="655"
-        font-family="'Inter', sans-serif" font-size="17" fill="#475569"
-        text-anchor="middle" text-rendering="optimizeLegibility">No tool names to memorize. Just ask your question — your AI figures out which tool fits.</text>
-
-  <text x="635" y="695"
+  <!-- Bottom note -->
+  <text x="635" y="665"
         font-family="'Inter', sans-serif" font-size="15" fill="#64748B"
-        text-anchor="middle">github.com/zoharbabin/web-researcher-mcp</text>
+        text-anchor="middle" text-rendering="optimizeLegibility">Just ask your question — your AI figures out which tool fits.</text>
 
-  <defs>
-    <linearGradient id="gAcc" x1="90" y1="150" x2="345" y2="360" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#22F0E8"/>
-      <stop offset="100%" stop-color="#5B4CFF"/>
-    </linearGradient>
-  </defs>
+  <text x="635" y="693"
+        font-family="'Inter', sans-serif" font-size="13" fill="#94A3B8"
+        text-anchor="middle">github.com/zoharbabin/web-researcher-mcp</text>
 </svg>
