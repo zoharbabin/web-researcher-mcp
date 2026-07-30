@@ -348,6 +348,15 @@ func Load() (*Config, error) {
 	if port > 0 && os.Getenv("OAUTH_ISSUER_URL") == "" {
 		warnings = append(warnings, "HTTP transport is enabled (PORT set) without OAUTH_ISSUER_URL — all requests run UNAUTHENTICATED as tenant=default/user=anonymous. Set OAUTH_ISSUER_URL for authenticated multi-tenant use.")
 	}
+	// CACHE_ISOLATION footgun guard (#484): CacheIsolation defaults to "shared"
+	// for the zero-config/single-tenant case, but that default is silent and
+	// dangerous once real tenant auth is active — an operator who never heard
+	// of the flag gets a cache that mixes cached responses across tenants. Once
+	// OAuth is configured (multi-tenant HTTP mode), require CACHE_ISOLATION to
+	// be set explicitly (either value) so the choice is deliberate, not assumed.
+	if port > 0 && os.Getenv("OAUTH_ISSUER_URL") != "" && os.Getenv("CACHE_ISOLATION") == "" {
+		errs = append(errs, "CACHE_ISOLATION must be set explicitly when OAUTH_ISSUER_URL is configured (multi-tenant HTTP mode) — set CACHE_ISOLATION=tenant to scope cache keys per tenant, or CACHE_ISOLATION=shared to explicitly accept that cached responses are shared across tenants")
+	}
 	if adminKey != "" && len(adminKey) < 16 {
 		errs = append(errs, adminKeyVar+" must be at least 16 characters")
 	}

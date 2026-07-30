@@ -201,6 +201,59 @@ func TestLoadDefaults(t *testing.T) {
 	}
 }
 
+// TestLoadCacheIsolationRequiredWithOAuth proves #484's startup guard: once
+// OAUTH_ISSUER_URL is configured (real multi-tenant HTTP mode) and
+// CACHE_ISOLATION is left unset, Load must fail rather than silently
+// defaulting to "shared" — the footgun this issue exists to close.
+func TestLoadCacheIsolationRequiredWithOAuth(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("PORT", "8080")
+	t.Setenv("OAUTH_ISSUER_URL", "https://auth.example.com")
+	t.Setenv("CACHE_ISOLATION", "")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error when OAUTH_ISSUER_URL is set and CACHE_ISOLATION is unset, got nil")
+	} else if !strings.Contains(err.Error(), "CACHE_ISOLATION") {
+		t.Errorf("expected error to mention CACHE_ISOLATION, got: %v", err)
+	}
+}
+
+// TestLoadCacheIsolationExplicitSharedAllowedWithOAuth proves the guard
+// accepts an explicit "shared" — the point is deliberateness, not forcing
+// "tenant" on every OAuth deployment.
+func TestLoadCacheIsolationExplicitSharedAllowedWithOAuth(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("PORT", "8080")
+	t.Setenv("OAUTH_ISSUER_URL", "https://auth.example.com")
+	t.Setenv("CACHE_ISOLATION", "shared")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error with explicit CACHE_ISOLATION=shared: %v", err)
+	}
+	if cfg.CacheIsolation != "shared" {
+		t.Errorf("expected CacheIsolation=shared, got %s", cfg.CacheIsolation)
+	}
+}
+
+// TestLoadCacheIsolationDefaultsWithoutOAuth proves the zero-config/STDIO
+// path is unaffected: no PORT or no OAUTH_ISSUER_URL means the historical
+// default ("shared") still applies without requiring an explicit value.
+func TestLoadCacheIsolationDefaultsWithoutOAuth(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("PORT", "8080")
+	t.Setenv("OAUTH_ISSUER_URL", "")
+	t.Setenv("CACHE_ISOLATION", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error without OAUTH_ISSUER_URL: %v", err)
+	}
+	if cfg.CacheIsolation != "shared" {
+		t.Errorf("expected default CacheIsolation=shared, got %s", cfg.CacheIsolation)
+	}
+}
+
 func setCustomEnv(t *testing.T) {
 	t.Helper()
 	setRequiredEnv(t)
@@ -224,6 +277,7 @@ func setCustomEnv(t *testing.T) {
 		"CHROME_PATH":            "/usr/bin/chromium",
 		"OAUTH_ISSUER_URL":       "https://auth.example.com",
 		"OAUTH_AUDIENCE":         "my-audience",
+		"CACHE_ISOLATION":        "tenant",
 	}
 	for k, v := range envVars {
 		t.Setenv(k, v)
@@ -1092,6 +1146,7 @@ func TestInsecureDefaultWarningWhenHTTPWithoutIssuer(t *testing.T) {
 func TestNoInsecureWarningWhenIssuerSet(t *testing.T) {
 	t.Setenv("PORT", "8080")
 	t.Setenv("OAUTH_ISSUER_URL", "https://issuer.example.com")
+	t.Setenv("CACHE_ISOLATION", "tenant")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)

@@ -483,7 +483,7 @@ GOEXPERIMENT=boringcrypto CGO_ENABLED=0 \
 | Search history | — | Per-tenant |
 | Audit logs | — | Filterable by tenant |
 
-**Note:** Set `CACHE_ISOLATION=tenant` to enforce per-tenant cache isolation. When enabled, all cache keys are prefixed with the authenticated tenant ID, preventing cross-tenant cache access. Default is `shared` (cache keys are content-addressed, identical queries share results across tenants). For search results sharing is safe (same query returns same results), but scrape cache may contain tenant-specific content — use `tenant` mode for strict data isolation deployments.
+**Note:** Set `CACHE_ISOLATION=tenant` to enforce per-tenant cache isolation. When enabled, all cache keys are prefixed with the authenticated tenant ID, preventing cross-tenant cache access. Default is `shared` (cache keys are content-addressed, identical queries share results across tenants). For search results sharing is safe (same query returns same results), but scrape cache may contain tenant-specific content — use `tenant` mode for strict data isolation deployments. Once `OAUTH_ISSUER_URL` is configured, `CACHE_ISOLATION` must be set explicitly (either value) — the server refuses to start otherwise, so the shared-vs-tenant choice can never be made by omission in a real multi-tenant deployment (#484).
 
 ### Supply Chain Security
 

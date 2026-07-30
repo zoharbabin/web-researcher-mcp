@@ -600,10 +600,12 @@ Regulated features (per-user personal data; each activates the consent subsystem
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `CACHE_ISOLATION` | Cache isolation mode (`shared` or `tenant`) | `shared` |
+| `CACHE_ISOLATION` | Cache isolation mode (`shared` or `tenant`) | `shared` (single-tenant/STDIO); **required** once `OAUTH_ISSUER_URL` is set |
 | `DATA_REGION` | Advisory label for where cache/session/audit data resides; surfaced in stats/audit. No functional restriction | — (unset) |
 
 When `CACHE_ISOLATION=tenant`, all cache keys are prefixed with the authenticated tenant ID from the JWT token. This ensures tenant A's cached results are invisible to tenant B. Default (`shared`) is appropriate for single-tenant deployments or when search results are inherently public. Use `tenant` for multi-tenant deployments with strict data isolation requirements.
+
+**Startup guard (#484):** once `OAUTH_ISSUER_URL` is configured (real multi-tenant HTTP mode), `CACHE_ISOLATION` must be set explicitly — the server refuses to start otherwise. This turns the silent shared-by-default footgun into a deliberate choice: set `CACHE_ISOLATION=tenant` for strict isolation, or `CACHE_ISOLATION=shared` to explicitly accept cross-tenant cache sharing. The default of `shared` still applies unmodified when no OAuth issuer is configured, preserving zero-config startup for single-tenant/STDIO use.
 
 `DATA_REGION` is an operator-supplied label only (e.g. `eu-central`, `us-east`). It is echoed in stats and audit records for residency documentation but does not move, restrict, or constrain where data is physically stored — that is governed by `CACHE_DIR`, `SESSION_DATA_DIR`, and `AUDIT_OUTPUT_PATH`.
 
