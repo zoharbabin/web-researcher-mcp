@@ -279,7 +279,7 @@ Gated on `vars.NIXPKGS_ENABLED == 'true'` + `secrets.NIXPKGS_FORK_GITHUB_TOKEN`.
 Push to `main` touching any of:
 - `README.md`, `ARCHITECTURE.md`, `CONTRIBUTING.md`
 - `docs/**`, `decks/**`, `overrides/**`
-- `assets/logo-final-transparent.svg`, `assets/favicon.ico`, `assets/demo.webm`, `assets/demo.mp4`
+- `assets/logo-final-transparent.svg`, `assets/favicon.ico`
 - `mkdocs.yml`, `.github/workflows/docs.yml`
 
 ### Steps
