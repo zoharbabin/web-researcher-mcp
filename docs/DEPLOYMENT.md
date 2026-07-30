@@ -238,6 +238,8 @@ docker run -p 3000:3000 \
 
 ## Kubernetes
 
+The `resources` and `securityContext` below assume the browser scrape tier is enabled (`CHROME_PATH` set, the default in the bundled images). A long-lived headless Chromium instance per pod (`internal/scraper/browser.go`'s `browserPool`) typically holds 300-500Mi RSS on its own once a handful of pages/tabs are open concurrently, on top of the Go process's own heap, connection pools, and in-memory cache tier — the `512Mi` limit in earlier versions of this example was sized for the Go process alone and will OOMKill under real browser-tier concurrency. If you disable the browser tier entirely (unset `CHROME_PATH`, forcing scrapes to stop at the markdown/stealth/HTML tiers), the Go-process-only footprint is well within `256-384Mi` and you can size down accordingly.
+
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -257,6 +259,12 @@ spec:
         prometheus.io/port: "3000"
         prometheus.io/path: "/metrics"
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: server
         image: web-researcher-mcp:latest
@@ -272,11 +280,20 @@ spec:
               key: google-api-key
         resources:
           requests:
-            cpu: 100m
-            memory: 128Mi
+            cpu: 250m
+            memory: 384Mi
           limits:
             cpu: 1000m
-            memory: 512Mi
+            memory: 1.5Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
         livenessProbe:
           httpGet:
             path: /health/live
@@ -289,6 +306,9 @@ spec:
             port: 3000
           initialDelaySeconds: 5
           periodSeconds: 5
+      volumes:
+      - name: tmp
+        emptyDir: {}
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler

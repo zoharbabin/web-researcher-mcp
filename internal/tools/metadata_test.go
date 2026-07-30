@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -576,6 +577,56 @@ func TestProvidersDocStructuredDomainTable(t *testing.T) {
 	for name := range documented {
 		if !structuredDomainDocTools[name] {
 			t.Errorf("docs/PROVIDERS.md documents tool %q not in structuredDomainDocTools — update the test's expected set if this is intentional", name)
+		}
+	}
+}
+
+// TestDeploymentDocK8sExampleHardened is a doc-content guard for issues
+// #473 (K8s example memory limits undersized for Chromium) and #487 (missing
+// K8s SecurityContext reference): it fails if docs/DEPLOYMENT.md's
+// Kubernetes example regresses to a memory limit too small for the
+// browser-tier RSS footprint, or drops the securityContext hardening block.
+func TestDeploymentDocK8sExampleHardened(t *testing.T) {
+	docPath := filepath.Join(repoRoot(t), "docs", "DEPLOYMENT.md")
+	data, err := os.ReadFile(docPath) // #nosec G304 -- fixed in-repo doc path, not user input
+	if err != nil {
+		t.Fatalf("read DEPLOYMENT.md: %v", err)
+	}
+
+	const marker = "## Kubernetes"
+	start := strings.Index(string(data), marker)
+	if start == -1 {
+		t.Fatal("docs/DEPLOYMENT.md missing '## Kubernetes' section")
+	}
+	section := string(data)[start:]
+	if end := strings.Index(section, "\n## "); end != -1 {
+		section = section[:end]
+	}
+
+	// Extract the container-level `limits: memory: <N>Mi|Gi` value and require
+	// it to be at least 1Gi — the browser-tier RSS footprint (300-500Mi) plus
+	// Go heap/cache means anything smaller repeats the #473 OOMKill gap.
+	memRe := regexp.MustCompile(`limits:\s*\n\s*cpu:\s*\S+\s*\n\s*memory:\s*([\d.]+)(Mi|Gi)`)
+	m := memRe.FindStringSubmatch(section)
+	if m == nil {
+		t.Fatal("docs/DEPLOYMENT.md's Kubernetes example is missing a container `limits.memory` value")
+	}
+	val, err := strconv.ParseFloat(m[1], 64)
+	if err != nil {
+		t.Fatalf("parse memory limit %q: %v", m[1], err)
+	}
+	mi := val
+	if m[2] == "Gi" {
+		mi = val * 1024
+	}
+	const minMi = 1024 // 1Gi
+	if mi < minMi {
+		t.Errorf("docs/DEPLOYMENT.md's Kubernetes example limits.memory is %s%s (%.0fMi) — must be >= 1Gi to cover Chromium RSS + Go heap + cache (issue #473)", m[1], m[2], mi)
+	}
+
+	for _, want := range []string{"securityContext", "runAsNonRoot", "allowPrivilegeEscalation", "readOnlyRootFilesystem", "drop"} {
+		if !strings.Contains(section, want) {
+			t.Errorf("docs/DEPLOYMENT.md's Kubernetes example is missing %q in its securityContext block (issue #487)", want)
 		}
 	}
 }
