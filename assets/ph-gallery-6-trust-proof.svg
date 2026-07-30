@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1270 760" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- PH Gallery Image 6: Before/after citation trust — same query, two answers -->
+  <rect width="1270" height="760" fill="#FFFFFF"/>
+
+  <!-- Header -->
+  <text x="635" y="50"
+        font-family="'Inter', 'SF Pro Display', sans-serif"
+        font-size="30" font-weight="700" fill="#0F172A" letter-spacing="-1"
+        text-anchor="middle" text-rendering="optimizeLegibility">Same query. Two different answers.</text>
+
+  <text x="635" y="80"
+        font-family="'Inter', 'SF Pro Display', sans-serif"
+        font-size="15" font-weight="400" fill="#64748B"
+        text-anchor="middle" text-rendering="optimizeLegibility">AI search tools invent sources with total confidence. Every claim here is checked before it reaches you.</text>
+
+  <!-- Shared query pill -->
+  <rect x="235" y="98" width="800" height="52" rx="26" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1.5"/>
+  <text x="635" y="130"
+        font-family="'Inter', sans-serif" font-size="15" font-weight="600" fill="#334155"
+        text-anchor="middle" text-rendering="optimizeLegibility">&#8220;Find a paper on AI-based protein structure prediction&#8221;</text>
+
+  <!-- ============ LEFT CARD: TYPICAL AI SEARCH ANSWER ============ -->
+  <g font-family="'Inter', sans-serif" text-rendering="optimizeLegibility">
+    <rect x="60" y="170" width="560" height="420" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <rect x="75" y="185" width="530" height="38" rx="19" fill="#EF4444"/>
+    <text x="340" y="209" font-size="14" font-weight="700" letter-spacing="0.5" fill="#FFFFFF" text-anchor="middle">TYPICAL AI SEARCH ANSWER</text>
+
+    <text x="95" y="250" font-size="10" font-weight="700" letter-spacing="1.2" fill="#94A3B8">CITATION PRESENTED</text>
+    <text x="95" y="278" font-size="16" font-weight="700" fill="#0F172A">Chen et al. 2023</text>
+    <text x="95" y="300" font-size="13" font-weight="400" fill="#334155">Neural protein folding breakthrough</text>
+    <text x="95" y="326" font-family="'JetBrains Mono', monospace" font-size="12" fill="#2563EB" text-decoration="underline">doi.org/10.1038/s41586-2099-88421-x</text>
+
+    <rect x="95" y="350" width="310" height="32" rx="16" fill="#FEE2E2"/>
+    <text x="250" y="371" font-size="12" font-weight="700" fill="#DC2626" text-anchor="middle">&#10007; Fabricated &#8212; no Crossref record</text>
+
+    <text x="95" y="432" font-size="13" fill="#64748B">No warning. No flag. Just a broken citation your</text>
+    <text x="95" y="454" font-size="13" fill="#64748B">reader eventually finds &#8212; after it's already shipped.</text>
+
+    <rect x="95" y="530" width="490" height="50" rx="12" fill="#FEF2F2" stroke="#FECACA" stroke-width="1.5"/>
+    <text x="340" y="560" font-size="13" font-weight="600" fill="#991B1B" text-anchor="middle">Presented with the exact same confidence as a real source</text>
+  </g>
+
+  <!-- ============ RIGHT CARD: WEB-RESEARCHER-MCP ============ -->
+  <g font-family="'Inter', sans-serif" text-rendering="optimizeLegibility">
+    <rect x="650" y="170" width="560" height="420" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <rect x="665" y="185" width="530" height="38" rx="19" fill="#16A34A"/>
+    <text x="930" y="209" font-size="14" font-weight="700" letter-spacing="0.5" fill="#FFFFFF" text-anchor="middle">WEB-RESEARCHER-MCP</text>
+
+    <text x="685" y="250" font-size="10" font-weight="700" letter-spacing="1.2" fill="#94A3B8">CITATION VERIFIED</text>
+    <text x="685" y="278" font-size="16" font-weight="700" fill="#0F172A">Jumper et al. 2021</text>
+    <text x="685" y="300" font-size="13" font-weight="400" fill="#334155">AlphaFold &#8212; protein structure prediction</text>
+    <text x="685" y="326" font-family="'JetBrains Mono', monospace" font-size="12" fill="#2563EB" text-decoration="underline">doi.org/10.1038/s41586-021-03819-2</text>
+
+    <rect x="685" y="350" width="300" height="32" rx="16" fill="#DCFCE7"/>
+    <text x="835" y="371" font-size="12" font-weight="700" fill="#16A34A" text-anchor="middle">&#10003; Verified &#8212; live Crossref record</text>
+
+    <text x="685" y="432" font-size="13" fill="#64748B">Checked against Crossref, Retraction Watch, and</text>
+    <text x="685" y="454" font-size="13" fill="#64748B">Unpaywall automatically &#8212; before it ever reaches you.</text>
+
+    <rect x="685" y="530" width="490" height="50" rx="12" fill="#F0FDF4" stroke="#BBF7D0" stroke-width="1.5"/>
+    <text x="930" y="560" font-size="13" font-weight="600" fill="#15803D" text-anchor="middle">Real DOI. Real link. Verified before it shipped.</text>
+  </g>
+
+  <!-- Bottom feature callouts -->
+  <g font-family="'Inter', sans-serif" text-rendering="optimizeLegibility">
+    <rect x="270" y="615" width="320" height="40" rx="20" fill="#EFF6FF"/>
+    <text x="430" y="640" font-size="14" font-weight="600" fill="#2563EB" text-anchor="middle">Every fabricated citation caught</text>
+
+    <rect x="620" y="615" width="380" height="40" rx="20" fill="#F0FDF4"/>
+    <text x="810" y="640" font-size="14" font-weight="600" fill="#16A34A" text-anchor="middle">Real DOIs. Real links. Every time.</text>
+  </g>
+
+  <!-- Tagline -->
+  <text x="635" y="700"
+        font-family="'Inter', sans-serif" font-size="15" fill="#64748B"
+        text-anchor="middle" text-rendering="optimizeLegibility">The same question, answered with equal confidence &#8212; only one answer survives a database check.</text>
+
+  <!-- Footnote -->
+  <text x="635" y="728"
+        font-family="'Inter', sans-serif" font-size="12" fill="#94A3B8"
+        text-anchor="middle" text-rendering="optimizeLegibility">AI search citation accuracy: Columbia Journalism Review, 2024 (cjr.org)</text>
+</svg>

@@ -143,7 +143,7 @@ All assets live in `/assets/`. Current deliverables:
 |------|------|-----|
 | `social-preview.svg` / `.png` | 1280x640 | GitHub / OpenGraph shares |
 | `ph-thumbnail.svg` / `.png` / `.gif` | 240x240 | Product Hunt feed |
-| `ph-gallery-*.svg` / `.png` | 1270x760 | Product Hunt gallery (5 images) |
+| `ph-gallery-*.svg` / `.png` | 1270x760 | Product Hunt gallery (6 images) |
 
 ---
 

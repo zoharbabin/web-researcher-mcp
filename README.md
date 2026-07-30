@@ -134,6 +134,10 @@ Works with Claude, Claude Desktop, Cursor, and any AI assistant that supports to
 
 ---
 
+![Same query, two answers — a typical AI search tool presents a fabricated DOI with full confidence; web-researcher-mcp verifies the citation against Crossref before it reaches you](assets/ph-gallery-6-trust-proof.png)
+
+---
+
 ## How It Compares
 
 |  | web-researcher-mcp | Perplexity | Scite.ai | Elicit |

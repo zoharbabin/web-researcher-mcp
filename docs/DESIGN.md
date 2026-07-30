@@ -146,6 +146,7 @@ Close a graphic with: 1–3 feature/callout pills (short, punchy, tinted), optio
 | `ph-gallery-3-providers.svg` | Light | Providers by category, pill layout |
 | `ph-gallery-4-tools.svg` | Light | Tools by outcome, pill layout |
 | `ph-gallery-5-lenses.svg` | Light | Search lenses by domain, pill layout |
+| `ph-gallery-6-trust-proof.svg` | Light | Before/after citation trust: same query, fabricated vs. verified answer card |
 | `social-preview.svg` | Light | GitHub/OpenGraph share card |
 | `ph-thumbnail.svg` | Dark (icon tile) | Product Hunt feed thumbnail — brand mark identity, not a content graphic |
 | `logo-final*.svg` | Dark tile (primary) | Governed by [Brand Guidelines](BRAND_GUIDELINES.md), not this doc |
