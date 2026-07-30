@@ -97,6 +97,18 @@ type Router struct {
 	maxFetchPerProvider map[string]int
 }
 
+// routerBreakerConfig is a deliberate override of the global circuit-breaker
+// default (#468: CIRCUIT_FAILURE_THRESHOLD / CIRCUIT_RESET_TIMEOUT_SECONDS).
+// The Router's breakers gate live per-request fallback ordering ("try the
+// next provider now"), not long-horizon provider-health tracking — they need
+// to trip and reset much faster than the 5-failures/60s global default so a
+// degraded provider drops out of rotation within seconds, not a minute.
+var routerBreakerConfig = circuit.Config{
+	FailureThreshold: 3,
+	ResetTimeout:     30,
+	HalfOpenAttempts: 1,
+}
+
 // Compile-time proof the Router satisfies every capability it routes. These
 // also document, at the type, exactly which capabilities the Router covers.
 var (
@@ -133,11 +145,7 @@ var depthNumResults = map[string]int{
 func NewRouter(providers map[string]Provider, cfg RouterConfig) *Router {
 	breakers := make(map[string]*circuit.Breaker, len(providers))
 	for name := range providers {
-		breakers[name] = circuit.New(circuit.Config{
-			FailureThreshold: 3,
-			ResetTimeout:     30,
-			HalfOpenAttempts: 1,
-		})
+		breakers[name] = circuit.New(routerBreakerConfig)
 	}
 
 	patentProviders := cfg.PatentProviders
@@ -146,11 +154,7 @@ func NewRouter(providers map[string]Provider, cfg RouterConfig) *Router {
 	}
 	patentBreakers := make(map[string]*circuit.Breaker, len(patentProviders))
 	for name := range patentProviders {
-		patentBreakers[name] = circuit.New(circuit.Config{
-			FailureThreshold: 3,
-			ResetTimeout:     30,
-			HalfOpenAttempts: 1,
-		})
+		patentBreakers[name] = circuit.New(routerBreakerConfig)
 	}
 
 	academicProviders := cfg.AcademicProviders
@@ -159,11 +163,7 @@ func NewRouter(providers map[string]Provider, cfg RouterConfig) *Router {
 	}
 	academicBreakers := make(map[string]*circuit.Breaker, len(academicProviders))
 	for name := range academicProviders {
-		academicBreakers[name] = circuit.New(circuit.Config{
-			FailureThreshold: 3,
-			ResetTimeout:     30,
-			HalfOpenAttempts: 1,
-		})
+		academicBreakers[name] = circuit.New(routerBreakerConfig)
 	}
 
 	logger := cfg.Logger
@@ -428,11 +428,7 @@ func (r *Router) RegisterPatentProviders(providers map[string]PatentProvider) {
 	for name, p := range providers {
 		r.patentProviders[name] = p
 		if _, exists := r.patentBreakers[name]; !exists {
-			r.patentBreakers[name] = circuit.New(circuit.Config{
-				FailureThreshold: 3,
-				ResetTimeout:     30,
-				HalfOpenAttempts: 1,
-			})
+			r.patentBreakers[name] = circuit.New(routerBreakerConfig)
 		}
 	}
 }
@@ -527,11 +523,7 @@ func (r *Router) RegisterAcademicProviders(providers map[string]AcademicProvider
 	for name, p := range providers {
 		r.academicProviders[name] = p
 		if _, exists := r.academicBreakers[name]; !exists {
-			r.academicBreakers[name] = circuit.New(circuit.Config{
-				FailureThreshold: 3,
-				ResetTimeout:     30,
-				HalfOpenAttempts: 1,
-			})
+			r.academicBreakers[name] = circuit.New(routerBreakerConfig)
 		}
 	}
 }

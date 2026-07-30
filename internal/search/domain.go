@@ -321,7 +321,7 @@ func AvailableAcademicProviders(cfg AcademicProviderConfig, deps Deps) map[strin
 	for _, name := range names {
 		provDeps := Deps{
 			HTTPClient: deps.HTTPClient,
-			Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+			Breaker:    circuit.New(deps.Circuit),
 		}
 		if p := NewAcademicProviderByName(name, cfg, provDeps); p != nil {
 			providers[name] = p
@@ -338,7 +338,7 @@ func AvailablePatentProviders(cfg PatentProviderConfig, deps Deps) map[string]Pa
 	for _, name := range SupportedPatentProviders {
 		provDeps := Deps{
 			HTTPClient: deps.HTTPClient,
-			Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+			Breaker:    circuit.New(deps.Circuit),
 		}
 		if p := NewPatentProviderByName(name, cfg, provDeps); p != nil {
 			providers[name] = p

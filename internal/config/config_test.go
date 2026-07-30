@@ -254,6 +254,45 @@ func TestLoadCacheIsolationDefaultsWithoutOAuth(t *testing.T) {
 	}
 }
 
+// TestCircuitConfigDefaults proves the CircuitConfig defaults (5 failures /
+// 60s) apply when CIRCUIT_FAILURE_THRESHOLD / CIRCUIT_RESET_TIMEOUT_SECONDS
+// are unset (#468).
+func TestCircuitConfigDefaults(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("CIRCUIT_FAILURE_THRESHOLD", "")
+	t.Setenv("CIRCUIT_RESET_TIMEOUT_SECONDS", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Circuit.FailureThreshold != 5 {
+		t.Errorf("expected default FailureThreshold=5, got %d", cfg.Circuit.FailureThreshold)
+	}
+	if cfg.Circuit.ResetTimeoutSecs != 60 {
+		t.Errorf("expected default ResetTimeoutSecs=60, got %d", cfg.Circuit.ResetTimeoutSecs)
+	}
+}
+
+// TestCircuitConfigFromEnv proves CIRCUIT_FAILURE_THRESHOLD /
+// CIRCUIT_RESET_TIMEOUT_SECONDS override the defaults (#468).
+func TestCircuitConfigFromEnv(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("CIRCUIT_FAILURE_THRESHOLD", "8")
+	t.Setenv("CIRCUIT_RESET_TIMEOUT_SECONDS", "45")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Circuit.FailureThreshold != 8 {
+		t.Errorf("expected FailureThreshold=8, got %d", cfg.Circuit.FailureThreshold)
+	}
+	if cfg.Circuit.ResetTimeoutSecs != 45 {
+		t.Errorf("expected ResetTimeoutSecs=45, got %d", cfg.Circuit.ResetTimeoutSecs)
+	}
+}
+
 func setCustomEnv(t *testing.T) {
 	t.Helper()
 	setRequiredEnv(t)

@@ -45,6 +45,7 @@ type Config struct {
 	Features               FeatureConfig
 	Audit                  AuditConfig
 	ResearchPanel          ResearchPanelConfig
+	Circuit                CircuitConfig
 
 	// StdioUserID names the single local user for STDIO transport, where there
 	// is no OAuth identity (the launching app owns the process, so it IS one
@@ -213,6 +214,15 @@ type OAuthConfig struct {
 	JWKSRefreshInterval time.Duration // Default: 1 hour
 	EnforceScopes       bool
 	RequiredScopes      []string
+}
+
+// CircuitConfig holds the global default circuit-breaker thresholds (#468),
+// applied at every circuit.New() call site in cmd/web-researcher-mcp/main.go
+// and internal/search unless that site documents a specific override (e.g.
+// Monarch's longer reset for its documented multi-minute KG-rebuild outages).
+type CircuitConfig struct {
+	FailureThreshold int
+	ResetTimeoutSecs int
 }
 
 type RateLimitConfig struct {
@@ -512,6 +522,10 @@ func Load() (*Config, error) {
 			IncludeRequestBody: envBool("AUDIT_INCLUDE_REQUEST_BODY", false),
 			MaxBytes:           envInt("AUDIT_MAX_BYTES", 100<<20),
 			RetentionDays:      retentionDays,
+		},
+		Circuit: CircuitConfig{
+			FailureThreshold: envInt("CIRCUIT_FAILURE_THRESHOLD", 5),
+			ResetTimeoutSecs: envInt("CIRCUIT_RESET_TIMEOUT_SECONDS", 60),
 		},
 		ResearchPanel: ResearchPanelConfig{
 			OpenRouterAPIKey: os.Getenv("OPENROUTER_API_KEY"),

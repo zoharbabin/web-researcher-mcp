@@ -88,7 +88,7 @@ func AvailableFilingProviders(cfg FilingProviderConfig, deps Deps) map[string]Fi
 	for _, name := range SupportedFilingProviders {
 		provDeps := Deps{
 			HTTPClient: deps.HTTPClient,
-			Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+			Breaker:    circuit.New(deps.Circuit),
 		}
 		if p := NewFilingProviderByName(name, cfg, provDeps); p != nil {
 			providers[name] = p
@@ -159,7 +159,7 @@ func AvailableCaseProviders(cfg CaseProviderConfig, deps Deps) map[string]CasePr
 	for _, name := range SupportedCaseProviders {
 		provDeps := Deps{
 			HTTPClient: deps.HTTPClient,
-			Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+			Breaker:    circuit.New(deps.Circuit),
 		}
 		if p := NewCaseProviderByName(name, cfg, provDeps); p != nil {
 			providers[name] = p
@@ -255,7 +255,7 @@ func AvailableEconProviders(cfg EconProviderConfig, deps Deps) map[string]EconPr
 	for _, name := range SupportedEconProviders {
 		provDeps := Deps{
 			HTTPClient: deps.HTTPClient,
-			Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+			Breaker:    circuit.New(deps.Circuit),
 		}
 		if p := NewEconProviderByName(name, cfg, provDeps); p != nil {
 			providers[name] = p
@@ -328,7 +328,7 @@ func AvailableTrialProviders(deps Deps) map[string]TrialProvider {
 	for _, name := range SupportedTrialProviders {
 		provDeps := Deps{
 			HTTPClient: deps.HTTPClient,
-			Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+			Breaker:    circuit.New(deps.Circuit),
 		}
 		if p := NewTrialProviderByName(name, provDeps); p != nil {
 			providers[name] = p

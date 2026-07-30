@@ -86,7 +86,7 @@ func AvailableContextProviders(braveKey string, deps Deps) map[string]ContextPro
 	for _, name := range SupportedContextProviders {
 		provDeps := Deps{
 			HTTPClient: deps.HTTPClient,
-			Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+			Breaker:    circuit.New(deps.Circuit),
 		}
 		if p := NewContextProviderByName(name, braveKey, provDeps); p != nil {
 			providers[name] = p
