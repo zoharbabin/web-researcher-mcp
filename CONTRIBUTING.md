@@ -98,6 +98,21 @@ go test -coverprofile=coverage.out ./...
 go tool cover -html=coverage.out
 ```
 
+### Fuzzing
+
+`internal/documents` (PDF/DOCX/PPTX extraction) and `internal/content`'s sanitizer parse fully untrusted, internet-sourced input, so both carry Go native (`testing.F`) fuzz targets. CI runs a short 20s-per-target sweep on every code PR; run a deeper local sweep periodically or after touching either package:
+
+```bash
+# Short CI-equivalent sweep across all 5 targets
+make test-fuzz
+
+# Deeper local sweep (minutes, not seconds)
+make test-fuzz FUZZTIME=5m
+
+# A single target directly
+go test ./internal/documents/... -run=^$ -fuzz=FuzzParsePDF -fuzztime=1m
+```
+
 ### Linting
 
 Tools are pinned in `go.mod` and invoked through `go tool` so every contributor and CI run uses byte-identical versions. Use the `make` targets, or the `go tool …` form if running directly — never the bare globally-installed binaries.

@@ -75,6 +75,8 @@ run_gate "SAST (gosec) + vuln scan + pattern checks (#484/#486/#488)" \
     grep -rq "ADMIN_API_KEY_PREV" internal/config/config.go 2>/dev/null
     echo "--- grep: no TODO/FIXME left in any #467 sub-issue touched file ---"
     ! grep -rn "TODO\|FIXME" internal/circuit/breaker.go internal/search/router.go internal/scraper/pipeline.go internal/metrics/collector.go internal/ratelimit/limiter.go internal/audit/logger.go internal/config/config.go 2>/dev/null
+    echo "--- fuzz: untrusted-input parsers survive a short adversarial sweep (#476) ---"
+    make test-fuzz FUZZTIME=5s
   '
 
 # internal/tools holds zero per-instance state (Design Rule 1). This gate

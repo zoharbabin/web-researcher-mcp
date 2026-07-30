@@ -312,6 +312,26 @@ jobs:
           path: coverage.out
           retention-days: 7
 
+  # 🧬 Fuzz — short native-fuzzing sweep (#476) over the untrusted-input
+  # parsers: internal/documents (PDF/DOCX/PPTX) and internal/content's HTML/
+  # text sanitizer. 20s/target keeps this fast in CI; `make test-fuzz
+  # FUZZTIME=5m` runs a deeper sweep locally.
+  fuzz:
+    name: 🧬 Fuzz · Untrusted-Input Parsers
+    needs: [changes, test]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.25.12"
+          cache: true
+
+      - name: Run fuzz targets (20s each)
+        run: make test-fuzz FUZZTIME=20s
+
   # Gate job: always reports under the exact name required by branch protection.
   # When code=true the matrix job ran; when code=false it was skipped (docs PR).
   # Either way this job passes so auto-merge isn't stuck.

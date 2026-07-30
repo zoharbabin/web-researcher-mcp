@@ -1,4 +1,4 @@
-.PHONY: build build-fips sync-lenses test test-race test-cover test-e2e test-live test-eval test-geo-eval test-concurrency test-bench test-python test-python-live \
+.PHONY: build build-fips sync-lenses test test-race test-cover test-e2e test-live test-eval test-geo-eval test-concurrency test-bench test-fuzz test-python test-python-live \
         lint fmt fmt-check vet vuln sec tools hooks precommit verify clean run dev docker docker-smoke e2e-oauth-docker release version-sync rebuild-local help all \
         gen-python-client check-python-drift
 
@@ -80,6 +80,18 @@ test-concurrency:
 
 test-bench:
 	go test -bench=. -benchmem ./tests/benchmark/
+
+# Go native fuzzing (#476) over the untrusted-input parsers: internal/documents
+# (PDF/DOCX/PPTX extraction) and internal/content's HTML/text sanitizer. Each
+# target gets a short, CI-friendly fuzztime; run with a longer FUZZTIME locally
+# (e.g. `make test-fuzz FUZZTIME=5m`) for a deeper periodic sweep.
+FUZZTIME ?= 30s
+test-fuzz:
+	go test ./internal/documents/... -run=^$$ -fuzz=FuzzParsePDF -fuzztime=$(FUZZTIME)
+	go test ./internal/documents/... -run=^$$ -fuzz=FuzzParseDOCX -fuzztime=$(FUZZTIME)
+	go test ./internal/documents/... -run=^$$ -fuzz=FuzzParsePPTX -fuzztime=$(FUZZTIME)
+	go test ./internal/content/... -run=^$$ -fuzz=FuzzSanitizeHTML -fuzztime=$(FUZZTIME)
+	go test ./internal/content/... -run=^$$ -fuzz=FuzzSanitizeText -fuzztime=$(FUZZTIME)
 
 # Python client library tests (no binary required — uses a mock HTTP server)
 test-python:
