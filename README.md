@@ -13,6 +13,10 @@
   no made up closed garden pre-synthesized results.
 </p>
 
+⭐ If you're tired of AI making things up, and [web-researcher-mcp](https://github.com/zoharbabin/web-researcher-mcp/) helps you, give us a star ⭐ — it helps more teams discover the project.  
+
+<video src="https://github.com/user-attachments/assets/cbf46fe1-f629-4540-b2bf-1282c69729a3" width="352" height="720"></video>
+
 <p align="center">
   <a href="https://github.com/zoharbabin/web-researcher-mcp/actions/workflows/ci.yml"><img src="https://github.com/zoharbabin/web-researcher-mcp/actions/workflows/ci.yml/badge.svg" height="20" alt="CI"></a>
   <a href="https://goreportcard.com/report/github.com/zoharbabin/web-researcher-mcp"><img src="https://goreportcard.com/badge/github.com/zoharbabin/web-researcher-mcp" height="20" alt="Go Report Card"></a>
@@ -25,8 +29,6 @@
   <a href="https://github.com/zoharbabin/web-researcher-mcp/stargazers"><img src="https://img.shields.io/github/stars/zoharbabin/web-researcher-mcp?style=social" height="20" alt="GitHub Stars"></a>
 <a href="https://mcptoplist.com/server/io.github.zoharbabin%2Fweb-researcher-mcp"><img src="https://mcptoplist.com/badge/io.github.zoharbabin%2Fweb-researcher-mcp.svg" height="20" alt="MCP Toplist"></a>
 </p>
-
-⭐ If you're tired of AI making things up, and [web-researcher-mcp](https://github.com/zoharbabin/web-researcher-mcp/) helps you, give us a star ⭐ — it helps more teams discover the project.  
 
 ### Get started in 30 seconds
 
