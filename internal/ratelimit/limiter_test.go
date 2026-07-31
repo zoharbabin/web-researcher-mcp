@@ -1,12 +1,17 @@
 package ratelimit
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -637,4 +642,92 @@ func TestConcurrentAllowDailyWithStore(t *testing.T) {
 	if want := int64(goroutines * perG); stats.DailyUsed != want {
 		t.Fatalf("lost updates under concurrency: DailyUsed=%d, want %d", stats.DailyUsed, want)
 	}
+}
+
+// erroringIncrementer always fails, simulating a flaky/unreachable Redis for
+// the #470 fallback path.
+type erroringIncrementer struct{ calls atomic.Int64 }
+
+func (e *erroringIncrementer) IncrDaily(ctx context.Context, tenantID string, resetAt time.Time) (int64, error) {
+	e.calls.Add(1)
+	return 0, errors.New("simulated redis error")
+}
+
+// TestAllowDailyRedisFallbackLogsAndCounts is the #470 regression guard: when
+// the Redis incrementer errors, AllowDaily must (a) still enforce the quota via
+// the local counter rather than fail the request, (b) increment
+// FallbackCount(), and (c) emit a slog.Warn naming the tenant and the error, so
+// the silent cross-pod-to-per-pod quota degradation is observable.
+func TestAllowDailyRedisFallbackLogsAndCounts(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	defer slog.SetDefault(prev)
+
+	incr := &erroringIncrementer{}
+	l := New(config.RateLimitConfig{Global: 1000, PerTenant: 1000, DailyQuota: 2}).WithDailyIncrementer(incr)
+
+	if !l.AllowDaily("tenant1") {
+		t.Fatal("expected first call to be allowed via local fallback")
+	}
+	if !l.AllowDaily("tenant1") {
+		t.Fatal("expected second call to be allowed via local fallback")
+	}
+	if l.AllowDaily("tenant1") {
+		t.Fatal("expected third call to be rejected: local fallback quota (2) exhausted")
+	}
+
+	if incr.calls.Load() != 3 {
+		t.Fatalf("expected IncrDaily to be attempted on every call, got %d", incr.calls.Load())
+	}
+	if got := l.FallbackCount(); got != 3 {
+		t.Fatalf("FallbackCount() = %d, want 3", got)
+	}
+
+	logged := buf.String()
+	if !strings.Contains(logged, "rate limiter Redis fallback") {
+		t.Errorf("expected fallback warning in log output, got: %s", logged)
+	}
+	if !strings.Contains(logged, "tenant1") {
+		t.Errorf("expected tenant ID in log output, got: %s", logged)
+	}
+	if !strings.Contains(logged, "simulated redis error") {
+		t.Errorf("expected error detail in log output, got: %s", logged)
+	}
+}
+
+// TestAllowDailySuccessNeverFallsBack proves the fallback path is only taken
+// on error — a healthy incrementer must never touch FallbackCount or the local
+// counter's quota, avoiding false-positive alerts (#470).
+func TestAllowDailySuccessNeverFallsBack(t *testing.T) {
+	store := persist.NewMemoryStore()
+	incr := &fakeSuccessIncrementer{}
+	l := NewWithStore(config.RateLimitConfig{Global: 1000, PerTenant: 1000, DailyQuota: 2}, store).WithDailyIncrementer(incr)
+
+	if !l.AllowDaily("tenant1") {
+		t.Fatal("expected first call within remote quota to be allowed")
+	}
+	if !l.AllowDaily("tenant1") {
+		t.Fatal("expected second call within remote quota to be allowed")
+	}
+	if l.AllowDaily("tenant1") {
+		t.Fatal("expected third call over remote quota to be rejected")
+	}
+	if got := l.FallbackCount(); got != 0 {
+		t.Fatalf("FallbackCount() = %d, want 0 on the all-success path", got)
+	}
+}
+
+// fakeSuccessIncrementer simulates a healthy Redis: it always succeeds and
+// returns a monotonically increasing fleet-wide count.
+type fakeSuccessIncrementer struct {
+	mu    sync.Mutex
+	count int64
+}
+
+func (f *fakeSuccessIncrementer) IncrDaily(ctx context.Context, tenantID string, resetAt time.Time) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.count++
+	return f.count, nil
 }

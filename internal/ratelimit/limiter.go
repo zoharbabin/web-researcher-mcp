@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/auth"
@@ -37,15 +39,22 @@ type Limiter struct {
 	// atomic increment, so N pods share one limit instead of N× the limit. nil
 	// keeps the per-pod in-memory counter (correct for single-pod / STDIO).
 	incr DailyIncrementer
+
+	// redisFallback counts AllowDaily calls that fell through to the per-pod
+	// local counter because incr reported a backend error (#470). Exported via
+	// FallbackCount for Prometheus, following the audit-loss pattern
+	// (internal/metrics/auditloss.go): a small polled atomic, not a direct
+	// metrics import, to avoid an internal/ratelimit -> internal/metrics cycle.
+	redisFallback atomic.Int64
 }
 
 // DailyIncrementer atomically increments a tenant's daily counter and returns
 // the new fleet-wide value. resetAt is when the window rolls over (used to set
-// the counter's TTL on first creation). ok=false signals the backend was
+// the counter's TTL on first creation). A non-nil err signals the backend was
 // unavailable, so the caller falls back to the local counter rather than
 // failing the request. Implemented by the Redis persist store (#42).
 type DailyIncrementer interface {
-	IncrDaily(ctx context.Context, tenantID string, resetAt time.Time) (count int64, ok bool)
+	IncrDaily(ctx context.Context, tenantID string, resetAt time.Time) (count int64, err error)
 }
 
 type tenantLimiter struct {
@@ -84,6 +93,12 @@ func (l *Limiter) WithDailyIncrementer(incr DailyIncrementer) *Limiter {
 	return l
 }
 
+// FallbackCount returns the cumulative number of AllowDaily calls that fell
+// through to the per-pod local counter because the Redis incrementer errored
+// (#470). Polled by internal/metrics via the RedisFallbackSource interface;
+// always 0 when no DailyIncrementer is configured.
+func (l *Limiter) FallbackCount() int64 { return l.redisFallback.Load() }
+
 func (l *Limiter) Allow(tenantID string) bool {
 	if !l.global.Allow() {
 		return false
@@ -96,12 +111,17 @@ func (l *Limiter) AllowDaily(tenantID string) bool {
 	// Atomic cross-pod path (#42): when a distributed incrementer is configured,
 	// the quota is enforced fleet-wide by a single atomic INCR keyed to a
 	// midnight-UTC TTL, so N pods share one limit. On any backend error we fall
-	// through to the local counter rather than failing the request.
+	// through to the local counter rather than failing the request — but that
+	// fallback silently degrades cross-pod enforcement to per-pod (#470), so it
+	// is logged and counted here rather than passing through unnoticed.
 	if l.incr != nil {
 		resetAt := time.Now().UTC().Truncate(24 * time.Hour).Add(24 * time.Hour)
-		if count, ok := l.incr.IncrDaily(context.Background(), tenantID, resetAt); ok {
+		count, err := l.incr.IncrDaily(context.Background(), tenantID, resetAt)
+		if err == nil {
 			return count <= int64(l.config.DailyQuota)
 		}
+		l.redisFallback.Add(1)
+		slog.Warn("rate limiter Redis fallback", "tenant", tenantID, "error", err)
 	}
 
 	tl := l.getTenantLimiter(tenantID)

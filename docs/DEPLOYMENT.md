@@ -637,6 +637,7 @@ When `CACHE_ISOLATION=tenant`, all cache keys are prefixed with the authenticate
 - **Token revocation** is shared across pods via the same Redis-backed persist store.
 - All personal-data namespaces (sessions, persist) are **AES-256-GCM encrypted before write** — Redis holds only ciphertext, identical at-rest protection to disk. `REDIS_URL` therefore **requires** `CACHE_ENCRYPTION_KEY`.
 - **Fail-fast:** if `REDIS_URL` is set but Redis is unreachable at startup, the server exits rather than silently degrading to per-pod mode.
+- **Runtime fallback (#470):** this fail-fast only covers startup. If Redis becomes unreachable *after* startup (a transient outage, not down at boot), each affected `AllowDaily` call falls back to that pod's local in-memory counter instead of failing the request — so the daily quota is briefly enforced per-pod (up to N× over-spend across N pods) rather than fleet-wide until Redis recovers. Every fallback occurrence logs `slog.Warn("rate limiter Redis fallback", "tenant", ..., "error", ...)` and increments the `mcp_ratelimit_redis_fallback_total` Prometheus counter — alert on a sustained non-zero rate to catch this degradation quickly.
 
 **Recommendations for multi-instance HTTP deployments:**
 

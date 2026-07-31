@@ -214,6 +214,9 @@ func main() {
 	if redisBackends != nil {
 		// Atomic cross-pod daily quota: N pods share one limit (#42).
 		rateLimiter = rateLimiter.WithDailyIncrementer(redisBackends.PersistStore())
+		// Expose fallback-to-per-pod occurrences (transient Redis errors) as a
+		// Prometheus counter so silent cross-pod quota degradation is alertable (#470).
+		metricsCollector.RegisterRateLimitFallback(rateLimiter)
 	}
 	// circuitDefaults (#468) is the operator-configured breaker threshold/timeout
 	// (CIRCUIT_FAILURE_THRESHOLD / CIRCUIT_RESET_TIMEOUT_SECONDS), applied to every

@@ -89,9 +89,9 @@ func TestIncrDailyAtomicAndExpires(t *testing.T) {
 	resetAt := time.Now().Add(time.Hour)
 
 	for i := int64(1); i <= 3; i++ {
-		v, ok := s.IncrDaily(ctx, "tenant-1", resetAt)
-		if !ok || v != i {
-			t.Fatalf("expected count %d, got %d ok=%v", i, v, ok)
+		v, err := s.IncrDaily(ctx, "tenant-1", resetAt)
+		if err != nil || v != i {
+			t.Fatalf("expected count %d, got %d err=%v", i, v, err)
 		}
 	}
 	// A different tenant has an independent counter.

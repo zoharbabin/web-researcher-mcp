@@ -74,8 +74,10 @@ return v
 // IncrDaily atomically increments a per-tenant daily counter shared across pods
 // and returns the new value. The counter is created with a TTL that expires it
 // at the given reset time, so the quota window is consistent fleet-wide. This
-// is the cross-pod replacement for the in-memory daily counter (#42).
-func (s *Store) IncrDaily(ctx context.Context, tenantID string, resetAt time.Time) (int64, bool) {
+// is the cross-pod replacement for the in-memory daily counter (#42). A non-nil
+// err (e.g. a transient Redis outage) tells the caller to fall back to local
+// behavior; the error is returned, not swallowed, so the caller can log it (#470).
+func (s *Store) IncrDaily(ctx context.Context, tenantID string, resetAt time.Time) (int64, error) {
 	ttl := time.Until(resetAt)
 	if ttl <= 0 {
 		ttl = 24 * time.Hour
@@ -83,7 +85,7 @@ func (s *Store) IncrDaily(ctx context.Context, tenantID string, resetAt time.Tim
 	k := s.b.key("quota:daily", tenantID)
 	v, err := incrByLua.Run(ctx, s.b.client, []string{k}, int64(ttl.Seconds())).Int64()
 	if err != nil {
-		return 0, false // caller falls back to local behavior on Redis error
+		return 0, err
 	}
-	return v, true
+	return v, nil
 }
