@@ -346,6 +346,31 @@ func TestNonTrippingCheckedBeforeRateLimit(t *testing.T) {
 	}
 }
 
+// TestReadyPerformsHalfOpenTransition (#469): unlike State(), Ready() must
+// perform the Open->HalfOpen transition itself when ResetTimeout has elapsed
+// — callers that gate a call on Ready() without ever calling Execute (e.g. a
+// health-check style pre-filter) must still see the breaker recover.
+func TestReadyPerformsHalfOpenTransition(t *testing.T) {
+	b := New(Config{FailureThreshold: 1, ResetTimeout: 1, HalfOpenAttempts: 1})
+
+	_ = b.Execute(func() error { return errTest })
+	if b.State() != StateOpen {
+		t.Fatalf("expected Open after one failure, got %v", b.State())
+	}
+	if b.Ready() {
+		t.Error("expected Ready() false immediately after tripping")
+	}
+
+	time.Sleep(1300 * time.Millisecond) // > ResetTimeout(1s) + max jitter(200ms)
+
+	if !b.Ready() {
+		t.Fatal("expected Ready() true past ResetTimeout+jitter")
+	}
+	if b.State() != StateHalfOpen {
+		t.Errorf("expected Ready() to perform the Open->HalfOpen transition as a side effect, got %v", b.State())
+	}
+}
+
 func TestConcurrentAccess(t *testing.T) {
 	b := New(Config{FailureThreshold: 100, ResetTimeout: 1})
 

@@ -387,7 +387,9 @@ func (r *Router) Patents(ctx context.Context, params PatentSearchParams) ([]Pate
 			continue
 		}
 		trace.attempt(name)
-		if hasBrk && breaker.State() == circuit.StateOpen {
+		// Ready(), not State()==Open: a passive State() read never performs
+		// the Open->HalfOpen transition (#469).
+		if hasBrk && !breaker.Ready() {
 			trace.fellBack(FallbackReasonCircuitOpen)
 			continue
 		}
@@ -485,7 +487,9 @@ func (r *Router) Scholarly(ctx context.Context, params AcademicSearchParams) ([]
 			continue
 		}
 		trace.attempt(name)
-		if hasBrk && breaker.State() == circuit.StateOpen {
+		// Ready(), not State()==Open: a passive State() read never performs
+		// the Open->HalfOpen transition (#469).
+		if hasBrk && !breaker.Ready() {
 			trace.fellBack(FallbackReasonCircuitOpen)
 			continue
 		}
@@ -636,7 +640,10 @@ func (r *Router) isHealthy(name string) bool {
 	if !ok {
 		return false
 	}
-	return breaker.State() != circuit.StateOpen
+	// Ready(), not State(): a passive State() read never performs the
+	// Open->HalfOpen transition, so a tripped breaker would stay Open forever
+	// once the Router stops calling Execute on it (#469).
+	return breaker.Ready()
 }
 
 func (r *Router) recordSuccess(name string) {

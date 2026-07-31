@@ -77,6 +77,20 @@ func (b *Breaker) Execute(fn func() error) error {
 	return nil
 }
 
+// Ready reports whether the breaker currently permits a request: always true
+// when Closed; true when Open only past ResetTimeout+jitter (performing the
+// Open->HalfOpen transition as a side effect, same as Execute's own
+// pre-check); true when HalfOpen only while probe attempts remain. Callers
+// that must decide whether to even attempt a provider without immediately
+// wrapping the call in Execute — e.g. a fallback router skipping to the next
+// provider in priority order — need this, not the passive State(), which
+// never performs the timeout-elapsed transition on its own and would leave a
+// tripped breaker permanently Open once nothing ever calls Execute on it
+// again (#469).
+func (b *Breaker) Ready() bool {
+	return b.allowRequest()
+}
+
 func (b *Breaker) allowRequest() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
