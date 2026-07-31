@@ -789,6 +789,7 @@ Our security controls map to MITRE ATT&CK techniques:
 
 - **DPoP token binding (RFC 9449)** — proof-of-possession prevents token theft
 - **Hash-chained audit logs** — tamper-evident logging for government deployments
+- **Native mTLS for service-to-service traffic** — the server does not implement mutual-TLS client-cert authentication itself, for either the HTTP admin plane or the Redis connection (`internal/redisbackend`); connections are encrypted in transit (`REDIS_URL` supports `rediss://`, and the HTTP server can run behind TLS) but not mutually authenticated at the application layer. Deployments requiring mTLS today should terminate it at a surrounding service mesh or ingress.
 - **Breach notification pipeline** — webhook alerting on security anomalies
 - **in-toto build attestations** — full supply chain provenance (SLSA Level 3)
 - **Seccomp profiles** — container syscall restriction for hardened deployments
