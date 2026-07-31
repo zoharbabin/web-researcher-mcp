@@ -194,6 +194,34 @@ to support.
 
 STDIO mode: no authentication (the calling process is the trust boundary).
 
+**Design choice: RS256 over HMAC, and where DPoP fits.** This server is an OAuth 2.1 *resource server* — it verifies tokens minted by an external IdP (Auth0, Okta, Keycloak, Entra ID, etc.) and never issues them itself; no private signing key exists anywhere in this codebase. That shapes the algorithm choice:
+
+```
+HMAC (HS256): one shared secret both signs and verifies.        RS256: one private key signs, any number of public
+Any verifier holding the secret can also forge tokens           keys (published via JWKS) verify. Compromising a
+accepted by every other verifier that trusts it.                verifier's key material grants no signing ability.
+
+  IdP --shared secret--> Server A                                 IdP --private key (never leaves IdP)--> signs JWT
+  IdP --shared secret--> Server B                                 IdP --publishes public key--> JWKS endpoint
+  (leak one verifier, forge tokens for all)                        Server A, Server B --fetch JWKS--> verify only
+```
+
+A single-service, single-trust-domain setup can use HMAC safely. A multi-tenant resource server that never issues its own tokens has a materially larger blast radius if it shares a symmetric verification secret than if it publishes a public key — so `internal/auth/middleware.go` pins to RS256 and rejects every other `alg`, including HS256 (closing the classic algorithm-confusion attack, where a token is resigned with HS256 using the public RS256 key as the HMAC secret).
+
+RS256 verification proves a token was issued by the trusted IdP and is unmodified. It does not prove the *presenter* is the party the IdP issued it to — a stolen bearer token replays as-is until it expires or is revoked. DPoP (RFC 9449) closes that gap by binding a token to a client-held private key via a `cnf.jkt` claim the IdP embeds at issuance time:
+
+```
+Bearer token (this server today)                 DPoP (requires IdP-side cnf.jkt support)
+Token stolen (log leak, XSS, proxy compromise)    Client signs a one-time proof JWT per request
+  -> replayed as-is, indistinguishable from          with its own private key
+     the legitimate client                         Access token carries cnf.jkt = SHA-256(pubkey)
+  -> mitigated by short TTL, JTI revocation,         Server checks: does this request's proof-key
+     per-tenant rate limits, audit logging           thumbprint match the token's cnf.jkt?
+                                                     -> stolen token alone is useless
+```
+
+A resource-server-only architecture cannot retrofit the right-hand side unilaterally — `cnf.jkt` can only be embedded by the issuing IdP at mint time. Research into current standards and the MCP ecosystem (tracked on [issue #489](https://github.com/zoharbabin/web-researcher-mcp/issues/489)) found DPoP is recommended-but-optional (RFC 9700/BCP 240), unevenly supported across IdPs (GA at Auth0/Okta/Ping/Curity; absent at AWS Cognito), still a proposal rather than a ratified requirement in the MCP spec itself, and not named by FedRAMP, DoD Zero Trust guidance, NIST 800-63B, or HIPAA's Security Rule. The realistic threat — stolen-bearer-token replay — is mitigated today via short-lived tokens, JTI revocation that survives restarts, per-tenant rate limiting, circuit breakers, and secret-redacted, request-correlated audit logging.
+
 ### Rate Limiting (HTTP mode)
 
 Three tiers preventing abuse while allowing legitimate high-throughput research:
@@ -790,6 +818,18 @@ Our security controls map to MITRE ATT&CK techniques:
 ## Current Limitations
 
 - **Native mTLS for service-to-service traffic** — the server does not implement mutual-TLS client-cert authentication itself, for either the HTTP admin plane or the Redis connection (`internal/redisbackend`); connections are encrypted in transit (`REDIS_URL` supports `rediss://`, and the HTTP server can run behind TLS) but not mutually authenticated at the application layer. Deployments requiring mTLS today should terminate it at a surrounding service mesh or ingress.
+- **No DPoP / sender-constrained tokens** — the server validates bearer tokens only; it does not check a `cnf.jkt` proof-of-possession claim, because embedding that claim is the issuing IdP's responsibility and no supported IdP integration currently requires it. Stolen-bearer-token replay is mitigated via short token TTLs, JTI-based revocation, per-tenant rate limiting, and audit logging (see the design-choice discussion under [Authentication (HTTP mode)](#authentication-http-mode)). Status tracked on [issue #489](https://github.com/zoharbabin/web-researcher-mcp/issues/489).
+
+### Multi-tenant shared Kubernetes clusters
+
+Operators running one deployment of this server behind a shared, multi-tenant HTTP endpoint (many `tenant_id` values through one process) should apply these controls in addition to the baseline hardening above:
+
+- **Set `CACHE_ISOLATION=tenant` explicitly.** The server requires an explicit choice once `OAUTH_ISSUER_URL` is configured — `shared` is only safe for single-tenant deployments. See `docs/DEPLOYMENT.md`'s Multi-Tenancy section.
+- **Encrypt shared state at rest and in transit.** If sharing Redis across replicas (`REDIS_URL`), also set `CACHE_ENCRYPTION_KEY` and use `rediss://`; Redis itself has no per-tenant ACL in this integration, so cross-pod isolation depends entirely on the application-layer `tenant_id` key prefixing plus transport/at-rest encryption, not on Redis-side access control.
+- **Namespace or NetworkPolicy per trust boundary.** If different tenants have different compliance requirements (e.g., one tenant is HIPAA-regulated, another isn't), run them in separate namespaces with a `NetworkPolicy` denying pod-to-pod traffic between them — the application enforces logical tenant isolation, not network isolation.
+- **Scope the admin plane to operators only.** `/admin/*` endpoints (`ADMIN_API_KEY`-gated) can read and erase any tenant's data (`/admin/data` GDPR export/erasure). In a shared cluster, restrict this route at the ingress/NetworkPolicy layer to an operator-only network path — a leaked admin key affects every tenant sharing the deployment, not just one.
+- **One OAuth audience per trust domain, not per tenant.** `OAUTH_AUDIENCE` validates that a token was minted for this deployment; tenant separation itself comes from the `tenant_id` claim inside an already-validated token, not from a separate audience per tenant. Don't rely on audience scoping as a substitute for verifying `tenant_id` presence and format.
+- **Size rate limits per tenant, not just per pod.** The per-tenant limiter (see Rate Limiting above) bounds one noisy tenant's blast radius on shared infrastructure; the global limiter alone does not, since a single busy tenant can otherwise starve every other tenant on the same pod.
 
 ### Architecture decisions that won't change:
 

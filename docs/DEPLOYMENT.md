@@ -337,6 +337,18 @@ spec:
         averageValue: "50"
 ```
 
+### Multi-tenant shared clusters
+
+Running one Deployment behind a shared HTTP+OAuth endpoint that serves multiple `tenant_id` values (rather than one cluster per customer) needs explicit isolation controls beyond the manifest above:
+
+- Set `CACHE_ISOLATION=tenant` (see [Multi-Tenancy](#multi-tenancy) below) — required once `OAUTH_ISSUER_URL` is set; `shared` is only safe for single-tenant deployments.
+- If replicas share Redis (`REDIS_URL`), also set `CACHE_ENCRYPTION_KEY` and use `rediss://` — Redis has no per-tenant ACL here, so isolation is enforced by the application's `tenant_id`-prefixed keys plus encryption, not by the datastore.
+- Put tenants with different compliance requirements in separate namespaces with a `NetworkPolicy` denying pod-to-pod traffic between them — this server enforces logical (application-layer) tenant isolation, not network isolation.
+- Restrict `/admin/*` (the `ADMIN_API_KEY`-gated plane, including GDPR export/erasure) to an operator-only ingress path — a leaked admin key in a shared deployment reaches every tenant, not just one.
+- Size per-tenant rate limits (see `docs/SECURITY_AND_COMPLIANCE.md`'s Rate Limiting section), not just the pod-level HPA metrics above — a single noisy tenant can otherwise starve the others on the same pod.
+
+Full rationale and the RS256/DPoP threat-model discussion behind these controls: `docs/SECURITY_AND_COMPLIANCE.md`'s [Multi-tenant shared Kubernetes clusters](security-and-compliance.md#multi-tenant-shared-kubernetes-clusters) section.
+
 ---
 
 ## Environment Variables

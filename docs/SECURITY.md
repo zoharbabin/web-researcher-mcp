@@ -80,20 +80,20 @@ Matched case-insensitively as an exact hostname or a dot-bounded suffix, so `svc
 Client → [Authorization: Bearer <token>] → MCP Server
                                               │
                                               ▼
-                                      ┌─────────────┐
+                                      ┌──────────────┐
                                       │ Validate JWT │
                                       │ - Signature  │
                                       │ - iss, aud   │
                                       │ - exp, nbf   │
                                       │ - scope      │
-                                      └──────┬──────┘
+                                      └──────┬───────┘
                                              │
-                                      ┌──────▼──────┐
+                                      ┌──────▼───────┐
                                       │Extract claims│
                                       │ - sub (user) │
                                       │ - tenant_id  │
                                       │ - session_id │
-                                      └─────────────┘
+                                      └──────────────┘
 ```
 
 **JWKS Management:**
@@ -109,6 +109,62 @@ Client → [Authorization: Bearer <token>] → MCP Server
 - `nbf` and `iat` are honored when present (±60s clock-skew tolerance)
 - `jti` is checked against the revocation set when present
 - `sub`, `tenant_id`, `session_id` are optional; absent `sub` maps to `anonymous`, absent `tenant_id` maps to `default`
+
+**Why RS256, not HMAC (HS256):**
+
+This server is an OAuth 2.1 *resource server* — it verifies tokens minted by an external identity provider (Auth0, Okta, Keycloak, Entra ID, etc.); it never issues them. That architecture is what makes RS256 (asymmetric) the correct choice over HS256 (symmetric):
+
+```
+HMAC (HS256) — one shared secret signs AND verifies
+┌───────────────┐  shared secret  ┌──────────────┐  shared secret  ┌──────────────┐
+│ Identity      │ ─────────────►  │ Resource     │ ─────────────►  │ Resource     │
+│ Provider      │  (must match)   │ Server A     │  (must match)   │ Server B     │
+└───────────────┘                 └──────────────┘                 └──────────────┘
+Any verifier that holds the secret can also forge tokens for every other verifier
+that trusts the same secret — one leaked verifier compromises the whole trust domain.
+
+RS256 — one private key signs, any number of public keys verify
+┌──────────────┐  private key   ┌──────────────┐
+│ Identity     │  (never        │ signs JWT    │
+│ Provider     │   leaves IdP)  │              │
+└──────┬───────┘                └──────────────┘
+       │ publishes public key via JWKS
+       ▼
+┌──────────────┐                ┌──────────────┐
+│ Resource     │  public key    │ Resource     │
+│ Server A     │  (verify-only) │ Server B     │
+└──────────────┘                └──────────────┘
+Neither server can forge a token — compromising one verifier's key material
+grants no ability to mint tokens for any tenant or any other verifier.
+```
+
+In a single-service, single-trust-domain setup HMAC is fine and cheaper. In a multi-tenant resource server that never issues its own tokens, sharing a symmetric verification secret across every verifier is a materially larger blast radius than publishing a public key — so `internal/auth/middleware.go` pins to RS256 and rejects everything else (including HS256, to close the classic "algorithm confusion" attack where a token is resigned with HS256 using the public RS256 key as the HMAC secret).
+
+**Token binding / proof-of-possession (DPoP, RFC 9449):**
+
+RS256 verification proves the token was issued by the trusted IdP and hasn't been tampered with. It does **not** prove the presenter is the party the IdP originally issued it to — a stolen bearer token is replayable as-is until it expires or is revoked. DPoP closes that gap by binding a token to a client-held private key:
+
+```
+Bearer token (current model)                DPoP (if the IdP issued cnf-bound tokens)
+──────────────────────────────               ──────────────────────────────────────────
+Attacker steals JWT                          Client signs a one-time "proof" JWT per
+(log leak, XSS, compromised proxy)           request with its own private key
+       │                                            │
+       ▼                                            ▼
+Replayed as-is — indistinguishable           Access token carries cnf.jkt =
+from the legitimate client                   SHA-256(client's public key)
+       │                                            │
+       ▼                                            ▼
+Mitigated by: short-lived tokens,            Resource server checks: does this
+JTI revocation, rate limits,                 request's proof-key thumbprint match
+audit logging — not by possession            the token's cnf.jkt?
+                                                     │
+                                                     ▼
+                                              Stolen token alone is useless without
+                                              the matching private key
+```
+
+This server cannot implement the right-hand side unilaterally: the `cnf.jkt` binding claim can only be embedded by the *issuing* IdP at token-mint time — a resource server that only ever verifies tokens (this one) has no way to retrofit that binding after the fact. Research into current standards and MCP-ecosystem state (summarized on [#489](https://github.com/zoharbabin/web-researcher-mcp/issues/489)) found DPoP is recommended-but-optional in general OAuth guidance (RFC 9700/BCP 240), unevenly supported across IdPs (GA at Auth0/Okta/Ping/Curity, absent at AWS Cognito), still a proposal (not a ratified requirement) in the MCP specification itself, and not named by FedRAMP, DoD Zero Trust guidance, NIST 800-63B, or HIPAA's Security Rule. The realistic threat — stolen-bearer-token replay — is mitigated today via short-lived tokens, JTI-based revocation (survives restarts via `persist.Store`), per-tenant rate limiting, circuit breakers, and secret-redacted audit logging with request correlation.
 
 **STDIO Transport:**
 - No authentication. Credentials come from environment.
@@ -133,11 +189,11 @@ This fails closed only for present-but-insufficient scopes — it never silently
 ```
 ┌─────────────────────────────────┐
 │          Tenant A               │
-│  ┌──────────┐  ┌────────────┐  │
-│  │ Session 1│  │ Session 2  │  │
-│  │ cache ns │  │ cache ns   │  │
-│  │ seq state│  │ seq state  │  │
-│  └──────────┘  └────────────┘  │
+│  ┌──────────┐  ┌────────────┐   │
+│  │ Session 1│  │ Session 2  │   │
+│  │ cache ns │  │ cache ns   │   │
+│  │ seq state│  │ seq state  │   │
+│  └──────────┘  └────────────┘   │
 └─────────────────────────────────┘
 ┌─────────────────────────────────┐
 │          Tenant B               │
@@ -186,8 +242,8 @@ Raw HTML/Content
 │      background                    │
 │    - HTML comments                 │
 │    - Zero-width characters         │
-│      (U+200B, U+200C, U+200D,     │
-│       U+FEFF, U+2060)             │
+│      (U+200B, U+200C, U+200D,      │
+│       U+FEFF, U+2060)              │
 └────────────────┬───────────────────┘
                  │
     ▼
