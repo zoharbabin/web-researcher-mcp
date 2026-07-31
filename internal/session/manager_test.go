@@ -3,6 +3,7 @@ package session
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -508,5 +509,141 @@ func TestCustomSummary(t *testing.T) {
 
 	if updated.Summary != "Custom summary provided by LLM" {
 		t.Errorf("expected custom summary, got %q", updated.Summary)
+	}
+}
+
+// TestAddSources verifies AddSources appends new sources and dedupes by URL
+// against both the existing set and duplicates within the same call.
+func TestAddSources(t *testing.T) {
+	m := newTestManager(5*time.Minute, 10)
+	defer m.Close()
+
+	idx, _ := m.Create("tenant-1", "u1")
+
+	if err := m.AddSources("tenant-1", "u1", idx.ID, []ResearchSource{
+		{URL: "https://a.example", Title: "A"},
+		{URL: "https://b.example", Title: "B"},
+	}); err != nil {
+		t.Fatalf("AddSources: %v", err)
+	}
+
+	// Second call: one duplicate URL (must not double up), one new URL.
+	if err := m.AddSources("tenant-1", "u1", idx.ID, []ResearchSource{
+		{URL: "https://a.example", Title: "A-dup"},
+		{URL: "https://c.example", Title: "C"},
+	}); err != nil {
+		t.Fatalf("AddSources (2nd call): %v", err)
+	}
+
+	full, err := m.GetFull("tenant-1", "u1", idx.ID)
+	if err != nil {
+		t.Fatalf("GetFull: %v", err)
+	}
+	if len(full.Sources) != 3 {
+		t.Fatalf("expected 3 deduped sources, got %d: %+v", len(full.Sources), full.Sources)
+	}
+	seen := make(map[string]bool)
+	for _, s := range full.Sources {
+		seen[s.URL] = true
+	}
+	for _, want := range []string{"https://a.example", "https://b.example", "https://c.example"} {
+		if !seen[want] {
+			t.Errorf("missing expected source URL %q", want)
+		}
+	}
+}
+
+// TestAddSourcesNotFound verifies AddSources surfaces ErrSessionNotFound for
+// an unknown session rather than silently no-op-ing.
+func TestAddSourcesNotFound(t *testing.T) {
+	m := newTestManager(5*time.Minute, 10)
+	defer m.Close()
+
+	err := m.AddSources("tenant-1", "u1", "nonexistent-id", []ResearchSource{{URL: "https://a.example"}})
+	if !errors.Is(err, ErrSessionNotFound) {
+		t.Errorf("expected ErrSessionNotFound, got %v", err)
+	}
+}
+
+// TestRebuildIndexRemovesCorruptFile verifies that on manager startup,
+// rebuildIndex removes a session file it cannot decrypt/unmarshal instead of
+// leaving it to poison every future rebuild.
+func TestRebuildIndexRemovesCorruptFile(t *testing.T) {
+	dir, err := os.MkdirTemp("", "session-test-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+
+	m, err := NewManager(Config{MaxSessions: 10, SessionTTL: time.Hour, DataDir: dir})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	idx, _ := m.Create("tenant-1", "u1")
+	fp := m.store.filePath(sessionKey("tenant-1", "u1", idx.ID))
+	m.Close()
+
+	// Corrupt the persisted file in place (valid 8-byte expiry header,
+	// garbage ciphertext after it) so loadFile fails during rebuild.
+	if err := os.WriteFile(fp, []byte{0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF, 0xFF}, 0600); err != nil {
+		t.Fatalf("corrupt file: %v", err)
+	}
+
+	m2, err := NewManager(Config{MaxSessions: 10, SessionTTL: time.Hour, DataDir: dir})
+	if err != nil {
+		t.Fatalf("NewManager (rebuild): %v", err)
+	}
+	defer m2.Close()
+
+	if _, ok := m2.GetIndex("tenant-1", "u1", idx.ID); ok {
+		t.Error("corrupt session should not survive rebuild")
+	}
+	if _, err := os.Stat(fp); !os.IsNotExist(err) {
+		t.Errorf("corrupt session file should be removed by rebuild, stat err=%v", err)
+	}
+}
+
+// TestRebuildIndexRemovesHashMismatch verifies that a session file whose
+// filename hash no longer matches sessionKey(sess.TenantID, ...) — e.g. it was
+// copied/renamed onto another key's slot — is removed during rebuild rather
+// than indexed under the wrong key.
+func TestRebuildIndexRemovesHashMismatch(t *testing.T) {
+	dir, err := os.MkdirTemp("", "session-test-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+
+	m, err := NewManager(Config{MaxSessions: 10, SessionTTL: time.Hour, DataDir: dir})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	idx, _ := m.Create("tenant-1", "u1")
+	origFP := m.store.filePath(sessionKey("tenant-1", "u1", idx.ID))
+	// Move the real file under a filename hash that doesn't match its
+	// serialized (tenant, user, id) — simulating on-disk tampering/corruption.
+	mismatchFP := filepath.Join(dir, fileHash("tenant-1:u1:wrong-id")+".session")
+	m.Close()
+
+	data, err := os.ReadFile(origFP)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if err := os.WriteFile(mismatchFP, data, 0600); err != nil {
+		t.Fatalf("write mismatch: %v", err)
+	}
+	if err := os.Remove(origFP); err != nil {
+		t.Fatalf("remove orig: %v", err)
+	}
+
+	m2, err := NewManager(Config{MaxSessions: 10, SessionTTL: time.Hour, DataDir: dir})
+	if err != nil {
+		t.Fatalf("NewManager (rebuild): %v", err)
+	}
+	defer m2.Close()
+
+	if m2.ActiveCount() != 0 {
+		t.Errorf("expected hash-mismatched session to be dropped, ActiveCount=%d", m2.ActiveCount())
+	}
+	if _, err := os.Stat(mismatchFP); !os.IsNotExist(err) {
+		t.Errorf("hash-mismatched file should be removed by rebuild, stat err=%v", err)
 	}
 }

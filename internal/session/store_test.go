@@ -326,6 +326,68 @@ func TestStoreExpiryPrefixPreservedOnReencrypt(t *testing.T) {
 	}
 }
 
+// TestStoreCleanOrphans verifies CleanOrphans removes stray .tmp files (left
+// behind by a crash between CreateTemp and rename) while leaving real
+// .session files untouched.
+func TestStoreCleanOrphans(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	s, _ := NewStore(dir, testKey)
+	key := "tenant-1:sess-clean"
+	if err := s.Save(key, newSession("tenant-1", "sess-clean"), time.Hour); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	orphan := filepath.Join(dir, ".session-orphan.tmp")
+	if err := os.WriteFile(orphan, []byte("stale"), 0600); err != nil {
+		t.Fatalf("write orphan: %v", err)
+	}
+
+	if err := s.CleanOrphans(); err != nil {
+		t.Fatalf("CleanOrphans: %v", err)
+	}
+
+	if _, err := os.Stat(orphan); !os.IsNotExist(err) {
+		t.Errorf("orphan .tmp file not removed: err=%v", err)
+	}
+	if _, err := os.Stat(s.filePath(key)); err != nil {
+		t.Errorf("real session file was removed: %v", err)
+	}
+}
+
+// TestStoreListValid verifies ListValid returns only non-expired session
+// keys (by filename hash) and deletes expired files as a side effect.
+func TestStoreListValid(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	s, _ := NewStore(dir, testKey)
+
+	validKey := "tenant-1:sess-valid"
+	expiredKey := "tenant-1:sess-expired"
+	if err := s.Save(validKey, newSession("tenant-1", "sess-valid"), time.Hour); err != nil {
+		t.Fatalf("Save valid: %v", err)
+	}
+	if err := s.Save(expiredKey, newSession("tenant-1", "sess-expired"), -time.Hour); err != nil {
+		t.Fatalf("Save expired: %v", err)
+	}
+
+	keys, err := s.ListValid(time.Now())
+	if err != nil {
+		t.Fatalf("ListValid: %v", err)
+	}
+
+	want := fileHash(validKey)
+	if len(keys) != 1 || keys[0] != want {
+		t.Errorf("ListValid = %v, want [%s]", keys, want)
+	}
+	if _, err := os.Stat(s.filePath(expiredKey)); !os.IsNotExist(err) {
+		t.Errorf("expired session file not deleted: err=%v", err)
+	}
+	if _, err := os.Stat(s.filePath(validKey)); err != nil {
+		t.Errorf("valid session file missing: %v", err)
+	}
+}
+
 // TestConcurrentSaveLoadDelete drives the encrypted session store under true
 // goroutine contention: many goroutines Save/Load/Delete across a mix of shared
 // and unique keys. Its purpose under `go test -race` is to prove the AES-GCM
