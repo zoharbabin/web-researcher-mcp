@@ -441,6 +441,13 @@ func corsMiddleware(allowedOrigins []string, strict bool, next http.Handler) htt
 // rotating it never produces a hard cutover for in-flight automation. Every
 // use of prevKey is logged (slog.Warn + an audit event) so an operator can
 // tell when it is safe to remove it.
+// sanitizeLogValue strips CR/LF from a value before it reaches a log line, so
+// a crafted request path can't forge additional log entries (CWE-117).
+func sanitizeLogValue(s string) string {
+	s = strings.ReplaceAll(s, "\r", "")
+	return strings.ReplaceAll(s, "\n", "")
+}
+
 func adminAuth(key, prevKey string, auditor audit.Auditor, handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		provided := r.Header.Get("X-Admin-Key")
@@ -449,7 +456,7 @@ func adminAuth(key, prevKey string, auditor audit.Auditor, handler http.HandlerF
 			return
 		}
 		if prevKey != "" && subtle.ConstantTimeCompare([]byte(provided), []byte(prevKey)) == 1 {
-			slog.Warn("admin request authenticated with ADMIN_API_KEY_PREV; rotate remaining clients off it", "path", r.URL.Path)
+			slog.Warn("admin request authenticated with ADMIN_API_KEY_PREV; rotate remaining clients off it", "path", sanitizeLogValue(r.URL.Path))
 			if auditor != nil {
 				ev := audit.NewEvent("auth.admin_key_prev_used", auth.TenantIDFromContext(r.Context()), auth.UserIDFromContext(r.Context()))
 				ev.Success = true

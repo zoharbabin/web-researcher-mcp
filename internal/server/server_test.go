@@ -530,6 +530,28 @@ func TestAdminKeyDualKeyGracePeriod(t *testing.T) {
 	})
 }
 
+// TestSanitizeLogValue proves a crafted request path can't forge additional
+// log lines via embedded CR/LF (CWE-117, CodeQL go/log-injection).
+func TestSanitizeLogValue(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"no control chars", "/admin/cache", "/admin/cache"},
+		{"embedded newline", "/admin/cache\nWARN forged log line", "/admin/cacheWARN forged log line"},
+		{"embedded CRLF", "/admin/cache\r\nWARN forged log line", "/admin/cacheWARN forged log line"},
+		{"embedded CR only", "/admin/cache\rWARN forged", "/admin/cacheWARN forged"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := sanitizeLogValue(tc.in); got != tc.want {
+				t.Errorf("sanitizeLogValue(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 // =============================================================================
 // Full HTTP Server Integration Tests
 // =============================================================================
