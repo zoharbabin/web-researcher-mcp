@@ -204,6 +204,69 @@ func TestNewPipeline_CustomConcurrency(t *testing.T) {
 	}
 }
 
+func TestNewPipeline_DefaultBrowserConcurrency(t *testing.T) {
+	p := NewPipeline(PipelineConfig{})
+	if cap(p.browserSemaphore) != 2 {
+		t.Errorf("expected default browser concurrency 2, got %d", cap(p.browserSemaphore))
+	}
+}
+
+func TestNewPipeline_CustomBrowserConcurrency(t *testing.T) {
+	p := NewPipeline(PipelineConfig{MaxBrowserConcurrency: 4})
+	if cap(p.browserSemaphore) != 4 {
+		t.Errorf("expected browser concurrency 4, got %d", cap(p.browserSemaphore))
+	}
+}
+
+// TestScrapePipelineTierFairness proves the #472 fix: an occupied
+// browser-tier slot must never block a fast-tier ("" tier) acquisition,
+// since they now draw from separate semaphores.
+func TestScrapePipelineTierFairness(t *testing.T) {
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 1, MaxBrowserConcurrency: 1, AllowPrivateIPs: true})
+
+	releaseBrowser, err := p.acquireTier(context.Background(), "browser")
+	if err != nil {
+		t.Fatalf("acquireTier(browser) failed: %v", err)
+	}
+	defer releaseBrowser()
+
+	done := make(chan struct{})
+	go func() {
+		release, err := p.acquireTier(context.Background(), "")
+		if err != nil {
+			t.Errorf("acquireTier(\"\") failed: %v", err)
+			return
+		}
+		release()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("fast-tier acquireTier blocked on an occupied browser-tier slot")
+	}
+}
+
+// TestPipeline_AcquireTier_BrowserPoolBounded proves the browser pool still
+// enforces its own limit — isolation from the fast pool doesn't mean it's
+// unbounded.
+func TestPipeline_AcquireTier_BrowserPoolBounded(t *testing.T) {
+	p := NewPipeline(PipelineConfig{MaxBrowserConcurrency: 1, AllowPrivateIPs: true})
+
+	release1, err := p.acquireTier(context.Background(), "browser")
+	if err != nil {
+		t.Fatalf("first acquireTier(browser) failed: %v", err)
+	}
+	defer release1()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if _, err := p.acquireTier(ctx, "browser"); err == nil {
+		t.Fatal("expected second acquireTier(browser) to block until the context timed out")
+	}
+}
+
 func TestPipeline_DomainFiltering(t *testing.T) {
 	p := NewPipeline(PipelineConfig{
 		AllowedDomains:  []string{"example.com", "test.org"},

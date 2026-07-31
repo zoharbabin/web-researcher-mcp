@@ -549,7 +549,8 @@ DAILY_QUOTA_PER_TENANT=10000
 | `ALLOWED_DOMAINS` | Domain whitelist (comma-separated) | — (all allowed) |
 | `CHROME_PATH` | Custom Chrome/Chromium binary path; set to `"disabled"` to turn the browser tier off entirely (no autodetect, no download) | auto-detect |
 | `JINA_READER_DISABLED` | Set `true` to turn off the Jina Reader scrape tier (r.jina.ai) entirely, e.g. for hardened deploys or network-free tests | `false` |
-| `MAX_SCRAPE_CONCURRENCY` | Parallel scrape limit | `5` |
+| `MAX_SCRAPE_CONCURRENCY` | Parallel scrape limit for the fast tiers (markdown/stealth/jina/html/exa) | `5` |
+| `MAX_SCRAPE_CONCURRENCY_BROWSER` | Separate parallel scrape limit for the browser (go-rod) tier, which can hold a slot for up to 30s — kept apart from `MAX_SCRAPE_CONCURRENCY` so slow browser scrapes can't starve fast ones (#472) | `2` |
 | `MAX_HTML_BYTES` | Decompressed HTML body read cap per scrape tier | `8388608` (8 MB) |
 | `MAX_DOCUMENT_BYTES` | Document (PDF/DOCX/PPTX) download cap | `52428800` (50 MB) |
 

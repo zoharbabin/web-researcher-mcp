@@ -32,6 +32,7 @@ type Config struct {
 	ChromePath             string
 	JinaDisabled           bool
 	MaxScrapeConcurrency   int
+	MaxBrowserConcurrency  int
 	MaxHTMLBytes           int
 	MaxDocumentBytes       int
 	SessionTTL             time.Duration
@@ -489,23 +490,24 @@ func Load() (*Config, error) {
 			Persist:        envBool("RATE_LIMIT_PERSIST", false),
 			MaxCallsPerDay: envInt("MAX_CALLS_PER_DAY", 0),
 		},
-		AllowPrivateIPs:      envBool("ALLOW_PRIVATE_IPS", false),
-		AllowedDomains:       splitCSV(os.Getenv("ALLOWED_DOMAINS")),
-		ChromePath:           os.Getenv("CHROME_PATH"),
-		JinaDisabled:         envBool("JINA_READER_DISABLED", false),
-		MaxScrapeConcurrency: envInt("MAX_SCRAPE_CONCURRENCY", 5),
-		MaxHTMLBytes:         envInt("MAX_HTML_BYTES", 8<<20),
-		MaxDocumentBytes:     envInt("MAX_DOCUMENT_BYTES", 50<<20),
-		SessionTTL:           envDuration("SESSION_TTL", 4*time.Hour),
-		SessionDataDir:       envOrDefault("SESSION_DATA_DIR", filepath.Join(envOrDefault("CACHE_DIR", defaultCacheDir()), "sessions")),
-		SessionMaxSteps:      envInt("SESSION_MAX_STEPS", 200),
-		LogLevel:             logLevel,
-		LogFormat:            envOrDefault("LOG_FORMAT", "json"),
-		MetricsEnabled:       envBool("METRICS_ENABLED", true),
-		MetricsMaxTenants:    envInt("METRICS_MAX_TENANTS", 10000),
-		AdminAPIKey:          adminKey,
-		DataRegion:           os.Getenv("DATA_REGION"),
-		StdioUserID:          stdioUserID,
+		AllowPrivateIPs:       envBool("ALLOW_PRIVATE_IPS", false),
+		AllowedDomains:        splitCSV(os.Getenv("ALLOWED_DOMAINS")),
+		ChromePath:            os.Getenv("CHROME_PATH"),
+		JinaDisabled:          envBool("JINA_READER_DISABLED", false),
+		MaxScrapeConcurrency:  envInt("MAX_SCRAPE_CONCURRENCY", 5),
+		MaxBrowserConcurrency: envInt("MAX_SCRAPE_CONCURRENCY_BROWSER", 2),
+		MaxHTMLBytes:          envInt("MAX_HTML_BYTES", 8<<20),
+		MaxDocumentBytes:      envInt("MAX_DOCUMENT_BYTES", 50<<20),
+		SessionTTL:            envDuration("SESSION_TTL", 4*time.Hour),
+		SessionDataDir:        envOrDefault("SESSION_DATA_DIR", filepath.Join(envOrDefault("CACHE_DIR", defaultCacheDir()), "sessions")),
+		SessionMaxSteps:       envInt("SESSION_MAX_STEPS", 200),
+		LogLevel:              logLevel,
+		LogFormat:             envOrDefault("LOG_FORMAT", "json"),
+		MetricsEnabled:        envBool("METRICS_ENABLED", true),
+		MetricsMaxTenants:     envInt("METRICS_MAX_TENANTS", 10000),
+		AdminAPIKey:           adminKey,
+		DataRegion:            os.Getenv("DATA_REGION"),
+		StdioUserID:           stdioUserID,
 		Features: FeatureConfig{
 			SourceRecommendations: envBool("SOURCE_RECOMMENDATIONS", true),
 			GenerativeUI:          envBool("GENERATIVE_UI_ENABLED", false),

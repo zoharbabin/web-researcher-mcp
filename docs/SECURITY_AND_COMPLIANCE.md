@@ -364,8 +364,9 @@ JavaScript-heavy pages. Chromium is launched with `--no-sandbox`; container-leve
 isolation (non-root UID 65534, network policies) provides the sandboxing boundary.
 Chromium's attack surface is mitigated by: non-root execution, bounded concurrency
 (single browser instance shared across goroutines; page concurrency capped by
-MaxConcurrency), SSRF protection on all URLs before they reach the browser, and
-container-level network restrictions.
+MaxBrowserConcurrency, a pool independent of the fast-tier MaxConcurrency, #472),
+SSRF protection on all URLs before they reach the browser, and container-level
+network restrictions.
 
 Deployment recommendations:
 

@@ -31,7 +31,7 @@ func getBrowserPool(chromePath string, maxPages int) *browserPool {
 	poolOnce.Do(func() {
 		pool = &browserPool{}
 	})
-	_ = maxPages // parameter retained for call-site compatibility; page-level limiting is handled by the pipeline semaphore
+	_ = maxPages // parameter retained for call-site compatibility; page-level limiting is handled by Pipeline.browserSemaphore (#472)
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 	if pool.browser == nil {
@@ -125,7 +125,7 @@ func (p *Pipeline) scrapeBrowser(ctx context.Context, url string, maxLength int,
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	bp := getBrowserPool(p.config.ChromePath, p.config.MaxConcurrency)
+	bp := getBrowserPool(p.config.ChromePath, p.config.MaxBrowserConcurrency)
 	bp.mu.Lock()
 	browser := bp.browser
 	bp.mu.Unlock()

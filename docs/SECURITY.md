@@ -233,7 +233,7 @@ Raw HTML/Content
 - Per-Tenant: `sync.Map[tenantID]*rate.Limiter` with TTL cleanup; daily quota (`AllowDaily`) optionally atomic across pods via Redis (`internal/redisbackend`)
 - Per-IP: `RATE_LIMIT_PER_IP` / `TRUST_PROXY`
 
-**Scrape concurrency (separate from rate limiting):** the scraper pipeline (`internal/scraper`) bounds in-flight scrapes with a buffered-channel semaphore of `MAX_SCRAPE_CONCURRENCY` slots (default 5) — backpressure on outbound fetches, not a per-session request limit.
+**Scrape concurrency (separate from rate limiting):** the scraper pipeline (`internal/scraper`) bounds in-flight scrapes with two independent buffered-channel semaphores — backpressure on outbound fetches, not a per-session request limit. The fast tiers (markdown/stealth/jina/html/exa) share a pool of `MAX_SCRAPE_CONCURRENCY` slots (default 5); the browser (go-rod) tier has its own smaller pool of `MAX_SCRAPE_CONCURRENCY_BROWSER` slots (default 2), so a burst of slow browser scrapes — which can each hold a slot for up to 30s — can't starve fast, unrelated requests.
 
 **Cost Quotas:**
 - Track tool/API call count per tenant per day (`DAILY_QUOTA_PER_TENANT`)
@@ -245,7 +245,7 @@ Raw HTML/Content
 When a single agent spawns many parallel tool calls, limits are enforced by token buckets, not a queue:
 - Per-tenant and global token buckets (`internal/ratelimit/limiter.go`) — excess calls are rejected immediately, never buffered
 - Rejected HTTP requests return `429` with a `Retry-After` header (`60` for the per-minute bucket, `3600` for the daily quota)
-- Concurrent scraping is separately bounded by a fixed-size semaphore in the scrape pipeline (`internal/scraper/pipeline.go`), so a burst of scrapes runs at a capped concurrency rather than all at once
+- Concurrent scraping is separately bounded by two fixed-size semaphores in the scrape pipeline (`internal/scraper/pipeline.go`) — one for fast tiers, one for the browser tier — so a burst of scrapes runs at a capped concurrency rather than all at once
 
 ---
 
