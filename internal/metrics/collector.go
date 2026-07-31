@@ -116,7 +116,6 @@ func (c *Collector) RecordToolCall(tool string, latency time.Duration, err error
 
 	stats := c.getOrCreateStats(tool)
 	stats.TotalCalls.Add(1)
-	stats.LastCalled = time.Now()
 
 	if err != nil {
 		stats.ErrorCalls.Add(1)
@@ -130,6 +129,7 @@ func (c *Collector) RecordToolCall(tool string, latency time.Duration, err error
 	}
 
 	stats.latencyMu.Lock()
+	stats.LastCalled = time.Now()
 	stats.latencies = append(stats.latencies, float64(latency.Milliseconds()))
 	if len(stats.latencies) > 1000 {
 		stats.latencies = stats.latencies[len(stats.latencies)-1000:]
@@ -165,11 +165,10 @@ func (c *Collector) GetToolStats() map[string]ToolStatsSnapshot {
 			ErrorCalls:   stats.ErrorCalls.Load(),
 			CacheHits:    stats.CacheHits.Load(),
 		}
+		stats.latencyMu.Lock()
 		if !stats.LastCalled.IsZero() {
 			snap.LastCalled = stats.LastCalled.Format(time.RFC3339)
 		}
-
-		stats.latencyMu.Lock()
 		if len(stats.latencies) > 0 {
 			snap.AvgLatencyMs = avg(stats.latencies)
 			snap.P95LatencyMs = percentile(stats.latencies, 95)

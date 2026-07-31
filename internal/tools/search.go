@@ -154,7 +154,9 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 		// signal (Brave's more_results_available, F8) into _meta without it ever
 		// entering the result body. Empty for providers that emit nothing.
 		metaCtx, resultMeta := search.NewResultMeta(traceCtx)
-		results, err := provider.Web(metaCtx, params)
+		results, err := coalescedFetch(ctx, deps, cacheKey, func() ([]search.SearchResult, error) {
+			return provider.Web(metaCtx, params)
+		})
 		if err != nil {
 			errCode := "upstream_error"
 			if isRateLimitError(err) {

@@ -68,13 +68,15 @@ func registerAwesomeListSearch(srv *mcp.Server, deps Dependencies) {
 			return cachedResultWithMeta(cached, meta), nil, nil
 		}
 
-		results, err := searcher.AwesomeLists(ctx, search.AwesomeListSearchParams{
-			Topic:       input.Topic,
-			Query:       input.Query,
-			MinStars:    input.MinStars,
-			MinProjects: input.MinProjects,
-			SortBy:      input.SortBy,
-			NumResults:  num,
+		results, err := coalescedFetch(ctx, deps, cacheKey, func() ([]search.AwesomeListResult, error) {
+			return searcher.AwesomeLists(ctx, search.AwesomeListSearchParams{
+				Topic:       input.Topic,
+				Query:       input.Query,
+				MinStars:    input.MinStars,
+				MinProjects: input.MinProjects,
+				SortBy:      input.SortBy,
+				NumResults:  num,
+			})
 		})
 		if err != nil {
 			errCode := "upstream_error"

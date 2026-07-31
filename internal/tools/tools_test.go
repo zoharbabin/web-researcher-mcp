@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/audit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/auth"
@@ -184,14 +185,26 @@ func (m *mockCaseProvider) Cases(_ context.Context, _ search.CaseSearchParams) (
 	return []search.CaseResult{{CaseName: "Mock v. Test", Citation: "1 U.S. 1", Court: "Supreme Court", CourtID: "scotus", DateFiled: "2024-01-01", CitationCount: 3, URL: "https://www.courtlistener.com/opinion/1/mock/", Source: "courtlistener"}}, nil
 }
 
-// mockEconProvider implements EconProvider for econ_search.
-type mockEconProvider struct{}
+// mockEconProvider implements EconProvider for econ_search. calls (when set)
+// counts every Econ invocation, and delay (when set) holds the call open so a
+// singleflight coalescing test (#474) can reliably observe N concurrent
+// callers landing in the same in-flight window.
+type mockEconProvider struct {
+	calls *atomic.Int64
+	delay time.Duration
+}
 
 func (m *mockEconProvider) Name() string { return "fred" }
 func (m *mockEconProvider) Metadata() search.ProviderMeta {
 	return search.ProviderMeta{Regions: []string{"US"}, RateClass: "free", Description: "mock fred"}
 }
 func (m *mockEconProvider) Econ(_ context.Context, _ search.EconSearchParams) ([]search.EconResult, error) {
+	if m.calls != nil {
+		m.calls.Add(1)
+	}
+	if m.delay > 0 {
+		time.Sleep(m.delay)
+	}
 	return []search.EconResult{{SeriesID: "GDP", Title: "Gross Domestic Product", Units: "Billions", Frequency: "Quarterly", Source: "fred"}}, nil
 }
 
@@ -380,6 +393,7 @@ func setupTestDeps() Dependencies {
 			&mockModelProvider{name: "mock-a", modelID: "model-a", text: "The sky is blue."},
 			&mockModelProvider{name: "mock-b", modelID: "model-b", text: "The sky is blue."},
 		},
+		Singleflight: &singleflight.Group{},
 	}
 }
 

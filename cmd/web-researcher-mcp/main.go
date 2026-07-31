@@ -32,6 +32,7 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/workspace"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"golang.org/x/sync/singleflight"
 )
 
 var version = "dev"
@@ -534,6 +535,7 @@ func main() {
 		CTLogResolver:           ctLogResolver,
 		ArchiveResolver:         archiveResolver,
 		ResearchPanelProviders:  tools.AvailableModelProviders(cfg.ResearchPanel, cfg.AllowPrivateIPs),
+		Singleflight:            &singleflight.Group{},
 	}
 
 	// Completion suppliers (#193): the live value sets the server can autocomplete

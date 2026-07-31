@@ -59,14 +59,16 @@ func registerFilingSearch(srv *mcp.Server, deps Dependencies) {
 			return cachedResultWithMeta(cached, meta), nil, nil
 		}
 
-		results, err := searcher.Filings(ctx, search.FilingSearchParams{
-			Query:      input.Query,
-			FormType:   input.FormType,
-			Ticker:     input.Ticker,
-			DateFrom:   input.DateFrom,
-			DateTo:     input.DateTo,
-			Facts:      input.Facts,
-			NumResults: num,
+		results, err := coalescedFetch(ctx, deps, cacheKey, func() ([]search.FilingResult, error) {
+			return searcher.Filings(ctx, search.FilingSearchParams{
+				Query:      input.Query,
+				FormType:   input.FormType,
+				Ticker:     input.Ticker,
+				DateFrom:   input.DateFrom,
+				DateTo:     input.DateTo,
+				Facts:      input.Facts,
+				NumResults: num,
+			})
 		})
 		if err != nil {
 			errCode := "upstream_error"
