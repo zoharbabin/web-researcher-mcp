@@ -646,7 +646,7 @@ Ask the same question to a panel of independently configured LLMs and see where 
 }
 ```
 
-**Response** carries: `question` (echo), `panel` (array of `model_id`, `provider`, `latency_ms`, and either `response`+`tokens_used` on success or `error` on failure), `divergence` (`consensus_points`, `contradictions` with `claim`+`positions`, `unique_to_model`, `confidence`, `confidence_rationale`), `_meta` (`cached`, `models_queried`, `models_succeeded`, `models_failed`, `total_tokens_used`), and `trust`. Override the panel with `models` (each `<provider>/<model-id>`) or cap its size with `max_models`. Pair with the `research-panel-factcheck` MCP Prompt to chase contradictions before citing a claim, or `research-panel-synthesis` to write up a single answer that surfaces disagreement instead of hiding it. Cost tracking (per-call USD estimates, spend caps) is deferred to a follow-on issue.
+**Response** carries: `question` (echo), `panel` (array of `model_id`, `provider`, `latency_ms`, and either `response`+`tokens_used` on success or `error` on failure), `divergence` (`consensus_points`, `contradictions` with `claim`+`positions`, `unique_to_model`, `confidence`, `confidence_rationale`), `_meta` (`cached`, `models_queried`, `models_succeeded`, `models_failed`, `total_tokens_used`), and `trust`. Override the panel with `models` (each `<provider>/<model-id>`) or cap its size with `max_models`. Pair with the `research-panel-factcheck` MCP Prompt to chase contradictions before citing a claim, or `research-panel-synthesis` to write up a single answer that surfaces disagreement instead of hiding it. Per-call USD cost estimates and spend caps are not tracked; `_meta` reports token usage (`total_tokens_used`) only.
 
 ---
 

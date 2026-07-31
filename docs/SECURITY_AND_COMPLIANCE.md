@@ -783,22 +783,13 @@ Our security controls map to MITRE ATT&CK techniques:
 | Content sanitization | T1059.007 (JavaScript), prompt injection vectors |
 | Rate limiting | T1499 (Endpoint DoS) |
 | Auth/JWKS | T1078 (Valid Accounts), T1550 (Use Alternate Auth Material) |
-| Audit logging | T1070 (Indicator Removal) — structured, secret-redacted, request-ID-correlated events (incl. auth failures) aid detection & attribution. Note: logs are append-only JSON, not cryptographically tamper-evident; hash-chaining is a roadmap item (below). |
+| Audit logging | T1070 (Indicator Removal) — structured, secret-redacted, request-ID-correlated events (incl. auth failures) aid detection & attribution. Note: logs are append-only JSON, not cryptographically tamper-evident. |
 
 ---
 
-## Roadmap Considerations
+## Current Limitations
 
-### Security features planned or under consideration:
-
-- **DPoP token binding (RFC 9449)** — proof-of-possession prevents token theft
-- **Hash-chained audit logs** — tamper-evident logging for government deployments
 - **Native mTLS for service-to-service traffic** — the server does not implement mutual-TLS client-cert authentication itself, for either the HTTP admin plane or the Redis connection (`internal/redisbackend`); connections are encrypted in transit (`REDIS_URL` supports `rediss://`, and the HTTP server can run behind TLS) but not mutually authenticated at the application layer. Deployments requiring mTLS today should terminate it at a surrounding service mesh or ingress.
-- **Breach notification pipeline** — webhook alerting on security anomalies
-- **in-toto build attestations** — full supply chain provenance (SLSA Level 3)
-- **Seccomp profiles** — container syscall restriction for hardened deployments
-- **UK Cyber Essentials certification** — UK public sector market access
-- **Global CBPR certification** — cross-border data transfer for APAC markets
 
 ### Architecture decisions that won't change:
 
