@@ -288,7 +288,7 @@ metadata.
 - Retention: rotated files older than `AUDIT_RETENTION_DAYS` are deleted on startup and hourly. The default is 180 days; any non-zero value is clamped to `[180, 3650]` per NIS2/HGB retention floors. `0` disables cleanup.
 
 **What is NOT logged (by default):**
-- **Raw query text** — omitted unless `AUDIT_INCLUDE_REQUEST_BODY=true`. When that flag is false (default), only the query **length** (an integer) is recorded, never the literal query; when true, the raw query is recorded after `MaskSecrets` redaction.
+- **Raw query text** — never recorded, in either setting. The query **length** (an integer) is always recorded; when `AUDIT_INCLUDE_REQUEST_BODY=true`, a SHA-256 hash of the query is additionally recorded, letting an operator correlate repeated/identical queries without the literal text ever reaching the audit sink (#486).
 - Scraped content (too large, PII risk)
 - Full request parameters (may contain PII)
 

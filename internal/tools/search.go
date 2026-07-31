@@ -280,11 +280,17 @@ func recordToolCall(deps Dependencies, tool string, dur time.Duration, err error
 
 // auditToolCallQuery is the metadata-aware variant for query tools.
 //
-// Privacy (decision f / DOC-VERIFY): the raw query is attached to metadata
-// only when the auditor reports IncludeRequestBody()==true
-// (AUDIT_INCLUDE_REQUEST_BODY). Otherwise only the query length is recorded —
-// never the text. All metadata string values are passed through
-// audit.MaskSecrets so secrets never persist to the audit sink.
+// Privacy (decision f / DOC-VERIFY, hardened by #486): the literal query text
+// is NEVER written to audit metadata, regardless of IncludeRequestBody(). When
+// the auditor reports IncludeRequestBody()==true (AUDIT_INCLUDE_REQUEST_BODY),
+// a SHA-256 hash of the query is recorded alongside the length, letting an
+// operator correlate repeated/identical queries (e.g. for abuse or support
+// investigation) without ever persisting the personal data a query may
+// contain (names, health conditions, legal matters, ...). Since no query text
+// reaches the audit sink under any configuration, audit logs need no
+// datasubject registration for this data (#85) and AUDIT_INCLUDE_REQUEST_BODY
+// carries no GDPR erasure gap. All metadata string values are additionally
+// passed through audit.MaskSecrets so secrets never persist to the audit sink.
 func auditToolCallQuery(ctx context.Context, deps Dependencies, toolName string, duration time.Duration, err error, errCode, query string, extra map[string]any) {
 	if deps.Auditor == nil {
 		return
@@ -317,10 +323,10 @@ func auditToolCallQuery(ctx context.Context, deps Dependencies, toolName string,
 		}
 	}
 	if query != "" {
+		meta["query_length"] = len(query)
 		if deps.Auditor.IncludeRequestBody() {
-			meta["query"] = audit.MaskSecrets(query)
-		} else {
-			meta["query_length"] = len(query)
+			h := sha256.Sum256([]byte(query))
+			meta["query_hash"] = hex.EncodeToString(h[:])
 		}
 	}
 	if err != nil {

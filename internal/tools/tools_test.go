@@ -2,6 +2,8 @@ package tools
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -2044,7 +2046,34 @@ func (c *capturingAuditor) last() audit.AuditEvent {
 	return c.events[len(c.events)-1]
 }
 
-func TestAuditQueryGatingOmitsRawQuery(t *testing.T) {
+// TestAuditQueryNeverStoresRawQuery is the #486 regression guard: the literal
+// query text must never reach audit metadata under either IncludeRequestBody
+// setting, since audit logs are not registered with the datasubject registry
+// (#85) and therefore have no GDPR erasure path for it.
+func TestAuditQueryNeverStoresRawQuery(t *testing.T) {
+	t.Parallel()
+	for _, includeReqBody := range []bool{false, true} {
+		cap := &capturingAuditor{includeReqBody: includeReqBody}
+		deps := setupTestDeps()
+		deps.Auditor = cap
+
+		auditToolCallQuery(context.Background(), deps, "web_search", time.Millisecond, nil, "", "secret research topic", nil)
+
+		ev := cap.last()
+		if q, ok := ev.Metadata["query"]; ok {
+			t.Errorf("includeReqBody=%v: raw query must NEVER be present, got %q", includeReqBody, q)
+		}
+		ql, ok := ev.Metadata["query_length"]
+		if !ok {
+			t.Fatalf("includeReqBody=%v: expected query_length in metadata", includeReqBody)
+		}
+		if ql.(int) != len("secret research topic") {
+			t.Errorf("includeReqBody=%v: query_length = %v, want %d", includeReqBody, ql, len("secret research topic"))
+		}
+	}
+}
+
+func TestAuditQueryGatingOmitsHash(t *testing.T) {
 	t.Parallel()
 	cap := &capturingAuditor{includeReqBody: false}
 	deps := setupTestDeps()
@@ -2053,40 +2082,35 @@ func TestAuditQueryGatingOmitsRawQuery(t *testing.T) {
 	auditToolCallQuery(context.Background(), deps, "web_search", time.Millisecond, nil, "", "secret research topic", nil)
 
 	ev := cap.last()
-	if _, ok := ev.Metadata["query"]; ok {
-		t.Error("raw query must NOT be present when IncludeRequestBody=false")
-	}
-	ql, ok := ev.Metadata["query_length"]
-	if !ok {
-		t.Fatal("expected query_length in metadata when IncludeRequestBody=false")
-	}
-	if ql.(int) != len("secret research topic") {
-		t.Errorf("query_length = %v, want %d", ql, len("secret research topic"))
+	if _, ok := ev.Metadata["query_hash"]; ok {
+		t.Error("query_hash must not be set when IncludeRequestBody=false")
 	}
 }
 
-func TestAuditQueryGatingIncludesRawQuery(t *testing.T) {
+func TestAuditQueryGatingIncludesHash(t *testing.T) {
 	t.Parallel()
 	cap := &capturingAuditor{includeReqBody: true}
 	deps := setupTestDeps()
 	deps.Auditor = cap
 
-	auditToolCallQuery(context.Background(), deps, "web_search", time.Millisecond, nil, "", "open research topic", nil)
+	const query = "open research topic"
+	auditToolCallQuery(context.Background(), deps, "web_search", time.Millisecond, nil, "", query, nil)
 
 	ev := cap.last()
-	q, ok := ev.Metadata["query"]
+	h, ok := ev.Metadata["query_hash"]
 	if !ok {
-		t.Fatal("expected raw query in metadata when IncludeRequestBody=true")
+		t.Fatal("expected query_hash in metadata when IncludeRequestBody=true")
 	}
-	if q.(string) != "open research topic" {
-		t.Errorf("query = %v, want 'open research topic'", q)
+	want := sha256.Sum256([]byte(query))
+	if h.(string) != hex.EncodeToString(want[:]) {
+		t.Errorf("query_hash = %v, want sha256(%q)", h, query)
 	}
-	if _, ok := ev.Metadata["query_length"]; ok {
-		t.Error("query_length must not be set when raw query is included")
+	if ql, ok := ev.Metadata["query_length"]; !ok || ql.(int) != len(query) {
+		t.Errorf("expected query_length=%d alongside query_hash, got %v", len(query), ev.Metadata["query_length"])
 	}
 }
 
-func TestAuditMasksQueryAndError(t *testing.T) {
+func TestAuditMasksErrorMessage(t *testing.T) {
 	t.Parallel()
 	cap := &capturingAuditor{includeReqBody: true}
 	deps := setupTestDeps()
@@ -2094,16 +2118,14 @@ func TestAuditMasksQueryAndError(t *testing.T) {
 
 	// Synthetic key-shaped values assembled at runtime so no contiguous
 	// credential literal lands in source (keeps secret scanners quiet); the
-	// google-key and token= query-param rules still fire on the joined string.
-	googleKey := "AIza" + "0123456789abcdefghijklmnopqrstuv012"
+	// token= query-param rule still fires on the joined string.
 	tokenVal := "val-" + "0123456789abcdef"
-	secretQuery := "lookup key=" + googleKey
 	err := errorString("provider failed: token=" + tokenVal)
-	auditToolCallQuery(context.Background(), deps, "web_search", time.Millisecond, err, "upstream_error", secretQuery, nil)
+	auditToolCallQuery(context.Background(), deps, "web_search", time.Millisecond, err, "upstream_error", "some query", nil)
 
 	ev := cap.last()
-	if q := ev.Metadata["query"].(string); strings.Contains(q, googleKey) {
-		t.Errorf("query metadata leaked a secret: %q", q)
+	if _, ok := ev.Metadata["query"]; ok {
+		t.Error("raw query must never be present in metadata")
 	}
 	if e := ev.Metadata["error"].(string); strings.Contains(e, tokenVal) {
 		t.Errorf("error metadata leaked a secret: %q", e)

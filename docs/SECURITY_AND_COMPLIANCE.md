@@ -235,10 +235,13 @@ Every tool invocation produces a structured JSON event:
 Design: async channel-based (never blocks tool calls), swap-to-disk overflow
 (never drops events under normal load), configurable output (stderr or file).
 
-What is NOT logged by default: raw query text (only the query length, an
-integer, is recorded — unless `AUDIT_INCLUDE_REQUEST_BODY=true`, when the raw
-query is recorded after `MaskSecrets` redaction), scraped content, and full
-request parameters (PII risk). Audit metadata and upstream error messages pass
+What is NOT logged, ever: raw query text. The query length (an integer) is
+always recorded; when `AUDIT_INCLUDE_REQUEST_BODY=true`, a SHA-256 hash of the
+query is additionally recorded so an operator can correlate repeated queries
+without the literal text ever reaching the audit sink — the literal query is
+never persisted regardless of this flag, so it carries no GDPR erasure gap
+(#486). Scraped content and full request parameters are also never logged
+(PII risk). Audit metadata and upstream error messages pass
 through `audit.MaskSecrets` so any credential echoed back by a provider is
 redacted before it reaches a sink. Audit files rotate at `AUDIT_MAX_BYTES` and
 are pruned after `AUDIT_RETENTION_DAYS` (default 180, clamped to `[180, 3650]`).

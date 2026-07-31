@@ -593,7 +593,7 @@ Regulated features (per-user personal data; each activates the consent subsystem
 | `AUDIT_ENABLED` | Enable structured audit logging | `true` |
 | `AUDIT_OUTPUT_PATH` | File path for audit log output (JSONL format) | — (stderr) |
 | `AUDIT_BUFFER_SIZE` | Internal event buffer size | `1000` |
-| `AUDIT_INCLUDE_REQUEST_BODY` | When `true`, raw query text is attached to audit metadata. When `false`, only a length/hash is recorded — raw query text is omitted | `false` |
+| `AUDIT_INCLUDE_REQUEST_BODY` | When `true`, a SHA-256 hash of the query is added to audit metadata alongside its length, for correlating repeated queries. The literal query text is never recorded, in either setting | `false` |
 | `AUDIT_MAX_BYTES` | Rotate the active audit file to a timestamped sibling at this size. File output only; ignored for stderr/STDIO | `104857600` (100 MB) |
 | `AUDIT_RETENTION_DAYS` | Rotated audit files older than this are deleted on startup and hourly. `0` disables cleanup. Any non-zero value is clamped to `[180, 3650]` per NIS2/HGB retention floors | `180` |
 
