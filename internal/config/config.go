@@ -40,6 +40,7 @@ type Config struct {
 	LogLevel               slog.Level
 	LogFormat              string
 	MetricsEnabled         bool
+	MetricsMaxTenants      int
 	AdminAPIKey            string
 	DataRegion             string
 	Features               FeatureConfig
@@ -501,6 +502,7 @@ func Load() (*Config, error) {
 		LogLevel:             logLevel,
 		LogFormat:            envOrDefault("LOG_FORMAT", "json"),
 		MetricsEnabled:       envBool("METRICS_ENABLED", true),
+		MetricsMaxTenants:    envInt("METRICS_MAX_TENANTS", 10000),
 		AdminAPIKey:          adminKey,
 		DataRegion:           os.Getenv("DATA_REGION"),
 		StdioUserID:          stdioUserID,

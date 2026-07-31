@@ -584,6 +584,7 @@ Regulated features (per-user personal data; each activates the consent subsystem
 | `LOG_LEVEL` | slog level | `info` |
 | `LOG_FORMAT` | Output format | `json` |
 | `METRICS_ENABLED` | Enable Prometheus metrics | `true` |
+| `METRICS_MAX_TENANTS` | Cap on distinct tenants tracked in per-tenant metrics; oldest-active tenant is evicted once exceeded | `10000` |
 
 ### Audit
 

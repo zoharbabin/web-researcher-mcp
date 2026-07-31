@@ -209,7 +209,7 @@ func main() {
 		logger.Info("query monitoring enabled", "consent", "required", "ttl", cfg.Features.MonitoringTTL)
 	}
 
-	metricsCollector := metrics.NewCollector()
+	metricsCollector := metrics.NewCollectorWithMaxTenants(cfg.MetricsMaxTenants)
 	rateLimiter := ratelimit.NewWithStore(cfg.RateLimit, persistStore)
 	if redisBackends != nil {
 		// Atomic cross-pod daily quota: N pods share one limit (#42).
