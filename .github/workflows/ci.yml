@@ -164,9 +164,9 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install pytest
-        run: python3 -m pip install --upgrade pytest
+        run: python3 -m pip install --upgrade pytest pytest-cov
       - name: Run Python SDK tests
-        run: python3 -m pytest tests/python/ --ignore=tests/python/test_live_e2e.py -v
+        run: python3 -m pytest tests/python/ --ignore=tests/python/test_live_e2e.py -v --cov=web_researcher_mcp --cov-report=term-missing
 
   # 📦 Packaging validation — PKGBUILD / .SRCINFO / flake.nix version + hash
   # consistency. Catches drift before it ships in a release.

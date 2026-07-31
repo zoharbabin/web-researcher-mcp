@@ -93,9 +93,11 @@ test-fuzz:
 	go test ./internal/content/... -run=^$$ -fuzz=FuzzSanitizeHTML -fuzztime=$(FUZZTIME)
 	go test ./internal/content/... -run=^$$ -fuzz=FuzzSanitizeText -fuzztime=$(FUZZTIME)
 
-# Python client library tests (no binary required — uses a mock HTTP server)
+# Python client library tests (no binary required — uses a mock HTTP server).
+# --cov reports coverage of the generated/hand-written client so gaps are
+# visible the same way Go per-package coverage is (#478).
 test-python:
-	python3 -m pytest tests/python/ --ignore=tests/python/test_live_e2e.py -v 2>&1 || python3 -m unittest discover -s tests/python -v
+	python3 -m pytest tests/python/ --ignore=tests/python/test_live_e2e.py -v --cov=web_researcher_mcp --cov-report=term-missing 2>&1 || python3 -m unittest discover -s tests/python -v
 
 # Python live E2E tests — build the real Go binary, start it, and exercise
 # the SDK against real external APIs. Keyless providers (DuckDuckGo, PubMed,
