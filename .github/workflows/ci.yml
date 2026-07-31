@@ -14,6 +14,12 @@ on:
         default: "false"
         type: choice
         options: ["true", "false"]
+      run_soak_test:
+        description: "Run sustained-load soak test (#480; network-free, ~30-60min)"
+        required: false
+        default: "false"
+        type: choice
+        options: ["true", "false"]
 
 permissions:
   contents: read
@@ -499,3 +505,27 @@ jobs:
           GOOGLE_CUSTOM_SEARCH_ID: ${{ secrets.GOOGLE_CUSTOM_SEARCH_ID }}
           BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
         run: make test-python-live
+
+  # 🐢 Sustained-load soak test (#480) — drives the real HTTP binary under
+  # moderate concurrent load for an extended window and asserts /metrics shows
+  # no unbounded goroutine/heap growth. Network-free (CHROME_PATH=disabled,
+  # web_search asserted for transport success only), but deliberately NOT part
+  # of the required `e2e` job — its own build tag keeps it out of `test-e2e`.
+  # Opt-in only via workflow_dispatch, mirroring python-live-e2e.
+  soak-test:
+    name: 🐢 Soak Test
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_soak_test == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.25.12"
+          cache: true
+
+      - name: Run sustained-load soak test
+        env:
+          SOAK_DURATION: 45m
+          SOAK_WORKERS: "16"
+        run: make test-soak

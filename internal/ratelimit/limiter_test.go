@@ -653,12 +653,12 @@ func (e *erroringIncrementer) IncrDaily(ctx context.Context, tenantID string, re
 	return 0, errors.New("simulated redis error")
 }
 
-// TestAllowDailyRedisFallbackLogsAndCounts is the #470 regression guard: when
+// TestRateLimiterRedisFallbackLogsAndCounts is the #470 regression guard: when
 // the Redis incrementer errors, AllowDaily must (a) still enforce the quota via
 // the local counter rather than fail the request, (b) increment
 // FallbackCount(), and (c) emit a slog.Warn naming the tenant and the error, so
 // the silent cross-pod-to-per-pod quota degradation is observable.
-func TestAllowDailyRedisFallbackLogsAndCounts(t *testing.T) {
+func TestRateLimiterRedisFallbackLogsAndCounts(t *testing.T) {
 	var buf bytes.Buffer
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))

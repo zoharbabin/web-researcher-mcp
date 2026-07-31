@@ -42,7 +42,8 @@ type httpHarness struct {
 // poll in newHTTPHarness closes that gap by retrying until the server answers.
 func freePort(t *testing.T) int {
 	t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
+	var lc net.ListenConfig
+	l, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("reserve free port: %v", err)
 	}
@@ -64,7 +65,7 @@ func newHTTPHarness(t *testing.T, extraEnv ...string) *httpHarness {
 		fmt.Sprintf("PORT=%d", port),
 	}, extraEnv...)
 
-	cmd := exec.Command(binPath)
+	cmd := exec.CommandContext(t.Context(), binPath)
 	cmd.Env = append(os.Environ(), env...)
 
 	var stderr bytes.Buffer
@@ -101,7 +102,11 @@ func (h *httpHarness) waitReady() {
 		if h.cmd.ProcessState != nil {
 			h.t.Fatalf("server exited before readiness:\n%s", h.stderr.String())
 		}
-		resp, err := h.client.Get(h.baseURL + "/health/ready")
+		req, reqErr := http.NewRequestWithContext(h.t.Context(), http.MethodGet, h.baseURL+"/health/ready", nil)
+		if reqErr != nil {
+			h.t.Fatalf("build readiness request: %v", reqErr)
+		}
+		resp, err := h.client.Do(req)
 		if err == nil {
 			body, _ := io.ReadAll(resp.Body)
 			_ = resp.Body.Close()
@@ -338,7 +343,11 @@ func TestHTTP_OversizedBody_413(t *testing.T) {
 func TestHTTP_SecurityHeaders(t *testing.T) {
 	h := newHTTPHarness(t)
 
-	resp, err := h.client.Get(h.baseURL + "/health/ready")
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, h.baseURL+"/health/ready", nil)
+	if err != nil {
+		t.Fatalf("build /health/ready request: %v", err)
+	}
+	resp, err := h.client.Do(req)
 	if err != nil {
 		t.Fatalf("GET /health/ready: %v", err)
 	}

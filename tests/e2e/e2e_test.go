@@ -22,7 +22,7 @@ func buildBinary(t *testing.T) string {
 		binPath += ".exe"
 	}
 
-	cmd := exec.Command("go", "build", "-o", binPath, "./cmd/web-researcher-mcp")
+	cmd := exec.CommandContext(t.Context(), "go", "build", "-o", binPath, "./cmd/web-researcher-mcp")
 	cmd.Dir = projectRoot(t)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -82,7 +82,7 @@ func newMCPTestHarness(t *testing.T, extraEnv ...string) *mcpTestHarness {
 	t.Helper()
 	binPath := buildBinary(t)
 
-	cmd := exec.Command(binPath)
+	cmd := exec.CommandContext(t.Context(), binPath)
 	cmd.Env = append(os.Environ(),
 		"GOOGLE_CUSTOM_SEARCH_API_KEY=test",
 		"GOOGLE_CUSTOM_SEARCH_ID=test",
@@ -177,7 +177,7 @@ func TestMCPLifecycle_VersionFlag(t *testing.T) {
 		binPath += ".exe"
 	}
 	const wantVersion = "9.9.9-e2e"
-	build := exec.Command("go", "build", "-ldflags", "-X main.version="+wantVersion, "-o", binPath, "./cmd/web-researcher-mcp")
+	build := exec.CommandContext(t.Context(), "go", "build", "-ldflags", "-X main.version="+wantVersion, "-o", binPath, "./cmd/web-researcher-mcp")
 	build.Dir = projectRoot(t)
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build with version ldflag failed: %v\n%s", err, out)
@@ -185,7 +185,7 @@ func TestMCPLifecycle_VersionFlag(t *testing.T) {
 
 	for _, flag := range []string{"--version", "-v", "version"} {
 		t.Run(flag, func(t *testing.T) {
-			cmd := exec.Command(binPath, flag)
+			cmd := exec.CommandContext(t.Context(), binPath, flag)
 			out, err := cmd.Output()
 			if err != nil {
 				t.Fatalf("%s exited non-zero: %v", flag, err)

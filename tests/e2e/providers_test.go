@@ -228,7 +228,7 @@ func newProviderHarness(t *testing.T, extraEnv []string) *providerHarness {
 	t.Helper()
 	binPath := buildBinary(t)
 
-	cmd := exec.Command(binPath)
+	cmd := exec.CommandContext(t.Context(), binPath)
 	cmd.Dir = projectRoot(t)
 	env := os.Environ()
 	env = append(env, extraEnv...)

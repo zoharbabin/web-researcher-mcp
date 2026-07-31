@@ -641,7 +641,16 @@ func TestRotationDisabledByZeroMaxBytes(t *testing.T) {
 	}
 }
 
-func TestIncludeRequestBodyFlag(t *testing.T) {
+// TestAuditRequestBodyErasureOrRedaction is the package-level half of the
+// #486 proof: IncludeRequestBody() is the gate a caller must check before
+// attaching any request-body content to audit metadata, and it defaults to
+// false (no attachment permitted) so the GDPR erasure gap only exists for
+// operators who explicitly opt in. The full behavioral proof — that the
+// query tool layer hashes rather than stores the raw query even when this
+// flag is true — lives in internal/tools (TestAuditQueryNeverStoresRawQuery,
+// TestAuditQueryGatingIncludesHash), since that's where the redaction
+// actually happens; this test only proves the gate itself.
+func TestAuditRequestBodyErasureOrRedaction(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 

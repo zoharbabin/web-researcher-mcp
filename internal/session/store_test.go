@@ -158,57 +158,63 @@ func TestStoreCrossKeyFails(t *testing.T) {
 	}
 }
 
-// TestStorePrevKeyLazyReencrypt verifies M1: a blob written under the previous
-// key is decryptable via the prev-key fallback and is lazily re-encrypted under
-// the current key on read (so the prev key is no longer required afterwards).
-func TestStorePrevKeyLazyReencrypt(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
+// TestSessionEncryptionKeyRotationEdgeCases is the #479 coverage target for
+// key-rotation edge cases: lazy re-encryption on read (M1) and the fail-closed
+// behavior when rotation drops a key that's still needed.
+func TestSessionEncryptionKeyRotationEdgeCases(t *testing.T) {
+	// LazyReencrypt verifies M1: a blob written under the previous key is
+	// decryptable via the prev-key fallback and is lazily re-encrypted under
+	// the current key on read (so the prev key is no longer required afterwards).
+	t.Run("LazyReencrypt", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
 
-	// Write under the old key only.
-	old, _ := NewStore(dir, testKey)
-	key := "tenant-1:sess-rot"
-	if err := old.Save(key, newSession("tenant-1", "sess-rot"), time.Hour); err != nil {
-		t.Fatalf("Save under old key: %v", err)
-	}
+		// Write under the old key only.
+		old, _ := NewStore(dir, testKey)
+		key := "tenant-1:sess-rot"
+		if err := old.Save(key, newSession("tenant-1", "sess-rot"), time.Hour); err != nil {
+			t.Fatalf("Save under old key: %v", err)
+		}
 
-	// Rotate: current = testKey2, prev = testKey.
-	rotated, _ := NewStoreWithPrev(dir, testKey2, testKey)
-	got, err := rotated.Load(key)
-	if err != nil {
-		t.Fatalf("Load after rotation: %v", err)
-	}
-	if got.ID != "sess-rot" {
-		t.Errorf("unexpected id %q", got.ID)
-	}
+		// Rotate: current = testKey2, prev = testKey.
+		rotated, _ := NewStoreWithPrev(dir, testKey2, testKey)
+		got, err := rotated.Load(key)
+		if err != nil {
+			t.Fatalf("Load after rotation: %v", err)
+		}
+		if got.ID != "sess-rot" {
+			t.Errorf("unexpected id %q", got.ID)
+		}
 
-	// After lazy re-encrypt, a store with ONLY the current key (no prev) must
-	// read it cleanly.
-	currentOnly, _ := NewStore(dir, testKey2)
-	got2, err := currentOnly.Load(key)
-	if err != nil {
-		t.Fatalf("Load with current key only after re-encrypt: %v", err)
-	}
-	if got2.ID != "sess-rot" {
-		t.Errorf("unexpected id after re-encrypt %q", got2.ID)
-	}
-}
+		// After lazy re-encrypt, a store with ONLY the current key (no prev) must
+		// read it cleanly.
+		currentOnly, _ := NewStore(dir, testKey2)
+		got2, err := currentOnly.Load(key)
+		if err != nil {
+			t.Fatalf("Load with current key only after re-encrypt: %v", err)
+		}
+		if got2.ID != "sess-rot" {
+			t.Errorf("unexpected id after re-encrypt %q", got2.ID)
+		}
+	})
 
-// TestStorePrevKeyNoMatchFails verifies that when neither current nor previous
-// key opens the blob, Load fails (no silent acceptance).
-func TestStorePrevKeyNoMatchFails(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	old, _ := NewStore(dir, testKey)
-	key := "tenant-1:sess-nomatch"
-	old.Save(key, newSession("tenant-1", "sess-nomatch"), time.Hour)
+	// NoMatchFails verifies that when neither current nor previous key opens
+	// the blob (e.g. an operator drops a key still needed by old data), Load
+	// fails rather than silently accepting or losing data.
+	t.Run("NoMatchFails", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		old, _ := NewStore(dir, testKey)
+		key := "tenant-1:sess-nomatch"
+		old.Save(key, newSession("tenant-1", "sess-nomatch"), time.Hour)
 
-	// current and prev are both unrelated to the writing key.
-	other := "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
-	s, _ := NewStoreWithPrev(dir, testKey2, other)
-	if _, err := s.Load(key); err != ErrCorrupt {
-		t.Errorf("expected ErrCorrupt when no key matches, got %v", err)
-	}
+		// current and prev are both unrelated to the writing key.
+		other := "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+		s, _ := NewStoreWithPrev(dir, testKey2, other)
+		if _, err := s.Load(key); err != ErrCorrupt {
+			t.Errorf("expected ErrCorrupt when no key matches, got %v", err)
+		}
+	})
 }
 
 // TestLoadVsLoadFileAADConsistency is the cross-path AAD consistency guard from

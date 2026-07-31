@@ -1,4 +1,4 @@
-.PHONY: build build-fips sync-lenses test test-race test-cover test-e2e test-live test-eval test-geo-eval test-concurrency test-bench test-fuzz test-python test-python-live \
+.PHONY: build build-fips sync-lenses test test-race test-cover test-e2e test-soak test-live test-eval test-geo-eval test-concurrency test-bench test-fuzz test-python test-python-live \
         lint fmt fmt-check vet vuln sec tools hooks precommit verify clean run dev docker docker-smoke e2e-oauth-docker release version-sync rebuild-local help all \
         gen-python-client check-python-drift
 
@@ -42,6 +42,16 @@ test-cover:
 # E2E suite drives the real binary over STDIO; needs the `e2e` build tag.
 test-e2e:
 	go test -tags=e2e -count=1 ./tests/e2e/...
+
+# Sustained-load soak test (#480): drives the real HTTP binary under moderate
+# concurrent load for an extended window and asserts /metrics shows no
+# unbounded goroutine/heap growth. Opt-in only (network-free, but deliberately
+# excluded from `test-e2e`/CI's required gate by its own build tag) — run
+# manually or via the nightly workflow_dispatch job. Override SOAK_DURATION
+# (e.g. 45m) and SOAK_WORKERS for a real long-window run; defaults keep a bare
+# local invocation short.
+test-soak:
+	go test -tags="e2e soak" -count=1 -timeout=90m -run TestSoak_SustainedLoad_NoUnboundedGrowth -v ./tests/e2e/...
 
 # Live external-API integration tests (EPO, CrossRef, OpenAlex). Opt-in only:
 # they depend on third-party endpoints and are non-deterministic, so they are

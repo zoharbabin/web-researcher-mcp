@@ -95,7 +95,7 @@ run_gate "Dead-code scan (go vet)" \
 # explicitly is what makes this gate fail now and pass only once Phase 3 lands.
 run_gate_requiring_tests "Unit/integration tests proving #468-#489 rules" \
   "$OUT_DIR/467-05-unit.log" \
-  go test -race ./internal/circuit/... ./internal/search/... ./internal/scraper/... ./internal/cache/... ./internal/metrics/... ./internal/ratelimit/... ./internal/audit/... ./internal/config/... ./internal/session/... ./internal/tools/... -run 'TestCircuitConfigFromEnv|TestBreakerJitterOnResetTimeout|TestRouterChaosFailoverAndRecovery|TestScrapePipelineTierFairness|TestSingleflightCoalescesCacheMiss|TestSingleflightDoesNotCoalesceAcrossTenants|TestTenantStatsBounded|TestRateLimiterRedisFallbackLogsAndCounts|TestTenantAware_Isolation|TestAdminKeyDualKeyGracePeriod|TestAuditRequestBodyErasureOrRedaction|TestSessionEncryptionKeyRotationEdgeCases|TestSessionDiskVsRedisSwitch' -v -count=1
+  go test -race ./internal/circuit/... ./internal/search/... ./internal/scraper/... ./internal/cache/... ./internal/metrics/... ./internal/ratelimit/... ./internal/audit/... ./internal/config/... ./internal/session/... ./internal/redisbackend/... ./internal/tools/... -run 'TestCircuitConfigFromEnv|TestBreakerJitterOnResetTimeout|TestRouterChaosFailoverAndRecovery|TestScrapePipelineTierFairness|TestSingleflightCoalescesCacheMiss|TestSingleflightDoesNotCoalesceAcrossTenants|TestTenantStatsBounded|TestRateLimiterRedisFallbackLogsAndCounts|TestTenantAware_Isolation|TestAdminKeyDualKeyGracePeriod|TestAuditRequestBodyErasureOrRedaction|TestSessionEncryptionKeyRotationEdgeCases|TestSessionDiskVsRedisSwitch' -v -count=1
 
 run_gate_requiring_tests "E2E (real MCP flow, recorded proof)" \
   "$OUT_DIR/467-06-e2e.log" \
