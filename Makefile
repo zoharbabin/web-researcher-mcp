@@ -1,4 +1,4 @@
-.PHONY: build build-fips sync-lenses test test-race test-cover test-e2e test-soak test-live test-eval test-geo-eval test-concurrency test-bench test-fuzz test-python test-python-live \
+.PHONY: build build-fips sync-lenses test test-race test-cover test-e2e test-soak test-live test-eval test-geo-eval test-extraction-eval test-relevance-eval test-concurrency test-bench test-fuzz test-python test-python-live \
         lint fmt fmt-check vet vuln sec tools hooks precommit verify clean run dev docker docker-smoke e2e-oauth-docker release version-sync rebuild-local help all \
         gen-python-client check-python-drift
 
@@ -81,6 +81,21 @@ test-eval:
 # See the suite-level map in internal/tools/geo_eval_reputation_test.go.
 test-geo-eval:
 	go test -tags=live -count=1 -v -run TestGeoEval ./internal/search/... ./internal/tools/...
+
+# Labeled accuracy eval for scrape_page extraction fidelity (#483): drives the
+# real scrape_page tool over a curated gold set of live pages, each labeled
+# with key facts that must survive extraction, and reports per-page + aggregate
+# recall. Opt-in (live, network required; no API key needed).
+test-extraction-eval:
+	go test -tags=live -count=1 -v -run TestExtractionFidelity ./internal/tools/...
+
+# Labeled accuracy eval for web_search relevance (#483): drives the real
+# search.Provider against a curated gold set of (query, expected-relevant-host)
+# pairs and reports whether the top results answer the query. Opt-in (live,
+# network required); prefers Google Custom Search when configured, falling
+# back to keyless DuckDuckGo otherwise.
+test-relevance-eval:
+	go test -tags=live -count=1 -v -run TestSearchRelevance ./internal/tools/...
 
 # Concurrency-focused tests (shared-state contention). Always on: they are
 # bounded (a few seconds) and only meaningful under -race.
