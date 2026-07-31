@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"context"
 	"errors"
 	"net/http/httptest"
 	"testing"
@@ -167,7 +168,7 @@ func TestHTTPHandler(t *testing.T) {
 	c.RecordToolCall("web_search", time.Millisecond, nil, "", false)
 
 	handler := c.HTTPHandler()
-	req := httptest.NewRequest("GET", "/metrics", nil)
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/metrics", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 

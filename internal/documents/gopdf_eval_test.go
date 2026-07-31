@@ -1,6 +1,7 @@
 package documents
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -229,7 +230,11 @@ func (b *byteReaderAt) ReadAt(p []byte, off int64) (int, error) {
 func downloadPDF(t *testing.T, url string) []byte {
 	t.Helper()
 	client := &http.Client{Timeout: 60 * time.Second}
-	resp, err := client.Get(url)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatalf("failed to build request for %s: %v", url, err)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("failed to download %s: %v", url, err)
 	}

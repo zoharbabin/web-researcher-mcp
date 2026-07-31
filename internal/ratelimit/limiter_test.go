@@ -94,7 +94,7 @@ func TestWrapMiddleware(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -116,13 +116,13 @@ func TestWrapMiddlewareReject(t *testing.T) {
 
 	// Exhaust the rate limiter
 	for i := 0; i < 5; i++ {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 	}
 
 	// Next request should be rate-limited
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -200,12 +200,12 @@ func TestWrapMiddlewareErrorMessage(t *testing.T) {
 
 	// Exhaust the per-tenant limiter
 	for i := 0; i < 5; i++ {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -233,7 +233,7 @@ func TestWrapMiddlewareReadsTenantFromAuthContext(t *testing.T) {
 
 	// Simulate auth middleware setting tenant ID in context
 	makeReq := func(tenantID string) *http.Request {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		ctx := context.WithValue(req.Context(), auth.ContextKeyTenantID, tenantID)
 		return req.WithContext(ctx)
 	}
@@ -272,12 +272,12 @@ func TestWrapMiddlewareDefaultTenantWithoutAuth(t *testing.T) {
 
 	// No auth context → should use "default" tenant via auth.TenantIDFromContext
 	for i := 0; i < 5; i++ {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusTooManyRequests {
@@ -303,7 +303,7 @@ func TestWrapMiddlewareDailyQuotaErrorMessage(t *testing.T) {
 	}))
 
 	makeReq := func() *http.Request {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		ctx := context.WithValue(req.Context(), auth.ContextKeyTenantID, "test-tenant")
 		return req.WithContext(ctx)
 	}
@@ -458,7 +458,7 @@ func TestWrapIPPassthroughWhenDisabled(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	for i := 0; i < 50; i++ {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		req.RemoteAddr = "9.9.9.9:1234"
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
@@ -480,7 +480,7 @@ func TestWrapIPRejectsFlood(t *testing.T) {
 
 	got429 := false
 	for i := 0; i < 10; i++ {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		req.RemoteAddr = "8.8.8.8:5555"
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
@@ -499,7 +499,7 @@ func TestWrapIPRejectsFlood(t *testing.T) {
 func TestClientIPTrustProxyOff(t *testing.T) {
 	t.Parallel()
 	l := New(config.RateLimitConfig{TrustProxy: false, PerIP: 1})
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.RemoteAddr = "203.0.113.7:443"
 	req.Header.Set("X-Forwarded-For", "1.1.1.1, 2.2.2.2")
 	if got := l.clientIP(req); got != "203.0.113.7" {
@@ -510,7 +510,7 @@ func TestClientIPTrustProxyOff(t *testing.T) {
 func TestClientIPTrustProxyOn(t *testing.T) {
 	t.Parallel()
 	l := New(config.RateLimitConfig{TrustProxy: true, PerIP: 1})
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.RemoteAddr = "203.0.113.7:443"
 	req.Header.Set("X-Forwarded-For", " 1.1.1.1 , 2.2.2.2 ")
 	if got := l.clientIP(req); got != "1.1.1.1" {
@@ -521,7 +521,7 @@ func TestClientIPTrustProxyOn(t *testing.T) {
 func TestClientIPTrustProxyOnEmptyHeaderFallsBack(t *testing.T) {
 	t.Parallel()
 	l := New(config.RateLimitConfig{TrustProxy: true, PerIP: 1})
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.RemoteAddr = "203.0.113.9:80"
 	// No X-Forwarded-For header set.
 	if got := l.clientIP(req); got != "203.0.113.9" {
@@ -532,7 +532,7 @@ func TestClientIPTrustProxyOnEmptyHeaderFallsBack(t *testing.T) {
 func TestClientIPMalformedRemoteAddr(t *testing.T) {
 	t.Parallel()
 	l := New(config.RateLimitConfig{TrustProxy: false, PerIP: 1})
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.RemoteAddr = "not-an-addr-no-port" // no panic, used verbatim
 	if got := l.clientIP(req); got != "not-an-addr-no-port" {
 		t.Fatalf("malformed RemoteAddr should be used verbatim without panic, got %q", got)

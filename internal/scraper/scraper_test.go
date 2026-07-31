@@ -144,7 +144,14 @@ func TestNewSSRFSafeClient_RejectsPrivateIPs(t *testing.T) {
 	defer ts.Close()
 
 	client := NewSSRFSafeClient(false)
-	_, err := client.Get(ts.URL)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL, nil)
+	if err != nil {
+		t.Fatalf("failed to build request: %v", err)
+	}
+	resp, err := client.Do(req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 	if err == nil {
 		t.Fatal("expected error when connecting to localhost, got nil")
 	}
@@ -165,7 +172,11 @@ func TestNewSSRFSafeClient_AllowsPublicIPs(t *testing.T) {
 	defer ts.Close()
 
 	client := NewSSRFSafeClient(true) // allow private
-	resp, err := client.Get(ts.URL)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL, nil)
+	if err != nil {
+		t.Fatalf("failed to build request: %v", err)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("unexpected error with allowPrivate=true: %v", err)
 	}

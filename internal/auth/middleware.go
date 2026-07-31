@@ -324,7 +324,12 @@ func (m *Middleware) refreshLoop(interval time.Duration) {
 func (m *Middleware) fetchJWKS() error {
 	url := strings.TrimRight(m.config.IssuerURL, "/") + "/.well-known/jwks.json"
 
-	resp, err := m.httpClient.Get(url)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("build JWKS request: %w", err)
+	}
+
+	resp, err := m.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("fetch JWKS: %w", err)
 	}
