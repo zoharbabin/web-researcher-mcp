@@ -617,6 +617,7 @@ When `CACHE_ISOLATION=tenant`, all cache keys are prefixed with the authenticate
 |----------|-------------|---------|
 | `JWKS_REFRESH_INTERVAL` | How often to refresh JWKS keys | `1h` |
 | `ADMIN_API_KEY` | Shared secret gating all `/admin/*` endpoints, sent as `X-Admin-Key` (min 16 chars). Generate with `openssl rand -hex 32` | — |
+| `ADMIN_API_KEY_PREV` | Optional previous admin key accepted alongside `ADMIN_API_KEY` during a rotation grace period (min 16 chars). Every use is logged (`slog.Warn` + an `auth.admin_key_prev_used` audit event). Empty = no fallback | — |
 | `CACHE_ADMIN_KEY` | **Deprecated** alias for `ADMIN_API_KEY` (still accepted; logs a startup warning). `ADMIN_API_KEY` wins if both are set | — |
 
 ---
@@ -952,13 +953,19 @@ The server uses two independent secrets. Both rotate without downtime.
 
 ### Admin key (`ADMIN_API_KEY`)
 
-The admin key is stateless — rotating it is a single env-var change:
+The admin key is stateless. For a hard cutover (acceptable for most deployments, since admin endpoints are operational, not user-facing):
 
 1. Generate a new key: `openssl rand -hex 32`.
 2. Update `ADMIN_API_KEY` in your deployment and restart (or rolling-restart) the pods.
 3. Update any operational scripts/dashboards that send `X-Admin-Key`.
 
-There is no stored state encrypted under the admin key, so no migration is needed. In a rolling deployment, in-flight admin calls against an old pod use that pod's old key until it cycles; admin endpoints are operational, not user-facing, so a brief overlap is harmless.
+There is no stored state encrypted under the admin key, so no migration is needed. In a rolling deployment, in-flight admin calls against an old pod use that pod's old key until it cycles.
+
+For a scheduled credential-rotation policy (a common SOC 2 control) where even that brief per-pod overlap is unacceptable, use the dual-key grace period instead:
+
+1. Move the current key to `ADMIN_API_KEY_PREV` and set a new `ADMIN_API_KEY` (generate with `openssl rand -hex 32`).
+2. Restart. Both the new and previous key authenticate successfully during the grace period — every request using `ADMIN_API_KEY_PREV` is logged (`slog.Warn` plus an `auth.admin_key_prev_used` audit event), so you can tell exactly when every client has migrated.
+3. Once no more `admin_key_prev_used` events appear, remove `ADMIN_API_KEY_PREV` — the previous key stops working immediately.
 
 ### Encryption key (`CACHE_ENCRYPTION_KEY`) — zero-downtime re-encryption
 

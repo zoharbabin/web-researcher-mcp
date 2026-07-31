@@ -43,6 +43,7 @@ type Config struct {
 	MetricsEnabled         bool
 	MetricsMaxTenants      int
 	AdminAPIKey            string
+	AdminAPIKeyPrev        string
 	DataRegion             string
 	Features               FeatureConfig
 	Audit                  AuditConfig
@@ -373,6 +374,20 @@ func Load() (*Config, error) {
 		errs = append(errs, adminKeyVar+" must be at least 16 characters")
 	}
 
+	// ADMIN_API_KEY_PREV (#488): the same zero-downtime rotation pattern as
+	// CACHE_ENCRYPTION_KEY_PREV, but for the stateless admin key — accept
+	// either the current or previous key for a grace window so a rotation
+	// never produces a hard cutover that locks out in-flight automation.
+	adminKeyPrev := os.Getenv("ADMIN_API_KEY_PREV")
+	if adminKeyPrev != "" {
+		if len(adminKeyPrev) < 16 {
+			errs = append(errs, "ADMIN_API_KEY_PREV must be at least 16 characters")
+		}
+		if adminKey == "" {
+			warnings = append(warnings, "ADMIN_API_KEY_PREV is set without ADMIN_API_KEY; it has no effect since admin endpoints are disabled")
+		}
+	}
+
 	// STDIO single-user identity (opt-in). Validated, never fatal: a bad value
 	// degrades to unset + a warning, preserving zero-config startup. Only honored
 	// in STDIO (port==0); whenever PORT is set we leave it
@@ -506,6 +521,7 @@ func Load() (*Config, error) {
 		MetricsEnabled:        envBool("METRICS_ENABLED", true),
 		MetricsMaxTenants:     envInt("METRICS_MAX_TENANTS", 10000),
 		AdminAPIKey:           adminKey,
+		AdminAPIKeyPrev:       adminKeyPrev,
 		DataRegion:            os.Getenv("DATA_REGION"),
 		StdioUserID:           stdioUserID,
 		Features: FeatureConfig{

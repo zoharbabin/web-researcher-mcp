@@ -1066,6 +1066,64 @@ func TestLoadLegacyCacheAdminKeyTooShort(t *testing.T) {
 	}
 }
 
+// TestLoadAdminAPIKeyPrevValidation is the #488 config-validation guard:
+// ADMIN_API_KEY_PREV follows the same minimum-length rule as ADMIN_API_KEY.
+func TestLoadAdminAPIKeyPrevValidation(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("ADMIN_API_KEY", strings.Repeat("a", 16))
+	t.Setenv("ADMIN_API_KEY_PREV", strings.Repeat("b", 15)) // 15 chars, too short
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for ADMIN_API_KEY_PREV shorter than 16 chars")
+	}
+	if !strings.Contains(err.Error(), "ADMIN_API_KEY_PREV must be at least 16 characters") {
+		t.Errorf("expected error about prev-key length, got: %v", err)
+	}
+}
+
+// TestLoadAdminAPIKeyPrevAccepted verifies the dual-key grace-period pattern:
+// both the current and previous admin key are accepted into config, with no
+// warning when ADMIN_API_KEY is also set.
+func TestLoadAdminAPIKeyPrevAccepted(t *testing.T) {
+	setRequiredEnv(t)
+	current := strings.Repeat("a", 16)
+	prev := strings.Repeat("b", 16)
+	t.Setenv("ADMIN_API_KEY", current)
+	t.Setenv("ADMIN_API_KEY_PREV", prev)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error with valid dual admin keys: %v", err)
+	}
+	if cfg.AdminAPIKey != current {
+		t.Errorf("expected AdminAPIKey to be set to the current key")
+	}
+	if cfg.AdminAPIKeyPrev != prev {
+		t.Errorf("expected AdminAPIKeyPrev to be set to the previous key")
+	}
+	if len(cfg.Warnings) != 0 {
+		t.Errorf("expected no warnings when both admin keys are set validly, got: %v", cfg.Warnings)
+	}
+}
+
+// TestLoadAdminAPIKeyPrevWithoutCurrentWarns verifies that setting only the
+// previous key (no current key, so admin endpoints are disabled entirely) is
+// flagged as a no-op rather than silently ignored.
+func TestLoadAdminAPIKeyPrevWithoutCurrentWarns(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("ADMIN_API_KEY", "")
+	t.Setenv("ADMIN_API_KEY_PREV", strings.Repeat("b", 16))
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Warnings) == 0 {
+		t.Error("expected a warning when ADMIN_API_KEY_PREV is set without ADMIN_API_KEY")
+	}
+}
+
 func TestLoadCacheEncryptionKeyPrevValidation(t *testing.T) {
 	setRequiredEnv(t)
 	t.Setenv("CACHE_ENCRYPTION_KEY_PREV", "not-hex-and-too-short")

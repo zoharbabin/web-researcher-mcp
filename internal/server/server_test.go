@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -401,7 +402,7 @@ func TestAdminFlushSessionsNil(t *testing.T) {
 }
 
 func TestAdminAuth(t *testing.T) {
-	handler := adminAuth("secret-key", nil, func(w http.ResponseWriter, r *http.Request) {
+	handler := adminAuth("secret-key", "", nil, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -438,6 +439,97 @@ func TestAdminAuth(t *testing.T) {
 	})
 }
 
+// recordingAuditor is a minimal test Auditor that records every event it
+// receives, for asserting the dual-key grace-period path emits its audit
+// event (#488).
+type recordingAuditor struct {
+	mu     sync.Mutex
+	events []audit.AuditEvent
+}
+
+func (r *recordingAuditor) Log(e audit.AuditEvent) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.events = append(r.events, e)
+}
+func (r *recordingAuditor) IncludeRequestBody() bool { return false }
+func (r *recordingAuditor) Close()                   {}
+func (r *recordingAuditor) all() []audit.AuditEvent {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]audit.AuditEvent(nil), r.events...)
+}
+
+// TestAdminKeyDualKeyGracePeriod is the #488 regression guard: during an
+// admin-key rotation, both the current key and the previous key (set via
+// ADMIN_API_KEY_PREV / the AdminKeyPrev config field) must authenticate
+// successfully, a request using the previous key must emit an audit event
+// so operators can tell when it is safe to remove it, and once the previous
+// key is unset (rotation complete) it must stop working.
+func TestAdminKeyDualKeyGracePeriod(t *testing.T) {
+	const currentKey = "current-admin-key-123"
+	const prevKey = "previous-admin-key-456"
+
+	aud := &recordingAuditor{}
+	handler := adminAuth(currentKey, prevKey, aud, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	t.Run("current key succeeds", func(t *testing.T) {
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/admin/cache", nil)
+		req.Header.Set("X-Admin-Key", currentKey)
+		rec := httptest.NewRecorder()
+		handler(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200 for current key, got %d", rec.Code)
+		}
+	})
+
+	t.Run("previous key succeeds during grace period and is audited", func(t *testing.T) {
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/admin/cache", nil)
+		req.Header.Set("X-Admin-Key", prevKey)
+		rec := httptest.NewRecorder()
+		handler(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200 for previous key during grace period, got %d", rec.Code)
+		}
+
+		events := aud.all()
+		if len(events) != 1 {
+			t.Fatalf("expected exactly one audit event, got %d: %+v", len(events), events)
+		}
+		if events[0].EventType != "auth.admin_key_prev_used" {
+			t.Errorf("expected event_type=auth.admin_key_prev_used, got %q", events[0].EventType)
+		}
+		if !events[0].Success {
+			t.Error("expected the prev-key event to be marked Success=true (it authenticated)")
+		}
+	})
+
+	t.Run("wrong key still fails with both keys configured", func(t *testing.T) {
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/admin/cache", nil)
+		req.Header.Set("X-Admin-Key", "neither-of-the-above")
+		rec := httptest.NewRecorder()
+		handler(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401 for an unrelated key, got %d", rec.Code)
+		}
+	})
+
+	t.Run("previous key stops working once rotation completes (empty prevKey)", func(t *testing.T) {
+		rotated := adminAuth(currentKey, "", audit.NewNoop(), func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/admin/cache", nil)
+		req.Header.Set("X-Admin-Key", prevKey)
+		rec := httptest.NewRecorder()
+		rotated(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401 once ADMIN_API_KEY_PREV is unset, got %d", rec.Code)
+		}
+	})
+}
+
 // =============================================================================
 // Full HTTP Server Integration Tests
 // =============================================================================
@@ -461,8 +553,8 @@ func buildTestHTTPServer(t *testing.T) *httptest.Server {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"issuer":"web-researcher-mcp","token_endpoint":"n/a"}`)
 	})
-	mux.HandleFunc("DELETE /admin/cache", adminAuth("test-admin-key", nil, handleAdminFlushCache(c)))
-	mux.HandleFunc("DELETE /admin/sessions", adminAuth("test-admin-key", nil, handleAdminFlushSessions(mgr)))
+	mux.HandleFunc("DELETE /admin/cache", adminAuth("test-admin-key", "", nil, handleAdminFlushCache(c)))
+	mux.HandleFunc("DELETE /admin/sessions", adminAuth("test-admin-key", "", nil, handleAdminFlushSessions(mgr)))
 
 	handler := securityHeaders(securityHeadersConfig{}, corsMiddleware([]string{"https://allowed.example.com"}, false, mux))
 	return httptest.NewServer(handler)

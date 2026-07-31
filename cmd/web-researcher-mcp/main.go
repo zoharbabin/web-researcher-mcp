@@ -762,6 +762,7 @@ func main() {
 			CORSStrict:        cfg.CORSStrict,
 			Metrics:           metricsCollector,
 			AdminKey:          cfg.AdminAPIKey,
+			AdminKeyPrev:      cfg.AdminAPIKeyPrev,
 			Cache:             cacheStore,
 			Sessions:          sessionManager,
 			DataSubjects:      dataSubjects,

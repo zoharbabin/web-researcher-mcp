@@ -154,7 +154,7 @@ func TestDashboardData_NilHealth(t *testing.T) {
 func TestDashboardData_AdminGated(t *testing.T) {
 	m, s, rl := dashboardTestDeps()
 	const key = "s3cret-admin-key"
-	gated := adminAuth(key, audit.NewNoop(), handleDashboardData("1.20.0", m, s, rl, nil))
+	gated := adminAuth(key, "", audit.NewNoop(), handleDashboardData("1.20.0", m, s, rl, nil))
 
 	t.Run("no key → 401", func(t *testing.T) {
 		rec := httptest.NewRecorder()
@@ -196,7 +196,7 @@ func TestServeHTTP_DashboardRoutesRegistered(t *testing.T) {
 		cfg := HTTPConfig{Version: "1.20.0", AdminKey: adminKey, Metrics: m, Sessions: s, RateLimiter: rl, Auditor: audit.NewNoop()}
 		if cfg.AdminKey != "" {
 			mux.Handle("GET /dashboard", handleDashboard(cfg.Version))
-			mux.Handle("GET /dashboard/data", adminAuth(cfg.AdminKey, cfg.Auditor, handleDashboardData(cfg.Version, cfg.Metrics, cfg.Sessions, cfg.RateLimiter, cfg.Health)))
+			mux.Handle("GET /dashboard/data", adminAuth(cfg.AdminKey, cfg.AdminKeyPrev, cfg.Auditor, handleDashboardData(cfg.Version, cfg.Metrics, cfg.Sessions, cfg.RateLimiter, cfg.Health)))
 		}
 		return httptest.NewServer(mux)
 	}

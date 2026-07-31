@@ -43,8 +43,12 @@ type HTTPConfig struct {
 	AllowedOrigins []string
 	Metrics        *metrics.Collector
 	AdminKey       string
-	Cache          cache.Cache
-	Sessions       session.Manager
+	// AdminKeyPrev, when set, is accepted alongside AdminKey for a rotation
+	// grace period (#488) — mirrors CACHE_ENCRYPTION_KEY_PREV's zero-downtime
+	// pattern. Empty (default) disables it; every use is logged.
+	AdminKeyPrev string
+	Cache        cache.Cache
+	Sessions     session.Manager
 	// DataSubjects fans GDPR access/erasure requests out to every registered
 	// per-user store (#85). Nil disables the /admin/data endpoints.
 	DataSubjects *datasubject.Registry
@@ -139,22 +143,22 @@ func (s *Server) ServeHTTP(ctx context.Context, cfg HTTPConfig) error {
 		// admin key exists (parity with the other operator surfaces); STDIO mode
 		// never reaches ServeHTTP, so it is HTTP-only by construction.
 		mux.Handle("GET /dashboard", handleDashboard(cfg.Version))
-		mux.Handle("GET /dashboard/data", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.Auditor, handleDashboardData(cfg.Version, cfg.Metrics, cfg.Sessions, cfg.RateLimiter, cfg.Health))))
+		mux.Handle("GET /dashboard/data", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.AdminKeyPrev, cfg.Auditor, handleDashboardData(cfg.Version, cfg.Metrics, cfg.Sessions, cfg.RateLimiter, cfg.Health))))
 
-		mux.Handle("DELETE /admin/cache", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.Auditor, handleAdminFlushCache(cfg.Cache))))
-		mux.Handle("DELETE /admin/sessions", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.Auditor, handleAdminFlushSessions(cfg.Sessions))))
-		mux.Handle("GET /admin/analytics", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.Auditor, handleAdminTenantAnalytics(cfg.Metrics))))
+		mux.Handle("DELETE /admin/cache", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.AdminKeyPrev, cfg.Auditor, handleAdminFlushCache(cfg.Cache))))
+		mux.Handle("DELETE /admin/sessions", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.AdminKeyPrev, cfg.Auditor, handleAdminFlushSessions(cfg.Sessions))))
+		mux.Handle("GET /admin/analytics", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.AdminKeyPrev, cfg.Auditor, handleAdminTenantAnalytics(cfg.Metrics))))
 		if cfg.DataSubjects != nil {
-			mux.Handle("GET /admin/data", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.Auditor, handleAdminDataExport(cfg.DataSubjects, cfg.Auditor))))
-			mux.Handle("DELETE /admin/data", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.Auditor, handleAdminDataErasure(cfg.DataSubjects, cfg.Consent, cfg.Auditor))))
+			mux.Handle("GET /admin/data", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.AdminKeyPrev, cfg.Auditor, handleAdminDataExport(cfg.DataSubjects, cfg.Auditor))))
+			mux.Handle("DELETE /admin/data", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.AdminKeyPrev, cfg.Auditor, handleAdminDataErasure(cfg.DataSubjects, cfg.Consent, cfg.Auditor))))
 		}
 		if cfg.Consent != nil {
-			mux.Handle("POST /admin/consent", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.Auditor, handleAdminConsentRecord(cfg.Consent, cfg.Auditor))))
-			mux.Handle("GET /admin/consent", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.Auditor, handleAdminConsentQuery(cfg.Consent))))
+			mux.Handle("POST /admin/consent", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.AdminKeyPrev, cfg.Auditor, handleAdminConsentRecord(cfg.Consent, cfg.Auditor))))
+			mux.Handle("GET /admin/consent", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.AdminKeyPrev, cfg.Auditor, handleAdminConsentQuery(cfg.Consent))))
 		}
 		if cfg.Workspaces != nil {
-			mux.Handle("POST /admin/workspace/members", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.Auditor, handleAdminWorkspaceMember(cfg.Workspaces, cfg.Auditor, true))))
-			mux.Handle("DELETE /admin/workspace/members", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.Auditor, handleAdminWorkspaceMember(cfg.Workspaces, cfg.Auditor, false))))
+			mux.Handle("POST /admin/workspace/members", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.AdminKeyPrev, cfg.Auditor, handleAdminWorkspaceMember(cfg.Workspaces, cfg.Auditor, true))))
+			mux.Handle("DELETE /admin/workspace/members", maxBytes(cfg.MaxRequestBody, adminAuth(cfg.AdminKey, cfg.AdminKeyPrev, cfg.Auditor, handleAdminWorkspaceMember(cfg.Workspaces, cfg.Auditor, false))))
 		}
 	}
 
@@ -430,15 +434,25 @@ func corsMiddleware(allowedOrigins []string, strict bool, next http.Handler) htt
 	})
 }
 
-func adminAuth(key string, auditor audit.Auditor, handler http.HandlerFunc) http.HandlerFunc {
+// adminAuth gates a handler behind X-Admin-Key. prevKey is optional
+// (empty disables it) and, when set, is accepted alongside key for a
+// rotation grace period (#488) — the same dual-key pattern already used for
+// CACHE_ENCRYPTION_KEY_PREV, applied here to the stateless admin key so
+// rotating it never produces a hard cutover for in-flight automation. Every
+// use of prevKey is logged (slog.Warn + an audit event) so an operator can
+// tell when it is safe to remove it.
+func adminAuth(key, prevKey string, auditor audit.Auditor, handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		provided := r.Header.Get("X-Admin-Key")
-		if subtle.ConstantTimeCompare([]byte(provided), []byte(key)) != 1 {
-			// Admin-key guessing is a high-value attack — make it detectable.
+		if subtle.ConstantTimeCompare([]byte(provided), []byte(key)) == 1 {
+			handler(w, r)
+			return
+		}
+		if prevKey != "" && subtle.ConstantTimeCompare([]byte(provided), []byte(prevKey)) == 1 {
+			slog.Warn("admin request authenticated with ADMIN_API_KEY_PREV; rotate remaining clients off it", "path", r.URL.Path)
 			if auditor != nil {
-				ev := audit.NewEvent("auth.failure", auth.TenantIDFromContext(r.Context()), auth.UserIDFromContext(r.Context()))
-				ev.Success = false
-				ev.ErrorCode = "admin_key_invalid"
+				ev := audit.NewEvent("auth.admin_key_prev_used", auth.TenantIDFromContext(r.Context()), auth.UserIDFromContext(r.Context()))
+				ev.Success = true
 				ev.SourceIP = auth.SourceIPFromContext(r.Context())
 				if rid := auth.RequestIDFromContext(r.Context()); rid != "" {
 					ev.RequestID = rid
@@ -446,10 +460,22 @@ func adminAuth(key string, auditor audit.Auditor, handler http.HandlerFunc) http
 				ev.Metadata = map[string]any{"path": r.URL.Path}
 				auditor.Log(ev)
 			}
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			handler(w, r)
 			return
 		}
-		handler(w, r)
+		// Admin-key guessing is a high-value attack — make it detectable.
+		if auditor != nil {
+			ev := audit.NewEvent("auth.failure", auth.TenantIDFromContext(r.Context()), auth.UserIDFromContext(r.Context()))
+			ev.Success = false
+			ev.ErrorCode = "admin_key_invalid"
+			ev.SourceIP = auth.SourceIPFromContext(r.Context())
+			if rid := auth.RequestIDFromContext(r.Context()); rid != "" {
+				ev.RequestID = rid
+			}
+			ev.Metadata = map[string]any{"path": r.URL.Path}
+			auditor.Log(ev)
+		}
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
 	}
 }
 
