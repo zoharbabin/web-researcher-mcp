@@ -150,12 +150,18 @@ spec:
     matchLabels:
       app: web-researcher-mcp
 ---
-# Restricts ingress to pods within this namespace only — the same control
-# docs/DEPLOYMENT.md's "Multi-tenant shared clusters" section recommends for
-# separating tenants across namespaces. An empty `namespaceSelector: {}` would
-# match every namespace in the cluster (a no-op, not an isolation boundary);
-# omitting it and using only `podSelector: {}` scopes the allow-list to same-
-# namespace traffic.
+# Restricts ingress to pods within this namespace, plus the ingress
+# controller's namespace — the same control docs/DEPLOYMENT.md's "Multi-tenant
+# shared clusters" section recommends for separating tenants across
+# namespaces. An empty `namespaceSelector: {}` would match every namespace in
+# the cluster (a no-op, not an isolation boundary); the bare `podSelector: {}`
+# rule alone scopes the allow-list to same-namespace traffic only, which also
+# silently blocks the ingress controller (it runs in its own namespace, so
+# without the second `from` entry below, every request through 04-ingress.yaml
+# gets a Bad Gateway). Rancher Desktop's bundled Traefik lives in
+# `kube-system`, matched here via the built-in `kubernetes.io/metadata.name`
+# namespace label; substitute the value if your distro's ingress controller
+# runs elsewhere (e.g. `ingress-nginx` on kind/minikube).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -168,3 +174,6 @@ spec:
   ingress:
   - from:
     - podSelector: {}
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system

@@ -45,12 +45,15 @@ kubectl create configmap oauth-issuer-jwks \
   --from-file=jwks.json="$WORK_DIR/jwks.json"
 kubectl apply -f deploy/k8s-local/01-oauth-issuer.yaml
 
-# 4. Create the app secret (may be empty — the server falls back to
-#    DuckDuckGo with no provider keys configured)
+# 4. Create the app secret. Provider API keys may be empty (the server falls
+#    back to DuckDuckGo unconfigured), but CACHE_ENCRYPTION_KEY is required —
+#    03-app.yaml sets REDIS_URL, and internal/redisbackend fails fast without
+#    an encryption key (personal-data namespaces must be encrypted at rest).
 kubectl create secret generic web-researcher-secrets \
   --namespace web-researcher \
   --from-literal=GOOGLE_CUSTOM_SEARCH_API_KEY= \
-  --from-literal=GOOGLE_CUSTOM_SEARCH_ID=
+  --from-literal=GOOGLE_CUSTOM_SEARCH_ID= \
+  --from-literal=CACHE_ENCRYPTION_KEY="$(openssl rand -hex 32)"
 
 kubectl apply -f deploy/k8s-local/03-app.yaml
 
