@@ -1,0 +1,30 @@
+# `web-researcher-mcp.local` is an arbitrary local-only hostname, not a
+# personal or real domain — substitute your own if you prefer, but add a
+# matching /etc/hosts entry and re-mint the TLS cert's CN/SAN either way (see
+# docs/K8S_LOCAL_DEV.md). Assumes a Traefik ingress controller (the default in
+# Rancher Desktop / k3s); adjust `ingressClassName` and the annotation for
+# other controllers (nginx-ingress, etc.).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-researcher-mcp
+  namespace: web-researcher
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - web-researcher-mcp.local
+    secretName: web-researcher-tls
+  rules:
+  - host: web-researcher-mcp.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: web-researcher-mcp
+            port:
+              number: 8080

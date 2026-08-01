@@ -1,0 +1,170 @@
+# Expects an image built and loaded into the local cluster as
+# web-researcher-mcp:local (see docs/K8S_LOCAL_DEV.md), and a
+# `web-researcher-secrets` Secret with any provider API keys you want the
+# pods to use (may be empty — the server falls back to DuckDuckGo unconfigured).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-researcher-mcp
+  namespace: web-researcher
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web-researcher-mcp
+  template:
+    metadata:
+      labels:
+        app: web-researcher-mcp
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: server
+        image: web-researcher-mcp:local
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+        env:
+        - name: PORT
+          value: "8080"
+        - name: OAUTH_ISSUER_URL
+          value: "http://oauth-issuer.web-researcher.svc.cluster.local"
+        - name: OAUTH_AUDIENCE
+          value: "web-researcher-mcp"
+        - name: CACHE_ISOLATION
+          value: "tenant"
+        - name: REDIS_URL
+          value: "redis://redis.web-researcher.svc.cluster.local:6379"
+        - name: MEMORY_ENABLED
+          value: "true"
+        - name: USER_ANALYTICS_ENABLED
+          value: "true"
+        - name: WORKSPACES_ENABLED
+          value: "true"
+        - name: MONITORING_ENABLED
+          value: "true"
+        - name: METRICS_ENABLED
+          value: "true"
+        - name: LOG_LEVEL
+          value: "info"
+        - name: LOG_FORMAT
+          value: "json"
+        - name: AUDIT_ENABLED
+          value: "true"
+        - name: ENFORCE_SCOPES
+          value: "false"
+        - name: RATE_LIMIT_PER_TENANT
+          value: "120"
+        - name: RATE_LIMIT_GLOBAL
+          value: "1000"
+        envFrom:
+        - secretRef:
+            name: web-researcher-secrets
+        resources:
+          requests:
+            cpu: 250m
+            memory: 384Mi
+          limits:
+            cpu: 1000m
+            memory: 1.5Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-researcher-mcp
+  namespace: web-researcher
+spec:
+  selector:
+    app: web-researcher-mcp
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: web-researcher-mcp
+  namespace: web-researcher
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: web-researcher-mcp
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: web-researcher-mcp
+  namespace: web-researcher
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: web-researcher-mcp
+---
+# Restricts ingress to pods within this namespace only — the same control
+# docs/DEPLOYMENT.md's "Multi-tenant shared clusters" section recommends for
+# separating tenants across namespaces. An empty `namespaceSelector: {}` would
+# match every namespace in the cluster (a no-op, not an isolation boundary);
+# omitting it and using only `podSelector: {}` scopes the allow-list to same-
+# namespace traffic.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web-researcher-mcp-isolation
+  namespace: web-researcher
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector: {}

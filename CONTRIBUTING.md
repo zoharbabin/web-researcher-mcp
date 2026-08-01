@@ -73,6 +73,27 @@ export SEARCH_PROVIDER="google"  # or brave, serper, searxng, searchapi, duckduc
 
 Unit and integration tests do not require API keys. Only E2E tests that hit live services need them.
 
+### Testing both transports locally
+
+If your change touches transport-specific behavior (auth, rate limiting,
+sessions, HTTP handlers), test it over both STDIO and HTTP before opening a
+PR — tool logic is identical across transports, but the surrounding plumbing
+isn't.
+
+- **STDIO** — the default `.mcp.json` entry in this repo already covers this;
+  just run your MCP client against the built binary.
+- **HTTP, zero setup** — run `PORT=3000 ./web-researcher-mcp` and point any
+  MCP client at `http://localhost:3000/mcp/` (no auth, no TLS). See
+  [DEPLOYMENT.md → HTTP](docs/DEPLOYMENT.md#http-multi-client-web-apps).
+- **HTTP, container parity** — `make docker-smoke` builds the real Docker
+  image and drives a full `initialize`/`tools/call` sequence over plain HTTP
+  in a container (no `-i`/`-t`, matching production). `make e2e-oauth-docker`
+  adds HTTPS + OAuth 2.1 + multi-tenant isolation + GDPR export/erasure on top,
+  entirely via Docker — no cluster needed.
+- **Full k8s parity** — for changes that need real multi-pod behavior (HPA
+  scaling, `REDIS_URL` cross-pod state, the stateless MCP transport under a
+  rolling deployment), see [docs/K8S_LOCAL_DEV.md](docs/K8S_LOCAL_DEV.md).
+
 ## Running Tests
 
 ```bash

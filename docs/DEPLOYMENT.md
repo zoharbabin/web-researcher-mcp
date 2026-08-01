@@ -150,7 +150,7 @@ stdin attached (`docker run -p ... -e PORT=...`) stays up serving HTTP.
 | Auth | No | OAuth 2.1 when `OAUTH_ISSUER_URL` is set; open otherwise |
 | Rate limiting (server-side) | None | Per-tenant + global |
 | Rate limiting (upstream APIs) | Applies | Applies |
-| Session persistence | Local disk | Local disk (use sticky sessions for multi-instance) |
+| `sequential_search` session persistence | Local disk | Local disk (use `REDIS_URL` for multi-instance, see [Horizontal Scaling](#horizontal-scaling)) |
 | Audit logging | Yes | Yes |
 | SSRF protection | Yes | Yes |
 | Cache | Local memory + disk | Local memory + disk |
@@ -237,6 +237,8 @@ docker run -p 3000:3000 \
 ---
 
 ## Kubernetes
+
+To exercise this topology on a local single-node cluster (Rancher Desktop, `kind`, `minikube`) rather than deploy it to production, see [`deploy/k8s-local/`](../deploy/k8s-local/) and [docs/K8S_LOCAL_DEV.md](K8S_LOCAL_DEV.md) — generic manifests, no personal hostnames or committed secrets.
 
 The `resources` and `securityContext` below assume the browser scrape tier is enabled (`CHROME_PATH` set, the default in the bundled images). A long-lived headless Chromium instance per pod (`internal/scraper/browser.go`'s `browserPool`) typically holds 300-500Mi RSS on its own once a handful of pages/tabs are open concurrently, on top of the Go process's own heap, connection pools, and in-memory cache tier — the `512Mi` limit in earlier versions of this example was sized for the Go process alone and will OOMKill under real browser-tier concurrency. If you disable the browser tier entirely (unset `CHROME_PATH`, forcing scrapes to stop at the markdown/stealth/HTML tiers), the Go-process-only footprint is well within `256-384Mi` and you can size down accordingly.
 
@@ -635,6 +637,8 @@ When `CACHE_ISOLATION=tenant`, all cache keys are prefixed with the authenticate
 ---
 
 ## Horizontal Scaling
+
+The "sessions" below are the `sequential_search` tool's own research-continuity state, not the MCP protocol transport session (`Mcp-Session-Id`). The transport itself runs in stateless mode (`mcp.StreamableHTTPOptions.Stateless` in `internal/server/server.go`) precisely so that no session affinity is required at the load balancer/ingress — sticky sessions would concentrate a client's traffic onto one pod (a load-concentration/DDoS risk) and still break on HPA scale-down or a rollout. This costs nothing functionally: the server makes no server-initiated push (no sampling, elicitation, or list-changed/progress notifications), so nothing needs a durable per-client transport session.
 
 **Two modes.** Without `REDIS_URL`, the server uses in-memory + encrypted-disk state, per-instance:
 

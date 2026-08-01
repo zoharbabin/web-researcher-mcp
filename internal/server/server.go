@@ -117,9 +117,18 @@ func (s *Server) RunSTDIO(ctx context.Context) error {
 }
 
 func (s *Server) ServeHTTP(ctx context.Context, cfg HTTPConfig) error {
+	// Stateless: multi-replica HTTP deployments have no shared session store
+	// (the SDK's session map is per-process, in-memory only), so a client's
+	// follow-up request can land on a different pod than its `initialize` and
+	// get a spurious "session not found". Stateless mode drops the Mcp-Session-Id
+	// requirement entirely rather than pinning clients to one pod (session
+	// affinity concentrates load onto a single backend, which is also an easier
+	// DDoS target, and still breaks on HPA scale-down/rollout). This server
+	// never sends server-initiated push (no sampling, elicitation, or list-
+	// changed/progress notifications), so stateless mode costs no functionality.
 	handler := mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
 		return s.mcpServer
-	}, nil)
+	}, &mcp.StreamableHTTPOptions{Stateless: true})
 
 	mux := http.NewServeMux()
 

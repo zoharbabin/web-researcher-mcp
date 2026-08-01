@@ -840,7 +840,7 @@ An optional iteration-assist level (#67). The server stays **infrastructure, not
 - Two-tier: in-memory index (lightweight) + encrypted disk (full session JSON)
 - Write-through on every step (crash-safe: temp → fsync → rename)
 - Index rebuilt from disk on server startup — no data loss across restarts
-- Behind a load balancer, use session-affinity (sticky sessions) so clients reconnect to the same instance
+- This is app-level research-continuity state, not the MCP transport session (which runs stateless — see [DEPLOYMENT.md → Horizontal Scaling](DEPLOYMENT.md#horizontal-scaling)). Behind a multi-instance load balancer without `REDIS_URL`, a step can land on a pod that doesn't hold this session; set `REDIS_URL` for cross-pod sessions (preferred), or use sticky sessions as a fallback
 
 ---
 
