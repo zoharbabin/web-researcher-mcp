@@ -286,7 +286,7 @@ Find community-curated "awesome list" collections on a topic — good for scouti
 
 ## University Syllabus Search (syllabus_search)
 
-Query the Open Syllabus Project's corpus of 32.9M university syllabi for structured author/title assignment data. Requires a research agreement with Open Syllabus (research@opensyllabus.org); registers only when `OPEN_SYLLABUS_API_KEY` and `OPEN_SYLLABUS_API_URL` are both set.
+Query the Open Syllabus Project's corpus of 32.9M university syllabi for structured author/title assignment data. Requires a research agreement with Open Syllabus (contact@opensyllabus.org); registers only when `OPEN_SYLLABUS_API_KEY` and `OPEN_SYLLABUS_API_URL` are both set.
 
 ```json
 {

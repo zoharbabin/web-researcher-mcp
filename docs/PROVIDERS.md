@@ -233,7 +233,7 @@ These providers back dedicated tools and are independent of the web search provi
 | `archive_source` | **[Internet Archive SPN](https://web.archive.org/save/)** | Save Page Now capture | No (keys raise reliability/limits) |
 | `brand_research` | **[BrandFetch](https://brandfetch.com/)** | Brand colors, fonts, logos, tagline, tone of voice (homepage meta + brand-page probing run unconditionally without a key) | No (`BRANDFETCH_API_KEY` optional) |
 | `company_recon` | **[crt.sh](https://crt.sh/)** + **[Wayback CDX](https://web.archive.org/cdx/search/cdx)** | Certificate Transparency log SANs, historical URL inventory, derived subdomains, lightweight web-search company summary | No |
-| `syllabus_search` | **[Open Syllabus](https://opensyllabus.org/)** | University syllabus assignment data — 32.9M syllabi, author/title frequency, co-assignment | Yes (research agreement — contact research@opensyllabus.org) |
+| `syllabus_search` | **[Open Syllabus](https://opensyllabus.org/)** | University syllabus assignment data — 32.9M syllabi, author/title frequency, co-assignment | Yes (research agreement — contact contact@opensyllabus.org) |
 | `gag_order_search` | **[PEN America](https://pen.org/)** | Educational gag order legislation tracker (state bills restricting classroom instruction) | Yes (Airtable personal access token) |
 
 **Notes:**
