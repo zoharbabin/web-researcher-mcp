@@ -473,7 +473,7 @@ func adminAuth(key, prevKey string, auditor audit.Auditor, handler http.HandlerF
 				if rid := auth.RequestIDFromContext(r.Context()); rid != "" {
 					ev.RequestID = rid
 				}
-				ev.Metadata = map[string]any{"path": r.URL.Path}
+				ev.Metadata = map[string]any{"path": sanitizeLogValue(r.URL.Path)}
 				auditor.Log(ev)
 			}
 			handler(w, r)
@@ -488,7 +488,7 @@ func adminAuth(key, prevKey string, auditor audit.Auditor, handler http.HandlerF
 			if rid := auth.RequestIDFromContext(r.Context()); rid != "" {
 				ev.RequestID = rid
 			}
-			ev.Metadata = map[string]any{"path": r.URL.Path}
+			ev.Metadata = map[string]any{"path": sanitizeLogValue(r.URL.Path)}
 			auditor.Log(ev)
 		}
 		http.Error(w, "unauthorized", http.StatusUnauthorized)

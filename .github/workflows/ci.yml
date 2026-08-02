@@ -6,6 +6,8 @@ on:
     tags: ["v*"]
   pull_request:
     branches: [main]
+  schedule:
+    - cron: "0 7 * * 1" # Weekly soak test, every Monday at 07:00 UTC
   workflow_dispatch:
     inputs:
       run_python_live:
@@ -511,10 +513,11 @@ jobs:
   # no unbounded goroutine/heap growth. Network-free (CHROME_PATH=disabled,
   # web_search asserted for transport success only), but deliberately NOT part
   # of the required `e2e` job — its own build tag keeps it out of `test-e2e`.
-  # Opt-in only via workflow_dispatch, mirroring python-live-e2e.
+  # Runs automatically on the weekly `schedule` trigger (network-free, so no
+  # rate-limit risk) and remains available on-demand via workflow_dispatch.
   soak-test:
     name: 🐢 Soak Test
-    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_soak_test == 'true' }}
+    if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_soak_test == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

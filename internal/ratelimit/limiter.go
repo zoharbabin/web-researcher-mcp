@@ -99,6 +99,13 @@ func (l *Limiter) WithDailyIncrementer(incr DailyIncrementer) *Limiter {
 // always 0 when no DailyIncrementer is configured.
 func (l *Limiter) FallbackCount() int64 { return l.redisFallback.Load() }
 
+// sanitizeLogValue strips CR/LF from a value before it reaches a log line, so
+// a crafted tenant ID can't forge additional log entries (CWE-117).
+func sanitizeLogValue(s string) string {
+	s = strings.ReplaceAll(s, "\r", "")
+	return strings.ReplaceAll(s, "\n", "")
+}
+
 func (l *Limiter) Allow(tenantID string) bool {
 	if !l.global.Allow() {
 		return false
@@ -121,7 +128,7 @@ func (l *Limiter) AllowDaily(tenantID string) bool {
 			return count <= int64(l.config.DailyQuota)
 		}
 		l.redisFallback.Add(1)
-		slog.Warn("rate limiter Redis fallback", "tenant", tenantID, "error", err)
+		slog.Warn("rate limiter Redis fallback", "tenant", sanitizeLogValue(tenantID), "error", err)
 	}
 
 	tl := l.getTenantLimiter(tenantID)

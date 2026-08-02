@@ -205,6 +205,13 @@ sync-lenses:
 # Full verification, matching CI. Run before opening a PR.
 verify: fmt-check vet lint sec vuln validate-lenses test-race test-e2e check-python-drift test-python build
 
+# Permanent regression gate for the v1.47.0 Operational Hardening milestone
+# (#467). Not part of `verify` — it re-runs lint/sec/vuln plus targeted tests
+# already covered there; run manually before cutting a release that touches
+# circuit breaker, rate limiter, scraper concurrency, or tenant isolation.
+harness-467:
+	bash scripts/harness-467.sh
+
 clean:
 	rm -f $(BINARY) coverage.out coverage.html
 

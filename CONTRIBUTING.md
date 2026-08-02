@@ -134,6 +134,16 @@ make test-fuzz FUZZTIME=5m
 go test ./internal/documents/... -run=^$ -fuzz=FuzzParsePDF -fuzztime=1m
 ```
 
+### Operational Hardening regression gate (#467)
+
+`make harness-467` re-runs the 6-gate regression suite for the v1.47.0 Operational Hardening milestone (circuit breaker, rate limiter, scraper concurrency, tenant isolation, dead-code, and E2E checks) in one pass. It isn't part of `make verify` — it re-checks lint/sec/vuln plus a curated set of tests already covered by CI, so it's a manual sanity pass rather than a duplicate CI job. Run it before cutting any release that touches `internal/circuit`, `internal/ratelimit`, `internal/scraper`, `internal/metrics`, or tenant-isolation code paths:
+
+```bash
+make harness-467
+```
+
+Logs land in the gitignored `.harness-out/` directory.
+
 ### Linting
 
 Tools are pinned in `go.mod` and invoked through `go tool` so every contributor and CI run uses byte-identical versions. Use the `make` targets, or the `go tool …` form if running directly — never the bare globally-installed binaries.
