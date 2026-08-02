@@ -1743,7 +1743,7 @@ Retrieve the full text of an academic paper from a single identifier — a DOI, 
 
 ## Tool 31: `syllabus_search`
 
-Query the Open Syllabus Project's corpus of 32.9M university syllabi for structured author/title assignment data — which institutions assign a given author or text, assignment frequency, and co-assignment patterns. Requires a research agreement with Open Syllabus (research@opensyllabus.org); registers only when `OPEN_SYLLABUS_API_KEY` and `OPEN_SYLLABUS_API_URL` are both set.
+Query the Open Syllabus Project's corpus of 32.9M university syllabi for structured author/title assignment data — which institutions assign a given author or text, assignment frequency, and co-assignment patterns. Requires a research agreement with Open Syllabus (contact@opensyllabus.org); registers only when `OPEN_SYLLABUS_API_KEY` and `OPEN_SYLLABUS_API_URL` are both set.
 
 ### Input Schema
 

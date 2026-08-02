@@ -201,7 +201,7 @@ type SearchConfig struct {
 	GitHubToken string // GITHUB_TOKEN
 
 	// OpenSyllabus optional credentials for syllabus_search. Requires a
-	// research agreement (contact research@opensyllabus.org); the tool
+	// research agreement (contact contact@opensyllabus.org); the tool
 	// registers only when both are set.
 	OpenSyllabusAPIKey string // OPEN_SYLLABUS_API_KEY
 	OpenSyllabusAPIURL string // OPEN_SYLLABUS_API_URL — configurable base URL
