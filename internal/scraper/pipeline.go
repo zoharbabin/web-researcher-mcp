@@ -3,6 +3,7 @@ package scraper
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -16,10 +17,17 @@ import (
 )
 
 type PipelineConfig struct {
-	MaxConcurrency  int
-	AllowPrivateIPs bool
-	AllowedDomains  []string
-	ChromePath      string
+	MaxConcurrency int
+	// MaxBrowserConcurrency bounds concurrent browser-tier (go-rod) launches
+	// separately from MaxConcurrency (#472). A browser scrape can hold its slot
+	// for up to 30s (browser.go's per-page timeout) while every other tier
+	// resolves in a few seconds at most; sharing one pool let a handful of slow
+	// browser scrapes occupy every slot and starve fast markdown/stealth/html
+	// requests for unrelated URLs. Zero ⇒ NewPipeline defaults it to 2.
+	MaxBrowserConcurrency int
+	AllowPrivateIPs       bool
+	AllowedDomains        []string
+	ChromePath            string
 	// ExaAPIKey, when set, enables the Exa /contents extraction tier as a final
 	// fallback (after markdown→stealth→html→browser all fail). Exa is a paid API,
 	// so it is deliberately last: the free tiers win the overwhelming majority of
@@ -264,14 +272,24 @@ func stampTier(r *ScrapeResult, tier string) *ScrapeResult {
 }
 
 type Pipeline struct {
-	client    *http.Client
-	semaphore chan struct{}
-	config    PipelineConfig
+	client *http.Client
+	// semaphore gates the fast HTTP-based tiers (markdown, stealth, jina, html,
+	// exa) and every non-tiered route (YouTube, Twitter, HN, Bsky, GitHub
+	// content, documents). browserSemaphore gates the browser tier separately
+	// (#472) — kept as two independent pools rather than one shared pool sized
+	// by tier so a burst of slow browser scrapes can never exhaust the slots
+	// fast requests need, and vice versa.
+	semaphore        chan struct{}
+	browserSemaphore chan struct{}
+	config           PipelineConfig
 }
 
 func NewPipeline(cfg PipelineConfig) *Pipeline {
 	if cfg.MaxConcurrency <= 0 {
 		cfg.MaxConcurrency = 5
+	}
+	if cfg.MaxBrowserConcurrency <= 0 {
+		cfg.MaxBrowserConcurrency = 2
 	}
 	if cfg.MaxHTMLBytes <= 0 {
 		cfg.MaxHTMLBytes = 8 << 20 // 8 MB
@@ -281,9 +299,31 @@ func NewPipeline(cfg PipelineConfig) *Pipeline {
 	}
 
 	return &Pipeline{
-		client:    NewSSRFSafeClient(cfg.AllowPrivateIPs),
-		semaphore: make(chan struct{}, cfg.MaxConcurrency),
-		config:    cfg,
+		client:           NewSSRFSafeClient(cfg.AllowPrivateIPs),
+		semaphore:        make(chan struct{}, cfg.MaxConcurrency),
+		browserSemaphore: make(chan struct{}, cfg.MaxBrowserConcurrency),
+		config:           cfg,
+	}
+}
+
+// acquireTier blocks until a slot is free in the semaphore pool for the given
+// tier name, or ctx is done, whichever happens first (#472). "browser" draws
+// from the small, dedicated browserSemaphore; every other tier name —
+// including "" for the non-tiered native routes (YouTube/Twitter/HN/Bsky/
+// GitHub-content/document) — draws from the shared fast-tier semaphore. The
+// returned release func must be called exactly once when the caller's single
+// attempt (not the whole multi-tier fallback sequence) finishes, so a slow
+// browser attempt never occupies a slot a fast markdown/html request needs.
+func (p *Pipeline) acquireTier(ctx context.Context, tier string) (func(), error) {
+	sem := p.semaphore
+	if tier == "browser" {
+		sem = p.browserSemaphore
+	}
+	select {
+	case sem <- struct{}{}:
+		return func() { <-sem }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
 }
 
@@ -297,39 +337,53 @@ func (p *Pipeline) Scrape(ctx context.Context, rawURL string, maxLength int) (*S
 
 	url := rawURL
 
-	// Acquire semaphore
-	select {
-	case p.semaphore <- struct{}{}:
-		defer func() { <-p.semaphore }()
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-
 	if !p.isDomainAllowed(url) {
 		return nil, validationError(url, "", nil, "access blocked: domain not in allowed list")
 	}
 
-	var result *ScrapeResult
-	var err error
-
+	// The tiered fallback path (default case) acquires per-tier-attempt
+	// internally (#472), not here, so a slow browser attempt can't hold a slot
+	// this call's fast tiers need for an unrelated concurrent request. Every
+	// native route below has no internal tier ladder, so it acquires one
+	// fast-tier slot up front for its single attempt, same as pre-#472.
+	var nativeRoute func() (*ScrapeResult, error)
 	switch {
 	case isYouTubeURL(url):
-		result, err = p.scrapeYouTube(ctx, url, maxLength)
+		nativeRoute = func() (*ScrapeResult, error) { return p.scrapeYouTube(ctx, url, maxLength) }
 	case isTwitterURL(url):
-		result, err = p.scrapeTwitter(ctx, url, maxLength)
+		nativeRoute = func() (*ScrapeResult, error) { return p.scrapeTwitter(ctx, url, maxLength) }
 	case isHNURL(url):
-		result, err = p.scrapeHN(ctx, url, maxLength)
+		nativeRoute = func() (*ScrapeResult, error) { return p.scrapeHN(ctx, url, maxLength) }
 	case isBskyURL(url):
-		result, err = p.scrapeBsky(ctx, url, maxLength)
+		nativeRoute = func() (*ScrapeResult, error) { return p.scrapeBsky(ctx, url, maxLength) }
 	case isGitHubContentURL(url):
-		result, err = p.scrapeGitHubContent(ctx, url, maxLength)
+		nativeRoute = func() (*ScrapeResult, error) { return p.scrapeGitHubContent(ctx, url, maxLength) }
 	case isDocumentURL(url):
-		result, err = p.scrapeDocument(ctx, url, maxLength)
-	default:
+		nativeRoute = func() (*ScrapeResult, error) { return p.scrapeDocument(ctx, url, maxLength) }
+	}
+
+	var result *ScrapeResult
+	var err error
+	if nativeRoute != nil {
+		release, aerr := p.acquireTier(ctx, "")
+		if aerr != nil {
+			return nil, aerr
+		}
+		result, err = nativeRoute()
+		release()
+	} else {
 		result, err = p.scrapeWithTieredFallback(ctx, url, maxLength)
 	}
 
 	if err != nil {
+		// A ctx cancellation/deadline surfaces from acquireTier as the bare
+		// context error, not a *ScrapeError — pass it through as-is rather
+		// than reclassifying it via string-matching (#472; matches the
+		// pre-existing contract callers already depend on, e.g.
+		// TestPipeline_ScrapeContextCanceled).
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
+		}
 		return nil, classifyRawError(err, url)
 	}
 	stampSparsity(result)
@@ -392,7 +446,13 @@ func (p *Pipeline) tieredFallback(ctx context.Context, url string, maxLength, de
 
 	// For known SPA domains, prefer the browser scraper first
 	if hasBrowser && isSPADomain(url) {
-		if result, err := p.scrapeBrowser(ctx, url, maxLength, raw); err == nil && result != nil && len(result.Content) > 100 && !looksLikeBotWall(result.Content) {
+		release, aerr := p.acquireTier(ctx, "browser")
+		if aerr != nil {
+			return nil, aerr
+		}
+		result, err := p.scrapeBrowser(ctx, url, maxLength, raw)
+		release()
+		if err == nil && result != nil && len(result.Content) > 100 && !looksLikeBotWall(result.Content) {
 			return stampTier(result, "browser"), nil
 		}
 	}
@@ -451,7 +511,12 @@ func (p *Pipeline) tieredFallback(ctx context.Context, url string, maxLength, de
 	var iframeSeen map[string]bool
 
 	for _, tier := range tiers {
+		release, aerr := p.acquireTier(ctx, tier.name)
+		if aerr != nil {
+			return nil, aerr
+		}
 		result, err := tier.fn(ctx, url, maxLength, raw)
+		release()
 		// A bot/JS-wall interstitial (e.g. "Checking your browser…", a CAPTCHA shell)
 		// is returned with a 200 and short placeholder text. Do NOT accept it as
 		// content — record it as a blocked outcome so the composite error is
@@ -787,38 +852,44 @@ func (p *Pipeline) ScrapeRaw(ctx context.Context, rawURL string, maxLength int) 
 
 	url := rawURL
 
-	select {
-	case p.semaphore <- struct{}{}:
-		defer func() { <-p.semaphore }()
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-
 	if !p.isDomainAllowed(url) {
 		return nil, blockedError(url, "", nil, "domain not in allowed list")
 	}
 
-	var result *ScrapeResult
-	var err error
-
+	var nativeRoute func() (*ScrapeResult, error)
 	switch {
 	case isYouTubeURL(url):
-		result, err = p.scrapeYouTube(ctx, url, maxLength)
+		nativeRoute = func() (*ScrapeResult, error) { return p.scrapeYouTube(ctx, url, maxLength) }
 	case isTwitterURL(url):
-		result, err = p.scrapeTwitter(ctx, url, maxLength)
+		nativeRoute = func() (*ScrapeResult, error) { return p.scrapeTwitter(ctx, url, maxLength) }
 	case isHNURL(url):
-		result, err = p.scrapeHN(ctx, url, maxLength)
+		nativeRoute = func() (*ScrapeResult, error) { return p.scrapeHN(ctx, url, maxLength) }
 	case isBskyURL(url):
-		result, err = p.scrapeBsky(ctx, url, maxLength)
+		nativeRoute = func() (*ScrapeResult, error) { return p.scrapeBsky(ctx, url, maxLength) }
 	case isGitHubContentURL(url):
-		result, err = p.scrapeGitHubContent(ctx, url, maxLength)
+		nativeRoute = func() (*ScrapeResult, error) { return p.scrapeGitHubContent(ctx, url, maxLength) }
 	case isDocumentURL(url):
-		result, err = p.scrapeDocument(ctx, url, maxLength)
-	default:
+		nativeRoute = func() (*ScrapeResult, error) { return p.scrapeDocument(ctx, url, maxLength) }
+	}
+
+	var result *ScrapeResult
+	var err error
+	if nativeRoute != nil {
+		release, aerr := p.acquireTier(ctx, "")
+		if aerr != nil {
+			return nil, aerr
+		}
+		result, err = nativeRoute()
+		release()
+	} else {
+		// tieredFallback acquires per-tier-attempt internally (#472).
 		result, err = p.tieredFallback(ctx, url, maxLength, 0, true)
 	}
 
 	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
+		}
 		return nil, classifyRawError(err, url)
 	}
 
@@ -848,17 +919,18 @@ func (p *Pipeline) ExtractLinks(ctx context.Context, rawURL string) []string {
 	if !p.browserEnabled() {
 		return nil
 	}
-	select {
-	case p.semaphore <- struct{}{}:
-		defer func() { <-p.semaphore }()
-	case <-ctx.Done():
+	// Browser-tier slot, not the shared fast-tier one (#472) — this is a
+	// go-rod render, same cost class as scrapeBrowser.
+	release, aerr := p.acquireTier(ctx, "browser")
+	if aerr != nil {
 		return nil
 	}
+	defer release()
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	bp := getBrowserPool(p.config.ChromePath, p.config.MaxConcurrency)
+	bp := getBrowserPool(p.config.ChromePath, p.config.MaxBrowserConcurrency)
 	bp.mu.Lock()
 	browser := bp.browser
 	bp.mu.Unlock()

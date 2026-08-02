@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"context"
 	"errors"
 	"net/http/httptest"
 	"testing"
@@ -67,6 +68,42 @@ func TestRecordTenantCall(t *testing.T) {
 	}
 }
 
+// TestTenantStatsBounded proves #475: tenantStats never grows past maxTenants
+// regardless of how many distinct tenant IDs call in, and eviction removes
+// the least-recently-active tenant, not an arbitrary one.
+func TestTenantStatsBounded(t *testing.T) {
+	const maxTenants = 5
+	c := NewCollectorWithMaxTenants(maxTenants)
+
+	const totalTenants = 10
+	for i := 0; i < totalTenants; i++ {
+		c.RecordTenantCall(tenantID(i), "google", time.Millisecond, false, false)
+		time.Sleep(time.Millisecond) // force distinct, increasing LastCalled per tenant
+	}
+
+	all := c.GetTenantStats("")
+	if len(all) > maxTenants {
+		t.Fatalf("expected tenantStats bounded at %d, got %d entries", maxTenants, len(all))
+	}
+
+	// The 5 most-recently-active tenants (the last 5 inserted) must survive;
+	// the 5 oldest must have been evicted.
+	for i := 0; i < totalTenants-maxTenants; i++ {
+		if got := c.GetTenantStats(tenantID(i)); got != nil {
+			t.Errorf("expected tenant %s to be evicted as least-recently-active, but it survived", tenantID(i))
+		}
+	}
+	for i := totalTenants - maxTenants; i < totalTenants; i++ {
+		if got := c.GetTenantStats(tenantID(i)); got == nil {
+			t.Errorf("expected tenant %s (recently active) to survive eviction", tenantID(i))
+		}
+	}
+}
+
+func tenantID(i int) string {
+	return "tenant-" + string(rune('a'+i))
+}
+
 func TestRecordCacheHit(t *testing.T) {
 	c := NewCollector()
 
@@ -131,7 +168,7 @@ func TestHTTPHandler(t *testing.T) {
 	c.RecordToolCall("web_search", time.Millisecond, nil, "", false)
 
 	handler := c.HTTPHandler()
-	req := httptest.NewRequest("GET", "/metrics", nil)
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/metrics", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 

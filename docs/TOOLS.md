@@ -840,7 +840,7 @@ An optional iteration-assist level (#67). The server stays **infrastructure, not
 - Two-tier: in-memory index (lightweight) + encrypted disk (full session JSON)
 - Write-through on every step (crash-safe: temp → fsync → rename)
 - Index rebuilt from disk on server startup — no data loss across restarts
-- Behind a load balancer, use session-affinity (sticky sessions) so clients reconnect to the same instance
+- This is app-level research-continuity state, not the MCP transport session (which runs stateless — see [DEPLOYMENT.md → Horizontal Scaling](DEPLOYMENT.md#horizontal-scaling)). Behind a multi-instance load balancer without `REDIS_URL`, a step can land on a pod that doesn't hold this session; set `REDIS_URL` for cross-pod sessions (preferred), or use sticky sessions as a fallback
 
 ---
 
@@ -2063,7 +2063,7 @@ Read-only, on-demand views exposed as MCP Resources (not tools). Read with `Read
 
 Every tool call is logged through `deps.Auditor.Log()` as an `audit.AuditEvent` (`internal/audit/logger.go`) carrying `tenant_id`, `user_id`, `request_id`, `tool_name`, `duration_ms`, `success`, and an optional `error_code` (field names are the JSON tags on `AuditEvent`). Tenant and user identity are read from the request context (`auth.TenantIDFromContext` / `auth.UserIDFromContext`).
 
-Privacy: the raw query text is attached to `metadata.query` **only** when `AUDIT_INCLUDE_REQUEST_BODY` is enabled (`Auditor.IncludeRequestBody()`); otherwise just `metadata.query_length` is recorded. All metadata string values and error strings pass through `audit.MaskSecrets` so credentials never persist. Cache keys and session keys are tenant-scoped, so one tenant cannot read another's cached or session data.
+Privacy: raw query text is never attached to audit metadata, regardless of configuration. `metadata.query_length` is always recorded; when `AUDIT_INCLUDE_REQUEST_BODY` is enabled (`Auditor.IncludeRequestBody()`), a SHA-256 `metadata.query_hash` is added alongside it so an operator can correlate repeated queries without the literal text ever reaching the audit sink. All metadata string values and error strings pass through `audit.MaskSecrets` so credentials never persist. Cache keys and session keys are tenant-scoped, so one tenant cannot read another's cached or session data.
 
 ### Unified Error Handling
 

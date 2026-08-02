@@ -69,6 +69,7 @@ hooks/            # Claude Code PLUGIN hook manifest (hooks.json) — NOT a git 
 bin/              # Claude Code plugin installer (bin/install.sh) — distinct from the root curl installer install.sh
 .claude-plugin/   # Claude Code plugin manifest — do not modify without understanding the plugin bootstrap
 mcpb/             # .mcpb bundle manifest template (consumed by scripts/build-mcpb.sh at release)
+deploy/k8s-local/ # Generic (non-personal) manifests for local multi-pod k8s parity testing — see docs/K8S_LOCAL_DEV.md
 ```
 
 Registry/manifest files (root, each read by a different external tool): `server.json` (MCP registry), `smithery.yaml` (Smithery), `glama.json` (Glama), `.mcp.json` (local MCP client config — edit this to wire env vars for local testing), `VERSION` (source of truth, synced by `scripts/sync-version.sh`). Two Dockerfiles are intentional: `Dockerfile` (local/Makefile) and `Dockerfile.release` (GoReleaser). Two installers are intentional: root `install.sh`/`install.ps1` (curl installers) and `bin/install.sh` (plugin hook).
@@ -194,6 +195,7 @@ Every doc and inline comment must reflect the current codebase exactly. No drift
 | `docs/SECURITY_AND_COMPLIANCE.md` | Security, privacy & compliance guide (all audiences) |
 | `docs/SECURITY.md` | Technical security architecture (threat model, defense layers) |
 | `docs/DEPLOYMENT.md` | Docker, K8s, client configs, env vars, admin endpoints, scaling |
+| `docs/K8S_LOCAL_DEV.md` | Standing up `deploy/k8s-local/` for local multi-pod k8s parity testing |
 | `docs/API_SETUP.md` | Getting API keys for each provider |
 | `docs/PROVIDERS.md` | Provider comparison: capability matrix, free tiers, quick-pick guide |
 | `docs/EXAMPLES.md` | Example tool calls and expected response shapes |

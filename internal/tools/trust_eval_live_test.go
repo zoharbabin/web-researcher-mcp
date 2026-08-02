@@ -33,30 +33,87 @@ import (
 // goldDOI is one labeled citation-existence/retraction case.
 type goldDOI struct {
 	name          string
+	category      string // gold-set category, for per-category precision/recall (#481)
 	doi           string
 	wantExists    bool // expect the DOI to resolve in Crossref
 	wantRetracted bool // expect retractionStatus.retracted == true
 }
 
-// trustGoldDOIs is the curated existence + retraction gold set. Kept small and
-// well-chosen (a few dozen entries is enough to be credible) and pinned to stable,
-// famous identifiers so the eval is reproducible.
+// Gold-set categories (#481). "canonical" is the original famous/easy set;
+// the rest were added to cover harder, more realistic cases: recent
+// retractions, non-English/regional publishers, preprint-then-retracted
+// chains, structurally unusual (but real) DOIs, and a larger fabricated set
+// spanning multiple real publisher prefixes.
+const (
+	catCanonical     = "canonical"
+	catRecentRetract = "recent_retraction"
+	catRegionalPub   = "regional_publisher"
+	catPreprintChain = "preprint_retraction_chain"
+	catMalformedEdge = "malformed_edge_case"
+	catFabricated    = "fabricated"
+)
+
+// trustGoldDOIs is the curated existence + retraction gold set, categorized so
+// TestTrustSuiteAccuracy_Existence can report precision/recall per category as
+// well as in aggregate. Every entry has been individually verified against the
+// live doi.org handle registry / Crossref / Retraction Watch at the time it was
+// added (see #481) — this is not a hand-guessed list.
 var trustGoldDOIs = []goldDOI{
-	// ── Known-RETRACTED (must flag retracted=true) ───────────────────────────
-	{"Wakefield 1998 (retracted MMR/autism)", "10.1016/S0140-6736(97)11096-0", true, true},
-	{"Obokata STAP cells (retracted)", "10.1038/nature12968", true, true},
-	// ── Known-REAL, not retracted (must exist=true, retracted=false) ─────────
-	{"Watson & Crick 1953 DNA", "10.1038/171737a0", true, false},
-	{"AlphaFold (Jumper 2021)", "10.1038/s41586-021-03819-2", true, false},
-	{"Hwang & Reich 2001 (Science)", "10.1126/science.1058040", true, false},
-	{"Shannon 1948 (reprinted DOI)", "10.1002/j.1538-7305.1948.tb01338.x", true, false},
+	// ── canonical: famous, stable identifiers (original set) ────────────────
+	{"Wakefield 1998 (retracted MMR/autism)", catCanonical, "10.1016/S0140-6736(97)11096-0", true, true},
+	{"Obokata STAP cells (retracted)", catCanonical, "10.1038/nature12968", true, true},
+	{"Watson & Crick 1953 DNA", catCanonical, "10.1038/171737a0", true, false},
+	{"AlphaFold (Jumper 2021)", catCanonical, "10.1038/s41586-021-03819-2", true, false},
+	{"Hwang & Reich 2001 (Science)", catCanonical, "10.1126/science.1058040", true, false},
+	{"Shannon 1948 (reprinted DOI)", catCanonical, "10.1002/j.1538-7305.1948.tb01338.x", true, false},
 	// arXiv DOI: registered through DataCite, 404 in Crossref, and NOT carried under
 	// this DOI by OpenAlex (which re-mints its own) — must still resolve exists=true
 	// via the authoritative doi.org handle registry (#226).
-	{"Transformer/arXiv DOI (DataCite-registered, Crossref-absent)", "10.48550/arXiv.1706.03762", true, false},
-	// ── Known-FABRICATED (plausible-looking but nonexistent → exists=false) ──
-	{"fabricated DOI (valid prefix, nonexistent suffix)", "10.1038/s41586-021-99999999-x", false, false},
-	{"fabricated DOI 2 (nonexistent)", "10.1016/j.cell.2099.13.013", false, false},
+	{"Transformer/arXiv DOI (DataCite-registered, Crossref-absent)", catCanonical, "10.48550/arXiv.1706.03762", true, false},
+
+	// ── recent_retraction: retracted within roughly the last 12-18 months ───
+	{"Arsenic-life bacterium (Wolfe-Simon 2010, Science; retracted 2025)", catRecentRetract, "10.1126/science.1197258", true, true},
+	{"Duckworth et al. 2011 test-motivation/IQ (PNAS; retracted 2025)", catRecentRetract, "10.1073/pnas.1018601108", true, true},
+	{"Luo et al. 2022 fetal cerebellar atlas (Nature; retracted 2025)", catRecentRetract, "10.1038/s41586-022-05487-2", true, true},
+	{"Kotz/Levermann/Wenz 2024 climate econ commitment (Nature; retracted 2025)", catRecentRetract, "10.1038/s41586-024-07219-0", true, true},
+	{"Liang et al. 2024 CRISPR RNA-targeting screens (Cell; retracted 2025)", catRecentRetract, "10.1016/j.cell.2024.10.021", true, true},
+
+	// ── regional_publisher: real, non-retracted, non-US/UK-publisher DOIs ───
+	{"Lim et al. 2020 COVID-19 index patient (J Korean Med Sci)", catRegionalPub, "10.3346/jkms.2020.35.e79", true, false},
+	{"Kutsumi et al. 2012 puppy training (J Vet Med Sci, Japan)", catRegionalPub, "10.1292/jvms.12-0008", true, false},
+	{"China NHC 2022 diabetes primary-care guideline", catRegionalPub, "10.3760/cma.j.cn112138-20220120-000063", true, false},
+	{"Croda et al. 2020 COVID-19 in Brazil (Rev Soc Bras Med Trop, SciELO)", catRegionalPub, "10.1590/0037-8682-0167-2020", true, false},
+	{"Pe'er 2016 eyelid tumor pathology (Indian J Ophthalmology)", catRegionalPub, "10.4103/0301-4738.181752", true, false},
+
+	// ── preprint_retraction_chain: preprint + its published version, both
+	// withdrawn/retracted, or a preprint formally withdrawn on its own ──────
+	{"Elgazzar et al. ivermectin COVID-19 preprint (Research Square, withdrawn)", catPreprintChain, "10.21203/rs.3.rs-100956/v1", true, true},
+	{"Pradhan et al. spike-protein/HIV-1 preprint (bioRxiv, self-withdrawn 2020)", catPreprintChain, "10.1101/2020.01.30.927871", true, true},
+	{"Vaghefi et al. additive-manufacturing RL — published version (retracted 2024)", catPreprintChain, "10.1016/j.addma.2024.104121", true, true},
+	{"Aneh/Ngwasiri et al. Dacryodes extraction — published version (Heliyon, retracted 2026)", catPreprintChain, "10.1016/j.heliyon.2023.e16443", true, true},
+
+	// ── malformed_edge_case: real DOIs with structurally unusual suffixes
+	// (non-Crossref registrars, dotted sub-component suffixes) — tests
+	// resolver robustness, not typo-tolerance ────────────────────────────────
+	{"Zenodo software release (DataCite registrar)", catMalformedEdge, "10.5281/zenodo.1212303", true, false},
+	{"Figshare teaching dataset (DataCite registrar)", catMalformedEdge, "10.6084/m9.figshare.1314459", true, false},
+	{"PANGAEA dataset (non-publisher registrant prefix)", catMalformedEdge, "10.1594/PANGAEA.873570", true, false},
+	{"Dryad dataset (short alphanumeric suffix)", catMalformedEdge, "10.5061/dryad.052q5", true, false},
+	{"PLOS supplementary file (dotted sub-component suffix)", catMalformedEdge, "10.1371/journal.pone.0184843.s001", true, false},
+
+	// ── fabricated: plausible-looking but nonexistent, spanning multiple
+	// real publisher prefixes (must all resolve exists=false) ──────────────
+	{"fabricated (Nature prefix)", catFabricated, "10.1038/s41586-021-99999999-x", false, false},
+	{"fabricated (Cell/Elsevier prefix)", catFabricated, "10.1016/j.cell.2099.13.013", false, false},
+	{"fabricated (Nature prefix 2)", catFabricated, "10.1038/s41586-023-88888-1", false, false},
+	{"fabricated (Wiley Angewandte Chemie prefix)", catFabricated, "10.1002/anie.202299999", false, false},
+	{"fabricated (Springer neurology journal prefix)", catFabricated, "10.1007/s00415-022-77777-x", false, false},
+	{"fabricated (Science/AAAS prefix)", catFabricated, "10.1126/science.abz9999", false, false},
+	{"fabricated (Elsevier Cell prefix 2)", catFabricated, "10.1016/j.cell.2023.09.999", false, false},
+	{"fabricated (PNAS prefix)", catFabricated, "10.1073/pnas.2299999120", false, false},
+	{"fabricated (PLOS Biology prefix)", catFabricated, "10.1371/journal.pbio.4009999", false, false},
+	{"fabricated (Wiley Advanced Materials prefix)", catFabricated, "10.1002/adma.202399999", false, false},
+	{"fabricated (Nature Communications prefix)", catFabricated, "10.1038/s41467-024-99999-9", false, false},
 }
 
 func newEvalDeps(t *testing.T) Dependencies {
@@ -112,6 +169,16 @@ func (p *prf) observe(predictedPositive, actualPositive bool) {
 }
 
 func (p *prf) report(t *testing.T, signal string) {
+	p.reportBudgeted(t, signal, 0)
+}
+
+// reportBudgeted is report with an explicit false-positive tolerance (#482).
+// The trust suite's whole point is that a FALSE POSITIVE (calling a real
+// source fake, or a clean paper retracted) is the unacceptable error — it
+// destroys trust — so maxFP must stay 0 for every category except the small
+// set of genuinely ambiguous ones calibrated in reportRetraction below.
+// Recall may lag (we under-flag by design) and is never gated here.
+func (p *prf) reportBudgeted(t *testing.T, signal string, maxFP int) {
 	precision, recall := 1.0, 1.0
 	if p.tp+p.fp > 0 {
 		precision = float64(p.tp) / float64(p.tp+p.fp)
@@ -121,21 +188,32 @@ func (p *prf) report(t *testing.T, signal string) {
 	}
 	t.Logf("[%s] precision=%.2f recall=%.2f (tp=%d fp=%d tn=%d fn=%d)",
 		signal, precision, recall, p.tp, p.fp, p.tn, p.fn)
-	// The trust suite's whole point: a FALSE POSITIVE (calling a real source fake,
-	// or a clean paper retracted) is the unacceptable error — it destroys trust.
-	// Demand zero false positives; recall may lag (we under-flag by design).
-	if p.fp > 0 {
-		t.Errorf("[%s] %d FALSE POSITIVES — the trust suite must never mislabel a legitimate source", signal, p.fp)
+	if p.fp > maxFP {
+		t.Errorf("[%s] %d FALSE POSITIVES (budget %d) — the trust suite must never mislabel a legitimate source beyond its calibrated tolerance", signal, p.fp, maxFP)
+	} else if p.fp > 0 {
+		t.Logf("[%s] %d false positive(s) within calibrated budget (%d) — see #482", signal, p.fp, maxFP)
 	}
 }
 
+// recentRetractionFPBudget (#482) is the only nonzero false-positive
+// tolerance in the trust eval. It applies solely to the recent_retraction
+// category's retraction signal: a retraction registered in the last
+// 12-18 months may genuinely lag Crossref/Retraction Watch indexing on the
+// day this test runs, which is a real-world timing gap, not a resolver bug.
+// Every other category (including recent_retraction's own existence signal)
+// stays at strict zero-tolerance.
+const recentRetractionFPBudget = 1
+
 // TestTrustSuiteAccuracy_Existence measures verify_citation's existence + retraction
-// signals over the gold DOI set.
+// signals over the gold DOI set, in aggregate and per category (#481) — the
+// aggregate number alone can hide a category (e.g. regional publishers) that
+// is doing much worse than the "canonical famous cases" average suggests.
 func TestTrustSuiteAccuracy_Existence(t *testing.T) {
 	deps := newEvalDeps(t)
 	ctx := context.Background()
 
 	var existence, retraction prf
+	byCategory := map[string]*struct{ existence, retraction prf }{}
 	for _, g := range trustGoldDOIs {
 		out := map[string]any{}
 		var prov []string
@@ -151,10 +229,36 @@ func TestTrustSuiteAccuracy_Existence(t *testing.T) {
 		}
 		retraction.observe(gotRetracted, g.wantRetracted)
 
-		t.Logf("%-55s exists=%v(want %v) retracted=%v(want %v)", g.name, gotExists, g.wantExists, gotRetracted, g.wantRetracted)
+		cat := byCategory[g.category]
+		if cat == nil {
+			cat = &struct{ existence, retraction prf }{}
+			byCategory[g.category] = cat
+		}
+		cat.existence.observe(gotExists, g.wantExists)
+		cat.retraction.observe(gotRetracted, g.wantRetracted)
+
+		t.Logf("[%s] %-55s exists=%v(want %v) retracted=%v(want %v)", g.category, g.name, gotExists, g.wantExists, gotRetracted, g.wantRetracted)
 	}
-	existence.report(t, "existence")
-	retraction.report(t, "retraction")
+
+	for _, cat := range []string{catCanonical, catRecentRetract, catRegionalPub, catPreprintChain, catMalformedEdge, catFabricated} {
+		c, ok := byCategory[cat]
+		if !ok {
+			continue
+		}
+		c.existence.report(t, "existence:"+cat)
+		// recent_retraction (#482) is the sole category with a nonzero budget:
+		// a retraction registered in the last 12-18 months can lag indexing on
+		// the day this runs, so the retraction signal alone gets calibrated
+		// slack here. Every other category, and this category's own existence
+		// signal, stays at report()'s strict zero-tolerance.
+		if cat == catRecentRetract {
+			c.retraction.reportBudgeted(t, "retraction:"+cat, recentRetractionFPBudget)
+		} else {
+			c.retraction.report(t, "retraction:"+cat)
+		}
+	}
+	existence.report(t, "existence:aggregate")
+	retraction.report(t, "retraction:aggregate")
 }
 
 // TestTrustSuiteAccuracy_Mischaracterization measures audit_bibliography's claim

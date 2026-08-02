@@ -27,6 +27,7 @@ Thumbs.db
 # Test
 coverage.out
 *.test
+.coverage
 
 # Vendor (if using)
 /vendor/

@@ -2,6 +2,7 @@ package circuit
 
 import (
 	"errors"
+	"math/rand"
 	"sync"
 	"time"
 )
@@ -39,6 +40,7 @@ type Breaker struct {
 	state            State
 	failures         int
 	lastFailure      time.Time
+	resetJitter      time.Duration
 	halfOpenAttempts int
 	config           Config
 }
@@ -75,6 +77,20 @@ func (b *Breaker) Execute(fn func() error) error {
 	return nil
 }
 
+// Ready reports whether the breaker currently permits a request: always true
+// when Closed; true when Open only past ResetTimeout+jitter (performing the
+// Open->HalfOpen transition as a side effect, same as Execute's own
+// pre-check); true when HalfOpen only while probe attempts remain. Callers
+// that must decide whether to even attempt a provider without immediately
+// wrapping the call in Execute — e.g. a fallback router skipping to the next
+// provider in priority order — need this, not the passive State(), which
+// never performs the timeout-elapsed transition on its own and would leave a
+// tripped breaker permanently Open once nothing ever calls Execute on it
+// again (#469).
+func (b *Breaker) Ready() bool {
+	return b.allowRequest()
+}
+
 func (b *Breaker) allowRequest() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -83,7 +99,7 @@ func (b *Breaker) allowRequest() bool {
 	case StateClosed:
 		return true
 	case StateOpen:
-		if time.Since(b.lastFailure) > time.Duration(b.config.ResetTimeout)*time.Second {
+		if time.Since(b.lastFailure) > time.Duration(b.config.ResetTimeout)*time.Second+b.resetJitter {
 			b.state = StateHalfOpen
 			b.halfOpenAttempts = 0
 			return true
@@ -99,6 +115,7 @@ func (b *Breaker) onSuccess() {
 	b.state = StateClosed
 	b.failures = 0
 	b.halfOpenAttempts = 0
+	b.resetJitter = 0
 }
 
 // onFailure records a failure and updates the circuit state. A wrapped
@@ -115,6 +132,7 @@ func (b *Breaker) onFailure(err error) {
 
 	if errors.Is(err, ErrRateLimit) {
 		b.state = StateOpen
+		b.resetJitter = b.newResetJitter()
 		return
 	}
 
@@ -123,11 +141,26 @@ func (b *Breaker) onFailure(err error) {
 	case StateClosed:
 		if b.failures >= b.config.FailureThreshold {
 			b.state = StateOpen
+			b.resetJitter = b.newResetJitter()
 		}
 	case StateHalfOpen:
 		b.state = StateOpen
 		b.halfOpenAttempts++
+		b.resetJitter = b.newResetJitter()
 	}
+}
+
+// newResetJitter returns a random duration in [0, ResetTimeout/5) — up to 20%
+// of the configured reset timeout — added to the half-open eligibility check.
+// Without it, every breaker tripped by the same outage becomes eligible to
+// probe the recovering provider at the exact same instant, producing a
+// synchronized retry thundering-herd (#471).
+func (b *Breaker) newResetJitter() time.Duration {
+	maxJitter := time.Duration(b.config.ResetTimeout) * time.Second / 5
+	if maxJitter <= 0 {
+		return 0
+	}
+	return time.Duration(rand.Int63n(int64(maxJitter))) // #nosec G404 -- jitter for retry timing, not security-sensitive
 }
 
 func (b *Breaker) State() State {
@@ -141,4 +174,5 @@ func (b *Breaker) Reset() {
 	defer b.mu.Unlock()
 	b.state = StateClosed
 	b.failures = 0
+	b.resetJitter = 0
 }

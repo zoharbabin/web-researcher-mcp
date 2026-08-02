@@ -201,6 +201,98 @@ func TestLoadDefaults(t *testing.T) {
 	}
 }
 
+// TestLoadCacheIsolationRequiredWithOAuth proves #484's startup guard: once
+// OAUTH_ISSUER_URL is configured (real multi-tenant HTTP mode) and
+// CACHE_ISOLATION is left unset, Load must fail rather than silently
+// defaulting to "shared" — the footgun this issue exists to close.
+func TestLoadCacheIsolationRequiredWithOAuth(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("PORT", "8080")
+	t.Setenv("OAUTH_ISSUER_URL", "https://auth.example.com")
+	t.Setenv("CACHE_ISOLATION", "")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error when OAUTH_ISSUER_URL is set and CACHE_ISOLATION is unset, got nil")
+	} else if !strings.Contains(err.Error(), "CACHE_ISOLATION") {
+		t.Errorf("expected error to mention CACHE_ISOLATION, got: %v", err)
+	}
+}
+
+// TestLoadCacheIsolationExplicitSharedAllowedWithOAuth proves the guard
+// accepts an explicit "shared" — the point is deliberateness, not forcing
+// "tenant" on every OAuth deployment.
+func TestLoadCacheIsolationExplicitSharedAllowedWithOAuth(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("PORT", "8080")
+	t.Setenv("OAUTH_ISSUER_URL", "https://auth.example.com")
+	t.Setenv("CACHE_ISOLATION", "shared")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error with explicit CACHE_ISOLATION=shared: %v", err)
+	}
+	if cfg.CacheIsolation != "shared" {
+		t.Errorf("expected CacheIsolation=shared, got %s", cfg.CacheIsolation)
+	}
+}
+
+// TestLoadCacheIsolationDefaultsWithoutOAuth proves the zero-config/STDIO
+// path is unaffected: no PORT or no OAUTH_ISSUER_URL means the historical
+// default ("shared") still applies without requiring an explicit value.
+func TestLoadCacheIsolationDefaultsWithoutOAuth(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("PORT", "8080")
+	t.Setenv("OAUTH_ISSUER_URL", "")
+	t.Setenv("CACHE_ISOLATION", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error without OAUTH_ISSUER_URL: %v", err)
+	}
+	if cfg.CacheIsolation != "shared" {
+		t.Errorf("expected default CacheIsolation=shared, got %s", cfg.CacheIsolation)
+	}
+}
+
+// TestCircuitConfigDefaults proves the CircuitConfig defaults (5 failures /
+// 60s) apply when CIRCUIT_FAILURE_THRESHOLD / CIRCUIT_RESET_TIMEOUT_SECONDS
+// are unset (#468).
+func TestCircuitConfigDefaults(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("CIRCUIT_FAILURE_THRESHOLD", "")
+	t.Setenv("CIRCUIT_RESET_TIMEOUT_SECONDS", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Circuit.FailureThreshold != 5 {
+		t.Errorf("expected default FailureThreshold=5, got %d", cfg.Circuit.FailureThreshold)
+	}
+	if cfg.Circuit.ResetTimeoutSecs != 60 {
+		t.Errorf("expected default ResetTimeoutSecs=60, got %d", cfg.Circuit.ResetTimeoutSecs)
+	}
+}
+
+// TestCircuitConfigFromEnv proves CIRCUIT_FAILURE_THRESHOLD /
+// CIRCUIT_RESET_TIMEOUT_SECONDS override the defaults (#468).
+func TestCircuitConfigFromEnv(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("CIRCUIT_FAILURE_THRESHOLD", "8")
+	t.Setenv("CIRCUIT_RESET_TIMEOUT_SECONDS", "45")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Circuit.FailureThreshold != 8 {
+		t.Errorf("expected FailureThreshold=8, got %d", cfg.Circuit.FailureThreshold)
+	}
+	if cfg.Circuit.ResetTimeoutSecs != 45 {
+		t.Errorf("expected ResetTimeoutSecs=45, got %d", cfg.Circuit.ResetTimeoutSecs)
+	}
+}
+
 func setCustomEnv(t *testing.T) {
 	t.Helper()
 	setRequiredEnv(t)
@@ -224,6 +316,7 @@ func setCustomEnv(t *testing.T) {
 		"CHROME_PATH":            "/usr/bin/chromium",
 		"OAUTH_ISSUER_URL":       "https://auth.example.com",
 		"OAUTH_AUDIENCE":         "my-audience",
+		"CACHE_ISOLATION":        "tenant",
 	}
 	for k, v := range envVars {
 		t.Setenv(k, v)
@@ -973,6 +1066,64 @@ func TestLoadLegacyCacheAdminKeyTooShort(t *testing.T) {
 	}
 }
 
+// TestLoadAdminAPIKeyPrevValidation is the #488 config-validation guard:
+// ADMIN_API_KEY_PREV follows the same minimum-length rule as ADMIN_API_KEY.
+func TestLoadAdminAPIKeyPrevValidation(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("ADMIN_API_KEY", strings.Repeat("a", 16))
+	t.Setenv("ADMIN_API_KEY_PREV", strings.Repeat("b", 15)) // 15 chars, too short
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for ADMIN_API_KEY_PREV shorter than 16 chars")
+	}
+	if !strings.Contains(err.Error(), "ADMIN_API_KEY_PREV must be at least 16 characters") {
+		t.Errorf("expected error about prev-key length, got: %v", err)
+	}
+}
+
+// TestLoadAdminAPIKeyPrevAccepted verifies the dual-key grace-period pattern:
+// both the current and previous admin key are accepted into config, with no
+// warning when ADMIN_API_KEY is also set.
+func TestLoadAdminAPIKeyPrevAccepted(t *testing.T) {
+	setRequiredEnv(t)
+	current := strings.Repeat("a", 16)
+	prev := strings.Repeat("b", 16)
+	t.Setenv("ADMIN_API_KEY", current)
+	t.Setenv("ADMIN_API_KEY_PREV", prev)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error with valid dual admin keys: %v", err)
+	}
+	if cfg.AdminAPIKey != current {
+		t.Errorf("expected AdminAPIKey to be set to the current key")
+	}
+	if cfg.AdminAPIKeyPrev != prev {
+		t.Errorf("expected AdminAPIKeyPrev to be set to the previous key")
+	}
+	if len(cfg.Warnings) != 0 {
+		t.Errorf("expected no warnings when both admin keys are set validly, got: %v", cfg.Warnings)
+	}
+}
+
+// TestLoadAdminAPIKeyPrevWithoutCurrentWarns verifies that setting only the
+// previous key (no current key, so admin endpoints are disabled entirely) is
+// flagged as a no-op rather than silently ignored.
+func TestLoadAdminAPIKeyPrevWithoutCurrentWarns(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("ADMIN_API_KEY", "")
+	t.Setenv("ADMIN_API_KEY_PREV", strings.Repeat("b", 16))
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Warnings) == 0 {
+		t.Error("expected a warning when ADMIN_API_KEY_PREV is set without ADMIN_API_KEY")
+	}
+}
+
 func TestLoadCacheEncryptionKeyPrevValidation(t *testing.T) {
 	setRequiredEnv(t)
 	t.Setenv("CACHE_ENCRYPTION_KEY_PREV", "not-hex-and-too-short")
@@ -1092,6 +1243,7 @@ func TestInsecureDefaultWarningWhenHTTPWithoutIssuer(t *testing.T) {
 func TestNoInsecureWarningWhenIssuerSet(t *testing.T) {
 	t.Setenv("PORT", "8080")
 	t.Setenv("OAUTH_ISSUER_URL", "https://issuer.example.com")
+	t.Setenv("CACHE_ISOLATION", "tenant")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)

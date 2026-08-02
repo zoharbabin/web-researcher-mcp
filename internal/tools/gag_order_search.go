@@ -71,7 +71,9 @@ func registerGagOrderSearch(srv *mcp.Server, deps Dependencies) {
 			return cachedResultWithMeta(cached, meta), nil, nil
 		}
 
-		results, err := fetchGagOrders(ctx, deps.PENAmericaAirtableToken, input, num)
+		results, err := coalescedFetch(ctx, deps, cacheKey, func() ([]gagOrderResult, error) {
+			return fetchGagOrders(ctx, deps.PENAmericaAirtableToken, input, num)
+		})
 		if err != nil {
 			errCode := "upstream_error"
 			if isRateLimitError(err) {

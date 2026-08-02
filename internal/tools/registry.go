@@ -4,6 +4,7 @@ import (
 	"log/slog"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/audit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/cache"
@@ -137,6 +138,12 @@ type Dependencies struct {
 	// configured via AvailableModelProviders(). Empty ⇒ the tool is not
 	// registered — a research panel with zero members can't run.
 	ResearchPanelProviders []ModelProvider
+	// Singleflight coalesces concurrent identical cache-miss requests into a
+	// single upstream call (#474), keyed tenant-scoped (coalesceKey) so two
+	// tenants' identical queries never dedup into the same in-flight result.
+	// nil ⇒ coalescedFetch falls through to calling fetch directly (e.g. a
+	// minimal test harness that doesn't need coalescing).
+	Singleflight *singleflight.Group
 }
 
 // Features mirrors config.FeatureConfig for the tool layer (kept local so the

@@ -93,15 +93,17 @@ func registerLocal(srv *mcp.Server, deps Dependencies) {
 			return cachedResultWithMeta(cached, meta), nil, nil
 		}
 
-		results, err := searcher.Local(ctx, search.LocalSearchParams{
-			Query:      input.Query,
-			Near:       input.Near,
-			Country:    input.Country,
-			Units:      input.Units,
-			NumResults: num,
-			Latitude:   lat,
-			Longitude:  lon,
-			Radius:     input.Radius,
+		results, err := coalescedFetch(ctx, deps, cacheKey, func() ([]search.LocalResult, error) {
+			return searcher.Local(ctx, search.LocalSearchParams{
+				Query:      input.Query,
+				Near:       input.Near,
+				Country:    input.Country,
+				Units:      input.Units,
+				NumResults: num,
+				Latitude:   lat,
+				Longitude:  lon,
+				Radius:     input.Radius,
+			})
 		})
 		if err != nil {
 			errCode := "upstream_error"

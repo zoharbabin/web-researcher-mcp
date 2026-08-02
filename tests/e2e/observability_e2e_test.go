@@ -19,7 +19,11 @@ func TestHTTP_Dashboard_ServedAndGated(t *testing.T) {
 	h := newHTTPHarness(t, "ADMIN_API_KEY="+adminKey)
 
 	// --- the page (no auth on the shell itself; it prompts client-side) ---
-	resp, err := h.client.Get(h.baseURL + "/dashboard")
+	dashReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, h.baseURL+"/dashboard", nil)
+	if err != nil {
+		t.Fatalf("build /dashboard request: %v", err)
+	}
+	resp, err := h.client.Do(dashReq)
 	if err != nil {
 		t.Fatalf("GET /dashboard: %v", err)
 	}
@@ -38,7 +42,11 @@ func TestHTTP_Dashboard_ServedAndGated(t *testing.T) {
 	}
 
 	// --- data endpoint: 401 without key ---
-	r1, err := h.client.Get(h.baseURL + "/dashboard/data")
+	dataReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, h.baseURL+"/dashboard/data", nil)
+	if err != nil {
+		t.Fatalf("build /dashboard/data request: %v", err)
+	}
+	r1, err := h.client.Do(dataReq)
 	if err != nil {
 		t.Fatalf("GET /dashboard/data: %v", err)
 	}

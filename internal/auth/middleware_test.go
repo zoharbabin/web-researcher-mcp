@@ -138,7 +138,7 @@ func TestMiddlewareNoAuth(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -161,7 +161,7 @@ func TestMiddlewareRequiresAuthHeader(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -178,7 +178,7 @@ func TestMiddlewareInvalidScheme(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Basic dXNlcjpwYXNz")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -205,7 +205,7 @@ func TestMiddlewareValidToken(t *testing.T) {
 
 	token := signJWT(t, key, kid, validPayload(jwksSrv.URL))
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -238,7 +238,7 @@ func TestMiddlewareExpiredToken(t *testing.T) {
 
 	token := signJWT(t, key, kid, payload)
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -265,7 +265,7 @@ func TestMiddlewareWrongAudience(t *testing.T) {
 
 	token := signJWT(t, key, kid, payload)
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -291,7 +291,7 @@ func TestMiddlewareWrongIssuer(t *testing.T) {
 
 	token := signJWT(t, key, kid, payload)
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -321,7 +321,7 @@ func TestMiddlewareRevokedToken(t *testing.T) {
 	// Revoke the token
 	m.RevokeToken("revoked-token-id", time.Now().Add(1*time.Hour))
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -347,7 +347,7 @@ func TestMiddlewareInvalidSignature(t *testing.T) {
 	wrongKey := testKey(t)
 	token := signJWT(t, wrongKey, kid, validPayload(jwksSrv.URL))
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -369,7 +369,7 @@ func TestMiddlewareMalformedToken(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer not.a.valid.jwt.token")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -393,7 +393,7 @@ func TestMiddlewareAudienceAsArray(t *testing.T) {
 
 	token := signJWT(t, key, kid, payload)
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -481,7 +481,7 @@ func TestMiddlewareKeyRotation(t *testing.T) {
 
 	// Token signed with key1 should work
 	token1 := signJWT(t, key1, kid1, validPayload(jwksSrv.URL))
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer "+token1)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -498,7 +498,7 @@ func TestMiddlewareKeyRotation(t *testing.T) {
 
 	// Token signed with key2 should work after JWKS re-fetch (triggered by cache miss)
 	token2 := signJWT(t, key2, kid2, validPayload(jwksSrv.URL))
-	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer "+token2)
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -754,7 +754,7 @@ func TestMiddlewareInjectsScopesIntoContext(t *testing.T) {
 
 	token := signJWT(t, key, kid, payload)
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -860,7 +860,7 @@ func TestMiddlewareRevocationViaStore(t *testing.T) {
 	payload["jti"] = "store-revoked-jti"
 	token := signJWT(t, key, kid, payload)
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -887,7 +887,7 @@ func TestMiddlewareMissingExpClaim(t *testing.T) {
 
 	token := signJWT(t, key, kid, payload)
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -926,7 +926,7 @@ func TestMiddlewareUnsupportedAlgorithm(t *testing.T) {
 
 	token := fmt.Sprintf("%s.%s.%s", headerB64, payloadB64, fakeSig)
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -981,7 +981,7 @@ func TestWrapAuditsAuthFailures(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			aud.events = nil
-			req := httptest.NewRequest(http.MethodPost, "/mcp/", nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/mcp/", nil)
 			tc.setup(req)
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)
@@ -1010,7 +1010,7 @@ func TestWrapAuditsAuthFailures(t *testing.T) {
 	t.Run("success emits nothing", func(t *testing.T) {
 		aud.events = nil
 		token := signJWT(t, key, kid, validPayload(jwksSrv.URL))
-		req := httptest.NewRequest(http.MethodPost, "/mcp/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/mcp/", nil)
 		req.Header.Set("Authorization", "Bearer "+token)
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)

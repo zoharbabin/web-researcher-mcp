@@ -120,6 +120,7 @@ docker run -d --name "$APP" --network "$NET" \
   -e MONITORING_ENABLED=true \
   -e OAUTH_ISSUER_URL="$ISSUER_URL" \
   -e OAUTH_AUDIENCE="$AUDIENCE" \
+  -e CACHE_ISOLATION=tenant \
   "$IMAGE" >/dev/null
 
 docker run -d --name "$PROXY" --network "$NET" \

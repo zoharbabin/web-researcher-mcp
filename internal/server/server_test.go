@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -41,7 +42,7 @@ func TestSecurityHeaders(t *testing.T) {
 	})
 
 	handler := securityHeaders(securityHeadersConfig{}, inner)
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -67,7 +68,7 @@ func TestCORSMiddleware(t *testing.T) {
 
 	t.Run("allowed origin", func(t *testing.T) {
 		handler := corsMiddleware([]string{"https://app.example.com"}, false, inner)
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		req.Header.Set("Origin", "https://app.example.com")
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
@@ -79,7 +80,7 @@ func TestCORSMiddleware(t *testing.T) {
 
 	t.Run("disallowed origin", func(t *testing.T) {
 		handler := corsMiddleware([]string{"https://app.example.com"}, false, inner)
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		req.Header.Set("Origin", "https://evil.com")
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
@@ -91,7 +92,7 @@ func TestCORSMiddleware(t *testing.T) {
 
 	t.Run("wildcard origin", func(t *testing.T) {
 		handler := corsMiddleware([]string{"*"}, false, inner)
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		req.Header.Set("Origin", "https://anything.com")
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
@@ -103,7 +104,7 @@ func TestCORSMiddleware(t *testing.T) {
 
 	t.Run("preflight OPTIONS", func(t *testing.T) {
 		handler := corsMiddleware([]string{"*"}, false, inner)
-		req := httptest.NewRequest(http.MethodOptions, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodOptions, "/", nil)
 		req.Header.Set("Origin", "https://app.example.com")
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
@@ -115,7 +116,7 @@ func TestCORSMiddleware(t *testing.T) {
 
 	t.Run("no origin allowed", func(t *testing.T) {
 		handler := corsMiddleware(nil, false, inner)
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		req.Header.Set("Origin", "https://anything.com")
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
@@ -131,7 +132,7 @@ func TestAdminFlushCache(t *testing.T) {
 	c.Set(context.Background(), "key1", []byte("val1"), time.Hour)
 
 	handler := handleAdminFlushCache(c)
-	req := httptest.NewRequest(http.MethodDelete, "/admin/cache", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/admin/cache", nil)
 	rec := httptest.NewRecorder()
 	handler(rec, req)
 
@@ -151,7 +152,7 @@ func TestAdminTenantAnalytics(t *testing.T) {
 	handler := handleAdminTenantAnalytics(m)
 
 	t.Run("all tenants", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/admin/analytics", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/analytics", nil)
 		rec := httptest.NewRecorder()
 		handler(rec, req)
 		if rec.Code != http.StatusOK {
@@ -172,7 +173,7 @@ func TestAdminTenantAnalytics(t *testing.T) {
 	})
 
 	t.Run("filtered by tenant_id", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/admin/analytics?tenant_id=tenant-1", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/analytics?tenant_id=tenant-1", nil)
 		rec := httptest.NewRecorder()
 		handler(rec, req)
 		var body struct {
@@ -187,7 +188,7 @@ func TestAdminTenantAnalytics(t *testing.T) {
 
 func TestAdminTenantAnalyticsNil(t *testing.T) {
 	handler := handleAdminTenantAnalytics(nil)
-	req := httptest.NewRequest(http.MethodGet, "/admin/analytics", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/analytics", nil)
 	rec := httptest.NewRecorder()
 	handler(rec, req)
 	if rec.Code != http.StatusServiceUnavailable {
@@ -218,7 +219,7 @@ func TestAdminDataExportAndErasure(t *testing.T) {
 
 	t.Run("export requires tenant_id", func(t *testing.T) {
 		h := handleAdminDataExport(reg, auditor)
-		req := httptest.NewRequest(http.MethodGet, "/admin/data", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/data", nil)
 		rec := httptest.NewRecorder()
 		h(rec, req)
 		if rec.Code != http.StatusBadRequest {
@@ -228,7 +229,7 @@ func TestAdminDataExportAndErasure(t *testing.T) {
 
 	t.Run("export returns subject data", func(t *testing.T) {
 		h := handleAdminDataExport(reg, auditor)
-		req := httptest.NewRequest(http.MethodGet, "/admin/data?tenant_id=tenant-1&user_id=user-1", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/data?tenant_id=tenant-1&user_id=user-1", nil)
 		rec := httptest.NewRecorder()
 		h(rec, req)
 		if rec.Code != http.StatusOK {
@@ -243,7 +244,7 @@ func TestAdminDataExportAndErasure(t *testing.T) {
 
 	t.Run("cross-tenant export is empty (boundary)", func(t *testing.T) {
 		h := handleAdminDataExport(reg, auditor)
-		req := httptest.NewRequest(http.MethodGet, "/admin/data?tenant_id=tenant-2&user_id=user-1", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/data?tenant_id=tenant-2&user_id=user-1", nil)
 		rec := httptest.NewRecorder()
 		h(rec, req)
 		var res datasubject.ExportResult
@@ -258,7 +259,7 @@ func TestAdminDataExportAndErasure(t *testing.T) {
 			TenantID: "tenant-1", UserID: "user-1", Purpose: consent.PurposeMemory, Granted: true,
 		})
 		h := handleAdminDataErasure(reg, consentMgr, auditor)
-		req := httptest.NewRequest(http.MethodDelete, "/admin/data?tenant_id=tenant-1&user_id=user-1", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/admin/data?tenant_id=tenant-1&user_id=user-1", nil)
 		rec := httptest.NewRecorder()
 		h(rec, req)
 		if rec.Code != http.StatusOK {
@@ -285,7 +286,7 @@ func TestAdminConsentRecordAndQuery(t *testing.T) {
 
 	rec := handleAdminConsentRecord(mgr, auditor)
 	body := `{"tenant_id":"t1","user_id":"u1","purpose":"memory","granted":true}`
-	req := httptest.NewRequest(http.MethodPost, "/admin/consent", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/consent", strings.NewReader(body))
 	w := httptest.NewRecorder()
 	rec(w, req)
 	if w.Code != http.StatusOK {
@@ -293,7 +294,7 @@ func TestAdminConsentRecordAndQuery(t *testing.T) {
 	}
 
 	q := handleAdminConsentQuery(mgr)
-	qreq := httptest.NewRequest(http.MethodGet, "/admin/consent?tenant_id=t1&user_id=u1&purpose=memory", nil)
+	qreq := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/consent?tenant_id=t1&user_id=u1&purpose=memory", nil)
 	qw := httptest.NewRecorder()
 	q(qw, qreq)
 	if qw.Code != http.StatusOK {
@@ -302,7 +303,7 @@ func TestAdminConsentRecordAndQuery(t *testing.T) {
 
 	t.Run("unknown purpose rejected", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		rec(w, httptest.NewRequest(http.MethodPost, "/admin/consent",
+		rec(w, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/consent",
 			strings.NewReader(`{"tenant_id":"t1","user_id":"u1","purpose":"bogus","granted":true}`)))
 		if w.Code != http.StatusBadRequest {
 			t.Errorf("expected 400 for unknown purpose, got %d", w.Code)
@@ -311,7 +312,7 @@ func TestAdminConsentRecordAndQuery(t *testing.T) {
 
 	t.Run("query missing returns 404", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		q(w, httptest.NewRequest(http.MethodGet, "/admin/consent?tenant_id=t1&user_id=u1&purpose=analytics", nil))
+		q(w, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/consent?tenant_id=t1&user_id=u1&purpose=analytics", nil))
 		if w.Code != http.StatusNotFound {
 			t.Errorf("expected 404 for no record, got %d", w.Code)
 		}
@@ -327,7 +328,7 @@ func TestAdminWorkspaceMembership(t *testing.T) {
 	add := handleAdminWorkspaceMember(store, auditor, true)
 	body := `{"workspace_id":"ws1","tenant_id":"t1","user_id":"u1"}`
 	w := httptest.NewRecorder()
-	add(w, httptest.NewRequest(http.MethodPost, "/admin/workspace/members", strings.NewReader(body)))
+	add(w, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/workspace/members", strings.NewReader(body)))
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 adding member, got %d", w.Code)
 	}
@@ -337,7 +338,7 @@ func TestAdminWorkspaceMembership(t *testing.T) {
 
 	del := handleAdminWorkspaceMember(store, auditor, false)
 	w = httptest.NewRecorder()
-	del(w, httptest.NewRequest(http.MethodDelete, "/admin/workspace/members", strings.NewReader(body)))
+	del(w, httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/admin/workspace/members", strings.NewReader(body)))
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 removing member, got %d", w.Code)
 	}
@@ -347,7 +348,7 @@ func TestAdminWorkspaceMembership(t *testing.T) {
 
 	t.Run("missing fields rejected", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		add(w, httptest.NewRequest(http.MethodPost, "/admin/workspace/members", strings.NewReader(`{"workspace_id":"ws1"}`)))
+		add(w, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/workspace/members", strings.NewReader(`{"workspace_id":"ws1"}`)))
 		if w.Code != http.StatusBadRequest {
 			t.Errorf("expected 400 for missing fields, got %d", w.Code)
 		}
@@ -356,7 +357,7 @@ func TestAdminWorkspaceMembership(t *testing.T) {
 
 func TestAdminFlushCacheNil(t *testing.T) {
 	handler := handleAdminFlushCache(nil)
-	req := httptest.NewRequest(http.MethodDelete, "/admin/cache", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/admin/cache", nil)
 	rec := httptest.NewRecorder()
 	handler(rec, req)
 
@@ -377,7 +378,7 @@ func TestAdminFlushSessions(t *testing.T) {
 	}
 
 	handler := handleAdminFlushSessions(mgr)
-	req := httptest.NewRequest(http.MethodDelete, "/admin/sessions", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/admin/sessions", nil)
 	rec := httptest.NewRecorder()
 	handler(rec, req)
 
@@ -391,7 +392,7 @@ func TestAdminFlushSessions(t *testing.T) {
 
 func TestAdminFlushSessionsNil(t *testing.T) {
 	handler := handleAdminFlushSessions(nil)
-	req := httptest.NewRequest(http.MethodDelete, "/admin/sessions", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/admin/sessions", nil)
 	rec := httptest.NewRecorder()
 	handler(rec, req)
 
@@ -401,12 +402,12 @@ func TestAdminFlushSessionsNil(t *testing.T) {
 }
 
 func TestAdminAuth(t *testing.T) {
-	handler := adminAuth("secret-key", nil, func(w http.ResponseWriter, r *http.Request) {
+	handler := adminAuth("secret-key", "", nil, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
 	t.Run("valid key", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodDelete, "/admin/cache", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/admin/cache", nil)
 		req.Header.Set("X-Admin-Key", "secret-key")
 		rec := httptest.NewRecorder()
 		handler(rec, req)
@@ -417,7 +418,7 @@ func TestAdminAuth(t *testing.T) {
 	})
 
 	t.Run("invalid key", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodDelete, "/admin/cache", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/admin/cache", nil)
 		req.Header.Set("X-Admin-Key", "wrong-key")
 		rec := httptest.NewRecorder()
 		handler(rec, req)
@@ -428,7 +429,7 @@ func TestAdminAuth(t *testing.T) {
 	})
 
 	t.Run("missing key", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodDelete, "/admin/cache", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/admin/cache", nil)
 		rec := httptest.NewRecorder()
 		handler(rec, req)
 
@@ -436,6 +437,119 @@ func TestAdminAuth(t *testing.T) {
 			t.Fatalf("expected 401, got %d", rec.Code)
 		}
 	})
+}
+
+// recordingAuditor is a minimal test Auditor that records every event it
+// receives, for asserting the dual-key grace-period path emits its audit
+// event (#488).
+type recordingAuditor struct {
+	mu     sync.Mutex
+	events []audit.AuditEvent
+}
+
+func (r *recordingAuditor) Log(e audit.AuditEvent) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.events = append(r.events, e)
+}
+func (r *recordingAuditor) IncludeRequestBody() bool { return false }
+func (r *recordingAuditor) Close()                   {}
+func (r *recordingAuditor) all() []audit.AuditEvent {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]audit.AuditEvent(nil), r.events...)
+}
+
+// TestAdminKeyDualKeyGracePeriod is the #488 regression guard: during an
+// admin-key rotation, both the current key and the previous key (set via
+// ADMIN_API_KEY_PREV / the AdminKeyPrev config field) must authenticate
+// successfully, a request using the previous key must emit an audit event
+// so operators can tell when it is safe to remove it, and once the previous
+// key is unset (rotation complete) it must stop working.
+func TestAdminKeyDualKeyGracePeriod(t *testing.T) {
+	const currentKey = "current-admin-key-123"
+	const prevKey = "previous-admin-key-456"
+
+	aud := &recordingAuditor{}
+	handler := adminAuth(currentKey, prevKey, aud, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	t.Run("current key succeeds", func(t *testing.T) {
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/admin/cache", nil)
+		req.Header.Set("X-Admin-Key", currentKey)
+		rec := httptest.NewRecorder()
+		handler(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200 for current key, got %d", rec.Code)
+		}
+	})
+
+	t.Run("previous key succeeds during grace period and is audited", func(t *testing.T) {
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/admin/cache", nil)
+		req.Header.Set("X-Admin-Key", prevKey)
+		rec := httptest.NewRecorder()
+		handler(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200 for previous key during grace period, got %d", rec.Code)
+		}
+
+		events := aud.all()
+		if len(events) != 1 {
+			t.Fatalf("expected exactly one audit event, got %d: %+v", len(events), events)
+		}
+		if events[0].EventType != "auth.admin_key_prev_used" {
+			t.Errorf("expected event_type=auth.admin_key_prev_used, got %q", events[0].EventType)
+		}
+		if !events[0].Success {
+			t.Error("expected the prev-key event to be marked Success=true (it authenticated)")
+		}
+	})
+
+	t.Run("wrong key still fails with both keys configured", func(t *testing.T) {
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/admin/cache", nil)
+		req.Header.Set("X-Admin-Key", "neither-of-the-above")
+		rec := httptest.NewRecorder()
+		handler(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401 for an unrelated key, got %d", rec.Code)
+		}
+	})
+
+	t.Run("previous key stops working once rotation completes (empty prevKey)", func(t *testing.T) {
+		rotated := adminAuth(currentKey, "", audit.NewNoop(), func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/admin/cache", nil)
+		req.Header.Set("X-Admin-Key", prevKey)
+		rec := httptest.NewRecorder()
+		rotated(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401 once ADMIN_API_KEY_PREV is unset, got %d", rec.Code)
+		}
+	})
+}
+
+// TestSanitizeLogValue proves a crafted request path can't forge additional
+// log lines via embedded CR/LF (CWE-117, CodeQL go/log-injection).
+func TestSanitizeLogValue(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"no control chars", "/admin/cache", "/admin/cache"},
+		{"embedded newline", "/admin/cache\nWARN forged log line", "/admin/cacheWARN forged log line"},
+		{"embedded CRLF", "/admin/cache\r\nWARN forged log line", "/admin/cacheWARN forged log line"},
+		{"embedded CR only", "/admin/cache\rWARN forged", "/admin/cacheWARN forged"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := sanitizeLogValue(tc.in); got != tc.want {
+				t.Errorf("sanitizeLogValue(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
 }
 
 // =============================================================================
@@ -461,8 +575,8 @@ func buildTestHTTPServer(t *testing.T) *httptest.Server {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"issuer":"web-researcher-mcp","token_endpoint":"n/a"}`)
 	})
-	mux.HandleFunc("DELETE /admin/cache", adminAuth("test-admin-key", nil, handleAdminFlushCache(c)))
-	mux.HandleFunc("DELETE /admin/sessions", adminAuth("test-admin-key", nil, handleAdminFlushSessions(mgr)))
+	mux.HandleFunc("DELETE /admin/cache", adminAuth("test-admin-key", "", nil, handleAdminFlushCache(c)))
+	mux.HandleFunc("DELETE /admin/sessions", adminAuth("test-admin-key", "", nil, handleAdminFlushSessions(mgr)))
 
 	handler := securityHeaders(securityHeadersConfig{}, corsMiddleware([]string{"https://allowed.example.com"}, false, mux))
 	return httptest.NewServer(handler)
@@ -472,10 +586,7 @@ func TestHealthLiveEndpoint(t *testing.T) {
 	ts := buildTestHTTPServer(t)
 	defer ts.Close()
 
-	resp, err := http.Get(ts.URL + "/health/live")
-	if err != nil {
-		t.Fatalf("failed to GET /health/live: %v", err)
-	}
+	resp := httpGet(t, ts.URL+"/health/live")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -492,10 +603,7 @@ func TestHealthReadyEndpoint(t *testing.T) {
 	ts := buildTestHTTPServer(t)
 	defer ts.Close()
 
-	resp, err := http.Get(ts.URL + "/health/ready")
-	if err != nil {
-		t.Fatalf("failed to GET /health/ready: %v", err)
-	}
+	resp := httpGet(t, ts.URL+"/health/ready")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -538,7 +646,7 @@ func TestReadinessHandler(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			rec := httptest.NewRecorder()
-			readinessHandler(tc.health)(rec, httptest.NewRequest(http.MethodGet, "/health/ready", nil))
+			readinessHandler(tc.health)(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health/ready", nil))
 			if rec.Code != tc.wantStatus {
 				t.Fatalf("status = %d, want %d", rec.Code, tc.wantStatus)
 			}
@@ -553,10 +661,7 @@ func TestHealthEndpointSecurityHeaders(t *testing.T) {
 	ts := buildTestHTTPServer(t)
 	defer ts.Close()
 
-	resp, err := http.Get(ts.URL + "/health/live")
-	if err != nil {
-		t.Fatalf("failed to GET /health/live: %v", err)
-	}
+	resp := httpGet(t, ts.URL+"/health/live")
 	defer resp.Body.Close()
 
 	if got := resp.Header.Get("X-Content-Type-Options"); got != "nosniff" {
@@ -574,10 +679,7 @@ func TestOAuthWellKnownEndpoint(t *testing.T) {
 	ts := buildTestHTTPServer(t)
 	defer ts.Close()
 
-	resp, err := http.Get(ts.URL + "/.well-known/oauth-authorization-server")
-	if err != nil {
-		t.Fatalf("failed to GET /.well-known/oauth-authorization-server: %v", err)
-	}
+	resp := httpGet(t, ts.URL+"/.well-known/oauth-authorization-server")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -606,7 +708,7 @@ func TestCORSNoOriginHeader(t *testing.T) {
 	ts := buildTestHTTPServer(t)
 	defer ts.Close()
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/health/live", nil)
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/health/live", nil)
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -626,7 +728,7 @@ func TestCORSWithAllowedOrigin(t *testing.T) {
 	ts := buildTestHTTPServer(t)
 	defer ts.Close()
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/health/live", nil)
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/health/live", nil)
 	req.Header.Set("Origin", "https://allowed.example.com")
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
@@ -644,7 +746,7 @@ func TestCORSWithDisallowedOrigin(t *testing.T) {
 	ts := buildTestHTTPServer(t)
 	defer ts.Close()
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/health/live", nil)
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/health/live", nil)
 	req.Header.Set("Origin", "https://evil.example.com")
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
@@ -662,10 +764,7 @@ func TestMetricsEndpoint(t *testing.T) {
 	ts := buildTestHTTPServer(t)
 	defer ts.Close()
 
-	resp, err := http.Get(ts.URL + "/metrics")
-	if err != nil {
-		t.Fatalf("failed to GET /metrics: %v", err)
-	}
+	resp := httpGet(t, ts.URL+"/metrics")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -685,7 +784,7 @@ func TestAdminCacheFlushIntegration(t *testing.T) {
 	client := &http.Client{Timeout: 5 * time.Second}
 
 	t.Run("with valid key", func(t *testing.T) {
-		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/admin/cache", nil)
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodDelete, ts.URL+"/admin/cache", nil)
 		req.Header.Set("X-Admin-Key", "test-admin-key")
 		resp, err := client.Do(req)
 		if err != nil {
@@ -698,7 +797,7 @@ func TestAdminCacheFlushIntegration(t *testing.T) {
 	})
 
 	t.Run("with invalid key", func(t *testing.T) {
-		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/admin/cache", nil)
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodDelete, ts.URL+"/admin/cache", nil)
 		req.Header.Set("X-Admin-Key", "wrong-key")
 		resp, err := client.Do(req)
 		if err != nil {
@@ -773,7 +872,7 @@ func TestServeHTTP_DrainsInflightRequest(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("done"))
 	})}
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
@@ -786,7 +885,12 @@ func TestServeHTTP_DrainsInflightRequest(t *testing.T) {
 	}
 	resCh := make(chan res, 1)
 	go func() {
-		resp, err := http.Get("http://" + ln.Addr().String() + "/")
+		req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://"+ln.Addr().String()+"/", nil)
+		if reqErr != nil {
+			resCh <- res{err: reqErr}
+			return
+		}
+		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			resCh <- res{err: err}
 			return
@@ -859,6 +963,21 @@ func TestHTTPServerTimeoutsFromConfig(t *testing.T) {
 	}
 }
 
+// httpPost issues a context-bound POST against a test server URL.
+func httpPost(t *testing.T, url, contentType string, body io.Reader) *http.Response {
+	t.Helper()
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", contentType)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp
+}
+
 func TestMaxBytesMiddleware(t *testing.T) {
 	t.Parallel()
 
@@ -874,10 +993,7 @@ func TestMaxBytesMiddleware(t *testing.T) {
 		t.Parallel()
 		ts := httptest.NewServer(maxBytes(1024, echo))
 		defer ts.Close()
-		resp, err := http.Post(ts.URL, "application/json", strings.NewReader(strings.Repeat("a", 100)))
-		if err != nil {
-			t.Fatalf("post: %v", err)
-		}
+		resp := httpPost(t, ts.URL, "application/json", strings.NewReader(strings.Repeat("a", 100)))
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("expected 200, got %d", resp.StatusCode)
@@ -888,10 +1004,7 @@ func TestMaxBytesMiddleware(t *testing.T) {
 		t.Parallel()
 		ts := httptest.NewServer(maxBytes(64, echo))
 		defer ts.Close()
-		resp, err := http.Post(ts.URL, "application/json", strings.NewReader(strings.Repeat("a", 5000)))
-		if err != nil {
-			t.Fatalf("post: %v", err)
-		}
+		resp := httpPost(t, ts.URL, "application/json", strings.NewReader(strings.Repeat("a", 5000)))
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusRequestEntityTooLarge {
 			t.Fatalf("expected 413, got %d", resp.StatusCode)
@@ -902,10 +1015,7 @@ func TestMaxBytesMiddleware(t *testing.T) {
 		t.Parallel()
 		ts := httptest.NewServer(maxBytes(0, echo))
 		defer ts.Close()
-		resp, err := http.Post(ts.URL, "application/json", strings.NewReader(strings.Repeat("a", 5000)))
-		if err != nil {
-			t.Fatalf("post: %v", err)
-		}
+		resp := httpPost(t, ts.URL, "application/json", strings.NewReader(strings.Repeat("a", 5000)))
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("expected 200 with disabled cap, got %d", resp.StatusCode)
@@ -922,7 +1032,7 @@ func TestCORSStrict(t *testing.T) {
 	t.Run("empty allowlist permissive default reflects", func(t *testing.T) {
 		t.Parallel()
 		handler := corsMiddleware(nil, false, inner)
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		req.Header.Set("Origin", "https://anything.com")
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
@@ -934,7 +1044,7 @@ func TestCORSStrict(t *testing.T) {
 	t.Run("empty allowlist strict denies", func(t *testing.T) {
 		t.Parallel()
 		handler := corsMiddleware(nil, true, inner)
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		req.Header.Set("Origin", "https://anything.com")
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
@@ -946,7 +1056,7 @@ func TestCORSStrict(t *testing.T) {
 	t.Run("strict still allows explicitly listed origin", func(t *testing.T) {
 		t.Parallel()
 		handler := corsMiddleware([]string{"https://ok.example.com"}, true, inner)
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		req.Header.Set("Origin", "https://ok.example.com")
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
@@ -970,7 +1080,7 @@ func TestSecurityHeadersConfigurable(t *testing.T) {
 			permissionsPolicy: "geolocation=()",
 		}, inner)
 		rec := httptest.NewRecorder()
-		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+		handler.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil))
 		if got := rec.Header().Get("Content-Security-Policy"); got != "default-src 'none'" {
 			t.Errorf("CSP = %q", got)
 		}
@@ -986,7 +1096,7 @@ func TestSecurityHeadersConfigurable(t *testing.T) {
 		t.Parallel()
 		handler := securityHeaders(securityHeadersConfig{}, inner)
 		rec := httptest.NewRecorder()
-		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+		handler.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil))
 		for _, h := range []string{"Content-Security-Policy", "Referrer-Policy", "Permissions-Policy"} {
 			if got := rec.Header().Get(h); got != "" {
 				t.Errorf("expected %s omitted, got %q", h, got)
@@ -1010,7 +1120,7 @@ func TestRequestIDMiddleware(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		}))
 		rec := httptest.NewRecorder()
-		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+		handler.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil))
 		if seen == "" {
 			t.Fatal("expected a generated request ID in context")
 		}
@@ -1029,7 +1139,7 @@ func TestRequestIDMiddleware(t *testing.T) {
 		handler := requestIDMiddleware(nil, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			seen = auth.RequestIDFromContext(r.Context())
 		}))
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		req.Header.Set("X-Request-Id", "client-correlation-123")
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
@@ -1044,7 +1154,7 @@ func TestRequestIDMiddleware(t *testing.T) {
 		handler := requestIDMiddleware(nil, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			seen = auth.RequestIDFromContext(r.Context())
 		}))
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		// Set the raw header directly to bypass net/http's validation in the test.
 		req.Header["X-Request-Id"] = []string{"abc\r\nSet-Cookie: evil"}
 		rec := httptest.NewRecorder()
@@ -1063,7 +1173,7 @@ func TestRequestIDMiddleware(t *testing.T) {
 		handler := requestIDMiddleware(nil, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			seen = auth.RequestIDFromContext(r.Context())
 		}))
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		req.Header.Set("X-Request-Id", strings.Repeat("x", 1000))
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
@@ -1078,7 +1188,7 @@ func TestRequestIDMiddleware(t *testing.T) {
 		handler := requestIDMiddleware(nil, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			seen = auth.RequestIDFromContext(r.Context())
 		}))
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		req.Header.Set("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
@@ -1094,7 +1204,7 @@ func TestRequestIDMiddleware(t *testing.T) {
 		handler := requestIDMiddleware(limiter, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			seen = auth.SourceIPFromContext(r.Context())
 		}))
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		req.RemoteAddr = "203.0.113.9:5555"
 		handler.ServeHTTP(httptest.NewRecorder(), req)
 		if seen != "203.0.113.9" {
@@ -1108,7 +1218,7 @@ func TestRequestIDMiddleware(t *testing.T) {
 		handler := requestIDMiddleware(nil, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			seen = auth.SourceIPFromContext(r.Context())
 		}))
-		handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+		handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil))
 		if seen != "" {
 			t.Fatalf("SourceIP should be empty with no limiter, got %q", seen)
 		}
@@ -1159,7 +1269,7 @@ func TestWrapIPOutermost(t *testing.T) {
 	const fixedIP = "203.0.113.7:5555"
 	rejected := false
 	for i := 0; i < 50; i++ {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		req.RemoteAddr = fixedIP
 		rec := httptest.NewRecorder()
 		root.ServeHTTP(rec, req)

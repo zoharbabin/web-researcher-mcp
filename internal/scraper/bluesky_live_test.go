@@ -32,7 +32,11 @@ func discoverBskyLivePostURL(t *testing.T) string {
 	q.Set("filter", "posts_no_replies")
 	reqURL := "https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?" + q.Encode()
 
-	resp, err := http.Get(reqURL)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, reqURL, nil)
+	if err != nil {
+		t.Fatalf("discoverBskyLivePostURL: build request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	skipIfNetworkUnreachableScraper(t, err)
 	if err != nil {
 		t.Fatalf("discoverBskyLivePostURL: %v", err)

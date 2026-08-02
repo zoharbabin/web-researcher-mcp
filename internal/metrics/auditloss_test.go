@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"context"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -19,7 +20,7 @@ func TestRegisterAuditLossExposesCounters(t *testing.T) {
 
 	// Scrape the /metrics handler and assert the three counters carry the values.
 	rec := httptest.NewRecorder()
-	c.HTTPHandler().ServeHTTP(rec, httptest.NewRequest("GET", "/metrics", nil))
+	c.HTTPHandler().ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), "GET", "/metrics", nil))
 	body := rec.Body.String()
 
 	for _, want := range []string{

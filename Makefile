@@ -1,4 +1,4 @@
-.PHONY: build build-fips sync-lenses test test-race test-cover test-e2e test-live test-eval test-geo-eval test-concurrency test-bench test-python test-python-live \
+.PHONY: build build-fips sync-lenses test test-race test-cover test-e2e test-soak test-live test-eval test-geo-eval test-extraction-eval test-relevance-eval test-concurrency test-bench test-fuzz test-python test-python-live \
         lint fmt fmt-check vet vuln sec tools hooks precommit verify clean run dev docker docker-smoke e2e-oauth-docker release version-sync rebuild-local help all \
         gen-python-client check-python-drift
 
@@ -43,6 +43,16 @@ test-cover:
 test-e2e:
 	go test -tags=e2e -count=1 ./tests/e2e/...
 
+# Sustained-load soak test (#480): drives the real HTTP binary under moderate
+# concurrent load for an extended window and asserts /metrics shows no
+# unbounded goroutine/heap growth. Opt-in only (network-free, but deliberately
+# excluded from `test-e2e`/CI's required gate by its own build tag) — run
+# manually or via the nightly workflow_dispatch job. Override SOAK_DURATION
+# (e.g. 45m) and SOAK_WORKERS for a real long-window run; defaults keep a bare
+# local invocation short.
+test-soak:
+	go test -tags="e2e soak" -count=1 -timeout=90m -run TestSoak_SustainedLoad_NoUnboundedGrowth -v ./tests/e2e/...
+
 # Live external-API integration tests (EPO, CrossRef, OpenAlex). Opt-in only:
 # they depend on third-party endpoints and are non-deterministic, so they are
 # excluded from the default suite and CI. Provide the relevant provider
@@ -72,6 +82,21 @@ test-eval:
 test-geo-eval:
 	go test -tags=live -count=1 -v -run TestGeoEval ./internal/search/... ./internal/tools/...
 
+# Labeled accuracy eval for scrape_page extraction fidelity (#483): drives the
+# real scrape_page tool over a curated gold set of live pages, each labeled
+# with key facts that must survive extraction, and reports per-page + aggregate
+# recall. Opt-in (live, network required; no API key needed).
+test-extraction-eval:
+	go test -tags=live -count=1 -v -run TestExtractionFidelity ./internal/tools/...
+
+# Labeled accuracy eval for web_search relevance (#483): drives the real
+# search.Provider against a curated gold set of (query, expected-relevant-host)
+# pairs and reports whether the top results answer the query. Opt-in (live,
+# network required); prefers Google Custom Search when configured, falling
+# back to keyless DuckDuckGo otherwise.
+test-relevance-eval:
+	go test -tags=live -count=1 -v -run TestSearchRelevance ./internal/tools/...
+
 # Concurrency-focused tests (shared-state contention). Always on: they are
 # bounded (a few seconds) and only meaningful under -race.
 test-concurrency:
@@ -81,9 +106,23 @@ test-concurrency:
 test-bench:
 	go test -bench=. -benchmem ./tests/benchmark/
 
-# Python client library tests (no binary required — uses a mock HTTP server)
+# Go native fuzzing (#476) over the untrusted-input parsers: internal/documents
+# (PDF/DOCX/PPTX extraction) and internal/content's HTML/text sanitizer. Each
+# target gets a short, CI-friendly fuzztime; run with a longer FUZZTIME locally
+# (e.g. `make test-fuzz FUZZTIME=5m`) for a deeper periodic sweep.
+FUZZTIME ?= 30s
+test-fuzz:
+	go test ./internal/documents/... -run=^$$ -fuzz=FuzzParsePDF -fuzztime=$(FUZZTIME)
+	go test ./internal/documents/... -run=^$$ -fuzz=FuzzParseDOCX -fuzztime=$(FUZZTIME)
+	go test ./internal/documents/... -run=^$$ -fuzz=FuzzParsePPTX -fuzztime=$(FUZZTIME)
+	go test ./internal/content/... -run=^$$ -fuzz=FuzzSanitizeHTML -fuzztime=$(FUZZTIME)
+	go test ./internal/content/... -run=^$$ -fuzz=FuzzSanitizeText -fuzztime=$(FUZZTIME)
+
+# Python client library tests (no binary required — uses a mock HTTP server).
+# --cov reports coverage of the generated/hand-written client so gaps are
+# visible the same way Go per-package coverage is (#478).
 test-python:
-	python3 -m pytest tests/python/ --ignore=tests/python/test_live_e2e.py -v 2>&1 || python3 -m unittest discover -s tests/python -v
+	python3 -m pytest tests/python/ --ignore=tests/python/test_live_e2e.py -v --cov=web_researcher_mcp --cov-report=term-missing 2>&1 || python3 -m unittest discover -s tests/python -v
 
 # Python live E2E tests — build the real Go binary, start it, and exercise
 # the SDK against real external APIs. Keyless providers (DuckDuckGo, PubMed,
@@ -165,6 +204,13 @@ sync-lenses:
 
 # Full verification, matching CI. Run before opening a PR.
 verify: fmt-check vet lint sec vuln validate-lenses test-race test-e2e check-python-drift test-python build
+
+# Permanent regression gate for the v1.47.0 Operational Hardening milestone
+# (#467). Not part of `verify` — it re-runs lint/sec/vuln plus targeted tests
+# already covered there; run manually before cutting a release that touches
+# circuit breaker, rate limiter, scraper concurrency, or tenant isolation.
+harness-467:
+	bash scripts/harness-467.sh
 
 clean:
 	rm -f $(BINARY) coverage.out coverage.html

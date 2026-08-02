@@ -80,20 +80,20 @@ Matched case-insensitively as an exact hostname or a dot-bounded suffix, so `svc
 Client → [Authorization: Bearer <token>] → MCP Server
                                               │
                                               ▼
-                                      ┌─────────────┐
+                                      ┌──────────────┐
                                       │ Validate JWT │
                                       │ - Signature  │
                                       │ - iss, aud   │
                                       │ - exp, nbf   │
                                       │ - scope      │
-                                      └──────┬──────┘
+                                      └──────┬───────┘
                                              │
-                                      ┌──────▼──────┐
+                                      ┌──────▼───────┐
                                       │Extract claims│
                                       │ - sub (user) │
                                       │ - tenant_id  │
                                       │ - session_id │
-                                      └─────────────┘
+                                      └──────────────┘
 ```
 
 **JWKS Management:**
@@ -109,6 +109,62 @@ Client → [Authorization: Bearer <token>] → MCP Server
 - `nbf` and `iat` are honored when present (±60s clock-skew tolerance)
 - `jti` is checked against the revocation set when present
 - `sub`, `tenant_id`, `session_id` are optional; absent `sub` maps to `anonymous`, absent `tenant_id` maps to `default`
+
+**Why RS256, not HMAC (HS256):**
+
+This server is an OAuth 2.1 *resource server* — it verifies tokens minted by an external identity provider (Auth0, Okta, Keycloak, Entra ID, etc.); it never issues them. That architecture is what makes RS256 (asymmetric) the correct choice over HS256 (symmetric):
+
+```
+HMAC (HS256) — one shared secret signs AND verifies
+┌───────────────┐  shared secret  ┌──────────────┐  shared secret  ┌──────────────┐
+│ Identity      │ ─────────────►  │ Resource     │ ─────────────►  │ Resource     │
+│ Provider      │  (must match)   │ Server A     │  (must match)   │ Server B     │
+└───────────────┘                 └──────────────┘                 └──────────────┘
+Any verifier that holds the secret can also forge tokens for every other verifier
+that trusts the same secret — one leaked verifier compromises the whole trust domain.
+
+RS256 — one private key signs, any number of public keys verify
+┌──────────────┐  private key   ┌──────────────┐
+│ Identity     │  (never        │ signs JWT    │
+│ Provider     │   leaves IdP)  │              │
+└──────┬───────┘                └──────────────┘
+       │ publishes public key via JWKS
+       ▼
+┌──────────────┐                ┌──────────────┐
+│ Resource     │  public key    │ Resource     │
+│ Server A     │  (verify-only) │ Server B     │
+└──────────────┘                └──────────────┘
+Neither server can forge a token — compromising one verifier's key material
+grants no ability to mint tokens for any tenant or any other verifier.
+```
+
+In a single-service, single-trust-domain setup HMAC is fine and cheaper. In a multi-tenant resource server that never issues its own tokens, sharing a symmetric verification secret across every verifier is a materially larger blast radius than publishing a public key — so `internal/auth/middleware.go` pins to RS256 and rejects everything else (including HS256, to close the classic "algorithm confusion" attack where a token is resigned with HS256 using the public RS256 key as the HMAC secret).
+
+**Token binding / proof-of-possession (DPoP, RFC 9449):**
+
+RS256 verification proves the token was issued by the trusted IdP and hasn't been tampered with. It does **not** prove the presenter is the party the IdP originally issued it to — a stolen bearer token is replayable as-is until it expires or is revoked. DPoP closes that gap by binding a token to a client-held private key:
+
+```
+Bearer token (current model)                DPoP (if the IdP issued cnf-bound tokens)
+──────────────────────────────               ──────────────────────────────────────────
+Attacker steals JWT                          Client signs a one-time "proof" JWT per
+(log leak, XSS, compromised proxy)           request with its own private key
+       │                                            │
+       ▼                                            ▼
+Replayed as-is — indistinguishable           Access token carries cnf.jkt =
+from the legitimate client                   SHA-256(client's public key)
+       │                                            │
+       ▼                                            ▼
+Mitigated by: short-lived tokens,            Resource server checks: does this
+JTI revocation, rate limits,                 request's proof-key thumbprint match
+audit logging — not by possession            the token's cnf.jkt?
+                                                     │
+                                                     ▼
+                                              Stolen token alone is useless without
+                                              the matching private key
+```
+
+This server cannot implement the right-hand side unilaterally: the `cnf.jkt` binding claim can only be embedded by the *issuing* IdP at token-mint time — a resource server that only ever verifies tokens (this one) has no way to retrofit that binding after the fact. Research into current standards and MCP-ecosystem state (summarized on [#489](https://github.com/zoharbabin/web-researcher-mcp/issues/489)) found DPoP is recommended-but-optional in general OAuth guidance (RFC 9700/BCP 240), unevenly supported across IdPs (GA at Auth0/Okta/Ping/Curity, absent at AWS Cognito), still a proposal (not a ratified requirement) in the MCP specification itself, and not named by FedRAMP, DoD Zero Trust guidance, NIST 800-63B, or HIPAA's Security Rule. The realistic threat — stolen-bearer-token replay — is mitigated today via short-lived tokens, JTI-based revocation (survives restarts via `persist.Store`), per-tenant rate limiting, circuit breakers, and secret-redacted audit logging with request correlation.
 
 **STDIO Transport:**
 - No authentication. Credentials come from environment.
@@ -133,11 +189,11 @@ This fails closed only for present-but-insufficient scopes — it never silently
 ```
 ┌─────────────────────────────────┐
 │          Tenant A               │
-│  ┌──────────┐  ┌────────────┐  │
-│  │ Session 1│  │ Session 2  │  │
-│  │ cache ns │  │ cache ns   │  │
-│  │ seq state│  │ seq state  │  │
-│  └──────────┘  └────────────┘  │
+│  ┌──────────┐  ┌────────────┐   │
+│  │ Session 1│  │ Session 2  │   │
+│  │ cache ns │  │ cache ns   │   │
+│  │ seq state│  │ seq state  │   │
+│  └──────────┘  └────────────┘   │
 └─────────────────────────────────┘
 ┌─────────────────────────────────┐
 │          Tenant B               │
@@ -186,8 +242,8 @@ Raw HTML/Content
 │      background                    │
 │    - HTML comments                 │
 │    - Zero-width characters         │
-│      (U+200B, U+200C, U+200D,     │
-│       U+FEFF, U+2060)             │
+│      (U+200B, U+200C, U+200D,      │
+│       U+FEFF, U+2060)              │
 └────────────────┬───────────────────┘
                  │
     ▼
@@ -233,7 +289,7 @@ Raw HTML/Content
 - Per-Tenant: `sync.Map[tenantID]*rate.Limiter` with TTL cleanup; daily quota (`AllowDaily`) optionally atomic across pods via Redis (`internal/redisbackend`)
 - Per-IP: `RATE_LIMIT_PER_IP` / `TRUST_PROXY`
 
-**Scrape concurrency (separate from rate limiting):** the scraper pipeline (`internal/scraper`) bounds in-flight scrapes with a buffered-channel semaphore of `MAX_SCRAPE_CONCURRENCY` slots (default 5) — backpressure on outbound fetches, not a per-session request limit.
+**Scrape concurrency (separate from rate limiting):** the scraper pipeline (`internal/scraper`) bounds in-flight scrapes with two independent buffered-channel semaphores — backpressure on outbound fetches, not a per-session request limit. The fast tiers (markdown/stealth/jina/html/exa) share a pool of `MAX_SCRAPE_CONCURRENCY` slots (default 5); the browser (go-rod) tier has its own smaller pool of `MAX_SCRAPE_CONCURRENCY_BROWSER` slots (default 2), so a burst of slow browser scrapes — which can each hold a slot for up to 30s — can't starve fast, unrelated requests.
 
 **Cost Quotas:**
 - Track tool/API call count per tenant per day (`DAILY_QUOTA_PER_TENANT`)
@@ -245,7 +301,7 @@ Raw HTML/Content
 When a single agent spawns many parallel tool calls, limits are enforced by token buckets, not a queue:
 - Per-tenant and global token buckets (`internal/ratelimit/limiter.go`) — excess calls are rejected immediately, never buffered
 - Rejected HTTP requests return `429` with a `Retry-After` header (`60` for the per-minute bucket, `3600` for the daily quota)
-- Concurrent scraping is separately bounded by a fixed-size semaphore in the scrape pipeline (`internal/scraper/pipeline.go`), so a burst of scrapes runs at a capped concurrency rather than all at once
+- Concurrent scraping is separately bounded by two fixed-size semaphores in the scrape pipeline (`internal/scraper/pipeline.go`) — one for fast tiers, one for the browser tier — so a burst of scrapes runs at a capped concurrency rather than all at once
 
 ---
 
@@ -288,7 +344,7 @@ metadata.
 - Retention: rotated files older than `AUDIT_RETENTION_DAYS` are deleted on startup and hourly. The default is 180 days; any non-zero value is clamped to `[180, 3650]` per NIS2/HGB retention floors. `0` disables cleanup.
 
 **What is NOT logged (by default):**
-- **Raw query text** — omitted unless `AUDIT_INCLUDE_REQUEST_BODY=true`. When that flag is false (default), only the query **length** (an integer) is recorded, never the literal query; when true, the raw query is recorded after `MaskSecrets` redaction.
+- **Raw query text** — never recorded, in either setting. The query **length** (an integer) is always recorded; when `AUDIT_INCLUDE_REQUEST_BODY=true`, a SHA-256 hash of the query is additionally recorded, letting an operator correlate repeated/identical queries without the literal text ever reaching the audit sink (#486).
 - Scraped content (too large, PII risk)
 - Full request parameters (may contain PII)
 
@@ -483,7 +539,7 @@ GOEXPERIMENT=boringcrypto CGO_ENABLED=0 \
 | Search history | — | Per-tenant |
 | Audit logs | — | Filterable by tenant |
 
-**Note:** Set `CACHE_ISOLATION=tenant` to enforce per-tenant cache isolation. When enabled, all cache keys are prefixed with the authenticated tenant ID, preventing cross-tenant cache access. Default is `shared` (cache keys are content-addressed, identical queries share results across tenants). For search results sharing is safe (same query returns same results), but scrape cache may contain tenant-specific content — use `tenant` mode for strict data isolation deployments.
+**Note:** Set `CACHE_ISOLATION=tenant` to enforce per-tenant cache isolation. When enabled, all cache keys are prefixed with the authenticated tenant ID, preventing cross-tenant cache access. Default is `shared` (cache keys are content-addressed, identical queries share results across tenants). For search results sharing is safe (same query returns same results), but scrape cache may contain tenant-specific content — use `tenant` mode for strict data isolation deployments. Once `OAUTH_ISSUER_URL` is configured, `CACHE_ISOLATION` must be set explicitly (either value) — the server refuses to start otherwise, so the shared-vs-tenant choice can never be made by omission in a real multi-tenant deployment (#484).
 
 ### Supply Chain Security
 

@@ -66,13 +66,15 @@ func registerClinicalSearch(srv *mcp.Server, deps Dependencies) {
 			return cachedResultWithMeta(cached, meta), nil, nil
 		}
 
-		results, err := searcher.Trials(ctx, search.TrialSearchParams{
-			Query:        input.Query,
-			Condition:    input.Condition,
-			Intervention: input.Intervention,
-			Sponsor:      input.Sponsor,
-			Status:       input.Status,
-			NumResults:   num,
+		results, err := coalescedFetch(ctx, deps, cacheKey, func() ([]search.TrialResult, error) {
+			return searcher.Trials(ctx, search.TrialSearchParams{
+				Query:        input.Query,
+				Condition:    input.Condition,
+				Intervention: input.Intervention,
+				Sponsor:      input.Sponsor,
+				Status:       input.Status,
+				NumResults:   num,
+			})
 		})
 		if err != nil {
 			errCode := "upstream_error"

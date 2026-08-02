@@ -72,7 +72,9 @@ func registerMonarchSearch(srv *mcp.Server, deps Dependencies) {
 			return cachedResultWithMeta(cached, meta), nil, nil
 		}
 
-		results, err := searcher.Search(ctx, params)
+		results, err := coalescedFetch(ctx, deps, cacheKey, func() ([]search.MonarchResult, error) {
+			return searcher.Search(ctx, params)
+		})
 		if err != nil {
 			errCode := "upstream_error"
 			if isRateLimitError(err) {

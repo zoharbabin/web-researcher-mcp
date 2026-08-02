@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,20 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/ratelimit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
 )
+
+// httpGet issues a context-bound GET against a test server URL.
+func httpGet(t *testing.T, url string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp
+}
 
 type stubHealth struct{}
 
@@ -31,7 +46,7 @@ func (stubHealth) Health() any {
 // poll, and embeds NO data (the data arrives via the gated JSON endpoint).
 func TestDashboardPage_NonceAndCSP(t *testing.T) {
 	handler := handleDashboard("1.20.0")
-	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/dashboard", nil)
 	rec := httptest.NewRecorder()
 	handler(rec, req)
 
@@ -63,7 +78,7 @@ func TestDashboardPage_NonceIsPerRequest(t *testing.T) {
 	handler := handleDashboard("1.20.0")
 	get := func() string {
 		rec := httptest.NewRecorder()
-		handler(rec, httptest.NewRequest(http.MethodGet, "/dashboard", nil))
+		handler(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/dashboard", nil))
 		return rec.Header().Get("Content-Security-Policy")
 	}
 	if get() == get() {
@@ -87,7 +102,7 @@ func TestDashboardData_AggregateShape(t *testing.T) {
 	m.RecordError(metrics.ErrorRecord{Tool: "web_search", Kind: "rate_limited", Provider: "google"})
 
 	handler := handleDashboardData("1.20.0", m, s, rl, stubHealth{})
-	req := httptest.NewRequest(http.MethodGet, "/dashboard/data", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/dashboard/data", nil)
 	rec := httptest.NewRecorder()
 	handler(rec, req)
 
@@ -123,7 +138,7 @@ func TestDashboardData_NilHealth(t *testing.T) {
 	m, s, rl := dashboardTestDeps()
 	handler := handleDashboardData("1.20.0", m, s, rl, nil)
 	rec := httptest.NewRecorder()
-	handler(rec, httptest.NewRequest(http.MethodGet, "/dashboard/data", nil))
+	handler(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/dashboard/data", nil))
 
 	var raw map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &raw); err != nil {
@@ -139,17 +154,17 @@ func TestDashboardData_NilHealth(t *testing.T) {
 func TestDashboardData_AdminGated(t *testing.T) {
 	m, s, rl := dashboardTestDeps()
 	const key = "s3cret-admin-key"
-	gated := adminAuth(key, audit.NewNoop(), handleDashboardData("1.20.0", m, s, rl, nil))
+	gated := adminAuth(key, "", audit.NewNoop(), handleDashboardData("1.20.0", m, s, rl, nil))
 
 	t.Run("no key → 401", func(t *testing.T) {
 		rec := httptest.NewRecorder()
-		gated(rec, httptest.NewRequest(http.MethodGet, "/dashboard/data", nil))
+		gated(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/dashboard/data", nil))
 		if rec.Code != http.StatusUnauthorized {
 			t.Fatalf("status = %d, want 401", rec.Code)
 		}
 	})
 	t.Run("wrong key → 401", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/dashboard/data", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/dashboard/data", nil)
 		req.Header.Set("X-Admin-Key", "nope")
 		rec := httptest.NewRecorder()
 		gated(rec, req)
@@ -158,7 +173,7 @@ func TestDashboardData_AdminGated(t *testing.T) {
 		}
 	})
 	t.Run("correct key → 200", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/dashboard/data", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/dashboard/data", nil)
 		req.Header.Set("X-Admin-Key", key)
 		rec := httptest.NewRecorder()
 		gated(rec, req)
@@ -181,7 +196,7 @@ func TestServeHTTP_DashboardRoutesRegistered(t *testing.T) {
 		cfg := HTTPConfig{Version: "1.20.0", AdminKey: adminKey, Metrics: m, Sessions: s, RateLimiter: rl, Auditor: audit.NewNoop()}
 		if cfg.AdminKey != "" {
 			mux.Handle("GET /dashboard", handleDashboard(cfg.Version))
-			mux.Handle("GET /dashboard/data", adminAuth(cfg.AdminKey, cfg.Auditor, handleDashboardData(cfg.Version, cfg.Metrics, cfg.Sessions, cfg.RateLimiter, cfg.Health)))
+			mux.Handle("GET /dashboard/data", adminAuth(cfg.AdminKey, cfg.AdminKeyPrev, cfg.Auditor, handleDashboardData(cfg.Version, cfg.Metrics, cfg.Sessions, cfg.RateLimiter, cfg.Health)))
 		}
 		return httptest.NewServer(mux)
 	}
@@ -189,19 +204,13 @@ func TestServeHTTP_DashboardRoutesRegistered(t *testing.T) {
 	t.Run("with admin key", func(t *testing.T) {
 		ts := run("k")
 		defer ts.Close()
-		resp, err := http.Get(ts.URL + "/dashboard")
-		if err != nil {
-			t.Fatal(err)
-		}
+		resp := httpGet(t, ts.URL+"/dashboard")
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			t.Errorf("/dashboard = %d, want 200", resp.StatusCode)
 		}
 		// data endpoint without key → 401
-		resp2, err := http.Get(ts.URL + "/dashboard/data")
-		if err != nil {
-			t.Fatal(err)
-		}
+		resp2 := httpGet(t, ts.URL+"/dashboard/data")
 		defer resp2.Body.Close()
 		if resp2.StatusCode != http.StatusUnauthorized {
 			t.Errorf("/dashboard/data (no key) = %d, want 401", resp2.StatusCode)
@@ -211,10 +220,7 @@ func TestServeHTTP_DashboardRoutesRegistered(t *testing.T) {
 	t.Run("without admin key", func(t *testing.T) {
 		ts := run("")
 		defer ts.Close()
-		resp, err := http.Get(ts.URL + "/dashboard")
-		if err != nil {
-			t.Fatal(err)
-		}
+		resp := httpGet(t, ts.URL+"/dashboard")
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusNotFound {
 			t.Errorf("/dashboard (no admin key) = %d, want 404", resp.StatusCode)

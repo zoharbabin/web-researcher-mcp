@@ -73,6 +73,27 @@ export SEARCH_PROVIDER="google"  # or brave, serper, searxng, searchapi, duckduc
 
 Unit and integration tests do not require API keys. Only E2E tests that hit live services need them.
 
+### Testing both transports locally
+
+If your change touches transport-specific behavior (auth, rate limiting,
+sessions, HTTP handlers), test it over both STDIO and HTTP before opening a
+PR — tool logic is identical across transports, but the surrounding plumbing
+isn't.
+
+- **STDIO** — the default `.mcp.json` entry in this repo already covers this;
+  just run your MCP client against the built binary.
+- **HTTP, zero setup** — run `PORT=3000 ./web-researcher-mcp` and point any
+  MCP client at `http://localhost:3000/mcp/` (no auth, no TLS). See
+  [DEPLOYMENT.md → HTTP](docs/DEPLOYMENT.md#http-multi-client-web-apps).
+- **HTTP, container parity** — `make docker-smoke` builds the real Docker
+  image and drives a full `initialize`/`tools/call` sequence over plain HTTP
+  in a container (no `-i`/`-t`, matching production). `make e2e-oauth-docker`
+  adds HTTPS + OAuth 2.1 + multi-tenant isolation + GDPR export/erasure on top,
+  entirely via Docker — no cluster needed.
+- **Full k8s parity** — for changes that need real multi-pod behavior (HPA
+  scaling, `REDIS_URL` cross-pod state, the stateless MCP transport under a
+  rolling deployment), see [docs/K8S_LOCAL_DEV.md](docs/K8S_LOCAL_DEV.md).
+
 ## Running Tests
 
 ```bash
@@ -97,6 +118,31 @@ go test ./internal/scraper/...
 go test -coverprofile=coverage.out ./...
 go tool cover -html=coverage.out
 ```
+
+### Fuzzing
+
+`internal/documents` (PDF/DOCX/PPTX extraction) and `internal/content`'s sanitizer parse fully untrusted, internet-sourced input, so both carry Go native (`testing.F`) fuzz targets. CI runs a short 20s-per-target sweep on every code PR; run a deeper local sweep periodically or after touching either package:
+
+```bash
+# Short CI-equivalent sweep across all 5 targets
+make test-fuzz
+
+# Deeper local sweep (minutes, not seconds)
+make test-fuzz FUZZTIME=5m
+
+# A single target directly
+go test ./internal/documents/... -run=^$ -fuzz=FuzzParsePDF -fuzztime=1m
+```
+
+### Operational Hardening regression gate (#467)
+
+`make harness-467` re-runs the 6-gate regression suite for the v1.47.0 Operational Hardening milestone (circuit breaker, rate limiter, scraper concurrency, tenant isolation, dead-code, and E2E checks) in one pass. It isn't part of `make verify` — it re-checks lint/sec/vuln plus a curated set of tests already covered by CI, so it's a manual sanity pass rather than a duplicate CI job. Run it before cutting any release that touches `internal/circuit`, `internal/ratelimit`, `internal/scraper`, `internal/metrics`, or tenant-isolation code paths:
+
+```bash
+make harness-467
+```
+
+Logs land in the gitignored `.harness-out/` directory.
 
 ### Linting
 

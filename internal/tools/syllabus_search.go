@@ -77,7 +77,9 @@ func registerSyllabusSearch(srv *mcp.Server, deps Dependencies) {
 			return cachedResultWithMeta(cached, meta), nil, nil
 		}
 
-		results, err := fetchOpenSyllabus(ctx, deps.OpenSyllabusAPIURL, deps.OpenSyllabusAPIKey, input, num, sortBy)
+		results, err := coalescedFetch(ctx, deps, cacheKey, func() ([]syllabusResult, error) {
+			return fetchOpenSyllabus(ctx, deps.OpenSyllabusAPIURL, deps.OpenSyllabusAPIKey, input, num, sortBy)
+		})
 		if err != nil {
 			errCode := "upstream_error"
 			if isRateLimitError(err) {

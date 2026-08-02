@@ -70,15 +70,17 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 		}
 
 		traceCtx, trace := search.NewRoutingTrace(ctx)
-		results, err := provider.News(traceCtx, search.NewsSearchParams{
-			Query:      input.Query,
-			NumResults: numResults,
-			Freshness:  freshness,
-			SortBy:     sortBy,
-			Source:     input.NewsSource,
-			Country:    input.Country,
-			Language:   input.Language,
-			Safe:       input.Safe,
+		results, err := coalescedFetch(ctx, deps, cacheKey, func() ([]search.NewsResult, error) {
+			return provider.News(traceCtx, search.NewsSearchParams{
+				Query:      input.Query,
+				NumResults: numResults,
+				Freshness:  freshness,
+				SortBy:     sortBy,
+				Source:     input.NewsSource,
+				Country:    input.Country,
+				Language:   input.Language,
+				Safe:       input.Safe,
+			})
 		})
 		if err != nil {
 			errCode := "upstream_error"

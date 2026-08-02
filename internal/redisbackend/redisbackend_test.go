@@ -2,6 +2,7 @@ package redisbackend
 
 import (
 	"context"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -89,9 +90,9 @@ func TestIncrDailyAtomicAndExpires(t *testing.T) {
 	resetAt := time.Now().Add(time.Hour)
 
 	for i := int64(1); i <= 3; i++ {
-		v, ok := s.IncrDaily(ctx, "tenant-1", resetAt)
-		if !ok || v != i {
-			t.Fatalf("expected count %d, got %d ok=%v", i, v, ok)
+		v, err := s.IncrDaily(ctx, "tenant-1", resetAt)
+		if err != nil || v != i {
+			t.Fatalf("expected count %d, got %d err=%v", i, v, err)
 		}
 	}
 	// A different tenant has an independent counter.
@@ -240,6 +241,74 @@ func TestSessionPerUserCapEvictsWithinUser(t *testing.T) {
 	if _, ok := m.GetIndex("t1", "bob", b2.ID); !ok {
 		t.Error("bob's second session must survive (his own cap not yet hit)")
 	}
+}
+
+// TestSessionDiskVsRedisSwitch is the #479 backend-switch proof: the disk
+// (session.MemoryManager) and Redis (SessionManager) backends satisfy the
+// identical session.Manager contract, so main.go's URL != "" branch swaps
+// implementations with zero caller-visible behavior difference for the same
+// sequence of operations.
+func TestSessionDiskVsRedisSwitch(t *testing.T) {
+	run := func(t *testing.T, m session.Manager) {
+		idx, err := m.Create("tenant-1", "u1")
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if _, err := m.AppendStep("tenant-1", "u1", idx.ID, session.ResearchStep{StepNumber: 1, Description: "step one"}, nil, ""); err != nil {
+			t.Fatalf("AppendStep: %v", err)
+		}
+		if err := m.SetResearchGoal("tenant-1", "u1", idx.ID, "switch parity goal"); err != nil {
+			t.Fatalf("SetResearchGoal: %v", err)
+		}
+
+		got, ok := m.GetIndex("tenant-1", "u1", idx.ID)
+		if !ok {
+			t.Fatal("GetIndex: expected session to be found")
+		}
+		if got.StepCount != 1 {
+			t.Errorf("StepCount = %d, want 1", got.StepCount)
+		}
+		if got.ResearchGoal != "switch parity goal" {
+			t.Errorf("ResearchGoal = %q, want %q", got.ResearchGoal, "switch parity goal")
+		}
+
+		full, err := m.GetFull("tenant-1", "u1", idx.ID)
+		if err != nil {
+			t.Fatalf("GetFull: %v", err)
+		}
+		if len(full.Steps) != 1 || full.Steps[0].Description != "step one" {
+			t.Fatalf("unexpected steps: %+v", full.Steps)
+		}
+
+		// Cross-tenant isolation must hold identically on both backends.
+		if _, err := m.GetFull("tenant-2", "u1", idx.ID); err == nil {
+			t.Error("expected a different tenant to be denied access to the session")
+		}
+
+		m.Delete("tenant-1", "u1", idx.ID)
+		if _, ok := m.GetIndex("tenant-1", "u1", idx.ID); ok {
+			t.Error("expected session to be gone after Delete")
+		}
+	}
+
+	t.Run("disk", func(t *testing.T) {
+		dir, err := os.MkdirTemp("", "session-switch-disk-*")
+		if err != nil {
+			t.Fatalf("MkdirTemp: %v", err)
+		}
+		defer os.RemoveAll(dir)
+		m, err := session.NewManager(session.Config{MaxSessions: 10, SessionTTL: time.Hour, DataDir: dir})
+		if err != nil {
+			t.Fatalf("session.NewManager: %v", err)
+		}
+		defer m.Close()
+		run(t, m)
+	})
+
+	t.Run("redis", func(t *testing.T) {
+		b := newTestBackend(t)
+		run(t, b.SessionManager())
+	})
 }
 
 // TestSplitMemberHandlesColonInUserID guards the tenant-index member parse: a

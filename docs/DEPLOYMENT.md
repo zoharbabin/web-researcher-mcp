@@ -150,7 +150,7 @@ stdin attached (`docker run -p ... -e PORT=...`) stays up serving HTTP.
 | Auth | No | OAuth 2.1 when `OAUTH_ISSUER_URL` is set; open otherwise |
 | Rate limiting (server-side) | None | Per-tenant + global |
 | Rate limiting (upstream APIs) | Applies | Applies |
-| Session persistence | Local disk | Local disk (use sticky sessions for multi-instance) |
+| `sequential_search` session persistence | Local disk | Local disk (use `REDIS_URL` for multi-instance, see [Horizontal Scaling](#horizontal-scaling)) |
 | Audit logging | Yes | Yes |
 | SSRF protection | Yes | Yes |
 | Cache | Local memory + disk | Local memory + disk |
@@ -238,6 +238,10 @@ docker run -p 3000:3000 \
 
 ## Kubernetes
 
+To exercise this topology on a local single-node cluster (Rancher Desktop, `kind`, `minikube`) rather than deploy it to production, see [`deploy/k8s-local/`](../deploy/k8s-local/) and [docs/K8S_LOCAL_DEV.md](K8S_LOCAL_DEV.md) — generic manifests, no personal hostnames or committed secrets.
+
+The `resources` and `securityContext` below assume the browser scrape tier is enabled (`CHROME_PATH` set, the default in the bundled images). A long-lived headless Chromium instance per pod (`internal/scraper/browser.go`'s `browserPool`) typically holds 300-500Mi RSS on its own once a handful of pages/tabs are open concurrently, on top of the Go process's own heap, connection pools, and in-memory cache tier — the `512Mi` limit in earlier versions of this example was sized for the Go process alone and will OOMKill under real browser-tier concurrency. If you disable the browser tier entirely (unset `CHROME_PATH`, forcing scrapes to stop at the markdown/stealth/HTML tiers), the Go-process-only footprint is well within `256-384Mi` and you can size down accordingly.
+
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -257,6 +261,12 @@ spec:
         prometheus.io/port: "3000"
         prometheus.io/path: "/metrics"
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: server
         image: web-researcher-mcp:latest
@@ -272,11 +282,20 @@ spec:
               key: google-api-key
         resources:
           requests:
-            cpu: 100m
-            memory: 128Mi
+            cpu: 250m
+            memory: 384Mi
           limits:
             cpu: 1000m
-            memory: 512Mi
+            memory: 1.5Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
         livenessProbe:
           httpGet:
             path: /health/live
@@ -289,6 +308,9 @@ spec:
             port: 3000
           initialDelaySeconds: 5
           periodSeconds: 5
+      volumes:
+      - name: tmp
+        emptyDir: {}
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
@@ -316,6 +338,18 @@ spec:
         type: AverageValue
         averageValue: "50"
 ```
+
+### Multi-tenant shared clusters
+
+Running one Deployment behind a shared HTTP+OAuth endpoint that serves multiple `tenant_id` values (rather than one cluster per customer) needs explicit isolation controls beyond the manifest above:
+
+- Set `CACHE_ISOLATION=tenant` (see [Multi-Tenancy](#multi-tenancy) below) — required once `OAUTH_ISSUER_URL` is set; `shared` is only safe for single-tenant deployments.
+- If replicas share Redis (`REDIS_URL`), also set `CACHE_ENCRYPTION_KEY` and use `rediss://` — Redis has no per-tenant ACL here, so isolation is enforced by the application's `tenant_id`-prefixed keys plus encryption, not by the datastore.
+- Put tenants with different compliance requirements in separate namespaces with a `NetworkPolicy` denying pod-to-pod traffic between them — this server enforces logical (application-layer) tenant isolation, not network isolation.
+- Restrict `/admin/*` (the `ADMIN_API_KEY`-gated plane, including GDPR export/erasure) to an operator-only ingress path — a leaked admin key in a shared deployment reaches every tenant, not just one.
+- Size per-tenant rate limits (see `docs/SECURITY_AND_COMPLIANCE.md`'s Rate Limiting section), not just the pod-level HPA metrics above — a single noisy tenant can otherwise starve the others on the same pod.
+
+Full rationale and the RS256/DPoP threat-model discussion behind these controls: `docs/SECURITY_AND_COMPLIANCE.md`'s [Multi-tenant shared Kubernetes clusters](security-and-compliance.md#multi-tenant-shared-kubernetes-clusters) section.
 
 ---
 
@@ -423,7 +457,7 @@ SEARCH_ROUTING='{"web":"brave,google","news":"brave,serper","images":"google,bra
 **How it works:**
 - Requests route to the first healthy provider in the priority list
 - If a provider fails (timeout, rate limit, 5xx), the next provider is tried automatically
-- Each provider gets an independent circuit breaker. The routing-layer breakers that govern fallback (web, patent, and academic alike) open after 3 consecutive failures and reset after 30s (`internal/search/router.go`). Domain providers additionally wrap their own upstream HTTP calls in an inner breaker (5 failures / 60s, `internal/search/domain.go`) — a separate, deeper layer, not the effective routing breaker. See those files for the authoritative values.
+- Each provider gets an independent circuit breaker. The routing-layer breakers that govern fallback (web, patent, and academic alike) open after 3 consecutive failures and reset after 30s (`internal/search/router.go`) — this tuning is fixed, since it governs fast per-request fallback ordering rather than long-horizon provider health. Domain providers additionally wrap their own upstream HTTP calls in an inner breaker — a separate, deeper layer, not the effective routing breaker — configurable via `CIRCUIT_FAILURE_THRESHOLD` / `CIRCUIT_RESET_TIMEOUT_SECONDS` (default 5 failures / 60s; see `.env.example`). The half-open reset check adds up to 20% random jitter to avoid synchronized retry storms across simultaneously-tripped breakers. See `internal/circuit/breaker.go` and `internal/search/domain.go` for the authoritative behavior.
 
 **Operation types:** `web`, `images`, `news`, `academic`, `patents`, `default`. The `academic` and `patents` lists are filtered to providers that implement the academic/patent interface — `academic` accepts `openalex`, `crossref`, `pubmed`, `semanticscholar`, `exa`; `patents` accepts `searchapi`, `epo`, `lens`, `uspto`. Names that don't implement the interface are silently dropped, so use the example values above.
 
@@ -529,7 +563,8 @@ DAILY_QUOTA_PER_TENANT=10000
 | `ALLOWED_DOMAINS` | Domain whitelist (comma-separated) | — (all allowed) |
 | `CHROME_PATH` | Custom Chrome/Chromium binary path; set to `"disabled"` to turn the browser tier off entirely (no autodetect, no download) | auto-detect |
 | `JINA_READER_DISABLED` | Set `true` to turn off the Jina Reader scrape tier (r.jina.ai) entirely, e.g. for hardened deploys or network-free tests | `false` |
-| `MAX_SCRAPE_CONCURRENCY` | Parallel scrape limit | `5` |
+| `MAX_SCRAPE_CONCURRENCY` | Parallel scrape limit for the fast tiers (markdown/stealth/jina/html/exa) | `5` |
+| `MAX_SCRAPE_CONCURRENCY_BROWSER` | Separate parallel scrape limit for the browser (go-rod) tier, which can hold a slot for up to 30s — kept apart from `MAX_SCRAPE_CONCURRENCY` so slow browser scrapes can't starve fast ones (#472) | `2` |
 | `MAX_HTML_BYTES` | Decompressed HTML body read cap per scrape tier | `8388608` (8 MB) |
 | `MAX_DOCUMENT_BYTES` | Document (PDF/DOCX/PPTX) download cap | `52428800` (50 MB) |
 
@@ -564,6 +599,7 @@ Regulated features (per-user personal data; each activates the consent subsystem
 | `LOG_LEVEL` | slog level | `info` |
 | `LOG_FORMAT` | Output format | `json` |
 | `METRICS_ENABLED` | Enable Prometheus metrics | `true` |
+| `METRICS_MAX_TENANTS` | Cap on distinct tenants tracked in per-tenant metrics; oldest-active tenant is evicted once exceeded | `10000` |
 
 ### Audit
 
@@ -572,7 +608,7 @@ Regulated features (per-user personal data; each activates the consent subsystem
 | `AUDIT_ENABLED` | Enable structured audit logging | `true` |
 | `AUDIT_OUTPUT_PATH` | File path for audit log output (JSONL format) | — (stderr) |
 | `AUDIT_BUFFER_SIZE` | Internal event buffer size | `1000` |
-| `AUDIT_INCLUDE_REQUEST_BODY` | When `true`, raw query text is attached to audit metadata. When `false`, only a length/hash is recorded — raw query text is omitted | `false` |
+| `AUDIT_INCLUDE_REQUEST_BODY` | When `true`, a SHA-256 hash of the query is added to audit metadata alongside its length, for correlating repeated queries. The literal query text is never recorded, in either setting | `false` |
 | `AUDIT_MAX_BYTES` | Rotate the active audit file to a timestamped sibling at this size. File output only; ignored for stderr/STDIO | `104857600` (100 MB) |
 | `AUDIT_RETENTION_DAYS` | Rotated audit files older than this are deleted on startup and hourly. `0` disables cleanup. Any non-zero value is clamped to `[180, 3650]` per NIS2/HGB retention floors | `180` |
 
@@ -580,10 +616,12 @@ Regulated features (per-user personal data; each activates the consent subsystem
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `CACHE_ISOLATION` | Cache isolation mode (`shared` or `tenant`) | `shared` |
+| `CACHE_ISOLATION` | Cache isolation mode (`shared` or `tenant`) | `shared` (single-tenant/STDIO); **required** once `OAUTH_ISSUER_URL` is set |
 | `DATA_REGION` | Advisory label for where cache/session/audit data resides; surfaced in stats/audit. No functional restriction | — (unset) |
 
 When `CACHE_ISOLATION=tenant`, all cache keys are prefixed with the authenticated tenant ID from the JWT token. This ensures tenant A's cached results are invisible to tenant B. Default (`shared`) is appropriate for single-tenant deployments or when search results are inherently public. Use `tenant` for multi-tenant deployments with strict data isolation requirements.
+
+**Startup guard (#484):** once `OAUTH_ISSUER_URL` is configured (real multi-tenant HTTP mode), `CACHE_ISOLATION` must be set explicitly — the server refuses to start otherwise. This turns the silent shared-by-default footgun into a deliberate choice: set `CACHE_ISOLATION=tenant` for strict isolation, or `CACHE_ISOLATION=shared` to explicitly accept cross-tenant cache sharing. The default of `shared` still applies unmodified when no OAuth issuer is configured, preserving zero-config startup for single-tenant/STDIO use.
 
 `DATA_REGION` is an operator-supplied label only (e.g. `eu-central`, `us-east`). It is echoed in stats and audit records for residency documentation but does not move, restrict, or constrain where data is physically stored — that is governed by `CACHE_DIR`, `SESSION_DATA_DIR`, and `AUDIT_OUTPUT_PATH`.
 
@@ -593,11 +631,14 @@ When `CACHE_ISOLATION=tenant`, all cache keys are prefixed with the authenticate
 |----------|-------------|---------|
 | `JWKS_REFRESH_INTERVAL` | How often to refresh JWKS keys | `1h` |
 | `ADMIN_API_KEY` | Shared secret gating all `/admin/*` endpoints, sent as `X-Admin-Key` (min 16 chars). Generate with `openssl rand -hex 32` | — |
+| `ADMIN_API_KEY_PREV` | Optional previous admin key accepted alongside `ADMIN_API_KEY` during a rotation grace period (min 16 chars). Every use is logged (`slog.Warn` + an `auth.admin_key_prev_used` audit event). Empty = no fallback | — |
 | `CACHE_ADMIN_KEY` | **Deprecated** alias for `ADMIN_API_KEY` (still accepted; logs a startup warning). `ADMIN_API_KEY` wins if both are set | — |
 
 ---
 
 ## Horizontal Scaling
+
+The "sessions" below are the `sequential_search` tool's own research-continuity state, not the MCP protocol transport session (`Mcp-Session-Id`). The transport itself runs in stateless mode (`mcp.StreamableHTTPOptions.Stateless` in `internal/server/server.go`) precisely so that no session affinity is required at the load balancer/ingress — sticky sessions would concentrate a client's traffic onto one pod (a load-concentration/DDoS risk) and still break on HPA scale-down or a rollout. This costs nothing functionally: the server makes no server-initiated push (no sampling, elicitation, or list-changed/progress notifications), so nothing needs a durable per-client transport session.
 
 **Two modes.** Without `REDIS_URL`, the server uses in-memory + encrypted-disk state, per-instance:
 
@@ -614,6 +655,7 @@ When `CACHE_ISOLATION=tenant`, all cache keys are prefixed with the authenticate
 - **Token revocation** is shared across pods via the same Redis-backed persist store.
 - All personal-data namespaces (sessions, persist) are **AES-256-GCM encrypted before write** — Redis holds only ciphertext, identical at-rest protection to disk. `REDIS_URL` therefore **requires** `CACHE_ENCRYPTION_KEY`.
 - **Fail-fast:** if `REDIS_URL` is set but Redis is unreachable at startup, the server exits rather than silently degrading to per-pod mode.
+- **Runtime fallback (#470):** this fail-fast only covers startup. If Redis becomes unreachable *after* startup (a transient outage, not down at boot), each affected `AllowDaily` call falls back to that pod's local in-memory counter instead of failing the request — so the daily quota is briefly enforced per-pod (up to N× over-spend across N pods) rather than fleet-wide until Redis recovers. Every fallback occurrence logs `slog.Warn("rate limiter Redis fallback", "tenant", ..., "error", ...)` and increments the `mcp_ratelimit_redis_fallback_total` Prometheus counter — alert on a sustained non-zero rate to catch this degradation quickly.
 
 **Recommendations for multi-instance HTTP deployments:**
 
@@ -927,13 +969,19 @@ The server uses two independent secrets. Both rotate without downtime.
 
 ### Admin key (`ADMIN_API_KEY`)
 
-The admin key is stateless — rotating it is a single env-var change:
+The admin key is stateless. For a hard cutover (acceptable for most deployments, since admin endpoints are operational, not user-facing):
 
 1. Generate a new key: `openssl rand -hex 32`.
 2. Update `ADMIN_API_KEY` in your deployment and restart (or rolling-restart) the pods.
 3. Update any operational scripts/dashboards that send `X-Admin-Key`.
 
-There is no stored state encrypted under the admin key, so no migration is needed. In a rolling deployment, in-flight admin calls against an old pod use that pod's old key until it cycles; admin endpoints are operational, not user-facing, so a brief overlap is harmless.
+There is no stored state encrypted under the admin key, so no migration is needed. In a rolling deployment, in-flight admin calls against an old pod use that pod's old key until it cycles.
+
+For a scheduled credential-rotation policy (a common SOC 2 control) where even that brief per-pod overlap is unacceptable, use the dual-key grace period instead:
+
+1. Move the current key to `ADMIN_API_KEY_PREV` and set a new `ADMIN_API_KEY` (generate with `openssl rand -hex 32`).
+2. Restart. Both the new and previous key authenticate successfully during the grace period — every request using `ADMIN_API_KEY_PREV` is logged (`slog.Warn` plus an `auth.admin_key_prev_used` audit event), so you can tell exactly when every client has migrated.
+3. Once no more `admin_key_prev_used` events appear, remove `ADMIN_API_KEY_PREV` — the previous key stops working immediately.
 
 ### Encryption key (`CACHE_ENCRYPTION_KEY`) — zero-downtime re-encryption
 

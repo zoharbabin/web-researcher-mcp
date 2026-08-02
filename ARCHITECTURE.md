@@ -188,15 +188,16 @@ A provider can satisfy several at once — `ExaProvider` implements both `Provid
 
 ```go
 type Pipeline struct {
-    client    *http.Client
-    semaphore chan struct{}
-    config    PipelineConfig
+    client           *http.Client
+    semaphore        chan struct{} // fast tiers: markdown/stealth/jina/html/exa + native routes
+    browserSemaphore chan struct{} // browser (go-rod) tier only — smaller, independent pool (#472)
+    config           PipelineConfig
 }
 
 func (p *Pipeline) Scrape(ctx context.Context, url string, maxLength int) (*ScrapeResult, error)
 ```
 
-The pipeline routes specialized content (YouTube, Hacker News threads, PDF/DOCX/PPTX) via early-return detection, then falls back through tiers in order: markdown → stealth → Jina Reader → HTML → browser (go-rod). Each tier is a private method with the same signature; the pipeline tries each in sequence and promotes the first result that meets a quality threshold. The Jina Reader tier (`internal/scraper/jina.go`, `r.jina.ai`) is a cloud-based bot-wall bypass that runs unconditionally and keyless; `JINA_API_KEY` raises its rate limit, and `JINA_READER_DISABLED` is a kill switch. When `EXA_API_KEY` is set, a **paid** final tier (Exa `/contents`) is appended as the last resort — it runs only after every preceding tier fails to extract more than 100 bytes, so the common path never incurs cost. The winning tier is surfaced to the caller as `extractedBy` (e.g. `stealth`, `exa:cached`).
+The pipeline routes specialized content (YouTube, Hacker News threads, PDF/DOCX/PPTX) via early-return detection, then falls back through tiers in order: markdown → stealth → Jina Reader → HTML → browser (go-rod). Each tier is a private method with the same signature; the pipeline tries each in sequence and promotes the first result that meets a quality threshold. Each tier attempt acquires its own concurrency slot for just that attempt — via `acquireTier(ctx, tierName)` — rather than holding one slot for the whole fallback sequence, and the browser tier draws from its own smaller `browserSemaphore` pool instead of the shared fast-tier `semaphore`, so a slow browser attempt (up to 30s) can never block unrelated fast requests (#472). The Jina Reader tier (`internal/scraper/jina.go`, `r.jina.ai`) is a cloud-based bot-wall bypass that runs unconditionally and keyless; `JINA_API_KEY` raises its rate limit, and `JINA_READER_DISABLED` is a kill switch. When `EXA_API_KEY` is set, a **paid** final tier (Exa `/contents`) is appended as the last resort — it runs only after every preceding tier fails to extract more than 100 bytes, so the common path never incurs cost. The winning tier is surfaced to the caller as `extractedBy` (e.g. `stealth`, `exa:cached`).
 
 **SPA fast-path:** When the URL matches a known SPA domain (`isSPADomain` in `internal/scraper/`), the pipeline skips directly to the browser tier rather than spending time on the markdown/stealth/HTML tiers that would return JS shells. This avoids wasted round-trips and the associated latency for single-page apps.
 
@@ -213,7 +214,8 @@ Every request carries a `context.Context` with deadline. Session and tenant IDs 
 ### 6. Concurrency Model
 
 - **Per-tool timeout**: Context with deadline on every tool call
-- **Bounded parallelism**: Semaphore channel for concurrent scrapes (default 5, configurable via `MAX_SCRAPE_CONCURRENCY`)
+- **Bounded parallelism**: Two independent semaphore channels for concurrent scrapes — the fast tiers (markdown/stealth/jina/html/exa) share one pool (default 5, `MAX_SCRAPE_CONCURRENCY`), the browser (go-rod) tier has its own smaller pool (default 2, `MAX_SCRAPE_CONCURRENCY_BROWSER`), so a burst of slow browser scrapes can't starve fast ones (#472)
+- **Request coalescing**: `internal/tools/coalesce.go` wraps cache-miss fetches in `golang.org/x/sync/singleflight`, keyed by tenant ID + the tool's own cache key, so concurrent identical requests from the *same* tenant share one upstream call instead of firing N redundant ones; two tenants issuing the same query never share a dedup key or a result (#474)
 - **Per-client backpressure**: Rate limiter per tenant (+ per-IP pre-auth), reject with 429
 - **Graceful shutdown**: Context cancellation propagates, in-flight requests drain
 
@@ -224,6 +226,7 @@ Routing, provider health, and recent errors are **operator/debug data, never mod
 - **Per-call routing trace** — `search.RoutingTrace` (`internal/search/routing_trace.go`) is a request-scoped, context-carried, concurrency-safe collector the `Router` populates while iterating providers. The tool layer reads its `RoutingDecision` and attaches it to the result's MCP `_meta.routing` (via `routingMeta` / `withRoutingMeta` in `internal/tools/errors.go`, merged with — never clobbering — the cache-freshness `_meta`). The same summary is mirrored to `audit.AuditEvent.Metadata["routing"]`. Omitted entirely when there is nothing to observe (single-provider / non-routed call).
 - **Recent-errors ring** — `metrics.ErrorRing` (`internal/metrics/errors.go`) is a bounded, memory-only, tenant-aware ring buffer fed at the central audit sink (`auditToolCallQuery`), so every tool error path records one redacted sample (cause passed through `audit.MaskSecrets`). No disk, no unbounded growth — consistent with the no-retention posture.
 - **Live provider health** — `search.Router.Health()` (`internal/search/health.go`) returns a tri-state `HealthSnapshot` (`healthy` / `degraded` / `unhealthy`) plus each routed provider's circuit-breaker state.
+- **Bounded per-tenant metrics** — `metrics.Collector`'s `tenantStats` map (`internal/metrics/collector.go`) is capped at `METRICS_MAX_TENANTS` (default 10,000); once at capacity, `getOrCreateTenant` evicts the least-recently-called tenant before inserting a new one, so per-tenant aggregate stats can't grow unbounded on a multi-tenant deployment with high tenant churn (#475).
 
 These reach operators through read-only MCP Resources (`diagnostics://errors/recent`, `diagnostics://health` beside `stats://*`, registered in `internal/resources/resources.go` via the small `HealthProvider` interface) and, in HTTP mode, an admin-gated operator dashboard (`GET /dashboard` + `GET /dashboard/data`, `internal/server/dashboard.go`). The dashboard is a self-contained HTML page (no CDN, no build) under a per-request nonce CSP, aggregate-only. See `docs/TOOLS.md` (Routing Provenance) and `docs/DEPLOYMENT.md` (Operator Observability) for the field contracts.
 
@@ -254,7 +257,7 @@ For exact versions, see `go.mod`. All dependencies use MIT, Apache 2.0, or BSD l
 | Scrape (markdown) | 100-300ms | HTTP GET + parse |
 | Scrape (HTML) | 500-2000ms | goquery parse |
 | Scrape (stealth HTTP) | 300-800ms | Browser-like TLS + headers, no JS |
-| Scrape (browser) | 2-10s | go-rod headless, bounded to MaxConcurrency |
+| Scrape (browser) | 2-10s | go-rod headless, bounded to MaxBrowserConcurrency (independent pool, #472) |
 | YouTube transcript | 1-5s | 3-strategy: captions → timedtext API → description |
 | Hacker News item/list/user | 200-700ms | Native HN Firebase REST; story + top comments fetched in parallel |
 | search_and_scrape | 2-15s | Parallel scrape (semaphore, default 5) |
@@ -264,12 +267,12 @@ For exact versions, see `go.mod`. All dependencies use MIT, Apache 2.0, or BSD l
 Default values are all configurable via environment variables — see `docs/DEPLOYMENT.md` for the full list with defaults.
 
 ```
-Browser pool (go-rod):        concurrent (mutex guards init only; page concurrency bounded by semaphore)
+Browser pool (go-rod):        concurrent (mutex guards init only; page concurrency bounded by browserSemaphore)
 ```
 
 Rate limiting applies only in HTTP mode. STDIO mode (the default for Claude Code, Cursor, and Claude Desktop) has no internal rate limiting — only upstream API quotas apply.
 
-Browser scrapes hold a scraping semaphore slot; the browser pool mutex is released before page creation, so multiple scrapes run concurrently up to the semaphore limit.
+Browser scrapes hold a `browserSemaphore` slot (separate, smaller pool than the fast tiers' `semaphore`, #472); the browser pool mutex is released before page creation, so multiple scrapes run concurrently up to that limit.
 
 ## Error Handling
 

@@ -6,10 +6,18 @@ on:
     tags: ["v*"]
   pull_request:
     branches: [main]
+  schedule:
+    - cron: "0 7 * * 1" # Weekly soak test, every Monday at 07:00 UTC
   workflow_dispatch:
     inputs:
       run_python_live:
         description: "Run Python SDK live E2E tests (requires internet, builds Go binary)"
+        required: false
+        default: "false"
+        type: choice
+        options: ["true", "false"]
+      run_soak_test:
+        description: "Run sustained-load soak test (#480; network-free, ~30-60min)"
         required: false
         default: "false"
         type: choice
@@ -164,9 +172,9 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install pytest
-        run: python3 -m pip install --upgrade pytest
+        run: python3 -m pip install --upgrade pytest pytest-cov
       - name: Run Python SDK tests
-        run: python3 -m pytest tests/python/ --ignore=tests/python/test_live_e2e.py -v
+        run: python3 -m pytest tests/python/ --ignore=tests/python/test_live_e2e.py -v --cov=web_researcher_mcp --cov-report=term-missing
 
   # 📦 Packaging validation — PKGBUILD / .SRCINFO / flake.nix version + hash
   # consistency. Catches drift before it ships in a release.
@@ -311,6 +319,26 @@ jobs:
           name: coverage
           path: coverage.out
           retention-days: 7
+
+  # 🧬 Fuzz — short native-fuzzing sweep (#476) over the untrusted-input
+  # parsers: internal/documents (PDF/DOCX/PPTX) and internal/content's HTML/
+  # text sanitizer. 20s/target keeps this fast in CI; `make test-fuzz
+  # FUZZTIME=5m` runs a deeper sweep locally.
+  fuzz:
+    name: 🧬 Fuzz · Untrusted-Input Parsers
+    needs: [changes, test]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.25.12"
+          cache: true
+
+      - name: Run fuzz targets (20s each)
+        run: make test-fuzz FUZZTIME=20s
 
   # Gate job: always reports under the exact name required by branch protection.
   # When code=true the matrix job ran; when code=false it was skipped (docs PR).
@@ -479,3 +507,28 @@ jobs:
           GOOGLE_CUSTOM_SEARCH_ID: ${{ secrets.GOOGLE_CUSTOM_SEARCH_ID }}
           BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
         run: make test-python-live
+
+  # 🐢 Sustained-load soak test (#480) — drives the real HTTP binary under
+  # moderate concurrent load for an extended window and asserts /metrics shows
+  # no unbounded goroutine/heap growth. Network-free (CHROME_PATH=disabled,
+  # web_search asserted for transport success only), but deliberately NOT part
+  # of the required `e2e` job — its own build tag keeps it out of `test-e2e`.
+  # Runs automatically on the weekly `schedule` trigger (network-free, so no
+  # rate-limit risk) and remains available on-demand via workflow_dispatch.
+  soak-test:
+    name: 🐢 Soak Test
+    if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_soak_test == 'true') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.25.12"
+          cache: true
+
+      - name: Run sustained-load soak test
+        env:
+          SOAK_DURATION: 45m
+          SOAK_WORKERS: "16"
+        run: make test-soak

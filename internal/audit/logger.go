@@ -65,10 +65,12 @@ func NewEvent(eventType, tenantID, userID string) AuditEvent {
 // Auditor is the interface for audit logging.
 type Auditor interface {
 	Log(event AuditEvent)
-	// IncludeRequestBody reports whether request bodies (e.g. raw query text)
-	// may be attached to audit metadata. When false, callers must record only
-	// non-sensitive derivatives (length/hash). Controlled by
-	// AUDIT_INCLUDE_REQUEST_BODY; defaults to false (privacy-preserving).
+	// IncludeRequestBody reports whether a request body's SHA-256 hash (e.g.
+	// for raw query text) may be attached to audit metadata, in addition to
+	// its length. Callers must never write the literal request-body text
+	// itself — hashed/length derivatives only — so audit logs carry no
+	// erasable personal data regardless of this flag (#486). Controlled by
+	// AUDIT_INCLUDE_REQUEST_BODY; defaults to false.
 	IncludeRequestBody() bool
 	Close()
 }

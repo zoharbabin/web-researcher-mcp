@@ -63,15 +63,17 @@ func registerEconSearch(srv *mcp.Server, deps Dependencies) {
 			return cachedResultWithMeta(cached, meta), nil, nil
 		}
 
-		results, err := searcher.Econ(ctx, search.EconSearchParams{
-			Query:      input.Query,
-			SeriesID:   input.SeriesID,
-			Country:    input.Country,
-			DateFrom:   input.DateFrom,
-			DateTo:     input.DateTo,
-			Frequency:  input.Frequency,
-			Units:      input.Units,
-			NumResults: num,
+		results, err := coalescedFetch(ctx, deps, cacheKey, func() ([]search.EconResult, error) {
+			return searcher.Econ(ctx, search.EconSearchParams{
+				Query:      input.Query,
+				SeriesID:   input.SeriesID,
+				Country:    input.Country,
+				DateFrom:   input.DateFrom,
+				DateTo:     input.DateTo,
+				Frequency:  input.Frequency,
+				Units:      input.Units,
+				NumResults: num,
+			})
 		})
 		if err != nil {
 			errCode := "upstream_error"

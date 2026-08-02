@@ -63,17 +63,19 @@ func registerImageSearch(srv *mcp.Server, deps Dependencies) {
 		}
 
 		traceCtx, trace := search.NewRoutingTrace(ctx)
-		results, err := provider.Images(traceCtx, search.ImageSearchParams{
-			Query:         input.Query,
-			NumResults:    numResults,
-			Size:          input.Size,
-			Type:          input.Type,
-			ColorType:     input.ColorType,
-			DominantColor: input.DominantColor,
-			FileType:      input.FileType,
-			Safe:          input.Safe,
-			Country:       input.Country,
-			Language:      input.Language,
+		results, err := coalescedFetch(ctx, deps, cacheKey, func() ([]search.ImageResult, error) {
+			return provider.Images(traceCtx, search.ImageSearchParams{
+				Query:         input.Query,
+				NumResults:    numResults,
+				Size:          input.Size,
+				Type:          input.Type,
+				ColorType:     input.ColorType,
+				DominantColor: input.DominantColor,
+				FileType:      input.FileType,
+				Safe:          input.Safe,
+				Country:       input.Country,
+				Language:      input.Language,
+			})
 		})
 		if err != nil {
 			errCode := "upstream_error"

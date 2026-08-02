@@ -55,7 +55,7 @@ There is also a fourth file, `codeql.yml`, that runs GitHub's CodeQL deep static
 
 - Every pull request targeting `main`
 - Every push to `main`
-- Manual: `Actions → ⚙️ CI → Run workflow` (add `run_python_live=true` to run live SDK tests)
+- Manual: `Actions → ⚙️ CI → Run workflow` (add `run_python_live=true` to run live SDK tests, `run_soak_test=true` to run the sustained-load soak test)
 
 ### 🔍 Change detector (`changes` job)
 
@@ -109,6 +109,7 @@ These run on every PR — except packaging-only ones, which can't cause the drif
 | **🐳 docker-smoke** | Builds the Docker image and drives MCP over HTTP end-to-end |
 | **🏗️ build** | Cross-compile for Linux/Darwin/Windows × amd64/arm64 |
 | **🛡️ security** | `govulncheck` + `gosec` — vulnerability and security scanning |
+| **🧬 fuzz** | `make test-fuzz FUZZTIME=20s` — native Go fuzz targets over untrusted-input parsers (`internal/documents`, `internal/content`) |
 
 ### 🐍 Manual-dispatch only
 
@@ -116,7 +117,15 @@ These run on every PR — except packaging-only ones, which can't cause the drif
 |-----|---------------|
 | **🐍 python-live-e2e** | `Actions → ⚙️ CI → Run workflow` with `run_python_live=true` |
 
-Hits real external APIs. Not part of the required gate — too flaky on rate limits.
+`python-live-e2e` hits real external APIs — too flaky on rate limits for a required gate.
+
+### 🐢 Weekly schedule + manual-dispatch
+
+| Job | How it runs |
+|-----|---------------|
+| **🐢 soak-test** | Automatically every Monday at 07:00 UTC (`schedule` trigger), or on-demand via `Actions → ⚙️ CI → Run workflow` with `run_soak_test=true` |
+
+`soak-test` (#480) is network-free but runs for an extended window (default 45min on manual dispatch); it drives the real HTTP binary under moderate concurrent load and asserts `/metrics` shows no unbounded goroutine/heap growth — see `make test-soak`. Being network-free (no external API rate-limit risk), it's safe to run unattended on a schedule, unlike `python-live-e2e`.
 
 ---
 

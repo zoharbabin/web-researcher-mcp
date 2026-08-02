@@ -32,6 +32,7 @@ type Config struct {
 	ChromePath             string
 	JinaDisabled           bool
 	MaxScrapeConcurrency   int
+	MaxBrowserConcurrency  int
 	MaxHTMLBytes           int
 	MaxDocumentBytes       int
 	SessionTTL             time.Duration
@@ -40,11 +41,14 @@ type Config struct {
 	LogLevel               slog.Level
 	LogFormat              string
 	MetricsEnabled         bool
+	MetricsMaxTenants      int
 	AdminAPIKey            string
+	AdminAPIKeyPrev        string
 	DataRegion             string
 	Features               FeatureConfig
 	Audit                  AuditConfig
 	ResearchPanel          ResearchPanelConfig
+	Circuit                CircuitConfig
 
 	// StdioUserID names the single local user for STDIO transport, where there
 	// is no OAuth identity (the launching app owns the process, so it IS one
@@ -215,6 +219,15 @@ type OAuthConfig struct {
 	RequiredScopes      []string
 }
 
+// CircuitConfig holds the global default circuit-breaker thresholds (#468),
+// applied at every circuit.New() call site in cmd/web-researcher-mcp/main.go
+// and internal/search unless that site documents a specific override (e.g.
+// Monarch's longer reset for its documented multi-minute KG-rebuild outages).
+type CircuitConfig struct {
+	FailureThreshold int
+	ResetTimeoutSecs int
+}
+
 type RateLimitConfig struct {
 	PerTenant  int
 	Global     int
@@ -348,8 +361,31 @@ func Load() (*Config, error) {
 	if port > 0 && os.Getenv("OAUTH_ISSUER_URL") == "" {
 		warnings = append(warnings, "HTTP transport is enabled (PORT set) without OAUTH_ISSUER_URL — all requests run UNAUTHENTICATED as tenant=default/user=anonymous. Set OAUTH_ISSUER_URL for authenticated multi-tenant use.")
 	}
+	// CACHE_ISOLATION footgun guard (#484): CacheIsolation defaults to "shared"
+	// for the zero-config/single-tenant case, but that default is silent and
+	// dangerous once real tenant auth is active — an operator who never heard
+	// of the flag gets a cache that mixes cached responses across tenants. Once
+	// OAuth is configured (multi-tenant HTTP mode), require CACHE_ISOLATION to
+	// be set explicitly (either value) so the choice is deliberate, not assumed.
+	if port > 0 && os.Getenv("OAUTH_ISSUER_URL") != "" && os.Getenv("CACHE_ISOLATION") == "" {
+		errs = append(errs, "CACHE_ISOLATION must be set explicitly when OAUTH_ISSUER_URL is configured (multi-tenant HTTP mode) — set CACHE_ISOLATION=tenant to scope cache keys per tenant, or CACHE_ISOLATION=shared to explicitly accept that cached responses are shared across tenants")
+	}
 	if adminKey != "" && len(adminKey) < 16 {
 		errs = append(errs, adminKeyVar+" must be at least 16 characters")
+	}
+
+	// ADMIN_API_KEY_PREV (#488): the same zero-downtime rotation pattern as
+	// CACHE_ENCRYPTION_KEY_PREV, but for the stateless admin key — accept
+	// either the current or previous key for a grace window so a rotation
+	// never produces a hard cutover that locks out in-flight automation.
+	adminKeyPrev := os.Getenv("ADMIN_API_KEY_PREV")
+	if adminKeyPrev != "" {
+		if len(adminKeyPrev) < 16 {
+			errs = append(errs, "ADMIN_API_KEY_PREV must be at least 16 characters")
+		}
+		if adminKey == "" {
+			warnings = append(warnings, "ADMIN_API_KEY_PREV is set without ADMIN_API_KEY; it has no effect since admin endpoints are disabled")
+		}
 	}
 
 	// STDIO single-user identity (opt-in). Validated, never fatal: a bad value
@@ -469,22 +505,25 @@ func Load() (*Config, error) {
 			Persist:        envBool("RATE_LIMIT_PERSIST", false),
 			MaxCallsPerDay: envInt("MAX_CALLS_PER_DAY", 0),
 		},
-		AllowPrivateIPs:      envBool("ALLOW_PRIVATE_IPS", false),
-		AllowedDomains:       splitCSV(os.Getenv("ALLOWED_DOMAINS")),
-		ChromePath:           os.Getenv("CHROME_PATH"),
-		JinaDisabled:         envBool("JINA_READER_DISABLED", false),
-		MaxScrapeConcurrency: envInt("MAX_SCRAPE_CONCURRENCY", 5),
-		MaxHTMLBytes:         envInt("MAX_HTML_BYTES", 8<<20),
-		MaxDocumentBytes:     envInt("MAX_DOCUMENT_BYTES", 50<<20),
-		SessionTTL:           envDuration("SESSION_TTL", 4*time.Hour),
-		SessionDataDir:       envOrDefault("SESSION_DATA_DIR", filepath.Join(envOrDefault("CACHE_DIR", defaultCacheDir()), "sessions")),
-		SessionMaxSteps:      envInt("SESSION_MAX_STEPS", 200),
-		LogLevel:             logLevel,
-		LogFormat:            envOrDefault("LOG_FORMAT", "json"),
-		MetricsEnabled:       envBool("METRICS_ENABLED", true),
-		AdminAPIKey:          adminKey,
-		DataRegion:           os.Getenv("DATA_REGION"),
-		StdioUserID:          stdioUserID,
+		AllowPrivateIPs:       envBool("ALLOW_PRIVATE_IPS", false),
+		AllowedDomains:        splitCSV(os.Getenv("ALLOWED_DOMAINS")),
+		ChromePath:            os.Getenv("CHROME_PATH"),
+		JinaDisabled:          envBool("JINA_READER_DISABLED", false),
+		MaxScrapeConcurrency:  envInt("MAX_SCRAPE_CONCURRENCY", 5),
+		MaxBrowserConcurrency: envInt("MAX_SCRAPE_CONCURRENCY_BROWSER", 2),
+		MaxHTMLBytes:          envInt("MAX_HTML_BYTES", 8<<20),
+		MaxDocumentBytes:      envInt("MAX_DOCUMENT_BYTES", 50<<20),
+		SessionTTL:            envDuration("SESSION_TTL", 4*time.Hour),
+		SessionDataDir:        envOrDefault("SESSION_DATA_DIR", filepath.Join(envOrDefault("CACHE_DIR", defaultCacheDir()), "sessions")),
+		SessionMaxSteps:       envInt("SESSION_MAX_STEPS", 200),
+		LogLevel:              logLevel,
+		LogFormat:             envOrDefault("LOG_FORMAT", "json"),
+		MetricsEnabled:        envBool("METRICS_ENABLED", true),
+		MetricsMaxTenants:     envInt("METRICS_MAX_TENANTS", 10000),
+		AdminAPIKey:           adminKey,
+		AdminAPIKeyPrev:       adminKeyPrev,
+		DataRegion:            os.Getenv("DATA_REGION"),
+		StdioUserID:           stdioUserID,
 		Features: FeatureConfig{
 			SourceRecommendations: envBool("SOURCE_RECOMMENDATIONS", true),
 			GenerativeUI:          envBool("GENERATIVE_UI_ENABLED", false),
@@ -503,6 +542,10 @@ func Load() (*Config, error) {
 			IncludeRequestBody: envBool("AUDIT_INCLUDE_REQUEST_BODY", false),
 			MaxBytes:           envInt("AUDIT_MAX_BYTES", 100<<20),
 			RetentionDays:      retentionDays,
+		},
+		Circuit: CircuitConfig{
+			FailureThreshold: envInt("CIRCUIT_FAILURE_THRESHOLD", 5),
+			ResetTimeoutSecs: envInt("CIRCUIT_RESET_TIMEOUT_SECONDS", 60),
 		},
 		ResearchPanel: ResearchPanelConfig{
 			OpenRouterAPIKey: os.Getenv("OPENROUTER_API_KEY"),

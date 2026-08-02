@@ -1,0 +1,59 @@
+# Local dev-only "IdP": a static nginx server publishing a JWKS document at
+# /.well-known/jwks.json, matching the pattern in scripts/e2e-oauth-docker.sh.
+# The server itself never issues tokens at runtime — tokens are pre-minted
+# offline (see scripts/e2e-oauth-mint-jwt.py) and handed to clients directly.
+#
+# The `oauth-issuer-jwks` ConfigMap it mounts is NOT defined here — it must be
+# created per-cluster from your own generated keypair (see
+# docs/K8S_LOCAL_DEV.md), so no private key ever needs to be committed to the
+# repo.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth-issuer
+  namespace: web-researcher
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oauth-issuer
+  template:
+    metadata:
+      labels:
+        app: oauth-issuer
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: jwks
+          mountPath: /usr/share/nginx/html/.well-known
+          readOnly: true
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
+      volumes:
+      - name: jwks
+        configMap:
+          name: oauth-issuer-jwks
+          items:
+          - key: jwks.json
+            path: jwks.json
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth-issuer
+  namespace: web-researcher
+spec:
+  selector:
+    app: oauth-issuer
+  ports:
+  - port: 80
+    targetPort: 80

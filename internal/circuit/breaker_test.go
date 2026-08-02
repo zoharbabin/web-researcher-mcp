@@ -96,7 +96,7 @@ func TestHalfOpenAfterTimeout(t *testing.T) {
 	}
 
 	// Wait for reset timeout to elapse
-	time.Sleep(1100 * time.Millisecond)
+	time.Sleep(1300 * time.Millisecond) // > ResetTimeout(1s) + max jitter(200ms)
 
 	// Next call should be allowed (transitions to half-open)
 	called := false
@@ -126,7 +126,7 @@ func TestHalfOpenFailureReopensCircuit(t *testing.T) {
 	}
 
 	// Wait for reset timeout
-	time.Sleep(1100 * time.Millisecond)
+	time.Sleep(1300 * time.Millisecond) // > ResetTimeout(1s) + max jitter(200ms)
 
 	// Fail in half-open state
 	err := b.Execute(func() error { return errTest })
@@ -149,7 +149,7 @@ func TestHalfOpenLimitsAttempts(t *testing.T) {
 	}
 
 	// Wait for reset timeout
-	time.Sleep(1100 * time.Millisecond)
+	time.Sleep(1300 * time.Millisecond) // > ResetTimeout(1s) + max jitter(200ms)
 
 	// First call in half-open should work (fail it to keep in half-open → open)
 	_ = b.Execute(func() error { return errTest })
@@ -296,7 +296,7 @@ func TestHalfOpenRateLimitReopensImmediately(t *testing.T) {
 		t.Fatalf("expected Open, got %v", b.State())
 	}
 
-	time.Sleep(1100 * time.Millisecond)
+	time.Sleep(1300 * time.Millisecond) // > ResetTimeout(1s) + max jitter(200ms)
 
 	err := b.Execute(func() error { return ErrRateLimit })
 	if !errors.Is(err, ErrRateLimit) {
@@ -346,6 +346,31 @@ func TestNonTrippingCheckedBeforeRateLimit(t *testing.T) {
 	}
 }
 
+// TestReadyPerformsHalfOpenTransition (#469): unlike State(), Ready() must
+// perform the Open->HalfOpen transition itself when ResetTimeout has elapsed
+// — callers that gate a call on Ready() without ever calling Execute (e.g. a
+// health-check style pre-filter) must still see the breaker recover.
+func TestReadyPerformsHalfOpenTransition(t *testing.T) {
+	b := New(Config{FailureThreshold: 1, ResetTimeout: 1, HalfOpenAttempts: 1})
+
+	_ = b.Execute(func() error { return errTest })
+	if b.State() != StateOpen {
+		t.Fatalf("expected Open after one failure, got %v", b.State())
+	}
+	if b.Ready() {
+		t.Error("expected Ready() false immediately after tripping")
+	}
+
+	time.Sleep(1300 * time.Millisecond) // > ResetTimeout(1s) + max jitter(200ms)
+
+	if !b.Ready() {
+		t.Fatal("expected Ready() true past ResetTimeout+jitter")
+	}
+	if b.State() != StateHalfOpen {
+		t.Errorf("expected Ready() to perform the Open->HalfOpen transition as a side effect, got %v", b.State())
+	}
+}
+
 func TestConcurrentAccess(t *testing.T) {
 	b := New(Config{FailureThreshold: 100, ResetTimeout: 1})
 
@@ -363,4 +388,51 @@ func TestConcurrentAccess(t *testing.T) {
 		<-done
 	}
 	// No panics means concurrent access is safe
+}
+
+// TestBreakerJitterOnResetTimeout proves the half-open eligibility check adds
+// randomized jitter (#471): tripping many breakers configured with the same
+// ResetTimeout at the same instant must NOT make them all eligible to
+// half-open at the exact same instant — some must still be Open at
+// ResetTimeout+1ms, and none should still be Open past ResetTimeout+the
+// documented max jitter (ResetTimeout/5).
+func TestBreakerJitterOnResetTimeout(t *testing.T) {
+	const resetTimeout = 5 // seconds
+	const n = 30
+
+	breakers := make([]*Breaker, n)
+	for i := range breakers {
+		b := New(Config{FailureThreshold: 1, ResetTimeout: resetTimeout})
+		_ = b.Execute(func() error { return errTest })
+		if b.State() != StateOpen {
+			t.Fatalf("breaker %d: expected Open after one failure, got %v", i, b.State())
+		}
+		breakers[i] = b
+	}
+
+	// Immediately after ResetTimeout elapses (before any jitter margin), at
+	// least one breaker must still be Open — proving the reset isn't fixed at
+	// exactly ResetTimeout for every instance.
+	time.Sleep(resetTimeout*time.Second + 50*time.Millisecond)
+	anyStillOpen := false
+	for _, b := range breakers {
+		if b.State() == StateOpen {
+			anyStillOpen = true
+			break
+		}
+	}
+	if !anyStillOpen {
+		t.Error("expected at least one breaker still Open just after ResetTimeout — jitter should stagger half-open eligibility, not eliminate the base timeout")
+	}
+
+	// Past ResetTimeout + max jitter (ResetTimeout/5), every breaker must be
+	// eligible to probe (State() flips Open->HalfOpen as an allowRequest side
+	// effect, so call State() via Execute's read path).
+	time.Sleep(resetTimeout*time.Second/5 + 200*time.Millisecond)
+	for i, b := range breakers {
+		_ = b.Execute(func() error { return nil })
+		if b.State() != StateClosed {
+			t.Errorf("breaker %d: expected Closed (via half-open success) past ResetTimeout+maxJitter, got %v", i, b.State())
+		}
+	}
 }

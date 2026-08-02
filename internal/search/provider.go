@@ -153,6 +153,13 @@ type PatentResult struct {
 type Deps struct {
 	HTTPClient *http.Client
 	Breaker    *circuit.Breaker
+	// Circuit carries the operator-configured default breaker thresholds
+	// (#468: CIRCUIT_FAILURE_THRESHOLD / CIRCUIT_RESET_TIMEOUT_SECONDS). Every
+	// Available*Providers constructor that mints a fresh per-provider breaker
+	// uses this instead of a hardcoded literal; the zero value falls back to
+	// circuit.New's own defaults (5 failures / 60s), so passing a zero-value
+	// Deps.Circuit is safe.
+	Circuit circuit.Config
 }
 
 // SupportedProviders lists all provider names that can be configured.
@@ -244,7 +251,7 @@ func AvailableProviders(cfg config.SearchConfig, deps Deps) map[string]Provider 
 	for _, name := range SupportedProviders {
 		providerDeps := Deps{
 			HTTPClient: deps.HTTPClient,
-			Breaker:    circuit.New(circuit.Config{FailureThreshold: 3, ResetTimeout: 120}),
+			Breaker:    circuit.New(deps.Circuit),
 		}
 		if p := NewProviderByName(name, cfg, providerDeps); p != nil {
 			providers[name] = p

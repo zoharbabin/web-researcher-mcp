@@ -59,12 +59,14 @@ func registerLegalSearch(srv *mcp.Server, deps Dependencies) {
 			return cachedResultWithMeta(cached, meta), nil, nil
 		}
 
-		results, err := searcher.Cases(ctx, search.CaseSearchParams{
-			Query:        input.Query,
-			Jurisdiction: input.Jurisdiction,
-			DateFrom:     input.DateFrom,
-			DateTo:       input.DateTo,
-			NumResults:   num,
+		results, err := coalescedFetch(ctx, deps, cacheKey, func() ([]search.CaseResult, error) {
+			return searcher.Cases(ctx, search.CaseSearchParams{
+				Query:        input.Query,
+				Jurisdiction: input.Jurisdiction,
+				DateFrom:     input.DateFrom,
+				DateTo:       input.DateTo,
+				NumResults:   num,
+			})
 		})
 		if err != nil {
 			errCode := "upstream_error"

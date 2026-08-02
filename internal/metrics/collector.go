@@ -13,6 +13,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+// defaultMaxTenants bounds tenantStats growth (#475): a shared multi-tenant
+// deployment with many short-lived/one-off tenant IDs (trial accounts,
+// churned customers) would otherwise grow this map by one entry per distinct
+// tenant ID for the process lifetime, with no reclamation short of a restart.
+const defaultMaxTenants = 10000
+
 type Collector struct {
 	toolCalls   *prometheus.CounterVec
 	toolErrors  *prometheus.CounterVec
@@ -24,6 +30,7 @@ type Collector struct {
 	mu          sync.RWMutex
 	toolStats   map[string]*ToolMetrics
 	tenantStats map[string]*TenantMetrics
+	maxTenants  int
 	registry    *prometheus.Registry
 
 	// recentErrors is the bounded, memory-only ring backing the
@@ -67,6 +74,17 @@ type ToolStatsSnapshot struct {
 }
 
 func NewCollector() *Collector {
+	return NewCollectorWithMaxTenants(defaultMaxTenants)
+}
+
+// NewCollectorWithMaxTenants constructs a Collector whose tenantStats map
+// evicts its least-recently-active entry once it would exceed maxTenants
+// (#475). maxTenants <= 0 falls back to defaultMaxTenants — this bound is
+// never optional, only its size is configurable.
+func NewCollectorWithMaxTenants(maxTenants int) *Collector {
+	if maxTenants <= 0 {
+		maxTenants = defaultMaxTenants
+	}
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(collectors.NewGoCollector())
 
@@ -98,6 +116,7 @@ func NewCollector() *Collector {
 		}),
 		toolStats:    make(map[string]*ToolMetrics),
 		tenantStats:  make(map[string]*TenantMetrics),
+		maxTenants:   maxTenants,
 		registry:     registry,
 		recentErrors: NewErrorRing(),
 	}
@@ -116,7 +135,6 @@ func (c *Collector) RecordToolCall(tool string, latency time.Duration, err error
 
 	stats := c.getOrCreateStats(tool)
 	stats.TotalCalls.Add(1)
-	stats.LastCalled = time.Now()
 
 	if err != nil {
 		stats.ErrorCalls.Add(1)
@@ -130,6 +148,7 @@ func (c *Collector) RecordToolCall(tool string, latency time.Duration, err error
 	}
 
 	stats.latencyMu.Lock()
+	stats.LastCalled = time.Now()
 	stats.latencies = append(stats.latencies, float64(latency.Milliseconds()))
 	if len(stats.latencies) > 1000 {
 		stats.latencies = stats.latencies[len(stats.latencies)-1000:]
@@ -165,11 +184,10 @@ func (c *Collector) GetToolStats() map[string]ToolStatsSnapshot {
 			ErrorCalls:   stats.ErrorCalls.Load(),
 			CacheHits:    stats.CacheHits.Load(),
 		}
+		stats.latencyMu.Lock()
 		if !stats.LastCalled.IsZero() {
 			snap.LastCalled = stats.LastCalled.Format(time.RFC3339)
 		}
-
-		stats.latencyMu.Lock()
 		if len(stats.latencies) > 0 {
 			snap.AvgLatencyMs = avg(stats.latencies)
 			snap.P95LatencyMs = percentile(stats.latencies, 95)
@@ -308,9 +326,34 @@ func (c *Collector) getOrCreateTenant(tenantID string) *TenantMetrics {
 	if t, ok := c.tenantStats[tenantID]; ok {
 		return t
 	}
+	if len(c.tenantStats) >= c.maxTenants {
+		c.evictOldestTenantLocked()
+	}
 	t := &TenantMetrics{providers: make(map[string]int64)}
 	c.tenantStats[tenantID] = t
 	return t
+}
+
+// evictOldestTenantLocked drops the tenant with the oldest LastCalled (#475),
+// bounding tenantStats growth in a shared multi-tenant deployment with many
+// distinct tenant IDs over the process lifetime. Callers must hold c.mu.
+func (c *Collector) evictOldestTenantLocked() {
+	var oldestID string
+	var oldestTime time.Time
+	first := true
+	for id, t := range c.tenantStats {
+		t.mu.Lock()
+		lastCalled := t.LastCalled
+		t.mu.Unlock()
+		if first || lastCalled.Before(oldestTime) {
+			oldestID = id
+			oldestTime = lastCalled
+			first = false
+		}
+	}
+	if !first {
+		delete(c.tenantStats, oldestID)
+	}
 }
 
 func (c *Collector) HTTPHandler() http.Handler {

@@ -32,6 +32,7 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/workspace"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"golang.org/x/sync/singleflight"
 )
 
 var version = "dev"
@@ -208,13 +209,28 @@ func main() {
 		logger.Info("query monitoring enabled", "consent", "required", "ttl", cfg.Features.MonitoringTTL)
 	}
 
-	metricsCollector := metrics.NewCollector()
+	metricsCollector := metrics.NewCollectorWithMaxTenants(cfg.MetricsMaxTenants)
 	rateLimiter := ratelimit.NewWithStore(cfg.RateLimit, persistStore)
 	if redisBackends != nil {
 		// Atomic cross-pod daily quota: N pods share one limit (#42).
 		rateLimiter = rateLimiter.WithDailyIncrementer(redisBackends.PersistStore())
+		// Expose fallback-to-per-pod occurrences (transient Redis errors) as a
+		// Prometheus counter so silent cross-pod quota degradation is alertable (#470).
+		metricsCollector.RegisterRateLimitFallback(rateLimiter)
 	}
-	searchBreaker := circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60})
+	// circuitDefaults (#468) is the operator-configured breaker threshold/timeout
+	// (CIRCUIT_FAILURE_THRESHOLD / CIRCUIT_RESET_TIMEOUT_SECONDS), applied to every
+	// breaker minted below and threaded into search.Deps.Circuit so every
+	// Available*Providers constructor picks it up too. The Router keeps its own
+	// distinct fast-trip/fast-reset tuning (routerBreakerConfig in router.go) for
+	// live per-request fallback ordering. A site with a genuinely different need
+	// (e.g. Monarch's longer reset for its documented multi-minute KG-rebuild
+	// outages) overrides inline instead.
+	circuitDefaults := circuit.Config{
+		FailureThreshold: cfg.Circuit.FailureThreshold,
+		ResetTimeout:     cfg.Circuit.ResetTimeoutSecs,
+	}
+	searchBreaker := circuit.New(circuitDefaults)
 
 	// Bundled lenses load from the embedded copy FIRST, so they are always present
 	// regardless of CWD or install method (uvx/pip wheel, `go install`, a bare
@@ -251,6 +267,7 @@ func main() {
 	searchDeps := search.Deps{
 		HTTPClient: scraper.NewSSRFSafeClient(cfg.AllowPrivateIPs),
 		Breaker:    searchBreaker,
+		Circuit:    circuitDefaults,
 	}
 
 	patentCfg := search.PatentProviderConfig{
@@ -321,7 +338,7 @@ func main() {
 	var oaResolver search.OAResolver
 	if r := search.NewUnpaywallResolver(cfg.Search.UnpaywallEmail, search.Deps{
 		HTTPClient: searchDeps.HTTPClient,
-		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+		Breaker:    circuit.New(circuitDefaults),
 	}); r != nil {
 		oaResolver = r
 	}
@@ -333,7 +350,7 @@ func main() {
 	// isolates failures from the academic providers; enrichment is best-effort.
 	retractionResolver := search.NewCrossrefRetractionResolver(cfg.Search.CrossRefEmail, search.Deps{
 		HTTPClient: searchDeps.HTTPClient,
-		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+		Breaker:    circuit.New(circuitDefaults),
 	})
 
 	// Authoritative DOI existence check (#226): the doi.org handle API confirms a
@@ -343,7 +360,7 @@ func main() {
 	// nonexistent. Keyless, own breaker, best-effort.
 	doiRegistry := search.NewHandleDOIRegistry(search.Deps{
 		HTTPClient: searchDeps.HTTPClient,
-		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+		Breaker:    circuit.New(circuitDefaults),
 	})
 
 	// Corporate ownership enrichment (#248): when verify_recommendation's lexical
@@ -353,7 +370,7 @@ func main() {
 	// failures; enrichment is best-effort and fail-open.
 	wikidataResolver := search.NewWikidataOwnershipResolver(search.Deps{
 		HTTPClient: searchDeps.HTTPClient,
-		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+		Breaker:    circuit.New(circuitDefaults),
 	})
 
 	// OSINT recon enrichment (#323): Certificate Transparency log lookups (crt.sh)
@@ -362,14 +379,14 @@ func main() {
 	// company_recon degrades gracefully (per-phase soft failure) if either 5xxs.
 	ctLogResolver := search.NewCrtShResolver(search.Deps{
 		HTTPClient: searchDeps.HTTPClient,
-		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+		Breaker:    circuit.New(circuitDefaults),
 	})
 	// Wayback CDX's observed p50-p99 latency (30-60s+) regularly exceeds the
 	// 30s shared SSRF client timeout, so this resolver gets its own longer-
 	// timeout client rather than starving on searchDeps.HTTPClient's deadline.
 	archiveResolver := search.NewWaybackCDXResolver(search.Deps{
 		HTTPClient: scraper.NewSSRFSafeClientWithTimeout(cfg.AllowPrivateIPs, 90*time.Second),
-		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+		Breaker:    circuit.New(circuitDefaults),
 	})
 
 	// Link verifier (#157): SSRF-safe liveness + Wayback archive fallback for the
@@ -414,16 +431,17 @@ func main() {
 	}
 
 	scraperPipeline := scraper.NewPipeline(scraper.PipelineConfig{
-		MaxConcurrency:   cfg.MaxScrapeConcurrency,
-		AllowPrivateIPs:  cfg.AllowPrivateIPs,
-		AllowedDomains:   cfg.AllowedDomains,
-		ChromePath:       cfg.ChromePath,
-		ExaAPIKey:        cfg.Search.ExaAPIKey,  // enables the paid Exa /contents fallback tier
-		JinaAPIKey:       cfg.Search.JinaAPIKey, // raises the keyless Jina Reader tier's rate limit
-		JinaDisabled:     cfg.JinaDisabled,      // JINA_READER_DISABLED: opt out of the Jina Reader tier entirely
-		MaxHTMLBytes:     cfg.MaxHTMLBytes,
-		MaxDocumentBytes: cfg.MaxDocumentBytes,
-		GitHubToken:      cfg.Search.GitHubToken, // raises GitHub's unauth rate limit for native README/blob/gist routing (#395)
+		MaxConcurrency:        cfg.MaxScrapeConcurrency,
+		MaxBrowserConcurrency: cfg.MaxBrowserConcurrency, // separate, smaller pool for the slow browser tier (#472)
+		AllowPrivateIPs:       cfg.AllowPrivateIPs,
+		AllowedDomains:        cfg.AllowedDomains,
+		ChromePath:            cfg.ChromePath,
+		ExaAPIKey:             cfg.Search.ExaAPIKey,  // enables the paid Exa /contents fallback tier
+		JinaAPIKey:            cfg.Search.JinaAPIKey, // raises the keyless Jina Reader tier's rate limit
+		JinaDisabled:          cfg.JinaDisabled,      // JINA_READER_DISABLED: opt out of the Jina Reader tier entirely
+		MaxHTMLBytes:          cfg.MaxHTMLBytes,
+		MaxDocumentBytes:      cfg.MaxDocumentBytes,
+		GitHubToken:           cfg.Search.GitHubToken, // raises GitHub's unauth rate limit for native README/blob/gist routing (#395)
 	})
 	defer scraperPipeline.Close()
 
@@ -521,6 +539,7 @@ func main() {
 		CTLogResolver:           ctLogResolver,
 		ArchiveResolver:         archiveResolver,
 		ResearchPanelProviders:  tools.AvailableModelProviders(cfg.ResearchPanel, cfg.AllowPrivateIPs),
+		Singleflight:            &singleflight.Group{},
 	}
 
 	// Completion suppliers (#193): the live value sets the server can autocomplete
@@ -743,6 +762,7 @@ func main() {
 			CORSStrict:        cfg.CORSStrict,
 			Metrics:           metricsCollector,
 			AdminKey:          cfg.AdminAPIKey,
+			AdminKeyPrev:      cfg.AdminAPIKeyPrev,
 			Cache:             cacheStore,
 			Sessions:          sessionManager,
 			DataSubjects:      dataSubjects,

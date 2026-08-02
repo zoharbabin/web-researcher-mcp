@@ -113,6 +113,7 @@ func newOAuthHarness(t *testing.T, extraEnv ...string) (*httpHarness, *rsa.Priva
 	env := append([]string{
 		"OAUTH_ISSUER_URL=" + issuer,
 		"OAUTH_AUDIENCE=" + oauthAudience,
+		"CACHE_ISOLATION=tenant",
 	}, extraEnv...)
 	h := newHTTPHarness(t, env...)
 	return h, key, issuer

@@ -144,7 +144,14 @@ func TestNewSSRFSafeClient_RejectsPrivateIPs(t *testing.T) {
 	defer ts.Close()
 
 	client := NewSSRFSafeClient(false)
-	_, err := client.Get(ts.URL)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL, nil)
+	if err != nil {
+		t.Fatalf("failed to build request: %v", err)
+	}
+	resp, err := client.Do(req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 	if err == nil {
 		t.Fatal("expected error when connecting to localhost, got nil")
 	}
@@ -165,7 +172,11 @@ func TestNewSSRFSafeClient_AllowsPublicIPs(t *testing.T) {
 	defer ts.Close()
 
 	client := NewSSRFSafeClient(true) // allow private
-	resp, err := client.Get(ts.URL)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL, nil)
+	if err != nil {
+		t.Fatalf("failed to build request: %v", err)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("unexpected error with allowPrivate=true: %v", err)
 	}
@@ -190,6 +201,69 @@ func TestNewPipeline_CustomConcurrency(t *testing.T) {
 	p := NewPipeline(PipelineConfig{MaxConcurrency: 10})
 	if cap(p.semaphore) != 10 {
 		t.Errorf("expected concurrency 10, got %d", cap(p.semaphore))
+	}
+}
+
+func TestNewPipeline_DefaultBrowserConcurrency(t *testing.T) {
+	p := NewPipeline(PipelineConfig{})
+	if cap(p.browserSemaphore) != 2 {
+		t.Errorf("expected default browser concurrency 2, got %d", cap(p.browserSemaphore))
+	}
+}
+
+func TestNewPipeline_CustomBrowserConcurrency(t *testing.T) {
+	p := NewPipeline(PipelineConfig{MaxBrowserConcurrency: 4})
+	if cap(p.browserSemaphore) != 4 {
+		t.Errorf("expected browser concurrency 4, got %d", cap(p.browserSemaphore))
+	}
+}
+
+// TestScrapePipelineTierFairness proves the #472 fix: an occupied
+// browser-tier slot must never block a fast-tier ("" tier) acquisition,
+// since they now draw from separate semaphores.
+func TestScrapePipelineTierFairness(t *testing.T) {
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 1, MaxBrowserConcurrency: 1, AllowPrivateIPs: true})
+
+	releaseBrowser, err := p.acquireTier(context.Background(), "browser")
+	if err != nil {
+		t.Fatalf("acquireTier(browser) failed: %v", err)
+	}
+	defer releaseBrowser()
+
+	done := make(chan struct{})
+	go func() {
+		release, err := p.acquireTier(context.Background(), "")
+		if err != nil {
+			t.Errorf("acquireTier(\"\") failed: %v", err)
+			return
+		}
+		release()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("fast-tier acquireTier blocked on an occupied browser-tier slot")
+	}
+}
+
+// TestPipeline_AcquireTier_BrowserPoolBounded proves the browser pool still
+// enforces its own limit — isolation from the fast pool doesn't mean it's
+// unbounded.
+func TestPipeline_AcquireTier_BrowserPoolBounded(t *testing.T) {
+	p := NewPipeline(PipelineConfig{MaxBrowserConcurrency: 1, AllowPrivateIPs: true})
+
+	release1, err := p.acquireTier(context.Background(), "browser")
+	if err != nil {
+		t.Fatalf("first acquireTier(browser) failed: %v", err)
+	}
+	defer release1()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if _, err := p.acquireTier(ctx, "browser"); err == nil {
+		t.Fatal("expected second acquireTier(browser) to block until the context timed out")
 	}
 }
 
