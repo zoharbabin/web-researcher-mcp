@@ -93,6 +93,20 @@ type linkSummary struct {
 // summary is a short human-facing description of the linked contents (e.g.
 // "raw page content for https://… (142 KB)"); it MUST NOT embed the full body.
 func largeResultOrInline(ctx context.Context, deps Dependencies, payload []byte, summary string) *mcp.CallToolResult {
+	return largeResultOrInlineWithFields(ctx, deps, payload, summary, nil)
+}
+
+// largeResultOrInlineWithFields behaves exactly like largeResultOrInline, but
+// additionally merges `extra` key/value pairs into the inline summary JSON (and
+// StructuredContent) when the payload links out. This lets a caller surface a
+// tool-specific hint — e.g. `contentSizeBytes` for a raw scrape, or
+// `sourceCount`/`status` for search_and_scrape — alongside the generic
+// resource/bytes/expiresAt fields, so a caller can judge whether the linked
+// artifact is worth a follow-up read WITHOUT one (#508). extra is ignored (and
+// must be nil/empty) on the inline path — a small payload already carries its
+// own fields undisturbed. Keys in extra must not collide with linkSummary's own
+// field names (resource, bytes, mimeType, summary, expiresAt, linked).
+func largeResultOrInlineWithFields(ctx context.Context, deps Dependencies, payload []byte, summary string, extra map[string]any) *mcp.CallToolResult {
 	if len(payload) < linkThresholdBytes {
 		return structuredResult(payload)
 	}
@@ -103,14 +117,14 @@ func largeResultOrInline(ctx context.Context, deps Dependencies, payload []byte,
 	}
 	size := len(payload)
 	expires := time.Now().UTC().Add(artifactTTL).Format(time.RFC3339)
-	sumBytes, _ := json.Marshal(linkSummary{
+	sumBytes := marshalLinkSummary(linkSummary{
 		Resource:  uri,
 		Bytes:     size,
 		MIMEType:  artifactMIMEType,
 		Summary:   summary,
 		ExpiresAt: expires,
 		Linked:    true,
-	})
+	}, extra)
 	sizeInt := int64(size)
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
@@ -128,6 +142,32 @@ func largeResultOrInline(ctx context.Context, deps Dependencies, payload []byte,
 		},
 		StructuredContent: json.RawMessage(sumBytes),
 	}
+}
+
+// marshalLinkSummary marshals sum, then — when extra is non-empty — merges its
+// keys into the resulting JSON object. Merging happens on the decoded map
+// rather than via struct embedding so each linkSummary caller can contribute a
+// different, tool-specific set of extra fields without a shared struct growing
+// unbounded optional fields. extra keys are trusted call-site data (int/string
+// counts and statuses already computed for the tool's own output), never
+// user-controlled HTML/page content, so no further sanitization is needed here.
+func marshalLinkSummary(sum linkSummary, extra map[string]any) []byte {
+	base, err := json.Marshal(sum)
+	if err != nil || len(extra) == 0 {
+		return base
+	}
+	var m map[string]any
+	if err := json.Unmarshal(base, &m); err != nil {
+		return base
+	}
+	for k, v := range extra {
+		m[k] = v
+	}
+	merged, err := json.Marshal(m)
+	if err != nil {
+		return base
+	}
+	return merged
 }
 
 // registerArtifactResource wires the read side of the artifact link: a resource

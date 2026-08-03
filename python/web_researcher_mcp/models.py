@@ -1847,6 +1847,7 @@ class ScrapePageResponse:
     citation: Optional[Citation] = None
     content: Optional[str] = None
     contentLength: Optional[int] = None
+    contentSizeBytes: Optional[int] = None
     contentType: Optional[str] = None
     detectedDoi: Optional[str] = None
     domainCategory: Optional[str] = None
@@ -1876,6 +1877,7 @@ class ScrapePageResponse:
             citation=Citation.from_dict(d.get('citation')) if d.get('citation') else None,
             content=d.get('content'),
             contentLength=d.get('contentLength'),
+            contentSizeBytes=d.get('contentSizeBytes'),
             contentType=d.get('contentType'),
             detectedDoi=d.get('detectedDoi'),
             domainCategory=d.get('domainCategory'),
@@ -1969,6 +1971,7 @@ class SearchAndScrapeResponse:
     recommendations: list[SearchAndScrapeRecommendation] = field(default_factory=list)
     scrapeFailures: list[SearchAndScrapeScrapefailure] = field(default_factory=list)
     sizeMetadata: Optional[SizeMetadata] = None
+    sourceCount: Optional[int] = None
     sources: list[SearchAndScrapeSource] = field(default_factory=list)
     status: Optional[str] = None
     summary: Optional[Summary] = None
@@ -1987,6 +1990,7 @@ class SearchAndScrapeResponse:
             recommendations=[SearchAndScrapeRecommendation.from_dict(i) for i in (d.get('recommendations') or [])],
             scrapeFailures=[SearchAndScrapeScrapefailure.from_dict(i) for i in (d.get('scrapeFailures') or [])],
             sizeMetadata=SizeMetadata.from_dict(d.get('sizeMetadata')) if d.get('sizeMetadata') else None,
+            sourceCount=d.get('sourceCount'),
             sources=[SearchAndScrapeSource.from_dict(i) for i in (d.get('sources') or [])],
             status=d.get('status'),
             summary=Summary.from_dict(d.get('summary')) if d.get('summary') else None,

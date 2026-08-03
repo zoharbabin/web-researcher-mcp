@@ -133,7 +133,11 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 
 				summary := fmt.Sprintf("search_and_scrape (LLM context) results for %q — %d snippets, %s combined content",
 					input.Query, len(ctxResult.Snippets), humanBytes(len(combined)))
-				return largeResultOrInline(ctx, deps, jsonBytes, summary), nil, nil
+				// sourceCount/status (#508): surfaced on the inline summary itself so a
+				// caller can judge whether the linked artifact is worth a follow-up read
+				// without one. Mirrors the always-"complete" status already set above.
+				extra := map[string]any{"sourceCount": len(sources), "status": "complete"}
+				return largeResultOrInlineWithFields(ctx, deps, jsonBytes, summary, extra), nil, nil
 			}
 			// ctxErr != nil or empty result: fall through to normal search + scrape.
 		}
@@ -261,7 +265,12 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 		// Large multi-page bundles link instead of inlining (#181) to keep context
 		// lean; small results inline unchanged. Routing _meta rides on either shape.
 		summary := fmt.Sprintf("search_and_scrape results for %q — %d pages scraped, %s combined content", input.Query, scraped, humanBytes(len(combined)))
-		return withRoutingMeta(largeResultOrInline(ctx, deps, jsonBytes, summary), rt), nil, nil
+		// sourceCount/status (#508): surfaced on the inline summary itself so a
+		// caller can judge whether the linked artifact is worth a follow-up read
+		// without one. status mirrors the already-computed complete/partial/failed
+		// value; sourceCount mirrors scraped (len(sources)).
+		extra := map[string]any{"sourceCount": scraped, "status": status}
+		return withRoutingMeta(largeResultOrInlineWithFields(ctx, deps, jsonBytes, summary, extra), rt), nil, nil
 	})
 }
 
