@@ -380,7 +380,13 @@ None of these is a personal-data store. Field contracts live in `docs/TOOLS.md` 
 - No sensitive data in URL query parameters
 
 ### FIPS Compliance (Optional)
-- Build with `GOEXPERIMENT=boringcrypto` for FIPS 140-2 validated crypto
+- Build with `GOFIPS140=latest` (Go's native FIPS 140-3 module, `crypto/fips140`) —
+  active CMVP certificate [#5247](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/5247).
+  `GOEXPERIMENT=boringcrypto` is no longer the compliant path: BoringCrypto's own
+  certificate is [Historical](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/3678)
+  (NIST's [FIPS 140-3 Transition](https://csrc.nist.gov/projects/fips-140-3-transition-effort)
+  moved remaining FIPS 140-2 modules off the Active list), and Go's own docs mark
+  `GOEXPERIMENT=boringcrypto` [unsupported and slated for removal](https://go.dev/doc/security/fips140).
 - Affects: TLS, AES, SHA, RSA operations
 
 ---
@@ -515,7 +521,7 @@ Data minimization (implemented): by default audit logs store only the query leng
 | Control | Implementation |
 |---------|----------------|
 | **SC-8** Transmission Confidentiality | TLS 1.2+ on all connections |
-| **SC-13** Cryptographic Protection | FIPS 140-2 via `GOEXPERIMENT=boringcrypto` |
+| **SC-13** Cryptographic Protection | FIPS 140-3 via `GOFIPS140=latest` (Go's native `crypto/fips140` module, CMVP cert [#5247](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/5247)) |
 | **SC-28** Protection at Rest | AES-256-GCM for disk cache |
 | **AC-3** Access Enforcement | OAuth middleware on all HTTP endpoints |
 | **AU-2** Audit Events | All tool calls, auth failures, config changes |
@@ -523,7 +529,7 @@ Data minimization (implemented): by default audit logs store only the query leng
 
 ```bash
 # FIPS-compliant build
-GOEXPERIMENT=boringcrypto CGO_ENABLED=0 \
+GOFIPS140=latest CGO_ENABLED=0 \
   go build -ldflags="-s -w -X main.version=${VERSION}" \
   -o web-researcher-mcp ./cmd/web-researcher-mcp
 ```

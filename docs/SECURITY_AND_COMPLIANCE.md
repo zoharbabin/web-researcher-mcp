@@ -222,6 +222,13 @@ Token stolen (log leak, XSS, proxy compromise)    Client signs a one-time proof 
 
 A resource-server-only architecture cannot retrofit the right-hand side unilaterally — `cnf.jkt` can only be embedded by the issuing IdP at mint time. Research into current standards and the MCP ecosystem (tracked on [issue #489](https://github.com/zoharbabin/web-researcher-mcp/issues/489)) found DPoP is recommended-but-optional (RFC 9700/BCP 240), unevenly supported across IdPs (GA at Auth0/Okta/Ping/Curity; absent at AWS Cognito), still a proposal rather than a ratified requirement in the MCP spec itself, and not named by FedRAMP, DoD Zero Trust guidance, NIST 800-63B, or HIPAA's Security Rule. The realistic threat — stolen-bearer-token replay — is mitigated today via short-lived tokens, JTI revocation that survives restarts, per-tenant rate limiting, circuit breakers, and secret-redacted, request-correlated audit logging.
 
+**Design choice: mesh/ingress-terminated mTLS, not application-native.** For service-to-service traffic (the HTTP admin plane, and the Redis connection in `internal/redisbackend`), this server relies on the surrounding infrastructure to terminate mutual TLS rather than implementing a TLS client-cert handshake in application code. This is a deliberate architectural choice, not a gap deferred for later:
+
+- **No standard surveyed requires application-native mTLS.** NIST SP 800-207 (Zero Trust Architecture) is technology-neutral by design; its cloud-native companion, SP 800-207A, explicitly names sidecar/service-mesh-terminated mTLS as a compliant Zero Trust enforcement pattern. PCI-DSS v4.0.1 Requirement 4, SOC 2's CC6.1/CC6.6/CC6.7, ISO/IEC 27001:2022 Annex A 8.20/8.24, and NIST SP 800-53 Rev 5 (SC-8, SC-13, SC-23) are all written as control outcomes — "protect transmitted information," "use strong cryptography" — and are silent on which component in the stack performs the cryptographic handshake. The one control that textually resembles mTLS, NIST 800-53's IA-3(1) ("cryptographically based bidirectional authentication"), is an optional enhancement selected per impact baseline, not a universal requirement.
+- **This mirrors mainstream practice, not a compromise.** Google's BeyondProd architecture terminates mTLS-equivalent trust at the infrastructure layer specifically so "individual microservice developers aren't burdened with implementing" it. CNCF's 2024 survey puts service-mesh adoption at 42% of respondents — infra-terminated mTLS (mesh sidecar, gateway, or platform-provisioned identity) is the dominant pattern at scale, not an exception auditors tolerate reluctantly.
+- **What an audit actually checks is the control outcome, not the binary.** Auditors evaluating internal-traffic mutual authentication push back on an undocumented or incorrectly-scoped trust boundary — not on the absence of native TLS code in the application process. A documented answer of "our service mesh/ingress terminates mTLS at trust-zone boundary X, backed by cert issuance/rotation policy Y" satisfies every framework above as thoroughly as native code would.
+- **The one real gap: bare-VM / non-mesh deployments.** Where there is no sidecar or gateway to terminate mTLS (a plain VM outside Kubernetes), the standards-consistent answer is still not to build cert provisioning/rotation/revocation into this binary — it is to place a lightweight local TLS-terminating proxy in front of it, or adopt SPIFFE/SPIRE workload identity (which explicitly supports VM and bare-metal workloads via node/workload attestation, issuing short-lived X.509-SVIDs a local agent consumes). This keeps cert lifecycle management out of the application's own code, consistent with every other pattern surveyed here. Tracked on [issue #485](https://github.com/zoharbabin/web-researcher-mcp/issues/485).
+
 ### Rate Limiting (HTTP mode)
 
 Three tiers preventing abuse while allowing legitimate high-throughput research:
@@ -240,8 +247,12 @@ All configurable. Returns 429 with `Retry-After` header.
   `CACHE_ENCRYPTION_KEY` is set). File permissions 0600.
 - **In transit:** TLS 1.2+ for all outbound connections (Go stdlib default).
   HSTS header for inbound HTTP.
-- **FIPS option:** Build with `GOEXPERIMENT=boringcrypto` for FIPS 140-2
-  validated cryptographic module.
+- **FIPS option:** Build with `GOFIPS140=latest` for Go's native FIPS 140-3
+  cryptographic module (`crypto/fips140`), backed by active CMVP certificate
+  [#5247](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/5247).
+  `GOEXPERIMENT=boringcrypto` is not the compliant path — BoringCrypto's own
+  certificate is [Historical](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/3678),
+  and Go's docs mark that build flag unsupported and slated for removal.
 
 ### Audit Logging
 
@@ -273,6 +284,16 @@ never persisted regardless of this flag, so it carries no GDPR erasure gap
 through `audit.MaskSecrets` so any credential echoed back by a provider is
 redacted before it reaches a sink. Audit files rotate at `AUDIT_MAX_BYTES` and
 are pruned after `AUDIT_RETENTION_DAYS` (default 180, clamped to `[180, 3650]`).
+
+**Forwarding to a SIEM or alerting pipeline.** `internal/audit/logger.go` writes
+structured JSON events to disk or stdout only — there is no built-in webhook or
+SIEM sink (see [issue #492](https://github.com/zoharbabin/web-researcher-mcp/issues/492)
+for why: breach-notification pipelines are an enterprise-tier feature gated
+behind paid support in comparable tools, not core OSS). Forward these events
+with a standard log agent instead: point Fluentd, Vector, or a syslog forwarder
+at the configured audit output path (or stdout, if running in a container
+platform that already collects it), and alert on `event_type` and `success`
+fields in your SIEM. No code change is required on this project's side.
 
 ---
 
@@ -374,7 +395,9 @@ A Business Associate Agreement (BAA) is required between the entity deploying
 this server and any covered entity whose data it processes. The server's
 encryption at rest (AES-256-GCM), encryption in transit (TLS 1.2+), access
 controls (OAuth + tenant isolation), and audit logging satisfy HIPAA Technical
-Safeguards (45 CFR 164.312). The FIPS build option (`GOEXPERIMENT=boringcrypto`)
+Safeguards (45 CFR 164.312). The FIPS build option (`GOFIPS140=latest`, Go's
+native FIPS 140-3 module, CMVP certificate
+[#5247](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/5247))
 satisfies NIST SP 800-111 requirements referenced by HIPAA.
 
 ### Container Security
@@ -401,7 +424,9 @@ Deployment recommendations:
 - Mount cache directory as tmpfs or encrypted volume
 - Apply network policies limiting egress to search API endpoints + Chromium
   download endpoints (for auto-update if enabled)
-- Consider seccomp profile (see `deploy/` directory when available)
+- Apply a `seccomp` profile — `RuntimeDefault` is already set in the example
+  manifests (`deploy/k8s-local/03-app.yaml`, `docs/DEPLOYMENT.md`), matching
+  the Kubernetes Pod Security Standards "Restricted" baseline
 - For environments where Chromium is not desired: set `CHROME_PATH=disabled`
   to skip browser-tier scraping entirely
 
@@ -448,6 +473,7 @@ standards — not through per-framework checkbox exercises.
 | **SOC 2 Type II** | Enterprise trust | Audit logging, rate limiting, tenant isolation, change management |
 | **NIST CSF 2.0** | US enterprise | Govern/Identify/Protect/Detect/Respond/Recover mapped to controls |
 | **GDPR / UK GDPR** | Privacy | Data minimization, purpose limitation, TTL caches; data-subject access/portability/erasure endpoints (`/admin/data`); consent record-verify-honor for regulated features |
+| **LGPD (Brazil) / PIPEDA (Canada) / DPDP Act (India) / POPIA (South Africa) / APPI (Japan) / PDPA (Singapore) / Privacy Act (Australia) / PIPL (China)** | Global privacy — **operator-owned, same shape as GDPR** | Each law's processor/intermediary-equivalent role has narrower direct statutory duties than its controller-equivalent, but every one of those duties (security safeguards, retention limitation, breach-notification support) maps to controls this project already ships (AES-256-GCM encryption, TTL caches, audit logging, `/admin/data` erasure). Cross-border-transfer mechanics and controller/processor role assignment remain the deploying entity's to configure, exactly as with GDPR above |
 | **OWASP MCP Cheat Sheet** | MCP-specific | SSRF protection, content sanitization, tool annotations, supply chain |
 | **OWASP Top 10 LLM (2025)** | AI security | Prompt injection defense, bounded agency, supply chain verification |
 | **OWASP Agentic Top 10 (2026 draft)** | AI agent security — **tool-provider slice only** | What this server owns: read-only-default tool annotations (writes non-destructive; deletion is a separate endpoint), JWT scope authorization, consent-gated + tenant-isolated + erasable memory/workspace, SSRF + HTML sanitization + untrusted-content marker, rate limits + circuit breakers + size caps, per-call audit with request-ID correlation. **Host-owned (not us):** goal/intent manipulation, cascading hallucination, multi-agent trust, the agent permission model — those live in the client that drives the tools. |
@@ -456,17 +482,21 @@ standards — not through per-framework checkbox exercises.
 | **EU Cyber Resilience Act** | Software supply chain | SBOM, signed releases, vulnerability handling, PSIRT, 5yr updates |
 | **NIS2** | EU critical infrastructure | Incident handling, supply chain, crypto, vulnerability management |
 | **FedRAMP** | US government | FIPS crypto option, access control, audit, vulnerability scanning |
-| **UK Cyber Essentials** | UK market access | Boundary protection, secure config, access control, patching |
+| **UK Cyber Essentials** | UK market access — **operator-owned** | This scheme certifies an organization's IT estate (device config, patching, access control), not an OSS artifact. There is no organization or IT estate here to certify. An operator seeking Cyber Essentials certifies their own deployment, using this project's boundary protection, secure config, access control, and patching as supporting evidence |
 | **UK NCSC CAF v4.0** | UK critical infra | 14-principle cyber assessment (covers AI risks) |
 | **BSIMM** | Security maturity | Code review, SAST, SCA, architecture analysis, vulnerability mgmt |
 | **HIPAA** | US healthcare | Encryption (AES-256), audit controls, access controls, BAA support, breach notification |
+| **NYDFS 23 NYCRR 500 / NAIC Insurance Data Security Model Law** | US financial/insurance — **operator-owned** | Both regulate the covered bank/insurer's Third-Party Service Provider oversight program, not an OSS artifact directly. This project supplies the technical evidence (encryption, access control, audit logging, vulnerability scanning) a covered entity cites in its own vendor risk assessment |
 | **HITRUST CSF** | Healthcare + cross-industry | Maps to 40+ frameworks; combined SOC 2 + HITRUST assessment |
 | **FIRST PSIRT** | Vulnerability handling | Structured triage, remediation, and disclosure for CVEs |
 | **MITRE ATT&CK** | Threat modeling | Security controls mapped to adversary techniques |
-| **Global CBPR** | Cross-border privacy | Data transfer certification for APAC/Americas markets |
+| **Global CBPR** | Cross-border privacy — **operator-owned** | This scheme certifies a business's cross-border data transfer program (APAC/Americas), not an OSS artifact. This project has no cross-border data-transfer business to certify. An operator seeking CBPR certifies their own deployment/data flows, using this project's data minimization and purpose-limitation controls as supporting evidence |
 | **IETF RFC 9700/9449** | OAuth security | Best current practice + DPoP proof-of-possession |
 | **CSA MCP Security Framework** | MCP hardening | Provenance, runtime isolation, secrets, observability |
 | **NSA MCP Security Guidance** | Government/military | Message signing, per-call scoping, trust chains |
+| **ISO 22301** | Business continuity — **operator-owned** | This standard certifies an organization's Business Continuity Management System (leadership commitment, BIA, exercise program), not an OSS artifact. This project's stateless/HPA architecture and Redis-durability options give an operator's BIA strong RTO/RPO inputs — see [Recovery objectives](DEPLOYMENT.md#recovery-objectives-rtorpo) — but the BCMS itself is the operator's |
+| **EU DORA** | EU financial-sector ICT risk — **out of scope unless hosted as SaaS** | DORA (Reg. (EU) 2022/2554) governs a financial entity's relationship with an "undertaking providing ICT services" it procures from. Self-hosting this OSS binary isn't procuring ICT services any more than self-hosting Postgres is. It attaches only if a *hosted SaaS* offering of this project sells to EU financial entities — then that SaaS operator owns Art. 28-44 obligations, the same split as the SOC 2/HIPAA rows above |
+| **ISO/IEC 42001** | AI management system — **operator-owned** | This standard certifies an organization's AI Management System (governance, risk treatment, lifecycle controls across AI-related roles), not an OSS artifact. This project is closest to an AI-system component supplier feeding an operator's own AIMS — same shared-responsibility shape as ISO 27001/UK Cyber Essentials above; it supplies technical evidence (transparency, risk-aware design, audit trails), not the management system itself |
 
 ### What Compliance Means for This Project
 
@@ -566,6 +596,15 @@ Responsibility splits three ways.
   scope, risk-treatment methodology, Statement of Applicability, internal-audit
   program, and management review (Clauses 4–10). The project satisfies the
   relevant Annex A technical controls only.
+- **NYDFS 23 NYCRR 500.11 / NAIC Insurance Data Security Model Law** — a bank or
+  insurer deploying this server must run its own Third-Party Service Provider
+  due-diligence and hold the vendor (this project) to its written information
+  security policy, same shape as a HIPAA BAA or GDPR DPA above. NAIC's Model Law
+  text itself treats NYDFS 500 compliance as satisfying the Model Law, so a
+  covered entity meeting one has effectively met both. The project supplies the
+  technical evidence (encryption, access control, audit logging, vulnerability
+  scanning); the covered entity owns the vendor-oversight program and regulatory
+  filing.
 
 This split is not a disclaimer — it is the honest shape of "compliance as
 architecture." The repository can make the technical half **provably** true; the
@@ -813,11 +852,46 @@ Our security controls map to MITRE ATT&CK techniques:
 | Auth/JWKS | T1078 (Valid Accounts), T1550 (Use Alternate Auth Material) |
 | Audit logging | T1070 (Indicator Removal) — structured, secret-redacted, request-ID-correlated events (incl. auth failures) aid detection & attribution. Note: logs are append-only JSON, not cryptographically tamper-evident. |
 
+### Operational Incident Response vs. PSIRT
+
+The FIRST PSIRT framework above governs *vulnerability disclosure*: someone
+reports a flaw, we triage and patch it before it's exploited. That is a
+different discipline from *operational incident response* — what an operator
+does when a running deployment is actively compromised, breached, or under
+attack — which NIST SP 800-61r2 defines as four phases: Preparation,
+Detection & Analysis, Containment/Eradication/Recovery, and Post-Incident
+Activity. This project supplies the technical primitives an operator's IR
+runbook (Preparation) draws on for the Containment phase; it does not run
+the runbook itself — same shared-responsibility split as the vendor-oversight
+rows above.
+
+Concrete containment actions available today, without a code change:
+
+- **Revoke a compromised token or key immediately** — the `persist.Store`-backed
+  JTI revocation list (`internal/auth`) takes effect fleet-wide (Redis-backed) or
+  per-pod (memory-backed) on the next request; rotate `ADMIN_API_KEY` to cut off
+  admin-plane access.
+- **Flush cache and sessions** — the admin cache/session flush endpoints
+  (`internal/server`) let an operator clear potentially-poisoned cached content
+  or a hijacked session without a restart.
+- **Isolate a tenant** — `/admin/data` export/erasure can pull or purge one
+  tenant's stored data (memory, analytics, workspace, sessions) independently of
+  the rest of the fleet.
+- **Correlate the timeline** — `internal/audit`'s structured, request-ID-correlated,
+  secret-redacted JSON events (PodID-tagged for cross-pod correlation) are the raw
+  material for the Detection & Analysis and Post-Incident phases; forward them to
+  a SIEM as described under [Audit Logging](#audit-logging) above.
+
+Preparation (an IR plan naming roles and escalation paths) and Post-Incident
+Activity (the retrospective, regulatory breach notification) remain operator-owned,
+same as the incident-response runbook already listed in the
+[shared-responsibility model](#shared-responsibility-model).
+
 ---
 
 ## Current Limitations
 
-- **Native mTLS for service-to-service traffic** — the server does not implement mutual-TLS client-cert authentication itself, for either the HTTP admin plane or the Redis connection (`internal/redisbackend`); connections are encrypted in transit (`REDIS_URL` supports `rediss://`, and the HTTP server can run behind TLS) but not mutually authenticated at the application layer. Deployments requiring mTLS today should terminate it at a surrounding service mesh or ingress.
+- **Native mTLS for service-to-service traffic** — the server does not implement mutual-TLS client-cert authentication itself, for either the HTTP admin plane or the Redis connection (`internal/redisbackend`); connections are encrypted in transit (`REDIS_URL` supports `rediss://`, and the HTTP server can run behind TLS) but not mutually authenticated at the application layer. This is a deliberate design choice, not a deferred gap — see [Authentication (HTTP mode)](#authentication-http-mode) for the standards research behind it. Deployments requiring mTLS today should terminate it at a surrounding service mesh or ingress; bare-VM/non-mesh deployments should use a local TLS-terminating proxy or SPIFFE/SPIRE workload identity instead of native in-binary cert handling. Status tracked on [issue #485](https://github.com/zoharbabin/web-researcher-mcp/issues/485).
 - **No DPoP / sender-constrained tokens** — the server validates bearer tokens only; it does not check a `cnf.jkt` proof-of-possession claim, because embedding that claim is the issuing IdP's responsibility and no supported IdP integration currently requires it. Stolen-bearer-token replay is mitigated via short token TTLs, JTI-based revocation, per-tenant rate limiting, and audit logging (see the design-choice discussion under [Authentication (HTTP mode)](#authentication-http-mode)). Status tracked on [issue #489](https://github.com/zoharbabin/web-researcher-mcp/issues/489).
 
 ### Multi-tenant shared Kubernetes clusters

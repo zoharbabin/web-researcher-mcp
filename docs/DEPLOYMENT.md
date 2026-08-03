@@ -663,6 +663,34 @@ The "sessions" below are the `sequential_search` tool's own research-continuity 
 2. Without Redis: use sticky sessions at your L7 load balancer and divide rate limits by expected instance count.
 3. `go-rod` browser rendering remains per-pod regardless (stateless, no shared pool needed).
 
+### Recovery objectives (RTO/RPO)
+
+Framed in NIST SP 800-34 contingency-planning terms, for an operator building a
+Business Impact Analysis or an Information System Contingency Plan around this
+server:
+
+- **Compute (RTO ≈ 0).** Pods are stateless (`Stateless` transport mode above)
+  and require no session affinity, so a crashed or evicted pod is replaced by
+  the orchestrator with zero coordination — the [HPA example](#kubernetes)
+  restores capacity automatically. There is no leader election, no warm-up
+  handshake, and no data to reattach.
+- **Cache (RPO = 0 by design, not by backup).** Memory and disk cache are
+  disposable: losing a pod's cache costs a re-fetch on the next query, not data
+  loss, because search results are deterministic and the cache is not a system
+  of record. No backup policy is needed for this tier.
+- **Sessions and rate-quota state, without `REDIS_URL` (RPO ≈ per-pod TTL
+  window).** Encrypted-disk sessions survive that one pod's restart but not its
+  loss; a pod replacement loses that pod's in-flight sessions and daily-quota
+  counters. Acceptable for single-instance or best-effort multi-instance
+  deployments; unacceptable if session continuity across a pod loss is a
+  requirement.
+- **Sessions and rate-quota state, with `REDIS_URL` (RPO = Redis's own).**
+  This project encrypts everything before writing it to Redis, but durability
+  beyond that is entirely a function of the operator's Redis deployment — its
+  own persistence mode (RDB/AOF), replication, and backup schedule. Size that
+  Redis RPO to match what the BIA actually requires; this project has no
+  opinion on it beyond "encrypt at rest," which it already enforces.
+
 ### Production Readiness Checklist
 
 Before running multiple instances behind a load balancer, work through this checklist. Items marked **(per-pod without Redis)** behave differently across pods unless `REDIS_URL` is set.
