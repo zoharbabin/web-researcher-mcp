@@ -156,60 +156,56 @@ for user in "$USER1" "$USER2"; do
   done
 done
 
+# The transport is stateless (no Mcp-Session-Id — see go-sdk >=1.7.0, PR #952);
+# tenant/user isolation is keyed by the OAuth bearer token, not a session ID.
 mcp_init() {
-  local token="$1" hdrs
-  hdrs="$(mktemp)"
-  curl "${CURL_OPTS[@]}" -D "$hdrs" -X POST "$BASE/mcp/" \
-    -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
-    -H "Authorization: Bearer $token" \
-    -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"e2e-oauth","version":"1.0"}}}' \
-    >/dev/null
-  local sid
-  sid="$(grep -i '^Mcp-Session-Id:' "$hdrs" | head -1 | cut -d: -f2- | tr -d '\r' | xargs)"
-  rm -f "$hdrs"
+  local token="$1"
   curl "${CURL_OPTS[@]}" -X POST "$BASE/mcp/" \
     -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
-    -H "Authorization: Bearer $token" -H "Mcp-Session-Id: $sid" \
+    -H "Authorization: Bearer $token" \
+    -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"e2e-oauth","version":"1.0"}}}'
+  curl "${CURL_OPTS[@]}" -X POST "$BASE/mcp/" \
+    -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
+    -H "Authorization: Bearer $token" \
     -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' -o /dev/null
-  echo "$sid"
 }
 
 mcp_call() {
-  local token="$1" sid="$2" name="$3" args="$4"
+  local token="$1" name="$2" args="$3"
   curl "${CURL_OPTS[@]}" -X POST "$BASE/mcp/" \
     -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
-    -H "Authorization: Bearer $token" -H "Mcp-Session-Id: $sid" \
+    -H "Authorization: Bearer $token" \
     -d "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"$name\",\"arguments\":$args}}"
 }
 
-SID1="$(mcp_init "$TOKEN1")"
-SID2="$(mcp_init "$TOKEN2")"
-[ -n "$SID1" ] && [ -n "$SID2" ]
+R1="$(mcp_init "$TOKEN1")"
+R2="$(mcp_init "$TOKEN2")"
+echo "$R1" | grep -q '"id":1' && echo "$R2" | grep -q '"id":1'
 check "MCP initialize for two distinct authenticated users" $?
 
-R="$(mcp_call "$TOKEN1" "$SID1" memory_save '{"note":"e2e isolation secret for alice","topic":"e2e"}')"
+R="$(mcp_call "$TOKEN1" memory_save '{"note":"e2e isolation secret for alice","topic":"e2e"}')"
 echo "$R" | grep -q '"status":"ok"'
 check "memory_save (alice)" $?
 
-R="$(mcp_call "$TOKEN1" "$SID1" memory_recall '{}')"
+R="$(mcp_call "$TOKEN1" memory_recall '{}')"
 echo "$R" | grep -q 'e2e isolation secret for alice'
 check "memory_recall sees own note (alice)" $?
 
-R="$(mcp_call "$TOKEN2" "$SID2" memory_recall '{}')"
+R="$(mcp_call "$TOKEN2" memory_recall '{}')"
 if echo "$R" | grep -q 'e2e isolation secret for alice'; then leak=1; else leak=0; fi
 check "memory_recall does NOT leak alice's note to bob (isolation)" "$leak"
 echo "$R" | grep -q '"count":0'
 check "bob's memory_recall count is 0" $?
 
-R="$(mcp_call "$TOKEN1" "$SID1" get_my_analytics '{}')"
+R="$(mcp_call "$TOKEN1" get_my_analytics '{}')"
 echo "$R" | grep -q '"userId":"'"$USER1"'"'
 check "get_my_analytics scoped to alice" $?
 
-R="$(mcp_call "$TOKEN1" "$SID1" monitor_query_save '{"query":"e2e oauth harness query","provider":"duckduckgo"}')"
+R="$(mcp_call "$TOKEN1" monitor_query_save '{"query":"e2e oauth harness query","provider":"duckduckgo"}')"
 echo "$R" | grep -q '"status":"ok"'
 check "monitor_query_save (alice)" $?
 
-R="$(mcp_call "$TOKEN2" "$SID2" monitor_query_check '{"query":"e2e oauth harness query","provider":"duckduckgo"}')"
+R="$(mcp_call "$TOKEN2" monitor_query_check '{"query":"e2e oauth harness query","provider":"duckduckgo"}')"
 echo "$R" | grep -q '"status":"not_found"'
 check "monitor_query_check has no baseline for bob (isolation)" $?
 

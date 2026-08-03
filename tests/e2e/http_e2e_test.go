@@ -230,9 +230,8 @@ func (h *httpHarness) initialize() {
 	if resp.Error != nil {
 		h.t.Fatalf("initialize error: %s", resp.Error)
 	}
-	if h.sessionID == "" {
-		h.t.Fatal("server did not return an Mcp-Session-Id on initialize")
-	}
+	// go-sdk >=1.7.0 stateless mode ignores Mcp-Session-Id entirely (see
+	// modelcontextprotocol/go-sdk#952), so the server no longer returns one.
 	// The notification has no response; fire-and-forget.
 	notif := h.post(jsonRPCRequest{JSONRPC: "2.0", Method: "notifications/initialized"}, nil)
 	_ = notif.Body.Close()
