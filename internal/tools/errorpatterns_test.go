@@ -56,6 +56,76 @@ func TestGetSessionNoPatternBelowThreshold(t *testing.T) {
 	}
 }
 
+// TestGetSessionOverviewSupersededBy (#512): a session's overview
+// (stepIndex/lastSteps) must surface supersededBy on a step revised by a
+// later one, so a caller recovering the session after context loss can see a
+// step is stale without re-deriving it from isRevision/revisesStep itself.
+func TestGetSessionOverviewSupersededBy(t *testing.T) {
+	deps := setupTestDeps()
+	sid := makeSessionWithRevision(t, deps)
+
+	out, res := callTool(t, deps, "get_research_session", map[string]any{"sessionId": sid})
+	if res.IsError {
+		t.Fatalf("get_research_session failed")
+	}
+
+	stepIndex, ok := out["stepIndex"].([]any)
+	if !ok || len(stepIndex) != 2 {
+		t.Fatalf("expected 2 stepIndex entries, got %v", out["stepIndex"])
+	}
+	e1, _ := stepIndex[0].(map[string]any)
+	if sb, _ := e1["supersededBy"].(float64); sb != 2 {
+		t.Errorf("stepIndex[0].supersededBy = %v, want 2", e1["supersededBy"])
+	}
+
+	lastSteps, ok := out["lastSteps"].([]any)
+	if !ok || len(lastSteps) == 0 {
+		t.Fatalf("expected lastSteps, got %v", out["lastSteps"])
+	}
+	var found bool
+	for _, s := range lastSteps {
+		step, _ := s.(map[string]any)
+		if step["stepNumber"] == float64(1) {
+			found = true
+			if sb, _ := step["supersededBy"].(float64); sb != 2 {
+				t.Errorf("lastSteps step 1 supersededBy = %v, want 2", step["supersededBy"])
+			}
+		}
+	}
+	if !found {
+		t.Fatal("step 1 not present in lastSteps window (only 2 steps total)")
+	}
+}
+
+// TestGetSessionSingleStepSupersededBy (#512): fetching a specific revised
+// step by stepId must also carry supersededBy, matching the overview view.
+func TestGetSessionSingleStepSupersededBy(t *testing.T) {
+	deps := setupTestDeps()
+	sid := makeSessionWithRevision(t, deps)
+
+	out, res := callTool(t, deps, "get_research_session", map[string]any{"sessionId": sid, "stepId": 1})
+	if res.IsError {
+		t.Fatalf("get_research_session (stepId=1) failed")
+	}
+	step, ok := out["step"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected step, got %v", out["step"])
+	}
+	if sb, _ := step["supersededBy"].(float64); sb != 2 {
+		t.Errorf("step 1 supersededBy = %v, want 2", step["supersededBy"])
+	}
+
+	// The revising step itself must not carry supersededBy.
+	out2, res2 := callTool(t, deps, "get_research_session", map[string]any{"sessionId": sid, "stepId": 2})
+	if res2.IsError {
+		t.Fatalf("get_research_session (stepId=2) failed")
+	}
+	step2, _ := out2["step"].(map[string]any)
+	if _, ok := step2["supersededBy"]; ok {
+		t.Errorf("step 2 (the revising step) must not itself carry supersededBy, got %v", step2["supersededBy"])
+	}
+}
+
 func TestGetSessionProviderStats(t *testing.T) {
 	deps := setupTestDeps()
 	sid, _ := startSession(t, deps, "")

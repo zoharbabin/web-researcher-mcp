@@ -281,6 +281,17 @@ func ClaimTermCoverageWindowed(text, claim string, windowSize int) (matched, tot
 // sentences / a paragraph) without spanning an entire long article.
 const defaultClaimWindow = 4
 
+// SignificantTerms tokenizes free text into distinct, lowercased significant
+// terms, dropping stop words and very short tokens. Exported for callers
+// outside this package that need the same term-extraction used for claim
+// matching — e.g. sequential_search's refinement-query reformulation (#511),
+// which needs the DISTINCT content words of a research goal / knowledge gap
+// rather than the raw strings, so it can vary phrasing instead of
+// concatenating them verbatim.
+func SignificantTerms(text string) []string {
+	return claimTerms(text)
+}
+
 // claimTerms tokenizes a claim into distinct, lowercased significant terms,
 // dropping stop words and very short tokens so matching is meaningful.
 func claimTerms(claim string) []string {

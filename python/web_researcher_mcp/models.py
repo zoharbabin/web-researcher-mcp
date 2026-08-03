@@ -1037,6 +1037,7 @@ class GetResearchSessionLaststep:
     rejectedApproaches: list[str] = field(default_factory=list)
     revisesStep: Optional[int] = None
     stepNumber: Optional[int] = None
+    supersededBy: Optional[int] = None
     timestamp: Optional[str] = None
 
     @classmethod
@@ -1052,6 +1053,7 @@ class GetResearchSessionLaststep:
             rejectedApproaches=list(d.get('rejectedApproaches') or []),
             revisesStep=d.get('revisesStep'),
             stepNumber=d.get('stepNumber'),
+            supersededBy=d.get('supersededBy'),
             timestamp=d.get('timestamp'),
         )
 
@@ -1117,6 +1119,7 @@ class GetResearchSessionStepindex:
     confidence: Optional[str] = None
     oneLiner: Optional[str] = None
     stepNumber: Optional[int] = None
+    supersededBy: Optional[int] = None
 
     @classmethod
     def from_dict(cls, d: dict[str, Any] | None) -> "GetResearchSessionStepindex | None":
@@ -1127,6 +1130,7 @@ class GetResearchSessionStepindex:
             confidence=d.get('confidence'),
             oneLiner=d.get('oneLiner'),
             stepNumber=d.get('stepNumber'),
+            supersededBy=d.get('supersededBy'),
         )
 
 @dataclass

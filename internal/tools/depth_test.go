@@ -2,7 +2,10 @@ package tools
 
 import (
 	"fmt"
+	"strings"
 	"testing"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 )
 
 // startSession creates a session and records a knowledge gap + a couple of
@@ -50,6 +53,95 @@ func TestDepthStandardAddsCoverage(t *testing.T) {
 	// standard must NOT auto-execute.
 	if _, ok := out["refinementResults"]; ok {
 		t.Error("standard depth must NOT auto-execute searches")
+	}
+}
+
+// TestDepthStandardRefinementQueriesAreReformulated (#511): the gap-derived
+// refinement query must be a genuine reformulation, not naive string
+// concatenation of researchGoal + knowledgeGap. Before the fix, the single
+// gap-derived suggestion for this fixture was exactly
+// "transformer scaling laws no data past 2023" — literally goal+" "+gap.
+func TestDepthStandardRefinementQueriesAreReformulated(t *testing.T) {
+	goal := "transformer scaling laws"
+	gap := "no data past 2023"
+	naiveConcat := goal + " " + gap
+
+	_, out := startSession(t, setupTestDeps(), "standard")
+	rq, ok := out["refinementQueries"].([]any)
+	if !ok || len(rq) == 0 {
+		t.Fatalf("standard depth should suggest refinement queries, got %v", out["refinementQueries"])
+	}
+
+	q0, _ := rq[0].(string)
+	if q0 == naiveConcat {
+		t.Errorf("refinementQueries[0] = %q is the naive goal+gap concatenation, not a reformulation", q0)
+	}
+	if q0 == gap {
+		t.Errorf("refinementQueries[0] = %q is just the bare knowledgeGap text", q0)
+	}
+	// A genuine reformulation should carry a search-operator variation (quoted
+	// phrase, site/date restriction, etc.) rather than plain appended words.
+	hasOperator := strings.Contains(q0, `"`) || strings.Contains(q0, "site:") ||
+		strings.Contains(q0, "after:") || strings.Contains(q0, "-site:") || strings.Contains(q0, "filetype:")
+	if !hasOperator {
+		t.Errorf("refinementQueries[0] = %q does not vary phrasing/operators from the raw goal+gap text", q0)
+	}
+}
+
+// TestReformulateFromGap (#511) exercises reformulateFromGap directly across
+// the shapes it must handle: a gap naming an explicit year, a gap with novel
+// terms but no year, a gap whose terms are all already in the goal, and an
+// empty goal.
+func TestReformulateFromGap(t *testing.T) {
+	termsOf := func(s string) map[string]bool {
+		m := map[string]bool{}
+		for _, t := range content.SignificantTerms(s) {
+			m[t] = true
+		}
+		return m
+	}
+
+	cases := []struct {
+		name      string
+		goal, gap string
+		want      string
+	}{
+		{
+			name: "year in gap becomes after: operator, not concatenation",
+			goal: "transformer scaling laws",
+			gap:  "no data past 2023",
+			want: `"transformer scaling laws" data past after:2023`,
+		},
+		{
+			name: "novel terms without a year get quoted-goal + terms",
+			goal: "transformer scaling laws",
+			gap:  "missing benchmark results",
+			want: `"transformer scaling laws" missing benchmark results`,
+		},
+		{
+			name: "gap terms fully covered by goal falls back to latest",
+			goal: "transformer scaling laws",
+			gap:  "the scaling laws",
+			want: "transformer scaling laws latest",
+		},
+		{
+			name: "empty goal returns novel terms alone",
+			goal: "",
+			gap:  "missing benchmark results",
+			want: "missing benchmark results",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := reformulateFromGap(c.goal, c.gap, termsOf(c.goal))
+			if got != c.want {
+				t.Errorf("reformulateFromGap(%q, %q) = %q, want %q", c.goal, c.gap, got, c.want)
+			}
+			naiveConcat := c.goal + " " + c.gap
+			if c.goal != "" && got == naiveConcat {
+				t.Errorf("reformulateFromGap(%q, %q) = %q is naive concatenation", c.goal, c.gap, got)
+			}
+		})
 	}
 }
 

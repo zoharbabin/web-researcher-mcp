@@ -318,9 +318,11 @@ func (m *MemoryManager) GetStep(tenantID, userID, sessionID string, stepNum int)
 		return nil, ErrSessionCorrupt
 	}
 
+	sm := SupersededMap(sess.Steps)
 	for i := range sess.Steps {
 		if sess.Steps[i].StepNumber == stepNum {
-			return &sess.Steps[i], nil
+			step := ApplySupersededByTo(sess.Steps[i], sm)
+			return &step, nil
 		}
 	}
 	return nil, fmt.Errorf("step %d not found", stepNum)
@@ -499,25 +501,35 @@ func buildIndexFromSession(sess *Session) *SessionIndex {
 		Sources:         sess.Sources,
 	}
 
+	// SupersededBy (#512) is derived at read time from the isRevision/revisesStep
+	// links already recorded on steps — never persisted, never mutates the
+	// stored step. Computed once here and applied to both views below so the
+	// signal is consistent whether a step is seen via the one-liner index (every
+	// step) or the LastSteps window (most recent 3).
+	supersededBy := SupersededMap(sess.Steps)
+
 	for _, step := range sess.Steps {
 		oneLiner := step.Description
 		if len(oneLiner) > 120 {
 			oneLiner = oneLiner[:120]
 		}
 		idx.StepIndex = append(idx.StepIndex, StepIndexEntry{
-			StepNumber: step.StepNumber,
-			BranchID:   step.BranchID,
-			OneLiner:   oneLiner,
-			Confidence: step.Confidence,
+			StepNumber:   step.StepNumber,
+			BranchID:     step.BranchID,
+			OneLiner:     oneLiner,
+			Confidence:   step.Confidence,
+			SupersededBy: supersededBy[step.StepNumber],
 		})
 	}
 
 	// Keep last 3 steps
+	var lastSteps []ResearchStep
 	if len(sess.Steps) > 3 {
-		idx.LastSteps = sess.Steps[len(sess.Steps)-3:]
+		lastSteps = sess.Steps[len(sess.Steps)-3:]
 	} else {
-		idx.LastSteps = sess.Steps
+		lastSteps = sess.Steps
 	}
+	idx.LastSteps = applySupersededBy(lastSteps, supersededBy)
 
 	// Auto-generate summary if not externally provided
 	if sess.ResearchGoal != "" && len(sess.Steps) > 0 {
