@@ -292,6 +292,17 @@ var scrapePageOutputSchema = map[string]any{
 				},
 			},
 		},
+		// contentSizeBytes (#508) is present ONLY on the linked resource_link
+		// hand-off shape (mode=raw content at/above the size threshold — see
+		// internal/tools/artifacts.go's largeResultOrInlineWithFields): it rides
+		// alongside the generic resource/bytes/expiresAt link-summary fields so a
+		// caller can judge whether the linked artifact is worth a follow-up read
+		// without one. Absent on every inline (non-linked) response, where
+		// contentLength already carries the same information.
+		"contentSizeBytes": map[string]any{
+			"type":        "integer",
+			"description": "Raw content length in bytes. Present only when the response links out to a resource_link artifact (mode=raw content at/above the size threshold); mirrors contentLength for a linked payload without requiring a follow-up read.",
+		},
 	},
 }
 
@@ -402,6 +413,18 @@ var searchAndScrapeOutputSchema = map[string]any{
 					"table":         map[string]any{"type": "object"},
 				},
 			},
+		},
+		// sourceCount (#508) is present ONLY on the linked resource_link hand-off
+		// shape (result at/above the size threshold — see internal/tools/
+		// artifacts.go's largeResultOrInlineWithFields): it rides alongside the
+		// generic resource/bytes/expiresAt link-summary fields, mirroring the
+		// already-present status field, so a caller can judge whether the linked
+		// artifact is worth a follow-up read without one. Absent on every inline
+		// (non-linked) response, where summary.urlsScraped already carries the
+		// same count.
+		"sourceCount": map[string]any{
+			"type":        "integer",
+			"description": "Number of sources successfully scraped (mirrors summary.urlsScraped). Present only when the response links out to a resource_link artifact, surfacing the count without a follow-up read.",
 		},
 	},
 }

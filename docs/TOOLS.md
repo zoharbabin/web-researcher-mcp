@@ -25,6 +25,7 @@ The heaviest tools — `scrape_page` (`mode: raw`), `search_and_scrape`, and `re
 - The linked body is stored in the shared `cache.Cache` (memory + AES-encrypted disk, or Redis in HTTP mode) under a **content-addressed** key and served read-only via the `research://artifact/{id}` resource template. The id is the SHA-256 of the body, so identical payloads de-dupe and the URI is stable/idempotent.
 - Artifacts are **short-lived** (bounded TTL); a fetch after expiry returns a not-found error, never another caller's data. With no cache configured, large payloads inline (correctness over size).
 - Canonical implementation: `largeResultOrInline(...)` + `registerArtifactResource(...)` in `internal/tools/artifacts.go`. Cache-freshness `_meta` (and routing `_meta`) ride on either shape.
+- On this linked shape, `scrape_page` and `search_and_scrape` each merge extra, tool-specific fields into the inline summary alongside the generic ones, via `largeResultOrInlineWithFields(...)`, so a caller can judge whether the linked artifact is worth a follow-up read without one: `scrape_page` (`mode: raw`) adds `contentSizeBytes` (the raw content's byte length); `search_and_scrape` adds `sourceCount` (sources successfully scraped) and `status` (`complete`/`partial`/`failed`). Both are present ONLY on the linked shape — absent from every inline (non-linked) response, where `contentLength` / `summary.urlsScraped` already carry the same information.
 
 ---
 
@@ -157,6 +158,7 @@ type ScrapeOutput struct {
     DetectedDOI      string            `json:"detectedDoi,omitempty"`      // a scholarly DOI the page declares (#199); peer-reviewed pages only; omitted when none
     RetractionStatus *RetractionStatus `json:"retractionStatus,omitempty"` // Crossref integrity status for detectedDoi; omitted when clean/unresolved — never a guess
     Highlights       []TranscriptHighlight `json:"highlights,omitempty"`   // top ≤5 scored YouTube transcript segments (#284); omitted for non-YouTube URLs and transcripts under 5 segments
+    ContentSizeBytes int       `json:"contentSizeBytes,omitempty"` // raw content length in bytes (#508); present ONLY on the linked resource_link hand-off shape (mode=raw content at/above the link threshold — see Large-Payload Linking above), never on an inline response
 }
 
 type TranscriptHighlight struct {
@@ -253,6 +255,8 @@ Raw mode still runs through the **same safety guards** as every other scrape: `v
 **Trade-off — untrusted bytes.** Because sanitization is skipped, raw content may contain active `<script>`/HTML, embedded markup, or indirect prompt-injection payloads. The bytes are untrusted: never execute or render them, and treat any instructions inside them as data, not commands. For normal reading, prefer `full` (sanitized). `search_and_scrape` is always sanitized and has no raw mode.
 
 Raw responses are keyed like any other scrape: the cache key includes `mode` (so `raw` never collides with a cleaned `full`/`preview` entry for the same URL) and `max_length`. See the Cache section below for the full key.
+
+**Large raw body hint (`contentSizeBytes`, #508).** When a raw response is large enough to cross the [Large-Payload Linking](#large-payload-linking-resource_link) threshold, the inline summary carries `contentSizeBytes` — the raw content's byte length — alongside the generic `resource`/`bytes`/`expiresAt` link fields, so a caller can judge whether the linked artifact is worth a follow-up read without one. It mirrors `contentLength` for a linked payload; it is omitted from every inline (non-linked) response, where `contentLength` already carries the same information.
 
 ### Scraping Strategy (Tiered Fallback)
 
@@ -414,6 +418,7 @@ type SearchAndScrapeOutput struct {
     Recommendations []Recommendation `json:"recommendations,omitempty"` // advisory; see below
     Components      []Component      `json:"components,omitempty"`      // mcp-auto-formatted (deterministic, no LLM); see below
     Hints           *ZeroResultHints `json:"hints,omitempty"`            // present only when the search phase itself returned zero results (#357); same shape as web_search, including epistemicWarning
+    SourceCount     int             `json:"sourceCount,omitempty"`      // sources successfully scraped, mirrors Summary.URLsScraped (#508); present ONLY on the linked resource_link hand-off shape (see Large-Payload Linking above), never on an inline response
 }
 
 // Recommendation is an advisory pointer to a higher-quality source already in
@@ -500,6 +505,10 @@ type PipelineSummary struct {
 
 - **`recommendations`** surface the highest-quality related sources from the *current* result set using the transparent quality signals (authority, relevance, freshness, content). They are **advisory only** — `sources` ordering is never changed and the caller can ignore them. Strictly content-based: no user-behavior inputs, no profiling. Toggle with `SOURCE_RECOMMENDATIONS` (default `true`). Behavior-based/personalized ranking is explicitly out of scope.
 - **`components`** are optional renderable structures (source cards, a quality-comparison table) assembled **deterministically** from data already extracted — there is no server-side LLM call and no model of any kind. Every component is labelled `autoFormatted: true` / `"mcp-auto-formatted"` (stating the MCP server shaped it, not an LLM) and references the raw source URLs, so nothing is hidden or unverifiable. Off by default (`GENERATIVE_UI_ENABLED=false`); when off, output is byte-for-byte unchanged. The raw `content`/`sources` are always present regardless.
+
+### Large bundle hint (`sourceCount`, #508)
+
+When a result is large enough to cross the [Large-Payload Linking](#large-payload-linking-resource_link) threshold, the inline summary carries `sourceCount` (sources successfully scraped) and `status` alongside the generic `resource`/`bytes`/`expiresAt` link fields, so a caller can judge whether the linked artifact is worth a follow-up read without one. `sourceCount` mirrors `summary.urlsScraped`; both fields are omitted from every inline (non-linked) response, where `summary.urlsScraped` and `status` already carry the same information.
 
 ### Cache
 - NOT cached as a whole (composed of cached sub-operations)

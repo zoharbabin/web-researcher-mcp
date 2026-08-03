@@ -235,6 +235,21 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 	})
 }
 
+// rawContentSizeFromCache recovers the raw content's byte length from a
+// previously cached scrapeRaw response body, for the contentSizeBytes hint
+// (#508). The cached body already carries "contentLength" (the pre-marshal
+// len(result.Content)); on any parse failure this falls back to the full
+// cached payload's size so the hint is always present, just less precise.
+func rawContentSizeFromCache(cached []byte) int {
+	var probe struct {
+		ContentLength int `json:"contentLength"`
+	}
+	if err := json.Unmarshal(cached, &probe); err == nil && probe.ContentLength > 0 {
+		return probe.ContentLength
+	}
+	return len(cached)
+}
+
 // scrapeRaw handles mode=="raw": it reuses the exact same tiered fetch
 // pipeline as full mode (markdown -> stealth -> html -> browser, with the same
 // anti-bot header spoofing, bot-wall detection, and tier escalation), through
@@ -252,7 +267,11 @@ func scrapeRaw(ctx context.Context, deps Dependencies, input scrapePageInput, ma
 		auditToolCall(ctx, deps, "scrape_page", time.Since(start), nil, "")
 		// A cached raw body can be large; link it past the threshold (#181) while
 		// keeping the cache-freshness _meta. Small bodies inline as before.
-		return withCacheMeta(largeResultOrInline(ctx, deps, cached, "raw page content for "+input.URL), meta), nil, nil
+		// contentSizeBytes (#508) surfaces the raw content's byte length on the
+		// inline summary itself, so a caller can judge whether the linked
+		// artifact is worth a follow-up read without one.
+		extra := map[string]any{"contentSizeBytes": rawContentSizeFromCache(cached)}
+		return withCacheMeta(largeResultOrInlineWithFields(ctx, deps, cached, "raw page content for "+input.URL, extra), meta), nil, nil
 	}
 
 	// Negative-cache short-circuit. URL-level failures (SSRF/blocked/auth/browser/
@@ -317,7 +336,9 @@ func scrapeRaw(ctx context.Context, deps Dependencies, input scrapePageInput, ma
 
 	// Raw page bodies are the heaviest single-tool payload; link past the
 	// threshold (#181) so the full text stays out of context until fetched.
-	return largeResultOrInline(ctx, deps, jsonBytes, "raw page content for "+input.URL), nil, nil
+	// contentSizeBytes (#508) surfaces contentLen on the inline summary itself.
+	extraFields := map[string]any{"contentSizeBytes": contentLen}
+	return largeResultOrInlineWithFields(ctx, deps, jsonBytes, "raw page content for "+input.URL, extraFields), nil, nil
 }
 
 // detectScholarlyDOITopBytes bounds the body fallback to the front matter of the

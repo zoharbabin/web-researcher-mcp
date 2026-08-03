@@ -143,3 +143,100 @@ func TestLargeResultOrInline_NoCacheInlines(t *testing.T) {
 		t.Fatalf("no-cache large payload should inline (1 item), got %d", len(res.Content))
 	}
 }
+
+// TestLargeResultOrInlineWithFields_MergesExtra: extra key/value pairs land in
+// both the inline TextContent summary and StructuredContent when the payload
+// links out (#508) — this is the mechanism scrape_page/search_and_scrape use to
+// surface contentSizeBytes/sourceCount/status alongside the generic
+// resource/bytes/expiresAt fields.
+func TestLargeResultOrInlineWithFields_MergesExtra(t *testing.T) {
+	deps := artifactTestDeps()
+	big := []byte(`{"content":"` + strings.Repeat("x", linkThresholdBytes) + `"}`)
+	extra := map[string]any{"contentSizeBytes": 12345, "sourceCount": 3, "status": "complete"}
+	res := largeResultOrInlineWithFields(context.Background(), deps, big, "with extra fields", extra)
+
+	if len(res.Content) != 2 {
+		t.Fatalf("large payload should be summary + link (2 items), got %d", len(res.Content))
+	}
+	txt, ok := res.Content[0].(*mcp.TextContent)
+	if !ok {
+		t.Fatalf("first content should be the summary TextContent, got %T", res.Content[0])
+	}
+
+	var m map[string]any
+	if err := json.Unmarshal([]byte(txt.Text), &m); err != nil {
+		t.Fatalf("summary should be valid JSON: %v", err)
+	}
+	if got, want := m["contentSizeBytes"], float64(12345); got != want {
+		t.Errorf("contentSizeBytes = %v, want %v", got, want)
+	}
+	if got, want := m["sourceCount"], float64(3); got != want {
+		t.Errorf("sourceCount = %v, want %v", got, want)
+	}
+	if got, want := m["status"], "complete"; got != want {
+		t.Errorf("status = %v, want %v", got, want)
+	}
+	// The generic linkSummary fields must still be present alongside the extras.
+	if m["linked"] != true || m["resource"] == "" || m["bytes"] == nil {
+		t.Errorf("generic linkSummary fields missing from merged summary: %+v", m)
+	}
+
+	// StructuredContent carries the same merged shape.
+	scBytes, ok := res.StructuredContent.(json.RawMessage)
+	if !ok {
+		t.Fatalf("StructuredContent should be json.RawMessage, got %T", res.StructuredContent)
+	}
+	var sm map[string]any
+	if err := json.Unmarshal(scBytes, &sm); err != nil {
+		t.Fatalf("StructuredContent should be valid JSON: %v", err)
+	}
+	if got, want := sm["contentSizeBytes"], float64(12345); got != want {
+		t.Errorf("StructuredContent contentSizeBytes = %v, want %v", got, want)
+	}
+}
+
+// TestLargeResultOrInlineWithFields_SmallPayloadIgnoresExtra: below the link
+// threshold, largeResultOrInlineWithFields must behave exactly like
+// largeResultOrInline/structuredResult — extra fields are never injected into a
+// small, already-complete inline response.
+func TestLargeResultOrInlineWithFields_SmallPayloadIgnoresExtra(t *testing.T) {
+	deps := artifactTestDeps()
+	small := []byte(`{"hello":"world"}`)
+	extra := map[string]any{"contentSizeBytes": 999}
+	res := largeResultOrInlineWithFields(context.Background(), deps, small, "small", extra)
+
+	if len(res.Content) != 1 {
+		t.Fatalf("small payload should be a single inline content, got %d items", len(res.Content))
+	}
+	txt, ok := res.Content[0].(*mcp.TextContent)
+	if !ok {
+		t.Fatalf("small payload content should be TextContent, got %T", res.Content[0])
+	}
+	if txt.Text != string(small) {
+		t.Errorf("small payload should inline unchanged, got %q", txt.Text)
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(txt.Text), &m); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if _, present := m["contentSizeBytes"]; present {
+		t.Errorf("extra fields must not leak into the small/inline path, got %+v", m)
+	}
+}
+
+// TestMarshalLinkSummary_NoExtraLeavesSummaryUnchanged: marshalLinkSummary with
+// a nil/empty extra map must be byte-identical to a plain json.Marshal(sum),
+// so largeResultOrInline's existing behavior (and every caller that has not
+// been migrated to largeResultOrInlineWithFields, e.g. research_export) is
+// preserved exactly.
+func TestMarshalLinkSummary_NoExtraLeavesSummaryUnchanged(t *testing.T) {
+	sum := linkSummary{Resource: "research://artifact/abc", Bytes: 42, MIMEType: artifactMIMEType, Summary: "s", ExpiresAt: "2026-01-01T00:00:00Z", Linked: true}
+	want, _ := json.Marshal(sum)
+
+	if got := marshalLinkSummary(sum, nil); string(got) != string(want) {
+		t.Errorf("marshalLinkSummary(nil extra) = %s, want %s", got, want)
+	}
+	if got := marshalLinkSummary(sum, map[string]any{}); string(got) != string(want) {
+		t.Errorf("marshalLinkSummary(empty extra) = %s, want %s", got, want)
+	}
+}
