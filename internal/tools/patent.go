@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -13,6 +14,51 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
+
+// barePatentNumberRegex recognizes a query that is itself a patent number
+// (e.g. "US10000000", "US10000000B2", "EP1234567A1") rather than a
+// description or keyword phrase. Reuses the same office-prefix + digit shape
+// as scraper.ExtractPatentNumberFromURL's start-of-string alternative, but
+// requires the WHOLE trimmed query to match (case-insensitive) so a query
+// like "US10000000 improvements" — a keyword search that happens to mention a
+// number — is not misidentified as an exact lookup.
+var barePatentNumberRegex = regexp.MustCompile(`(?i)^[A-Z]{2}\d[\dA-Z]*$`)
+
+// looksLikePatentNumber reports whether query is shaped like a bare patent
+// number rather than a free-text search phrase.
+func looksLikePatentNumber(query string) bool {
+	return barePatentNumberRegex.MatchString(strings.TrimSpace(query))
+}
+
+// isPatentSpecificLookup reports whether the #502 direct-lookup short-circuit
+// applies: no explicit provider was pinned (that path — Strategy 1 — already
+// owns the request), the caller asked for an exact lookup, and the query is
+// itself shaped like a patent number rather than free text.
+func isPatentSpecificLookup(provider, searchType, query string) bool {
+	return provider == "" && searchType == "specific" && looksLikePatentNumber(query)
+}
+
+// patentDetailScraper is the narrow interface for fetching a single patent's
+// detail page — satisfied by *scraper.Pipeline. Declared here (not only in
+// tests) so the #502 short-circuit's fetch logic can be exercised with a fake
+// in unit tests, mirroring the patentDetailScraper/enrichPatentsWithScraper
+// pattern already used for enrichPatents in patent_enrich_test.go.
+type patentDetailScraper interface {
+	ScrapePatentDetail(ctx context.Context, number string) (*scraper.PatentResult, error)
+}
+
+// lookupPatentByNumber performs the #502 specific-lookup short-circuit: fetch
+// exactly one patent by its number from its detail page. A fetch error, a nil
+// detail, or a detail with no title (all shapes of "not found") are treated
+// as a miss — returning nil — rather than an error, since the caller falls
+// through to zero-result hints rather than another search strategy.
+func lookupPatentByNumber(ctx context.Context, number string, ps patentDetailScraper) *scraper.PatentResult {
+	detail, err := ps.ScrapePatentDetail(ctx, number)
+	if err != nil || detail == nil || detail.Title == "" {
+		return nil
+	}
+	return detail
+}
 
 type patentSearchInput struct {
 	Query        string `json:"query,omitempty" jsonschema:"Patent search terms, invention description, or patent number (e.g. 'US11234567' or 'machine learning video encoding'). Not required when assignee or inventor is provided."`
@@ -109,8 +155,29 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 			}
 		}
 
+		// Specific-lookup short-circuit (#502): when the caller asked for an
+		// exact patent lookup (search_type=specific) and the query is itself a
+		// bare patent number (e.g. "US10000000"), fetch that one patent
+		// directly from its detail page instead of running the broad-text-
+		// search strategies below. Those strategies treat the query as free
+		// text — providers can return tangentially related matches, and
+		// Strategy 4's web-discovery fallback pads out to numResults with
+		// whatever else the search turns up, producing unrelated-looking
+		// results #2-5 alongside the correct #1. A direct-by-number lookup has
+		// no such padding: it returns exactly the requested patent, or
+		// nothing — so the broader strategies are skipped entirely rather than
+		// used as a fallback on a miss.
+		isSpecificNumberLookup := isPatentSpecificLookup(input.Provider, searchType, input.Query)
+		if isSpecificNumberLookup {
+			number := strings.ToUpper(strings.TrimSpace(input.Query))
+			if detail := lookupPatentByNumber(ctx, number, deps.Scraper); detail != nil {
+				patents = []scraper.PatentResult{*detail}
+				source = "google_patents_direct"
+			}
+		}
+
 		// Strategy 2: Try the main provider (Router implements PatentSearcher)
-		if len(patents) == 0 && source == "" {
+		if len(patents) == 0 && source == "" && !isSpecificNumberLookup {
 			if ps, ok := deps.Search.(search.PatentSearcher); ok {
 				traceCtx, trace := search.NewRoutingTrace(ctx)
 				apiResults, err := ps.Patents(traceCtx, searchParams)
@@ -122,9 +189,19 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 			}
 		}
 
-		// Strategy 3: Try patent-only providers directly (non-router mode)
-		if len(patents) == 0 && source == "" {
-			for name, pp := range deps.PatentProviders {
+		// Strategy 3: Try patent-only providers directly (non-router mode).
+		// Iterated in the deterministic search.SupportedPatentProviders order
+		// (not Go's randomized map order) so behavior doesn't vary call to
+		// call, and a rate-limited provider is skipped rather than aborting
+		// the whole ladder (#503) — Go map iteration order is random, so with
+		// the old `break`-on-rate-limit a rate-limited provider visited early
+		// would silently cut off healthy providers later in the same call.
+		if len(patents) == 0 && source == "" && !isSpecificNumberLookup {
+			for _, name := range search.SupportedPatentProviders {
+				pp, ok := deps.PatentProviders[name]
+				if !ok {
+					continue
+				}
 				if !pp.Metadata().MatchesRegion(input.PatentOffice) {
 					continue
 				}
@@ -133,14 +210,15 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 					patents = convertPatentResults(apiResults)
 					source = name
 					break
-				} else if err != nil && isRateLimitError(err) {
-					break
 				}
+				// A rate-limited (or otherwise failing) provider is skipped, not
+				// treated as exhausting the whole ladder — the next provider in
+				// SupportedPatentProviders order still gets a chance (#503).
 			}
 		}
 
 		// Strategy 4: Fallback — discover via web search + enrich from detail pages
-		if len(patents) == 0 && source == "" {
+		if len(patents) == 0 && source == "" && !isSpecificNumberLookup {
 			provider, errResult := resolveProvider(deps, "")
 			if errResult != nil {
 				return errResult, nil, nil

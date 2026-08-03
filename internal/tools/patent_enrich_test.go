@@ -61,16 +61,12 @@ func TestEnrichPatentsAggregateDeadline(t *testing.T) {
 	}
 }
 
-// patentDetailScraper is the narrow interface that enrichPatentsWithScraper
-// needs — only ScrapePatentDetail, not the full scraper.Pipeline struct.
-// This lets us inject a slow stub without constructing a real pipeline.
-type patentDetailScraper interface {
-	ScrapePatentDetail(ctx context.Context, number string) (*scraper.PatentResult, error)
-}
-
 // enrichPatentsWithScraper is a testable version of enrichPatents that accepts
-// the narrow patentDetailScraper interface. The production enrichPatents calls
-// this via the *scraper.Pipeline (which satisfies the interface).
+// the patentDetailScraper interface (declared in patent.go, shared with the
+// #502 short-circuit's lookupPatentByNumber) instead of the full
+// *scraper.Pipeline struct, so a slow/fake stub can be injected without
+// constructing a real pipeline. The production enrichPatents calls this via
+// *scraper.Pipeline (which satisfies the interface).
 func enrichPatentsWithScraper(ctx context.Context, numbers []string, ps patentDetailScraper) []scraper.PatentResult {
 	if len(numbers) == 0 {
 		return nil
