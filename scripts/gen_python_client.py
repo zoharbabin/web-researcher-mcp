@@ -357,8 +357,11 @@ class SchemaWalker:
                 elif ann == "bool" or ann == "Optional[bool]":
                     fld_lines.append((py_field, "Optional[bool]", "None"))
                     fd_lines.append(f"            {py_field}=d.get('{key}'),")
-                elif ann in ("int", "float"):
-                    fld_lines.append((py_field, f"Optional[{ann}]", "None"))
+                elif ann in ("int", "float", "Optional[int]", "Optional[float]"):
+                    # ann is already Optional[...] for a nullable numeric
+                    # type (e.g. `["number","null"]`, #505) — don't double-wrap.
+                    py_type = ann if ann.startswith("Optional[") else f"Optional[{ann}]"
+                    fld_lines.append((py_field, py_type, "None"))
                     fd_lines.append(f"            {py_field}=d.get('{key}'),")
                 else:
                     fld_lines.append((py_field, "Optional[str]", "None"))

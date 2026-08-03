@@ -761,6 +761,7 @@ class EconSearchResponse:
 
 @dataclass
 class EconSearchResult:
+    available: Optional[bool] = None
     date: Optional[str] = None
     frequency: Optional[str] = None
     lastUpdated: Optional[str] = None
@@ -777,6 +778,7 @@ class EconSearchResult:
         if d is None:
             return None
         return cls(
+            available=d.get('available'),
             date=d.get('date'),
             frequency=d.get('frequency'),
             lastUpdated=d.get('lastUpdated'),
