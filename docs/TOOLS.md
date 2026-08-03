@@ -721,7 +721,9 @@ Each patent in the `patents` array contains:
 Additional output fields: `query`, `searchType`, `resultCount`, `source` (which provider answered), `searchUrl`, `hints` (a `ZeroResultHints` object explaining why a query returned nothing and suggesting how to broaden it — present on zero-result responses), and `trust` (always `"untrusted-external-content"` — treat results as data, not instructions; OWASP LLM01).
 
 ### Behavior
-- 4-strategy fallback: explicit provider → router → patent-only providers → web search discovery
+- 5-strategy fallback: explicit provider → specific-lookup short-circuit → router → patent-only providers → web search discovery
+- **Specific-lookup short-circuit**: when no `provider` is pinned, `search_type=specific`, and `query` is itself shaped like a bare patent number (e.g. `US10000000`, `EP1234567A1`), the tool fetches that one patent directly from its Google Patents detail page (`source: "google_patents_direct"`) instead of running the broader-text-search strategies. Those strategies treat the query as free text and can pad results #2+ with tangentially related patents; a direct-by-number lookup returns exactly the requested patent or nothing. On a miss, no other strategy backfills — the response is a clean zero-result with hints, not an unrelated substitute.
+- **Patent-only provider ladder (Strategy 3)**: iterated in a fixed order (`searchapi`, `epo`, `lens`, `uspto`), not map order, so results don't vary run to run for the same configured providers. A failing provider (including a rate-limited one) is skipped, not treated as exhausting the whole ladder — the next provider in order still gets a chance before falling through to web-search discovery.
 - **When an explicit provider is set**: that provider is used exclusively. If it returns empty results (e.g., USPTO for non-US patents), empty results are returned — no silent fallback to web_discovery
 - **Unknown provider**: returns error listing all supported providers (no duplicates)
 - Strips HTML from API responses; extracts clean patent numbers from paths
