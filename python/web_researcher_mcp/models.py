@@ -2348,11 +2348,13 @@ class VerifyCitationResponse:
     inputType: Optional[str] = None
     matchConfidence: Optional[str] = None
     matchedRecord: Optional[Any] = None
+    possibleMatch: dict[str, Any] = field(default_factory=dict)
     provenance: list[str] = field(default_factory=list)
     retractionStatus: Optional[RetractionStatus] = None
     sparsityNote: Optional[str] = None
     titleMatch: Optional[str] = None
     trust: Optional[str] = None
+    verificationStatus: Optional[str] = None
 
     @classmethod
     def from_dict(cls, d: dict[str, Any] | None) -> "VerifyCitationResponse | None":
@@ -2376,11 +2378,13 @@ class VerifyCitationResponse:
             inputType=d.get('inputType'),
             matchConfidence=d.get('matchConfidence'),
             matchedRecord=d.get('matchedRecord') or None,
+            possibleMatch=dict(d.get('possibleMatch') or {}),
             provenance=list(d.get('provenance') or []),
             retractionStatus=RetractionStatus.from_dict(d.get('retractionStatus')) if d.get('retractionStatus') else None,
             sparsityNote=d.get('sparsityNote'),
             titleMatch=d.get('titleMatch'),
             trust=d.get('trust'),
+            verificationStatus=d.get('verificationStatus'),
         )
 
 @dataclass

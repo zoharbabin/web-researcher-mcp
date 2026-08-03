@@ -29,6 +29,38 @@ type verifyCitationInput struct {
 // doiPattern matches a bare or doi.org-prefixed DOI (10.<registrant>/<suffix>).
 var doiPattern = regexp.MustCompile(`(?i)\b10\.\d{4,9}/[-._;()/:a-z0-9]+`)
 
+// verificationConfirmed/Uncertain/NotFound (#510) are the three states of the
+// verificationStatus sibling field. exists stays a strict bool for backward
+// compatibility (every existing caller checking it as true/false keeps working),
+// but a free-text fuzzy match against an academic record can land in a state
+// that is neither "confidently real" nor "authoritatively absent" — a medium- or
+// low-confidence title-overlap hit may be an unrelated real paper matched to a
+// fabricated citation, which is evidence, not confirmation. verificationStatus
+// makes that middle state explicit instead of conflating it into exists:true.
+const (
+	verificationConfirmed = "confirmed" // exists:true backed by an authoritative or high-confidence match
+	verificationUncertain = "uncertain" // a candidate match exists but at insufficient confidence — see possibleMatch
+	verificationNotFound  = "not_found" // no record/resource found at all
+)
+
+// setVerificationStatus derives verificationStatus from exists for the DOI and
+// URL paths, whose existence signal is already authoritative (exact-DOI entity
+// lookup, Crossref, the doi.org handle registry, or link liveness) — exists:true
+// there always means verificationStatus:"confirmed" and exists:false always means
+// "not_found". It never overwrites a status verifyByReference already set
+// explicitly for its own medium/low-confidence "uncertain" case, which cannot be
+// recovered from exists alone (#510).
+func setVerificationStatus(out map[string]any) {
+	if _, already := out["verificationStatus"]; already {
+		return
+	}
+	if exists, _ := out["exists"].(bool); exists {
+		out["verificationStatus"] = verificationConfirmed
+	} else {
+		out["verificationStatus"] = verificationNotFound
+	}
+}
+
 func registerVerifyCitation(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "verify_citation",
@@ -71,6 +103,8 @@ func registerVerifyCitation(srv *mcp.Server, deps Dependencies) {
 			out["inputType"] = "reference"
 			verifyByReference(ctx, deps, citation, claim, out, &provenance)
 		}
+
+		setVerificationStatus(out)
 
 		if len(provenance) > 0 {
 			out["provenance"] = provenance
@@ -386,6 +420,7 @@ func verifyByReference(ctx context.Context, deps Dependencies, ref, claim string
 	}
 	if rec == nil {
 		out["exists"] = false
+		out["verificationStatus"] = verificationNotFound
 		out["matchConfidence"] = "none"
 		*prov = append(*prov, "no academic match found for the reference text")
 		// No record ⇒ no URL to fetch; still report the claim as source_unavailable
@@ -394,11 +429,30 @@ func verifyByReference(ctx context.Context, deps Dependencies, ref, claim string
 		emitClaimCoverage(ctx, deps, "", claim, out, prov)
 		return
 	}
-	out["matchedRecord"] = rec
-	out["exists"] = true
-	out["matchConfidence"] = conf
-	*prov = append(*prov, "best-match academic lookup ("+rec.Source+")")
-	// If the matched record has a DOI, check retraction too.
+	// #510: a free-text match is fuzzy, never an exact-DOI/entity lookup — the
+	// single best title-overlap hit can be a real but UNRELATED paper (different
+	// author, different subject) matched to a fabricated citation. exists:true is
+	// the headline field callers check in isolation, so it must require "high"
+	// confidence — the same bar titleMatch's "match" already uses. A medium/low
+	// match is evidence worth surfacing, never a confirmation: it is reported as
+	// possibleMatch (with its own confidence) alongside verificationStatus:
+	// "uncertain", so exists stays false rather than validating a fabrication.
+	if conf == "high" {
+		out["matchedRecord"] = rec
+		out["exists"] = true
+		out["verificationStatus"] = verificationConfirmed
+		out["matchConfidence"] = conf
+		*prov = append(*prov, "best-match academic lookup ("+rec.Source+")")
+	} else {
+		out["exists"] = false
+		out["verificationStatus"] = verificationUncertain
+		out["possibleMatch"] = rec
+		out["matchConfidence"] = conf
+		*prov = append(*prov, "best-match academic lookup ("+rec.Source+") — confidence "+conf+", below the high-confidence bar required for exists:true; surfaced as possibleMatch, not confirmed")
+	}
+	// If the matched record has a DOI, check retraction too — informative even
+	// for an uncertain match (a retracted UNRELATED paper is still worth flagging
+	// as evidence), and does not change verificationStatus/exists either way.
 	if rec.DOI != "" && deps.RetractionResolver != nil {
 		if status, _, err := deps.RetractionResolver.Resolve(ctx, rec.DOI); err == nil && status != nil {
 			out["retractionStatus"] = status
