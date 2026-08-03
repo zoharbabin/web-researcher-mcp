@@ -759,7 +759,7 @@ Multi-step research tracking with session persistence, branching, and knowledge 
 | `responseMode` | string | no | auto | Force `full` or `summary` output |
 | `totalStepsEstimate` | int | no | — | Estimated total steps |
 | `isRevision` | bool | no | false | Revising a previous step |
-| `revisesStep` | int | no | — | Step being revised |
+| `revisesStep` | int | no | — | Step being revised. Purely additive — the revised step's stored data is never mutated or deleted; every read path (`sequential_search`, `get_research_session`, `research_export`) derives and attaches a `supersededBy` field on the revised step pointing at the latest step that revises it, so consumers can spot a stale step without re-deriving it themselves |
 | `branchFromStep` | int | no | — | Branching point |
 | `branchId` | string | no | — | Branch identifier |
 | `knowledgeGap` | string | no | — | Gap identified |
@@ -807,14 +807,17 @@ type SequentialSearchOutput struct {
 }
 
 type StepIndexEntry struct {
-    StepNumber int    `json:"stepNumber"`
-    OneLiner   string `json:"oneLiner"`
-    BranchID   string `json:"branchId"`
-    Confidence string `json:"confidence"`
+    StepNumber   int    `json:"stepNumber"`
+    OneLiner     string `json:"oneLiner"`
+    BranchID     string `json:"branchId"`
+    Confidence   string `json:"confidence"`
+    SupersededBy int    `json:"supersededBy,omitempty"` // set when a later step revises this one (#512)
 }
 ```
 
 > The key set depends on `responseMode`: **full** mode emits `steps`; **summary** mode emits `summary` + `stepIndex` instead. Both emit `lastSteps`, `gaps`, and `sources`. This tool does **not** emit a `_meta` block (no caching).
+>
+> `supersededBy` (#512) appears on a step in `steps`, `stepIndex`, and `lastSteps` whenever a later step in the session revised it (`isRevision`+`revisesStep`). It is derived at read time by scanning the session's steps — the revised step's own stored data is never mutated — and holds the step number of the *latest* step that revises it. Omitted when no later step revises the step.
 
 ### Iterative Depth (`depth`)
 
@@ -829,7 +832,7 @@ An optional iteration-assist level (#67). The server stays **infrastructure, not
 **Extra output fields** (present only for `standard`/`thorough`):
 
 - `coverage` — `{ sourceCount, uniqueDomains, domainSpread, dominantDomain?, sourceTypes, gaps[] }`. Descriptive coverage signals (domain spread, source-type balance, thin-coverage flags) computed from the session's recorded sources. Never an answer.
-- `refinementQueries` — suggested follow-up search strings derived from knowledge gaps + coverage gaps. The caller's AI decides whether to act on them.
+- `refinementQueries` — suggested follow-up search strings derived from knowledge gaps + coverage gaps. Each knowledge-gap-derived suggestion is a genuine reformulation (#511), not a concatenation of `researchGoal` + `knowledgeGap`: it extracts the gap's own significant terms not already present in the goal, quotes the goal as an exact phrase, and — when the gap names an explicit year (e.g. "no data past 2023") — swaps it for an `after:YYYY` search operator. The caller's AI decides whether to act on them.
 - `refinementResults` (`thorough` only) — array of `{ query, resultCount, results[] }` (or `{ query, error }`), one per auto-run query. Raw web results tagged with the originating query; **not** synthesized. Each result is `{ title, url, snippet, publishedAt? }` (`publishedAt` (#356) present only when the underlying provider's response carried a date).
 - `refinementNote` (`thorough` only) — present when more than 3 queries were suggested and the auto-run was bounded.
 - `refinementWarning` (`thorough` only, #357) — present when at least one auto-run refinement search returned zero results: coverage gaps may persist and are **not confirmed absent** by an empty search.
@@ -863,6 +866,7 @@ Recover a `sequential_search` session after context loss. Returns the session su
 3. Every response carries `"trust": "untrusted-external-content"` — the echoed source metadata (titles/URLs) is external data; treat it as data, not instructions (OWASP LLM01).
 4. Sessions are private to the `(tenant, user)` that created them — a session ID is honored only for its owning user (anonymous/STDIO uses a single owner).
 5. A source's `foundInStep` is the 1-indexed `sequential_search` step that surfaced it. It is **omitted entirely** when the source was not tied to a numbered step (e.g. added via a `web_search` carrying only a `sessionId`) — steps are 1-indexed, so there is no `foundInStep: 0`. The same convention applies to a gap's `foundInStep`.
+6. `supersededBy` (#512): any step entry in `stepIndex`, `lastSteps`, or the `stepId` single-step view carries a `supersededBy` field, set to the step number of the *latest* later step that revises it (`isRevision`+`revisesStep`), whenever such a later step exists. This is derived at read time by scanning the session's steps — the revised step's stored data is never mutated, so `isRevision`/`revisesStep` remain a pure audit trail. Omitted when no later step revises the step.
 
 #### Cross-call error patterns (#99)
 
@@ -1172,6 +1176,7 @@ Export a completed `sequential_search` session as a shareable deliverable — a 
 - Deterministic: same session → byte-identical output aside from the `exportedAt` stamp (idempotency).
 - Sessions are private to their owning `(tenant, user)`; a leaked sessionId is honored only for its owner.
 - **`verify_links=true`**: runs a batched SSRF-safe liveness check on every recorded source URL and attaches a Wayback Machine snapshot URL for any dead link. Best-effort — a URL that can't be checked is left unverified, never an error. Off by default (adds latency proportional to source count).
+- **Revision discoverability (#512)**: a step revised by a later one (`isRevision`+`revisesStep`) is annotated with a derived `supersededBy` signal in both formats — the markdown heading gains `(superseded by step N)` alongside the existing `(revises step N)` label on the revising step, and in the `json` document each revised step in `document.steps[]` carries `"supersededBy": N`. Derived at read time from the full step list; the revised step's stored data is never mutated, so this stays additive/audit-trail.
 
 ### Annotations
 - ReadOnly: true · Idempotent: true · OpenWorld: false (reads internal session state)

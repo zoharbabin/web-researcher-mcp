@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -93,10 +94,21 @@ func sourcesToCoverage(sources []session.ResearchSource) []content.CoverageInput
 }
 
 // refinementQueries derives suggested follow-up search queries from the research
-// goal, the active knowledge gaps, and the coverage gaps. Deterministic and
-// de-duplicated; capped so the list stays actionable.
+// goal, the active knowledge gaps, and the coverage gaps. Each suggestion is a
+// genuine REFORMULATION, not a concatenation of goal+gap text (#511): it pulls
+// the gap's own distinct significant terms — dropping words already present in
+// the goal so the query doesn't just restate the goal twice — and combines them
+// with a search-operator variation (site exclusion, quoted phrase, alternate
+// framing) so each suggestion covers a materially different angle than the
+// plain goal string. Deterministic and de-duplicated; capped so the list
+// stays actionable.
 func refinementQueries(idx *session.SessionIndex, cov content.Coverage) []string {
 	goal := strings.TrimSpace(idx.ResearchGoal)
+	goalTerms := map[string]bool{}
+	for _, t := range content.SignificantTerms(goal) {
+		goalTerms[t] = true
+	}
+
 	var out []string
 	seen := map[string]bool{}
 	add := func(q string) {
@@ -109,12 +121,11 @@ func refinementQueries(idx *session.SessionIndex, cov content.Coverage) []string
 	}
 
 	// Knowledge gaps the caller flagged are the strongest refinement signal.
+	// Reformulate rather than concatenate: extract the gap's OWN significant
+	// terms not already in the goal, then build a query around them so the
+	// suggestion reads as a distinct angle instead of "<goal> <gap text>".
 	for _, g := range idx.ActiveGaps {
-		if goal != "" {
-			add(goal + " " + g.Description)
-		} else {
-			add(g.Description)
-		}
+		add(reformulateFromGap(goal, g.Description, goalTerms))
 	}
 
 	// Coverage-derived nudges: diversify away from an over-represented domain.
@@ -123,6 +134,8 @@ func refinementQueries(idx *session.SessionIndex, cov content.Coverage) []string
 	}
 
 	// Type-balance nudge: if everything is one type, suggest a complementary lens.
+	// Unchanged from before #511 — this was already a generic phrase suggestion,
+	// not a goal+gap concatenation, so it's out of this fix's scope.
 	if goal != "" && len(cov.SourceTypes) == 1 {
 		for t := range cov.SourceTypes {
 			switch t {
@@ -141,6 +154,59 @@ func refinementQueries(idx *session.SessionIndex, cov content.Coverage) []string
 	}
 	return out
 }
+
+// reformulateFromGap turns a knowledge-gap description into a search query
+// that is a genuine reformulation of the research goal rather than the two
+// strings glued together (#511). It keeps only the gap's significant terms
+// that are NOT already present in the goal (so the query doesn't just restate
+// the goal), quotes the goal as an exact phrase (a materially different
+// provider query than the bare concatenation), and — when the gap names a
+// bare year (a common gap shape, "no data past 2023") — swaps that year for
+// an explicit "after:YYYY" search operator instead of leaving it as a plain
+// keyword a provider may ignore. Falls back to the raw gap text only when no
+// significant terms survive filtering (e.g. a very short or all-stopword gap).
+func reformulateFromGap(goal, gap string, goalTerms map[string]bool) string {
+	gap = strings.TrimSpace(gap)
+	if gap == "" {
+		return goal
+	}
+
+	terms := content.SignificantTerms(gap)
+	year := yearPattern.FindString(gap)
+	var novel []string
+	for _, t := range terms {
+		if t == year || goalTerms[t] {
+			continue
+		}
+		novel = append(novel, t)
+	}
+
+	switch {
+	case goal != "" && year != "":
+		q := `"` + goal + `"`
+		if len(novel) > 0 {
+			q += " " + strings.Join(novel, " ")
+		}
+		return q + " after:" + year
+	case goal != "" && len(novel) > 0:
+		return `"` + goal + `" ` + strings.Join(novel, " ")
+	case len(novel) > 0:
+		return strings.Join(novel, " ")
+	case goal != "":
+		// Every gap term already appears in the goal (or the gap is too short/
+		// stopword-heavy to yield terms) — the only way to make this a distinct
+		// angle is an explicit "latest" variant instead of the bare gap text.
+		return goal + " latest"
+	default:
+		return gap
+	}
+}
+
+// yearPattern matches a bare 4-digit year (1900-2099), used to lift an
+// explicit year out of a knowledge-gap description (e.g. "no data past 2023")
+// so the reformulated query can search a year-scoped angle instead of just
+// echoing the gap text.
+var yearPattern = regexp.MustCompile(`\b(19|20)\d{2}\b`)
 
 // searchResultsToMaps renders web results as plain JSON objects for the
 // provenance-tagged refinement payload.

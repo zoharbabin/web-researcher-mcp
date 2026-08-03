@@ -67,6 +67,15 @@ type ResearchStep struct {
 	RevisesStep        int      `json:"revisesStep,omitempty"`
 	BranchID           string   `json:"branchId,omitempty"`
 	Timestamp          string   `json:"timestamp"`
+	// SupersededBy is a derived, read-time-only discoverability signal (#512):
+	// the step number of the LATEST later step that revises this one (isRevision
+	// + revisesStep == this step's number), or omitted when no later step revises
+	// it. It is never persisted — this struct's on-disk/stored form never carries
+	// it; callers that read a step (get_research_session, research_export) compute
+	// it fresh via SupersededMap and attach it to the copy they return. Revision
+	// is additive/audit-trail by design: nothing about the superseded step is
+	// mutated or removed, this only makes the forward link discoverable backward.
+	SupersededBy int `json:"supersededBy,omitempty"`
 }
 
 type ResearchSource struct {
@@ -121,4 +130,9 @@ type StepIndexEntry struct {
 	BranchID   string `json:"branchId,omitempty"`
 	OneLiner   string `json:"oneLiner"`
 	Confidence string `json:"confidence,omitempty"`
+	// SupersededBy mirrors ResearchStep.SupersededBy (#512) — derived at
+	// index-build time, present on every entry so the one-liner index (which
+	// covers EVERY step, unlike the LastSteps sliding window) always surfaces
+	// the signal regardless of how far back the revised step is.
+	SupersededBy int `json:"supersededBy,omitempty"`
 }

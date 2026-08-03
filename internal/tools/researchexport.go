@@ -64,6 +64,13 @@ func registerResearchExport(srv *mcp.Server, deps Dependencies) {
 			annotateSourcesWithLiveness(ctx, deps, sess.Sources)
 		}
 
+		// supersededBy (#512): derived, read-time-only discoverability signal for
+		// a step revised by a later one. Computed over the full step list and
+		// attached to this loaded (non-persisted) session copy so both the
+		// markdown report and the json document carry it, without mutating the
+		// stored session — revision stays additive/audit-trail.
+		sess.Steps = session.WithSupersededBy(sess.Steps)
+
 		exportedAt := time.Now().Format(time.RFC3339)
 
 		output := map[string]any{
@@ -116,6 +123,9 @@ func renderSessionMarkdown(sess *session.Session, tenantID, exportedAt string) s
 		heading := fmt.Sprintf("### Step %d", step.StepNumber)
 		if step.IsRevision && step.RevisesStep > 0 {
 			heading += fmt.Sprintf(" (revises step %d)", step.RevisesStep)
+		}
+		if step.SupersededBy > 0 {
+			heading += fmt.Sprintf(" (superseded by step %d)", step.SupersededBy)
 		}
 		if step.BranchID != "" {
 			heading += fmt.Sprintf(" [branch: %s]", step.BranchID)

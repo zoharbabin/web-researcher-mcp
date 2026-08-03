@@ -217,9 +217,11 @@ func (m *SessionManager) GetStep(tenantID, userID, sessionID string, stepNum int
 	if err != nil {
 		return nil, err
 	}
+	sm := session.SupersededMap(sess.Steps)
 	for i := range sess.Steps {
 		if sess.Steps[i].StepNumber == stepNum {
-			return &sess.Steps[i], nil
+			step := session.ApplySupersededByTo(sess.Steps[i], sm)
+			return &step, nil
 		}
 	}
 	return nil, session.ErrSessionNotFound
