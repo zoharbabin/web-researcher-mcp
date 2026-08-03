@@ -788,14 +788,19 @@ var formatBibliographyOutputSchema = map[string]any{
 var verifyCitationOutputSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{
-		"input":     map[string]any{"type": "string", "description": "The citation as supplied."},
-		"inputType": map[string]any{"type": "string", "enum": []any{"doi", "url", "reference"}, "description": "How the input was interpreted."},
-		"exists":    map[string]any{"type": "boolean", "description": "Whether the citation resolved to a real record / live resource. Evidence, not a verdict."},
+		"input":              map[string]any{"type": "string", "description": "The citation as supplied."},
+		"inputType":          map[string]any{"type": "string", "enum": []any{"doi", "url", "reference"}, "description": "How the input was interpreted."},
+		"exists":             map[string]any{"type": "boolean", "description": "Whether the citation resolved to a real record / live resource, at high confidence. Evidence, not a verdict. For a free-text reference match (#510), true requires matchConfidence:\"high\" — a medium/low-confidence match is reported as possibleMatch with exists:false and verificationStatus:\"uncertain\" instead, so a fabricated citation coincidentally near a real-but-unrelated paper is never read as confirmed. DOI and URL inputs are unaffected: their existence signal is already authoritative (exact-DOI entity lookup, Crossref, the doi.org handle registry, or link liveness)."},
+		"verificationStatus": map[string]any{"type": "string", "enum": []any{"confirmed", "uncertain", "not_found"}, "description": "The tri-state companion to exists (#510): \"confirmed\" = exists:true (an authoritative DOI/URL check, or a high-confidence free-text match); \"not_found\" = exists:false with no candidate at all; \"uncertain\" = exists:false but a free-text match DID surface a candidate below the high-confidence bar — see possibleMatch. Check this field, not just exists, before treating a free-text citation as real."},
 		"matchedRecord": map[string]any{
 			"type":        "object",
-			"description": "The academic record the citation matched (title, authors, year, DOI, …) when one was found.",
+			"description": "The academic record the citation matched (title, authors, year, DOI, …), present only when verificationStatus is \"confirmed\". A medium/low-confidence free-text candidate is never attached here — see possibleMatch.",
 		},
-		"matchConfidence":  map[string]any{"type": "string", "enum": []any{"high", "medium", "low", "none"}, "description": "Confidence the matched record is the cited work (high for an exact DOI; heuristic for free-text)."},
+		"possibleMatch": map[string]any{
+			"type":        "object",
+			"description": "Present only for a free-text reference whose best academic match was medium/low confidence (verificationStatus:\"uncertain\") — the candidate record (title, authors, year, DOI, …) that partially matched, surfaced as evidence for you to judge, NOT confirmation the citation is real. Pair with matchConfidence to see how strong the overlap was.",
+		},
+		"matchConfidence":  map[string]any{"type": "string", "enum": []any{"high", "medium", "low", "none"}, "description": "Confidence the matched/possible record is the cited work (high for an exact DOI; heuristic for free-text). For a free-text reference, only \"high\" backs exists:true — \"medium\"/\"low\" describe possibleMatch instead."},
 		"detectedDoi":      map[string]any{"type": "string", "description": "For a URL input that resolves to a scholarly article: the DOI extracted from the page (citation_doi meta, the URL path, or references-safe front matter). Lets a URL be checked for retraction and title match like a DOI input. Omitted when no scholarly DOI was found."},
 		"titleMatch":       map[string]any{"type": "string", "enum": []any{"match", "mismatch", "not_checked"}, "description": "Whether a title (text supplied alongside a DOI, or a scholarly page's own title for a URL input) matches the matched record's actual title (token-overlap heuristic). 'match' = strong overlap; 'mismatch' = ≥2 substantive title tokens that are absent from the record title — possibly the wrong paper; 'not_checked' = no title text or single-token ambiguous text (not enough to judge). Present only when a record was matched by exact DOI (DOI inputs, or URL inputs resolving to a scholarly DOI)."},
 		"retractionStatus": map[string]any{"type": "object", "description": "Crossref integrity status when the DOI is retracted/corrected; omitted when clean."},

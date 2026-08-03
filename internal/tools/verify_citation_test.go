@@ -716,6 +716,124 @@ func TestVerifyCitationFabricatedFreeTextRef(t *testing.T) {
 	}
 }
 
+// mockUnrelatedMediumMatchProvider (#510) models the exact bug reported in the
+// issue: a free-text query returns a real but UNRELATED academic record whose
+// title shares just enough substantive tokens with the query to score "medium"
+// confidence (never "high", never "low"/coincidental-single-token). It has no
+// DOIResolver capability, so verify_citation's DOI-exact-lookup path is never
+// exercised — this mock exists solely to drive verifyByReference's fuzzy path.
+type mockUnrelatedMediumMatchProvider struct{}
+
+func (m *mockUnrelatedMediumMatchProvider) Name() string { return "openalex" }
+func (m *mockUnrelatedMediumMatchProvider) Metadata() search.ProviderMeta {
+	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "free", Description: "mock unrelated medium match"}
+}
+func (m *mockUnrelatedMediumMatchProvider) Scholarly(_ context.Context, _ search.AcademicSearchParams) ([]search.AcademicResult, error) {
+	// Query "Smith 2021 time travel psychology" shares "time"/"travel"/"psychology"
+	// with this title, but the paper itself is about an unrelated subject (physics
+	// education, not the fabricated psychology study the citation claims).
+	return []search.AcademicResult{{
+		Title:   "Time Travel Concepts And Psychology Of Physics Education",
+		URL:     "https://doi.org/10.5555/unrelated",
+		DOI:     "10.5555/unrelated",
+		Year:    2015,
+		Authors: []string{"Jones, A."},
+		Source:  "openalex",
+	}}, nil
+}
+
+// TestVerifyCitationFreeTextFabricated_MediumMatchNotExists is the direct
+// regression test for #510: a fabricated free-text citation whose ONLY academic
+// hit is a real-but-unrelated paper at medium confidence must NOT read as
+// exists:true. Before the fix, verifyByReference attached any non-nil match as
+// matchedRecord with exists:true regardless of confidence — the exact false
+// positive the issue reported (a fabricated "Smith 2021 time travel psychology"
+// citation resolving to an unrelated real paper). After the fix, exists must
+// stay false, verificationStatus must be "uncertain" (not "confirmed" or
+// "not_found"), and the candidate must be surfaced as possibleMatch — never as
+// matchedRecord, which is reserved for confirmed matches.
+func TestVerifyCitationFreeTextFabricated_MediumMatchNotExists(t *testing.T) {
+	deps := setupTestDeps()
+	deps.AcademicProviders = map[string]search.AcademicProvider{
+		"openalex": &mockUnrelatedMediumMatchProvider{},
+	}
+	deps.Search = nil
+
+	out := callVerify(t, deps, "Smith 2021 time travel psychology")
+
+	if out["exists"] != false {
+		t.Errorf("exists = %v, want false — a medium-confidence match to an unrelated paper must never confirm a fabricated citation", out["exists"])
+	}
+	if out["verificationStatus"] != verificationUncertain {
+		t.Errorf("verificationStatus = %v, want %q", out["verificationStatus"], verificationUncertain)
+	}
+	if out["matchConfidence"] != "medium" {
+		t.Errorf("matchConfidence = %v, want medium (this test's mock is calibrated to that band)", out["matchConfidence"])
+	}
+	if _, present := out["matchedRecord"]; present {
+		t.Errorf("matchedRecord must NOT be set for an unconfirmed (uncertain) match, got %v", out["matchedRecord"])
+	}
+	pm, ok := out["possibleMatch"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected possibleMatch to carry the medium-confidence candidate, got %v", out["possibleMatch"])
+	}
+	if pm["title"] != "Time Travel Concepts And Psychology Of Physics Education" {
+		t.Errorf("possibleMatch.title = %v, want the candidate's title", pm["title"])
+	}
+}
+
+// TestVerifyCitationFreeTextHighConfidence_StillExists proves the fix is
+// confidence-gated, not a blanket demotion: a genuine high-confidence free-text
+// match (the mock academic provider's title, "Mock Paper", overlapping strongly
+// with the query text) must still return exists:true, verificationStatus
+// "confirmed", and matchedRecord populated — exactly the pre-fix behavior for a
+// real match, unaffected by #510's fix.
+func TestVerifyCitationFreeTextHighConfidence_StillExists(t *testing.T) {
+	out := callVerify(t, setupTestDeps(), "Mock Paper, 2024")
+	if out["exists"] != true {
+		t.Errorf("exists = %v, want true (high-confidence match)", out["exists"])
+	}
+	if out["verificationStatus"] != verificationConfirmed {
+		t.Errorf("verificationStatus = %v, want %q", out["verificationStatus"], verificationConfirmed)
+	}
+	if out["matchConfidence"] != "high" {
+		t.Errorf("matchConfidence = %v, want high", out["matchConfidence"])
+	}
+	if _, present := out["matchedRecord"]; !present {
+		t.Error("expected matchedRecord for a high-confidence match")
+	}
+	if _, present := out["possibleMatch"]; present {
+		t.Errorf("possibleMatch must not be set alongside a confirmed matchedRecord, got %v", out["possibleMatch"])
+	}
+}
+
+// TestVerifyCitationDOIPath_VerificationStatusUnaffected (#510): the DOI path's
+// existence signal is already authoritative (exact-DOI entity lookup / Crossref /
+// the doi.org handle registry), so it must be entirely unaffected by the
+// free-text confidence gate — exists:true still maps to verificationStatus
+// "confirmed", and a fabricated DOI with no record anywhere still maps to
+// exists:false / verificationStatus "not_found".
+func TestVerifyCitationDOIPath_VerificationStatusUnaffected(t *testing.T) {
+	real := callVerify(t, setupTestDeps(), "10.1234/x")
+	if real["exists"] != true {
+		t.Fatalf("exists = %v, want true for the known-good DOI", real["exists"])
+	}
+	if real["verificationStatus"] != verificationConfirmed {
+		t.Errorf("verificationStatus = %v, want %q for a resolved DOI", real["verificationStatus"], verificationConfirmed)
+	}
+
+	fake := callVerify(t, setupTestDeps(), "10.9999/fake.made.up.2099")
+	if fake["exists"] != false {
+		t.Fatalf("exists = %v, want false for a fabricated DOI", fake["exists"])
+	}
+	if fake["verificationStatus"] != verificationNotFound {
+		t.Errorf("verificationStatus = %v, want %q for a fabricated DOI", fake["verificationStatus"], verificationNotFound)
+	}
+	if _, present := fake["possibleMatch"]; present {
+		t.Errorf("the DOI path must never populate possibleMatch, got %v", fake["possibleMatch"])
+	}
+}
+
 func TestVerifyCitation_EmptyInput(t *testing.T) {
 	ctx := context.Background()
 	deps := setupTestDeps()
