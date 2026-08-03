@@ -1663,7 +1663,7 @@ Each `lists[]` item: `name`, `fullName` (owner/repo of the list's source reposit
 
 ## Tool 29: `monarch_search`
 
-Query the **Monarch Initiative** biomedical knowledge graph — rank diseases and genes by phenotype similarity, look up disease/gene/phenotype entities, and traverse gene-disease-phenotype associations. One tool, five operations selected by the required `operation` field. The Monarch API is keyless, so this tool is always registered. For published literature on a condition, combine with `academic_search`; for active interventional trials, use `clinical_search`. Discovery only — not medical advice, and the `annotate` operation must never be sent identifiable patient data (it forwards free text to a public third-party API with no BAA).
+Query the **Monarch Initiative** biomedical knowledge graph — rank diseases and genes by phenotype similarity, look up disease/gene/phenotype entities, and traverse gene-disease-phenotype associations. One tool, five operations selected by the required `operation` field. The Monarch API is keyless, so this tool is always registered. For published literature on a condition, combine with `academic_search`; for active interventional trials, use `clinical_search`. Discovery only — not medical advice, and the `annotate` operation must never be sent identifiable patient data (it forwards free text to a public third-party API with no BAA). Semsim rankings past the top few results often tie or degrade into shared generic ontology-ancestor matches rather than fine-grained phenotype-profile similarity — this is the upstream Monarch semsim API's own Best-Match-Average/Resnik-style scoring behavior, not a defect in this tool, so don't over-index on rank order deep in the result list.
 
 ### Input Schema
 
@@ -1698,6 +1698,7 @@ Each `results[]` item carries only the fields relevant to its operation: `source
 - A `404`/no-match from the API is an empty result, never a panic; a `429` surfaces as a rate-limited error.
 - **Auth**: keyless — the Monarch Initiative API needs no API key.
 - **No identifiable patient data.** The `annotate` operation forwards its `text` argument to a public third-party API with no Business Associate Agreement — callers must never submit real patient data.
+- **Semsim tie-scores.** Rankings past the top few `semsim` results frequently tie or plateau at a shared generic ontology-ancestor term (`ancestorId`/`ancestorLabel`) rather than reflecting genuine differential similarity — this is inherent to Monarch's own Best-Match-Average/Resnik-style semsim scoring for less-specific inputs, not a ranking bug in this tool. Treat rank order deep in the result list as low-confidence.
 
 ### Annotations
 - ReadOnly: true · Idempotent: true · OpenWorld: true (queries the live Monarch Initiative API)

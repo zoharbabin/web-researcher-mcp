@@ -43,7 +43,7 @@ const monarchMaxTextLen = 2000
 func registerMonarchSearch(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "monarch_search",
-		Description:  "Query the Monarch Initiative biomedical knowledge graph: rank diseases and genes by phenotype similarity (semsim), look up disease/gene/phenotype entities, and traverse gene-disease-phenotype associations. For published literature on a condition combine with academic_search; for active interventional trials use clinical_search. Do not submit identifiable patient data in the annotate operation.",
+		Description:  "Query the Monarch Initiative biomedical knowledge graph: rank diseases and genes by phenotype similarity (semsim), look up disease/gene/phenotype entities, and traverse gene-disease-phenotype associations. For published literature on a condition combine with academic_search; for active interventional trials use clinical_search. Semsim rankings past the top few results often tie or degrade into shared generic ontology-ancestor matches rather than fine-grained phenotype-profile similarity — this is the upstream Monarch semsim API's own Best-Match-Average/Resnik-style scoring behavior, not a defect in this tool, so don't over-index on rank order deep in the result list. Do not submit identifiable patient data in the annotate operation.",
 		Annotations:  readOnlyAnnotations(true, true),
 		OutputSchema: monarchSearchOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input monarchSearchInput) (*mcp.CallToolResult, any, error) {
