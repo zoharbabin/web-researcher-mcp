@@ -70,26 +70,23 @@ echo "=== [4/4] Drive MCP over HTTP: initialize + web_search"
 ACCEPT='Accept: application/json, text/event-stream'
 CT='Content-Type: application/json'
 
-init_headers="$(mktemp)"
-init_body="$(curl -fsS -D "${init_headers}" \
+init_body="$(curl -fsS \
   -H "${CT}" -H "${ACCEPT}" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"docker-smoke","version":"1.0.0"}}}' \
   "${BASE}/mcp/" 2>/dev/null)" || fail "initialize request failed"
+echo "${init_body}" | grep -q '"id":1' || fail "initialize returned no result for id 1 (body: ${init_body})"
+echo "    initialize -> ok"
 
-# Header names are case-insensitive; grep -i and trim CR.
-SESSION_ID="$(grep -i '^Mcp-Session-Id:' "${init_headers}" | head -1 | cut -d: -f2- | tr -d '\r' | xargs || true)"
-rm -f "${init_headers}"
-[ -n "${SESSION_ID}" ] || fail "no Mcp-Session-Id returned by initialize (body: ${init_body})"
-echo "    initialize -> session ${SESSION_ID}"
-
-# notifications/initialized (fire-and-forget; no response body expected).
+# notifications/initialized (fire-and-forget; no response body expected). The
+# transport is stateless (no Mcp-Session-Id — see go-sdk >=1.7.0, PR #952), so
+# no session correlation is needed across requests.
 curl -fsS -o /dev/null \
-  -H "${CT}" -H "${ACCEPT}" -H "Mcp-Session-Id: ${SESSION_ID}" \
+  -H "${CT}" -H "${ACCEPT}" \
   -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
   "${BASE}/mcp/" 2>/dev/null || true
 
 search_body="$(curl -fsS \
-  -H "${CT}" -H "${ACCEPT}" -H "Mcp-Session-Id: ${SESSION_ID}" \
+  -H "${CT}" -H "${ACCEPT}" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"web_search","arguments":{"query":"docker smoke test"}}}' \
   "${BASE}/mcp/" 2>/dev/null)" || fail "web_search request failed"
 
