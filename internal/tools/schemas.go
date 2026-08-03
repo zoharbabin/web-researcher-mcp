@@ -1049,9 +1049,10 @@ var econSearchOutputSchema = map[string]any{
 					"notes":       map[string]any{"type": "string"},
 					"popularity":  map[string]any{"type": "integer", "description": "FRED's own relevance ranking (higher = more widely referenced/canonical). Only present for FRED series-search results."},
 					// observations mode
-					"date":   map[string]any{"type": "string"},
-					"value":  map[string]any{"type": "number", "description": "Observation value, exactly as returned — no rounding."},
-					"source": map[string]any{"type": "string"},
+					"date":      map[string]any{"type": "string"},
+					"value":     map[string]any{"type": []any{"number", "null"}, "description": "Observation value, exactly as returned — no rounding. Explicit null (never an absent key) when the source has no value yet — e.g. FRED's \".\" sentinel for a delayed/not-yet-released observation — see `available`."},
+					"available": map[string]any{"type": "boolean", "description": "Observations mode only: whether `value` holds a real number. false means the source reported no value for this date (e.g. FRED's \".\" sentinel) — `value` is then explicit null, not omitted."},
+					"source":    map[string]any{"type": "string"},
 				},
 			},
 		},

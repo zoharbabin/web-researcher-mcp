@@ -166,9 +166,13 @@ func resolveEconSearcher(deps Dependencies, providerName string) (search.EconSea
 	return nil, "", nil
 }
 
-// econResultToMap renders an EconResult. In observations mode the value is always
-// emitted (even 0.0, gated by HasValue) so a real zero isn't dropped by omitempty;
-// missing observations carry no value key.
+// econResultToMap renders an EconResult. In observations mode `value` is
+// ALWAYS present: a real number (even 0.0, gated by HasValue) when the source
+// reported one, or an explicit `null` when it did not (e.g. FRED's "."
+// sentinel for a delayed/not-yet-released observation, #505) — never a
+// silently absent key, which is indistinguishable from a parse failure.
+// `available` mirrors HasValue so a caller can branch on presence without
+// having to special-case a JSON null.
 func econResultToMap(r search.EconResult, mode string) map[string]any {
 	m := map[string]any{"source": r.Source}
 	if r.SeriesID != "" {
@@ -178,8 +182,11 @@ func econResultToMap(r search.EconResult, mode string) map[string]any {
 		if r.Date != "" {
 			m["date"] = r.Date
 		}
+		m["available"] = r.HasValue
 		if r.HasValue {
 			m["value"] = r.Value
+		} else {
+			m["value"] = nil
 		}
 		// Multi-dimensional providers (OECD, Eurostat) return several subgroup
 		// series interleaved for the same periods and compose a disambiguating
