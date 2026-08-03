@@ -32,6 +32,7 @@ class AcademicSearchPaper:
     isInDoaj: Optional[bool] = None
     isInfluential: Optional[bool] = None
     journal: Optional[str] = None
+    lowConfidenceDomain: Optional[bool] = None
     openAccess: Optional[bool] = None
     pdfUrl: Optional[str] = None
     source: Optional[str] = None
@@ -54,6 +55,7 @@ class AcademicSearchPaper:
             isInDoaj=d.get('isInDoaj'),
             isInfluential=d.get('isInfluential'),
             journal=d.get('journal'),
+            lowConfidenceDomain=d.get('lowConfidenceDomain'),
             openAccess=d.get('openAccess'),
             pdfUrl=d.get('pdfUrl'),
             source=d.get('source'),

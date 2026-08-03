@@ -9,6 +9,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
@@ -221,6 +222,14 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 		// merged Retraction Watch + publisher data, so a search never presents a
 		// withdrawn paper as sound. Best-effort + no-op when unconfigured.
 		results = search.EnrichRetraction(ctx, deps.RetractionResolver, results)
+
+		// Low-confidence-domain signal (#509): defense-in-depth against upstream
+		// index noise (a spam/mirror record title-matching a well-known paper) —
+		// the underlying index quality issue is out of this repo's control, so
+		// this only flags, never drops, a suspicious result. Runs after
+		// placeholder-filtering and OA/retraction enrichment (needs the final
+		// PDFUrl/CitationCount) and before the pdf_only filter/map rendering.
+		results = flagLowConfidenceDomains(results)
 
 		// Filter PDF-only if requested
 		if input.PDFOnly && len(results) > 0 {
@@ -483,6 +492,9 @@ func academicResultToMap(r search.AcademicResult) map[string]any {
 	if r.HasPDF {
 		paper["hasPdf"] = true
 	}
+	if r.LowConfidenceDomain {
+		paper["lowConfidenceDomain"] = true
+	}
 	return paper
 }
 
@@ -511,6 +523,113 @@ func isPlaceholderDOI(doi string) bool {
 	d = strings.TrimPrefix(d, "http://doi.org/")
 	d = strings.TrimPrefix(d, "doi:")
 	return strings.HasPrefix(d, "10.5555/")
+}
+
+// lowConfidenceMinPeerCitations and lowConfidenceCitationRatio bound the
+// "anomalously low citation count" half of the #509 heuristic below. A
+// same-titled peer must itself be reasonably well-cited (at least this many
+// citations) before its count becomes a meaningful baseline — two obscure,
+// lightly-cited papers that happen to share a title are not evidence of
+// anything. Once that baseline exists, a candidate citing less than 1/10th of
+// it is the "implausibly low for a well-known-sounding title" signal the
+// issue describes.
+const (
+	lowConfidenceMinPeerCitations = 50
+	lowConfidenceCitationRatio    = 10
+)
+
+// flagLowConfidenceDomains implements the #509 defense-in-depth signal: OpenAlex
+// (and academic indexes generally) occasionally surface a spam/mirror record
+// that title-matches a famous paper — hosted on an unrecognized domain, with an
+// implausible citation count, sometimes ranked ahead of or alongside the real
+// record. That upstream index-quality problem is out of this repo's control
+// (see #509), but within one response we can compare same-titled results
+// against each other: when a result's hosting domain is not a recognized
+// publisher/preprint-server (content.IsAcademicHost) AND another result in the
+// same response shares its (normalized) title with a citation count at least
+// lowConfidenceCitationRatio times higher, the lower-cited result is flagged
+// LowConfidenceDomain. This never drops or reorders results — it only adds a
+// signal the model can use to hedge or prefer the higher-confidence peer.
+// Conservative by design: a title with no well-cited peer in the same
+// response is left unflagged, since there is nothing to compare against.
+func flagLowConfidenceDomains(results []search.AcademicResult) []search.AcademicResult {
+	if len(results) < 2 {
+		return results
+	}
+
+	maxCitationsByTitle := make(map[string]int, len(results))
+	for _, r := range results {
+		key := normalizeAcademicTitle(r.Title)
+		if key == "" {
+			continue
+		}
+		if r.CitationCount > maxCitationsByTitle[key] {
+			maxCitationsByTitle[key] = r.CitationCount
+		}
+	}
+
+	for i := range results {
+		r := &results[i]
+		key := normalizeAcademicTitle(r.Title)
+		if key == "" {
+			continue
+		}
+		peerMax := maxCitationsByTitle[key]
+		if peerMax < lowConfidenceMinPeerCitations {
+			continue // no well-cited peer for this title to compare against
+		}
+		if r.CitationCount >= peerMax {
+			continue // this IS the well-cited peer (or ties it) — never self-flag
+		}
+		if r.CitationCount*lowConfidenceCitationRatio >= peerMax {
+			continue // within the tolerated ratio of the peer — not anomalous
+		}
+		if content.IsAcademicHost(hostingHostForResult(r)) {
+			continue // recognized publisher/preprint host — never flagged
+		}
+		r.LowConfidenceDomain = true
+	}
+	return results
+}
+
+// hostingHostForResult returns the host of the location the paper is actually
+// hosted at, for the domain-recognition check above. PDFUrl (the provider's
+// open-access "oa_url") is preferred over URL because URL is frequently a
+// doi.org resolver link — identical in host for a genuine paper and a
+// DOI-bearing spam/mirror record alike, so it carries no discriminating signal
+// on its own. PDFUrl/oa_url is where the content is actually served from, which
+// is exactly the "hosted on a low-quality domain" signal #509 describes. Falls
+// back to URL only when no PDFUrl is present.
+func hostingHostForResult(r *search.AcademicResult) string {
+	if r.PDFUrl != "" {
+		return hostForURL(r.PDFUrl)
+	}
+	return hostForURL(r.URL)
+}
+
+// normalizeAcademicTitle lowercases a paper title and strips everything but
+// letters/digits/spaces, collapsing whitespace, so titles that differ only by
+// punctuation, casing, or an extra space still group together (e.g. "Attention
+// Is All You Need" vs "Attention is all you need."). Returns "" for an empty
+// or all-punctuation title so such results never join a false comparison group.
+func normalizeAcademicTitle(title string) string {
+	var b strings.Builder
+	lastWasSpace := true // suppress leading spaces
+	for _, r := range strings.ToLower(title) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+			lastWasSpace = false
+		case r == ' ' || r == '\t' || r == '\n':
+			if !lastWasSpace {
+				b.WriteRune(' ')
+				lastWasSpace = true
+			}
+		default:
+			// punctuation/symbols dropped entirely, not treated as a separator
+		}
+	}
+	return strings.TrimSpace(b.String())
 }
 
 func detectAcademicSource(url string) string {

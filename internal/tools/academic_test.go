@@ -2,8 +2,11 @@ package tools
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
@@ -181,6 +184,235 @@ func TestAcademicSearchScholarAPINotAutoSelected(t *testing.T) {
 		if paper, ok := p.(map[string]any); ok && paper["source"] == "scholarapi" {
 			t.Fatalf("scholarapi must not be auto-selected without an explicit provider request: %v", paper)
 		}
+	}
+}
+
+// TestNormalizeAcademicTitle proves titles that differ only by casing,
+// punctuation, or whitespace normalize to the same comparison key, while
+// genuinely different titles do not.
+func TestNormalizeAcademicTitle(t *testing.T) {
+	t.Parallel()
+	if got := normalizeAcademicTitle("Attention Is All You Need"); got != normalizeAcademicTitle("attention is all you need.") {
+		t.Errorf("expected casing/punctuation-insensitive match, got %q vs %q", got, normalizeAcademicTitle("attention is all you need."))
+	}
+	if got := normalizeAcademicTitle("Attention Is All You Need"); got == normalizeAcademicTitle("BERT: Pre-training") {
+		t.Errorf("different titles must not collide: %q", got)
+	}
+	if normalizeAcademicTitle("   ") != "" {
+		t.Error("all-whitespace title should normalize to empty")
+	}
+	if normalizeAcademicTitle("") != "" {
+		t.Error("empty title should normalize to empty")
+	}
+}
+
+// TestFlagLowConfidenceDomains_SpamMirror is the #509 regression guard: a
+// spam/mirror record title-matching a famous paper, hosted off a recognized
+// publisher/preprint domain with an implausibly low citation count next to
+// the genuine highly-cited peer in the same response, must be flagged.
+func TestFlagLowConfidenceDomains_SpamMirror(t *testing.T) {
+	t.Parallel()
+	in := []search.AcademicResult{
+		{
+			Title:         "Attention Is All You Need",
+			URL:           "https://doi.org/10.48550/arXiv.1706.03762",
+			PDFUrl:        "https://arxiv.org/pdf/1706.03762",
+			CitationCount: 95000,
+			Source:        "openalex",
+		},
+		{
+			// Spam/mirror record: same title, low-quality unrecognized host, tiny
+			// citation count relative to the genuine paper above.
+			Title:         "Attention is all you need",
+			URL:           "https://doi.org/10.9999/mirror.spam.1234",
+			PDFUrl:        "https://sketchy-paper-mirror.example/attention.pdf",
+			CitationCount: 2,
+			Source:        "openalex",
+		},
+	}
+	out := flagLowConfidenceDomains(in)
+	if out[0].LowConfidenceDomain {
+		t.Error("the well-cited genuine paper must never be flagged")
+	}
+	if !out[1].LowConfidenceDomain {
+		t.Error("the low-cited spam/mirror record on an unrecognized domain must be flagged")
+	}
+}
+
+// TestFlagLowConfidenceDomains_RecognizedDomainNeverFlagged proves a result
+// hosted on a recognized publisher/preprint domain (content.IsAcademicHost)
+// is never flagged, even if its citation count trails a same-titled peer —
+// e.g. two independently-indexed copies of the same paper on arxiv.org and
+// nature.com, where a citation-count lag alone is not spam.
+func TestFlagLowConfidenceDomains_RecognizedDomainNeverFlagged(t *testing.T) {
+	t.Parallel()
+	in := []search.AcademicResult{
+		{Title: "Attention Is All You Need", PDFUrl: "https://arxiv.org/pdf/1706.03762", CitationCount: 95000},
+		{Title: "Attention Is All You Need", PDFUrl: "https://www.nature.com/articles/attention", CitationCount: 5},
+	}
+	out := flagLowConfidenceDomains(in)
+	for i, r := range out {
+		if r.LowConfidenceDomain {
+			t.Errorf("result %d on a recognized publisher domain must never be flagged", i)
+		}
+	}
+}
+
+// TestFlagLowConfidenceDomains_NoWellCitedPeerLeftUnflagged proves the
+// heuristic requires a genuinely well-cited peer to compare against — two
+// lightly-cited results sharing a title, none of them above
+// lowConfidenceMinPeerCitations, must not be flagged (nothing to compare to).
+func TestFlagLowConfidenceDomains_NoWellCitedPeerLeftUnflagged(t *testing.T) {
+	t.Parallel()
+	in := []search.AcademicResult{
+		{Title: "An Obscure Paper", PDFUrl: "https://unrecognized-host.example/a.pdf", CitationCount: 1},
+		{Title: "An Obscure Paper", PDFUrl: "https://another-unrecognized-host.example/b.pdf", CitationCount: 3},
+	}
+	out := flagLowConfidenceDomains(in)
+	for i, r := range out {
+		if r.LowConfidenceDomain {
+			t.Errorf("result %d must not be flagged with no well-cited peer to compare against", i)
+		}
+	}
+}
+
+// TestFlagLowConfidenceDomains_SingleResultUntouched proves the fast path
+// (fewer than 2 results — nothing to compare) leaves the slice unflagged.
+func TestFlagLowConfidenceDomains_SingleResultUntouched(t *testing.T) {
+	t.Parallel()
+	in := []search.AcademicResult{
+		{Title: "Solo Paper", PDFUrl: "https://unrecognized-host.example/a.pdf", CitationCount: 0},
+	}
+	out := flagLowConfidenceDomains(in)
+	if out[0].LowConfidenceDomain {
+		t.Error("a lone result has no peer to compare against and must not be flagged")
+	}
+}
+
+// spamMirrorOpenAlexResponse is a fixture OpenAlex /works response modeling
+// the #509 report: the genuine, highly-cited "Attention Is All You Need"
+// alongside a spam/mirror record that title-matches it but is hosted on an
+// unrecognized domain with an implausible (near-zero) citation count and an
+// implausible DOI.
+const spamMirrorOpenAlexResponse = `{
+  "results": [
+    {
+      "display_name": "Attention Is All You Need",
+      "doi": "https://doi.org/10.48550/arXiv.1706.03762",
+      "publication_year": 2017,
+      "cited_by_count": 95000,
+      "primary_location": {"source": {"display_name": "NeurIPS"}},
+      "open_access": {"is_oa": true, "oa_url": "https://arxiv.org/pdf/1706.03762"}
+    },
+    {
+      "display_name": "Attention Is All You Need",
+      "doi": "https://doi.org/10.9999/sketchy.mirror.99887766",
+      "publication_year": 2023,
+      "cited_by_count": 1,
+      "primary_location": {"source": {"display_name": "Sketchy Paper Mirror"}},
+      "open_access": {"is_oa": true, "oa_url": "https://sketchy-paper-mirror.example/attention-is-all-you-need.pdf"}
+    }
+  ]
+}`
+
+// recognizedDomainOpenAlexResponse is a fixture from a recognized publisher
+// domain only — the no-flag control case.
+const recognizedDomainOpenAlexResponse = `{
+  "results": [
+    {
+      "display_name": "Attention Is All You Need",
+      "doi": "https://doi.org/10.48550/arXiv.1706.03762",
+      "publication_year": 2017,
+      "cited_by_count": 95000,
+      "primary_location": {"source": {"display_name": "NeurIPS"}},
+      "open_access": {"is_oa": true, "oa_url": "https://arxiv.org/pdf/1706.03762"}
+    }
+  ]
+}`
+
+// fixtureOpenAlexProvider replays a canned OpenAlex-shaped response through
+// the same parser the real provider uses (search.parseOpenAlexResponse via an
+// httptest server), so these tests exercise the tool's actual end-to-end
+// pipeline (parse → filter → enrich → flagLowConfidenceDomains → render)
+// against a realistic fixture rather than hand-built AcademicResult structs.
+func newFixtureOpenAlexProvider(t *testing.T, body string) search.AcademicProvider {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	p := search.NewOpenAlexProvider("test@example.com", search.Deps{
+		HTTPClient: srv.Client(),
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+	})
+	p.SetBaseURL(srv.URL)
+	return p
+}
+
+// TestAcademicSearchFlagsSpamMirrorFromUnrecognizedDomain is the #509
+// end-to-end regression guard: academic_search's output for a query that
+// OpenAlex answers with a genuine highly-cited paper PLUS a spam/mirror
+// record (unrecognized host, near-zero citations) must flag only the
+// mirror's lowConfidenceDomain, leaving the genuine paper unflagged.
+func TestAcademicSearchFlagsSpamMirrorFromUnrecognizedDomain(t *testing.T) {
+	deps := setupTestDeps()
+	deps.AcademicProviders = map[string]search.AcademicProvider{
+		"openalex": newFixtureOpenAlexProvider(t, spamMirrorOpenAlexResponse),
+	}
+
+	out, res := callTool(t, deps, "academic_search", map[string]any{
+		"query": "transformer attention mechanism", "provider": "openalex",
+	})
+	if res.IsError {
+		t.Fatalf("unexpected error result")
+	}
+	papers, _ := out["papers"].([]any)
+	if len(papers) != 2 {
+		t.Fatalf("expected 2 papers, got %d", len(papers))
+	}
+
+	var genuineFlagged, mirrorFlagged bool
+	for _, p := range papers {
+		paper := p.(map[string]any)
+		flagged, _ := paper["lowConfidenceDomain"].(bool)
+		if paper["citationCount"] == float64(95000) {
+			genuineFlagged = flagged
+		} else {
+			mirrorFlagged = flagged
+		}
+	}
+	if genuineFlagged {
+		t.Error("the genuine, highly-cited arxiv.org paper must never be flagged")
+	}
+	if !mirrorFlagged {
+		t.Error("the spam/mirror record on an unrecognized domain must be flagged lowConfidenceDomain")
+	}
+}
+
+// TestAcademicSearchNoFlagFromRecognizedDomainOnly proves a response from a
+// recognized publisher/preprint domain alone never carries the
+// lowConfidenceDomain field — the field must be entirely omitted, matching
+// the schema's omitempty contract.
+func TestAcademicSearchNoFlagFromRecognizedDomainOnly(t *testing.T) {
+	deps := setupTestDeps()
+	deps.AcademicProviders = map[string]search.AcademicProvider{
+		"openalex": newFixtureOpenAlexProvider(t, recognizedDomainOpenAlexResponse),
+	}
+
+	out, res := callTool(t, deps, "academic_search", map[string]any{
+		"query": "transformer attention mechanism", "provider": "openalex",
+	})
+	if res.IsError {
+		t.Fatalf("unexpected error result")
+	}
+	papers, _ := out["papers"].([]any)
+	if len(papers) != 1 {
+		t.Fatalf("expected 1 paper, got %d", len(papers))
+	}
+	paper := papers[0].(map[string]any)
+	if _, present := paper["lowConfidenceDomain"]; present {
+		t.Errorf("lowConfidenceDomain must be omitted for a recognized-domain-only response, got %v", paper["lowConfidenceDomain"])
 	}
 }
 

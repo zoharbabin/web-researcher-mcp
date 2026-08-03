@@ -200,7 +200,7 @@ func sourceTypeFromHost(host string) string {
 		return SourceTypeWiki
 	case isLegalPrimaryHost(host):
 		return SourceTypeGovernment
-	case isAcademicHost(host):
+	case IsAcademicHost(host):
 		return SourceTypePeerReviewed
 	case isOfficialDocsHost(host):
 		return SourceTypeOfficialDocs
@@ -217,7 +217,15 @@ func sourceTypeFromHost(host string) string {
 	}
 }
 
-func isAcademicHost(host string) bool {
+// IsAcademicHost reports whether host is a recognized publisher, preprint
+// server, or academic institution — the allowlist behind the peer_reviewed
+// source-type heuristic here and, reused unchanged, behind academic_search's
+// low-confidence-domain flag (#509): a result whose host is NOT on this list
+// is not automatically wrong, but combined with an anomalously low citation
+// count for a well-known-sounding title match, it is a useful defense-in-depth
+// signal against upstream index noise (spam/mirror records OpenAlex itself
+// sometimes returns) that this repo cannot fix at the source.
+func IsAcademicHost(host string) bool {
 	if strings.HasSuffix(host, ".edu") || strings.Contains(host, ".edu.") || strings.HasSuffix(host, ".ac.uk") {
 		return true
 	}
@@ -339,7 +347,7 @@ func hostToCategory(host string) string {
 	switch {
 	case host == "":
 		return ""
-	case isAcademicHost(host):
+	case IsAcademicHost(host):
 		return "academic"
 	case isOfficialDocsHost(host) || isForumHost(host):
 		return "technical"

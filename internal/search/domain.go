@@ -211,6 +211,15 @@ type AcademicResult struct {
 	// ScholarAPI-only signal — not a URL, just an availability flag; fetching
 	// the PDF itself is out of scope (no provider method for it).
 	HasPDF bool `json:"hasPdf,omitempty"`
+	// LowConfidenceDomain is a defense-in-depth signal (#509) for upstream index
+	// noise — a title-matching record OpenAlex (or another provider) returns
+	// from a host outside the recognized publisher/preprint-server allowlist
+	// (content.IsAcademicHost), combined with a citation count implausibly low
+	// for how well-known the title sounds. Set by academic_search at the tool
+	// layer (search providers never set it themselves), never by a provider
+	// package. False/omitted is the default and carries no signal either way —
+	// it does NOT mean "verified genuine," only "didn't trip this heuristic."
+	LowConfidenceDomain bool `json:"lowConfidenceDomain,omitempty"`
 }
 
 // RetractionStatus is the operator/model-facing integrity signal for a scholarly
