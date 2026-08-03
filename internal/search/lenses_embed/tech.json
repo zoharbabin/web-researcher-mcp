@@ -1,6 +1,6 @@
 {
   "name": "tech",
-  "description": "Technology news and analysis",
+  "description": "Technology news and industry journalism (Ars Technica, TechCrunch, The Verge, ...) — not engineering docs or API references; use the docs or programming lens for those",
   "domains": [
     "arstechnica.com",
     "techcrunch.com",
