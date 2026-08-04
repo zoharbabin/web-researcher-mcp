@@ -1,7 +1,6 @@
 # decks/
 
-Presentation decks about this project — source + rendered outputs, one folder
-per deck. Published to the docs site under `/decks/<name>/` via `.github/workflows/docs.yml`.
+Presentation decks about this project — source + rendered outputs, one folder per deck. Published to the docs site under `/decks/<name>/` via `.github/workflows/docs.yml`.
 
 | Deck | What it covers |
 |------|----------------|
@@ -18,15 +17,9 @@ decks/<name>/
 └── <name>-deck.pdf     # rendered, self-contained
 ```
 
-- **Source is [Marp](https://marp.app/)** (`marp: true` frontmatter). Slides are
-  Markdown; styling is a single inline `<style>` block matched to
-  `assets/social-preview.svg`.
-- **Rendered outputs are self-contained** — the logo is embedded as a
-  `data:image/svg+xml;base64` URI, so the HTML works on GitHub Pages with no
-  external fetch and the PDF needs no local files.
-- **Accuracy rule (same as docs):** every factual claim must match the current
-  code, and slides making a technical claim cite the file that backs it (in a
-  `_footer`). Re-verify against the codebase before re-rendering.
+- **Source is [Marp](https://marp.app/)** (`marp: true` frontmatter). Slides are Markdown; styling is a single inline `<style>` block matched to `assets/social-preview.svg`.
+- **Rendered outputs are self-contained** — the logo is embedded as a `data:image/svg+xml;base64` URI, so the HTML works on GitHub Pages with no external fetch and the PDF needs no local files.
+- **Accuracy rule (same as docs):** every factual claim must match the current code, and slides making a technical claim cite the file that backs it (in a `_footer`). Re-verify against the codebase before re-rendering.
 
 ## Re-rendering
 
@@ -39,7 +32,4 @@ npx @marp-team/marp-cli@latest <name>-deck.md --pdf --allow-local-files -o <name
 
 ## Publishing
 
-`docs.yml` copies each deck's rendered `*.html` (as `index.html`) and `*.pdf`
-into `site_src/decks/<name>/`, so they serve at
-`https://zoharbabin.com/web-researcher-mcp/decks/<name>/`. Add a new deck's
-copy lines to that workflow's assemble step.
+`docs.yml` copies each deck's rendered `*.html` (as `index.html`) and `*.pdf` into `site_src/decks/<name>/`, so they serve at `https://zoharbabin.com/web-researcher-mcp/decks/<name>/`. Add a new deck's copy lines to that workflow's assemble step.

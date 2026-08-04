@@ -121,22 +121,12 @@ OAUTH_AUDIENCE=https://api.example.com \
 ./web-researcher-mcp
 ```
 
-When `PORT` is set, the server runs the HTTP (Streamable) transport exclusively
-and does not read STDIO; when `PORT` is unset it runs STDIO exclusively. The two
-transports are mutually exclusive, so a container started with `PORT` set but no
-stdin attached (`docker run -p ... -e PORT=...`) stays up serving HTTP.
+When `PORT` is set, the server runs the HTTP (Streamable) transport exclusively and does not read STDIO; when `PORT` is unset it runs STDIO exclusively. The two transports are mutually exclusive, so a container started with `PORT` set but no stdin attached (`docker run -p ... -e PORT=...`) stays up serving HTTP.
 
 **Endpoints:**
 - `/mcp/` — Streamable HTTP MCP endpoint (handles POST and streaming)
-- `GET /health/live` — Liveness probe (always 200, `ok`; a degraded-but-alive
-  process must not be killed)
-- `GET /health/ready` — Readiness probe. When multi-provider routing is
-  configured, returns `503` (with the health snapshot JSON) **only when every
-  provider's circuit breaker is open** — the pod cannot serve any query and
-  should be pulled from the load balancer; `200` otherwise (`healthy` or
-  `degraded`, since fallback providers still serve). With no routing
-  (single-provider / zero-config), it is a static `200 ready` — there is no
-  breaker ladder to gate on and the process is ready by construction.
+- `GET /health/live` — Liveness probe (always 200, `ok`; a degraded-but-alive process must not be killed)
+- `GET /health/ready` — Readiness probe. When multi-provider routing is configured, returns `503` (with the health snapshot JSON) **only when every provider's circuit breaker is open** — the pod cannot serve any query and should be pulled from the load balancer; `200` otherwise (`healthy` or `degraded`, since fallback providers still serve). With no routing (single-provider / zero-config), it is a static `200 ready` — there is no breaker ladder to gate on and the process is ready by construction.
 - `GET /metrics` — Prometheus metrics
 - `GET /dashboard` — read-only operator dashboard (HTML); its data endpoint `GET /dashboard/data` is admin-gated. Both are registered only when `ADMIN_API_KEY` is set. See [Operator Dashboard](#operator-dashboard-http-mode)
 - `GET /.well-known/oauth-authorization-server` — OAuth metadata
@@ -665,31 +655,12 @@ The "sessions" below are the `sequential_search` tool's own research-continuity 
 
 ### Recovery objectives (RTO/RPO)
 
-Framed in NIST SP 800-34 contingency-planning terms, for an operator building a
-Business Impact Analysis or an Information System Contingency Plan around this
-server:
+Framed in NIST SP 800-34 contingency-planning terms, for an operator building a Business Impact Analysis or an Information System Contingency Plan around this server:
 
-- **Compute (RTO ≈ 0).** Pods are stateless (`Stateless` transport mode above)
-  and require no session affinity, so a crashed or evicted pod is replaced by
-  the orchestrator with zero coordination — the [HPA example](#kubernetes)
-  restores capacity automatically. There is no leader election, no warm-up
-  handshake, and no data to reattach.
-- **Cache (RPO = 0 by design, not by backup).** Memory and disk cache are
-  disposable: losing a pod's cache costs a re-fetch on the next query, not data
-  loss, because search results are deterministic and the cache is not a system
-  of record. No backup policy is needed for this tier.
-- **Sessions and rate-quota state, without `REDIS_URL` (RPO ≈ per-pod TTL
-  window).** Encrypted-disk sessions survive that one pod's restart but not its
-  loss; a pod replacement loses that pod's in-flight sessions and daily-quota
-  counters. Acceptable for single-instance or best-effort multi-instance
-  deployments; unacceptable if session continuity across a pod loss is a
-  requirement.
-- **Sessions and rate-quota state, with `REDIS_URL` (RPO = Redis's own).**
-  This project encrypts everything before writing it to Redis, but durability
-  beyond that is entirely a function of the operator's Redis deployment — its
-  own persistence mode (RDB/AOF), replication, and backup schedule. Size that
-  Redis RPO to match what the BIA actually requires; this project has no
-  opinion on it beyond "encrypt at rest," which it already enforces.
+- **Compute (RTO ≈ 0).** Pods are stateless (`Stateless` transport mode above) and require no session affinity, so a crashed or evicted pod is replaced by the orchestrator with zero coordination — the [HPA example](#kubernetes) restores capacity automatically. There is no leader election, no warm-up handshake, and no data to reattach.
+- **Cache (RPO = 0 by design, not by backup).** Memory and disk cache are disposable: losing a pod's cache costs a re-fetch on the next query, not data loss, because search results are deterministic and the cache is not a system of record. No backup policy is needed for this tier.
+- **Sessions and rate-quota state, without `REDIS_URL` (RPO ≈ per-pod TTL window).** Encrypted-disk sessions survive that one pod's restart but not its loss; a pod replacement loses that pod's in-flight sessions and daily-quota counters. Acceptable for single-instance or best-effort multi-instance deployments; unacceptable if session continuity across a pod loss is a requirement.
+- **Sessions and rate-quota state, with `REDIS_URL` (RPO = Redis's own).** This project encrypts everything before writing it to Redis, but durability beyond that is entirely a function of the operator's Redis deployment — its own persistence mode (RDB/AOF), replication, and backup schedule. Size that Redis RPO to match what the BIA actually requires; this project has no opinion on it beyond "encrypt at rest," which it already enforces.
 
 ### Production Readiness Checklist
 
@@ -911,20 +882,9 @@ This server is distributed via:
 | `/health/live` | GET | `200 OK` always (`ok`) | K8s liveness probe |
 | `/health/ready` | GET | `200 OK` (`ready`/snapshot); `503` when all provider breakers are open | K8s readiness probe |
 
-`/health/live` is a static process-up check: a `200` means the process is running
-and the HTTP listener is bound (the server completes all initialization —
-providers, cache, sessions, audit — before binding the port, so a successful
-connection already implies a fully-constructed server). A degraded-but-alive
-process must not be killed, so liveness never flips on dependency state.
+`/health/live` is a static process-up check: a `200` means the process is running and the HTTP listener is bound (the server completes all initialization — providers, cache, sessions, audit — before binding the port, so a successful connection already implies a fully-constructed server). A degraded-but-alive process must not be killed, so liveness never flips on dependency state.
 
-`/health/ready` reflects whether the pod can serve a query. With multi-provider
-routing configured, it returns `503` (body `{"status":"unhealthy"}`) **only when
-every provider's circuit breaker is open** — the pod can serve nothing and should
-be pulled from the load balancer — and `200` otherwise (`healthy`/`degraded`,
-since fallback providers still serve). With no routing (single-provider /
-zero-config) there is no breaker ladder, so it stays a static `200`. The body is
-the aggregate status only; the per-provider breaker list is operator data behind
-the admin-gated dashboard and `diagnostics://health`, not this unauthenticated probe.
+`/health/ready` reflects whether the pod can serve a query. With multi-provider routing configured, it returns `503` (body `{"status":"unhealthy"}`) **only when every provider's circuit breaker is open** — the pod can serve nothing and should be pulled from the load balancer — and `200` otherwise (`healthy`/`degraded`, since fallback providers still serve). With no routing (single-provider / zero-config) there is no breaker ladder, so it stays a static `200`. The body is the aggregate status only; the per-provider breaker list is operator data behind the admin-gated dashboard and `diagnostics://health`, not this unauthenticated probe.
 
 ---
 

@@ -1,25 +1,12 @@
 # Local Kubernetes Parity Testing
 
-Manifests under [`deploy/k8s-local/`](../deploy/k8s-local/) reproduce the
-production topology (`docs/DEPLOYMENT.md`'s [Kubernetes](DEPLOYMENT.md#kubernetes)
-section) on a local single-node cluster: multi-pod HPA scaling, OAuth 2.1 auth,
-`REDIS_URL` cross-pod session/cache/rate-limit state, and namespace-scoped
-`NetworkPolicy` isolation. Use this when a change needs to be exercised across
-real pods (the stateless MCP transport, Redis-backed sessions, HPA behavior,
-multi-tenant isolation) — for everything else, the zero-setup
-[local HTTP](DEPLOYMENT.md#http-multi-client-web-apps) or
-[`make docker-smoke`](DEPLOYMENT.md#docker) paths are faster and need no cluster.
+Manifests under [`deploy/k8s-local/`](../deploy/k8s-local/) reproduce the production topology (`docs/DEPLOYMENT.md`'s [Kubernetes](DEPLOYMENT.md#kubernetes) section) on a local single-node cluster: multi-pod HPA scaling, OAuth 2.1 auth, `REDIS_URL` cross-pod session/cache/rate-limit state, and namespace-scoped `NetworkPolicy` isolation. Use this when a change needs to be exercised across real pods (the stateless MCP transport, Redis-backed sessions, HPA behavior, multi-tenant isolation) — for everything else, the zero-setup [local HTTP](DEPLOYMENT.md#http-multi-client-web-apps) or [`make docker-smoke`](DEPLOYMENT.md#docker) paths are faster and need no cluster.
 
-Everything under `deploy/k8s-local/` is generic — no personal hostnames,
-tokens, or machine-specific paths. The one thing you generate yourself is the
-JWKS/JWT keypair, so no private key is ever committed to the repo.
+Everything under `deploy/k8s-local/` is generic — no personal hostnames, tokens, or machine-specific paths. The one thing you generate yourself is the JWKS/JWT keypair, so no private key is ever committed to the repo.
 
 ## Prerequisites
 
-Any local single-node Kubernetes distribution with an Ingress controller works
-— Rancher Desktop, `kind`, `minikube`, k3d. The steps below assume Rancher
-Desktop's bundled Traefik; substitute `ingressClassName`/annotations in
-`04-ingress.yaml` for a different controller.
+Any local single-node Kubernetes distribution with an Ingress controller works — Rancher Desktop, `kind`, `minikube`, k3d. The steps below assume Rancher Desktop's bundled Traefik; substitute `ingressClassName`/annotations in `04-ingress.yaml` for a different controller.
 
 ## Setup
 
@@ -78,19 +65,11 @@ python3 scripts/e2e-oauth-mint-jwt.py mint "$WORK_DIR" my-local-user wrm-k8s-key
   http://oauth-issuer.web-researcher.svc.cluster.local web-researcher-mcp
 ```
 
-The printed JWT is an RS256 token signed with the keypair from step 3,
-matching what `internal/auth/middleware.go` validates against the in-cluster
-JWKS endpoint — it is only valid inside this cluster, never a real IdP token.
+The printed JWT is an RS256 token signed with the keypair from step 3, matching what `internal/auth/middleware.go` validates against the in-cluster JWKS endpoint — it is only valid inside this cluster, never a real IdP token.
 
 ## Connecting a client
 
-Port-forward the ingress (or use your cluster's LoadBalancer/NodePort), then
-point an MCP client's `http` transport entry at
-`https://web-researcher-mcp.local:<port>/mcp/` with
-`Authorization: Bearer <minted-jwt>`. `.mcp.json` in this repo intentionally
-stays STDIO-only and portable (see [Development Setup](../CONTRIBUTING.md#development-setup))
-— add a client entry for this cluster in your own untracked MCP client config,
-not in the tracked `.mcp.json`.
+Port-forward the ingress (or use your cluster's LoadBalancer/NodePort), then point an MCP client's `http` transport entry at `https://web-researcher-mcp.local:<port>/mcp/` with `Authorization: Bearer <minted-jwt>`. `.mcp.json` in this repo intentionally stays STDIO-only and portable (see [Development Setup](../CONTRIBUTING.md#development-setup)) — add a client entry for this cluster in your own untracked MCP client config, not in the tracked `.mcp.json`.
 
 ## Teardown
 

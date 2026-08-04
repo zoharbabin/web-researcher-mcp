@@ -238,11 +238,9 @@ Strip the labels, and they demand **the same handful of things**:
 
 <br>
 
-Compliance teams call this *control mapping* — and it's usually a 1,400-row
-spreadsheet and a consultant. **We built the 8 properties into the code instead.**
+Compliance teams call this *control mapping* — and it's usually a 1,400-row spreadsheet and a consultant. **We built the 8 properties into the code instead.**
 
-> **The payoff:** add the 23rd standard and you write **zero** new code — you
-> already satisfy it. Compliance cost stops scaling with the number of regimes.
+> **The payoff:** add the 23rd standard and you write **zero** new code — you already satisfy it. Compliance cost stops scaling with the number of regimes.
 
 <!-- _footer: '↳ proof: docs/SECURITY_AND_COMPLIANCE.md "Compliance Posture" · docs/SECURITY.md crosswalks' -->
 
@@ -252,8 +250,7 @@ spreadsheet and a consultant. **We built the 8 properties into the code instead.
 
 # The architecture that satisfies them
 
-The 8 properties are baked into *how the code is built* — so they hold everywhere,
-not just where someone remembered to add them:
+The 8 properties are baked into *how the code is built* — so they hold everywhere, not just where someone remembered to add them:
 
 - **One way in for every dependency** — nothing reaches in through a back door, so there's one place to audit
 - **Swappable parts behind clean seams** — the cache, search, and audit layers can change without rewriting callers
@@ -271,17 +268,11 @@ not just where someone remembered to add them:
 
 # The safest config is the *default* config
 
-Run it the normal way — locally, inside your AI app — and there's **no network
-port open, no login to misconfigure, nothing exposed to the internet.** The app
-that launched it is the only thing that can reach it. The typical user *can't*
-hold it wrong, because there's nothing to set.
+Run it the normal way — locally, inside your AI app — and there's **no network port open, no login to misconfigure, nothing exposed to the internet.** The app that launched it is the only thing that can reach it. The typical user *can't* hold it wrong, because there's nothing to set.
 
-The heavyweight controls for shared, multi-user deployments — sign-in, per-customer
-isolation, rate limits, encryption, audit logs — only switch on when an operator
-deliberately runs it as a network server.
+The heavyweight controls for shared, multi-user deployments — sign-in, per-customer isolation, rate limits, encryption, audit logs — only switch on when an operator deliberately runs it as a network server.
 
-> **Secure by default, permissive by configuration.** Power is unlocked by an
-> *explicit* choice, never the reverse.
+> **Secure by default, permissive by configuration.** Power is unlocked by an *explicit* choice, never the reverse.
 
 <!-- _footer: '↳ proof: docs/SECURITY_AND_COMPLIANCE.md Principles 1 & 4, "Deployment Security"' -->
 
@@ -291,8 +282,7 @@ deliberately runs it as a network server.
 
 # Controls, not certificates: the honest line
 
-"Compliance as architecture" ships the *controls*. It can't ship the *operating
-organization* a certificate requires — so here's the split:
+"Compliance as architecture" ships the *controls*. It can't ship the *operating organization* a certificate requires — so here's the split:
 
 | Layer | Who owns it |
 |-------|-------------|
@@ -300,9 +290,7 @@ organization* a certificate requires — so here's the split:
 | **The operator owns the process** | They're the **data controller** — sign BAAs/DPAs, set the retention *schedule* (code gives TTL knobs, not policy), run access reviews + incident response, choose lawful basis, run DPIAs |
 | **A hosted SaaS adds the program** | Trained staff, controls *audited over time*, 24/7 IR, signed customer DPAs, and the actual **SOC 2 / HITRUST / ISO 27001 audit** — none of which a repo can contain |
 
-> So "aligned with 23 standards" means *we provide the technical controls each one
-> requires* — not that an organization has been audited against them. A binary
-> can't clear a hospital's HIPAA bar; it hands that review its evidence.
+> So "aligned with 23 standards" means *we provide the technical controls each one requires* — not that an organization has been audited against them. A binary can't clear a hospital's HIPAA bar; it hands that review its evidence.
 
 <!-- _footer: '↳ proof: docs/SECURITY_AND_COMPLIANCE.md "Operator & Hosted-Service Responsibilities"' -->
 
@@ -312,24 +300,13 @@ organization* a certificate requires — so here's the split:
 
 # Agency sharpens one old threat — and adds a new one
 
-Give an AI a tool that fetches any page, and it now *chooses the URLs*. That
-**amplifies an old vuln** and **surfaces a new one**:
+Give an AI a tool that fetches any page, and it now *chooses the URLs*. That **amplifies an old vuln** and **surfaces a new one**:
 
-**Old vuln, now automated — SSRF (OWASP Web A10).** A hijacked link can steer an
-*autonomous* fetch at your internal network. So before any fetch the server
-rejects private/reserved IPs and cloud-metadata hosts, connects only to the
-exact resolved address (DNS-rebind defense), and re-checks on every redirect.
+**Old vuln, now automated — SSRF (OWASP Web A10).** A hijacked link can steer an *autonomous* fetch at your internal network. So before any fetch the server rejects private/reserved IPs and cloud-metadata hosts, connects only to the exact resolved address (DNS-rebind defense), and re-checks on every redirect.
 
-**A genuinely new class — indirect prompt injection.** A booby-trapped page can
-try to hijack the AI reading it. The server strips active markup, caps size, and
-stamps every result that carries external text with an `untrusted-external-content`
-marker — in the JSON *envelope*, never inside the content where a page could forge
-it, and **enforced by a cross-tool drift test** so a new tool can't ship unmarked.
-It does **not** enforce the prompt boundary — that's the *host's* job, where the
-model and agent loop live.
+**A genuinely new class — indirect prompt injection.** A booby-trapped page can try to hijack the AI reading it. The server strips active markup, caps size, and stamps every result that carries external text with an `untrusted-external-content` marker — in the JSON *envelope*, never inside the content where a page could forge it, and **enforced by a cross-tool drift test** so a new tool can't ship unmarked. It does **not** enforce the prompt boundary — that's the *host's* job, where the model and agent loop live.
 
-> Prompt injection is **#1** on OWASP's LLM list, and the agentic rules are still
-> being drafted. This tool sits squarely in that gap.
+> Prompt injection is **#1** on OWASP's LLM list, and the agentic rules are still being drafted. This tool sits squarely in that gap.
 
 <!-- _footer: '↳ proof: internal/scraper/ssrf.go · internal/tools/scrape.go (envelope "trust" marker) · internal/tools/metadata_test.go (cross-tool gate) · internal/content/sanitize.go · OWASP Web A10 · LLM01' -->
 
@@ -339,17 +316,11 @@ model and agent loop live.
 
 # An erasure registry you can't outrun
 
-Privacy starts with collecting little: the cache is content-addressed (not keyed
-to a user), and the operator — not us — is the data controller. But the moment a
-feature *does* store personal data, "right to be forgotten" has to actually work.
+Privacy starts with collecting little: the cache is content-addressed (not keyed to a user), and the operator — not us — is the data controller. But the moment a feature *does* store personal data, "right to be forgotten" has to actually work.
 
-So it's enforced structurally: **every store that holds personal data must
-register an Exporter + Eraser.** One `(tenant, user)` request fans out to all of
-them — and each store ships a round-trip **release-gate test**.
+So it's enforced structurally: **every store that holds personal data must register an Exporter + Eraser.** One `(tenant, user)` request fans out to all of them — and each store ships a round-trip **release-gate test**.
 
-> Add a new feature and forget to wire its eraser? **CI fails — not an auditor.**
-> GDPR access / portability / erasure (Art. 15 / 17 / 20) becomes a property of
-> the build, not a promise in a policy PDF.
+> Add a new feature and forget to wire its eraser? **CI fails — not an auditor.** GDPR access / portability / erasure (Art. 15 / 17 / 20) becomes a property of the build, not a promise in a policy PDF.
 
 <!-- _footer: '↳ proof: internal/datasubject/registry.go · internal/session/datasubject_test.go ("the #85 release gate")' -->
 
@@ -359,10 +330,7 @@ them — and each store ships a round-trip **release-gate test**.
 
 # Consent as a primitive: record → verify → honor
 
-The AI-tool standard (MCP) says *asking* the user for consent is the **client
-app's** job — so most servers do nothing. But whoever *stores* the data is, in
-law, the **data controller**, and GDPR / Quebec Law 25 make *them* prove consent
-was given and honor a withdrawal — a duty a login token can't discharge.
+The AI-tool standard (MCP) says *asking* the user for consent is the **client app's** job — so most servers do nothing. But whoever *stores* the data is, in law, the **data controller**, and GDPR / Quebec Law 25 make *them* prove consent was given and honor a withdrawal — a duty a login token can't discharge.
 
 So the server treats consent as three things it actually does:
 
@@ -378,8 +346,7 @@ So the server treats consent as three things it actually does:
 
 # The docs are tested, not trusted
 
-"Keep the docs accurate" isn't a good intention here — a stack of small
-mechanisms makes drift hard to write and impossible to merge quietly:
+"Keep the docs accurate" isn't a good intention here — a stack of small mechanisms makes drift hard to write and impossible to merge quietly:
 
 | Layer | What keeps it honest |
 |-------|----------------------|
@@ -388,8 +355,7 @@ mechanisms makes drift hard to write and impossible to merge quietly:
 | **A test reads the docs** | At build time it parses `docs/TOOLS.md`, starts a real server, and fails if the documented tools or shapes don't match reality |
 | **Gates that can't be skipped** | The doc-drift check runs in CI on **every** PR — even docs-only ones |
 
-> The *judgment* — threat models, standards crosswalks — lives in prose and gets
-> human review. Where a claim is enumerable, the build enforces it.
+> The *judgment* — threat models, standards crosswalks — lives in prose and gets human review. Where a claim is enumerable, the build enforces it.
 
 <!-- _footer: '↳ proof: CLAUDE.md "Documentation Guidelines" · internal/tools/metadata_test.go · .github/workflows/ci.yml (docs-drift)' -->
 
@@ -426,9 +392,7 @@ The same architecture pays off differently for everyone who touches it:
 
 <br>
 
-*Honest boundaries: "aligned with," not "certified." The local and server threat
-models differ. By default it stores little; the features that do store personal
-data are opt-in, consent-gated, and erasable — not absent.*
+*Honest boundaries: "aligned with," not "certified." The local and server threat models differ. By default it stores little; the features that do store personal data are opt-in, consent-gated, and erasable — not absent.*
 
 <!-- _footer: '↳ five portable principles · no compliance framework required' -->
 
@@ -439,13 +403,10 @@ data are opt-in, consent-gated, and erasable — not absent.*
 
 # Read the code, not the marketing.
 
-Each technical claim here names the file that backs it — open any one and check.
-And a CI drift gate keeps the tool docs honest against the code.
+Each technical claim here names the file that backs it — open any one and check. And a CI drift gate keeps the tool docs honest against the code.
 
 <br>
 
 <br>
 
-*Solo maintainer · MIT licensed · **contributors welcome.** Spot a claim that
-doesn't match the code? Open an issue or a PR — that's the whole point. Come help
-build it: `github.com/zoharbabin/web-researcher-mcp`*
+*Solo maintainer · MIT licensed · **contributors welcome.** Spot a claim that doesn't match the code? Open an issue or a PR — that's the whole point. Come help build it: `github.com/zoharbabin/web-researcher-mcp`*

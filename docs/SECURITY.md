@@ -297,8 +297,7 @@ Raw HTML/Content
 - Reject with informative error when exceeded
 - Counters are in-memory by default; set `RATE_LIMIT_PERSIST=true` to write them through to the encrypted persist store so quotas survive a restart
 
-**Burst handling (parallel tool calls):**
-When a single agent spawns many parallel tool calls, limits are enforced by token buckets, not a queue:
+**Burst handling (parallel tool calls):** When a single agent spawns many parallel tool calls, limits are enforced by token buckets, not a queue:
 - Per-tenant and global token buckets (`internal/ratelimit/limiter.go`) — excess calls are rejected immediately, never buffered
 - Rejected HTTP requests return `429` with a `Retry-After` header (`60` for the per-minute bucket, `3600` for the daily quota)
 - Concurrent scraping is separately bounded by two fixed-size semaphores in the scrape pipeline (`internal/scraper/pipeline.go`) — one for fast tiers, one for the browser tier — so a burst of scrapes runs at a capped concurrency rather than all at once
@@ -324,18 +323,9 @@ Protects against cascading failures when upstream APIs are down.
 
 ### Layer 7: Audit Logging
 
-**Tool calls that do real work are audited** — on cache-hit, terminal success,
-upstream error, AND regulated-tool refusal (no_consent / not_member /
-unauthenticated). Authentication and authorization failures (missing/invalid
-token, insufficient scope, bad admin key) emit a separate `auth.failure` event.
-**Not audited:** cheap input-validation rejections handled at the top of the
-handler before any work (e.g. empty query, missing URL, oversized note) — they
-return a `toolError` immediately and emit no event.
+**Tool calls that do real work are audited** — on cache-hit, terminal success, upstream error, AND regulated-tool refusal (no_consent / not_member / unauthenticated). Authentication and authorization failures (missing/invalid token, insufficient scope, bad admin key) emit a separate `auth.failure` event. **Not audited:** cheap input-validation rejections handled at the top of the handler before any work (e.g. empty query, missing URL, oversized note) — they return a `toolError` immediately and emit no event.
 
-See `internal/audit/logger.go` for the canonical `AuditEvent` struct. Key fields:
-timestamp, tenant/user/session IDs, tool name, request ID, source IP (HTTP only;
-proxy-aware, empty under STDIO), duration, success/error status, and extensible
-metadata.
+See `internal/audit/logger.go` for the canonical `AuditEvent` struct. Key fields: timestamp, tenant/user/session IDs, tool name, request ID, source IP (HTTP only; proxy-aware, empty under STDIO), duration, success/error status, and extensible metadata.
 
 **Storage:**
 - Default: structured log to stderr (slog JSON)
@@ -380,13 +370,7 @@ None of these is a personal-data store. Field contracts live in `docs/TOOLS.md` 
 - No sensitive data in URL query parameters
 
 ### FIPS Compliance (Optional)
-- Build with `GOFIPS140=latest` (Go's native FIPS 140-3 module, `crypto/fips140`) —
-  active CMVP certificate [#5247](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/5247).
-  `GOEXPERIMENT=boringcrypto` is no longer the compliant path: BoringCrypto's own
-  certificate is [Historical](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/3678)
-  (NIST's [FIPS 140-3 Transition](https://csrc.nist.gov/projects/fips-140-3-transition-effort)
-  moved remaining FIPS 140-2 modules off the Active list), and Go's own docs mark
-  `GOEXPERIMENT=boringcrypto` [unsupported and slated for removal](https://go.dev/doc/security/fips140).
+- Build with `GOFIPS140=latest` (Go's native FIPS 140-3 module, `crypto/fips140`) — active CMVP certificate [#5247](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/5247). `GOEXPERIMENT=boringcrypto` is no longer the compliant path: BoringCrypto's own certificate is [Historical](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/3678) (NIST's [FIPS 140-3 Transition](https://csrc.nist.gov/projects/fips-140-3-transition-effort) moved remaining FIPS 140-2 modules off the Active list), and Go's own docs mark `GOEXPERIMENT=boringcrypto` [unsupported and slated for removal](https://go.dev/doc/security/fips140).
 - Affects: TLS, AES, SHA, RSA operations
 
 ---
