@@ -298,6 +298,7 @@ The `status` field tells you immediately: `"complete"`, `"partial"`, or `"failed
 ### 1. Errors are actionable, not diagnostic
 
 Bad: `"error: HTTP 403"`
+
 Good:
 ```
 Blocked: x.com uses bot detection. Try an alternative source — its content can't be read directly.

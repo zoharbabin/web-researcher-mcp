@@ -23,7 +23,7 @@ build:
 	CGO_ENABLED=0 go build $(LDFLAGS) -o $(BINARY) ./cmd/web-researcher-mcp
 
 build-fips:
-	GOEXPERIMENT=boringcrypto CGO_ENABLED=0 go build $(LDFLAGS) -o $(BINARY) ./cmd/web-researcher-mcp
+	GOFIPS140=latest CGO_ENABLED=0 go build $(LDFLAGS) -o $(BINARY) ./cmd/web-researcher-mcp
 
 # --- Tests ------------------------------------------------------------------
 

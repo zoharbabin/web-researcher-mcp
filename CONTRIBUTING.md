@@ -18,18 +18,13 @@ Whether you're fixing a typo, adding a search provider, improving docs, or propo
 
 ### Prerequisites
 
-- **Go** — version requirement is specified in `go.mod` (the `toolchain` directive
-  pins the exact patched release; Go auto-downloads it, so you never build with
-  an unpatched compiler)
+- **Go** — version requirement is specified in `go.mod` (the `toolchain` directive pins the exact patched release; Go auto-downloads it, so you never build with an unpatched compiler)
 - **API keys** (for integration/E2E testing):
   - Google Custom Search: `GOOGLE_CUSTOM_SEARCH_API_KEY` and `GOOGLE_CUSTOM_SEARCH_ID`
   - Brave Search (optional): `BRAVE_API_KEY`
 - **Chrome/Chromium** — optional, only needed for headless scraping features
 
-Linters and the vulnerability scanner are **not** separate installs — they are
-pinned in `go.mod` as `tool` directives and invoked via `go tool`, so every
-contributor and CI run uses byte-identical versions (no drift, no "works on my
-machine").
+Linters and the vulnerability scanner are **not** separate installs — they are pinned in `go.mod` as `tool` directives and invoked via `go tool`, so every contributor and CI run uses byte-identical versions (no drift, no "works on my machine").
 
 ### One-time setup
 
@@ -38,9 +33,7 @@ make tools   # warms the pinned golangci-lint + govulncheck + gosec (go tool fet
 make hooks   # installs the git pre-commit hook (fmt + vet + lint on staged files)
 ```
 
-The pre-commit hook keeps commits fast by checking only staged Go files with the
-quick gates; the full suite (race, vuln, e2e) runs in CI. Bypass a hook in an
-emergency with `git commit --no-verify` — CI still enforces everything.
+The pre-commit hook keeps commits fast by checking only staged Go files with the quick gates; the full suite (race, vuln, e2e) runs in CI. Bypass a hook in an emergency with `git commit --no-verify` — CI still enforces everything.
 
 ### Getting Started
 
@@ -75,24 +68,12 @@ Unit and integration tests do not require API keys. Only E2E tests that hit live
 
 ### Testing both transports locally
 
-If your change touches transport-specific behavior (auth, rate limiting,
-sessions, HTTP handlers), test it over both STDIO and HTTP before opening a
-PR — tool logic is identical across transports, but the surrounding plumbing
-isn't.
+If your change touches transport-specific behavior (auth, rate limiting, sessions, HTTP handlers), test it over both STDIO and HTTP before opening a PR — tool logic is identical across transports, but the surrounding plumbing isn't.
 
-- **STDIO** — the default `.mcp.json` entry in this repo already covers this;
-  just run your MCP client against the built binary.
-- **HTTP, zero setup** — run `PORT=3000 ./web-researcher-mcp` and point any
-  MCP client at `http://localhost:3000/mcp/` (no auth, no TLS). See
-  [DEPLOYMENT.md → HTTP](docs/DEPLOYMENT.md#http-multi-client-web-apps).
-- **HTTP, container parity** — `make docker-smoke` builds the real Docker
-  image and drives a full `initialize`/`tools/call` sequence over plain HTTP
-  in a container (no `-i`/`-t`, matching production). `make e2e-oauth-docker`
-  adds HTTPS + OAuth 2.1 + multi-tenant isolation + GDPR export/erasure on top,
-  entirely via Docker — no cluster needed.
-- **Full k8s parity** — for changes that need real multi-pod behavior (HPA
-  scaling, `REDIS_URL` cross-pod state, the stateless MCP transport under a
-  rolling deployment), see [docs/K8S_LOCAL_DEV.md](docs/K8S_LOCAL_DEV.md).
+- **STDIO** — the default `.mcp.json` entry in this repo already covers this; just run your MCP client against the built binary.
+- **HTTP, zero setup** — run `PORT=3000 ./web-researcher-mcp` and point any MCP client at `http://localhost:3000/mcp/` (no auth, no TLS). See [DEPLOYMENT.md → HTTP](docs/DEPLOYMENT.md#http-multi-client-web-apps).
+- **HTTP, container parity** — `make docker-smoke` builds the real Docker image and drives a full `initialize`/`tools/call` sequence over plain HTTP in a container (no `-i`/`-t`, matching production). `make e2e-oauth-docker` adds HTTPS + OAuth 2.1 + multi-tenant isolation + GDPR export/erasure on top, entirely via Docker — no cluster needed.
+- **Full k8s parity** — for changes that need real multi-pod behavior (HPA scaling, `REDIS_URL` cross-pod state, the stateless MCP transport under a rolling deployment), see [docs/K8S_LOCAL_DEV.md](docs/K8S_LOCAL_DEV.md).
 
 ## Running Tests
 
@@ -264,12 +245,7 @@ STDIO transport is unaffected.
    - (individual targets exist too: `make test-race`, `make lint`, `make sec`, `make vuln`)
    - New code has tests; documentation updated if behavior changes
 
-   `main` is branch-protected: the **Lint**, **Test**, **Security** (govulncheck +
-   gosec), and **E2E** CI checks must all pass before a PR can merge, the branch
-   must be up to date with `main`, linear history is required, and all PR
-   conversations must be resolved. Running `make verify` locally reproduces the
-   CI checks exactly (same pinned tool versions via `go tool`). Human approval is
-   **not** required (the repo is maintainer-driven — see the merge policy below).
+   `main` is branch-protected: the **Lint**, **Test**, **Security** (govulncheck + gosec), and **E2E** CI checks must all pass before a PR can merge, the branch must be up to date with `main`, linear history is required, and all PR conversations must be resolved. Running `make verify` locally reproduces the CI checks exactly (same pinned tool versions via `go tool`). Human approval is **not** required (the repo is maintainer-driven — see the merge policy below).
 
 4. **Write a clear PR description** — explain what changed and why. Include:
    - Summary of changes
@@ -290,27 +266,15 @@ STDIO transport is unaffected.
 
 ### Maintainer Merge Policy
 
-`main` requires **zero human approvals** (this is a maintainer-driven repo, so a
-required-reviewer rule would just block the maintainer's own PRs). Quality is
-held by two gates instead: the CI checks above, and a mandatory **Copilot review
-as a second set of eyes**. Every PR is reviewed by Copilot and every finding is
-either fixed or rebutted before merge.
+`main` requires **zero human approvals** (this is a maintainer-driven repo, so a required-reviewer rule would just block the maintainer's own PRs). Quality is held by two gates instead: the CI checks above, and a mandatory **Copilot review as a second set of eyes**. Every PR is reviewed by Copilot and every finding is either fixed or rebutted before merge.
 
-**How Copilot review is triggered:** by the repo setting *Settings → Rules →
-Rulesets → "Request pull request review from Copilot"* (a one-time UI toggle).
-Copilot **cannot** be requested per-PR via the API or `gh` — it is not a
-collaborator, so `gh pr edit --add-reviewer` and the `requested_reviewers`
-REST/GraphQL endpoints all reject it. The automatic setting is the only
-mechanism; if a fast PR merges before Copilot posts, address its findings in a
-follow-up PR.
+**How Copilot review is triggered:** by the repo setting *Settings → Rules → Rulesets → "Request pull request review from Copilot"* (a one-time UI toggle). Copilot **cannot** be requested per-PR via the API or `gh` — it is not a collaborator, so `gh pr edit --add-reviewer` and the `requested_reviewers` REST/GraphQL endpoints all reject it. The automatic setting is the only mechanism; if a fast PR merges before Copilot posts, address its findings in a follow-up PR.
 
 Per-PR cycle the maintainer follows:
 
 1. Open the PR; CI runs and Copilot review is auto-requested.
 2. Wait for Copilot's review to post (`copilot-pull-request-reviewer[bot]`).
-3. For **each** Copilot finding: fix it, or reply in-thread explaining why it's
-   incorrect — then resolve the conversation. (Copilot only ever `COMMENTED`,
-   never `APPROVED`, so its review can't satisfy an approval gate by design.)
+3. For **each** Copilot finding: fix it, or reply in-thread explaining why it's incorrect — then resolve the conversation. (Copilot only ever `COMMENTED`, never `APPROVED`, so its review can't satisfy an approval gate by design.)
 4. Confirm all CI checks are green and every Copilot thread is resolved.
 5. Merge: `gh pr merge <N> --squash --admin`.
 
@@ -327,9 +291,7 @@ gh api repos/zoharbabin/web-researcher-mcp/pulls/<N>/comments \
 gh pr merge <N> --squash --admin
 ```
 
-`--admin` clears the conversation-resolution/up-to-date formalities at merge
-time; it is **not** a substitute for steps 2–3 — never run it before Copilot's
-findings are genuinely addressed.
+`--admin` clears the conversation-resolution/up-to-date formalities at merge time; it is **not** a substitute for steps 2–3 — never run it before Copilot's findings are genuinely addressed.
 
 ## Issue Guidelines
 

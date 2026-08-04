@@ -7,10 +7,7 @@
   <strong>Your AI research assistant that cites real sources and stays honest.</strong>
 </p>
 <p align="center">
-  Search the entire web or narrow it down to just the sites you trust;<br/>
-  medical journals, court databases, news outlets, academic papers.<br/>
-  Analyze the full source, not just snippets. Links that work, citations you can trust,<br/>
-  no made up closed garden pre-synthesized results.
+  Search the entire web or narrow it down to just the sites you trust;<br/> medical journals, court databases, news outlets, academic papers.<br/> Analyze the full source, not just snippets. Links that work, citations you can trust,<br/> no made up closed garden pre-synthesized results.
 </p>
 
 ⭐ If you're tired of AI making things up, and [web-researcher-mcp](https://github.com/zoharbabin/web-researcher-mcp/) helps you, give us a star ⭐ — it helps more teams discover the project.  
