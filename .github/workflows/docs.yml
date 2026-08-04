@@ -10,6 +10,7 @@ on:
       - "docs/**"
       - "decks/**"
       - "overrides/**"
+      - "landing/**"
       - "assets/logo-final-transparent.svg"
       - "assets/favicon.ico"
       - "mkdocs.yml"
@@ -110,9 +111,45 @@ jobs:
           cp decks/compliance/compliance-deck.html site_src/decks/compliance/index.html
           cp decks/compliance/compliance-deck.pdf  site_src/decks/compliance/compliance-deck.pdf
 
+      - name: Build docs site into publish/docs
+        run: mkdocs build -d publish/docs
+
+      - name: Assemble landing page at publish root
+        run: |
+          mkdir -p publish
+          cp landing/index.html publish/index.html
+          cp landing/styles.css publish/styles.css
+          cp landing/hero-poster.jpg publish/hero-poster.jpg
+          cp -R landing/assets publish/assets
+
+      - name: Generate redirect stubs for relocated doc pages
+        run: |
+          # These slugs were published at the site root before docs moved under /docs/.
+          # Each stub 302s (via meta refresh) old inbound links/bookmarks to the new path
+          # so external backlinks and search rankings aren't silently broken.
+          slugs="examples tools api-setup providers deployment security security-and-compliance architecture contributing error-handling privacy brand-guidelines design lessons-learned session-persistence migration cicd"
+          for slug in $slugs; do
+            mkdir -p "publish/$slug"
+            target="/web-researcher-mcp/docs/$slug/"
+            {
+              printf '<!DOCTYPE html>\n<html lang="en">\n<head>\n'
+              printf '<meta charset="UTF-8">\n'
+              printf '<meta http-equiv="refresh" content="0; url=%s">\n' "$target"
+              printf '<link rel="canonical" href="https://zoharbabin.com%s">\n' "$target"
+              printf '<title>Redirecting...</title>\n</head>\n<body>\n'
+              printf '<p>This page moved to <a href="%s">%s</a>.</p>\n' "$target" "$target"
+              printf '</body>\n</html>\n'
+            } > "publish/$slug/index.html"
+          done
+
       - name: Generate robots.txt
         run: |
-          printf 'User-agent: *\nAllow: /\n\nSitemap: https://zoharbabin.com/web-researcher-mcp/sitemap.xml\n' > site_src/robots.txt
+          printf 'User-agent: *\nAllow: /\n\nSitemap: https://zoharbabin.com/web-researcher-mcp/docs/sitemap.xml\n' > publish/robots.txt
 
       - name: Deploy to GitHub Pages
-        run: mkdocs gh-deploy --force --remote-branch gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: publish
+          publish_branch: gh-pages
+          force_orphan: true
