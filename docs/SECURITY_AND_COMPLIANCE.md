@@ -37,7 +37,7 @@ Six rules that govern every design decision:
    A developer running `go build && ./web-researcher-mcp` should not need to configure OAuth, encryption keys, or compliance profiles. An enterprise deploying for 10,000 users should have everything they need.
 
 6. **Elegant code is secure code.**  
-   Short, readable, well-tested functions are easier to audit and harder to exploit than clever abstractions. Prefer Go's standard library over third- party dependencies. One clear implementation over pluggable frameworks.
+   Short, readable, well-tested functions are easier to audit and harder to exploit than clever abstractions. Prefer Go's standard library over third-party dependencies. One clear implementation over pluggable frameworks.
 
 ---
 
