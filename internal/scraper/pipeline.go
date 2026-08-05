@@ -158,6 +158,14 @@ type ScrapeResult struct {
 	// (#284). Nil for non-YouTube URLs, the description-only fallback, and short
 	// transcripts.
 	Highlights []TranscriptHighlight
+	// GitHubTrustSignals holds repo/owner/contributor/community-health/release
+	// metadata for a github.com repo README scrape (#546). Nil for non-GitHub
+	// URLs and GitHub blob/gist scrapes (no repo-level context); also nil when
+	// every one of the five underlying API calls fails, but a failure of any
+	// subset (including repo stats) still yields a non-nil value with only the
+	// successful fields populated — the README is always returned regardless
+	// (rule 3.2 graceful degradation).
+	GitHubTrustSignals *GitHubTrustSignals
 	// rawHTMLBytes is the size of the decompressed HTML the HTML-parsing tiers
 	// (stealth, html) read before extraction. The pipeline reads it to detect a
 	// JavaScript-rendered SPA shell — a large HTML payload that yielded little

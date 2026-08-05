@@ -303,6 +303,59 @@ var scrapePageOutputSchema = map[string]any{
 			"type":        "integer",
 			"description": "Raw content length in bytes. Present only when the response links out to a resource_link artifact (mode=raw content at/above the size threshold); mirrors contentLength for a linked payload without requiring a follow-up read.",
 		},
+		"githubTrustSignals": map[string]any{
+			"type":        "object",
+			"description": "Repo/owner/contributor/community-health/release metadata for a github.com repo-root README scrape (#546): a specific repo's real age, popularity, and ownership credibility, distinct from the generic authorityTier every github.com URL otherwise shares. Best-effort and additive — any sub-fetch that fails is simply omitted rather than failing the scrape; present only for github.com repo-root README scrapes, absent for /blob/ file scrapes, gists, and non-GitHub URLs.",
+			"properties": map[string]any{
+				"repo": map[string]any{
+					"type":        "object",
+					"description": "GET /repos/{owner}/{repo}. Omitted if this call failed.",
+					"properties": map[string]any{
+						"stargazersCount": map[string]any{"type": "integer"},
+						"forksCount":      map[string]any{"type": "integer"},
+						"openIssuesCount": map[string]any{"type": "integer"},
+						"createdAt":       map[string]any{"type": "string"},
+						"pushedAt":        map[string]any{"type": "string"},
+						"archived":        map[string]any{"type": "boolean"},
+						"disabled":        map[string]any{"type": "boolean"},
+						"fork":            map[string]any{"type": "boolean"},
+						"license":         map[string]any{"type": "string", "description": "SPDX ID (e.g. MIT). Omitted when unlicensed."},
+						"topics":          map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					},
+				},
+				"owner": map[string]any{
+					"type":        "object",
+					"description": "GET /orgs/{login} or /users/{login}, matching the repo owner's actual type. Omitted if this call failed.",
+					"properties": map[string]any{
+						"login":       map[string]any{"type": "string"},
+						"type":        map[string]any{"type": "string", "enum": []any{"Organization", "User"}},
+						"createdAt":   map[string]any{"type": "string"},
+						"publicRepos": map[string]any{"type": "integer"},
+						"followers":   map[string]any{"type": "integer"},
+						"isVerified":  map[string]any{"type": "boolean", "description": "GitHub-verified organization badge. Omitted (false) for users and unverified orgs."},
+					},
+				},
+				"contributorCount": map[string]any{
+					"type":        "integer",
+					"description": "Derived from the Link response header's rel=\"last\" page number on a single per_page=1 request — never a full pagination walk. Omitted if this call failed.",
+				},
+				"community": map[string]any{
+					"type":        "object",
+					"description": "GET /repos/{owner}/{repo}/community/profile. Omitted if this call failed.",
+					"properties": map[string]any{
+						"healthPercentage": map[string]any{"type": "integer"},
+						"hasLicense":       map[string]any{"type": "boolean"},
+						"hasContributing":  map[string]any{"type": "boolean"},
+						"hasCodeOfConduct": map[string]any{"type": "boolean"},
+						"hasReadme":        map[string]any{"type": "boolean"},
+					},
+				},
+				"releaseCount": map[string]any{
+					"type":        "integer",
+					"description": "Derived from the Link response header's rel=\"last\" page number on a single per_page=1 request, same technique as contributorCount. Omitted if this call failed.",
+				},
+			},
+		},
 	},
 }
 
