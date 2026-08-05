@@ -2,10 +2,12 @@
 set -uo pipefail
 
 # Permanent regression gate for "GitHub trust-surface signals for scrape_page"
-# (see issue #546). Runs 6 independent gates in order; fails loud (non-zero
-# exit) on the first gate that fails. Re-run after every change to
-# internal/scraper/github.go, internal/content/quality.go,
-# internal/content/classify.go, or their supporting tests.
+# (see issue #546). Runs all 6 gates in order, regardless of earlier
+# failures, then exits non-zero if any gate failed — so a single run's
+# output always shows the full pass/fail picture, not just the first
+# failure. Re-run after every change to internal/scraper/github.go,
+# internal/content/quality.go, internal/content/classify.go, or their
+# supporting tests.
 #
 # Usage: bash scripts/harness-546.sh
 

@@ -305,7 +305,7 @@ var scrapePageOutputSchema = map[string]any{
 		},
 		"githubTrustSignals": map[string]any{
 			"type":        "object",
-			"description": "Repo/owner/contributor/community-health/release metadata for a github.com repo README scrape (#546): a specific repo's real age, popularity, and ownership credibility, distinct from the generic authorityTier every github.com URL otherwise shares. Best-effort and additive — any sub-fetch that fails is simply omitted rather than failing the scrape; present only for github.com repo-root/blob README scrapes, absent for gists and non-GitHub URLs.",
+			"description": "Repo/owner/contributor/community-health/release metadata for a github.com repo-root README scrape (#546): a specific repo's real age, popularity, and ownership credibility, distinct from the generic authorityTier every github.com URL otherwise shares. Best-effort and additive — any sub-fetch that fails is simply omitted rather than failing the scrape; present only for github.com repo-root README scrapes, absent for /blob/ file scrapes, gists, and non-GitHub URLs.",
 			"properties": map[string]any{
 				"repo": map[string]any{
 					"type":        "object",

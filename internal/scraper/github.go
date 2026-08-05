@@ -498,9 +498,11 @@ type GitHubCommunity struct {
 }
 
 // fetchGitHubTrustSignals gathers the full trust surface for owner/repo via
-// four independent api.github.com calls (issue #546). Every call is
-// best-effort and independent: repo stats fail to nil, owner fetch is skipped
-// on unknown owner type, and a failing contributors/community/releases call
+// five independent api.github.com calls (issue #546): repo stats, owner/org
+// profile, contributor count, community profile, and release count. Every
+// call is best-effort and independent: a failing repo-stats call leaves
+// ownerType empty (the owner fetch then falls back to /users rather than
+// being skipped), and a failing owner/contributors/community/releases call
 // simply leaves that field unset — never propagating an error to the README
 // scrape (rule 3.2).
 func (p *Pipeline) fetchGitHubTrustSignals(ctx context.Context, owner, repo string) *GitHubTrustSignals {
