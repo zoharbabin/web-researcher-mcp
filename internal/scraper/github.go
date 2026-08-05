@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -179,15 +180,26 @@ func (p *Pipeline) fetchGitHubRaw(ctx context.Context, rawContentURL string) (in
 	return resp.StatusCode, body, nil
 }
 
-// fetchGitHubAPI fetches from api.github.com, sending the optional
-// GitHubToken (never logged) to raise the unauthenticated core rate limit.
-func (p *Pipeline) fetchGitHubAPI(ctx context.Context, apiURL string) (int, []byte, error) {
+// githubAPIResult is the outcome of a single api.github.com request,
+// including the raw "Link" response header (RFC 5988) the contributor/
+// release-count page-number trick needs (issue #546 rule 4.2).
+type githubAPIResult struct {
+	status int
+	body   []byte
+	link   string
+}
+
+// doGitHubAPIRequest is the single shared low-level request path for every
+// api.github.com call — README-fallback, gist, and the trust-signal endpoints
+// (issue #546) all go through this so every caller inherits the same
+// SSRF-safe client, 10s timeout, size cap, and never-logged token handling.
+func (p *Pipeline) doGitHubAPIRequest(ctx context.Context, apiURL string) (githubAPIResult, error) {
 	fetchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(fetchCtx, "GET", apiURL, nil)
 	if err != nil {
-		return 0, nil, err
+		return githubAPIResult{}, err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
@@ -198,15 +210,53 @@ func (p *Pipeline) fetchGitHubAPI(ctx context.Context, apiURL string) (int, []by
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return 0, nil, err
+		return githubAPIResult{}, err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, githubScrapeMaxBytes))
 	if err != nil {
-		return resp.StatusCode, nil, err
+		return githubAPIResult{status: resp.StatusCode}, err
 	}
-	return resp.StatusCode, body, nil
+	return githubAPIResult{status: resp.StatusCode, body: body, link: resp.Header.Get("Link")}, nil
+}
+
+// fetchGitHubAPI fetches from api.github.com, sending the optional
+// GitHubToken (never logged) to raise the unauthenticated core rate limit.
+func (p *Pipeline) fetchGitHubAPI(ctx context.Context, apiURL string) (int, []byte, error) {
+	res, err := p.doGitHubAPIRequest(ctx, apiURL)
+	return res.status, res.body, err
+}
+
+// githubAPIRetryBackoffs bounds each trust-signal API call (org/user,
+// contributors, community profile, releases) to at most 1+len(...) attempts,
+// modeled on linkverify.go's spnRetryBackoffs pattern (issue #546 rule 3.1) —
+// a fixed small slice of durations, never an unbounded loop.
+var githubAPIRetryBackoffs = []time.Duration{500 * time.Millisecond, 1500 * time.Millisecond}
+
+// fetchGitHubAPIWithRetry calls doGitHubAPIRequest, retrying up to
+// len(githubAPIRetryBackoffs) additional times on a transport error or a 5xx
+// response — never on 4xx. A 403 (rate limit or forbidden) or 404 will not
+// succeed on retry, and retrying a rate-limited response risks exhausting the
+// remaining request budget (issue #546 rule 4.3), so it degrades immediately
+// instead of retrying.
+func (p *Pipeline) fetchGitHubAPIWithRetry(ctx context.Context, apiURL string) (githubAPIResult, error) {
+	var res githubAPIResult
+	var err error
+	for attempt := 0; ; attempt++ {
+		res, err = p.doGitHubAPIRequest(ctx, apiURL)
+		if err == nil && res.status < 500 {
+			return res, err
+		}
+		if attempt >= len(githubAPIRetryBackoffs) {
+			return res, err
+		}
+		select {
+		case <-ctx.Done():
+			return res, err
+		case <-time.After(githubAPIRetryBackoffs[attempt]):
+		}
+	}
 }
 
 // scrapeGitHubReadme fetches a repo's README, preferring the zero-budget raw
@@ -221,7 +271,7 @@ func (p *Pipeline) scrapeGitHubReadme(ctx context.Context, rawURL, owner, repo s
 		return nil, networkError(rawURL, "github", err)
 	}
 	if status == 200 && len(body) > 0 {
-		return p.buildGitHubReadmeResult(rawURL, owner, repo, string(body), maxLength, "github:raw"), nil
+		return p.buildGitHubReadmeResult(ctx, rawURL, owner, repo, string(body), maxLength, "github:raw"), nil
 	}
 	if status != 404 {
 		return nil, classifyHTTPStatus(status, rawURL, "github")
@@ -253,23 +303,29 @@ func (p *Pipeline) scrapeGitHubReadme(ctx context.Context, rawURL, owner, repo s
 	if dlStatus != 200 {
 		return nil, classifyHTTPStatus(dlStatus, rawURL, "github")
 	}
-	return p.buildGitHubReadmeResult(rawURL, owner, repo, string(dlBody), maxLength, "github:contents-api"), nil
+	return p.buildGitHubReadmeResult(ctx, rawURL, owner, repo, string(dlBody), maxLength, "github:contents-api"), nil
 }
 
-func (p *Pipeline) buildGitHubReadmeResult(rawURL, owner, repo, body string, maxLength int, tier string) *ScrapeResult {
+// buildGitHubReadmeResult builds the README ScrapeResult and additively
+// attaches the GitHub trust-surface signals (issue #546) for the same
+// owner/repo. The trust-signal fetch is best-effort (see
+// fetchGitHubTrustSignals's rule 3.2 graceful degradation): a failure there
+// never prevents the README content itself from being returned.
+func (p *Pipeline) buildGitHubReadmeResult(ctx context.Context, rawURL, owner, repo, body string, maxLength int, tier string) *ScrapeResult {
 	truncated := false
 	if len(body) > maxLength {
 		body = truncateBytes(body, maxLength)
 		truncated = true
 	}
 	res := &ScrapeResult{
-		URL:         rawURL,
-		Content:     body,
-		ContentType: "github",
-		Title:       fmt.Sprintf("%s/%s — README", owner, repo),
-		Author:      owner,
-		SiteName:    "GitHub",
-		Truncated:   truncated,
+		URL:                rawURL,
+		Content:            body,
+		ContentType:        "github",
+		Title:              fmt.Sprintf("%s/%s — README", owner, repo),
+		Author:             owner,
+		SiteName:           "GitHub",
+		Truncated:          truncated,
+		GitHubTrustSignals: p.fetchGitHubTrustSignals(ctx, owner, repo),
 	}
 	return stampTier(res, tier)
 }
@@ -386,4 +442,275 @@ func (p *Pipeline) scrapeGitHubGist(ctx context.Context, rawURL, gistID string, 
 		Truncated:   truncated,
 	}
 	return stampTier(res, "github:gist-api"), nil
+}
+
+// GitHubTrustSignals is the "GitHub trust surface" for a repo (issue #546):
+// repo stats, the owning org/user's profile, contributor count, community
+// health, and release presence — surfacing the signals scrape_page's caller
+// would otherwise have no way to see (a brand-new repo and a decade-old,
+// foundation-backed one both rendered identically as authorityTier: "high").
+// Defined once, here, per rule 5.3 — never redefined in internal/content.
+// Every field is best-effort: a failed sub-fetch leaves its section nil/zero
+// rather than aborting the README scrape (rule 3.2).
+type GitHubTrustSignals struct {
+	Repo         *GitHubRepoStats `json:"repo,omitempty"`
+	Owner        *GitHubOwner     `json:"owner,omitempty"`
+	Contributors *int             `json:"contributorCount,omitempty"`
+	Community    *GitHubCommunity `json:"community,omitempty"`
+	Releases     *int             `json:"releaseCount,omitempty"`
+}
+
+// GitHubRepoStats is the subset of GET /repos/{owner}/{repo} that signals a
+// repo's trust profile: age, activity, popularity, and license/archival
+// status (issue #546 acceptance criteria).
+type GitHubRepoStats struct {
+	StargazersCount int      `json:"stargazersCount"`
+	ForksCount      int      `json:"forksCount"`
+	OpenIssuesCount int      `json:"openIssuesCount"`
+	CreatedAt       string   `json:"createdAt"`
+	PushedAt        string   `json:"pushedAt"`
+	Archived        bool     `json:"archived"`
+	Disabled        bool     `json:"disabled"`
+	Fork            bool     `json:"fork"`
+	License         string   `json:"license,omitempty"`
+	Topics          []string `json:"topics,omitempty"`
+}
+
+// GitHubOwner is the subset of GET /orgs/{login} or /users/{login} that
+// signals the credibility of the account behind a repo.
+type GitHubOwner struct {
+	Login       string `json:"login"`
+	Type        string `json:"type"` // "Organization" or "User"
+	CreatedAt   string `json:"createdAt"`
+	PublicRepos int    `json:"publicRepos"`
+	Followers   int    `json:"followers"`
+	IsVerified  bool   `json:"isVerified,omitempty"`
+}
+
+// GitHubCommunity is the subset of GET /repos/{owner}/{repo}/community/profile
+// that signals project governance maturity.
+type GitHubCommunity struct {
+	HealthPercentage int  `json:"healthPercentage"`
+	HasLicense       bool `json:"hasLicense"`
+	HasContributing  bool `json:"hasContributing"`
+	HasCodeOfConduct bool `json:"hasCodeOfConduct"`
+	HasReadme        bool `json:"hasReadme"`
+}
+
+// fetchGitHubTrustSignals gathers the full trust surface for owner/repo via
+// four independent api.github.com calls (issue #546). Every call is
+// best-effort and independent: repo stats fail to nil, owner fetch is skipped
+// on unknown owner type, and a failing contributors/community/releases call
+// simply leaves that field unset — never propagating an error to the README
+// scrape (rule 3.2).
+func (p *Pipeline) fetchGitHubTrustSignals(ctx context.Context, owner, repo string) *GitHubTrustSignals {
+	signals := &GitHubTrustSignals{}
+
+	ownerType := ""
+	if repoStats, ot, ok := p.fetchGitHubRepoStats(ctx, owner, repo); ok {
+		signals.Repo = repoStats
+		ownerType = ot
+	}
+	if o, ok := p.fetchGitHubOwner(ctx, owner, ownerType); ok {
+		signals.Owner = o
+	}
+	if n, ok := p.fetchGitHubContributorCount(ctx, owner, repo); ok {
+		signals.Contributors = &n
+	}
+	if c, ok := p.fetchGitHubCommunityProfile(ctx, owner, repo); ok {
+		signals.Community = c
+	}
+	if n, ok := p.fetchGitHubReleaseCount(ctx, owner, repo); ok {
+		signals.Releases = &n
+	}
+
+	if signals.Repo == nil && signals.Owner == nil && signals.Contributors == nil &&
+		signals.Community == nil && signals.Releases == nil {
+		return nil
+	}
+	return signals
+}
+
+// fetchGitHubRepoStats calls GET /repos/{owner}/{repo} (issue #546 rules
+// 2.1/2.2/2.3/2.4/3.1/3.3). Returns the owner's account type alongside the
+// stats so the caller can route the owner fetch to /orgs or /users without a
+// second repo call.
+func (p *Pipeline) fetchGitHubRepoStats(ctx context.Context, owner, repo string) (*GitHubRepoStats, string, bool) {
+	apiURL := fmt.Sprintf("%s/repos/%s/%s", p.githubAPIBase(), url.PathEscape(owner), url.PathEscape(repo))
+	res, err := p.fetchGitHubAPIWithRetry(ctx, apiURL)
+	if err != nil || res.status != 200 {
+		return nil, "", false
+	}
+
+	var body struct {
+		StargazersCount int    `json:"stargazers_count"`
+		ForksCount      int    `json:"forks_count"`
+		OpenIssuesCount int    `json:"open_issues_count"`
+		CreatedAt       string `json:"created_at"`
+		PushedAt        string `json:"pushed_at"`
+		Archived        bool   `json:"archived"`
+		Disabled        bool   `json:"disabled"`
+		Fork            bool   `json:"fork"`
+		License         struct {
+			SPDXID string `json:"spdx_id"`
+		} `json:"license"`
+		Topics []string `json:"topics"`
+		Owner  struct {
+			Type string `json:"type"`
+		} `json:"owner"`
+	}
+	if err := json.Unmarshal(res.body, &body); err != nil {
+		return nil, "", false
+	}
+
+	return &GitHubRepoStats{
+		StargazersCount: body.StargazersCount,
+		ForksCount:      body.ForksCount,
+		OpenIssuesCount: body.OpenIssuesCount,
+		CreatedAt:       body.CreatedAt,
+		PushedAt:        body.PushedAt,
+		Archived:        body.Archived,
+		Disabled:        body.Disabled,
+		Fork:            body.Fork,
+		License:         body.License.SPDXID,
+		Topics:          body.Topics,
+	}, body.Owner.Type, true
+}
+
+// fetchGitHubOwner calls GET /orgs/{login} when ownerType is "Organization",
+// or GET /users/{login} for anything else (including "" — an unknown type
+// falls back to the /users endpoint, which also resolves organization logins
+// on GitHub's API, just without the org-only fields) (issue #546 rules
+// 2.1/2.2/2.3/2.4/3.1/3.3).
+func (p *Pipeline) fetchGitHubOwner(ctx context.Context, login, ownerType string) (*GitHubOwner, bool) {
+	segment := "users"
+	if ownerType == "Organization" {
+		segment = "orgs"
+	}
+	apiURL := fmt.Sprintf("%s/%s/%s", p.githubAPIBase(), segment, url.PathEscape(login))
+	res, err := p.fetchGitHubAPIWithRetry(ctx, apiURL)
+	if err != nil || res.status != 200 {
+		return nil, false
+	}
+
+	var body struct {
+		Login       string `json:"login"`
+		Type        string `json:"type"`
+		CreatedAt   string `json:"created_at"`
+		PublicRepos int    `json:"public_repos"`
+		Followers   int    `json:"followers"`
+		IsVerified  bool   `json:"is_verified"`
+	}
+	if err := json.Unmarshal(res.body, &body); err != nil {
+		return nil, false
+	}
+
+	typ := body.Type
+	if typ == "" {
+		typ = ownerType
+	}
+	return &GitHubOwner{
+		Login:       body.Login,
+		Type:        typ,
+		CreatedAt:   body.CreatedAt,
+		PublicRepos: body.PublicRepos,
+		Followers:   body.Followers,
+		IsVerified:  body.IsVerified,
+	}, true
+}
+
+// githubLastPageRe extracts the page number from a Link header's
+// rel="last" entry, e.g. `<https://api.github.com/...?page=42>; rel="last"`.
+// Deriving the count from this single number — rather than paginating through
+// every page — is issue #546 rule 4.2's core requirement.
+var githubLastPageRe = regexp.MustCompile(`<[^>]*[?&]page=(\d+)[^>]*>;\s*rel="last"`)
+
+// lastPageFromLinkHeader returns the rel="last" page number from an RFC 5988
+// Link header, or 0 if absent (meaning: zero or one page — see the two
+// call sites, which treat 0 as "no Link header ⇒ derive count from the single
+// returned page instead").
+func lastPageFromLinkHeader(link string) int {
+	m := githubLastPageRe.FindStringSubmatch(link)
+	if m == nil {
+		return 0
+	}
+	n, err := strconv.Atoi(m[1])
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// fetchGitHubContributorCount derives the contributor count from the
+// rel="last" page number of a per_page=1 request to
+// /repos/{owner}/{repo}/contributors — a single HTTP call, never pagination
+// (issue #546 rule 4.2). When the Link header is absent, the count is the
+// number of items in the single-page body (0 or 1).
+func (p *Pipeline) fetchGitHubContributorCount(ctx context.Context, owner, repo string) (int, bool) {
+	apiURL := fmt.Sprintf("%s/repos/%s/%s/contributors?per_page=1&anon=1", p.githubAPIBase(), url.PathEscape(owner), url.PathEscape(repo))
+	res, err := p.fetchGitHubAPIWithRetry(ctx, apiURL)
+	if err != nil || res.status != 200 {
+		return 0, false
+	}
+	if n := lastPageFromLinkHeader(res.link); n > 0 {
+		return n, true
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal(res.body, &items); err != nil {
+		return 0, false
+	}
+	return len(items), true
+}
+
+// fetchGitHubReleaseCount derives the release count the same Link-header way
+// as fetchGitHubContributorCount, against /repos/{owner}/{repo}/releases
+// (issue #546 rule 4.2).
+func (p *Pipeline) fetchGitHubReleaseCount(ctx context.Context, owner, repo string) (int, bool) {
+	apiURL := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=1", p.githubAPIBase(), url.PathEscape(owner), url.PathEscape(repo))
+	res, err := p.fetchGitHubAPIWithRetry(ctx, apiURL)
+	if err != nil || res.status != 200 {
+		return 0, false
+	}
+	if n := lastPageFromLinkHeader(res.link); n > 0 {
+		return n, true
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal(res.body, &items); err != nil {
+		return 0, false
+	}
+	return len(items), true
+}
+
+// fetchGitHubCommunityProfile calls GET /repos/{owner}/{repo}/community/profile
+// (issue #546 rules 2.1/2.2/2.3/2.4/3.1/3.3).
+func (p *Pipeline) fetchGitHubCommunityProfile(ctx context.Context, owner, repo string) (*GitHubCommunity, bool) {
+	apiURL := fmt.Sprintf("%s/repos/%s/%s/community/profile", p.githubAPIBase(), url.PathEscape(owner), url.PathEscape(repo))
+	res, err := p.fetchGitHubAPIWithRetry(ctx, apiURL)
+	if err != nil || res.status != 200 {
+		return nil, false
+	}
+
+	var body struct {
+		HealthPercentage int `json:"health_percentage"`
+		Files            struct {
+			License       json.RawMessage `json:"license"`
+			Contributing  json.RawMessage `json:"contributing"`
+			CodeOfConduct json.RawMessage `json:"code_of_conduct"`
+			Readme        json.RawMessage `json:"readme"`
+		} `json:"files"`
+	}
+	if err := json.Unmarshal(res.body, &body); err != nil {
+		return nil, false
+	}
+
+	notNull := func(raw json.RawMessage) bool {
+		return len(raw) > 0 && string(raw) != "null"
+	}
+	return &GitHubCommunity{
+		HealthPercentage: body.HealthPercentage,
+		HasLicense:       notNull(body.Files.License),
+		HasContributing:  notNull(body.Files.Contributing),
+		HasCodeOfConduct: notNull(body.Files.CodeOfConduct),
+		HasReadme:        notNull(body.Files.Readme),
+	}, true
 }

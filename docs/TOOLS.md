@@ -158,6 +158,7 @@ type ScrapeOutput struct {
     DetectedDOI      string            `json:"detectedDoi,omitempty"`      // a scholarly DOI the page declares (#199); peer-reviewed pages only; omitted when none
     RetractionStatus *RetractionStatus `json:"retractionStatus,omitempty"` // Crossref integrity status for detectedDoi; omitted when clean/unresolved — never a guess
     Highlights       []TranscriptHighlight `json:"highlights,omitempty"`   // top ≤5 scored YouTube transcript segments (#284); omitted for non-YouTube URLs and transcripts under 5 segments
+    GitHubTrustSignals *GitHubTrustSignals `json:"githubTrustSignals,omitempty"` // repo/owner/contributor/community-health/release metadata for a github.com repo README scrape (#546); omitted for non-GitHub URLs, gists, and when every sub-fetch failed
     ContentSizeBytes int       `json:"contentSizeBytes,omitempty"` // raw content length in bytes (#508); present ONLY on the linked resource_link hand-off shape (mode=raw content at/above the link threshold — see Large-Payload Linking above), never on an inline response
 }
 
@@ -196,6 +197,44 @@ type ForumComment struct {
     Body      string `json:"body"`                 // plain text, max 500 chars
     Permalink string `json:"permalink,omitempty"`
     Created   string `json:"created,omitempty"`
+}
+
+type GitHubTrustSignals struct {
+    Repo         *GitHubRepoStats `json:"repo,omitempty"`             // GET /repos/{owner}/{repo}; omitted if this call failed
+    Owner        *GitHubOwner     `json:"owner,omitempty"`            // GET /orgs/{login} or /users/{login}; omitted if this call failed
+    Contributors *int             `json:"contributorCount,omitempty"` // derived from the Link header's rel="last" page number on one per_page=1 request — never a full pagination walk
+    Community    *GitHubCommunity `json:"community,omitempty"`        // GET /repos/{owner}/{repo}/community/profile; omitted if this call failed
+    Releases     *int             `json:"releaseCount,omitempty"`     // same Link-header technique as Contributors, against /releases
+}
+
+type GitHubRepoStats struct {
+    StargazersCount int      `json:"stargazersCount"`
+    ForksCount      int      `json:"forksCount"`
+    OpenIssuesCount int      `json:"openIssuesCount"`
+    CreatedAt       string   `json:"createdAt"`
+    PushedAt        string   `json:"pushedAt"`
+    Archived        bool     `json:"archived"`
+    Disabled        bool     `json:"disabled"`
+    Fork            bool     `json:"fork"`
+    License         string   `json:"license,omitempty"` // SPDX ID (e.g. MIT); omitted when unlicensed
+    Topics          []string `json:"topics,omitempty"`
+}
+
+type GitHubOwner struct {
+    Login       string `json:"login"`
+    Type        string `json:"type"` // "Organization" or "User"
+    CreatedAt   string `json:"createdAt"`
+    PublicRepos int    `json:"publicRepos"`
+    Followers   int    `json:"followers"`
+    IsVerified  bool   `json:"isVerified,omitempty"` // GitHub-verified organization badge; omitted (false) for users and unverified orgs
+}
+
+type GitHubCommunity struct {
+    HealthPercentage int  `json:"healthPercentage"`
+    HasLicense       bool `json:"hasLicense"`
+    HasContributing  bool `json:"hasContributing"`
+    HasCodeOfConduct bool `json:"hasCodeOfConduct"`
+    HasReadme        bool `json:"hasReadme"`
 }
 
 type StructuredData struct {
@@ -243,6 +282,8 @@ In `raw` mode the output additionally carries `"raw": true`, and `contentType` i
 **Scholarly DOI + integrity status (#199).** When a page classifies as `peer_reviewed` **or** sits on a known academic-journal host (the latter so detection still engages when an extraction tier strips the citation metadata, e.g. the cached-text fallback), the response surfaces `detectedDoi` — the DOI the page declares, read (in descending order of authority) from its Highwire `citation_doi` `<head>` metadata, then a DOI embedded in the request URL path itself (the publisher's canonical article identifier, e.g. `nejm.org/doi/full/10.1056/…` — present even on extraction tiers that strip the citation metadata, such as the cached-text fallback), then the first few KB of the cleaned text (the front matter, above any references list, so a references-list DOI is never mistaken for the page's own). It is **evidence, never a verdict and never an identity claim**: it says "this DOI appears on the page; here is its recorded integrity status," not "the page *is* this record" — you confirm the document's identity. When the DOI resolves to a Crossref/Retraction-Watch integrity record, `retractionStatus` is attached (the same object `verify_citation` and `academic_search` return); an `expression_of_concern`/`correction` is reported but is **not** a retraction (`retracted` stays `false`), and `retractionStatus.source` names `retraction-watch` vs `publisher`. The status is captured at scrape time and shares the one-hour scrape cache TTL — re-scrape or use `verify_citation` for a point-in-time check. Both fields are omitted on non-scholarly pages, in raw mode, and when no DOI is found or the resolver is unavailable. Use `verify_citation` to verify one citation and `audit_bibliography` to audit a whole reference list.
 
 **Transcript highlights (YouTube, #284).** When a YouTube transcript is successfully extracted (Strategy 1 or 2) and has at least 5 lines, the response carries `highlights` — up to 5 top-scored transcript segments, each with `text` (the `"[M:SS] text"` formatted line), `score` (normalized to `[0,1]` against the batch's highest-scoring segment, or `0` for every segment when none score above zero), and `startTime` (`"M:SS"`). Scoring is purely structural: a digit anywhere in a word (+2), an all-caps word like "NASA" (+1), and a question-ending line (+1) — no query or keyword weighting is applied from this tool. `highlights` is omitted for non-YouTube URLs, the description-only fallback (Strategy 3), and transcripts shorter than 5 lines. Transcripts are now fetched in WebVTT format (`fmt=vtt`) rather than the legacy `srv3` XML dialect; VTT entities (if any) pass through unmodified rather than being HTML-decoded.
+
+**GitHub trust surface (#546).** When a `github.com` repo-root or `/blob/` README scrape succeeds, the response additionally carries `githubTrustSignals` — read natively via up to 4 more GitHub REST API calls (repo stats, owner/org profile, contributor count, community health, release count) alongside the README fetch, so a caller can judge a *specific* repo's real age/popularity/ownership credibility rather than relying on the generic `authorityTier: "high"` every `github.com` URL otherwise shares. Each sub-fetch degrades independently: a failure on any one of them (network error, 403/rate-limit, 5xx) omits just that field — `repo`, `owner`, `contributorCount`, `community`, or `releaseCount` — never the whole scrape, and the README content is always returned regardless. Contributor and release counts are derived from the `Link` response header's `rel="last"` page number on a single `per_page=1` request, never a full pagination walk. Works fully unauthenticated at GitHub's public rate limit (60/hr); `GITHUB_TOKEN` (see `.env.example`) raises that ceiling to 5000/hr but is never required. Omitted entirely for gists and non-GitHub URLs.
 
 **Trust boundary marker.** Every scrape response (full, preview, and raw) carries `"trust": "untrusted-external-content"` in the JSON envelope — an explicit, machine-readable boundary marker. It is deliberately placed in the structured output, never inside the `content` string (where a malicious page could forge or close it), and signals that `content` is external data to be treated as data, never as instructions (OWASP LLM01, indirect prompt injection). The server cannot enforce the prompt boundary itself — the model and agent loop live in the host application — so this marker exists to make the untrusted provenance unmissable to that host.
 

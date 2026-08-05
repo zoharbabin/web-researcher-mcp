@@ -544,6 +544,26 @@ class Colors:
         )
 
 @dataclass
+class Community:
+    hasCodeOfConduct: Optional[bool] = None
+    hasContributing: Optional[bool] = None
+    hasLicense: Optional[bool] = None
+    hasReadme: Optional[bool] = None
+    healthPercentage: Optional[int] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "Community | None":
+        if d is None:
+            return None
+        return cls(
+            hasCodeOfConduct=d.get('hasCodeOfConduct'),
+            hasContributing=d.get('hasContributing'),
+            hasLicense=d.get('hasLicense'),
+            hasReadme=d.get('hasReadme'),
+            healthPercentage=d.get('healthPercentage'),
+        )
+
+@dataclass
 class CompanyReconArchiveUrl:
     category: Optional[str] = None
     mime_type: Optional[str] = None
@@ -1134,6 +1154,26 @@ class GetResearchSessionStepindex:
         )
 
 @dataclass
+class GithubTrustSignals:
+    community: Optional[Community] = None
+    contributorCount: Optional[int] = None
+    owner: Optional[Owner] = None
+    releaseCount: Optional[int] = None
+    repo: Optional[Repo] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "GithubTrustSignals | None":
+        if d is None:
+            return None
+        return cls(
+            community=Community.from_dict(d.get('community')) if d.get('community') else None,
+            contributorCount=d.get('contributorCount'),
+            owner=Owner.from_dict(d.get('owner')) if d.get('owner') else None,
+            releaseCount=d.get('releaseCount'),
+            repo=Repo.from_dict(d.get('repo')) if d.get('repo') else None,
+        )
+
+@dataclass
 class Identity:
     description: Optional[str] = None
     domain: Optional[str] = None
@@ -1620,6 +1660,28 @@ class NewsSearchResponse:
         )
 
 @dataclass
+class Owner:
+    createdAt: Optional[str] = None
+    followers: Optional[int] = None
+    isVerified: Optional[bool] = None
+    login: Optional[str] = None
+    publicRepos: Optional[int] = None
+    type: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "Owner | None":
+        if d is None:
+            return None
+        return cls(
+            createdAt=d.get('createdAt'),
+            followers=d.get('followers'),
+            isVerified=d.get('isVerified'),
+            login=d.get('login'),
+            publicRepos=d.get('publicRepos'),
+            type=d.get('type'),
+        )
+
+@dataclass
 class PaperFulltextResponse:
     abstract: Optional[str] = None
     authors: list[str] = field(default_factory=list)
@@ -1731,6 +1793,36 @@ class Profile:
             return None
         return cls(
             summary=d.get('summary'),
+        )
+
+@dataclass
+class Repo:
+    archived: Optional[bool] = None
+    createdAt: Optional[str] = None
+    disabled: Optional[bool] = None
+    fork: Optional[bool] = None
+    forksCount: Optional[int] = None
+    license: Optional[str] = None
+    openIssuesCount: Optional[int] = None
+    pushedAt: Optional[str] = None
+    stargazersCount: Optional[int] = None
+    topics: list[str] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "Repo | None":
+        if d is None:
+            return None
+        return cls(
+            archived=d.get('archived'),
+            createdAt=d.get('createdAt'),
+            disabled=d.get('disabled'),
+            fork=d.get('fork'),
+            forksCount=d.get('forksCount'),
+            license=d.get('license'),
+            openIssuesCount=d.get('openIssuesCount'),
+            pushedAt=d.get('pushedAt'),
+            stargazersCount=d.get('stargazersCount'),
+            topics=list(d.get('topics') or []),
         )
 
 @dataclass
@@ -1863,6 +1955,7 @@ class ScrapePageResponse:
     extractedBy: Optional[str] = None
     extractionQuality: Optional[str] = None
     forumSignals: Optional[ForumSignals] = None
+    githubTrustSignals: Optional[GithubTrustSignals] = None
     highlights: list[ScrapePageHighlight] = field(default_factory=list)
     metadata: Optional[ScrapePageMetadata] = None
     raw: Optional[bool] = None
@@ -1893,6 +1986,7 @@ class ScrapePageResponse:
             extractedBy=d.get('extractedBy'),
             extractionQuality=d.get('extractionQuality'),
             forumSignals=ForumSignals.from_dict(d.get('forumSignals')) if d.get('forumSignals') else None,
+            githubTrustSignals=GithubTrustSignals.from_dict(d.get('githubTrustSignals')) if d.get('githubTrustSignals') else None,
             highlights=[ScrapePageHighlight.from_dict(i) for i in (d.get('highlights') or [])],
             metadata=ScrapePageMetadata.from_dict(d.get('metadata')) if d.get('metadata') else None,
             raw=d.get('raw'),

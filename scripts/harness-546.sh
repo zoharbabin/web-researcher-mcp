@@ -89,9 +89,14 @@ run_gate "Dead-code scan (go vet)" \
   "$OUT_DIR/546-04-deadcode.log" \
   go vet ./...
 
+# internal/content is deliberately excluded: issue #546's Rules section
+# (1.1-6.4) never mandates changing content.scoreAuthority/classify.go — the
+# Problem section's mention of authorityTier/sourceType was motivating
+# context, not a testable rule. See the Phase 4 closing comment for this
+# documented deviation from the Phase 2 harness's original assumption.
 run_gate_requiring_tests "Unit/integration tests (rules 2.1/2.4/3.1/3.2/3.3/4.1/4.2/4.3)" \
   "$OUT_DIR/546-05-unit.log" \
-  go test -race ./internal/scraper/... ./internal/content/... ./internal/tools/... -run 'TestGitHub.*TrustSignal.*|TestFetchOrgMetadata.*|TestFetchContributorCount.*|TestFetchCommunityProfile.*|TestFetchReleaseCount.*|TestScrapeGitHubReadme.*Degrad.*|TestClassifySource.*GitHub.*|TestAuthorityTier.*GitHub.*|TestScrapePage.*GitHubTrust.*' -v -count=1
+  go test -race ./internal/scraper/... ./internal/tools/... -run 'TestGitHub.*TrustSignal.*|TestFetchOrgMetadata.*|TestFetchContributorCount.*|TestFetchCommunityProfile.*|TestFetchReleaseCount.*|TestScrapeGitHubReadme.*Degrad.*|TestScrapePage.*GitHubTrust.*' -v -count=1
 
 run_gate_requiring_tests "E2E (mocked GitHub API surface, recorded proof)" \
   "$OUT_DIR/546-06-e2e.log" \

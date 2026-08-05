@@ -344,6 +344,7 @@ This project is designed to satisfy security and privacy requirements across mul
 | **NIS2** | EU critical infrastructure | Incident handling, supply chain, crypto, vulnerability management |
 | **FedRAMP** | US government | FIPS crypto option, access control, audit, vulnerability scanning |
 | **UK Cyber Essentials** | UK market access — **operator-owned** | This scheme certifies an organization's IT estate (device config, patching, access control), not an OSS artifact. There is no organization or IT estate here to certify. An operator seeking Cyber Essentials certifies their own deployment, using this project's boundary protection, secure config, access control, and patching as supporting evidence |
+| **PCI-DSS** | Payment card industry — **not applicable** | This project never processes, stores, or transmits payment card or cardholder data — no tool, cache, or persisted store has a card-data field. PCI-DSS attaches only to systems in that data path; nothing here qualifies |
 | **UK NCSC CAF v4.0** | UK critical infra | 14-principle cyber assessment (covers AI risks) |
 | **BSIMM** | Security maturity | Code review, SAST, SCA, architecture analysis, vulnerability mgmt |
 | **HIPAA** | US healthcare | Encryption (AES-256), audit controls, access controls, BAA support, breach notification |

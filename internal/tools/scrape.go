@@ -191,6 +191,13 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 			output["highlights"] = result.Highlights
 		}
 
+		// GitHub trust surface (#546): repo/owner/contributor/community-health/
+		// release metadata for a github.com repo README scrape. Nil for
+		// non-GitHub URLs, gists, and when every sub-fetch failed.
+		if result.GitHubTrustSignals != nil {
+			output["githubTrustSignals"] = result.GitHubTrustSignals
+		}
+
 		// Typed source classification (#62): source_type / authority_tier /
 		// domain_category, derived from the Schema.org/Highwire signals + the
 		// numeric authority score. Additive; no lens on scrape_page. Captured once
@@ -389,8 +396,9 @@ func scrapeCacheKey(url, mode string, maxLength int) string {
 	// (#247) for Reddit engagement metadata. v8 adds wordCount/sparsityWarning
 	// (#358) — the content-volume signal. v9 adds the native Bluesky post/profile
 	// scraper route (#285), whose forumSignals.platform="bluesky" value a v8 blob
-	// never produced. Bump on any future shape change.
-	fmt.Fprintf(h, "scrape|v9|%s|%s|%d", url, mode, maxLength)
+	// never produced. v10 adds the githubTrustSignals field (#546). Bump on any
+	// future shape change.
+	fmt.Fprintf(h, "scrape|v10|%s|%s|%d", url, mode, maxLength)
 	return "scrape:" + hex.EncodeToString(h.Sum(nil))[:32]
 }
 
