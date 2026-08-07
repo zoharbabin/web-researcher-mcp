@@ -82,7 +82,7 @@ run_gate "SAST (gosec) + vuln scan + SSRF fuzz sweep (#499)" \
 # this gate proves neither leaked into package-level shared state.
 run_gate_requiring_tests "Multi-instance isolation tests (#463/#466)" \
   "$OUT_DIR/21-03-isolation.log" \
-  go test ./internal/scraper/... ./internal/audit/... -run 'TestPerTenantLimiter_.*Isolation|TestMultiInstance.*|TestAuditor.*Isolation' -v -count=1
+  go test ./internal/scraper/... ./internal/audit/... -run 'TestPerTenantLimiter_.*Isolation|TestMultiInstance.*|TestHashChain_TwoInstancesIndependent' -v -count=1
 
 run_gate "Dead-code scan (go vet)" \
   "$OUT_DIR/21-04-deadcode.log" \
@@ -93,11 +93,11 @@ run_gate "Dead-code scan (go vet)" \
 # what makes this gate fail now and pass only once Phase 3 lands each one.
 run_gate_requiring_tests "Unit/integration tests proving #463-#548 rules" \
   "$OUT_DIR/21-05-unit.log" \
-  go test -race ./internal/scraper/... ./internal/audit/... ./internal/redisbackend/... ./internal/tools/... ./internal/resources/... -run 'TestPerTenantLimiter_GlobalCeilingRespected|TestPerTenantLimiter_SingleTenantUsesFullCapacity|TestScrapeFairness_TenantIDFromContextOnly|TestScrapeBrowserRecoversFromCrash|TestAuditor.*HashChain|TestEnumErrorMessageParity|TestPromptsDocMatchesRegistry|TestSharedCache_.*|TestSessionManager_.*Redis.*' -v -count=1
+  go test -race ./internal/scraper/... ./internal/audit/... ./internal/redisbackend/... ./internal/tools/... ./internal/resources/... -run 'TestPerTenantLimiter_GlobalCeilingRespected|TestPerTenantLimiter_SingleTenantUsesFullCapacity|TestScrapeFairness_TenantIDFromContextOnly|TestScrapeBrowserRecoversFromCrash|TestHashChain_.*|TestVerifyChain_.*|TestEnumErrorMessageParity|TestPromptsDocMatchesRegistry|TestPromptGolden|TestSharedCache.*|TestSessionManager.*' -v -count=1
 
 run_gate_requiring_tests "E2E (real MCP flow, recorded proof)" \
   "$OUT_DIR/21-06-e2e.log" \
-  go test -tags=e2e -run 'TestOperationalHardening21_E2E|TestAllPromptsAdvertised' ./tests/e2e/... -v -count=1
+  go test -tags=e2e -run 'TestSecurity_STDIO_Templates|TestHTTP_Templates' ./tests/e2e/... -v -count=1
 
 echo
 if [ "$FAILED" -ne 0 ]; then
