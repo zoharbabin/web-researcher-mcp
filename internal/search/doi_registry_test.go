@@ -102,6 +102,49 @@ func TestDOIRegistry_TransportErrorIsUnknown(t *testing.T) {
 	}
 }
 
+// TestDOIRegistry_RetriesTransientFailure proves issue #549's fix: a server
+// that fails with 5xx N times then succeeds is retried within the bounded
+// attempt count, so a transient hiccup no longer reports a real DOI as
+// existence-unknown.
+func TestDOIRegistry_RetriesTransientFailure(t *testing.T) {
+	t.Parallel()
+	attempts := 0
+	r := newDOIRegistry(t, func(w http.ResponseWriter, _ *http.Request) {
+		attempts++
+		if attempts <= len(doiHandleRetryBackoffs) {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write([]byte(`{"responseCode":1}`))
+	})
+	reg, err := r.IsRegistered(context.Background(), "10.1038/171737a0")
+	if err != nil || !reg {
+		t.Fatalf("want (true,nil) after recovering within budget, got (%v,%v)", reg, err)
+	}
+	maxAttempts := len(doiHandleRetryBackoffs) + 1
+	if attempts > maxAttempts {
+		t.Errorf("made %d attempts, want at most %d", attempts, maxAttempts)
+	}
+}
+
+// TestDOIRegistry_DoesNotRetry404 proves a 404 (authoritative "not
+// registered") is never retried — it will not succeed on retry.
+func TestDOIRegistry_DoesNotRetry404(t *testing.T) {
+	t.Parallel()
+	attempts := 0
+	r := newDOIRegistry(t, func(w http.ResponseWriter, _ *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusNotFound)
+	})
+	reg, err := r.IsRegistered(context.Background(), "10.1038/nonexistent")
+	if err != nil || reg {
+		t.Fatalf("want (false,nil), got (%v,%v)", reg, err)
+	}
+	if attempts != 1 {
+		t.Errorf("made %d attempts, want exactly 1 (no retry on 404)", attempts)
+	}
+}
+
 func TestDOIRegistry_PrefixNormalized(t *testing.T) {
 	t.Parallel()
 	// A doi.org-prefixed input must be normalized to the bare DOI before the call.

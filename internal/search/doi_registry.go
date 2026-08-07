@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
@@ -64,6 +65,60 @@ type handleResponse struct {
 	ResponseCode int `json:"responseCode"`
 }
 
+// doiHandleRetryBackoffs bounds the existence check to at most 1+len(...)
+// attempts on a transport error or 5xx, modeled on linkverify.go's
+// spnRetryBackoffs / github.go's githubAPIRetryBackoffs pattern (issue #549):
+// a single transient hiccup on this best-effort verification call must not
+// report a genuinely registered DOI as existence-unknown. Never retried on
+// 404/429/other 4xx — those are authoritative, not transient.
+var doiHandleRetryBackoffs = []time.Duration{500 * time.Millisecond, 1500 * time.Millisecond}
+
+// doRequest issues a single GET and returns the raw status+body (or a
+// transport error). Status-code interpretation happens in the caller so this
+// stays a plain, retryable unit.
+func (h *HandleDOIRegistry) doRequest(ctx context.Context, reqURL string) (int, []byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+	if err != nil {
+		return 0, nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := h.deps.HTTPClient.Do(req)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	if err != nil {
+		return resp.StatusCode, nil, err
+	}
+	return resp.StatusCode, body, nil
+}
+
+// doRequestWithRetry retries doRequest up to len(doiHandleRetryBackoffs)
+// additional times on a transport error or a 5xx response — never on 4xx (a
+// 404/429 will not succeed on retry and retrying a rate-limited response
+// risks compounding the throttle).
+func (h *HandleDOIRegistry) doRequestWithRetry(ctx context.Context, reqURL string) (int, []byte, error) {
+	var status int
+	var body []byte
+	var err error
+	for attempt := 0; ; attempt++ {
+		status, body, err = h.doRequest(ctx, reqURL)
+		if err == nil && status < 500 {
+			return status, body, nil
+		}
+		if attempt >= len(doiHandleRetryBackoffs) {
+			return status, body, err
+		}
+		select {
+		case <-ctx.Done():
+			return status, body, err
+		case <-time.After(doiHandleRetryBackoffs[attempt]):
+		}
+	}
+}
+
 func (h *HandleDOIRegistry) IsRegistered(ctx context.Context, doi string) (bool, error) {
 	doi = normalizeDOI(doi)
 	if doi == "" {
@@ -76,37 +131,26 @@ func (h *HandleDOIRegistry) IsRegistered(ctx context.Context, doi string) (bool,
 		// slashes (same defense-in-depth as crossrefEscapeDOI): a "../"-style
 		// segment becomes a literal escaped segment that simply 404s.
 		reqURL := h.baseURL + "/" + crossrefEscapeDOI(doi)
-		req, er := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
-		if er != nil {
-			return er
-		}
-		req.Header.Set("Accept", "application/json")
 
-		resp, er := h.deps.HTTPClient.Do(req)
-		if er != nil {
-			return er
+		statusCode, body, err := h.doRequestWithRetry(ctx, reqURL)
+		if err != nil {
+			return err
 		}
-		defer resp.Body.Close()
 
 		switch {
-		case resp.StatusCode == 404:
+		case statusCode == 404:
 			// Authoritative "this DOI is not registered" — a clean negative, not
 			// an error. (A fabricated DOI lands here.)
 			registered = false
 			return nil
-		case resp.StatusCode == 429:
+		case statusCode == 429:
 			return fmt.Errorf("doi-handle: rate limited: %w", circuit.ErrRateLimit)
-		case resp.StatusCode >= 400:
-			body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-			return fmt.Errorf("doi-handle: API error %d: %s", resp.StatusCode, string(body))
+		case statusCode >= 400:
+			return fmt.Errorf("doi-handle: API error %d: %s", statusCode, string(body[:min(len(body), 512)]))
 		}
 
-		data, er := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
-		if er != nil {
-			return er
-		}
 		var hr handleResponse
-		if er := json.Unmarshal(data, &hr); er != nil {
+		if er := json.Unmarshal(body, &hr); er != nil {
 			return fmt.Errorf("doi-handle: parse: %w", er)
 		}
 		registered = hr.ResponseCode == 1

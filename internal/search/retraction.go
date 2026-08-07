@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
@@ -58,6 +59,64 @@ func (c *CrossrefRetractionResolver) SetBaseURL(base string) { c.baseURL = base 
 
 func (c *CrossrefRetractionResolver) Name() string { return "crossref-retraction" }
 
+// crossrefRetryBackoffs bounds the retraction check to at most 1+len(...)
+// attempts on a transport error or 5xx, modeled on linkverify.go's
+// spnRetryBackoffs / github.go's githubAPIRetryBackoffs pattern (issue #549):
+// a single transient hiccup on this best-effort enrichment call must not
+// route a genuinely clean/existing DOI to "unchecked". Never retried on
+// 404/429/other 4xx — those are authoritative, not transient.
+var crossrefRetryBackoffs = []time.Duration{500 * time.Millisecond, 1500 * time.Millisecond}
+
+// doRequest issues a single GET and returns the raw status+body (or a
+// transport error). Status-code interpretation happens in the caller so this
+// stays a plain, retryable unit.
+func (c *CrossrefRetractionResolver) doRequest(ctx context.Context, reqURL string) (int, []byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+	if err != nil {
+		return 0, nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	// Polite-pool User-Agent with mailto (Crossref convention).
+	if c.mailto != "" {
+		req.Header.Set("User-Agent", "web-researcher-mcp (mailto:"+c.mailto+")")
+	}
+
+	resp, err := c.deps.HTTPClient.Do(req)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024))
+	if err != nil {
+		return resp.StatusCode, nil, err
+	}
+	return resp.StatusCode, body, nil
+}
+
+// doRequestWithRetry retries doRequest up to len(crossrefRetryBackoffs)
+// additional times on a transport error or a 5xx response — never on 4xx (a
+// 404/429 will not succeed on retry and retrying a rate-limited response
+// risks compounding the throttle).
+func (c *CrossrefRetractionResolver) doRequestWithRetry(ctx context.Context, reqURL string) (int, []byte, error) {
+	var status int
+	var body []byte
+	var err error
+	for attempt := 0; ; attempt++ {
+		status, body, err = c.doRequest(ctx, reqURL)
+		if err == nil && status < 500 {
+			return status, body, nil
+		}
+		if attempt >= len(crossrefRetryBackoffs) {
+			return status, body, err
+		}
+		select {
+		case <-ctx.Done():
+			return status, body, err
+		case <-time.After(crossrefRetryBackoffs[attempt]):
+		}
+	}
+}
+
 func (c *CrossrefRetractionResolver) Resolve(ctx context.Context, doi string) (*RetractionStatus, bool, error) {
 	doi = normalizeDOI(doi)
 	if doi == "" {
@@ -74,39 +133,24 @@ func (c *CrossrefRetractionResolver) Resolve(ctx context.Context, doi string) (*
 		if c.mailto != "" {
 			reqURL += "?mailto=" + url.QueryEscape(c.mailto)
 		}
-		req, er := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
-		if er != nil {
-			return er
-		}
-		req.Header.Set("Accept", "application/json")
-		// Polite-pool User-Agent with mailto (Crossref convention).
-		if c.mailto != "" {
-			req.Header.Set("User-Agent", "web-researcher-mcp (mailto:"+c.mailto+")")
-		}
 
-		resp, er := c.deps.HTTPClient.Do(req)
-		if er != nil {
-			return er
+		statusCode, body, err := c.doRequestWithRetry(ctx, reqURL)
+		if err != nil {
+			return err
 		}
-		defer resp.Body.Close()
 
 		switch {
-		case resp.StatusCode == 404:
+		case statusCode == 404:
 			// Unknown/malformed DOI — legitimate "no info", not an error.
 			return nil
-		case resp.StatusCode == 429:
+		case statusCode == 429:
 			return fmt.Errorf("crossref: rate limited: %w", circuit.ErrRateLimit)
-		case resp.StatusCode >= 400:
-			body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-			return fmt.Errorf("crossref: API error %d: %s", resp.StatusCode, string(body))
+		case statusCode >= 400:
+			return fmt.Errorf("crossref: API error %d: %s", statusCode, string(body[:min(len(body), 512)]))
 		}
 
-		data, er := io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024))
-		if er != nil {
-			return er
-		}
 		var cr crossrefWorkResponse
-		if er := json.Unmarshal(data, &cr); er != nil {
+		if er := json.Unmarshal(body, &cr); er != nil {
 			return fmt.Errorf("crossref: parse: %w", er)
 		}
 		found = true
