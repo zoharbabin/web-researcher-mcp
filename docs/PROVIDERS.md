@@ -233,14 +233,11 @@ These providers back dedicated tools and are independent of the web search provi
 | `archive_source` | **[Internet Archive SPN](https://web.archive.org/save/)** | Save Page Now capture | No (keys raise reliability/limits) |
 | `brand_research` | **[BrandFetch](https://brandfetch.com/)** | Brand colors, fonts, logos, tagline, tone of voice (homepage meta + brand-page probing run unconditionally without a key) | No (`BRANDFETCH_API_KEY` optional) |
 | `company_recon` | **[crt.sh](https://crt.sh/)** + **[Wayback CDX](https://web.archive.org/cdx/search/cdx)** | Certificate Transparency log SANs, historical URL inventory, derived subdomains, lightweight web-search company summary | No |
-| `syllabus_search` | **[Open Syllabus](https://opensyllabus.org/)** | University syllabus assignment data — 32.9M syllabi, author/title frequency, co-assignment | Yes (research agreement — contact contact@opensyllabus.org) |
-| `gag_order_search` | **[PEN America](https://pen.org/)** | Educational gag order legislation tracker (state bills restricting classroom instruction) | Yes (Airtable personal access token) |
 
 **Notes:**
 - World Bank, OECD, Eurostat, ClinicalTrials.gov, CourtListener, ecosyste.ms, the Monarch Initiative, crt.sh, and Wayback CDX are always available — no configuration required. Setting `ECOSYSTEMS_EMAIL` (falls back to `OPENALEX_EMAIL`) opts ecosyste.ms calls into the "polite pool," raising the per-caller rate-limit tier above the shared "anonymous" pool. `ECOSYSTEMS_API_KEY` is also sent but only takes effect on ecosyste.ms's paid plans.
 - SEC EDGAR and FRED activate on their respective env vars (`EDGAR_CONTACT_EMAIL` / `FRED_API_KEY`). `EDGAR_CONTACT_EMAIL` falls back to `OPENALEX_EMAIL`.
 - `brand_research` is always available — without `BRANDFETCH_API_KEY` it runs homepage meta/structured-data extraction and brand-page probing; the key adds a concurrent BrandFetch enrichment tier on top, never a replacement.
-- `syllabus_search` registers only when both `OPEN_SYLLABUS_API_KEY` and `OPEN_SYLLABUS_API_URL` are set. `gag_order_search` registers only when `PEN_AMERICA_AIRTABLE_TOKEN` is set.
 - `archive_source`, `memory_save`, and `workspace_contribute` are the write tools in the suite. `archive_source` triggers a live internet capture; `memory_save` and `workspace_contribute` are opt-in regulated features.
 
 ---

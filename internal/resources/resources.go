@@ -561,7 +561,7 @@ func registerPrompts(srv *mcp.Server) {
 
 	srv.AddPrompt(&mcp.Prompt{
 		Name:        "curriculum-research",
-		Description: "Research a subject's academic curriculum footprint, institutional free-speech climate, and country-level academic-freedom context. Orchestrates syllabus_search, gag_order_search, and web_search (lens: curriculum) across five steps to produce a cited overview.",
+		Description: "Research a subject's academic curriculum footprint, institutional free-speech climate, and country-level academic-freedom context. Orchestrates web_search (lens: curriculum) across five steps to produce a cited overview.",
 		Arguments: []*mcp.PromptArgument{
 			{Name: "subject", Description: "Author, text, discipline, or topic to research (e.g. 'Marx', 'critical race theory', 'evolutionary biology')", Required: true},
 			{Name: "scope", Description: "Geographic or institutional scope, e.g. a country, US state, or institution name — narrows steps 2-5 (default: no scope restriction)"},
@@ -696,13 +696,11 @@ func buildCurriculumResearchPrompt(subject, scope, timeRange string) string {
 
 	p := "Research the academic curriculum footprint and free-speech climate for: " + subject + "\n" +
 		"Scope: " + scopeNote + " | Time range: " + timeNote + "\n\n" +
-		"Available tools: syllabus_search, gag_order_search, web_search, scrape_page. " +
-		"Use lens: curriculum for web_search calls that target curriculum, academic-freedom, or campus-climate data sources. " +
-		"syllabus_search and gag_order_search are each only registered when their upstream credentials are configured — " +
-		"if either is not in your active tool list, skip its step and note the gap in your final summary.\n\n" +
+		"Available tools: web_search, scrape_page. " +
+		"Use lens: curriculum for every web_search call below — it restricts results to curriculum, academic-freedom, and campus-climate data sources (Open Syllabus, PEN America, FIRE, AAUP, academic-freedom indices, and campus watchdogs across the political spectrum).\n\n" +
 
 		"=== Step 1 — Syllabus Coverage ===\n" +
-		"syllabus_search: query=\"" + subject + "\"" + curriculumScopeSuffix(scope, "institution", "country") + "\n" +
+		"web_search lens=curriculum: \"" + subject + "\"" + curriculumScopeSuffix(scope) + " site:opensyllabus.org\n" +
 		"Goal: how widely is this subject/author/text assigned, at which institutions, and how has assignment frequency shifted over time.\n" +
 		"Note: the Open Syllabus corpus is ~65% US/Anglophone — a sparse or absent result means 'not indexed in this corpus,' not 'never assigned.'\n\n" +
 
@@ -716,10 +714,9 @@ func buildCurriculumResearchPrompt(subject, scope, timeRange string) string {
 		"Goal: place any findings in the context of the relevant country's academic-freedom trend — improving, stable, or declining.\n\n" +
 
 		"=== Step 4 — Policy / Legislation ===\n" +
-		"gag_order_search: state=\"" + scope + "\"" + curriculumTimeRangeNote(timeRange) + "\n" +
-		"web_search lens=curriculum: \"" + subject + "\" bill legislation classroom restriction\n" +
-		"Goal: surface any enacted, pending, failed, or vetoed legislation that would restrict teaching this subject, and its current status.\n" +
-		"Note: gag_order_search's field names are matched fuzzily against PEN America's live Airtable schema — treat an unmapped field as absent, not as evidence a bill lacks that attribute.\n\n" +
+		"web_search lens=curriculum: " + curriculumScopeOrSubject(scope, subject) + " educational gag order bill legislation classroom restriction" + curriculumTimeRangeNote(timeRange) + " site:pen.org\n" +
+		"web_search lens=curriculum: \"" + subject + "\" bill legislation classroom restriction" + curriculumTimeRangeNote(timeRange) + "\n" +
+		"Goal: surface any enacted, pending, failed, or vetoed legislation that would restrict teaching this subject, and its current status.\n\n" +
 
 		"=== Step 5 — Watchdog / Incident Coverage ===\n" +
 		"web_search lens=curriculum: \"" + subject + "\" incident OR controversy site:adl.org OR site:amchainitiative.org OR site:hillel.org OR site:campusreform.org OR site:nas.org OR site:palestinelegal.org\n" +
@@ -728,18 +725,18 @@ func buildCurriculumResearchPrompt(subject, scope, timeRange string) string {
 
 		"=== Synthesis ===\n" +
 		"Produce a cited summary covering: syllabus assignment frequency and coverage gaps, institutional climate signals, the relevant country's academic-freedom trend, any bearing legislation and its status, and watchdog/incident coverage with source orientation noted. " +
-		"Flag any step skipped because its tool was unavailable, and any claim resting on a single source.\n"
+		"Flag any claim resting on a single source.\n"
 
 	return p
 }
 
-// curriculumScopeSuffix appends institution/country filter args to a
-// syllabus_search call description when scope is set.
-func curriculumScopeSuffix(scope, institutionLabel, countryLabel string) string {
+// curriculumScopeSuffix appends a scope filter term to a web_search query
+// when scope is set.
+func curriculumScopeSuffix(scope string) string {
 	if scope == "" {
 		return ""
 	}
-	return fmt.Sprintf(", %s/%s=\"%s\" (whichever applies)", institutionLabel, countryLabel, scope)
+	return " " + scope
 }
 
 // curriculumScopeOrSubject returns scope if set, else falls back to subject —
@@ -751,13 +748,13 @@ func curriculumScopeOrSubject(scope, subject string) string {
 	return subject
 }
 
-// curriculumTimeRangeNote appends a year_from/year_to note to a
-// gag_order_search call description when time_range is set.
+// curriculumTimeRangeNote appends a time-range filter term to a web_search
+// query when time_range is set.
 func curriculumTimeRangeNote(timeRange string) string {
 	if timeRange == "" {
 		return ""
 	}
-	return fmt.Sprintf(", year_from/year_to=\"%s\"", timeRange)
+	return " " + timeRange
 }
 
 // buildRareDiseaseResearchPrompt constructs a research plan over

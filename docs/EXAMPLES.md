@@ -284,40 +284,21 @@ Find community-curated "awesome list" collections on a topic — good for scouti
 
 ---
 
-## University Syllabus Search (syllabus_search)
+## Curriculum & Academic-Freedom Research (web_search, curriculum lens)
 
-Query the Open Syllabus Project's corpus of 32.9M university syllabi for structured author/title assignment data. Requires a research agreement with Open Syllabus (contact@opensyllabus.org); registers only when `OPEN_SYLLABUS_API_KEY` and `OPEN_SYLLABUS_API_URL` are both set.
+Search academic curriculum, institutional free-speech, and academic-freedom sources (Open Syllabus, PEN America, FIRE, AAUP, academic-freedom indices, and campus watchdogs) using the `curriculum` lens, which restricts results to that domain set.
 
 ```json
 {
-  "tool": "syllabus_search",
+  "tool": "web_search",
   "arguments": {
-    "query": "George Orwell",
-    "field": "history",
-    "sort_by": "frequency"
+    "query": "George Orwell assignment frequency",
+    "lens": "curriculum"
   }
 }
 ```
 
-**Response** contains: `query`, `sortBy`, `resultCount`, `provider` (always `opensyllabus`), `corpusNote`, `trust`, and `results` (array with `title`, `author`, `institution`, `country`, `field`, `year`, `frequency`, `institutionCount`, `coAssignedWith`, `url`). The corpus is ~65% US/Anglophone — absence of a result means "not indexed in this corpus," not "never assigned." Use lens `curriculum` with `web_search` for broader curriculum-related discovery. Results stay fresh for 6 hours.
-
----
-
-## Educational Gag Order Tracking (gag_order_search)
-
-Query PEN America's live tracker of state legislation restricting what public school and university instructors may teach, sourced from PEN America's public Airtable base. Registers only when `PEN_AMERICA_AIRTABLE_TOKEN` is set.
-
-```json
-{
-  "tool": "gag_order_search",
-  "arguments": {
-    "state": "FL",
-    "status": "enacted"
-  }
-}
-```
-
-**Response** contains: `resultCount`, `provider` (always `pen_america`), `trust`, and `results` (array with `state`, `billName`, `status`, `targets`, `year`, `summary`, `url`, all present when found). The target Airtable table and its field names are resolved fuzzily at runtime rather than hardcoded, since PEN America may restructure the base without notice — treat an unmapped field as absent, not as evidence a bill lacks that attribute. Results stay fresh for 30 minutes.
+**Response** is a standard `web_search` result set restricted to the lens's domains. Target a specific source with a `site:` filter, e.g. `site:opensyllabus.org` for syllabus-assignment data or `site:pen.org` for educational gag-order tracking. See the `curriculum-research` prompt for a five-step orchestration across this lens.
 
 ---
 

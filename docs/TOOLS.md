@@ -1801,73 +1801,7 @@ Retrieve the full text of an academic paper from a single identifier — a DOI, 
 
 ---
 
-## Tool 31: `syllabus_search`
-
-Query the Open Syllabus Project's corpus of 32.9M university syllabi for structured author/title assignment data — which institutions assign a given author or text, assignment frequency, and co-assignment patterns. Requires a research agreement with Open Syllabus (contact@opensyllabus.org); registers only when `OPEN_SYLLABUS_API_KEY` and `OPEN_SYLLABUS_API_URL` are both set.
-
-### Input Schema
-
-| Field | Type | Required | Default | Constraints |
-|-------|------|----------|---------|-------------|
-| `query` | string | yes | — | Author name, title, or keyword to find in the syllabus corpus |
-| `institution` | string | no | — | Filter by institution name or partial name |
-| `country` | string | no | — | ISO 3166-1 alpha-2 country code (e.g. `US`, `GB`, `DE`) |
-| `field` | string | no | — | Academic field or discipline (e.g. economics, history, biology) |
-| `year_from` | int | no | — | Earliest syllabus year |
-| `year_to` | int | no | — | Latest syllabus year |
-| `sort_by` | string | no | `frequency` | `frequency`, `recency`, or `institution_count` |
-| `max_results` | int | no | 10 | 1–50 |
-
-### Output Fields
-
-Each `results[]` item: `title`, `author`, `institution`, `country`, `field`, `year`, `frequency` (assignment count across the corpus), `institutionCount` (distinct institutions assigning this text), `coAssignedWith` (array, optional), `url` (optional). Plus `query`, `sortBy`, `resultCount`, `provider` (always `opensyllabus`), `hints` (when empty), `corpusNote` (coverage-bias caveat), and `trust` (`untrusted-external-content`).
-
-### Behavior
-- The corpus is ~65% US/Anglophone — absence of a result means "not indexed in this corpus," not "never assigned." The `corpusNote` field restates this on every response.
-- Use lens `curriculum` with `web_search` for broader curriculum-related discovery; use this tool for structured, sortable queries against the corpus itself.
-- Results can shift between identical calls as the corpus is updated — not idempotent.
-
-### Annotations
-- ReadOnly: true · Idempotent: false · OpenWorld: true (queries the live Open Syllabus API)
-
-### Cache
-- TTL: 6 hours (only for non-empty results)
-
----
-
-## Tool 32: `gag_order_search`
-
-Query PEN America's live educational gag order tracker — state legislation restricting what public school and university instructors may teach, sourced from PEN America's public Airtable base. Registers only when `PEN_AMERICA_AIRTABLE_TOKEN` is set.
-
-### Input Schema
-
-| Field | Type | Required | Default | Constraints |
-|-------|------|----------|---------|-------------|
-| `state` | string | no | — | US state abbreviation (e.g. `FL`, `TX`); omit for all states |
-| `status` | string | no | — | Bill status: `enacted`, `pending`, `failed`, `vetoed` |
-| `targets` | string | no | — | Scope: `higher_education`, `k12`, `both` |
-| `year_from` | int | no | — | Earliest bill introduction year |
-| `year_to` | int | no | — | Latest bill introduction year |
-| `max_results` | int | no | 25 | 1–200 |
-
-### Output Fields
-
-Each `results[]` item: `state`, `billName`, `status`, `targets`, `year`, `summary`, `url` (all optional, present when found). Plus `resultCount`, `provider` (always `pen_america`), `hints` (when empty), and `trust` (`untrusted-external-content`).
-
-### Behavior
-- The target Airtable table is resolved at runtime via Airtable's Metadata API (matched by name against "bill"/"gag"/"legislation"/"tracker", falling back to the base's first table) rather than a hardcoded table ID, since PEN America may restructure the base without notice.
-- Record fields are matched fuzzily against a list of candidate names (e.g. `state`/`jurisdiction`) for the same reason — treat an unmapped field as absent, not as evidence a bill lacks that attribute.
-- The tracker updates frequently, so results cache for a short TTL.
-
-### Annotations
-- ReadOnly: true · Idempotent: true · OpenWorld: true (queries the live PEN America Airtable base)
-
-### Cache
-- TTL: 30 minutes (only for non-empty results)
-
----
-
-## Tool 33: `company_recon`
+## Tool 31: `company_recon`
 
 OSINT company reconnaissance with typed structured output: Certificate Transparency log SANs (crt.sh), a Wayback Machine CDX historical URL inventory (with inferred `login`/`api`/`admin`/`asset`/`doc` categories), a derived subdomain list, and a lightweight web-search company summary. This is the programmatic complement to the `company-recon` MCP Prompt: use that prompt for an AI-orchestrated deep-dive across many tools; use this tool when you need machine-readable OSINT data directly, without an agent parsing crt.sh's JSON or Wayback's array-of-arrays itself. Both crt.sh and the Wayback CDX API are keyless, so this tool is always registered.
 
@@ -1919,7 +1853,7 @@ OSINT company reconnaissance with typed structured output: Certificate Transpare
 
 ---
 
-## Tool 34: `research_panel`
+## Tool 32: `research_panel`
 
 Ask the same research question to a panel of independently configured LLMs and compare their answers with a deterministic divergence analysis — consensus points every model restates, contradictions where two models take opposing positions on the same claim, and points unique to one model — computed by lexical term overlap and negation-cue detection, never a synthesis LLM call. The panel is auto-detected at startup from whatever LLM credentials are configured (OpenRouter, direct OpenAI/Anthropic/Google keys, AWS Bedrock, or local Ollama/LM Studio); registers only when at least one panel member resolves. Use this when you want to know whether models actually agree, not just what one model says.
 
@@ -1953,7 +1887,7 @@ Ask the same research question to a panel of independently configured LLMs and c
 
 ---
 
-## Tool 35: `monitor_query_save`
+## Tool 33: `monitor_query_save`
 
 **Opt-in, consent-gated (#273). Registered only when `MONITORING_ENABLED=true`.** This is a **write** tool (`ReadOnlyHint: false`, `DestructiveHint: false`).
 
@@ -1993,7 +1927,7 @@ Requires an authenticated user and recorded consent for the `monitoring` purpose
 
 ---
 
-## Tool 36: `monitor_query_check`
+## Tool 34: `monitor_query_check`
 
 **Opt-in, consent-gated (#273). Registered only when `MONITORING_ENABLED=true`.** Read-only, but **not idempotent** — every call mutates the monitor's stored baseline.
 
@@ -2273,7 +2207,7 @@ No new Go dependencies — all data comes from free, publicly accessible endpoin
 
 ### `curriculum-research`
 
-Research a subject's academic curriculum footprint, institutional free-speech climate, and country-level academic-freedom context. Orchestrates `syllabus_search`, `gag_order_search`, and `web_search` (lens: `curriculum`) across five steps to produce a cited overview.
+Research a subject's academic curriculum footprint, institutional free-speech climate, and country-level academic-freedom context. Orchestrates `web_search` (lens: `curriculum`) across five steps to produce a cited overview.
 
 #### Arguments
 
@@ -2287,16 +2221,14 @@ Research a subject's academic curriculum footprint, institutional free-speech cl
 
 | Step | Tools | Goal |
 |---|---|---|
-| 1 — Syllabus Coverage | `syllabus_search` | Assignment frequency, institution spread, and trend over time |
+| 1 — Syllabus Coverage | `web_search` (curriculum lens) | Assignment frequency, institution spread, and trend over time (via `opensyllabus.org`) |
 | 2 — US Institutional Climate | `web_search` (curriculum lens) | Policy statements and free-speech rankings from FIRE, AAUP, Heterodox Academy, PEN America |
 | 3 — Country-Level Academic Freedom Context | `web_search` (curriculum lens) | Academic-freedom index trend for the relevant country |
-| 4 — Policy / Legislation | `gag_order_search`, `web_search` (curriculum lens) | Enacted/pending/failed/vetoed legislation bearing on the subject |
+| 4 — Policy / Legislation | `web_search` (curriculum lens) | Enacted/pending/failed/vetoed legislation bearing on the subject (via `pen.org` and general search) |
 | 5 — Watchdog / Incident Coverage | `web_search` (curriculum lens) | Incident reports across the political spectrum, source orientation noted |
 
 #### Known limitations
 
-- **`syllabus_search` requires a research agreement with Open Syllabus** — without `OPEN_SYLLABUS_API_KEY`/`OPEN_SYLLABUS_API_URL` set, the tool is not registered and Step 1 should be skipped.
-- **`gag_order_search` requires a PEN America Airtable token** — without `PEN_AMERICA_AIRTABLE_TOKEN` set, the tool is not registered and Step 4's structured lookup should be skipped (the `web_search` half of Step 4 still applies).
 - **Open Syllabus corpus skew**: ~65% US/Anglophone — a sparse or absent Step 1 result means "not indexed," not "never assigned."
 - **Watchdog source orientation**: Step 5 sources span the political spectrum (advocacy groups, civil-liberties monitors) — cite each source's known orientation rather than treating any as neutral.
 

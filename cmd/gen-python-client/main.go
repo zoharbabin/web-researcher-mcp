@@ -114,11 +114,6 @@ func buildDeps() tools.Dependencies {
 		Memory:               memory.NewStore(persist.NewMemoryStore(), 0),
 		Workspaces:           workspace.NewStore(persist.NewMemoryStore(), 0),
 		Monitor:              persist.NewMemoryStore(),
-		// Bare-field-gated tools: a non-empty value is all that's needed to
-		// register them so their schemas appear in the generated client.
-		OpenSyllabusAPIKey:      "gen-schema-key",
-		OpenSyllabusAPIURL:      "https://gen-schema.invalid",
-		PENAmericaAirtableToken: "gen-schema-token",
 		// research_panel registers only when at least one panel member is
 		// present — a placeholder mock is enough for schema generation.
 		ResearchPanelProviders: []tools.ModelProvider{&mockModelProvider{}},

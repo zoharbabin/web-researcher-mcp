@@ -186,7 +186,7 @@ Works with Claude, Claude Desktop, Cursor, and any AI assistant that supports to
 | `format_bibliography` | Turn collected sources into a formatted bibliography — APA, MLA, BibTeX, RIS, or CSL-JSON (Zotero/EndNote/Mendeley-ready) |
 | `research_panel` | Ask the same question to a panel of independently configured LLMs and compare answers — consensus, contradictions, and model-unique points, computed deterministically, never smoothed over by an arbiter model |
 
-Most tools above are always available. A few activate only when the right provider or config is present: `citation_graph` and `research_panel` require at least one configured backing provider; `filing_search` requires `EDGAR_CONTACT_EMAIL`; `local_search` requires `BRAVE_API_KEY`; `syllabus_search` and `gag_order_search` (used by the curriculum-research template below) require their own provider credentials. Operators can also enable opt-in, consent-gated tools (per-user analytics, long-term memory, shared workspaces, saved-query monitoring) that appear only when their feature is turned on — see [`docs/TOOLS.md`](docs/TOOLS.md) for the authoritative, CI-verified tool list and full schemas.
+Most tools above are always available. A few activate only when the right provider or config is present: `citation_graph` and `research_panel` require at least one configured backing provider; `filing_search` requires `EDGAR_CONTACT_EMAIL`; `local_search` requires `BRAVE_API_KEY`. Operators can also enable opt-in, consent-gated tools (per-user analytics, long-term memory, shared workspaces, saved-query monitoring) that appear only when their feature is turned on — see [`docs/TOOLS.md`](docs/TOOLS.md) for the authoritative, CI-verified tool list and full schemas.
 
 ### Ready-made research templates
 
@@ -200,7 +200,7 @@ The server also ships guided **prompt templates** your AI assistant can pull in 
 | `literature-review` | Systematically review academic literature on a topic |
 | `brand-guidelines` | Research a brand and produce use-case-specific creative direction (landing page, email, video brief) — calls `brand_research` and interprets the structured JSON for you |
 | `company-recon` | Deep OSINT reconnaissance on a company — maps infrastructure, filings, personnel, and public footprint |
-| `curriculum-research` | Research a subject's syllabus coverage, institutional climate, and academic-freedom context — calls `syllabus_search`, `gag_order_search`, and `web_search` |
+| `curriculum-research` | Research a subject's syllabus coverage, institutional climate, and academic-freedom context — calls `web_search` with the `curriculum` lens |
 
 In most AI apps these show up wherever you pick a prompt or "/" command. The server exposes live **status resources** (`stats://tools`, `stats://sessions`, `stats://rate-limits`, `stats://providers`), a lens catalog (`lenses://catalog`), diagnostics (`diagnostics://errors/recent`, `diagnostics://health`), and a large-payload artifact store (`research://artifact/{id}`) so you — or your AI — can check usage, limits, and which providers are active. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#mcp-resources--prompts) for the full list.
 

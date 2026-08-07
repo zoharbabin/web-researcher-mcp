@@ -117,13 +117,6 @@ type Dependencies struct {
 	// by the Brand API. Empty → that resolution step is skipped (falls back to
 	// deps.Search.Web()).
 	BrandFetchClientID string
-	// OpenSyllabusAPIKey / OpenSyllabusAPIURL gate syllabus_search. Both must be
-	// set (a research agreement with Open Syllabus is required) or the tool
-	// does not register.
-	OpenSyllabusAPIKey string
-	OpenSyllabusAPIURL string
-	// PENAmericaAirtableToken gates gag_order_search. Empty ⇒ tool not registered.
-	PENAmericaAirtableToken string
 	// CTLogResolver backs company_recon's Certificate Transparency phase
 	// (crt.sh, #323). Keyless, so main.go always constructs it — non-nil in
 	// production. A nil value in tests degrades that phase to a soft skip.
@@ -266,16 +259,6 @@ func RegisterAll(srv *mcp.Server, deps Dependencies) {
 	// unconditionally without BRANDFETCH_API_KEY/BRANDFETCH_CLIENT_ID.
 	registerBrandResearch(srv, deps)
 
-	// syllabus_search (#352) — requires a research agreement with Open
-	// Syllabus; registers only when both the key and base URL are set.
-	if deps.OpenSyllabusAPIKey != "" && deps.OpenSyllabusAPIURL != "" {
-		registerSyllabusSearch(srv, deps)
-	}
-	// gag_order_search (#352) — PEN America's educational gag order tracker
-	// via Airtable; registers only when a token is set.
-	if deps.PENAmericaAirtableToken != "" {
-		registerGagOrderSearch(srv, deps)
-	}
 	// company_recon (#323) — always registered; every phase's data source
 	// (crt.sh, Wayback CDX, homepage probing, web search) is keyless. Individual
 	// phases soft-skip when their resolver dependency is nil (e.g. in a minimal

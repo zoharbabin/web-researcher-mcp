@@ -45,7 +45,6 @@ from web_researcher_mcp.models import (
     EconSearchResponse,
     FilingSearchResponse,
     FormatBibliographyResponse,
-    GagOrderSearchResponse,
     GetMyAnalyticsResponse,
     GetResearchSessionResponse,
     ImageSearchResponse,
@@ -65,7 +64,6 @@ from web_researcher_mcp.models import (
     ScrapePageResponse,
     SearchAndScrapeResponse,
     SequentialSearchResponse,
-    SyllabusSearchResponse,
     VerifyCitationResponse,
     VerifyRecommendationResponse,
     WebSearchResponse,
@@ -557,28 +555,6 @@ class WebResearcherClient:
             },
         )
         return FormatBibliographyResponse.from_dict(d)
-    async def gag_order_search(
-        self,
-        max_results: int = None,
-        state: str = None,
-        status: str = None,
-        targets: str = None,
-        year_from: int = None,
-        year_to: int = None,
-    ) -> GagOrderSearchResponse:
-        """Query PEN America's live educational gag order tracker — state legislation restricting what public school and university instructors may teach, sourced from PEN America's public Airtable base"""
-        d = await self._call_tool(
-            "gag_order_search",
-            {
-                "max_results": max_results,
-                "state": state,
-                "status": status,
-                "targets": targets,
-                "year_from": year_from,
-                "year_to": year_to,
-            },
-        )
-        return GagOrderSearchResponse.from_dict(d)
     async def get_my_analytics(
         self,) -> GetMyAnalyticsResponse:
         """Return YOUR OWN usage analytics (which tools you used such as web_search or sequential_search, counts, first/last seen) for this tenant"""
@@ -991,32 +967,6 @@ class WebResearcherClient:
             },
         )
         return SequentialSearchResponse.from_dict(d)
-    async def syllabus_search(
-        self,
-        query: str,
-        country: str = None,
-        field: str = None,
-        institution: str = None,
-        max_results: int = None,
-        sort_by: str = None,
-        year_from: int = None,
-        year_to: int = None,
-    ) -> SyllabusSearchResponse:
-        """Query the Open Syllabus Project's corpus of 32"""
-        d = await self._call_tool(
-            "syllabus_search",
-            {
-                "query": query,
-                "country": country,
-                "field": field,
-                "institution": institution,
-                "max_results": max_results,
-                "sort_by": sort_by,
-                "year_from": year_from,
-                "year_to": year_to,
-            },
-        )
-        return SyllabusSearchResponse.from_dict(d)
     async def verify_citation(
         self,
         citation: str,
@@ -1507,25 +1457,6 @@ class SyncWebResearcherClient:
             style=style,
             )
         )
-    def gag_order_search(
-        self,
-        max_results: int = None,
-        state: str = None,
-        status: str = None,
-        targets: str = None,
-        year_from: int = None,
-        year_to: int = None,
-    ) -> GagOrderSearchResponse:
-        return self._run(
-            self._async_client.gag_order_search(
-            max_results=max_results,
-            state=state,
-            status=status,
-            targets=targets,
-            year_from=year_from,
-            year_to=year_to,
-            )
-        )
     def get_my_analytics(
         self,) -> GetMyAnalyticsResponse:
         return self._run(
@@ -1882,29 +1813,6 @@ class SyncWebResearcherClient:
             sessionId=sessionId,
             sessionSummary=sessionSummary,
             totalStepsEstimate=totalStepsEstimate,
-            )
-        )
-    def syllabus_search(
-        self,
-        query: str,
-        country: str = None,
-        field: str = None,
-        institution: str = None,
-        max_results: int = None,
-        sort_by: str = None,
-        year_from: int = None,
-        year_to: int = None,
-    ) -> SyllabusSearchResponse:
-        return self._run(
-            self._async_client.syllabus_search(
-            query=query,
-            country=country,
-            field=field,
-            institution=institution,
-            max_results=max_results,
-            sort_by=sort_by,
-            year_from=year_from,
-            year_to=year_to,
             )
         )
     def verify_citation(
