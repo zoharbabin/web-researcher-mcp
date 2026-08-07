@@ -1,6 +1,6 @@
 .PHONY: build build-fips sync-lenses test test-race test-cover test-e2e test-soak test-live test-eval test-geo-eval test-extraction-eval test-relevance-eval test-concurrency test-bench test-fuzz test-python test-python-live \
         lint fmt fmt-check vet vuln sec tools hooks precommit verify clean run dev docker docker-smoke e2e-oauth-docker release version-sync rebuild-local help all \
-        gen-python-client check-python-drift
+        gen-python-client check-python-drift harness-467 harness-21
 
 BINARY = web-researcher-mcp
 VERSION ?= $(shell cat VERSION 2>/dev/null || git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -211,6 +211,14 @@ verify: fmt-check vet lint sec vuln validate-lenses test-race test-e2e check-pyt
 # circuit breaker, rate limiter, scraper concurrency, or tenant isolation.
 harness-467:
 	bash scripts/harness-467.sh
+
+# Permanent regression gate for the v1.48.0 Operational Hardening II
+# milestone (#21, build constitution #555). Not part of `verify` — it
+# re-runs lint/sec/vuln/fuzz plus targeted tests already covered there; run
+# manually before cutting a release that touches per-tenant scrape
+# concurrency, browser-pool health, audit hash-chaining, or SSRF validation.
+harness-21:
+	bash scripts/harness-21.sh
 
 clean:
 	rm -f $(BINARY) coverage.out coverage.html
