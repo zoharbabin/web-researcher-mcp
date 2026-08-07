@@ -88,11 +88,23 @@ default_cache_dir() {
 # claude_json_install_path reads the exact binary path Claude Code's own MCP
 # config points at (~/.claude.json's mcpServers.web-researcher.command). This
 # is the authoritative "this is what Claude Code loads" source when present.
+# The config commonly stores a bare command name (e.g. "web-researcher-mcp",
+# resolved via $PATH at launch, such as a pyenv shim) rather than an absolute
+# path — resolve it the same way the shell would, via `command -v`. Without
+# this, a bare name gets treated as a literal path relative to $REPO_ROOT
+# (this script's cwd), colliding with the just-built binary sitting right
+# there and deleting it out from under the subsequent `cp`.
 claude_json_install_path() {
   local cfg="$HOME/.claude.json"
   [ -f "$cfg" ] || return 1
   command -v jq >/dev/null 2>&1 || return 1
-  jq -er '.mcpServers["web-researcher"].command // empty' "$cfg" 2>/dev/null
+  local raw
+  raw="$(jq -er '.mcpServers["web-researcher"].command // empty' "$cfg" 2>/dev/null)" || return 1
+  [ -n "$raw" ] || return 1
+  case "$raw" in
+    /*) printf '%s\n' "$raw" ;;
+    *)  command -v "$raw" 2>/dev/null ;;
+  esac
 }
 
 # discover_install_targets prints "<path>\t<source>" lines: the ~/.claude.json
