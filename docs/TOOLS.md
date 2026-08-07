@@ -439,7 +439,7 @@ Combined search + scrape pipeline with quality scoring, deduplication, and sourc
 | `max_length_per_source` | int | no | 50000 | Bytes |
 | `total_max_length` | int | no | 300000 | Bytes |
 | `filter_by_query` | bool | no | false | — |
-| `provider` | string | no | — | Force search provider for the search phase |
+| `provider` | string | no | — | Force search provider for the search phase: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github |
 | `sessionId` | string | no | — | Link results to a `sequential_search` session |
 | `claim` | string | no | — | Optional claim to evaluate against each source; when set, each source gains `keySentences` + `claimSignal` (#66). Evidence only — never a verdict |
 
@@ -573,7 +573,7 @@ When a result is large enough to cross the [Large-Payload Linking](#large-payloa
 | `safe` | string | no | `medium` | off, medium, high. On **Brave images** only `off` and `strict` apply (any non-`off` maps to `strict`). |
 | `country` | string | no | — | ISO 3166-1 alpha-2 (e.g. `us`, `gb`). Honored by Brave and Google. |
 | `language` | string | no | — | BCP 47 / 2-letter code (e.g. `en`, `de`). Honored by Brave (`search_lang`) and Google (`lr`). |
-| `provider` | string | no | — | Force search provider |
+| `provider` | string | no | — | Force search provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github |
 
 ### Output Schema
 
@@ -622,7 +622,7 @@ type ImageResult struct {
 | `country` | string | no | — | ISO 3166-1 alpha-2 (e.g. `us`, `gb`). Honored by Brave news. |
 | `language` | string | no | — | BCP 47 / 2-letter code (e.g. `en`, `de`). Honored by Brave news (`search_lang`). |
 | `safe` | string | no | — | SafeSearch level: off, moderate, strict. Honored by Brave news. |
-| `provider` | string | no | — | Force search provider |
+| `provider` | string | no | — | Force search provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github |
 | `sessionId` | string | no | — | Link results to a `sequential_search` session |
 
 ### Output Schema
@@ -684,7 +684,7 @@ On a zero-result response, `hints` carries the same `ZeroResultHints` object as 
 | `sort_by` | string | no | `relevance` | relevance, date |
 | `open_access` | bool | no | false | Only return open-access papers |
 | `full_text` | bool | no | false | Fetch PMC full text for open-access biomedical articles with a PubMed Central ID. Only effective when the `pubmed` provider is active. Substantially increases response time |
-| `provider` | string | no | — | Force provider: openalex, crossref, pubmed, semanticscholar, core, exa, scholarapi (academic APIs), or google, brave, serper, searxng, searchapi, duckduckgo, tavily (web fallback) |
+| `provider` | string | no | — | Force provider: openalex, crossref, pubmed, semanticscholar, core, exa, scholarapi (academic APIs), or google, brave, serper, searxng, searchapi, duckduckgo, tavily, hackernews, reddit, bluesky, github (web fallback) |
 | `sessionId` | string | no | — | Link results to a `sequential_search` session; sources are auto-recorded for recovery after context loss |
 
 ### Output Fields
@@ -753,7 +753,7 @@ arxiv.org, pubmed.ncbi.nlm.nih.gov, scholar.google.com, ieeexplore.ieee.org, dl.
 | `cpc_code` | string | no | — | CPC classification (e.g., G06F) — enforced as a structured filter by every dedicated provider, not appended as free text (#530) |
 | `year_from` | int | no | — | Only patents filed in or after this year |
 | `year_to` | int | no | — | Only patents filed in or before this year |
-| `provider` | string | no | — | Force provider: searchapi, epo, lens, uspto, or web search providers |
+| `provider` | string | no | — | Force provider: searchapi, epo, lens, uspto (patent-only APIs), or google, brave, serper, searxng, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github (web search fallback) |
 | `sessionId` | string | no | — | Link results to a `sequential_search` session; sources are auto-recorded for recovery after context loss |
 
 ### Output Fields
@@ -1909,7 +1909,7 @@ Save a search query to monitor for new results over time. Runs the query once no
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `query` | string | yes | The search query to monitor (1-500 chars) |
-| `provider` | string | no | Search provider to use. Must match what's passed to `monitor_query_check` for the same monitor. Empty uses the configured default |
+| `provider` | string | no | Search provider to use: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github. Must match what's passed to `monitor_query_check` for the same monitor. Empty uses the configured default |
 | `ttl_days` | int | no | Retention in days (1-90, default 30). After expiry the monitor is silently dropped |
 
 ### Output Schema
@@ -1949,7 +1949,7 @@ Check a query saved with `monitor_query_save` for new results since the last che
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `query` | string | yes | Must match the query passed to `monitor_query_save` |
-| `provider` | string | no | Must match the provider used in `monitor_query_save` (or both empty for the default) |
+| `provider` | string | no | google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github. Must match the provider used in `monitor_query_save` (or both empty for the default) |
 
 ### Output Schema
 
