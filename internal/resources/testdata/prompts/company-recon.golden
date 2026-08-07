@@ -1,0 +1,77 @@
+Description: Company OSINT recon: Acme Corp acme.com
+---
+Run a multi-phase OSINT intelligence recon on: Acme Corp acme.com
+Depth: standard | Focus: general — balanced coverage across all active phases
+
+NOTE: Throughout these instructions {domain} means the bare domain extracted from the target above (e.g. if target is "Acme Corp acme.com", {domain} = "acme.com"). {analytics_id} is a placeholder for an analytics ID you will discover at runtime during the analytics correlation phase — do not substitute it before you have found the ID.
+
+Available tools: web_search, scrape_page, search_and_scrape, news_search, filing_search, research_export.
+Use the osint lens (lens: osint) for web_search calls that target OSINT data sources. If the osint lens is unavailable or returns no results, apply site: operators directly: crt.sh, securitytrails.com, censys.io, publicwww.com, github.com.
+
+=== Phase 1 — Company Profiling ===
+web_search: "Acme Corp acme.com about founded CEO headquarters"
+search_and_scrape: company homepage, LinkedIn, Crunchbase
+news_search: recent news about the company (last 90 days)
+Goal: establish company identity, leadership, HQ, core products, and recent developments.
+
+=== Phase 2 — Certificate Transparency ===
+scrape_page: https://crt.sh/?q=%25.{domain}&output=json  (replace {domain} with the target domain)
+Parse the JSON array: extract name_value fields, deduplicate subdomains, note wildcard SANs.
+Note: crt.sh is a free, public CT log aggregator — no API key required.
+
+=== Phase 3 — DNS / Infrastructure ===
+web_search lens=osint: site:securitytrails.com "{domain}" DNS history
+web_search lens=osint: site:censys.io "{domain}"
+scrape_page: https://hackertarget.com/find-dns-host-records/?q={domain}
+Goal: map IP blocks, ASN, name servers, historical DNS changes, and cloud providers in use.
+
+=== Phase 4 — Archive Mining ===
+scrape_page: https://web.archive.org/cdx/search/cdx?url={domain}/*&output=json&collapse=urlkey&limit=500&fl=original,timestamp,statuscode
+Analyze the returned URL list for patterns: login pages (/login, /signin, /auth), API endpoints (/api/, /v1/, /graphql), admin paths (/admin, /dashboard), JS bundles, staging subdomains.
+Note: Wayback CDX API is free and does not require authentication.
+
+=== Phase 6 — Web / Content Discovery ===
+search_and_scrape: "{domain}" inurl:login
+search_and_scrape: site:{domain} -www
+web_search lens=osint: "{domain}" archive OR leaked OR exposed
+Goal: surface exposed login surfaces, forgotten subdomains, and any indexed sensitive paths.
+
+=== Phase 7 — Analytics / Tracker Correlation ===
+First, find the target's analytics IDs by scraping https://{domain} (replace {domain} with the target domain) or using web_search for their GTM/UA tags.
+For UA-XXXXXX or GTM-XXXXXX IDs found:
+  scrape_page: https://hackertarget.com/reverse-analytics-search/?q={analytics_id}
+  web_search: "{analytics_id}" site:publicwww.com
+If no UA-XXXXXX or GTM-XXXXXX IDs are found, skip the reverse-analytics lookup and note the limitation in the Phase 9 report.
+IMPORTANT: GA4 IDs (G-XXXXXX) are NOT correlatable via reverse-analytics lookup — only Universal Analytics (UA-XXXXXX) and Google Tag Manager (GTM-XXXXXX) IDs work for finding co-deployed sites.
+Goal: identify other domains sharing the same analytics account — signals subsidiaries, partner networks, or acquired properties.
+
+=== Phase 8 — Business Intelligence ===
+web_search: "Acme Corp acme.com customers case studies"
+web_search: "Acme Corp acme.com" site:g2.com OR site:trustradius.com
+filing_search: search for SEC 10-K/10-Q filings if the company is publicly traded (Note: filing_search requires EDGAR_CONTACT_EMAIL to be configured — skip if the tool is unavailable)
+news_search: "Acme Corp acme.com" acquisitions funding partnerships
+Goal: identify customers, revenue signals, strategic partnerships, and corporate structure.
+
+=== Phase 9 — Confidence Scoring + Report ===
+For each finding — including subdomains, infrastructure, URL patterns, business relationships, and co-deployed domains — assign a confidence tier:
+  CONFIRMED — press release, case study, or official SEC filing
+  STRONG    — multiple independent credible sources
+  MODERATE  — single credible source, not independently confirmed
+  WEAK      — inferred from analytics/embed correlation or subdomain enumeration only; not independently verified
+
+Call research_export to consolidate all findings into a structured report.
+The report must include (omit sections for phases that were not active for this depth):
+  - Company profile summary
+  - Certificate transparency findings
+  - Discovered infrastructure (subdomains, IPs, ASN)
+  - Archive URL patterns of interest
+  - Business intelligence (customers, partners, filings)
+  - Confidence-tiered findings table
+  - Known limitations for this run (e.g. GA4 correlation gap, Censys/BuiltWith depth without API keys)
+
+Known limitations:
+- GA4 (G-XXXXXX) analytics IDs cannot be reverse-correlated — only UA-XXXXXX and GTM-XXXXXX work
+- Live JavaScript inspection requires a browser (Playwright MCP if available); fall back to static source-code search
+- Censys and BuiltWith depth is limited without API keys — infrastructure data comes from web-searchable pages only
+- filing_search (SEC EDGAR) is only available when EDGAR_CONTACT_EMAIL is configured — skip Phase 8 SEC lookup if the tool is not in your active tool list
+- GitHub Code Search gives higher recall than web_search on github.com; use it if separately available
