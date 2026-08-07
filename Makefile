@@ -117,6 +117,8 @@ test-fuzz:
 	go test ./internal/documents/... -run=^$$ -fuzz=FuzzParsePPTX -fuzztime=$(FUZZTIME)
 	go test ./internal/content/... -run=^$$ -fuzz=FuzzSanitizeHTML -fuzztime=$(FUZZTIME)
 	go test ./internal/content/... -run=^$$ -fuzz=FuzzSanitizeText -fuzztime=$(FUZZTIME)
+	go test ./internal/scraper/... -run=^$$ -fuzz=FuzzIsBlockedHostname -fuzztime=$(FUZZTIME)
+	go test ./internal/scraper/... -run=^$$ -fuzz=FuzzIsPrivateIP -fuzztime=$(FUZZTIME)
 
 # Python client library tests (no binary required — uses a mock HTTP server).
 # --cov reports coverage of the generated/hand-written client so gaps are
