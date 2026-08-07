@@ -180,6 +180,36 @@ func (m *MemoryManager) SetResearchGoal(tenantID, userID, sessionID, goal string
 	return nil
 }
 
+// SetTotalStepsEstimate persists the caller's latest total-steps estimate on an
+// existing session (#525), so it survives later steps that omit the field —
+// unlike SetResearchGoal (step-1-only), this is called on ANY step that
+// supplies a positive estimate.
+func (m *MemoryManager) SetTotalStepsEstimate(tenantID, userID, sessionID string, estimate int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	key := sessionKey(tenantID, userID, sessionID)
+	idx, ok := m.index[key]
+	if !ok {
+		return ErrSessionNotFound
+	}
+
+	sess, err := m.store.Load(key)
+	if err != nil {
+		return err
+	}
+
+	sess.TotalStepsEstimate = estimate
+	sess.LastUsed = time.Now()
+	if err := m.store.Save(key, sess, m.config.SessionTTL); err != nil {
+		return err
+	}
+
+	idx.TotalStepsEstimate = estimate
+	idx.LastUsed = sess.LastUsed
+	return nil
+}
+
 func (m *MemoryManager) AddSources(tenantID, userID, sessionID string, sources []ResearchSource) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -490,15 +520,16 @@ func buildIndexFromSession(sess *Session) *SessionIndex {
 		owner = "anonymous"
 	}
 	idx := &SessionIndex{
-		ID:              sess.ID,
-		TenantID:        sess.TenantID,
-		CreatedByUserID: owner,
-		ResearchGoal:    sess.ResearchGoal,
-		CreatedAt:       sess.CreatedAt,
-		LastUsed:        sess.LastUsed,
-		StepCount:       len(sess.Steps),
-		ActiveGaps:      sess.Gaps,
-		Sources:         sess.Sources,
+		ID:                 sess.ID,
+		TenantID:           sess.TenantID,
+		CreatedByUserID:    owner,
+		ResearchGoal:       sess.ResearchGoal,
+		TotalStepsEstimate: sess.TotalStepsEstimate,
+		CreatedAt:          sess.CreatedAt,
+		LastUsed:           sess.LastUsed,
+		StepCount:          len(sess.Steps),
+		ActiveGaps:         sess.Gaps,
+		Sources:            sess.Sources,
 	}
 
 	// SupersededBy (#512) is derived at read time from the isRevision/revisesStep

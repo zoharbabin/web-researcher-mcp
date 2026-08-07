@@ -125,6 +125,70 @@ func TestRetraction_IgnoresVersionUpdates(t *testing.T) {
 	}
 }
 
+// TestRetraction_RetriesTransientFailure proves issue #549's fix: a server
+// that fails with 5xx N times then succeeds is retried within the bounded
+// attempt count, so a transient hiccup no longer routes a genuinely clean or
+// existing DOI to "unchecked".
+func TestRetraction_RetriesTransientFailure(t *testing.T) {
+	t.Parallel()
+	attempts := 0
+	r := newRetractionResolver(t, func(w http.ResponseWriter, _ *http.Request) {
+		attempts++
+		if attempts <= len(crossrefRetryBackoffs) {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write([]byte(`{"message":{"title":["A fine paper"]}}`))
+	})
+	st, found, err := r.Resolve(context.Background(), "10.1/clean")
+	if err != nil || !found {
+		t.Fatalf("want found=true after recovering within budget, got found=%v err=%v", found, err)
+	}
+	if st != nil {
+		t.Errorf("clean work must yield nil status, got %+v", st)
+	}
+	maxAttempts := len(crossrefRetryBackoffs) + 1
+	if attempts > maxAttempts {
+		t.Errorf("made %d attempts, want at most %d", attempts, maxAttempts)
+	}
+}
+
+// TestRetraction_DoesNotRetry404 proves a 404 (authoritative "no info") is
+// never retried — it will not succeed on retry.
+func TestRetraction_DoesNotRetry404(t *testing.T) {
+	t.Parallel()
+	attempts := 0
+	r := newRetractionResolver(t, func(w http.ResponseWriter, _ *http.Request) {
+		attempts++
+		w.WriteHeader(404)
+	})
+	_, found, err := r.Resolve(context.Background(), "10.1/unknown")
+	if err != nil || found {
+		t.Fatalf("want found=false, nil err, got found=%v err=%v", found, err)
+	}
+	if attempts != 1 {
+		t.Errorf("made %d attempts, want exactly 1 (no retry on 404)", attempts)
+	}
+}
+
+// TestRetraction_DoesNotRetry429 proves a 429 is never retried by the
+// resolver's own loop — retrying a rate-limited response would compound the
+// throttle instead of degrading immediately.
+func TestRetraction_DoesNotRetry429(t *testing.T) {
+	t.Parallel()
+	attempts := 0
+	r := newRetractionResolver(t, func(w http.ResponseWriter, _ *http.Request) {
+		attempts++
+		w.WriteHeader(429)
+	})
+	if _, _, err := r.Resolve(context.Background(), "10.1/x"); err == nil {
+		t.Error("429 should surface an error")
+	}
+	if attempts != 1 {
+		t.Errorf("made %d attempts, want exactly 1 (no retry on 429)", attempts)
+	}
+}
+
 func TestEnrichRetraction_NilSafeAndBestEffort(t *testing.T) {
 	t.Parallel()
 	results := []AcademicResult{{DOI: "10.1/x"}, {Title: "no doi"}}

@@ -260,6 +260,9 @@ func TestSessionDiskVsRedisSwitch(t *testing.T) {
 		if err := m.SetResearchGoal("tenant-1", "u1", idx.ID, "switch parity goal"); err != nil {
 			t.Fatalf("SetResearchGoal: %v", err)
 		}
+		if err := m.SetTotalStepsEstimate("tenant-1", "u1", idx.ID, 7); err != nil {
+			t.Fatalf("SetTotalStepsEstimate: %v", err)
+		}
 
 		got, ok := m.GetIndex("tenant-1", "u1", idx.ID)
 		if !ok {
@@ -270,6 +273,9 @@ func TestSessionDiskVsRedisSwitch(t *testing.T) {
 		}
 		if got.ResearchGoal != "switch parity goal" {
 			t.Errorf("ResearchGoal = %q, want %q", got.ResearchGoal, "switch parity goal")
+		}
+		if got.TotalStepsEstimate != 7 {
+			t.Errorf("TotalStepsEstimate = %d, want 7 (#525 parity)", got.TotalStepsEstimate)
 		}
 
 		full, err := m.GetFull("tenant-1", "u1", idx.ID)

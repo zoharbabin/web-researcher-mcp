@@ -73,7 +73,15 @@ func applyDepth(ctx context.Context, deps Dependencies, input sequentialSearchIn
 			if len(results) == 0 {
 				zeroCount++
 			}
-			trackSources(ctx, deps, sessionID, searchResultsToSources(results))
+			// This refinement search runs from within a numbered sequential_search
+			// step, so — unlike a standalone tool call that only carries a
+			// sessionId — the step number is known here and must be stamped onto
+			// each source rather than left unset (#534).
+			refinedSources := searchResultsToSources(results)
+			for i := range refinedSources {
+				refinedSources[i].FoundInStep = input.StepNumber
+			}
+			trackSources(ctx, deps, sessionID, refinedSources)
 			trackOutcome(ctx, deps, sessionID, deps.Search.Name(), len(results) > 0, "", "")
 		}
 		refined = append(refined, entry)
@@ -318,6 +326,15 @@ func registerSequentialSearch(srv *mcp.Server, deps Dependencies) {
 		}
 
 		idx, err = deps.Sessions.AppendStep(tenantID, userID, sessionID, step, gap, input.SessionSummary)
+		if err == nil && input.TotalStepsEstimate > 0 {
+			// Persist so a later step that omits totalStepsEstimate still reports
+			// the last known value (#525) — set on the local idx directly rather
+			// than relying on any backend's internal aliasing, since the Redis
+			// manager returns a freshly-built index each call.
+			if serr := deps.Sessions.SetTotalStepsEstimate(tenantID, userID, sessionID, input.TotalStepsEstimate); serr == nil {
+				idx.TotalStepsEstimate = input.TotalStepsEstimate
+			}
+		}
 		if err != nil {
 			// Typed recovery: a not-found session (expired, evicted, or — in a
 			// multi-pod HTTP deployment — held by a different instance) returns a
@@ -358,12 +375,21 @@ func buildSequentialResponse(idx *session.SessionIndex, input sequentialSearchIn
 		}
 	}
 
+	// idx.TotalStepsEstimate is the session's persisted value (#525): the last
+	// step that supplied a positive estimate, surviving later steps that omit
+	// it. Fall back to this call's own input only if the session never
+	// recorded one (e.g. session lookup/set failed).
+	totalStepsEstimate := idx.TotalStepsEstimate
+	if totalStepsEstimate == 0 {
+		totalStepsEstimate = input.TotalStepsEstimate
+	}
+
 	output := map[string]any{
 		"sessionId":          idx.ID,
 		"responseMode":       mode,
 		"researchGoal":       idx.ResearchGoal,
 		"currentStep":        input.StepNumber,
-		"totalStepsEstimate": input.TotalStepsEstimate,
+		"totalStepsEstimate": totalStepsEstimate,
 		"isComplete":         !input.NextStepNeeded,
 		"startedAt":          idx.CreatedAt.Format(time.RFC3339),
 		// The echoed `sources` carry external-origin titles/URLs; mark the

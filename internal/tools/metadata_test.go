@@ -313,7 +313,7 @@ func TestOutputSchemaMatchesResponse(t *testing.T) {
 		"gag_order_search":    {},
 		"paper_fulltext":      {"identifier": "https://example.com/paper.pdf"},
 		"company_recon":       {"target": "example.com"},
-		"research_panel":      {"question": "test"},
+		"research_panel":      {"query": "test"},
 		// Anonymous test client has no auth context, so both return status:
 		// "unavailable" rather than exercising the content path (covered by
 		// monitor_test.go's authenticated-context tests).
@@ -430,7 +430,7 @@ func TestExternalContentToolsCarryTrustMarker(t *testing.T) {
 		"gag_order_search":    {},
 		"paper_fulltext":      {"identifier": "https://example.com/paper.pdf"},
 		"monarch_search":      {"operation": "entity", "query": "Marfan syndrome"},
-		"research_panel":      {"question": "test"},
+		"research_panel":      {"query": "test"},
 	}
 
 	for name, wantTrust := range want {

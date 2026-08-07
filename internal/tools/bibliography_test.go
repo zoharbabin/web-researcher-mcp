@@ -166,3 +166,21 @@ func TestFormatBibliographyFromSession(t *testing.T) {
 		t.Errorf("expected at least one source from session, got %v", out["entryCount"])
 	}
 }
+
+// TestFormatBibliographyFromSessionCarriesDOI proves the #532 fix end-to-end:
+// a source auto-tracked onto a session by academic_search (which the mock
+// academic provider returns with DOI "10.1/x") must reach format_bibliography's
+// bibtex output with that DOI populated, not silently dropped to a bare
+// title/URL entry as it was before ResearchSource carried DOI/Author/Date.
+func TestFormatBibliographyFromSessionCarriesDOI(t *testing.T) {
+	deps := setupTestDeps()
+	sid := makeSessionWithSources(t, deps)
+	out, res := callTool(t, deps, "format_bibliography", map[string]any{"sessionId": sid, "style": "bibtex"})
+	if res.IsError {
+		t.Fatalf("session bibliography failed")
+	}
+	b, _ := out["bibliography"].(string)
+	if !strings.Contains(b, "doi = {10.1/x}") {
+		t.Errorf("expected session-derived bibtex entry to carry the academic_search DOI, got:\n%s", b)
+	}
+}

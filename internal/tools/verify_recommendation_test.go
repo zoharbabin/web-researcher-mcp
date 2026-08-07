@@ -228,7 +228,7 @@ func TestVerifyRecommendationCorroborationCountsAgreement(t *testing.T) {
 	if !ok || len(corrobSearches) == 0 {
 		t.Fatalf("expected corroborationSearches to be populated, got %v", rec["corroborationSearches"])
 	}
-	// At least one lens should have been searched (journalism or tech must be in registry).
+	// At least one lens should have been searched (investigative_records or tech must be in registry).
 	for _, cs := range corrobSearches {
 		csMap := cs.(map[string]any)
 		lensName, _ := csMap["lens"].(string)
@@ -331,26 +331,26 @@ func TestVerifyRecommendationCorroborationCatchesTitleOnlyRefutation(t *testing.
 }
 
 // TestVerifyRecommendationLensSelectionTechClaim (#434 Finding D Rule 1): a
-// generic tech/product claim must route to {news, tech}, not the mislabeled
-// gov/legal "journalism" lens.
+// generic tech/product claim must route to {news, tech}, not the
+// gov/legal investigative_records lens.
 func TestVerifyRecommendationLensSelectionTechClaim(t *testing.T) {
 	lenses := selectCorroborationLenses("Shopify", "best e-commerce platforms for small businesses")
 	if !containsString(lenses, "news") {
 		t.Errorf("expected tech/product claim to include %q, got %v", "news", lenses)
 	}
-	if containsString(lenses, "journalism") {
-		t.Errorf("expected tech/product claim to exclude %q, got %v", "journalism", lenses)
+	if containsString(lenses, "investigative_records") {
+		t.Errorf("expected tech/product claim to exclude %q, got %v", "investigative_records", lenses)
 	}
 }
 
 // TestVerifyRecommendationLensSelectionLegalClaim (#434 Finding D Rule 1): a
 // claim about corporate/gov/legal/financial matters must still route to the
-// journalism lens (gov/public-record/filing sources) in addition to the
-// generic set.
+// investigative_records lens (gov/public-record/filing sources) in addition
+// to the generic set.
 func TestVerifyRecommendationLensSelectionLegalClaim(t *testing.T) {
 	lenses := selectCorroborationLenses("Glass Lewis", "best proxy advisory firms")
-	if !containsString(lenses, "journalism") {
-		t.Errorf("expected legal/financial claim to include %q, got %v", "journalism", lenses)
+	if !containsString(lenses, "investigative_records") {
+		t.Errorf("expected legal/financial claim to include %q, got %v", "investigative_records", lenses)
 	}
 }
 

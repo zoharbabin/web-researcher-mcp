@@ -1,7 +1,9 @@
 package content
 
 import (
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -137,7 +139,7 @@ func ExtractClaimEvidence(text, claim string) ClaimEvidence {
 		return ClaimEvidence{}
 	}
 
-	sentences := splitSentences(text)
+	sentences := splitSentences(stripReferencesSection(text))
 
 	type scored struct {
 		idx   int
@@ -147,9 +149,10 @@ func ExtractClaimEvidence(text, claim string) ClaimEvidence {
 	var hits []scored
 	for i, s := range sentences {
 		lower := strings.ToLower(s)
+		words := wordSet(lower)
 		matched := 0
 		for _, t := range terms {
-			if strings.Contains(lower, t) {
+			if termMatches(words, t) {
 				matched++
 			}
 		}
@@ -200,9 +203,9 @@ func ClaimTermCoverage(text, claim string) (matched, total int) {
 	if total == 0 || strings.TrimSpace(text) == "" {
 		return 0, total
 	}
-	lower := strings.ToLower(text)
+	words := wordSet(strings.ToLower(stripReferencesSection(text)))
 	for _, t := range terms {
-		if strings.Contains(lower, t) {
+		if termMatches(words, t) {
 			matched++
 		}
 	}
@@ -234,16 +237,41 @@ func ClaimTermCoverageWindowed(text, claim string, windowSize int) (matched, tot
 		windowSize = defaultClaimWindow
 	}
 
-	sentences := splitSentences(text)
+	sentences := splitSentences(stripReferencesSection(text))
 	if len(sentences) == 0 {
 		// No sentence boundaries (e.g. one long line) — fall back to whole-text.
 		return ClaimTermCoverage(text, claim)
 	}
 
-	// Per-sentence presence bitsets over the claim terms, computed once.
-	lowerSentences := make([]string, len(sentences))
+	// Per-sentence word sets over the claim terms, computed once.
+	sentenceWords := make([]map[string]struct{}, len(sentences))
 	for i, s := range sentences {
-		lowerSentences[i] = strings.ToLower(s)
+		sentenceWords[i] = wordSet(strings.ToLower(s))
+	}
+
+	// A short, single-topic document (e.g. a press release stating a vote count
+	// near the top and naming the dissenters near the bottom) has no "scattered
+	// stray hits across an unrelated long page" risk — that's what windowing
+	// guards against (#177). Splitting it into small windows instead
+	// undercounts genuinely-supported claims whose terms are spread across the
+	// whole short body, which is exactly what #523's live repro (a real FOMC
+	// press release) surfaced: the vote count and the named dissenters are both
+	// true of the same document but more than one window apart. Below the
+	// threshold, whole-document coverage is the right measure.
+	if len(sentences) <= shortDocSentenceThreshold {
+		merged := make(map[string]struct{})
+		for _, sw := range sentenceWords {
+			for w := range sw {
+				merged[w] = struct{}{}
+			}
+		}
+		matched = 0
+		for _, t := range terms {
+			if termMatches(merged, t) {
+				matched++
+			}
+		}
+		return matched, total
 	}
 
 	best := 0
@@ -256,7 +284,7 @@ func ClaimTermCoverageWindowed(text, claim string, windowSize int) (matched, tot
 		for ti := range terms {
 			t := terms[ti]
 			for w := start; w < end; w++ {
-				if strings.Contains(lowerSentences[w], t) {
+				if termMatches(sentenceWords[w], t) {
 					seen++
 					break
 				}
@@ -276,6 +304,18 @@ func ClaimTermCoverageWindowed(text, claim string, windowSize int) (matched, tot
 	return best, total
 }
 
+// shortDocSentenceThreshold is the sentence count below which
+// ClaimTermCoverageWindowed measures whole-document coverage instead of a
+// sliding window (#523). A short document (press release, abstract, brief
+// article) is inherently single-topic — the dilution risk windowing guards
+// against (#177) only shows up on long, broad pages — so windowing it can
+// only undercount a genuinely well-supported claim whose terms happen to
+// fall in different sentences (e.g. a vote count near the top of a press
+// release and the named dissenters near the bottom). Sized comfortably above
+// defaultClaimWindow so it covers documents a few times the window's length,
+// not just ones already smaller than a single window.
+const shortDocSentenceThreshold = 20
+
 // defaultClaimWindow is the sentence-window size for ClaimTermCoverageWindowed.
 // Sized so a claim's terms can co-occur within a focused passage (a few adjacent
 // sentences / a paragraph) without spanning an entire long article.
@@ -293,7 +333,10 @@ func SignificantTerms(text string) []string {
 }
 
 // claimTerms tokenizes a claim into distinct, lowercased significant terms,
-// dropping stop words and very short tokens so matching is meaningful.
+// dropping stop words and very short tokens so matching is meaningful. Purely
+// numeric tokens (e.g. a "9-3" vote count) are kept regardless of length: a
+// short number is often the single most claim-critical differentiator (#523),
+// unlike a short word, which is usually noise.
 func claimTerms(claim string) []string {
 	fields := strings.FieldsFunc(strings.ToLower(claim), func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
@@ -301,7 +344,8 @@ func claimTerms(claim string) []string {
 	seen := make(map[string]struct{}, len(fields))
 	var terms []string
 	for _, f := range fields {
-		if len(f) < 3 || claimStopWords[f] {
+		numeric := isNumericToken(f)
+		if !numeric && (len(f) < 3 || claimStopWords[f]) {
 			continue
 		}
 		if _, dup := seen[f]; dup {
@@ -311,6 +355,153 @@ func claimTerms(claim string) []string {
 		terms = append(terms, f)
 	}
 	return terms
+}
+
+// isNumericToken reports whether f consists entirely of digits.
+func isNumericToken(f string) bool {
+	if f == "" {
+		return false
+	}
+	for _, r := range f {
+		if !unicode.IsNumber(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// termSuffixes are inflectional endings stripped by stemTerm so a claim term
+// and its inflected form in the source text (e.g. claim "voted" vs. source
+// "vote") are recognized as the same word (#523). Ordered longest first so
+// "es"/"'s" don't shadow a longer suffix on the same token.
+var termSuffixes = []string{"'s", "ing", "ed", "es", "s"}
+
+// stemTerm strips a single trailing inflectional suffix from a lowercased
+// word, leaving numeric tokens untouched (stripping digits would corrupt
+// them). Best-effort and deliberately shallow — no real stemming, just enough
+// to bridge simple verb/noun inflection, which is what #523's repro needed.
+func stemTerm(w string) string {
+	if isNumericToken(w) {
+		return w
+	}
+	for _, suf := range termSuffixes {
+		if strings.HasSuffix(w, suf) && len(w) > len(suf)+2 {
+			return strings.TrimSuffix(w, suf)
+		}
+	}
+	return w
+}
+
+// wordSet tokenizes lowerText into a set of whole words plus each word's stem,
+// for exact (never substring) claim-term matching. A raw substring match on a
+// stemmed term (e.g. claim "proves" stemmed to "prov") would wrongly match
+// unrelated words that merely CONTAIN that fragment — "improved", "provide"
+// — which is exactly the false-positive a live wet-test against the real
+// arXiv:1304.1068 PDF text surfaced after the initial #523 fix. Matching
+// against whole tokens (and their stems) instead of raw substrings closes
+// that hole while still tolerating simple inflection.
+func wordSet(lowerText string) map[string]struct{} {
+	fields := strings.FieldsFunc(lowerText, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+	})
+	set := make(map[string]struct{}, len(fields)*2)
+	for _, f := range fields {
+		set[f] = struct{}{}
+		if stemmed := stemTerm(f); stemmed != f {
+			set[stemmed] = struct{}{}
+		}
+	}
+	return set
+}
+
+// termMatches reports whether claim term t appears as a whole word (or its
+// stem) in the set of words produced by wordSet, tolerating simple inflection
+// in either direction without falling back to substring containment.
+func termMatches(words map[string]struct{}, t string) bool {
+	if _, ok := words[t]; ok {
+		return true
+	}
+	stemmed := stemTerm(t)
+	if stemmed == t {
+		return false
+	}
+	_, ok := words[stemmed]
+	return ok
+}
+
+// referenceSectionHeader matches a line that starts an academic
+// bibliography/reference list, so that section can be excluded from claim-
+// coverage scoring — otherwise a claim's terms can spuriously match the
+// TITLES of a paper's own cited works rather than its actual body text
+// (#522), e.g. a "cancer" claim matching a cited cancer-nanotechnology paper's
+// title in the bibliography of a paper that is actually about something else
+// entirely.
+var referenceSectionHeader = regexp.MustCompile(`(?i)^\s*(references|bibliography|works cited|literature cited)\s*$`)
+
+// numberedReferenceLine matches a line opening a numbered bibliography entry
+// ("1. Smith, J. et al. ..."). Academic PDF text extraction routinely drops
+// the "References" header itself (confirmed against the arXiv:1304.1068 PDF
+// text underlying #522) while leaving the numbered entries intact, so the
+// header regex alone misses real-world cases.
+var numberedReferenceLine = regexp.MustCompile(`^\s*(\d{1,3})\.\s+\S`)
+
+// numberedReferenceListStart returns the line index where a numbered
+// bibliography (1., 2., 3., ... in order) begins, or -1 if none is found.
+// Requires the sequence 1→2→3 to appear IN ORDER (not necessarily on
+// consecutive lines, since a wrapped citation spans several) before
+// concluding it found a reference list rather than a coincidental "1." in
+// body prose — a bare "1." alone is far too common to trust on its own.
+func numberedReferenceListStart(lines []string) int {
+	startIdx := -1
+	expected := 1
+	for i, line := range lines {
+		m := numberedReferenceLine.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		n, err := strconv.Atoi(m[1])
+		if err != nil {
+			continue
+		}
+		switch n {
+		case expected:
+			if expected == 1 {
+				startIdx = i
+			}
+			expected++
+			if expected > 3 {
+				return startIdx
+			}
+		case 1:
+			startIdx = i
+			expected = 2
+		default:
+			startIdx = -1
+			expected = 1
+		}
+	}
+	return -1
+}
+
+// stripReferencesSection truncates text at the start of its
+// References/Bibliography section, if one is found, so downstream claim-
+// coverage scoring never scans citation-list text (#522). Detection is a
+// single linear pre-pass over lines — a header-line scan first (deliberately
+// not confused with an in-body mention like "see the references below,"
+// which does not stand alone on its own line the way a real section header
+// does), falling back to the numbered-reference-list shape when no explicit
+// header line survived extraction.
+func stripReferencesSection(text string) string {
+	lines := strings.Split(text, "\n")
+	for i, line := range lines {
+		if referenceSectionHeader.MatchString(line) {
+			return strings.Join(lines[:i], "\n")
+		}
+	}
+	if idx := numberedReferenceListStart(lines); idx >= 0 {
+		return strings.Join(lines[:idx], "\n")
+	}
+	return text
 }
 
 // splitSentences breaks text into sentences on ., !, ? boundaries while keeping

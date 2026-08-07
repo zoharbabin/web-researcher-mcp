@@ -86,7 +86,11 @@ func registerEconSearch(srv *mcp.Server, deps Dependencies) {
 		}
 
 		items := make([]map[string]any, 0, len(results))
+		var truncationWarning string
 		for _, r := range results {
+			if r.TruncationWarning != "" {
+				truncationWarning = r.TruncationWarning
+			}
 			items = append(items, econResultToMap(r, mode))
 		}
 
@@ -97,6 +101,9 @@ func registerEconSearch(srv *mcp.Server, deps Dependencies) {
 			"results":     items,
 			"provider":    providerName,
 			"trust":       untrustedContentTrust,
+		}
+		if truncationWarning != "" {
+			output["truncationWarning"] = truncationWarning
 		}
 		if input.SeriesID != "" {
 			output["seriesId"] = input.SeriesID

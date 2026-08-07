@@ -38,7 +38,7 @@ const (
 )
 
 type researchPanelInput struct {
-	Question    string   `json:"question" jsonschema:"The research question to pose identically to every panel member.,required"`
+	Query       string   `json:"query" jsonschema:"The research question to pose identically to every panel member.,required"`
 	Models      []string `json:"models,omitempty" jsonschema:"Optional explicit panel override, each '<provider>/<model-id>' (e.g. 'openrouter/anthropic/claude-sonnet-4-6', 'anthropic/claude-sonnet-4-6'). Only members whose provider credentials are configured are used. Omit to use the auto-detected default panel."`
 	MaxModels   int      `json:"max_models,omitempty" jsonschema:"Cap on panel size (default 3)."`
 	TimeoutSecs int      `json:"timeout_secs,omitempty" jsonschema:"Per-model timeout in seconds (default 30, range 5-120). A model that exceeds this is recorded as failed, not retried."`
@@ -57,9 +57,9 @@ func registerResearchPanel(srv *mcp.Server, deps Dependencies) {
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input researchPanelInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
 
-		question := strings.TrimSpace(input.Question)
+		question := strings.TrimSpace(input.Query)
 		if question == "" {
-			return toolError("question is required"), nil, nil
+			return toolError("query is required"), nil, nil
 		}
 		if len(question) > researchPanelMaxQuestion {
 			auditToolDenial(ctx, deps, "research_panel", time.Since(start), "question_too_large")
@@ -172,7 +172,7 @@ func registerResearchPanel(srv *mcp.Server, deps Dependencies) {
 		divergence := AnalyzeDivergence(responses)
 
 		output := map[string]any{
-			"question":   question,
+			"query":      question,
 			"panel":      panelItems,
 			"divergence": divergence,
 			"trust":      untrustedContentTrust,

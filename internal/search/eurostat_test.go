@@ -135,6 +135,87 @@ func TestEurostatMultiDimDecode(t *testing.T) {
 	}
 }
 
+// TestEurostatMultiSeriesTruncationWarning guards #536: une_rt_m-shaped cube
+// with 3 demographic series (Females/Males/Total) sorted alphabetically ahead
+// of truncation must not silently drop Males/Total when num_results is below
+// the full row count — the first row must carry a warning naming the gap, and
+// every one of the 3 series' labels must still be discoverable by reading the
+// warning (it names the series count, not the labels, since the labels vary
+// by dataset — the count is what proves the loss is visible, not silent).
+func TestEurostatMultiSeriesTruncationWarning(t *testing.T) {
+	// 3 sex categories (Females, Males, Total) × 2 months, time fastest:
+	// keys 0-1 = Females Jan-Feb, 2-3 = Males Jan-Feb, 4-5 = Total Jan-Feb.
+	p := newEurostatTestProvider(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{
+			"label":"Unemployment rate",
+			"id":["sex","time"],
+			"size":[3,2],
+			"value":{"0":3.2,"1":3.3,"2":2.9,"3":3.0,"4":3.1,"5":3.2},
+			"dimension":{
+				"sex":{"category":{"index":{"F":0,"M":1,"T":2},"label":{"F":"Females","M":"Males","T":"Total"}}},
+				"time":{"category":{"index":{"2024-01":0,"2024-02":1},"label":{"2024-01":"2024-01","2024-02":"2024-02"}}}
+			}
+		}`))
+	})
+	// Full cube has 3 series × 2 obs = 6 rows; ask for fewer than that.
+	res, err := p.Econ(context.Background(), EconSearchParams{SeriesID: "une_rt_m", NumResults: 2})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res) != 2 {
+		t.Fatalf("want 2 rows (respecting num_results), got %d", len(res))
+	}
+	// "Females" sorts first alphabetically — the pre-fix bug kept only it.
+	if !strings.Contains(res[0].Title, "Females") {
+		t.Fatalf("expected the alphabetically-first series (Females) to be kept, got title %q", res[0].Title)
+	}
+	if res[0].TruncationWarning == "" {
+		t.Fatal("expected TruncationWarning on the first row when a multi-series cube is truncated below its full row count")
+	}
+	if !strings.Contains(res[0].TruncationWarning, "3 series") {
+		t.Errorf("TruncationWarning should name the total distinct-series count (3), got: %q", res[0].TruncationWarning)
+	}
+	for _, r := range res[1:] {
+		if r.TruncationWarning != "" {
+			t.Errorf("TruncationWarning must appear only on the first row, found on a later row: %+v", r)
+		}
+	}
+}
+
+// TestEurostatNoWarningWhenSingleSeries guards the fail-open half of #536: a
+// single-series cube (the common case — a pinned geo/sex/age with no
+// breakdown dimension varying) truncated below its full row count must NOT
+// carry a warning, since there is no other series being silently dropped.
+func TestEurostatNoWarningWhenSingleSeries(t *testing.T) {
+	// One series (DE only) × 5 months — all rows share the same Title.
+	p := newEurostatTestProvider(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{
+			"label":"Unemployment rate",
+			"id":["geo","time"],
+			"size":[1,5],
+			"value":{"0":3.0,"1":3.1,"2":3.2,"3":3.3,"4":3.4},
+			"dimension":{
+				"geo":{"category":{"index":{"DE":0},"label":{"DE":"Germany"}}},
+				"time":{"category":{"index":{"2024-01":0,"2024-02":1,"2024-03":2,"2024-04":3,"2024-05":4},"label":{}}}
+			}
+		}`))
+	})
+	// Full series has 5 observations; ask for fewer than that — a normal,
+	// intentional "give me the most recent N" truncation, not a series drop.
+	res, err := p.Econ(context.Background(), EconSearchParams{SeriesID: "une_rt_m", Country: "DE", NumResults: 2})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res) != 2 {
+		t.Fatalf("want 2 rows, got %d", len(res))
+	}
+	for _, r := range res {
+		if r.TruncationWarning != "" {
+			t.Errorf("single-series truncation must not carry a warning, got: %+v", r)
+		}
+	}
+}
+
 func TestEurostatSearch(t *testing.T) {
 	p := newEurostatTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.URL.Path, "/toc") {

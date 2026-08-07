@@ -193,7 +193,7 @@ func verifyOneRecommendation(ctx context.Context, deps Dependencies, rec recomme
 		}
 	}
 
-	// Corroboration search (#246): query independent journalism and tech lenses
+	// Corroboration search (#246): query independent news and tech lenses
 	// to find sources that agree, disagree, or are silent about this recommendation
 	// in the context of the caller's claim. Skipped when no claim is provided or
 	// when the item has no title to search for. Fail-open — a provider error or
@@ -325,15 +325,14 @@ func detectCorporateOwnershipForURL(ctx context.Context, deps Dependencies, rawU
 // them resistant to brand-controlled or sponsored content.
 var genericCorroborationLenses = []string{"news", "tech"}
 
-// corporateGovLegalKeywords trigger routing to the journalism lens in addition
-// to the generic set (see #434 Finding D). Despite its name, lenses/journalism.json
-// is scoped to government/public-record/corporate-filing domains (sec.gov,
+// corporateGovLegalKeywords trigger routing to the investigative_records lens
+// in addition to the generic set (see #434 Finding D). lenses/investigative_records.json
+// (renamed from journalism in #535, since it was never about news media) is
+// scoped to government/public-record/corporate-filing domains (sec.gov,
 // courtlistener.com, opencorporates.com, data.gov, census.gov, federalregister.gov,
 // opensecrets.org, foia.gov, congress.gov, gao.gov) — the right lens for claims
 // about corporate, governmental, legal, or financial matters, not generic
-// tech/product claims. The lens's file/name is left untouched (it is also a
-// public, user-facing lens name exercised by internal/search/geo_eval_live_test.go's
-// gold-set containment tests) — only this selection logic changes.
+// tech/product claims.
 var corporateGovLegalKeywords = []string{
 	"sec filing", "10-k", "10-q", "8-k", "proxy advisory", "proxy advisor",
 	"shareholder", "securities", "lawsuit", "litigation", "court", "regulator",
@@ -345,13 +344,13 @@ var corporateGovLegalKeywords = []string{
 // selectCorroborationLenses classifies claim+title text and returns the lens
 // set to search (#434 Finding D): generic/tech/product claims use
 // {news, tech}; claims about corporate/gov/legal/financial matters
-// additionally route to journalism.
+// additionally route to investigative_records.
 func selectCorroborationLenses(title, claim string) []string {
 	lenses := append([]string{}, genericCorroborationLenses...)
 	text := strings.ToLower(title + " " + claim)
 	for _, kw := range corporateGovLegalKeywords {
 		if strings.Contains(text, kw) {
-			return append(lenses, "journalism")
+			return append(lenses, "investigative_records")
 		}
 	}
 	return lenses
@@ -466,12 +465,12 @@ var verifyRecommendationOutputSchema = map[string]any{
 					"httpStatus": map[string]any{"type": "integer", "description": "Live HTTP status for the URL (0 = unreachable/timeout)."},
 					"corroborationSearches": map[string]any{
 						"type":        "array",
-						"description": "Present when the `claim` field was supplied. One entry per corroboration lens, selected by classifying the claim/title text: generic/tech/product claims search {news, tech}; claims about corporate/government/legal/financial matters additionally search {journalism} (gov/public-record/filing sources — sec.gov, courtlistener.com, data.gov, ...). Shows whether independent sources agree, disagree, or are silent about this recommendation in the context of the claim.",
+						"description": "Present when the `claim` field was supplied. One entry per corroboration lens, selected by classifying the claim/title text: generic/tech/product claims search {news, tech}; claims about corporate/government/legal/financial matters additionally search {investigative_records} (gov/public-record/filing sources — sec.gov, courtlistener.com, data.gov, ...). Shows whether independent sources agree, disagree, or are silent about this recommendation in the context of the claim.",
 						"items": map[string]any{
 							"type": "object",
 							"properties": map[string]any{
 								"query":         map[string]any{"type": "string", "description": "The site-scoped query issued against this lens."},
-								"lens":          map[string]any{"type": "string", "description": "Lens name used (e.g. 'news', 'tech', 'journalism')."},
+								"lens":          map[string]any{"type": "string", "description": "Lens name used (e.g. 'news', 'tech', 'investigative_records')."},
 								"resultCount":   map[string]any{"type": "integer", "description": "Total results returned by the search."},
 								"agreeCount":    map[string]any{"type": "integer", "description": "Results whose snippet addresses the recommendation positively in context of the claim."},
 								"disagreeCount": map[string]any{"type": "integer", "description": "Results whose snippet or title contradicts or does not address the recommendation." + languageHeuristicCaveat},

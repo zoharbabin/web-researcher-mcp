@@ -43,6 +43,82 @@ func TestCreateAndGet(t *testing.T) {
 	}
 }
 
+// TestSetTotalStepsEstimatePersistsAcrossRebuild verifies #525: once set, the
+// estimate survives a later AppendStep — which rebuilds the index from the
+// stored session — even though that later call carries no estimate itself.
+func TestSetTotalStepsEstimatePersistsAcrossRebuild(t *testing.T) {
+	m := newTestManager(5*time.Minute, 10)
+	defer m.Close()
+
+	idx, err := m.Create("tenant-1", "u1")
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	if err := m.SetTotalStepsEstimate("tenant-1", "u1", idx.ID, 5); err != nil {
+		t.Fatalf("SetTotalStepsEstimate failed: %v", err)
+	}
+
+	got, ok := m.GetIndex("tenant-1", "u1", idx.ID)
+	if !ok || got.TotalStepsEstimate != 5 {
+		t.Fatalf("expected TotalStepsEstimate=5 immediately after set, got %+v", got)
+	}
+
+	idx2, err := m.AppendStep("tenant-1", "u1", idx.ID, ResearchStep{StepNumber: 2, Description: "step 2, no estimate"}, nil, "")
+	if err != nil {
+		t.Fatalf("AppendStep failed: %v", err)
+	}
+	if idx2.TotalStepsEstimate != 5 {
+		t.Errorf("expected TotalStepsEstimate=5 to survive AppendStep's index rebuild, got %d", idx2.TotalStepsEstimate)
+	}
+}
+
+// TestSessionIndexTotalStepsEstimateIsolatedPerSession proves rule 1.2 (#525,
+// issue #549): TotalStepsEstimate is per-session state keyed by
+// tenantID+userID+sessionID via the existing Manager, not a package-level
+// cache — setting it on one (tenant,user) pair's session must never be
+// visible on a different pair's session, even with the identical step
+// pattern.
+func TestSessionIndexTotalStepsEstimateIsolatedPerSession(t *testing.T) {
+	m := newTestManager(5*time.Minute, 10)
+	defer m.Close()
+
+	idxA, err := m.Create("tenant-A", "u1")
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	idxB, err := m.Create("tenant-B", "u2")
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	if err := m.SetTotalStepsEstimate("tenant-A", "u1", idxA.ID, 7); err != nil {
+		t.Fatalf("SetTotalStepsEstimate failed: %v", err)
+	}
+
+	gotA, ok := m.GetIndex("tenant-A", "u1", idxA.ID)
+	if !ok || gotA.TotalStepsEstimate != 7 {
+		t.Fatalf("expected tenant-A's session to have TotalStepsEstimate=7, got %+v", gotA)
+	}
+
+	gotB, ok := m.GetIndex("tenant-B", "u2", idxB.ID)
+	if !ok {
+		t.Fatalf("expected tenant-B's session to exist")
+	}
+	if gotB.TotalStepsEstimate != 0 {
+		t.Errorf("tenant-B's session must not see tenant-A's TotalStepsEstimate, got %d", gotB.TotalStepsEstimate)
+	}
+}
+
+func TestSetTotalStepsEstimateNonExistentSession(t *testing.T) {
+	m := newTestManager(5*time.Minute, 10)
+	defer m.Close()
+
+	if err := m.SetTotalStepsEstimate("tenant-1", "u1", "nonexistent-id", 5); err == nil {
+		t.Error("expected error for nonexistent session")
+	}
+}
+
 func TestGetNonExistent(t *testing.T) {
 	m := newTestManager(5*time.Minute, 10)
 	defer m.Close()

@@ -220,6 +220,12 @@ func (s *SearchAPIProvider) doPatentSearch(ctx context.Context, params PatentSea
 	if query == "" {
 		query = "*"
 	}
+	if params.CPCCode != "" {
+		// Google Patents' own query syntax (not a SearchAPI request parameter)
+		// recognizes CPC=<code> as a classification filter within `q` — see
+		// https://www.google.com/advanced_patent_search (#530).
+		query += " CPC=" + params.CPCCode
+	}
 	q.Set("q", query)
 
 	if params.NumResults > 0 {

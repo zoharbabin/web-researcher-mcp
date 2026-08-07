@@ -3,15 +3,19 @@ package session
 import "time"
 
 type Session struct {
-	ID              string           `json:"id"`
-	TenantID        string           `json:"tenantId"`
-	CreatedByUserID string           `json:"createdByUserId,omitempty"`
-	ResearchGoal    string           `json:"researchGoal,omitempty"`
-	CreatedAt       time.Time        `json:"createdAt"`
-	LastUsed        time.Time        `json:"lastUsed"`
-	Steps           []ResearchStep   `json:"steps"`
-	Sources         []ResearchSource `json:"sources"`
-	Gaps            []KnowledgeGap   `json:"gaps"`
+	ID              string `json:"id"`
+	TenantID        string `json:"tenantId"`
+	CreatedByUserID string `json:"createdByUserId,omitempty"`
+	ResearchGoal    string `json:"researchGoal,omitempty"`
+	// TotalStepsEstimate is the caller's latest estimate of total steps needed,
+	// set via sequential_search's totalStepsEstimate field and persisted across
+	// steps so it survives even when a later step omits it (#525).
+	TotalStepsEstimate int              `json:"totalStepsEstimate,omitempty"`
+	CreatedAt          time.Time        `json:"createdAt"`
+	LastUsed           time.Time        `json:"lastUsed"`
+	Steps              []ResearchStep   `json:"steps"`
+	Sources            []ResearchSource `json:"sources"`
+	Gaps               []KnowledgeGap   `json:"gaps"`
 	// Outcomes is the bounded per-session record of tool outcomes (provider
 	// attempt/success + error kind), feeding the cross-call error-pattern and
 	// provider-stats aggregation surfaced in get_research_session (#99). Capped
@@ -82,6 +86,14 @@ type ResearchSource struct {
 	URL       string `json:"url"`
 	Title     string `json:"title,omitempty"`
 	Relevance string `json:"relevance,omitempty"`
+	// Author/Date/DOI carry bibliographic metadata from the originating search
+	// result (e.g. search.AcademicResult) when the tool that auto-tracks this
+	// source has it available, so format_bibliography on a session produces
+	// citation-complete entries without requiring the caller to pass sources
+	// explicitly (#532). Omitted when the source type has no such metadata.
+	Author string `json:"author,omitempty"`
+	Date   string `json:"date,omitempty"`
+	DOI    string `json:"doi,omitempty"`
 	// FoundInStep is the 1-indexed sequential_search step that surfaced this
 	// source, or omitted entirely when the source was not tied to a numbered step
 	// (e.g. added via a web_search carrying only a sessionId). Steps are 1-indexed,
@@ -105,19 +117,22 @@ type KnowledgeGap struct {
 }
 
 type SessionIndex struct {
-	ID              string           `json:"id"`
-	TenantID        string           `json:"tenantId"`
-	CreatedByUserID string           `json:"createdByUserId,omitempty"`
-	ResearchGoal    string           `json:"researchGoal"`
-	CreatedAt       time.Time        `json:"createdAt"`
-	LastUsed        time.Time        `json:"lastUsed"`
-	StepCount       int              `json:"stepCount"`
-	Summary         string           `json:"summary"`
-	StepIndex       []StepIndexEntry `json:"stepIndex"`
-	LastSteps       []ResearchStep   `json:"lastSteps"`
-	ActiveGaps      []KnowledgeGap   `json:"activeGaps"`
-	Sources         []ResearchSource `json:"sources"`
-	Warning         string           `json:"warning,omitempty"`
+	ID              string `json:"id"`
+	TenantID        string `json:"tenantId"`
+	CreatedByUserID string `json:"createdByUserId,omitempty"`
+	ResearchGoal    string `json:"researchGoal"`
+	// TotalStepsEstimate mirrors Session.TotalStepsEstimate (#525) — the latest
+	// caller-supplied estimate, persisted so it survives steps that omit it.
+	TotalStepsEstimate int              `json:"totalStepsEstimate,omitempty"`
+	CreatedAt          time.Time        `json:"createdAt"`
+	LastUsed           time.Time        `json:"lastUsed"`
+	StepCount          int              `json:"stepCount"`
+	Summary            string           `json:"summary"`
+	StepIndex          []StepIndexEntry `json:"stepIndex"`
+	LastSteps          []ResearchStep   `json:"lastSteps"`
+	ActiveGaps         []KnowledgeGap   `json:"activeGaps"`
+	Sources            []ResearchSource `json:"sources"`
+	Warning            string           `json:"warning,omitempty"`
 	// ErrorPatterns surfaces recurring error kinds (count >= ErrorPatternMinCount)
 	// across the session; ProviderStats reports per-provider attempt/success
 	// counts. Both are derived from Session.Outcomes at index-build time (#99).

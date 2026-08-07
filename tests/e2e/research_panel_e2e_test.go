@@ -60,14 +60,14 @@ func TestResearchPanel_E2E(t *testing.T) {
 		}
 	})
 
-	t.Run("RejectsEmptyQuestion", func(t *testing.T) {
+	t.Run("RejectsEmptyQuery", func(t *testing.T) {
 		h.send(jsonRPCRequest{
 			JSONRPC: "2.0",
 			ID:      3,
 			Method:  "tools/call",
 			Params: map[string]interface{}{
 				"name":      "research_panel",
-				"arguments": map[string]interface{}{"question": "  "},
+				"arguments": map[string]interface{}{"query": "  "},
 			},
 		})
 		resp := h.readResponse()
@@ -81,7 +81,7 @@ func TestResearchPanel_E2E(t *testing.T) {
 			t.Fatalf("parse result: %v", err)
 		}
 		if !result.IsError {
-			t.Errorf("research_panel should reject a blank question with a tool error")
+			t.Errorf("research_panel should reject a blank query with a tool error")
 		}
 	})
 

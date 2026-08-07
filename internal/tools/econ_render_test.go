@@ -3,6 +3,7 @@ package tools
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
@@ -171,5 +172,94 @@ func TestEconSearchFREDMissingValueSentinel(t *testing.T) {
 	}
 	if avail, ok := normalRow["available"]; !ok || avail != true {
 		t.Errorf("a normal observation must carry available:true, got %v (present=%v)", avail, ok)
+	}
+}
+
+// TestEconSearchEurostatTruncationWarning is an end-to-end regression test for
+// #536: a Eurostat observations() call against a 3-series (demographic
+// breakdown) cube with num_results below the full row count must surface a
+// top-level `truncationWarning` on econ_search's response — not silently keep
+// only the alphabetically-first series with no signal.
+func TestEconSearchEurostatTruncationWarning(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{
+			"label":"Unemployment rate",
+			"id":["sex","time"],
+			"size":[3,2],
+			"value":{"0":3.2,"1":3.3,"2":2.9,"3":3.0,"4":3.1,"5":3.2},
+			"dimension":{
+				"sex":{"category":{"index":{"F":0,"M":1,"T":2},"label":{"F":"Females","M":"Males","T":"Total"}}},
+				"time":{"category":{"index":{"2024-01":0,"2024-02":1},"label":{"2024-01":"2024-01","2024-02":"2024-02"}}}
+			}
+		}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	eurostat := search.NewEurostatProvider(search.Deps{
+		HTTPClient: srv.Client(),
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+	})
+	eurostat.SetBaseURLs(srv.URL+"/data", srv.URL+"/toc")
+
+	deps := setupTestDeps()
+	deps.EconProviders = map[string]search.EconProvider{"eurostat": eurostat}
+
+	out, res := callTool(t, deps, "econ_search", map[string]any{"series_id": "une_rt_m", "provider": "eurostat", "num_results": 2})
+	if res.IsError {
+		t.Fatalf("unexpected error result: %v", res.Content)
+	}
+
+	warning, ok := out["truncationWarning"].(string)
+	if !ok || warning == "" {
+		t.Fatalf("expected a top-level truncationWarning, got %v", out["truncationWarning"])
+	}
+	if !strings.Contains(warning, "3 series") {
+		t.Errorf("truncationWarning should name the total distinct-series count, got: %q", warning)
+	}
+
+	results, ok := out["results"].([]any)
+	if !ok || len(results) != 2 {
+		t.Fatalf("want 2 rows (respecting num_results), got %v", out["results"])
+	}
+}
+
+// TestEconSearchNoTruncationWarningWhenSingleSeries guards the fail-open half
+// of #536: a single-series Eurostat observation set truncated below its full
+// row count (the ordinary "give me the latest N" case) must not carry
+// truncationWarning at all.
+func TestEconSearchNoTruncationWarningWhenSingleSeries(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{
+			"label":"Unemployment rate",
+			"id":["geo","time"],
+			"size":[1,5],
+			"value":{"0":3.0,"1":3.1,"2":3.2,"3":3.3,"4":3.4},
+			"dimension":{
+				"geo":{"category":{"index":{"DE":0},"label":{"DE":"Germany"}}},
+				"time":{"category":{"index":{"2024-01":0,"2024-02":1,"2024-03":2,"2024-04":3,"2024-05":4},"label":{}}}
+			}
+		}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	eurostat := search.NewEurostatProvider(search.Deps{
+		HTTPClient: srv.Client(),
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+	})
+	eurostat.SetBaseURLs(srv.URL+"/data", srv.URL+"/toc")
+
+	deps := setupTestDeps()
+	deps.EconProviders = map[string]search.EconProvider{"eurostat": eurostat}
+
+	out, res := callTool(t, deps, "econ_search", map[string]any{"series_id": "une_rt_m", "provider": "eurostat", "country": "DE", "num_results": 2})
+	if res.IsError {
+		t.Fatalf("unexpected error result: %v", res.Content)
+	}
+	if _, present := out["truncationWarning"]; present {
+		t.Errorf("single-series truncation must not carry truncationWarning, got %v", out["truncationWarning"])
 	}
 }

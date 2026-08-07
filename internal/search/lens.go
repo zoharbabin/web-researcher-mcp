@@ -137,6 +137,11 @@ func (l *LensProvider) buildQuery(params PatentSearchParams) []byte {
 			"term": map[string]any{"jurisdiction": strings.ToUpper(params.PatentOffice)},
 		})
 	}
+	if params.CPCCode != "" {
+		must = append(must, map[string]any{
+			"term": map[string]any{"class_cpc.symbol": params.CPCCode},
+		})
+	}
 
 	dateRange := map[string]any{}
 	if params.YearFrom > 0 {

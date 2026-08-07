@@ -20,6 +20,9 @@ type Manager interface {
 	AppendStep(tenantID, userID, sessionID string, step ResearchStep, gap *KnowledgeGap, summary string) (*SessionIndex, error)
 	// SetResearchGoal sets the goal on an existing session.
 	SetResearchGoal(tenantID, userID, sessionID, goal string) error
+	// SetTotalStepsEstimate persists the latest total-steps estimate on an
+	// existing session (#525), so it survives later steps that omit the field.
+	SetTotalStepsEstimate(tenantID, userID, sessionID string, estimate int) error
 	// AddSources appends de-duplicated sources to a session.
 	AddSources(tenantID, userID, sessionID string, sources []ResearchSource) error
 	// RecordOutcome appends a bounded tool-outcome event (provider attempt/success

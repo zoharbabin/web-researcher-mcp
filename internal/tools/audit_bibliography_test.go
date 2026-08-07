@@ -91,6 +91,47 @@ func TestAuditBibliography_RetractedDOI(t *testing.T) {
 	}
 }
 
+// TestAuditBibliography_FrontiersFullURLStripsViewerSuffix verifies #526: a
+// Frontiers article URL ending in "/full" must resolve on the real DOI, not a
+// mangled "<doi>/full" string that would falsely report as not-found.
+func TestAuditBibliography_FrontiersFullURLStripsViewerSuffix(t *testing.T) {
+	var gotDOI string
+	crossref := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotDOI = r.URL.Path
+		_, _ = w.Write([]byte(`{"message":{}}`))
+	}))
+	defer crossref.Close()
+
+	deps := setupTestDeps()
+	rr := search.NewCrossrefRetractionResolver("t@e.com", search.Deps{
+		HTTPClient: crossref.Client(),
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+	})
+	rr.SetBaseURL(crossref.URL)
+	deps.RetractionResolver = rr
+
+	out, isErr := callAudit(t, deps, map[string]any{
+		"entries": []any{map[string]any{
+			"url":   "https://www.frontiersin.org/articles/10.3389/fpsyg.2020.01234/full",
+			"title": "A Frontiers Article",
+		}},
+	})
+	if isErr {
+		t.Fatal("unexpected tool error")
+	}
+	if !strings.Contains(gotDOI, "10.3389/fpsyg.2020.01234") {
+		t.Fatalf("Crossref lookup path %q must carry the bare DOI, not the /full-suffixed URL", gotDOI)
+	}
+	if strings.Contains(gotDOI, "/full") {
+		t.Errorf("Crossref lookup path %q must NOT include the trailing /full viewer suffix", gotDOI)
+	}
+	entries := out["entries"].([]any)
+	e0 := entries[0].(map[string]any)
+	if e0["doi"] != "10.3389/fpsyg.2020.01234" {
+		t.Errorf("extracted doi = %v, want the bare DOI with no /full suffix", e0["doi"])
+	}
+}
+
 func TestAuditBibliography_DeadLinkWithArchive(t *testing.T) {
 	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(404) }))
 	defer origin.Close()

@@ -216,6 +216,13 @@ type EconResult struct {
 	// provider doesn't supply the signal (observation mode, non-FRED providers).
 	Popularity int    `json:"popularity,omitempty"`
 	Source     string `json:"source"`
+	// TruncationWarning is set on the first row only when a provider's
+	// per-request decode detects that a multi-series observations result was
+	// truncated to NumResults in a way that structurally favors some series
+	// over others (Eurostat: a flat alphabetical-by-title sort ahead of the
+	// truncation — see #536). A caller lifts it into one top-level field;
+	// empty for every provider/mode that has no such bias (fail-open).
+	TruncationWarning string `json:"-"`
 }
 
 // EconProviderConfig holds economic-data provider auth.

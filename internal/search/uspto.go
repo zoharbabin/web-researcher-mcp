@@ -104,6 +104,9 @@ func (u *USPTOProvider) doSearch(ctx context.Context, params PatentSearchParams)
 	results := make([]PatentResult, 0, len(response.PatentFileWrapperDataBag))
 	for _, item := range response.PatentFileWrapperDataBag {
 		meta := item.ApplicationMetaData
+		if params.CPCCode != "" && !matchesCPCCode(meta.CPCClassificationBag, params.CPCCode) {
+			continue
+		}
 		patentNum := meta.PatentNumber
 		appNum := item.ApplicationNumberText
 
@@ -144,6 +147,11 @@ func (u *USPTOProvider) doSearch(ctx context.Context, params PatentSearchParams)
 		results = append(results, result)
 	}
 
+	// USPTO's PEDS API `q` full-text search has no native filing-date range
+	// parameter (unlike EPO/Lens/searchapi), so year_from/year_to is enforced
+	// client-side on the Filed date here instead (#528).
+	results = filterByFiledYear(results, params.YearFrom, params.YearTo)
+
 	// Defensive cap: the USPTO API can return more rows than requested (the
 	// `rows` param is not always honored), so enforce the caller's limit here
 	// to match every other provider's contract.
@@ -151,6 +159,59 @@ func (u *USPTOProvider) doSearch(ctx context.Context, params PatentSearchParams)
 		results = results[:n]
 	}
 	return results, nil
+}
+
+// filterByFiledYear drops results whose Filed date falls outside
+// [yearFrom, yearTo] (either bound may be zero/unset). A result whose Filed
+// date is missing or unparseable is kept rather than dropped — there is no
+// evidence it's out of range, so excluding it would be a false negative, not
+// a correctness fix.
+func filterByFiledYear(results []PatentResult, yearFrom, yearTo int) []PatentResult {
+	if yearFrom == 0 && yearTo == 0 {
+		return results
+	}
+	out := results[:0]
+	for _, r := range results {
+		if year, ok := parseFiledYear(r.Filed); ok {
+			if yearFrom > 0 && year < yearFrom {
+				continue
+			}
+			if yearTo > 0 && year > yearTo {
+				continue
+			}
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+// parseFiledYear extracts the leading 4-digit year from a Filed date string
+// (USPTO's filingDate is "YYYY-MM-DD").
+func parseFiledYear(filed string) (int, bool) {
+	if len(filed) < 4 {
+		return 0, false
+	}
+	year, err := strconv.Atoi(filed[:4])
+	if err != nil {
+		return 0, false
+	}
+	return year, true
+}
+
+// matchesCPCCode reports whether any of a result's CPC classification symbols
+// starts with the requested code (e.g. requesting "G06F" matches the
+// symbol "G06F17/30"). USPTO's PEDS API `q` full-text search has no CPC
+// query parameter (unlike EPO's cpc= and Lens's class_cpc.symbol), so
+// cpc_code is enforced client-side here, the same pattern as #528's
+// year-range filter (#530).
+func matchesCPCCode(symbols []string, code string) bool {
+	code = strings.ToUpper(code)
+	for _, s := range symbols {
+		if strings.HasPrefix(strings.ToUpper(s), code) {
+			return true
+		}
+	}
+	return false
 }
 
 func (u *USPTOProvider) assigneeFromAssignments(assignments []usptoAssignment) string {

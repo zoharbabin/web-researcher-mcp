@@ -95,7 +95,7 @@ func TestResearchPanelEvalAccuracy(t *testing.T) {
 	for _, g := range researchPanelGoldSet {
 		res, err := client.CallTool(ctx, &mcp.CallToolParams{
 			Name:      "research_panel",
-			Arguments: map[string]any{"question": g.question, "use_cache": false},
+			Arguments: map[string]any{"query": g.question, "use_cache": false},
 		})
 		if err != nil {
 			t.Fatalf("%s: CallTool error: %v", g.name, err)

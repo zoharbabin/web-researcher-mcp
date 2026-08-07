@@ -250,8 +250,13 @@ type HintAction struct {
 // ZeroResultHints is byte-identical — see TestBuildZeroResultHints_EpistemicWarning.
 const epistemicZeroResultWarning = "Zero results do not confirm absence. The queried fact may exist and be unreachable by the current query or provider. Do not assert non-existence from this result."
 
-// buildZeroResultHints constructs hints explaining why a search returned nothing.
-func buildZeroResultHints(provider string, params map[string]string, alternatives []string) *ZeroResultHints {
+// buildZeroResultHints constructs hints explaining why a search returned
+// nothing. requiredKeys (optional, #537) names params in the map that are
+// mandatory for the tool call — e.g. monarch_search's operation — so they are
+// still surfaced in filtersApplied for context but never suggested as a
+// remove_filter action, since removing a required param isn't a valid
+// recovery step.
+func buildZeroResultHints(provider string, params map[string]string, alternatives []string, requiredKeys ...string) *ZeroResultHints {
 	hints := &ZeroResultHints{
 		Reason:           "no_match",
 		EpistemicWarning: epistemicZeroResultWarning,
@@ -260,10 +265,18 @@ func buildZeroResultHints(provider string, params map[string]string, alternative
 		hints.ProvidersAttempted = []string{provider}
 	}
 
+	required := make(map[string]bool, len(requiredKeys))
+	for _, k := range requiredKeys {
+		required[k] = true
+	}
+
 	if len(params) > 0 {
 		hints.FiltersApplied = params
 		hints.Reason = "filters_too_restrictive"
 		for k := range params {
+			if required[k] {
+				continue
+			}
 			hints.SuggestedActions = append(hints.SuggestedActions, HintAction{
 				Action:    "remove_filter",
 				Parameter: k,

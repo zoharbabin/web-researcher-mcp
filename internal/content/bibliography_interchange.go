@@ -80,12 +80,22 @@ func risValue(s string) string {
 
 // formatCSLJSONList renders entries as a CSL-JSON array (the format citation.js,
 // Zotero's "Better CSL JSON", and pandoc consume). Ordered by cite key; the
-// "id" is that key so the array is stable and each item is addressable.
+// "id" is that key, suffixed on collision (a/b/…, same as formatBibTeXList) so
+// two entries never share an id and silently shadow one another in a tool that
+// indexes CSL-JSON by id (#531).
 func formatCSLJSONList(entries []BibEntry) string {
 	ordered := orderByCiteKey(entries)
+	used := make(map[string]int, len(ordered))
 	items := make([]string, 0, len(ordered))
 	for _, e := range ordered {
-		items = append(items, formatCSLJSON(e))
+		key := BibTeXKey(e.Author, e.Date, e.Title)
+		if n := used[key]; n > 0 {
+			used[key] = n + 1
+			key += collisionSuffix(n)
+		} else {
+			used[key] = 1
+		}
+		items = append(items, formatCSLJSON(e, key))
 	}
 	if len(items) == 0 {
 		return "[]"
@@ -98,12 +108,14 @@ func formatCSLJSONList(entries []BibEntry) string {
 // sources or "article-journal" when a DOI is present (DOIs are primarily assigned
 // to scholarly works), a title, an author array of {family,given|literal}, an
 // "issued" date-parts year, container-title for the site/journal, DOI, and URL.
-// Values are JSON-escaped.
-func formatCSLJSON(e BibEntry) string {
+// Values are JSON-escaped. id is the caller-resolved (collision-free) cite key,
+// not recomputed here, so formatCSLJSONList's suffixing is the single source of
+// truth for it (#531).
+func formatCSLJSON(e BibEntry, id string) string {
 	var fields []string
 	add := func(s string) { fields = append(fields, "    "+s) }
 
-	add(`"id": ` + jsonString(BibTeXKey(e.Author, e.Date, e.Title)))
+	add(`"id": ` + jsonString(id))
 	if e.DOI != "" {
 		add(`"type": "article-journal"`)
 	} else {

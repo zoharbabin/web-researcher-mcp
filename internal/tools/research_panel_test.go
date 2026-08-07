@@ -19,7 +19,7 @@ func TestResearchPanelTool(t *testing.T) {
 
 	res, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "research_panel",
-		Arguments: map[string]any{"question": "What is the sky's color?", "use_cache": false},
+		Arguments: map[string]any{"query": "What is the sky's color?", "use_cache": false},
 	})
 	if err != nil {
 		t.Fatalf("CallTool failed: %v", err)
@@ -32,8 +32,8 @@ func TestResearchPanelTool(t *testing.T) {
 	if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &out); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if out["question"] != "What is the sky's color?" {
-		t.Errorf("expected question echoed, got %v", out["question"])
+	if out["query"] != "What is the sky's color?" {
+		t.Errorf("expected query echoed, got %v", out["query"])
 	}
 	panel, _ := out["panel"].([]any)
 	if len(panel) != 2 {
@@ -65,7 +65,7 @@ func TestResearchPanelPartialFailure(t *testing.T) {
 
 	res, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "research_panel",
-		Arguments: map[string]any{"question": "What color is the sky?", "use_cache": false},
+		Arguments: map[string]any{"query": "What color is the sky?", "use_cache": false},
 	})
 	if err != nil {
 		t.Fatalf("CallTool failed: %v", err)
@@ -122,7 +122,7 @@ func TestResearchPanelNoSynthesisCall(t *testing.T) {
 
 	res, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "research_panel",
-		Arguments: map[string]any{"question": "What color is the sky?", "use_cache": false},
+		Arguments: map[string]any{"query": "What color is the sky?", "use_cache": false},
 	})
 	if err != nil || res.IsError {
 		t.Fatalf("CallTool failed: err=%v isError=%v content=%v", err, res.IsError, res.Content)
@@ -141,7 +141,7 @@ func TestResearchPanelEmptyQuestion(t *testing.T) {
 
 	res, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "research_panel",
-		Arguments: map[string]any{"question": "  "},
+		Arguments: map[string]any{"query": "  "},
 	})
 	if err != nil {
 		t.Fatalf("CallTool failed: %v", err)
@@ -164,7 +164,7 @@ func TestResearchPanelQuestionTooLarge(t *testing.T) {
 	}
 	res, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "research_panel",
-		Arguments: map[string]any{"question": string(huge)},
+		Arguments: map[string]any{"query": string(huge)},
 	})
 	if err != nil {
 		t.Fatalf("CallTool failed: %v", err)
@@ -251,7 +251,7 @@ func TestResearchPanelMultiInstanceIsolation(t *testing.T) {
 
 	resA, err := sessionA.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "research_panel",
-		Arguments: map[string]any{"question": "isolation check", "use_cache": false},
+		Arguments: map[string]any{"query": "isolation check", "use_cache": false},
 	})
 	if err != nil || resA.IsError {
 		t.Fatalf("server A call failed: err=%v isError=%v content=%v", err, resA.IsError, resA.Content)
@@ -270,7 +270,7 @@ func TestResearchPanelMultiInstanceIsolation(t *testing.T) {
 
 	resB, err := sessionB.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "research_panel",
-		Arguments: map[string]any{"question": "isolation check", "use_cache": false},
+		Arguments: map[string]any{"query": "isolation check", "use_cache": false},
 	})
 	if err != nil || resB.IsError {
 		t.Fatalf("server B call failed: err=%v isError=%v content=%v", err, resB.IsError, resB.Content)

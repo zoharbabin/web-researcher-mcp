@@ -52,13 +52,14 @@ var webSearchOutputSchema = map[string]any{
 			"items": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"title":       map[string]any{"type": "string"},
-					"url":         map[string]any{"type": "string"},
-					"snippet":     map[string]any{"type": "string"},
-					"displayLink": map[string]any{"type": "string"},
-					"publishedAt": map[string]any{"type": "string", "description": "RFC3339 publish timestamp, present only when the provider's response carried a date (Google, Tavily, Exa, SearXNG, HackerNews). Never inferred from snippet/title text."},
-					"claimSignal": map[string]any{"type": "string", "description": "Most claim-relevant snippet sentence (present per result only when the `claim` param was supplied and matched). Evidence, not a verdict." + languageHeuristicCaveat},
-					"engagement":  engagementSignalsSchema,
+					"title":         map[string]any{"type": "string"},
+					"url":           map[string]any{"type": "string"},
+					"snippet":       map[string]any{"type": "string"},
+					"displayLink":   map[string]any{"type": "string"},
+					"publishedAt":   map[string]any{"type": "string", "description": "RFC3339 publish timestamp, present only when the provider's response carried a date (Google, Tavily, Exa, SearXNG, HackerNews). Never inferred from snippet/title text."},
+					"extraSnippets": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Additional text snippets beyond the primary snippet, present only for providers that surface them (Brave, with BRAVE_EXTRA_SNIPPETS=true)."},
+					"claimSignal":   map[string]any{"type": "string", "description": "Most claim-relevant snippet sentence (present per result only when the `claim` param was supplied and matched). Evidence, not a verdict." + languageHeuristicCaveat},
+					"engagement":    engagementSignalsSchema,
 				},
 			},
 		},
@@ -103,12 +104,15 @@ var newsSearchOutputSchema = map[string]any{
 			"items": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"title":       map[string]any{"type": "string"},
-					"url":         map[string]any{"type": "string"},
-					"source":      map[string]any{"type": "string"},
-					"publishedAt": map[string]any{"type": "string"},
-					"snippet":     map[string]any{"type": "string"},
-					"engagement":  engagementSignalsSchema,
+					"title":         map[string]any{"type": "string"},
+					"url":           map[string]any{"type": "string"},
+					"source":        map[string]any{"type": "string"},
+					"publishedAt":   map[string]any{"type": "string"},
+					"snippet":       map[string]any{"type": "string"},
+					"extraSnippets": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"engagement":    engagementSignalsSchema,
+					"sourceType":    map[string]any{"type": "string"},
+					"isSocialMedia": map[string]any{"type": "boolean"},
 				},
 			},
 		},
@@ -162,6 +166,17 @@ var patentSearchOutputSchema = map[string]any{
 		"searchUrl":   map[string]any{"type": "string"},
 		"hints":       map[string]any{"type": "object"},
 		"trust":       trustUntrustedExternal,
+		"assigneeClusters": map[string]any{
+			"type":        "array",
+			"description": "search_type=landscape only (#529): assignees represented in `patents`, ordered by how many results each holds (most prolific first) — the \"competitive overview\" grouping distinct from prior_art's plain relevance order.",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"assignee": map[string]any{"type": "string"},
+					"count":    map[string]any{"type": "integer"},
+				},
+			},
+		},
 		"patents": map[string]any{
 			"type": "array",
 			"items": map[string]any{
@@ -1110,14 +1125,15 @@ var awesomeListSearchOutputSchema = map[string]any{
 var econSearchOutputSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{
-		"query":       map[string]any{"type": "string"},
-		"mode":        map[string]any{"type": "string", "description": "'series' (keyword search) or 'observations' (series_id lookup)."},
-		"seriesId":    map[string]any{"type": "string", "description": "Echoed when observations were requested."},
-		"country":     map[string]any{"type": "string", "description": "Echoed country code for a multi-country (worldbank) observation lookup."},
-		"resultCount": map[string]any{"type": "integer"},
-		"provider":    map[string]any{"type": "string", "description": "Which economic-data provider answered (fred or worldbank)."},
-		"hints":       map[string]any{"type": "object"},
-		"trust":       trustUntrustedExternal,
+		"query":             map[string]any{"type": "string"},
+		"mode":              map[string]any{"type": "string", "description": "'series' (keyword search) or 'observations' (series_id lookup)."},
+		"seriesId":          map[string]any{"type": "string", "description": "Echoed when observations were requested."},
+		"country":           map[string]any{"type": "string", "description": "Echoed country code for a multi-country (worldbank) observation lookup."},
+		"resultCount":       map[string]any{"type": "integer"},
+		"provider":          map[string]any{"type": "string", "description": "Which economic-data provider answered (fred or worldbank)."},
+		"hints":             map[string]any{"type": "object"},
+		"trust":             trustUntrustedExternal,
+		"truncationWarning": map[string]any{"type": "string", "description": "Present (observations mode, multi-dimensional providers like Eurostat) when the dataset has more distinct series (by sex/age/adjustment/…) than num_results could return, so some series were dropped from the truncated result — increase num_results or narrow the query to see the rest."},
 		"results": map[string]any{
 			"type": "array",
 			"items": map[string]any{
@@ -1467,8 +1483,8 @@ var brandResearchOutputSchema = map[string]any{
 var researchPanelOutputSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{
-		"question": map[string]any{"type": "string"},
-		"trust":    trustUntrustedExternal,
+		"query": map[string]any{"type": "string"},
+		"trust": trustUntrustedExternal,
 		"panel": map[string]any{
 			"type": "array",
 			"items": map[string]any{
@@ -1592,10 +1608,11 @@ var monitorQueryCheckOutputSchema = map[string]any{
 			"items": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"title":       map[string]any{"type": "string"},
-					"url":         map[string]any{"type": "string"},
-					"snippet":     map[string]any{"type": "string"},
-					"publishedAt": map[string]any{"type": "string"},
+					"title":         map[string]any{"type": "string"},
+					"url":           map[string]any{"type": "string"},
+					"snippet":       map[string]any{"type": "string"},
+					"publishedAt":   map[string]any{"type": "string"},
+					"extraSnippets": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Additional text snippets beyond the primary snippet, present only for providers that surface them (Brave, with BRAVE_EXTRA_SNIPPETS=true)."},
 				},
 			},
 		},

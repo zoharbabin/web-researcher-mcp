@@ -261,6 +261,12 @@ func TestEPOProvider_CQLConstruction(t *testing.T) {
 			params: PatentSearchParams{Query: "language model inference", Assignee: "Apple", PatentOffice: "EP"},
 			want:   `txt=language AND txt=model AND txt=inference AND pa="Apple" AND pn=EP`,
 		},
+		{
+			// #530: cpc_code becomes an actual cpc= CQL clause, not free text.
+			name:   "with cpc code",
+			params: PatentSearchParams{Query: "battery", CPCCode: "H01M10/00"},
+			want:   `txt=battery AND cpc=H01M10/00`,
+		},
 	}
 
 	for _, tt := range tests {

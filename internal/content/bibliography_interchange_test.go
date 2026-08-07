@@ -255,6 +255,46 @@ func TestFormatCSLJSON_ArticleJournalWhenDOI(t *testing.T) {
 	}
 }
 
+// TestFormatCSLJSONCollisionKeys proves the #531 fix: two entries whose
+// BibTeXKey collides (same author+year+first-title-word, different URLs) must
+// get distinct "id" values in the CSL-JSON array — the same collisionSuffix
+// scheme formatBibTeXList already applies — instead of silently sharing an id
+// that would shadow one entry when a reference manager indexes by id.
+func TestFormatCSLJSONCollisionKeys(t *testing.T) {
+	entries := []BibEntry{
+		{URL: "https://example.com/1", Title: "Learning models", Author: "Smith, A.", Date: "2020"},
+		{URL: "https://example.com/2", Title: "Learning systems", Author: "Smith, A.", Date: "2020"},
+	}
+	out, n := FormatBibliography(entries, "csl-json")
+	if n != 2 {
+		t.Fatalf("entry count = %d, want 2", n)
+	}
+	var items []map[string]any
+	if err := json.Unmarshal([]byte(out), &items); err != nil {
+		t.Fatalf("CSL-JSON is not valid JSON: %v\n%s", err, out)
+	}
+	if len(items) != 2 {
+		t.Fatalf("want 2 CSL items, got %d", len(items))
+	}
+	ids := map[string]bool{}
+	for _, it := range items {
+		id, _ := it["id"].(string)
+		if id == "" {
+			t.Fatalf("item missing id: %v", it)
+		}
+		if ids[id] {
+			t.Fatalf("duplicate id %q across CSL-JSON items:\n%s", id, out)
+		}
+		ids[id] = true
+	}
+	if !ids["smith2020learning"] {
+		t.Errorf("base key missing among ids: %v", ids)
+	}
+	if !ids["smith2020learninga"] {
+		t.Errorf("collision-suffixed key missing among ids: %v", ids)
+	}
+}
+
 func TestSplitAuthors(t *testing.T) {
 	cases := map[string]int{
 		"":                      0,

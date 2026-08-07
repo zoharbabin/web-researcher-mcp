@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/auth"
@@ -100,18 +102,32 @@ func newsResultsToSources(results []search.NewsResult) []session.ResearchSource 
 	return sources
 }
 
+// academicResultsToSources carries Author/Date/DOI onto the session source
+// (#532) so format_bibliography on a session produces citation-complete
+// entries without the caller re-supplying them explicitly.
 func academicResultsToSources(results []search.AcademicResult) []session.ResearchSource {
 	sources := make([]session.ResearchSource, 0, len(results))
 	for _, r := range results {
-		sources = append(sources, session.ResearchSource{
+		src := session.ResearchSource{
 			URL:       r.URL,
 			Title:     r.Title,
 			Relevance: "academic",
-		})
+			DOI:       r.DOI,
+		}
+		if len(r.Authors) > 0 {
+			src.Author = strings.Join(r.Authors, "; ")
+		}
+		if r.Year > 0 {
+			src.Date = strconv.Itoa(r.Year)
+		}
+		sources = append(sources, src)
 	}
 	return sources
 }
 
+// patentResultsToSources carries Author (inventor) and Date (filing date)
+// onto the session source (#532) so a session-derived bibliography of patents
+// isn't reduced to a bare title/URL.
 func patentResultsToSources(results []scraper.PatentResult) []session.ResearchSource {
 	sources := make([]session.ResearchSource, 0, len(results))
 	for _, r := range results {
@@ -119,6 +135,8 @@ func patentResultsToSources(results []scraper.PatentResult) []session.ResearchSo
 			URL:       r.URL,
 			Title:     r.Title,
 			Relevance: "patent",
+			Author:    r.Inventor,
+			Date:      r.Filed,
 		})
 	}
 	return sources

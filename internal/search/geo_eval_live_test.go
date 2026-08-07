@@ -39,12 +39,13 @@ type geoEvalCase struct {
 }
 
 // geoEvalCases spans lenses that map onto the paper's "trusted domain" framing
-// most directly — news/journalism/tech (the paper's own trust-domain
-// instruction targeted news outlets) plus academic/legal/security/clinical/
-// government as the repo's broader structured-domain coverage.
+// most directly — news/investigative_records/tech (the paper's own
+// trust-domain instruction targeted news outlets) plus academic/legal/
+// security/clinical/government as the repo's broader structured-domain
+// coverage.
 var geoEvalCases = []geoEvalCase{
 	{"news", "central bank interest rate decision"},
-	{"journalism", "corporate ownership investigation"},
+	{"investigative_records", "corporate ownership investigation"},
 	{"tech", "large language model safety research"},
 	{"academic", "CRISPR gene editing mechanism"},
 	{"legal", "supreme court free speech ruling"},

@@ -275,6 +275,35 @@ func TestDepthUnknownTreatedAsQuick(t *testing.T) {
 	}
 }
 
+// TestSequentialSearchStampsFoundInStepOnAutoTrackedSources (#534): a source
+// auto-tracked from a depth="thorough" refinement search runs from within a
+// numbered sequential_search step, so foundInStep must be stamped with that
+// step number rather than left at its zero value (which omitempty would then
+// drop entirely) — get_research_session's sources must report it.
+func TestSequentialSearchStampsFoundInStepOnAutoTrackedSources(t *testing.T) {
+	deps := setupTestDeps()
+	sid, out := startSession(t, deps, "thorough")
+	rr, ok := out["refinementResults"].([]any)
+	if !ok || len(rr) == 0 {
+		t.Fatalf("thorough depth should auto-run refinement searches, got %v", out["refinementResults"])
+	}
+
+	sessOut, sres := callTool(t, deps, "get_research_session", map[string]any{"sessionId": sid})
+	if sres.IsError {
+		t.Fatalf("get_research_session failed")
+	}
+	sources, _ := sessOut["sources"].([]any)
+	if len(sources) == 0 {
+		t.Fatalf("expected sources from the thorough-depth refinement, got none")
+	}
+	for _, s := range sources {
+		src, _ := s.(map[string]any)
+		if src["foundInStep"] != float64(1) {
+			t.Errorf("source %v: foundInStep = %v, want 1 (the step the refinement search ran from)", src["url"], src["foundInStep"])
+		}
+	}
+}
+
 // TestSequentialSearchPropagatesDepthToWebSearchParams (#286): sequential_search
 // must forward its depth input to search.WebSearchParams.Depth so the router
 // can apply depth-tiered NumResults defaults when NumResults is left at 0.

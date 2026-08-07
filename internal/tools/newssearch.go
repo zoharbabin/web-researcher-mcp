@@ -8,8 +8,46 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
+
+// newsArticleOutput is search.NewsResult plus a typed source-type
+// classification (#524). news_search has no scraped body/structured signals
+// to feed content.ClassifySource, so only the URL-host heuristic applies —
+// still enough to flag social-media reposts (Facebook/Instagram/X/etc.) that
+// otherwise surface unmarked alongside real outlet articles, especially with
+// time_range=day.
+type newsArticleOutput struct {
+	Title         string                    `json:"title"`
+	URL           string                    `json:"url"`
+	Source        string                    `json:"source"`
+	PublishedAt   string                    `json:"publishedAt,omitempty"`
+	Snippet       string                    `json:"snippet"`
+	ExtraSnippets []string                  `json:"extraSnippets,omitempty"`
+	Engagement    *search.EngagementSignals `json:"engagement,omitempty"`
+	SourceType    string                    `json:"sourceType,omitempty"`
+	IsSocialMedia bool                      `json:"isSocialMedia,omitempty"`
+}
+
+func classifyNewsResults(results []search.NewsResult) []newsArticleOutput {
+	out := make([]newsArticleOutput, 0, len(results))
+	for _, r := range results {
+		cls := content.ClassifySource(r.URL, 0, content.StructuredSignals{}, "", "")
+		out = append(out, newsArticleOutput{
+			Title:         r.Title,
+			URL:           r.URL,
+			Source:        r.Source,
+			PublishedAt:   r.PublishedAt,
+			Snippet:       r.Snippet,
+			ExtraSnippets: r.ExtraSnippets,
+			Engagement:    r.Engagement,
+			SourceType:    cls.SourceType,
+			IsSocialMedia: cls.SourceType == content.SourceTypeSocial,
+		})
+	}
+	return out
+}
 
 type newsSearchInput struct {
 	Query      string `json:"query" jsonschema:"Topic or event to find news about. Use specific terms for precision (e.g. 'OpenAI GPT-5 release' not 'AI news').,required"`
@@ -93,8 +131,9 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 		}
 		rt := routingMeta(trace.Decision(), time.Since(start), false)
 
+		articles := classifyNewsResults(results)
 		output := map[string]any{
-			"articles":    results,
+			"articles":    articles,
 			"query":       input.Query,
 			"resultCount": len(results),
 			"trust":       untrustedContentTrust,

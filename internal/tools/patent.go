@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -23,6 +24,13 @@ import (
 // like "US10000000 improvements" — a keyword search that happens to mention a
 // number — is not misidentified as an exact lookup.
 var barePatentNumberRegex = regexp.MustCompile(`(?i)^[A-Z]{2}\d[\dA-Z]*$`)
+
+// landscapeOverfetchCount is how many candidates search_type=landscape
+// requests from providers/web-discovery before clustering by assignee and
+// truncating back to the caller's numResults (#529) — 25 is the highest
+// NumResults any provider actually honors (see EPO's clamp(..., 1, 25) in
+// internal/search/epo.go), so requesting more would be wasted API cost.
+const landscapeOverfetchCount = 25
 
 // looksLikePatentNumber reports whether query is shaped like a bare patent
 // number rather than a free-text search phrase.
@@ -113,19 +121,43 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 		// paths name their provider in the body's `source` and have no ladder.
 		var routeDecision search.RoutingDecision
 
+		// isLandscape (#529): search_type=landscape is documented as a
+		// "competitive overview" distinct from prior_art's plain broad
+		// search. It over-fetches a wider candidate pool (up to
+		// landscapeOverfetchCount, the max any provider honors) and, once a
+		// strategy below has resolved `patents`, clusters that pool by
+		// assignee before truncating back down to numResults — so the same
+		// query returns a genuinely different composition/ordering than
+		// prior_art, not a byte-identical response.
+		isLandscape := searchType == "landscape"
+		requestCount := numResults
+		if isLandscape {
+			requestCount = landscapeOverfetchCount
+		}
+
 		searchParams := search.PatentSearchParams{
 			Query:        input.Query,
 			Assignee:     normalizeAssignee(input.Assignee),
 			Inventor:     input.Inventor,
+			CPCCode:      input.CPCCode,
 			PatentOffice: input.PatentOffice,
 			YearFrom:     input.YearFrom,
 			YearTo:       input.YearTo,
-			NumResults:   numResults,
+			NumResults:   requestCount,
 		}
 
 		var patents []scraper.PatentResult
 
 		var source string
+
+		// webProviderRequested + pinnedWebProvider: set below when input.Provider
+		// names a web-search-fallback provider (google, brave, etc.) rather than a
+		// dedicated patent provider (#527) — routes exclusively through Strategy
+		// 4's web-discovery using that named provider, so Strategies 2/3 (which
+		// pick whichever dedicated patent provider answers first, ignoring
+		// input.Provider entirely) are skipped rather than silently taking over.
+		var webProviderRequested bool
+		var pinnedWebProvider search.Provider
 
 		// Strategy 1: If a specific provider is requested, try it directly
 		if input.Provider != "" {
@@ -152,6 +184,16 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 					// fall back — return empty results from that provider.
 					source = input.Provider
 				}
+			} else {
+				// ps == nil, errResult == nil: resolvePatentSearcher's fall-through
+				// sentinel — input.Provider names a valid *web* search provider, not
+				// a dedicated patent provider. Pin it now for Strategy 4 below.
+				webProvider, errResult := resolveProvider(deps, input.Provider)
+				if errResult != nil {
+					return errResult, nil, nil
+				}
+				webProviderRequested = true
+				pinnedWebProvider = webProvider
 			}
 		}
 
@@ -176,8 +218,12 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 			}
 		}
 
-		// Strategy 2: Try the main provider (Router implements PatentSearcher)
-		if len(patents) == 0 && source == "" && !isSpecificNumberLookup {
+		// Strategy 2: Try the main provider (Router implements PatentSearcher).
+		// Skipped when a web-search-fallback provider was explicitly pinned
+		// (#527) — Strategies 2/3 pick whichever dedicated patent provider
+		// answers first, ignoring input.Provider entirely, which is exactly the
+		// silent substitution this issue fixes.
+		if len(patents) == 0 && source == "" && !isSpecificNumberLookup && !webProviderRequested {
 			if ps, ok := deps.Search.(search.PatentSearcher); ok {
 				traceCtx, trace := search.NewRoutingTrace(ctx)
 				apiResults, err := ps.Patents(traceCtx, searchParams)
@@ -196,7 +242,7 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 		// the whole ladder (#503) — Go map iteration order is random, so with
 		// the old `break`-on-rate-limit a rate-limited provider visited early
 		// would silently cut off healthy providers later in the same call.
-		if len(patents) == 0 && source == "" && !isSpecificNumberLookup {
+		if len(patents) == 0 && source == "" && !isSpecificNumberLookup && !webProviderRequested {
 			for _, name := range search.SupportedPatentProviders {
 				pp, ok := deps.PatentProviders[name]
 				if !ok {
@@ -217,18 +263,27 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 			}
 		}
 
-		// Strategy 4: Fallback — discover via web search + enrich from detail pages
+		// Strategy 4: Fallback — discover via web search + enrich from detail
+		// pages. When a web-search-fallback provider was explicitly pinned
+		// (#527), use that exact provider instead of the auto-selected default —
+		// this is the ONLY strategy a pinned web provider runs through, so its
+		// choice is actually honored end to end, not overridden by whichever
+		// dedicated patent provider Strategies 2/3 would otherwise pick.
 		if len(patents) == 0 && source == "" && !isSpecificNumberLookup {
-			provider, errResult := resolveProvider(deps, "")
-			if errResult != nil {
-				return errResult, nil, nil
+			provider := pinnedWebProvider
+			if !webProviderRequested {
+				var errResult *mcp.CallToolResult
+				provider, errResult = resolveProvider(deps, "")
+				if errResult != nil {
+					return errResult, nil, nil
+				}
 			}
 
 			searchQuery := buildPatentDiscoveryQuery(input)
 			traceCtx, trace := search.NewRoutingTrace(ctx)
 			webResults, err := provider.Web(traceCtx, search.WebSearchParams{
 				Query:      searchQuery,
-				NumResults: numResults + 5,
+				NumResults: requestCount + 5,
 			})
 			if err != nil {
 				errCode := "upstream_error"
@@ -254,16 +309,37 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 					seen[number] = true
 					patentNumbers = append(patentNumbers, number)
 				}
-				if len(patentNumbers) >= numResults {
+				if len(patentNumbers) >= requestCount {
 					break
 				}
 			}
 
 			patents = enrichPatents(ctx, deps.Scraper, patentNumbers)
 			if len(patents) > 0 {
-				source = "web_discovery"
+				if webProviderRequested {
+					// Report the caller's own pinned provider name, not the
+					// generic "web_discovery" label, so the response makes clear
+					// their explicit choice was honored (#527).
+					source = input.Provider
+				} else {
+					source = "web_discovery"
+				}
 				routeDecision = trace.Decision()
 			}
+		}
+
+		// search_type=landscape (#529): cluster the over-fetched candidate
+		// pool by assignee — most-represented assignee first — then truncate
+		// back down to the caller's numResults, keeping each cluster's
+		// patents contiguous. This is what makes landscape's output
+		// genuinely differ from prior_art's plain relevance order for the
+		// identical query, rather than being an alias that only changes the
+		// echoed searchType string.
+		var assigneeClusters []map[string]any
+		if isLandscape && len(patents) > 0 {
+			patents, assigneeClusters = clusterPatentsByAssignee(patents, numResults)
+		} else if len(patents) > numResults {
+			patents = patents[:numResults]
 		}
 
 		// Build the Google Patents search URL for reference
@@ -290,6 +366,9 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 
 		if len(patents) == 0 {
 			output["hints"] = buildPatentHints(input, source, deps)
+		}
+		if len(assigneeClusters) > 0 {
+			output["assigneeClusters"] = assigneeClusters
 		}
 
 		jsonBytes, _ := json.Marshal(output)
@@ -318,6 +397,12 @@ func buildPatentDiscoveryQuery(input patentSearchInput) string {
 	}
 	if input.Inventor != "" {
 		parts = append(parts, fmt.Sprintf("inventor:%q", input.Inventor))
+	}
+	if input.CPCCode != "" {
+		// Google Patents' own query syntax recognizes CPC=<code> as a
+		// classification filter, so the web-discovery fallback (Strategy 4)
+		// honors cpc_code the same as the dedicated patent providers (#530).
+		parts = append(parts, "CPC="+input.CPCCode)
 	}
 	if input.PatentOffice != "" && input.PatentOffice != "all" {
 		parts = append(parts, input.PatentOffice)
@@ -386,6 +471,83 @@ func enrichPatents(ctx context.Context, pipeline *scraper.Pipeline, numbers []st
 		}
 	}
 	return filtered
+}
+
+// clusterPatentsByAssignee groups patents by their (normalized) assignee,
+// orders clusters by size descending (most prolific assignee first, ties
+// broken by each cluster's first-seen order in the input to stay
+// deterministic), then flattens back into a patents slice truncated to limit
+// — keeping each cluster's own patents contiguous. Patents with no assignee
+// form their own single-member clusters and sort by their original count (1)
+// same as any other singleton, so they naturally fall after any multi-patent
+// assignee cluster. Returns the reordered/truncated patents plus a summary
+// of the clusters actually included in the truncated output (#529).
+func clusterPatentsByAssignee(patents []scraper.PatentResult, limit int) ([]scraper.PatentResult, []map[string]any) {
+	type cluster struct {
+		key     string
+		patents []scraper.PatentResult
+	}
+	order := make([]string, 0)
+	byKey := make(map[string]*cluster)
+	for _, p := range patents {
+		key := normalizeAssignee(p.Assignee)
+		if key == "" {
+			key = p.Number
+		}
+		c, ok := byKey[key]
+		if !ok {
+			c = &cluster{key: key}
+			byKey[key] = c
+			order = append(order, key)
+		}
+		c.patents = append(c.patents, p)
+	}
+
+	clusters := make([]*cluster, 0, len(order))
+	for _, key := range order {
+		clusters = append(clusters, byKey[key])
+	}
+	sort.SliceStable(clusters, func(i, j int) bool {
+		return len(clusters[i].patents) > len(clusters[j].patents)
+	})
+
+	result := make([]scraper.PatentResult, 0, limit)
+	summary := make([]map[string]any, 0, len(clusters))
+	for _, c := range clusters {
+		if len(result) >= limit {
+			break
+		}
+		assignee := c.patents[0].Assignee
+		if assignee == "" {
+			continue
+		}
+		summary = append(summary, map[string]any{"assignee": assignee, "count": len(c.patents)})
+		for _, p := range c.patents {
+			if len(result) >= limit {
+				break
+			}
+			result = append(result, p)
+		}
+	}
+	// Backfill with any un-assigneed patents (their own singleton clusters,
+	// skipped above) if there's still room under limit.
+	if len(result) < limit {
+		for _, c := range clusters {
+			if len(result) >= limit {
+				break
+			}
+			if c.patents[0].Assignee != "" {
+				continue
+			}
+			for _, p := range c.patents {
+				if len(result) >= limit {
+					break
+				}
+				result = append(result, p)
+			}
+		}
+	}
+	return result, summary
 }
 
 func normalizeAssignee(assignee string) string {
