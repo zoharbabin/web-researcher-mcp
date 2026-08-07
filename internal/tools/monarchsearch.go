@@ -22,9 +22,9 @@ import (
 // with no BAA — callers must not submit identifiable patient data.
 
 type monarchSearchInput struct {
-	Operation     string   `json:"operation" jsonschema:"Required. One of: semsim (phenotype-to-disease/gene similarity search), entity (look up an entity by free text or by ID), associations (traverse typed knowledge-graph edges), compare (compare two phenotype profiles directly), annotate (ground a short clinical text to HPO terms). Do not submit identifiable patient data in the annotate text."`
+	Operation     string   `json:"operation" jsonschema:"Required. The knowledge-graph query to run (semsim = phenotype-to-disease/gene similarity search, entity = look up an entity by free text or by ID, associations = traverse typed knowledge-graph edges, compare = compare two phenotype profiles directly, annotate = ground a short clinical text to HPO terms). Do not submit identifiable patient data in the annotate text."`
 	Phenotypes    []string `json:"phenotypes,omitempty" jsonschema:"semsim/compare: list of HPO term IDs, e.g. [\"HP:0001166\",\"HP:0001083\"]. Maximum 20 terms per query."`
-	Group         string   `json:"group,omitempty" jsonschema:"semsim: termset group to search against. One of: Human Genes, Mouse Genes, Rat Genes, Zebrafish Genes, C. Elegans Genes, Human Diseases. Defaults to Human Diseases."`
+	Group         string   `json:"group,omitempty" jsonschema:"semsim: termset group to search against. Defaults to Human Diseases."`
 	CompareTo     []string `json:"compareTo,omitempty" jsonschema:"compare: the second list of HPO term IDs to compare the phenotypes list against."`
 	Query         string   `json:"query,omitempty" jsonschema:"entity: free-text search term, e.g. \"Marfan syndrome\"."`
 	EntityID      string   `json:"entityId,omitempty" jsonschema:"entity/associations: an entity CURIE, e.g. MONDO:0007947, HGNC:3603, HP:0001166. Must match ^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$."`
@@ -33,7 +33,7 @@ type monarchSearchInput struct {
 	AssocCategory string   `json:"category,omitempty" jsonschema:"associations: Biolink association category enum, e.g. biolink:CausalGeneToDiseaseAssociation. Maps to the API 'category' query parameter."`
 	Text          string   `json:"text,omitempty" jsonschema:"annotate: short clinical text to ground to HPO terms. Hard limit 2000 characters. Never include patient-identifiable data."`
 	NumResults    int      `json:"num_results,omitempty" jsonschema:"Maximum results to return. Default 20, max 200 (the API caps association pages at 200)."`
-	Provider      string   `json:"provider,omitempty" jsonschema:"Force a specific Monarch provider: monarch. Errors if not configured."`
+	Provider      string   `json:"provider,omitempty" jsonschema:"Force a specific Monarch provider. Errors if not configured."`
 	SessionID     string   `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. Sources are automatically recorded for recovery after context loss."`
 }
 
@@ -41,10 +41,15 @@ const monarchMaxPhenotypes = 20
 const monarchMaxTextLen = 2000
 
 func registerMonarchSearch(srv *mcp.Server, deps Dependencies) {
+	inputSchema := mustSchemaFor[monarchSearchInput]()
+	inputSchema.Properties["operation"].Enum = monarchOperationEnum()
+	inputSchema.Properties["group"].Enum = monarchGroupEnum()
+	inputSchema.Properties["provider"].Enum = monarchProviderEnum()
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "monarch_search",
 		Description:  "Query the Monarch Initiative biomedical knowledge graph: rank diseases and genes by phenotype similarity (semsim), look up disease/gene/phenotype entities, and traverse gene-disease-phenotype associations. For published literature on a condition combine with academic_search; for active interventional trials use clinical_search. Semsim rankings past the top few results often tie or degrade into shared generic ontology-ancestor matches rather than fine-grained phenotype-profile similarity — this is the upstream Monarch semsim API's own Best-Match-Average/Resnik-style scoring behavior, not a defect in this tool, so don't over-index on rank order deep in the result list. Do not submit identifiable patient data in the annotate operation.",
 		Annotations:  readOnlyAnnotations(true, true),
+		InputSchema:  inputSchema,
 		OutputSchema: monarchSearchOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input monarchSearchInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
