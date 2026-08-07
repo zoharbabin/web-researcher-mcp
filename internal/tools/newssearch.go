@@ -52,21 +52,27 @@ func classifyNewsResults(results []search.NewsResult) []newsArticleOutput {
 type newsSearchInput struct {
 	Query      string `json:"query" jsonschema:"Topic or event to find news about. Use specific terms for precision (e.g. 'OpenAI GPT-5 release' not 'AI news').,required"`
 	NumResults int    `json:"num_results,omitempty" jsonschema:"Number of articles to return (1-50, default: 5). Brave returns up to 50; Google up to 10."`
-	TimeRange  string `json:"time_range,omitempty" jsonschema:"Restrict to a time period: hour, day, week (default), month, or year."`
-	SortBy     string `json:"sort_by,omitempty" jsonschema:"Sort order: relevance (default) or date (newest first). Google only — Brave news has no sort param and ignores it."`
+	TimeRange  string `json:"time_range,omitempty" jsonschema:"Restrict to a time period. Default: week."`
+	SortBy     string `json:"sort_by,omitempty" jsonschema:"Sort order (date = newest first). Default: relevance. Google only — Brave news has no sort param and ignores it."`
 	NewsSource string `json:"news_source,omitempty" jsonschema:"Restrict to a specific news outlet domain (e.g. reuters.com, bbc.co.uk). Google only — Brave news has no source filter and ignores it."`
 	Country    string `json:"country,omitempty" jsonschema:"Country to localize results to, ISO 3166-1 alpha-2 (e.g. 'us', 'gb'). Honored by Brave news."`
 	Language   string `json:"language,omitempty" jsonschema:"Language to scope results to, BCP 47 / 2-letter code (e.g. 'en', 'de'). Honored by Brave news (search_lang)."`
-	Safe       string `json:"safe,omitempty" jsonschema:"SafeSearch level: off, moderate, or strict. Honored by Brave news."`
-	Provider   string `json:"provider,omitempty" jsonschema:"Force a specific search provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, github. Omit to use configured default."`
+	Safe       string `json:"safe,omitempty" jsonschema:"SafeSearch level. Honored by Brave news."`
+	Provider   string `json:"provider,omitempty" jsonschema:"Force a specific search provider. Omit to use configured default."`
 	SessionID  string `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. Sources are automatically recorded for recovery after context loss."`
 }
 
 func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
+	inputSchema := mustSchemaFor[newsSearchInput]()
+	inputSchema.Properties["time_range"].Enum = newsTimeRangeEnum()
+	inputSchema.Properties["sort_by"].Enum = sortByRelevanceDateEnum()
+	inputSchema.Properties["safe"].Enum = newsSafeEnum()
+	inputSchema.Properties["provider"].Enum = webProviderEnum()
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "news_search",
 		Description:  "Find recent news articles on any topic, returning each article's headline, source, publish time, and snippet. Defaults to the past week, but the freshness window is tunable for breaking news or for looking further back, and results can be limited to a single outlet. Reach for this when recency matters; use web_search for general content, academic_search for research papers, or search_and_scrape when you need the full article text. Errors come back as structured JSON. Results refresh every 15 minutes.",
 		Annotations:  readOnlyAnnotations(true, true),
+		InputSchema:  inputSchema,
 		OutputSchema: newsSearchOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input newsSearchInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()

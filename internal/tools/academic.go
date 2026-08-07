@@ -46,20 +46,25 @@ type academicSearchInput struct {
 	NumResults int    `json:"num_results,omitempty" jsonschema:"Number of papers to return (1-10, default: 5)."`
 	YearFrom   int    `json:"year_from,omitempty" jsonschema:"Only include papers published in or after this year (e.g. 2020)."`
 	YearTo     int    `json:"year_to,omitempty" jsonschema:"Only include papers published in or before this year (e.g. 2024)."`
-	Source     string `json:"source,omitempty" jsonschema:"Restrict to an academic source: all (default), arxiv, pubmed, ieee, nature, springer."`
+	Source     string `json:"source,omitempty" jsonschema:"Restrict to an academic source. Default: all."`
 	PDFOnly    bool   `json:"pdf_only,omitempty" jsonschema:"Only return papers with direct PDF links (default: false). Useful when you plan to scrape the full paper."`
-	SortBy     string `json:"sort_by,omitempty" jsonschema:"Sort order: relevance (default) or date (newest first)."`
-	Provider   string `json:"provider,omitempty" jsonschema:"Force a specific provider. Academic: openalex, crossref, pubmed, semanticscholar, core, exa, scholarapi (paid, full-text; not used by automatic selection — must be requested explicitly). Web fallback: google, brave, serper, searxng, searchapi, duckduckgo, tavily. Omit to use automatic selection (recommended)."`
+	SortBy     string `json:"sort_by,omitempty" jsonschema:"Sort order (date = newest first). Default: relevance."`
+	Provider   string `json:"provider,omitempty" jsonschema:"Force a specific provider (academic, or a web-search fallback). scholarapi is paid/full-text and only used when explicitly requested — never by automatic selection. Omit to use automatic selection (recommended)."`
 	OpenAccess bool   `json:"open_access,omitempty" jsonschema:"Only return open-access papers with free full-text (default: false)."`
 	FullText   bool   `json:"full_text,omitempty" jsonschema:"Fetch PMC full text for open-access biomedical articles with a PubMed Central ID (default: false). Only effective when the pubmed provider is active. Substantially increases response time."`
 	SessionID  string `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. Sources are automatically recorded for recovery after context loss."`
 }
 
 func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
+	inputSchema := mustSchemaFor[academicSearchInput]()
+	inputSchema.Properties["source"].Enum = academicSourceEnum()
+	inputSchema.Properties["sort_by"].Enum = sortByRelevanceDateEnum()
+	inputSchema.Properties["provider"].Enum = academicProviderEnum()
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "academic_search",
 		Description:  "Search peer-reviewed papers and scholarly literature using plain natural language — no special syntax needed. Each result includes the paper's title, authors, journal, year, abstract, citation count, and a PDF link when one is available (pair with scrape_page to read the full text). Reach for this for literature reviews, prior-art research, and finding citations; use web_search for non-academic content or news_search for current events. Results can be narrowed by year, source, or access type. Returns structured JSON, with recovery hints when nothing matches. Results stay fresh for 1 hour.",
 		Annotations:  readOnlyAnnotations(true, true),
+		InputSchema:  inputSchema,
 		OutputSchema: academicSearchOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input academicSearchInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()

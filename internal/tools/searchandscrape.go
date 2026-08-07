@@ -23,16 +23,19 @@ type searchAndScrapeInput struct {
 	MaxLengthPerSource int    `json:"max_length_per_source,omitempty" jsonschema:"Max content bytes extracted per source (default: 50000)."`
 	TotalMaxLength     int    `json:"total_max_length,omitempty" jsonschema:"Max total bytes for combined output (default: 300000). Reduce for faster, more concise results."`
 	FilterByQuery      bool   `json:"filter_by_query,omitempty" jsonschema:"Remove sources with low relevance to the query (default: false). Enable for precision over recall."`
-	Provider           string `json:"provider,omitempty" jsonschema:"Force a specific search provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, github. Omit to use configured default."`
+	Provider           string `json:"provider,omitempty" jsonschema:"Force a specific search provider. Omit to use configured default."`
 	SessionID          string `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. All scraped sources are automatically recorded for recovery after context loss."`
 	Claim              string `json:"claim,omitempty" jsonschema:"Optional claim to evaluate against each source. When set, each source gains keySentences (the most claim-relevant sentences) and a claimSignal (the single strongest). The server surfaces evidence only — it never decides supports/contradicts; you make that call."`
 }
 
 func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
+	inputSchema := mustSchemaFor[searchAndScrapeInput]()
+	inputSchema.Properties["provider"].Enum = webProviderEnum()
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "search_and_scrape",
 		Description:  "Search the web and read the full content from the top results, all in one step. Combines content from multiple sources, removes duplicates, and scores each source for quality and relevance. Returns a status field (complete/partial/failed) and per-source quality scores. If some pages fail, scrapeFailures lists each with kind, retryable, and suggestedAction. Use web_search if you only need links, or scrape_page to read one specific URL you already have.",
 		Annotations:  readOnlyAnnotations(true, true),
+		InputSchema:  inputSchema,
 		OutputSchema: searchAndScrapeOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input searchAndScrapeInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()

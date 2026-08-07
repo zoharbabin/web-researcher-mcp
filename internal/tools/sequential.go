@@ -247,18 +247,23 @@ type sequentialSearchInput struct {
 	KnowledgeGap       string   `json:"knowledgeGap,omitempty" jsonschema:"A specific gap or unanswered question identified during this step that needs further investigation."`
 	ResearchGoal       string   `json:"researchGoal,omitempty" jsonschema:"The question or goal driving this research. Set on step 1; ignored on later steps."`
 	Reasoning          string   `json:"reasoning,omitempty" jsonschema:"Why you chose this search direction over alternatives."`
-	Confidence         string   `json:"confidence,omitempty" jsonschema:"Confidence in this step's findings: high, medium, or low."`
+	Confidence         string   `json:"confidence,omitempty" jsonschema:"Confidence in this step's findings."`
 	RejectedApproaches []string `json:"rejectedApproaches,omitempty" jsonschema:"Approaches considered but rejected, with brief reasons."`
 	SessionSummary     string   `json:"sessionSummary,omitempty" jsonschema:"Running summary of research so far. Update periodically for better session recovery."`
-	ResponseMode       string   `json:"responseMode,omitempty" jsonschema:"Force response format: full or summary. Default: auto (full for 8 or fewer steps, summary for more)."`
-	Depth              string   `json:"depth,omitempty" jsonschema:"Iteration assist level: quick (default — record the step and return), standard (also analyze coverage of sources gathered so far and suggest refinement queries; you decide whether to act), or thorough (also auto-run up to 3 suggested refinement searches and return their merged, provenance-tagged results). Never synthesizes an answer."`
+	ResponseMode       string   `json:"responseMode,omitempty" jsonschema:"Force a response format. Default: auto (full for 8 or fewer steps, summary for more)."`
+	Depth              string   `json:"depth,omitempty" jsonschema:"Iteration assist level (standard = also analyze coverage of sources gathered so far and suggest refinement queries, you decide whether to act; thorough = also auto-run up to 3 suggested refinement searches and return their merged, provenance-tagged results). Default: quick (record the step and return). Never synthesizes an answer."`
 }
 
 func registerSequentialSearch(srv *mcp.Server, deps Dependencies) {
+	inputSchema := mustSchemaFor[sequentialSearchInput]()
+	inputSchema.Properties["confidence"].Enum = sequentialConfidenceEnum()
+	inputSchema.Properties["responseMode"].Enum = sequentialResponseModeEnum()
+	inputSchema.Properties["depth"].Enum = sequentialDepthEnum()
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "sequential_search",
 		Description:  "Keep track of a multi-step research project. Use this alongside web_search or search_and_scrape to record what you've found at each step, note unanswered questions, and explore alternative angles (branching). Start a new session with stepNumber=1, then pass the returned sessionId for each follow-up step. Mark the session complete by setting nextStepNeeded=false. Sessions stay active for 4 hours between steps and persist across restarts. Use get_research_session to recover a session after context loss.",
 		Annotations:  readOnlyAnnotations(false, false),
+		InputSchema:  inputSchema,
 		OutputSchema: sequentialSearchOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input sequentialSearchInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()

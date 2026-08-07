@@ -71,22 +71,27 @@ func lookupPatentByNumber(ctx context.Context, number string, ps patentDetailScr
 type patentSearchInput struct {
 	Query        string `json:"query,omitempty" jsonschema:"Patent search terms, invention description, or patent number (e.g. 'US11234567' or 'machine learning video encoding'). Not required when assignee or inventor is provided."`
 	NumResults   int    `json:"num_results,omitempty" jsonschema:"Number of patents to return (1-10, default: 5)."`
-	SearchType   string `json:"search_type,omitempty" jsonschema:"Search strategy: prior_art (default, broad technical search), specific (exact patent lookup), landscape (competitive overview)."`
-	PatentOffice string `json:"patent_office,omitempty" jsonschema:"Restrict to patent office: all (default), US, EP, WO, JP, CN, KR."`
+	SearchType   string `json:"search_type,omitempty" jsonschema:"Search strategy (specific = exact patent lookup, landscape = competitive overview). Default: prior_art (broad technical search)."`
+	PatentOffice string `json:"patent_office,omitempty" jsonschema:"Restrict to a patent office. Default: all."`
 	Assignee     string `json:"assignee,omitempty" jsonschema:"Company or organization that owns the patent (auto-generates name variations for matching)."`
 	Inventor     string `json:"inventor,omitempty" jsonschema:"Name of the inventor to filter by."`
 	CPCCode      string `json:"cpc_code,omitempty" jsonschema:"Cooperative Patent Classification code to narrow by technology area (e.g. G06F for computing, H04L for networking)."`
 	YearFrom     int    `json:"year_from,omitempty" jsonschema:"Only include patents filed in or after this year."`
 	YearTo       int    `json:"year_to,omitempty" jsonschema:"Only include patents filed in or before this year."`
-	Provider     string `json:"provider,omitempty" jsonschema:"Force a specific patent provider: searchapi, epo, lens, uspto (patent-specific), or google, brave, serper, searxng, duckduckgo, tavily, exa (web search fallback). Omit for automatic selection based on configured providers and region."`
+	Provider     string `json:"provider,omitempty" jsonschema:"Force a specific patent provider (patent-specific: searchapi, epo, lens, uspto; or a web-search fallback provider). Omit for automatic selection based on configured providers and region."`
 	SessionID    string `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. Sources are automatically recorded for recovery after context loss."`
 }
 
 func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
+	inputSchema := mustSchemaFor[patentSearchInput]()
+	inputSchema.Properties["search_type"].Enum = patentSearchTypeEnum()
+	inputSchema.Properties["patent_office"].Enum = patentOfficeEnum()
+	inputSchema.Properties["provider"].Enum = patentProviderEnum()
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "patent_search",
 		Description:  "Search patents for prior art, competitive landscape mapping, or to look up a specific patent. Query by patent number (e.g. 'US11234567'), an invention description, a company, or an inventor — company name variations are matched automatically. Each result carries the patent's bibliographic details (title, number, abstract, assignee, inventor, dates, status). Reach for this when the question is about inventions or IP; use academic_search for research papers or web_search for general technical content. Zero-result and error responses come back as structured JSON with recovery hints. Results stay fresh for 24 hours.",
 		Annotations:  readOnlyAnnotations(true, true),
+		InputSchema:  inputSchema,
 		OutputSchema: patentSearchOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input patentSearchInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
