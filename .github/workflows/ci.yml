@@ -22,6 +22,12 @@ on:
         default: "false"
         type: choice
         options: ["true", "false"]
+      run_multipod_session_test:
+        description: "Run multi-pod Redis session continuity test (#495; needs a kind cluster, ~3-5min)"
+        required: false
+        default: "false"
+        type: choice
+        options: ["true", "false"]
 
 permissions:
   contents: read
@@ -532,3 +538,41 @@ jobs:
           SOAK_DURATION: 45m
           SOAK_WORKERS: "16"
         run: make test-soak
+
+  # ☸️ Multi-pod Redis session continuity (#495) — the automated counterpart
+  # to the manual `deploy/k8s-local/` + docs/K8S_LOCAL_DEV.md verification
+  # (a real 3-replica deployment + Redis, done by hand per commit a13dbe0).
+  # tests/e2e/operational_hardening_467_e2e_test.go proves stateless-HTTP
+  # correctness across two client connections, but both hit the SAME server
+  # process — this job is the one that spins up REAL separate pods and proves
+  # a sequential_search session created on pod 1 is readable via
+  # get_research_session from pod 3, with Redis as the only shared state.
+  # Deterministic by design: scripts/k8s-ci-session-continuity.sh
+  # kubectl port-forwards to each pod's own IP in turn, so the test proves
+  # cross-pod visibility directly rather than hoping kube-proxy load-balancing
+  # spreads N requests across replicas. NOT a required gate — kind cluster
+  # spin-up is extra CI minutes for a property that changes rarely (only
+  # internal/session/ or internal/redisbackend/ changes could break it), so
+  # this stays opt-in via workflow_dispatch, plus the weekly schedule (kind
+  # startup is ~1-2min, cheap enough for continuous verification).
+  multipod-redis-session-continuity:
+    name: ☸️ Multi-Pod Redis Session Continuity
+    if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_multipod_session_test == 'true') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: wrm-ci-495
+          wait: 120s
+
+      - name: Run multi-pod Redis session continuity check
+        env:
+          KIND_CLUSTER_EXISTS: "true"
+          KIND_CLUSTER_NAME: wrm-ci-495
+        run: bash scripts/k8s-ci-session-continuity.sh

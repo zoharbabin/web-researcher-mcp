@@ -4,6 +4,8 @@ Manifests under [`deploy/k8s-local/`](../deploy/k8s-local/) reproduce the produc
 
 Everything under `deploy/k8s-local/` is generic — no personal hostnames, tokens, or machine-specific paths. The one thing you generate yourself is the JWKS/JWT keypair, so no private key is ever committed to the repo.
 
+One specific property this setup verifies manually — a `sequential_search` session created on one pod being readable via `get_research_session` from another pod, with Redis as the only shared state — also runs as an automated `kind`-based CI job: `☸️ Multi-Pod Redis Session Continuity` in `.github/workflows/ci.yml` (`scripts/k8s-ci-session-continuity.sh`, `deploy/k8s-ci/`). It's opt-in (`workflow_dispatch`, plus a weekly `schedule` run) rather than a per-PR gate, since cluster spin-up is slow for something that only regresses via changes to `internal/session/` or `internal/redisbackend/`. Trigger it manually from the Actions tab when touching either package; the full topology here (OAuth, Ingress, HPA, NetworkPolicy) stays a manual-only exercise.
+
 ## Prerequisites
 
 Any local single-node Kubernetes distribution with an Ingress controller works — Rancher Desktop, `kind`, `minikube`, k3d. The steps below assume Rancher Desktop's bundled Traefik; substitute `ingressClassName`/annotations in `04-ingress.yaml` for a different controller.
