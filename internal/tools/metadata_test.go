@@ -45,8 +45,6 @@ var expectedTools = []string{
 	"workspace_contribute",
 	"workspace_read",
 	"brand_research",
-	"syllabus_search",
-	"gag_order_search",
 	"paper_fulltext",
 	"company_recon",
 	"research_panel",
@@ -194,15 +192,6 @@ func TestAllToolsHaveAnnotations(t *testing.T) {
 				if !*tool.Annotations.OpenWorldHint {
 					t.Error("company_recon should be open-world")
 				}
-			case "syllabus_search":
-				// Corpus-side ranking/frequency data can shift between identical
-				// calls as Open Syllabus's corpus is updated: NOT idempotent.
-				if tool.Annotations.IdempotentHint {
-					t.Error("syllabus_search should NOT be idempotent")
-				}
-				if !*tool.Annotations.OpenWorldHint {
-					t.Error("syllabus_search should be open-world")
-				}
 			case "monitor_query_save":
 				// A write (seeds/updates a monitor baseline); not idempotent
 				// (re-running with the same query re-seeds the baseline from a
@@ -309,8 +298,6 @@ func TestOutputSchemaMatchesResponse(t *testing.T) {
 		"local_search":        {"query": "coffee near me"},
 		"monarch_search":      {"operation": "entity", "query": "Marfan syndrome"},
 		"brand_research":      {"url": "example.com"},
-		"syllabus_search":     {"query": "Marx"},
-		"gag_order_search":    {},
 		"paper_fulltext":      {"identifier": "https://example.com/paper.pdf"},
 		"company_recon":       {"target": "example.com"},
 		"research_panel":      {"query": "test"},
@@ -402,8 +389,6 @@ func TestExternalContentToolsCarryTrustMarker(t *testing.T) {
 		"clinical_search":     "untrusted-external-content",
 		"awesome_list_search": "untrusted-external-content",
 		"local_search":        "untrusted-external-content",
-		"syllabus_search":     "untrusted-external-content",
-		"gag_order_search":    "untrusted-external-content",
 		"paper_fulltext":      "untrusted-external-content",
 		"monarch_search":      "untrusted-external-content",
 		"research_panel":      "untrusted-external-content",
@@ -426,8 +411,6 @@ func TestExternalContentToolsCarryTrustMarker(t *testing.T) {
 		"clinical_search":     {"condition": "covid-19"},
 		"awesome_list_search": {"topic": "osint"},
 		"local_search":        {"query": "coffee near me"},
-		"syllabus_search":     {"query": "Marx"},
-		"gag_order_search":    {},
 		"paper_fulltext":      {"identifier": "https://example.com/paper.pdf"},
 		"monarch_search":      {"operation": "entity", "query": "Marfan syndrome"},
 		"research_panel":      {"query": "test"},
@@ -524,8 +507,6 @@ var structuredDomainDocTools = map[string]bool{
 	"monarch_search":      true,
 	"archive_source":      true,
 	"brand_research":      true,
-	"syllabus_search":     true,
-	"gag_order_search":    true,
 	"company_recon":       true,
 }
 

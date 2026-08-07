@@ -379,18 +379,13 @@ func setupTestDeps() Dependencies {
 		// conditionally-registered tool is visible to the CI drift tests
 		// (TestToolsDocMatchesRegistry / TestAllToolsHaveAnnotations /
 		// TestOutputSchemaMatchesResponse). Production gates these by feature flag.
-		Consent:       consent.NewStoreManager(persist.NewMemoryStore()),
-		UserAnalytics: useranalytics.NewStoreRecorder(persist.NewMemoryStore()),
-		Memory:        memory.NewStore(persist.NewMemoryStore(), 0),
-		Workspaces:    workspace.NewStore(persist.NewMemoryStore(), 0),
-		Monitor:       persist.NewMemoryStore(),
-		// Bare-field-gated tools (#352): a non-empty value is all that's needed
-		// to register them under test — no mock provider map involved.
-		OpenSyllabusAPIKey:      "test-key",
-		OpenSyllabusAPIURL:      "http://test.invalid",
-		PENAmericaAirtableToken: "test-token",
-		CTLogResolver:           &mockCTLogResolver{},
-		ArchiveResolver:         &mockArchiveResolver{},
+		Consent:         consent.NewStoreManager(persist.NewMemoryStore()),
+		UserAnalytics:   useranalytics.NewStoreRecorder(persist.NewMemoryStore()),
+		Memory:          memory.NewStore(persist.NewMemoryStore(), 0),
+		Workspaces:      workspace.NewStore(persist.NewMemoryStore(), 0),
+		Monitor:         persist.NewMemoryStore(),
+		CTLogResolver:   &mockCTLogResolver{},
+		ArchiveResolver: &mockArchiveResolver{},
 		ResearchPanelProviders: []ModelProvider{
 			&mockModelProvider{name: "mock-a", modelID: "model-a", text: "The sky is blue."},
 			&mockModelProvider{name: "mock-b", modelID: "model-b", text: "The sky is blue."},

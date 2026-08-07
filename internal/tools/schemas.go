@@ -1158,62 +1158,6 @@ var econSearchOutputSchema = map[string]any{
 	},
 }
 
-var syllabusSearchOutputSchema = map[string]any{
-	"type": "object",
-	"properties": map[string]any{
-		"query":       map[string]any{"type": "string"},
-		"sortBy":      map[string]any{"type": "string", "description": "frequency, recency, or institution_count."},
-		"resultCount": map[string]any{"type": "integer"},
-		"provider":    map[string]any{"type": "string", "description": "Always opensyllabus."},
-		"hints":       map[string]any{"type": "object"},
-		"trust":       trustUntrustedExternal,
-		"corpusNote":  map[string]any{"type": "string", "description": "Coverage-bias caveat: the corpus is ~65% US/Anglophone."},
-		"results": map[string]any{
-			"type": "array",
-			"items": map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"title":            map[string]any{"type": "string"},
-					"author":           map[string]any{"type": "string"},
-					"institution":      map[string]any{"type": "string"},
-					"country":          map[string]any{"type": "string"},
-					"field":            map[string]any{"type": "string"},
-					"year":             map[string]any{"type": "integer"},
-					"frequency":        map[string]any{"type": "integer", "description": "Assignment count across the corpus."},
-					"institutionCount": map[string]any{"type": "integer", "description": "Number of distinct institutions assigning this text."},
-					"coAssignedWith":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-					"url":              map[string]any{"type": "string"},
-				},
-			},
-		},
-	},
-}
-
-var gagOrderSearchOutputSchema = map[string]any{
-	"type": "object",
-	"properties": map[string]any{
-		"resultCount": map[string]any{"type": "integer"},
-		"provider":    map[string]any{"type": "string", "description": "Always pen_america."},
-		"hints":       map[string]any{"type": "object"},
-		"trust":       trustUntrustedExternal,
-		"results": map[string]any{
-			"type": "array",
-			"items": map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"state":    map[string]any{"type": "string"},
-					"billName": map[string]any{"type": "string"},
-					"status":   map[string]any{"type": "string", "description": "enacted, pending, failed, or vetoed."},
-					"targets":  map[string]any{"type": "string", "description": "higher_education, k12, or both."},
-					"year":     map[string]any{"type": "integer", "description": "Bill introduction year."},
-					"summary":  map[string]any{"type": "string"},
-					"url":      map[string]any{"type": "string"},
-				},
-			},
-		},
-	},
-}
-
 var monarchSearchOutputSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{
