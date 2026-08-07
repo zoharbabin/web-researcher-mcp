@@ -2,8 +2,11 @@ package audit
 
 import (
 	"bufio"
+	"bytes"
+	"context"
 	"encoding/json"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,6 +32,16 @@ type AuditEvent struct {
 	Success   bool           `json:"success"`
 	ErrorCode string         `json:"error_code,omitempty"`
 	Metadata  map[string]any `json:"metadata,omitempty"`
+	// PrevHash/Hash form a tamper-evident hash chain (#466 half 2): Hash is
+	// SHA-256(PrevHash + canonical JSON bytes of this event with Hash cleared),
+	// and PrevHash is the previous event's Hash (empty string for the first
+	// event a Logger instance ever writes). Both are fixed-size strings — no
+	// event stores more than its immediate predecessor's hash, so chain-state
+	// memory is O(1) regardless of chain length (see Logger.prevHash). See
+	// VerifyChain for the tamper-detection check and docs/SECURITY_AND_COMPLIANCE.md
+	// for the operator-facing verification workflow.
+	PrevHash string `json:"prev_hash,omitempty"`
+	Hash     string `json:"hash,omitempty"`
 }
 
 // podID identifies the process/instance emitting audit events, enabling
@@ -89,6 +102,12 @@ type Config struct {
 	// RetentionDays deletes rotated audit siblings older than this many days,
 	// at startup and hourly. 0 disables cleanup. File output only.
 	RetentionDays int
+	// WebhookURL, when non-empty, POSTs each event as JSON to this URL for SIEM
+	// export (#466 half 2). Fire-and-forget with a bounded timeout — a slow or
+	// dead receiver never blocks the audit write path. AUDIT_WEBHOOK_URL.
+	WebhookURL string
+	// WebhookTimeout bounds each webhook POST. <=0 defaults to 5s.
+	WebhookTimeout time.Duration
 }
 
 // Logger is a goroutine-safe, channel-based audit logger that writes
@@ -121,6 +140,30 @@ type Logger struct {
 	// includeRequestBody mirrors Config.IncludeRequestBody; read-only after
 	// construction, so it is safe to expose without synchronization.
 	includeRequestBody bool
+
+	// prevHash is the running tail of this instance's tamper-evidence hash
+	// chain (#466 half 2) — the Hash of the last event writeEvent processed,
+	// or "" before the first. It is read and mutated only inside writeEvent,
+	// which itself only ever runs on the single processLoop goroutine (both
+	// the direct channel path and the swap-replay path funnel through it), so
+	// no additional lock is needed. Deliberately per-Logger-instance (never a
+	// package-level var) so two Logger instances never share or interfere with
+	// each other's chains — see TestHashChain_TwoInstancesIndependent.
+	prevHash string
+
+	// Webhook SIEM export (#466 half 2). webhookClient/webhookSem are nil/zero
+	// when WebhookURL is unset, making exportToWebhook a no-op check.
+	webhookURL     string
+	webhookClient  *http.Client
+	webhookTimeout time.Duration
+	// webhookSem bounds in-flight webhook POSTs so a slow/dead receiver can
+	// only ever hold back a fixed number of goroutines, never grow without
+	// bound under sustained load; a full semaphore drops the export for that
+	// event (fire-and-forget — SIEM export is best-effort, never a reason to
+	// lose or delay the local JSONL write).
+	webhookSem     chan struct{}
+	webhookDropped atomic.Int64 // count of webhook exports dropped (semaphore full)
+	webhookWG      sync.WaitGroup
 }
 
 // NewLogger creates a new audit Logger from the given config.
@@ -165,6 +208,11 @@ func NewLogger(cfg Config) (*Logger, error) {
 	}
 	swapPath := filepath.Join(swapDir, ".audit-swap.jsonl")
 
+	webhookTimeout := cfg.WebhookTimeout
+	if webhookTimeout <= 0 {
+		webhookTimeout = 5 * time.Second
+	}
+
 	l := &Logger{
 		writer:             writer,
 		file:               file,
@@ -177,6 +225,14 @@ func NewLogger(cfg Config) (*Logger, error) {
 		retentionDays:      cfg.RetentionDays,
 		curSize:            curSize,
 		includeRequestBody: cfg.IncludeRequestBody,
+		webhookURL:         cfg.WebhookURL,
+		webhookTimeout:     webhookTimeout,
+	}
+	if cfg.WebhookURL != "" {
+		l.webhookClient = &http.Client{Timeout: webhookTimeout}
+		// Bounded in-flight exports (16) so a stalled receiver can't spawn an
+		// unbounded number of goroutines under sustained event volume.
+		l.webhookSem = make(chan struct{}, 16)
 	}
 
 	l.wg.Add(1)
@@ -258,6 +314,61 @@ func (l *Logger) Close() {
 	if l.file != nil {
 		_ = l.file.Close()
 	}
+
+	// Every in-flight webhook POST is bounded by webhookTimeout (the
+	// http.Client's own Timeout), so this Wait always returns within that
+	// bound — it never hangs indefinitely on a dead receiver.
+	l.webhookWG.Wait()
+}
+
+// WebhookDroppedCount reports how many SIEM webhook exports were skipped
+// because 16 were already in flight (bounded fan-out, not backpressure on the
+// local JSONL write). Read-only, lock-free; exported for the metrics layer.
+func (l *Logger) WebhookDroppedCount() int64 { return l.webhookDropped.Load() }
+
+// exportToWebhook fires a best-effort, non-blocking POST of event to the
+// configured SIEM webhook (#466 half 2). It is a no-op when no webhook is
+// configured. The POST runs in its own goroutine bounded by webhookSem (a
+// fixed-size semaphore) and webhookTimeout (the http.Client's Timeout), so a
+// slow or dead receiver can never block the caller (processLoop, the sole
+// caller of writeEvent) nor grow goroutines without bound: when the semaphore
+// is full the export for that event is dropped (counted), never queued.
+func (l *Logger) exportToWebhook(event AuditEvent) {
+	if l.webhookURL == "" {
+		return
+	}
+	data, err := json.Marshal(event)
+	if err != nil {
+		return
+	}
+
+	select {
+	case l.webhookSem <- struct{}{}:
+	default:
+		l.webhookDropped.Add(1)
+		return
+	}
+
+	l.webhookWG.Add(1)
+	go func() {
+		defer l.webhookWG.Done()
+		defer func() { <-l.webhookSem }()
+
+		ctx, cancel := context.WithTimeout(context.Background(), l.webhookTimeout)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, l.webhookURL, bytes.NewReader(data))
+		if err != nil {
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := l.webhookClient.Do(req)
+		if err != nil {
+			return // fire-and-forget: no retry, no error surfaced to the audit path
+		}
+		_ = resp.Body.Close()
+	}()
 }
 
 func (l *Logger) processLoop() {
@@ -294,11 +405,28 @@ func (l *Logger) processLoop() {
 	}
 }
 
-// writeEvent encodes one event, tracks the active file size, and rotates the
-// file when it would exceed maxBytes. Encoding is best-effort (errors ignored)
-// to match the prior behavior; rotation is file-output only. It returns the
-// encoder to use for the next write (rebound after a rotation).
+// writeEvent computes the tamper-evidence hash for one event, encodes it,
+// tracks the active file size, and rotates the file when it would exceed
+// maxBytes. Encoding is best-effort (errors ignored) to match the prior
+// behavior; rotation is file-output only. It returns the encoder to use for
+// the next write (rebound after a rotation).
+//
+// writeEvent is the single choke point every event passes through before
+// hitting the writer — both the direct channel path and the swap-file replay
+// path call it — so l.prevHash is only ever read/mutated from this method,
+// which itself only ever runs on the single processLoop goroutine. That
+// keeps the hash chain correctly ordered with no additional locking, and
+// keeps chain state to one fixed-size string per Logger instance (#466 half
+// 2, milestone #555 §1.3/§4.1) rather than package-level or unbounded state.
 func (l *Logger) writeEvent(enc *json.Encoder, event AuditEvent) *json.Encoder {
+	hash, err := hashEvent(l.prevHash, event)
+	if err == nil {
+		event.PrevHash = l.prevHash
+		event.Hash = hash
+		l.prevHash = hash
+	}
+	l.exportToWebhook(event)
+
 	if l.file == nil || l.maxBytes <= 0 {
 		_ = enc.Encode(event)
 		return enc

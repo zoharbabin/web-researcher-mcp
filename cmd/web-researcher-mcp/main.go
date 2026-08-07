@@ -483,6 +483,7 @@ func main() {
 			OutputPath:         cfg.Audit.OutputPath,
 			BufferSize:         cfg.Audit.BufferSize,
 			IncludeRequestBody: cfg.Audit.IncludeRequestBody,
+			WebhookURL:         cfg.Audit.WebhookURL,
 		})
 		if err != nil {
 			logger.Error("failed to create audit logger", "err", err)

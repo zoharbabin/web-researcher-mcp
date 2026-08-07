@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/textproto"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -133,6 +134,9 @@ type AuditConfig struct {
 	IncludeRequestBody bool
 	MaxBytes           int
 	RetentionDays      int
+	// WebhookURL is the optional SIEM export target (#466 half 2):
+	// AUDIT_WEBHOOK_URL. Empty disables webhook export entirely.
+	WebhookURL string
 }
 
 type SearchConfig struct {
@@ -286,6 +290,18 @@ func Load() (*Config, error) {
 	searxngURL := os.Getenv("SEARXNG_URL")
 	if provider == "searxng" && searxngURL == "" {
 		errs = append(errs, "SEARXNG_URL is required when SEARCH_PROVIDER=searxng")
+	}
+
+	// AUDIT_WEBHOOK_URL (#466 half 2): optional SIEM export target. Validated
+	// at this boundary (operator-supplied env var) rather than deferred to the
+	// audit package, matching the fail-closed pattern used for other optional
+	// URL-shaped config above — a malformed value refuses startup rather than
+	// silently never firing.
+	auditWebhookURL := os.Getenv("AUDIT_WEBHOOK_URL")
+	if auditWebhookURL != "" {
+		if u, perr := url.Parse(auditWebhookURL); perr != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			errs = append(errs, "AUDIT_WEBHOOK_URL must be a valid absolute http(s) URL")
+		}
 	}
 
 	// SearXNG auth (optional). Parsed unconditionally — not gated on
@@ -529,6 +545,7 @@ func Load() (*Config, error) {
 			IncludeRequestBody: envBool("AUDIT_INCLUDE_REQUEST_BODY", false),
 			MaxBytes:           envInt("AUDIT_MAX_BYTES", 100<<20),
 			RetentionDays:      retentionDays,
+			WebhookURL:         auditWebhookURL,
 		},
 		Circuit: CircuitConfig{
 			FailureThreshold: envInt("CIRCUIT_FAILURE_THRESHOLD", 5),

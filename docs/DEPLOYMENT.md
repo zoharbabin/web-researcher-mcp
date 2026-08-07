@@ -599,6 +599,9 @@ Regulated features (per-user personal data; each activates the consent subsystem
 | `AUDIT_INCLUDE_REQUEST_BODY` | When `true`, a SHA-256 hash of the query is added to audit metadata alongside its length, for correlating repeated queries. The literal query text is never recorded, in either setting | `false` |
 | `AUDIT_MAX_BYTES` | Rotate the active audit file to a timestamped sibling at this size. File output only; ignored for stderr/STDIO | `104857600` (100 MB) |
 | `AUDIT_RETENTION_DAYS` | Rotated audit files older than this are deleted on startup and hourly. `0` disables cleanup. Any non-zero value is clamped to `[180, 3650]` per NIS2/HGB retention floors | `180` |
+| `AUDIT_WEBHOOK_URL` | Optional SIEM export target. Each audit event is POSTed as JSON to this URL, fire-and-forget with a bounded timeout — a slow or dead receiver never blocks the audit write path. Must be an absolute `http(s)` URL (validated at startup) | — (disabled) |
+
+Every audit event carries a tamper-evident hash chain (`prev_hash`/`hash` fields — SHA-256 of the previous event's hash plus the current event's canonical bytes) so an edited or reordered log line is detectable; verify a log with `audit.VerifyChain`. See `docs/SECURITY_AND_COMPLIANCE.md` for the operator-facing verification workflow.
 
 ### Multi-Tenancy
 
