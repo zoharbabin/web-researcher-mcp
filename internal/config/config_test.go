@@ -184,6 +184,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.MaxScrapeConcurrency != 5 {
 		t.Errorf("expected default MaxScrapeConcurrency=5, got %d", cfg.MaxScrapeConcurrency)
 	}
+	if cfg.MaxScrapeConcurrencyPerTenant != 5 {
+		t.Errorf("expected default MaxScrapeConcurrencyPerTenant to fall back to MaxScrapeConcurrency=5, got %d", cfg.MaxScrapeConcurrencyPerTenant)
+	}
 	if cfg.LogFormat != "json" {
 		t.Errorf("expected default LogFormat=json, got %s", cfg.LogFormat)
 	}
@@ -391,11 +394,35 @@ func TestLoadCustomScrapingConfig(t *testing.T) {
 	if cfg.MaxScrapeConcurrency != 10 {
 		t.Errorf("expected MaxScrapeConcurrency=10, got %d", cfg.MaxScrapeConcurrency)
 	}
+	if cfg.MaxScrapeConcurrencyPerTenant != 10 {
+		t.Errorf("expected MaxScrapeConcurrencyPerTenant to fall back to the custom MaxScrapeConcurrency=10 when unset, got %d", cfg.MaxScrapeConcurrencyPerTenant)
+	}
 	if cfg.ChromePath != "/usr/bin/chromium" {
 		t.Errorf("expected ChromePath=/usr/bin/chromium, got %s", cfg.ChromePath)
 	}
 	if !cfg.AllowPrivateIPs {
 		t.Error("expected AllowPrivateIPs=true")
+	}
+}
+
+// TestLoadMaxScrapeConcurrencyPerTenantExplicit proves #463's config knob is
+// independently settable, not just a passthrough of MAX_SCRAPE_CONCURRENCY —
+// an operator running a shared multi-tenant deployment sets this BELOW the
+// global cap to stop one tenant from saturating every slot.
+func TestLoadMaxScrapeConcurrencyPerTenantExplicit(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("MAX_SCRAPE_CONCURRENCY", "20")
+	t.Setenv("MAX_SCRAPE_CONCURRENCY_PER_TENANT", "2")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.MaxScrapeConcurrency != 20 {
+		t.Errorf("expected MaxScrapeConcurrency=20, got %d", cfg.MaxScrapeConcurrency)
+	}
+	if cfg.MaxScrapeConcurrencyPerTenant != 2 {
+		t.Errorf("expected explicit MaxScrapeConcurrencyPerTenant=2, got %d", cfg.MaxScrapeConcurrencyPerTenant)
 	}
 }
 
