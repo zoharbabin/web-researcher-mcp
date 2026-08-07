@@ -1622,6 +1622,7 @@ class MonitorQuerySaveResponse:
 @dataclass
 class NewsSearchArticle:
     engagement: Optional[Engagement] = None
+    extraSnippets: list[str] = field(default_factory=list)
     isSocialMedia: Optional[bool] = None
     publishedAt: Optional[str] = None
     snippet: Optional[str] = None
@@ -1636,6 +1637,7 @@ class NewsSearchArticle:
             return None
         return cls(
             engagement=Engagement.from_dict(d.get('engagement')) if d.get('engagement') else None,
+            extraSnippets=list(d.get('extraSnippets') or []),
             isSocialMedia=d.get('isSocialMedia'),
             publishedAt=d.get('publishedAt'),
             snippet=d.get('snippet'),

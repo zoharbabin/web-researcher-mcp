@@ -108,6 +108,7 @@ var newsSearchOutputSchema = map[string]any{
 					"source":        map[string]any{"type": "string"},
 					"publishedAt":   map[string]any{"type": "string"},
 					"snippet":       map[string]any{"type": "string"},
+					"extraSnippets": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 					"engagement":    engagementSignalsSchema,
 					"sourceType":    map[string]any{"type": "string"},
 					"isSocialMedia": map[string]any{"type": "boolean"},
