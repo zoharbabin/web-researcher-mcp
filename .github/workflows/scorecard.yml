@@ -1,0 +1,50 @@
+name: 🔒 OpenSSF Scorecard
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1" # Every Monday at 06:00 UTC — matches Dependabot + CodeQL cadence
+
+# Declared at the job level below per Scorecard's workflow restrictions when
+# publish_results is true (see https://github.com/ossf/scorecard-action#workflow-restrictions):
+# no top-level env/defaults, no workflow-level write permissions.
+permissions: read-all
+
+jobs:
+  # ── 🔒 OpenSSF Scorecard ────────────────────────────────────────────────────
+  # Runs the OpenSSF Scorecard supply-chain-security check suite and publishes
+  # results to the public API (scorecard.dev) so the badge in README.md stays
+  # live, plus uploads SARIF to Security → Code scanning.
+  analyze:
+    name: 🔒 Scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      # Required to upload SARIF results to code scanning
+      security-events: write
+      # Required to publish results to the public Scorecard API (Sigstore OIDC)
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Run analysis
+        uses: ossf/scorecard-action@v2
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: SARIF file
+          path: results.sarif
+          retention-days: 5
+
+      - name: Upload to code-scanning
+        uses: github/codeql-action/upload-sarif@v4.37.4
+        with:
+          sarif_file: results.sarif
