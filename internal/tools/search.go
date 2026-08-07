@@ -39,8 +39,8 @@ const (
 type webSearchInput struct {
 	Query        string   `json:"query" jsonschema:"The search query text (1-500 chars). Be specific with key terms and qualifiers for better results.,required"`
 	NumResults   int      `json:"num_results,omitempty" jsonschema:"Number of results to return (1-10). Default: 5. Higher values increase latency."`
-	TimeRange    string   `json:"time_range,omitempty" jsonschema:"Restrict to a time period: day, week, month, or year. Omit for all-time results."`
-	Safe         string   `json:"safe,omitempty" jsonschema:"SafeSearch level: off, medium (default), or high."`
+	TimeRange    string   `json:"time_range,omitempty" jsonschema:"Restrict to a time period. Omit for all-time results."`
+	Safe         string   `json:"safe,omitempty" jsonschema:"SafeSearch level. Default: medium."`
 	Language     string   `json:"language,omitempty" jsonschema:"Filter by language using ISO 639-1 code (e.g. en, fr, de)."`
 	Site         string   `json:"site,omitempty" jsonschema:"Restrict to a single domain (e.g. stackoverflow.com). Cannot combine with sites."`
 	Sites        []string `json:"sites,omitempty" jsonschema:"Restrict to a set of domains (up to 10, OR-joined), e.g. [\"stackoverflow.com\", \"github.com\"]. Cannot combine with site."`
@@ -48,16 +48,21 @@ type webSearchInput struct {
 	ExcludeTerms string   `json:"exclude_terms,omitempty" jsonschema:"Terms to exclude from results (space-separated)."`
 	Country      string   `json:"country,omitempty" jsonschema:"Restrict to a country using ISO 3166-1 alpha-2 code (e.g. US, GB)."`
 	Lens         string   `json:"lens,omitempty" jsonschema:"Focus your search on trusted sites in a specific field: docs, academic, academic-extended, clinical, security, investigative_records, programming, devops, news, tech, legal, medical, finance, science, government, awesome-lists. For engineering/API questions use docs (official references) or programming (docs, tutorials, Q&A) — tech is technology news and industry journalism, not engineering documentation. Only one lens can be active at a time (overrides the site/sites parameters)."`
-	Provider     string   `json:"provider,omitempty" jsonschema:"Choose which search engine to use for this query: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github. Leave empty to use the default. Returns an error if the chosen provider isn't set up."`
+	Provider     string   `json:"provider,omitempty" jsonschema:"Choose which search engine to use for this query. Leave empty to use the default. Returns an error if the chosen provider isn't set up."`
 	SessionID    string   `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. Sources are automatically recorded in the session for recovery after context loss."`
 	Claim        string   `json:"claim,omitempty" jsonschema:"Optional claim to evaluate against each result's snippet. When set, each result gains a claimSignal (the most claim-relevant snippet sentence) to help triage which links to read; for full-text evidence use search_and_scrape with claim. Evidence only — the server never decides supports/contradicts."`
 }
 
 func registerWebSearch(srv *mcp.Server, deps Dependencies) {
+	inputSchema := mustSchemaFor[webSearchInput]()
+	inputSchema.Properties["time_range"].Enum = webTimeRangeEnum()
+	inputSchema.Properties["safe"].Enum = webSafeEnum()
+	inputSchema.Properties["provider"].Enum = webProviderEnum()
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "web_search",
 		Description:  "Search the web and get a list of relevant pages with titles and snippets — without reading the full page content. Narrow results to one domain with the site parameter, or apply a search lens to restrict to trusted sites in a field (see the lens parameter for the full list). Use search_and_scrape if you need full page text, news_search for current events, or academic_search for research papers. Results stay fresh for 30 minutes; use time_range to get more recent results. Snippets are not the full source — use scrape_page before asserting a claim. Zero results do not confirm a fact is false.",
 		Annotations:  readOnlyAnnotations(true, true),
+		InputSchema:  inputSchema,
 		OutputSchema: webSearchOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input webSearchInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
