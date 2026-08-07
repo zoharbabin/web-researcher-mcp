@@ -8,6 +8,7 @@ on:
     branches: [main]
   schedule:
     - cron: "0 7 * * 1" # Weekly soak test, every Monday at 07:00 UTC
+    - cron: "0 9 * * 1" # Weekly multi-pod Redis session continuity, every Monday at 09:00 UTC (#495)
   workflow_dispatch:
     inputs:
       run_python_live:
@@ -554,10 +555,13 @@ jobs:
   # spin-up is extra CI minutes for a property that changes rarely (only
   # internal/session/ or internal/redisbackend/ changes could break it), so
   # this stays opt-in via workflow_dispatch, plus the weekly schedule (kind
-  # startup is ~1-2min, cheap enough for continuous verification).
+  # startup is ~1-2min, cheap enough for continuous verification). Gated to
+  # its own cron string (not just github.event_name == 'schedule') so it
+  # doesn't also fire on the soak-test/trust-eval crons once those share the
+  # same `on.schedule` list.
   multipod-redis-session-continuity:
     name: ☸️ Multi-Pod Redis Session Continuity
-    if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_multipod_session_test == 'true') }}
+    if: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 9 * * 1') || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_multipod_session_test == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
