@@ -1514,6 +1514,37 @@ func TestSearchAPIProvider_PatentSearch(t *testing.T) {
 	}
 }
 
+// TestSearchAPIProvider_PatentSearch_CPCCode proves the #530 fix: cpc_code is
+// folded into Google Patents' own `q` classification syntax (CPC=<code>)
+// rather than being silently dropped, since SearchAPI's google_patents
+// engine has no dedicated CPC request parameter.
+func TestSearchAPIProvider_PatentSearch_CPCCode(t *testing.T) {
+	t.Parallel()
+
+	var gotQuery string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query().Get("q")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(searchAPIPatentResponse{})
+	}))
+	defer ts.Close()
+
+	deps := Deps{HTTPClient: ts.Client(), Breaker: circuit.New(circuit.Config{FailureThreshold: 5})}
+	s := NewSearchAPIProvider("key", deps)
+	s.SetBaseURL(ts.URL)
+
+	_, err := s.Patents(context.Background(), PatentSearchParams{
+		Query:   "battery",
+		CPCCode: "H01M10/00",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(gotQuery, "CPC=H01M10/00") {
+		t.Errorf("expected q to contain CPC=H01M10/00, got %q", gotQuery)
+	}
+}
+
 func TestExtractPatentNumber(t *testing.T) {
 	t.Parallel()
 

@@ -15,6 +15,21 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
+// mockOAResolver is a fixed-response search.OAResolver stub for #533 tests —
+// it never hits the network, mirroring the other mock*Resolver types in
+// tools_test.go.
+type mockOAResolver struct {
+	oa     bool
+	pdfURL string
+	found  bool
+	err    error
+}
+
+func (m *mockOAResolver) Name() string { return "mock-unpaywall" }
+func (m *mockOAResolver) Resolve(_ context.Context, _ string) (bool, string, bool, error) {
+	return m.oa, m.pdfURL, m.found, m.err
+}
+
 // failingPaperFetcher implements search.AcademicProvider + search.PaperFetcher,
 // with FetchPaper always returning a non-nil, non-not-found error — modeling a
 // genuine upstream failure (rate limit, network, 5xx) as opposed to "no record".
@@ -190,6 +205,88 @@ func TestPaperFulltextWithMockS2(t *testing.T) {
 	}
 	if out["trust"] != "untrusted-external-content" {
 		t.Errorf("trust marker missing: %v", out["trust"])
+	}
+}
+
+// TestPaperFulltextUnpaywallFallback proves the #533 fix: when the Semantic
+// Scholar fetcher resolves a DOI but has no PDF URL of its own, paper_fulltext
+// must fall back to deps.OAResolver (Unpaywall) instead of degrading straight
+// to the S2 landing page — mirroring the enrichment academic_search already
+// performs via search.EnrichOpenAccess.
+func TestPaperFulltextUnpaywallFallback(t *testing.T) {
+	pdf := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><head><title>OA Copy</title></head><body><article><p>` +
+			"Full text served from the Unpaywall-resolved open access location." +
+			`</p></article></body></html>`))
+	}))
+	defer pdf.Close()
+
+	s2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// Semantic Scholar knows the paper but has no openAccessPdf of its own.
+		_, _ = w.Write([]byte(`{"paperId":"abc","externalIds":{"DOI":"10.1038/nature12373"},"title":"A Study","year":2013,"isOpenAccess":false}`))
+	}))
+	defer s2.Close()
+
+	s2Provider := search.NewSemanticScholarProvider("", search.Deps{
+		HTTPClient: http.DefaultClient,
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+	})
+	s2Provider.SetBaseURL(s2.URL)
+
+	deps := scrapeTestDeps()
+	deps.AcademicProviders = map[string]search.AcademicProvider{"semanticscholar": s2Provider}
+	deps.OAResolver = &mockOAResolver{oa: true, pdfURL: pdf.URL, found: true}
+
+	out := callPaperFulltext(t, deps, map[string]any{"identifier": "10.1038/nature12373"})
+
+	if out["resolvedUrl"] != pdf.URL {
+		t.Errorf("resolvedUrl = %v, want the Unpaywall-resolved PDF URL %v", out["resolvedUrl"], pdf.URL)
+	}
+	if out["openAccess"] != true {
+		t.Errorf("openAccess = %v, want true (Unpaywall found an OA copy)", out["openAccess"])
+	}
+	if out["source"] != "semanticscholar" {
+		t.Errorf("source = %v, want semanticscholar", out["source"])
+	}
+}
+
+// TestPaperFulltextUnpaywallNeverOverwritesExistingPDFUrl proves the fallback
+// never overwrites a fetcher-supplied PDFUrl — Unpaywall is consulted only
+// when the fetcher's own metadata has none.
+func TestPaperFulltextUnpaywallNeverOverwritesExistingPDFUrl(t *testing.T) {
+	s2PDF := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><head><title>S2 Copy</title></head><body><article><p>` +
+			"Full text served from the Semantic Scholar PDF URL, not Unpaywall's." +
+			`</p></article></body></html>`))
+	}))
+	defer s2PDF.Close()
+
+	unpaywallPDF := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer unpaywallPDF.Close()
+
+	s2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"paperId":"abc","externalIds":{"DOI":"10.1038/nature12373"},"title":"A Study","year":2013,"isOpenAccess":true,"openAccessPdf":{"url":"` + s2PDF.URL + `"}}`))
+	}))
+	defer s2.Close()
+
+	s2Provider := search.NewSemanticScholarProvider("", search.Deps{
+		HTTPClient: http.DefaultClient,
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+	})
+	s2Provider.SetBaseURL(s2.URL)
+
+	deps := scrapeTestDeps()
+	deps.AcademicProviders = map[string]search.AcademicProvider{"semanticscholar": s2Provider}
+	deps.OAResolver = &mockOAResolver{oa: true, pdfURL: unpaywallPDF.URL, found: true}
+
+	out := callPaperFulltext(t, deps, map[string]any{"identifier": "10.1038/nature12373"})
+
+	if out["resolvedUrl"] != s2PDF.URL {
+		t.Errorf("resolvedUrl = %v, want the Semantic Scholar PDF URL %v (must not be overwritten by Unpaywall)", out["resolvedUrl"], s2PDF.URL)
 	}
 }
 

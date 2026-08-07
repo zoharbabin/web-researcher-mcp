@@ -261,6 +261,157 @@ func TestHasContrastCueCatchesRealWorldRefutationLanguage(t *testing.T) {
 	}
 }
 
+// TestClaimTermCoverageWindowedExcludesReferencesSection reproduces #522: a
+// claim's terms superficially matching the TITLES of a paper's own cited
+// works, in its bibliography, must not count as coverage — only the body
+// text is measured.
+func TestClaimTermCoverageWindowedExcludesReferencesSection(t *testing.T) {
+	body := "This work reports nanometre-scale thermometry using NV centers in diamond for measuring temperature in living cells. " +
+		"The technique enables precise thermal mapping at the cellular level."
+	bibliography := "\nReferences\n" +
+		"1. Schroeder, A. et al. Treating metastatic cancer with nanotechnology. Nature Reviews Cancer, 171-176 (2012).\n" +
+		"2. Some other cancer nanoparticle ablation study, Cancer Research, 4372-4382 (2012).\n"
+	text := body + bibliography
+
+	claim := "This paper proves that CRISPR-Cas9 can cure all forms of cancer."
+	matched, total := ClaimTermCoverageWindowed(text, claim, 0)
+	if matched != 0 {
+		t.Errorf("cancer claim should score 0 coverage against a thermometry paper once the bibliography is excluded, got matched=%d/%d", matched, total)
+	}
+
+	ev := ExtractClaimEvidence(text, claim)
+	if len(ev.KeySentences) != 0 {
+		t.Errorf("expected no claim evidence once the bibliography is excluded, got %v", ev.KeySentences)
+	}
+
+	// Precondition: without exclusion, the bibliography's "cancer" mentions would
+	// have matched — proving the fix, not a vacuously-true claim setup. Checked
+	// via a raw substring scan (not ClaimTermCoverage, which now strips the
+	// References section on its own input too).
+	if !strings.Contains(strings.ToLower(bibliography), "cancer") {
+		t.Fatalf("precondition failed: bibliography text should itself contain claim terms")
+	}
+}
+
+// TestClaimTermCoverageWindowedExcludesNumberedReferenceListWithoutHeader
+// reproduces #522's actual live repro: the arXiv:1304.1068 PDF text has no
+// literal "References" header line at all (the scraper's extraction dropped
+// it) — only the numbered bibliography entries (1., 2., 3., ...) survive. The
+// header-only regex would miss this; the numbered-list detector must catch
+// it.
+func TestClaimTermCoverageWindowedExcludesNumberedReferenceListWithoutHeader(t *testing.T) {
+	body := "This work demonstrates nanoscale thermometry using nitrogen-vacancy color centers in diamond to measure temperature in a living cell. " +
+		"Acknowledgements: we thank colleagues for helpful discussions."
+	bibliography := "\n1. Yue, Y. and Wang, X. Nanoscale thermal probing. Reviews 3 (2012).\n" +
+		"2. Lucchetta, E. et al. Dynamics of embryonic patterning. Nature 434, 1134-1138 (2005).\n" +
+		"3. Kumar, S. V. and Wigge, P. A. Nucleosomes and thermosensory response. Cell 140, 136-147 (2010).\n" +
+		"6. Schroeder, A. et al. Treating metastatic cancer with nanotechnology. Nature Reviews Cancer 12, 39-50 (2011).\n" +
+		"9. Vreugdenburg, T. et al. Elastography and digital infrared thermography for breast cancer screening. (2013).\n"
+	text := body + bibliography
+
+	claim := "This paper proves that CRISPR-Cas9 can cure all forms of cancer."
+	matched, _ := ClaimTermCoverageWindowed(text, claim, 0)
+	if matched != 0 {
+		t.Errorf("cancer claim should score 0 coverage once the header-less numbered reference list is excluded, got matched=%d", matched)
+	}
+
+	// Sanity: a numbered list that never reaches 1→2→3 in order (just a
+	// coincidental "1." in body prose) must NOT be treated as a reference list.
+	falsePositive := "Step 1. Mix the reagents. Then move to the next station. The cancer cells were plated."
+	if idx := numberedReferenceListStart(strings.Split(falsePositive, "\n")); idx >= 0 {
+		t.Errorf("a lone numbered step should not be detected as a reference list, got start index %d", idx)
+	}
+}
+
+// TestClaimTermsKeepsNumericTokens reproduces part of #523: a claim's
+// numeric-only tokens (e.g. a vote count) must survive tokenization even
+// though they're shorter than the 3-char minimum applied to words.
+func TestClaimTermsKeepsNumericTokens(t *testing.T) {
+	terms := claimTerms("The FOMC voted 9-3 with Hammack, Kashkari, and Logan dissenting")
+	joined := strings.Join(terms, ",")
+	for _, want := range []string{"9", "3"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("expected numeric term %q to survive claimTerms, got %v", want, terms)
+		}
+	}
+}
+
+// TestClaimTermCoverageWindowedToleratesInflection reproduces #523: a claim
+// term and its inflected form in the source ("dissenting" vs. the source's
+// "dissented") must be recognized as the same word.
+func TestClaimTermCoverageWindowedToleratesInflection(t *testing.T) {
+	text := "The Federal Reserve voted 9-3 to raise rates. Hammack, Kashkari, and Logan dissented from the decision."
+	claim := "The FOMC voted 9-3 with Hammack, Kashkari, and Logan dissenting in favor of a rate hike"
+	matched, total := ClaimTermCoverageWindowed(text, claim, 0)
+	if float64(matched)/float64(total) < 0.6 {
+		t.Errorf("verbatim FOMC vote claim should clear the addressed threshold, got matched=%d total=%d", matched, total)
+	}
+}
+
+// TestClaimTermCoverageWindowedStemDoesNotMatchUnrelatedWords is the
+// regression guard for a false positive a live wet-test against the real
+// arXiv:1304.1068 PDF text surfaced in #523/#549: the initial stemming fix
+// matched a claim term's stem as a raw SUBSTRING of the source text, so claim
+// term "proves" (stemmed to "prov") wrongly matched unrelated words like
+// "improved" and "provide" that merely contain that fragment. Matching must
+// be against whole source words (or their stems), never substrings.
+func TestClaimTermCoverageWindowedStemDoesNotMatchUnrelatedWords(t *testing.T) {
+	text := "The resolution of our method can be improved by increasing the number of centers, " +
+		"and this approach may provide a powerful new tool for biological research."
+	claim := "This paper proves that CRISPR-Cas9 can cure all forms of cancer."
+	matched, _ := ClaimTermCoverageWindowed(text, claim, 0)
+	if matched != 0 {
+		t.Errorf("stemmed term 'prov' must not substring-match 'improved'/'provide', got matched=%d", matched)
+	}
+
+	ev := ExtractClaimEvidence(text, claim)
+	if len(ev.KeySentences) != 0 {
+		t.Errorf("expected no claim evidence from unrelated substring matches, got %v", ev.KeySentences)
+	}
+}
+
+// TestClaimTermCoverageWindowedShortDocumentUsesWholeDocCoverage reproduces
+// #523's actual live repro: a real, short Federal Reserve FOMC press release
+// verbatim-states a 9-3 vote with named dissenters, but the vote-count
+// sentence and the dissenter-naming sentence are more than one
+// defaultClaimWindow apart, so a fixed sliding window undercounts a claim the
+// whole short document genuinely supports.
+func TestClaimTermCoverageWindowedShortDocumentUsesWholeDocCoverage(t *testing.T) {
+	text := "Federal Reserve issues FOMC statement\n" +
+		"For release at 2:00 p.m.\n" +
+		"The Federal Open Market Committee approved the following statement for release by a 9 - 3 vote:\n" +
+		"The Committee decided to maintain the target range for the federal funds rate at 3-1/2 to 3-3/4 percent, in support of the Federal Reserve's dual mandate.\n" +
+		"The Committee is continuing its policy of maintaining ample reserves in the banking system.\n" +
+		"Economic activity is expanding at a solid pace despite elevated uncertainty that owes, in part, to the conflict in the Middle East.\n" +
+		"Productivity growth and capital investment are strong.\n" +
+		"Job gains have kept pace with the workforce, and the unemployment rate has changed little.\n" +
+		"Inflation remains elevated relative to the Committee's 2 percent goal, in part reflecting supply shocks that have driven price increases in certain sectors, including energy.\n" +
+		"The Committee will deliver price stability.\n" +
+		"Voting against the monetary policy action were Beth M. Hammack, Neel Kashkari, and Lorie K. Logan, who preferred to raise the target range for the federal funds rate by 1/4 percentage point at this meeting.\n"
+
+	claim := "The FOMC voted 9-3 with Hammack, Kashkari, and Logan dissenting in favor of a rate hike"
+	matched, total := ClaimTermCoverageWindowed(text, claim, 0)
+	if float64(matched)/float64(total) < claimAddressedThresholdForTest {
+		t.Errorf("verbatim FOMC vote claim against the real short press release should clear the addressed threshold, got matched=%d total=%d", matched, total)
+	}
+}
+
+// claimAddressedThresholdForTest mirrors internal/tools' claimAddressedThreshold
+// (0.6) — duplicated here rather than imported to avoid this package depending
+// on internal/tools, which would invert the intended dependency direction.
+const claimAddressedThresholdForTest = 0.6
+
+func TestClaimTermsDropsShortNonNumericTokens(t *testing.T) {
+	terms := claimTerms("a claim with an id of ab and a number 42")
+	joined := strings.Join(terms, ",")
+	if strings.Contains(joined, ",ab,") || strings.HasPrefix(joined, "ab,") {
+		t.Errorf("short non-numeric token 'ab' should still be dropped, got %v", terms)
+	}
+	if !strings.Contains(joined, "42") {
+		t.Errorf("numeric token '42' should survive, got %v", terms)
+	}
+}
+
 func TestContainsAny(t *testing.T) {
 	needles := []string{"foo", "bar"}
 	if !ContainsAny("this has a foo in it", needles) {
@@ -294,5 +445,27 @@ func TestCountAny(t *testing.T) {
 	// Repeated occurrences of the same needle count once, not per-occurrence.
 	if got := CountAny("foo foo foo", needles); got != 1 {
 		t.Errorf("repeated needle should count once, got %d", got)
+	}
+}
+
+// BenchmarkClaimTermCoverageWindowedWithReferenceSection guards against the
+// #522 reference-section pre-pass introducing an order-of-magnitude
+// regression: it must stay a single linear scan over sentences, not a new
+// nested scan (see issue #549, rule 4.1).
+func BenchmarkClaimTermCoverageWindowedWithReferenceSection(b *testing.B) {
+	var sb strings.Builder
+	for i := 0; i < 500; i++ {
+		sb.WriteString("The study measured outcomes across multiple cohorts over several years of follow-up. ")
+	}
+	sb.WriteString("\nReferences\n")
+	for i := 0; i < 200; i++ {
+		sb.WriteString("Author, A. et al. A related study on cohorts and outcomes. Journal of Studies, 1-10 (2020).\n")
+	}
+	longDoc := sb.String()
+	claim := "the study measured outcomes across multiple cohorts"
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		ClaimTermCoverageWindowed(longDoc, claim, 0)
 	}
 }

@@ -160,6 +160,16 @@ func (m *SessionManager) SetResearchGoal(tenantID, userID, sessionID, goal strin
 	return m.save(sess)
 }
 
+func (m *SessionManager) SetTotalStepsEstimate(tenantID, userID, sessionID string, estimate int) error {
+	sess, err := m.load(tenantID, userID, sessionID)
+	if err != nil {
+		return err
+	}
+	sess.TotalStepsEstimate = estimate
+	sess.LastUsed = nowUTC()
+	return m.save(sess)
+}
+
 func (m *SessionManager) AddSources(tenantID, userID, sessionID string, sources []session.ResearchSource) error {
 	sess, err := m.load(tenantID, userID, sessionID)
 	if err != nil {

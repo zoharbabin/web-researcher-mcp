@@ -258,6 +258,35 @@ func TestBuildZeroResultHints_EpistemicWarning(t *testing.T) {
 	}
 }
 
+// TestBuildZeroResultHintsRequiredKeysExcluded guards #537: a required,
+// non-removable param (e.g. monarch_search's operation) must still appear in
+// filtersApplied for context, but must never be suggested as a remove_filter
+// action, since removing a required param isn't a valid recovery step.
+func TestBuildZeroResultHintsRequiredKeysExcluded(t *testing.T) {
+	hints := buildZeroResultHints("monarch", map[string]string{
+		"operation": "semsim",
+		"entityId":  "MONDO:0007947",
+	}, nil, "operation")
+
+	if hints.FiltersApplied["operation"] != "semsim" {
+		t.Errorf("required key must still be surfaced in filtersApplied, got %v", hints.FiltersApplied)
+	}
+	for _, a := range hints.SuggestedActions {
+		if a.Action == "remove_filter" && a.Parameter == "operation" {
+			t.Errorf("required key must never be suggested for removal, got %v", hints.SuggestedActions)
+		}
+	}
+	found := false
+	for _, a := range hints.SuggestedActions {
+		if a.Action == "remove_filter" && a.Parameter == "entityId" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("non-required key entityId should still be suggested for removal, got %v", hints.SuggestedActions)
+	}
+}
+
 // emptyEconProvider implements search.EconProvider and always returns zero
 // results, so econ_search's zero-result hints branch (buildZeroResultHints +
 // econFilterMap, issue #357) can be exercised in a test.

@@ -77,7 +77,7 @@ func registerFormatBibliography(srv *mcp.Server, deps Dependencies) {
 				return toolError("Session not found or expired. Sessions last 4 hours from last activity."), nil, nil
 			}
 			for _, s := range sess.Sources {
-				entries = append(entries, content.BibEntry{URL: s.URL, Title: s.Title})
+				entries = append(entries, content.BibEntry{URL: s.URL, Title: s.Title, Author: s.Author, Date: s.Date, DOI: s.DOI})
 			}
 		}
 

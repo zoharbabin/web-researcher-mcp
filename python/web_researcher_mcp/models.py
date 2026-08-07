@@ -763,6 +763,7 @@ class EconSearchResponse:
     resultCount: Optional[int] = None
     results: list[EconSearchResult] = field(default_factory=list)
     seriesId: Optional[str] = None
+    truncationWarning: Optional[str] = None
     trust: Optional[str] = None
 
     @classmethod
@@ -778,6 +779,7 @@ class EconSearchResponse:
             resultCount=d.get('resultCount'),
             results=[EconSearchResult.from_dict(i) for i in (d.get('results') or [])],
             seriesId=d.get('seriesId'),
+            truncationWarning=d.get('truncationWarning'),
             trust=d.get('trust'),
         )
 
@@ -1620,9 +1622,11 @@ class MonitorQuerySaveResponse:
 @dataclass
 class NewsSearchArticle:
     engagement: Optional[Engagement] = None
+    isSocialMedia: Optional[bool] = None
     publishedAt: Optional[str] = None
     snippet: Optional[str] = None
     source: Optional[str] = None
+    sourceType: Optional[str] = None
     title: Optional[str] = None
     url: Optional[str] = None
 
@@ -1632,9 +1636,11 @@ class NewsSearchArticle:
             return None
         return cls(
             engagement=Engagement.from_dict(d.get('engagement')) if d.get('engagement') else None,
+            isSocialMedia=d.get('isSocialMedia'),
             publishedAt=d.get('publishedAt'),
             snippet=d.get('snippet'),
             source=d.get('source'),
+            sourceType=d.get('sourceType'),
             title=d.get('title'),
             url=d.get('url'),
         )
@@ -1728,6 +1734,20 @@ class PaperFulltextResponse:
         )
 
 @dataclass
+class PatentSearchAssigneecluster:
+    assignee: Optional[str] = None
+    count: Optional[int] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "PatentSearchAssigneecluster | None":
+        if d is None:
+            return None
+        return cls(
+            assignee=d.get('assignee'),
+            count=d.get('count'),
+        )
+
+@dataclass
 class PatentSearchPatent:
     abstract: Optional[str] = None
     assignee: Optional[str] = None
@@ -1759,6 +1779,7 @@ class PatentSearchPatent:
 
 @dataclass
 class PatentSearchResponse:
+    assigneeClusters: list[PatentSearchAssigneecluster] = field(default_factory=list)
     hints: dict[str, Any] = field(default_factory=dict)
     patents: list[PatentSearchPatent] = field(default_factory=list)
     query: Optional[str] = None
@@ -1773,6 +1794,7 @@ class PatentSearchResponse:
         if d is None:
             return None
         return cls(
+            assigneeClusters=[PatentSearchAssigneecluster.from_dict(i) for i in (d.get('assigneeClusters') or [])],
             hints=dict(d.get('hints') or {}),
             patents=[PatentSearchPatent.from_dict(i) for i in (d.get('patents') or [])],
             query=d.get('query'),
@@ -1896,7 +1918,7 @@ class ResearchPanelResponse:
     _meta: Optional[Meta] = None
     divergence: Optional[Divergence] = None
     panel: list[ResearchPanelPanel] = field(default_factory=list)
-    question: Optional[str] = None
+    query: Optional[str] = None
     trust: Optional[str] = None
 
     @classmethod
@@ -1907,7 +1929,7 @@ class ResearchPanelResponse:
             _meta=Meta.from_dict(d.get('_meta')) if d.get('_meta') else None,
             divergence=Divergence.from_dict(d.get('divergence')) if d.get('divergence') else None,
             panel=[ResearchPanelPanel.from_dict(i) for i in (d.get('panel') or [])],
-            question=d.get('question'),
+            query=d.get('query'),
             trust=d.get('trust'),
         )
 

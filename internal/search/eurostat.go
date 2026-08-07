@@ -363,6 +363,32 @@ func decodeJSONStatObservations(js *jsonStat, seriesID string, limit int) []Econ
 		}
 		return out[i].Date < out[j].Date
 	})
+
+	// A multi-series cube (more than one distinct Title) truncated below its
+	// full row count silently drops whichever series sort last — alphabetically
+	// after whichever came first (#536). Detect this BEFORE truncating (the
+	// full, pre-truncation set of distinct titles is what would be dropped)
+	// and attach a warning to the first surviving row, the one place a caller
+	// checking the top of the result set will see it.
+	if len(out) > limit {
+		distinctTitles := map[string]struct{}{}
+		for _, r := range out {
+			distinctTitles[r.Title] = struct{}{}
+		}
+		if len(distinctTitles) > 1 {
+			keptTitles := map[string]struct{}{}
+			for _, r := range out[:limit] {
+				keptTitles[r.Title] = struct{}{}
+			}
+			dropped := len(distinctTitles) - len(keptTitles)
+			if dropped > 0 {
+				out[0].TruncationWarning = fmt.Sprintf(
+					"this dataset has %d series (e.g. by sex/age/adjustment); num_results=%d kept only %d of them — increase num_results or narrow with a series-specific query to see the rest",
+					len(distinctTitles), limit, len(keptTitles))
+			}
+		}
+	}
+
 	if len(out) > limit {
 		out = out[:limit]
 	}

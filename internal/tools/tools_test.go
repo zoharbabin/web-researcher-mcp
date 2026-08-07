@@ -850,6 +850,62 @@ func TestSequentialSearchMissingSessionOnStep2(t *testing.T) {
 	}
 }
 
+// TestSequentialSearchTotalStepsEstimatePersists verifies #525: an estimate set
+// on step 1 is still reported on step 2, even though step 2's own request
+// omits totalStepsEstimate entirely — previously the response echoed only the
+// current call's input (always 0 on step 2+), silently dropping the estimate.
+func TestSequentialSearchTotalStepsEstimatePersists(t *testing.T) {
+	ctx := context.Background()
+	deps := setupTestDeps()
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "sequential_search",
+		Arguments: map[string]any{
+			"searchStep":         "Initial search for topic X",
+			"stepNumber":         float64(1),
+			"nextStepNeeded":     true,
+			"totalStepsEstimate": float64(5),
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool step 1 failed: %v", err)
+	}
+	var output map[string]any
+	if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &output); err != nil {
+		t.Fatalf("failed to parse step 1 output: %v", err)
+	}
+	sessionID, _ := output["sessionId"].(string)
+	if sessionID == "" {
+		t.Fatal("expected sessionId in step 1 response")
+	}
+	if got := output["totalStepsEstimate"]; got != float64(5) {
+		t.Fatalf("step 1: totalStepsEstimate = %v, want 5", got)
+	}
+
+	res, err = session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "sequential_search",
+		Arguments: map[string]any{
+			"searchStep":     "Found relevant paper on topic X",
+			"stepNumber":     float64(2),
+			"nextStepNeeded": false,
+			"sessionId":      sessionID,
+			// totalStepsEstimate deliberately omitted — must still report 5.
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool step 2 failed: %v", err)
+	}
+	if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &output); err != nil {
+		t.Fatalf("failed to parse step 2 output: %v", err)
+	}
+	if got := output["totalStepsEstimate"]; got != float64(5) {
+		t.Errorf("step 2: totalStepsEstimate = %v, want 5 (must persist from step 1, #525)", got)
+	}
+}
+
 func TestPatentSearchTool(t *testing.T) {
 	ctx := context.Background()
 	deps := setupTestDeps()

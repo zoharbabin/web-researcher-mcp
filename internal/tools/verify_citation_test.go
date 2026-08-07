@@ -834,6 +834,51 @@ func TestVerifyCitationDOIPath_VerificationStatusUnaffected(t *testing.T) {
 	}
 }
 
+// TestDetectDOIStripsFrontiersViewerSuffix verifies #526: a Frontiers article
+// URL's trailing "/full" (or similar publisher viewer-type path segment) must
+// not be captured as part of the DOI — doiPattern's path character class
+// allows "/" and would otherwise greedily include it.
+func TestDetectDOIStripsFrontiersViewerSuffix(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "frontiers full",
+			in:   "https://www.frontiersin.org/articles/10.3389/fpsyg.2020.01234/full",
+			want: "10.3389/fpsyg.2020.01234",
+		},
+		{
+			name: "abstract suffix",
+			in:   "https://example.org/10.1234/abcd.5678/abstract",
+			want: "10.1234/abcd.5678",
+		},
+		{
+			name: "pdf suffix",
+			in:   "https://example.org/10.1234/abcd.5678/pdf",
+			want: "10.1234/abcd.5678",
+		},
+		{
+			name: "no suffix unaffected",
+			in:   "10.1038/nature12373",
+			want: "10.1038/nature12373",
+		},
+		{
+			name: "real doi ending in a word that happens to look like a suffix stays untouched",
+			in:   "10.1234/some.pdf-format.study",
+			want: "10.1234/some.pdf-format.study",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := detectDOI(tc.in); got != strings.ToLower(tc.want) {
+				t.Errorf("detectDOI(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestVerifyCitation_EmptyInput(t *testing.T) {
 	ctx := context.Background()
 	deps := setupTestDeps()

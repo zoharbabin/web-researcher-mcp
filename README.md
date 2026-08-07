@@ -513,7 +513,7 @@ Search lenses let you control which websites your AI is allowed to search. Inste
 | `clinical` | Clinical trials, drug safety, evidence-based medicine |
 | `curriculum` | Academic curriculum data, institutional free speech climate, and global education statistics |
 | `security` | CVEs, advisories, vulnerability research |
-| `journalism` | Public records, corporate filings, FOIA |
+| `investigative_records` | Public records, corporate filings, FOIA |
 | `programming` | Code docs, tutorials, Q&A |
 | `programming-goggle` | Developer-first results re-ranked by Brave's Programming Goggle — surfaces docs, repos, and authoritative technical content (requires Brave) |
 | `devops` | Infrastructure and operations — Kubernetes, Docker, Terraform, cloud, CI/CD |

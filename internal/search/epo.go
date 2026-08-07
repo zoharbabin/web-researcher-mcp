@@ -151,6 +151,9 @@ func (e *EPOProvider) buildCQL(params PatentSearchParams) string {
 	if params.PatentOffice != "" && params.PatentOffice != "all" {
 		clauses = append(clauses, fmt.Sprintf("pn=%s", params.PatentOffice))
 	}
+	if params.CPCCode != "" {
+		clauses = append(clauses, fmt.Sprintf("cpc=%s", params.CPCCode))
+	}
 	if params.YearFrom > 0 {
 		clauses = append(clauses, fmt.Sprintf("pd>=%d", params.YearFrom))
 	}

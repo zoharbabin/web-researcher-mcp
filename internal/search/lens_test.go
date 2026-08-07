@@ -175,6 +175,20 @@ func TestLensProvider_QueryConstruction(t *testing.T) {
 				}
 			},
 		},
+		{
+			// #530: cpc_code becomes a class_cpc.symbol term filter, not free text.
+			name:   "with cpc code",
+			params: PatentSearchParams{Query: "battery", CPCCode: "H01M10/00", NumResults: 5},
+			check: func(t *testing.T, body []byte) {
+				s := string(body)
+				if !strings.Contains(s, `"class_cpc.symbol"`) {
+					t.Error("expected class_cpc.symbol filter in query")
+				}
+				if !strings.Contains(s, "H01M10/00") {
+					t.Error("expected the CPC code value in query")
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {

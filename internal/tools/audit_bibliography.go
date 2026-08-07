@@ -208,7 +208,7 @@ func collectAuditEntries(ctx context.Context, deps Dependencies, input auditBibl
 		}
 		out := make([]auditItem, 0, len(sess.Sources))
 		for _, s := range sess.Sources {
-			out = append(out, auditItem{entry: content.BibEntry{URL: s.URL, Title: s.Title}})
+			out = append(out, auditItem{entry: content.BibEntry{URL: s.URL, Title: s.Title, Author: s.Author, Date: s.Date, DOI: s.DOI}})
 		}
 		return out, "session", nil
 	}

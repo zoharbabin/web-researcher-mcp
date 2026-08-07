@@ -32,7 +32,7 @@ type monarchSearchInput struct {
 	AssocObject   string   `json:"assocObject,omitempty" jsonschema:"associations: object-side entity CURIE to filter edges by."`
 	AssocCategory string   `json:"category,omitempty" jsonschema:"associations: Biolink association category enum, e.g. biolink:CausalGeneToDiseaseAssociation. Maps to the API 'category' query parameter."`
 	Text          string   `json:"text,omitempty" jsonschema:"annotate: short clinical text to ground to HPO terms. Hard limit 2000 characters. Never include patient-identifiable data."`
-	NumResults    int      `json:"numResults,omitempty" jsonschema:"Maximum results to return. Default 20, max 200 (the API caps association pages at 200)."`
+	NumResults    int      `json:"num_results,omitempty" jsonschema:"Maximum results to return. Default 20, max 200 (the API caps association pages at 200)."`
 	Provider      string   `json:"provider,omitempty" jsonschema:"Force a specific Monarch provider: monarch. Errors if not configured."`
 	SessionID     string   `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. Sources are automatically recorded for recovery after context loss."`
 }
@@ -105,7 +105,7 @@ func registerMonarchSearch(srv *mcp.Server, deps Dependencies) {
 			if params.EntityID != "" {
 				filters["entityId"] = params.EntityID
 			}
-			output["hints"] = buildZeroResultHints(providerName, filters, nil)
+			output["hints"] = buildZeroResultHints(providerName, filters, nil, "operation")
 		}
 
 		jsonBytes, _ := json.Marshal(output)

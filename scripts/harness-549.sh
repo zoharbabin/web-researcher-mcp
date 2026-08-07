@@ -85,6 +85,23 @@ TOUCHED_FILES=(
   internal/tools/monarchsearch.go
   internal/tools/errors.go
   internal/tools/research_panel.go
+  internal/session/types.go
+  internal/tools/bibliography.go
+  internal/tools/paper_fulltext_test.go
+  internal/tools/depth_test.go
+  internal/tools/verify_recommendation.go
+  internal/tools/verify_recommendation_test.go
+  internal/search/geo_eval_live_test.go
+  internal/search/structured_domains.go
+  internal/search/eurostat_test.go
+  internal/tools/fred.go
+  internal/tools/econ_render_test.go
+  internal/tools/schemas.go
+  internal/tools/monarchsearch_test.go
+  internal/tools/zerohints_test.go
+  internal/tools/research_panel_test.go
+  internal/tools/research_panel_eval_test.go
+  internal/tools/metadata_test.go
 )
 
 run_gate "Lint (golangci-lint)" \
@@ -107,8 +124,12 @@ run_gate "SAST (gosec) + pattern checks (rules 2.1/2.2/2.3/5.1/5.3/5.4/6.2/6.3)"
     echo "--- grep: old json tags fully retired, not aliased (rule 5.3) ---"
     ! grep -n "\"question\"" internal/tools/research_panel.go
     ! grep -n "\"numResults\"" internal/tools/monarchsearch.go
-    echo "--- grep: no orphaned journalism lens-name reference in Go code (rule 5.4) ---"
-    ! grep -rn "\"journalism\"" --include="*.go" internal/
+    echo "--- grep: no orphaned journalism lens-name reference anywhere (rule 5.4, #535) ---"
+    ! grep -rln "journalism" --include="*.go" --include="*.json" internal/ lenses/
+    echo "--- grep: investigative_records lens name propagated (rule 5.4, #535) ---"
+    grep -q "investigative_records" internal/tools/verify_recommendation.go
+    test -f lenses/investigative_records.json
+    test -f internal/search/lenses_embed/investigative_records.json
     echo "--- grep: no new datasubject/persist.Store call sites in touched files (rule 6.2) ---"
     ! grep -n "persist\.Store\|datasubject\." '"${TOUCHED_FILES[*]}"' 2>/dev/null
     echo "--- grep: no new consent.Purpose/HasConsent call sites in touched files (rule 6.3) ---"
@@ -125,7 +146,7 @@ run_gate "Dead-code scan (go vet)" \
 
 run_gate_requiring_tests "Unit/integration tests — one per issue (#522-#539)" \
   "$OUT_DIR/549-05-unit.log" \
-  go test -race ./internal/content/... ./internal/tools/... ./internal/search/... ./internal/session/... -run 'TestExtractClaimEvidence.*|TestClaimTermCoverage.*|TestClaimTerms.*|TestNewsResultsSourceType.*|TestNewsSearch.*SourceType.*|TestSequentialSearch.*TotalStepsEstimate.*|TestBuildSequentialResponse.*TotalStepsEstimate.*|TestDetectDOI.*|TestDOI.*Full.*|TestAuditBibliography.*Frontiers.*|TestPatentSearch.*Provider.*Google.*|TestResolvePatentSearcher.*|TestUSPTOPatentsYearFilter.*|TestPatentSearch.*Landscape.*|TestPatentSearch.*CPCCode.*|TestFormatCSLJSON.*Collision.*|TestAcademicResultsToSources.*|TestSourceTracker.*Author.*|TestPaperFulltext.*Unpaywall.*|TestSourceTracker.*FoundInStep.*|TestSequentialSearch.*FoundInStep.*|TestSelectCorroborationLenses.*|TestGeoEval.*InvestigativeRecords.*|TestEurostat.*Warning.*|TestMonarchSearch.*Hints.*|TestBuildZeroResultHints.*Required.*|TestResearchPanel.*Query.*|TestMonarchSearch.*NumResults.*' -v -count=1
+  go test -race ./internal/content/... ./internal/tools/... ./internal/search/... -run 'TestExtractClaimEvidence.*|TestClaimTermCoverage.*|TestClaimTerms.*|TestNewsResultsSourceType.*|TestNewsSearch.*SourceType.*|TestSequentialSearch.*TotalStepsEstimate.*|TestBuildSequentialResponse.*TotalStepsEstimate.*|TestDetectDOI.*|TestDOI.*Full.*|TestAuditBibliography.*Frontiers.*|TestPatentSearch.*Provider.*Google.*|TestResolvePatentSearcher.*|TestUSPTOPatentsYearFilter.*|TestPatentSearch.*Landscape.*|TestPatentSearch.*CPCCode.*|TestFormatCSLJSON.*Collision.*|TestAcademicResultsToSources.*|TestSourceTracker.*Author.*|TestPaperFulltext.*Unpaywall.*|TestSourceTracker.*FoundInStep.*|TestSequentialSearch.*FoundInStep.*|TestSelectCorroborationLenses.*|TestGeoEval.*InvestigativeRecords.*|TestEurostat.*Warning.*|TestEconSearch.*Warning.*|TestMonarchSearch.*Hints.*|TestBuildZeroResultHints.*Required.*|TestResearchPanel.*Query.*|TestMonarchSearch.*NumResults.*' -v -count=1
 
 run_gate_requiring_tests "E2E (real binary, real MCP transport, recorded proof)" \
   "$OUT_DIR/549-06-e2e.log" \

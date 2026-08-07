@@ -1,6 +1,70 @@
 package tools
 
-import "testing"
+import (
+	"context"
+	"testing"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/search"
+)
+
+// emptyMonarchProvider implements search.MonarchProvider and always returns
+// zero results, so monarch_search's zero-result hints branch (#537) can be
+// exercised in a test.
+type emptyMonarchProvider struct{}
+
+func (m *emptyMonarchProvider) Name() string { return "monarch" }
+func (m *emptyMonarchProvider) Metadata() search.ProviderMeta {
+	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "free", Description: "empty monarch"}
+}
+func (m *emptyMonarchProvider) Search(_ context.Context, _ search.MonarchSearchParams) ([]search.MonarchResult, error) {
+	return nil, nil
+}
+
+// TestMonarchSearchZeroResultHintsExcludeOperation guards #537: monarch_search's
+// zero-result hints must never suggest removing the required `operation`
+// param — removing it isn't a valid recovery action, since operation is
+// mandatory for every call. entityId (not required) should still be
+// suggested for removal.
+func TestMonarchSearchZeroResultHintsExcludeOperation(t *testing.T) {
+	deps := setupTestDeps()
+	deps.MonarchProviders = map[string]search.MonarchProvider{"monarch": &emptyMonarchProvider{}}
+
+	out, res := callTool(t, deps, "monarch_search", map[string]any{
+		"operation": "entity",
+		"entityId":  "MONDO:0007947",
+	})
+	if res.IsError {
+		t.Fatalf("unexpected error result: %v", res.Content)
+	}
+	if out["resultCount"].(float64) != 0 {
+		t.Fatalf("expected 0 results, got %v", out["resultCount"])
+	}
+	hints, ok := out["hints"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected hints object on zero results, got %v", out["hints"])
+	}
+	filters, _ := hints["filtersApplied"].(map[string]any)
+	if filters["operation"] != "entity" {
+		t.Errorf("operation should still be surfaced in filtersApplied for context, got %v", filters)
+	}
+	actions, _ := hints["suggestedActions"].([]any)
+	for _, a := range actions {
+		action, _ := a.(map[string]any)
+		if action["action"] == "remove_filter" && action["parameter"] == "operation" {
+			t.Errorf("must never suggest removing the required operation param, got %v", actions)
+		}
+	}
+	found := false
+	for _, a := range actions {
+		action, _ := a.(map[string]any)
+		if action["action"] == "remove_filter" && action["parameter"] == "entityId" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected entityId suggested for removal, got %v", actions)
+	}
+}
 
 func TestMonarchSearchSemsim(t *testing.T) {
 	out, res := callTool(t, setupTestDeps(), "monarch_search", map[string]any{

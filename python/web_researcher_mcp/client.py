@@ -730,7 +730,7 @@ class WebResearcherClient:
         compareTo: Optional[list] = None,
         entityId: str = None,
         group: str = None,
-        numResults: int = None,
+        num_results: int = None,
         phenotypes: Optional[list] = None,
         provider: str = None,
         query: str = None,
@@ -748,7 +748,7 @@ class WebResearcherClient:
                 "compareTo": compareTo,
                 "entityId": entityId,
                 "group": group,
-                "numResults": numResults,
+                "num_results": num_results,
                 "phenotypes": phenotypes,
                 "provider": provider,
                 "query": query,
@@ -881,7 +881,7 @@ class WebResearcherClient:
         return ResearchExportResponse.from_dict(d)
     async def research_panel(
         self,
-        question: str,
+        query: str,
         max_models: int = None,
         models: Optional[list] = None,
         timeout_secs: int = None,
@@ -891,7 +891,7 @@ class WebResearcherClient:
         d = await self._call_tool(
             "research_panel",
             {
-                "question": question,
+                "query": query,
                 "max_models": max_models,
                 "models": models,
                 "timeout_secs": timeout_secs,
@@ -1656,7 +1656,7 @@ class SyncWebResearcherClient:
         compareTo: Optional[list] = None,
         entityId: str = None,
         group: str = None,
-        numResults: int = None,
+        num_results: int = None,
         phenotypes: Optional[list] = None,
         provider: str = None,
         query: str = None,
@@ -1672,7 +1672,7 @@ class SyncWebResearcherClient:
             compareTo=compareTo,
             entityId=entityId,
             group=group,
-            numResults=numResults,
+            num_results=num_results,
             phenotypes=phenotypes,
             provider=provider,
             query=query,
@@ -1786,7 +1786,7 @@ class SyncWebResearcherClient:
         )
     def research_panel(
         self,
-        question: str,
+        query: str,
         max_models: int = None,
         models: Optional[list] = None,
         timeout_secs: int = None,
@@ -1794,7 +1794,7 @@ class SyncWebResearcherClient:
     ) -> ResearchPanelResponse:
         return self._run(
             self._async_client.research_panel(
-            question=question,
+            query=query,
             max_models=max_models,
             models=models,
             timeout_secs=timeout_secs,

@@ -131,6 +131,7 @@ type PatentSearchParams struct {
 	Query        string
 	Assignee     string
 	Inventor     string
+	CPCCode      string
 	PatentOffice string
 	YearFrom     int
 	YearTo       int

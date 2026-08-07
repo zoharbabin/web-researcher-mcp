@@ -629,8 +629,33 @@ func referenceMatchConfidence(ref string, rec *search.AcademicResult) string {
 	return "low"
 }
 
+// doiViewerSuffixes are non-DOI path segments that publisher platforms (e.g.
+// Frontiers: .../10.3389/<article-doi-path>/full) append after the real DOI in
+// an article URL. doiPattern's path-segment character class allows both "/"
+// and alnum chars, so it greedily matches these onto the end of the DOI it
+// found (#526). Stripped only when the trailing segment matches this set
+// exactly, so a genuine DOI suffix is never touched.
+var doiViewerSuffixes = map[string]bool{
+	"full": true, "abstract": true, "pdf": true, "epdf": true, "html": true,
+	"meta": true, "references": true, "full-text": true, "fulltext": true,
+	"supplementary": true, "figures": true, "xml": true,
+}
+
 func detectDOI(s string) string {
-	return strings.ToLower(strings.TrimSpace(doiPattern.FindString(s)))
+	doi := strings.ToLower(strings.TrimSpace(doiPattern.FindString(s)))
+	// Only strip a trailing viewer suffix when s is itself a URL — a bare DOI
+	// string (e.g. a citation_doi meta value or an explicit bibliography `doi`
+	// field) never carries a publisher viewer path, so a DOI whose own last
+	// segment happens to equal a suffix word (e.g. "10.1234/meta") must not be
+	// truncated (regression caught by TestDetectScholarlyDOI_MetaBeatsURL).
+	if strings.Contains(s, "://") {
+		if idx := strings.LastIndex(doi, "/"); idx > 0 {
+			if doiViewerSuffixes[doi[idx+1:]] {
+				doi = doi[:idx]
+			}
+		}
+	}
+	return doi
 }
 
 // sameDOI reports whether two DOI strings refer to the same work. DOIs are
