@@ -1553,6 +1553,7 @@ class MonarchSearchResult:
 
 @dataclass
 class MonitorQueryCheckNewresult:
+    extraSnippets: list[str] = field(default_factory=list)
     publishedAt: Optional[str] = None
     snippet: Optional[str] = None
     title: Optional[str] = None
@@ -1563,6 +1564,7 @@ class MonitorQueryCheckNewresult:
         if d is None:
             return None
         return cls(
+            extraSnippets=list(d.get('extraSnippets') or []),
             publishedAt=d.get('publishedAt'),
             snippet=d.get('snippet'),
             title=d.get('title'),
@@ -2642,6 +2644,7 @@ class WebSearchResult:
     claimSignal: Optional[str] = None
     displayLink: Optional[str] = None
     engagement: Optional[Engagement] = None
+    extraSnippets: list[str] = field(default_factory=list)
     publishedAt: Optional[str] = None
     snippet: Optional[str] = None
     title: Optional[str] = None
@@ -2655,6 +2658,7 @@ class WebSearchResult:
             claimSignal=d.get('claimSignal'),
             displayLink=d.get('displayLink'),
             engagement=Engagement.from_dict(d.get('engagement')) if d.get('engagement') else None,
+            extraSnippets=list(d.get('extraSnippets') or []),
             publishedAt=d.get('publishedAt'),
             snippet=d.get('snippet'),
             title=d.get('title'),

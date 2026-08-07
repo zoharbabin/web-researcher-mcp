@@ -1935,6 +1935,29 @@ func TestWebSearchEnrichPreservesEngagement(t *testing.T) {
 	}
 }
 
+// TestWebSearchEnrichPreservesExtraSnippets: enrichResultsWithReputation must
+// carry a provider-supplied ExtraSnippets through to the "extraSnippets" key
+// (Brave, with BRAVE_EXTRA_SNIPPETS=true), and must omit the key entirely
+// when the provider left it empty (never emit an empty array).
+func TestWebSearchEnrichPreservesExtraSnippets(t *testing.T) {
+	t.Parallel()
+	results := []search.SearchResult{
+		{Title: "Extra", URL: "https://example.org/a", Snippet: "has extras", ExtraSnippets: []string{"one", "two"}},
+		{Title: "Plain", URL: "https://example.org/b", Snippet: "no extras"},
+	}
+	enriched := enrichResultsWithReputation(results, "")
+	if len(enriched) != 2 {
+		t.Fatalf("want 2 results, got %d", len(enriched))
+	}
+	extra, ok := enriched[0]["extraSnippets"].([]string)
+	if !ok || len(extra) != 2 || extra[0] != "one" || extra[1] != "two" {
+		t.Errorf("extraSnippets = %v, want [one two]", enriched[0]["extraSnippets"])
+	}
+	if _, ok := enriched[1]["extraSnippets"]; ok {
+		t.Errorf("extraSnippets key must be omitted when the provider left it empty, got %v", enriched[1]["extraSnippets"])
+	}
+}
+
 func TestImageSearchEmptyQuery(t *testing.T) {
 	ctx := context.Background()
 	deps := setupTestDeps()

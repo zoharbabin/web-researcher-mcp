@@ -67,6 +67,9 @@ func enrichResultsWithReputation(results []search.SearchResult, claim string) []
 		if r.PublishedAt != "" {
 			m["publishedAt"] = r.PublishedAt
 		}
+		if len(r.ExtraSnippets) > 0 {
+			m["extraSnippets"] = r.ExtraSnippets
+		}
 		if r.Engagement != nil {
 			m["engagement"] = r.Engagement
 		}
