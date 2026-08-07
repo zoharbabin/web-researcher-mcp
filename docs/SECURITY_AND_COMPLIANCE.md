@@ -472,7 +472,7 @@ cosign verify ghcr.io/zoharbabin/web-researcher-mcp:latest \
 ### Dependency Policy
 
 - All dependencies: actively maintained, no unpatched CVEs
-- Licenses: permissive only (MIT, Apache 2.0, BSD)
+- Licenses: permissive only (MIT, Apache 2.0, BSD) — mechanically enforced by `make license-check` (`go-licenses check ./... --disallowed_types=forbidden,restricted`) in CI's `security` job and locally before opening a PR
 - Preference for Go standard library over third-party
 - `go.sum` pins exact dependency hashes
 - Minimum dependency footprint (fewer deps = smaller attack surface)
