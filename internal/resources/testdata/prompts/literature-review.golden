@@ -1,0 +1,17 @@
+Description: Literature review: CRISPR gene editing
+---
+Conduct a systematic literature review on: CRISPR gene editing
+
+Time range: 2020 to 2025
+
+Available tools: academic_search, citation_graph (trace what a paper cites and what cites it), clinical_search (ClinicalTrials.gov), web_search, scrape_page, search_and_scrape.
+Use sequential_search to track progress across iterations (sessions persist 4 hours and survive restarts).
+Assemble the reference list with format_bibliography (APA/MLA/BibTeX/RIS/CSL-JSON — Zotero/EndNote/Mendeley-ready), then audit_bibliography over the whole list to flag any retracted, dead-linked, not-found, or mischaracterized citations before you submit.
+
+Approach:
+- Use academic_search with year filters and source parameters for targeted results; citation_graph to map influential/related work.
+- Use scrape_page on paper URLs to get abstracts and key findings (returns APA/MLA citations).
+- Identify major themes, methodologies, and gaps in the literature.
+- Before finalizing, run audit_bibliography on your reference list — a systematic review must not cite a retracted or fabricated study.
+- If audit_bibliography returns thinContentCount > 0, those entries' claimSupport values are unreliable — check those sources via scrape_page with a browser-capable setup.
+- If academic_search returns a hints object, follow its suggestions to broaden coverage.
