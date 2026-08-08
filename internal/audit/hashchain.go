@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 )
 
 // ErrChainBroken is returned (wrapped) by VerifyChain when a recorded Hash
@@ -31,6 +32,36 @@ func hashEvent(prevHash string, event AuditEvent) (string, error) {
 	}
 	sum := sha256.Sum256(append([]byte(prevHash), data...))
 	return hex.EncodeToString(sum[:]), nil
+}
+
+// lastEventHash returns the recorded Hash of the last non-blank line in the
+// audit log at path, so a Logger restarting against a pre-existing file can
+// seed its in-memory prevHash correctly instead of always starting from ""
+// (which would make VerifyChain misreport tampering at every restart
+// boundary). Returns "" on any read/parse error or an empty file — the chain
+// simply starts fresh in that case, matching prior behavior.
+func lastEventHash(path string) string {
+	f, err := os.Open(path) // #nosec G304 -- operator-configured audit output path, not user input
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
+	last := ""
+	for scanner.Scan() {
+		raw := bytes.TrimSpace(scanner.Bytes())
+		if len(raw) == 0 {
+			continue
+		}
+		var event AuditEvent
+		if json.Unmarshal(raw, &event) != nil {
+			continue
+		}
+		last = event.Hash
+	}
+	return last
 }
 
 // VerifyChain walks a JSONL audit log (one AuditEvent per line, as written by

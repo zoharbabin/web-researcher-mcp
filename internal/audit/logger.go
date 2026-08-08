@@ -181,6 +181,7 @@ func NewLogger(cfg Config) (*Logger, error) {
 	var writer io.Writer
 	var file *os.File
 	var curSize int64
+	var prevHash string
 
 	if cfg.OutputPath == "" {
 		writer = os.Stderr
@@ -193,6 +194,14 @@ func NewLogger(cfg Config) (*Logger, error) {
 		writer = f
 		if info, statErr := f.Stat(); statErr == nil {
 			curSize = info.Size()
+		}
+		if curSize > 0 {
+			// A process restart against a pre-existing, non-empty log must
+			// continue the hash chain from where it left off — otherwise the
+			// first post-restart event's PrevHash="" would not match the last
+			// pre-restart event's real Hash, and VerifyChain would (correctly,
+			// but misleadingly) report tampering at every restart boundary.
+			prevHash = lastEventHash(cfg.OutputPath)
 		}
 	}
 
@@ -227,6 +236,7 @@ func NewLogger(cfg Config) (*Logger, error) {
 		includeRequestBody: cfg.IncludeRequestBody,
 		webhookURL:         cfg.WebhookURL,
 		webhookTimeout:     webhookTimeout,
+		prevHash:           prevHash,
 	}
 	if cfg.WebhookURL != "" {
 		l.webhookClient = &http.Client{Timeout: webhookTimeout}
@@ -367,6 +377,11 @@ func (l *Logger) exportToWebhook(event AuditEvent) {
 		if err != nil {
 			return // fire-and-forget: no retry, no error surfaced to the audit path
 		}
+		// Drain before Close so the underlying connection can be reused by the
+		// http.Client's keep-alive pool; an unread body forces the transport to
+		// close the connection instead, causing avoidable churn under sustained
+		// audit volume.
+		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
 	}()
 }

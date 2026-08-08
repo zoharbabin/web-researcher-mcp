@@ -576,24 +576,28 @@ jobs:
           CROSSREF_EMAIL: ${{ secrets.CROSSREF_EMAIL }}
           OPENALEX_EMAIL: ${{ secrets.OPENALEX_EMAIL }}
         run: |
-          set -o pipefail
+          make test-eval 2>&1 | tee /tmp/trust-eval.log || true
+          status=${PIPESTATUS[0]}
           echo "## 🎯 Trust-suite accuracy eval ($(date -u +%Y-%m-%dT%H:%M:%SZ))" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          make test-eval 2>&1 | tee /tmp/trust-eval.log | grep -E 'precision=|SKIP|--- (PASS|FAIL)' | tee -a "$GITHUB_STEP_SUMMARY" || true
+          grep -E 'precision=|SKIP|--- (PASS|FAIL)' /tmp/trust-eval.log >> "$GITHUB_STEP_SUMMARY" || true
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           tail -n 40 /tmp/trust-eval.log
+          exit "$status"
 
       - name: Run GEO-defense eval
         env:
           GOOGLE_CUSTOM_SEARCH_API_KEY: ${{ secrets.GOOGLE_CUSTOM_SEARCH_API_KEY }}
           GOOGLE_CUSTOM_SEARCH_ID: ${{ secrets.GOOGLE_CUSTOM_SEARCH_ID }}
         run: |
-          set -o pipefail
+          make test-geo-eval 2>&1 | tee /tmp/geo-eval.log || true
+          status=${PIPESTATUS[0]}
           echo "## 🧭 GEO-defense eval" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          make test-geo-eval 2>&1 | tee /tmp/geo-eval.log | grep -E 'summary|recall|containment|SKIP|--- (PASS|FAIL)' | tee -a "$GITHUB_STEP_SUMMARY" || true
+          grep -E 'summary|recall|containment|SKIP|--- (PASS|FAIL)' /tmp/geo-eval.log >> "$GITHUB_STEP_SUMMARY" || true
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           tail -n 40 /tmp/geo-eval.log
+          exit "$status"
 
       - name: Run research_panel divergence eval
         env:
@@ -602,9 +606,11 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
         run: |
-          set -o pipefail
+          go test -tags=live -count=1 -v -run TestResearchPanelEvalAccuracy ./internal/tools/... 2>&1 | tee /tmp/panel-eval.log || true
+          status=${PIPESTATUS[0]}
           echo "## 🗳️ research_panel divergence eval" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          go test -tags=live -count=1 -v -run TestResearchPanelEvalAccuracy ./internal/tools/... 2>&1 | tee /tmp/panel-eval.log | grep -E 'skip|confidence=|--- (PASS|FAIL)' | tee -a "$GITHUB_STEP_SUMMARY" || true
+          grep -E 'skip|confidence=|--- (PASS|FAIL)' /tmp/panel-eval.log >> "$GITHUB_STEP_SUMMARY" || true
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           tail -n 40 /tmp/panel-eval.log
+          exit "$status"

@@ -244,6 +244,70 @@ func TestVerifyChain_DetectsTampering(t *testing.T) {
 	}
 }
 
+// TestHashChain_SurvivesRestart proves a Logger that restarts (a new NewLogger
+// call, e.g. after a process restart) against a pre-existing, non-empty audit
+// log continues the hash chain from the file's last recorded event rather
+// than resetting prevHash to "" — otherwise the first post-restart event's
+// PrevHash="" would not match the pre-restart file's real last Hash, and
+// VerifyChain would misreport tampering at every restart boundary (#466 half
+// 2, GitHub Copilot review feedback on PR #566).
+func TestHashChain_SurvivesRestart(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "audit.log")
+
+	logger1, err := NewLogger(Config{Enabled: true, OutputPath: path, BufferSize: 100})
+	if err != nil {
+		t.Fatalf("failed to create first logger: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		logger1.Log(NewEvent("tool_call", "tenant-1", "user-1"))
+	}
+	logger1.Close()
+
+	// Simulate a process restart: a brand new Logger instance opens the same
+	// (now non-empty) file in append mode.
+	logger2, err := NewLogger(Config{Enabled: true, OutputPath: path, BufferSize: 100})
+	if err != nil {
+		t.Fatalf("failed to create second logger: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		logger2.Log(NewEvent("tool_call", "tenant-1", "user-1"))
+	}
+	logger2.Close()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read log: %v", err)
+	}
+	lines := bytes.Split(bytes.TrimSpace(data), []byte("\n"))
+	if len(lines) != 6 {
+		t.Fatalf("expected 6 combined events, got %d", len(lines))
+	}
+
+	// The whole file — pre- and post-restart events together — must verify as
+	// one unbroken chain.
+	if err := VerifyChain(bytes.NewReader(data)); err != nil {
+		t.Errorf("expected chain to survive a Logger restart with no break, got: %v", err)
+	}
+
+	// Explicitly confirm the seam: line 4 (the first post-restart event) must
+	// carry PrevHash equal to line 3's (the last pre-restart event's) Hash —
+	// not the empty string a fresh chain would use.
+	var line3, line4 AuditEvent
+	if err := json.Unmarshal(lines[2], &line3); err != nil {
+		t.Fatalf("failed to unmarshal line 3: %v", err)
+	}
+	if err := json.Unmarshal(lines[3], &line4); err != nil {
+		t.Fatalf("failed to unmarshal line 4: %v", err)
+	}
+	if line4.PrevHash != line3.Hash {
+		t.Errorf("first post-restart event's PrevHash = %q, want %q (last pre-restart event's Hash)", line4.PrevHash, line3.Hash)
+	}
+	if line4.PrevHash == "" {
+		t.Error("first post-restart event's PrevHash is empty — restart reset the chain instead of continuing it")
+	}
+}
+
 // TestWebhookExport_NonBlockingTimeout proves the SIEM webhook export never
 // blocks the audit write path beyond its configured timeout, even against an
 // unresponsive receiver, and that local file writes proceed unaffected (#466
