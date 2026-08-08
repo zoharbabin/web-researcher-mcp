@@ -49,10 +49,13 @@ func getBrowserPool(chromePath string, maxPages int) *browserPool {
 	return pool
 }
 
-// livenessCheckTimeout bounds the CDP round-trip used to detect a dead
-// browser connection (issue #464) — short enough that a hung/dead connection
-// is discovered well within the 30s scrapeBrowser deadline, long enough that
-// a briefly slow-but-alive browser is not misdiagnosed as dead.
+// livenessCheckTimeout bounds only the CDP round-trip used to detect a dead
+// browser connection (issue #464) — short enough that the probe itself
+// resolves quickly, long enough that a briefly slow-but-alive browser is not
+// misdiagnosed as dead. It does NOT bound the full recovery path: the
+// getBrowserPool/init() relaunch that follows a detected-dead connection has
+// no deadline and can exceed the 30s scrapeBrowser budget on a cold or slow
+// host.
 const livenessCheckTimeout = 2 * time.Second
 
 // connectedLocked reports whether bp.browser's CDP connection is still alive

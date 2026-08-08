@@ -190,9 +190,23 @@ func TestScrapeBrowserRecoversFromCrash(t *testing.T) {
 	if err := proc.Kill(); err != nil {
 		t.Fatalf("failed to kill browser process %d: %v", pid, err)
 	}
-	// Give the OS a moment to tear down the process and close its end of the
-	// CDP websocket before the next scrape attempt probes liveness.
-	time.Sleep(500 * time.Millisecond)
+	// Wait for the kill to actually take effect — i.e. for the liveness probe
+	// itself to start observing a dead connection — instead of a fixed sleep,
+	// which can race the OS/websocket teardown and make this test flaky.
+	const teardownPollTimeout = 5 * time.Second
+	teardownDeadline := time.Now().Add(teardownPollTimeout)
+	for {
+		bp.mu.Lock()
+		dead := !bp.connectedLocked()
+		bp.mu.Unlock()
+		if dead {
+			break
+		}
+		if time.Now().After(teardownDeadline) {
+			t.Fatalf("browser connection still reports alive %s after killing pid %d", teardownPollTimeout, pid)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 
 	start := time.Now()
 	p := NewPipeline(PipelineConfig{AllowPrivateIPs: true})
