@@ -360,6 +360,33 @@ jobs:
             dist/web-researcher-mcp_*/web-researcher-mcp
             dist/web-researcher-mcp_*/web-researcher-mcp.exe
 
+  # ── 📜 SLSA build provenance ──────────────────────────────────────────────────
+  # Delegates to the provenance.yml reusable workflow, which carries its own
+  # `id-token`/`attestations` permissions — isolated from this job's GoReleaser
+  # step so nothing that runs inside `release` (including third-party
+  # GoReleaser plugins) can influence what gets attested. This isolation is
+  # what SLSA Level 3 requires; GitHub's ephemeral hosted runners + Sigstore
+  # signing already satisfy the rest. Needs only `release` (the GitHub Release
+  # + checksums.txt must exist) — independent of docker-sign and every other
+  # `needs: release` job below, so it can't destabilize their sequencing.
+  provenance:
+    name: 📜 SLSA Build Provenance
+    needs: release
+    # A called reusable workflow's own `permissions:` block can only narrow,
+    # never widen, what the CALLING JOB grants it — and an unset calling-job
+    # permissions block falls back to this workflow's top-level permissions
+    # (contents/packages/id-token/actions above), which do NOT include
+    # `attestations: write`. This explicit override is job-scoped: it changes
+    # nothing for `release` or any of the five other `needs: release` jobs.
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/provenance.yml
+    with:
+      release-tag: ${{ inputs.tag || github.ref_name }}
+    secrets: inherit
+
   # ── 🐳 Docker image signing ───────────────────────────────────────────────────
   # Fetches the image digest from GHCR and signs it with cosign using GitHub's
   # OIDC identity, creating a publicly verifiable Sigstore signature.
