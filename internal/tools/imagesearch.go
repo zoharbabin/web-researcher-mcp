@@ -14,22 +14,31 @@ import (
 type imageSearchInput struct {
 	Query         string `json:"query" jsonschema:"Descriptive search query for images (e.g. 'golden retriever puppy playing fetch'). More descriptive = better results.,required"`
 	NumResults    int    `json:"num_results,omitempty" jsonschema:"Number of image results (1-200, default: 5). Brave returns up to 200; Google up to 10."`
-	Size          string `json:"size,omitempty" jsonschema:"Filter by image size: huge, icon, large, medium, small, xlarge, xxlarge. Google/SearchAPI only — Brave ignores it."`
-	Type          string `json:"type,omitempty" jsonschema:"Filter by image type: clipart, face, lineart, stock, photo, animated. Google/SearchAPI only — Brave ignores it."`
-	ColorType     string `json:"color_type,omitempty" jsonschema:"Filter by color mode: color, gray, mono, trans (transparent background). Google/SearchAPI only — Brave ignores it."`
-	DominantColor string `json:"dominant_color,omitempty" jsonschema:"Filter by dominant color: black, blue, brown, gray, green, orange, pink, purple, red, teal, white, yellow. Google/SearchAPI only — Brave ignores it."`
-	FileType      string `json:"file_type,omitempty" jsonschema:"Filter by file format: jpg, gif, png, bmp, svg, webp. Google/SearchAPI only — Brave ignores it."`
-	Safe          string `json:"safe,omitempty" jsonschema:"SafeSearch level: off, medium (default), high. On Brave images only off and strict apply (any non-off maps to strict)."`
+	Size          string `json:"size,omitempty" jsonschema:"Filter by image size. Google/SearchAPI only — Brave ignores it."`
+	Type          string `json:"type,omitempty" jsonschema:"Filter by image type. Google/SearchAPI only — Brave ignores it."`
+	ColorType     string `json:"color_type,omitempty" jsonschema:"Filter by color mode (trans = transparent background). Google/SearchAPI only — Brave ignores it."`
+	DominantColor string `json:"dominant_color,omitempty" jsonschema:"Filter by dominant color. Google/SearchAPI only — Brave ignores it."`
+	FileType      string `json:"file_type,omitempty" jsonschema:"Filter by file format. Google/SearchAPI only — Brave ignores it."`
+	Safe          string `json:"safe,omitempty" jsonschema:"SafeSearch level. Default: medium. On Brave images only off and strict apply (any non-off maps to strict)."`
 	Country       string `json:"country,omitempty" jsonschema:"Country to localize results to, ISO 3166-1 alpha-2 (e.g. 'us', 'gb'). Honored by Brave and Google."`
 	Language      string `json:"language,omitempty" jsonschema:"Language to scope results to, BCP 47 / 2-letter code (e.g. 'en', 'de'). Honored by Brave (search_lang) and Google (lr)."`
-	Provider      string `json:"provider,omitempty" jsonschema:"Force a specific search provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily. Omit to use configured default."`
+	Provider      string `json:"provider,omitempty" jsonschema:"Force a specific search provider. Omit to use configured default."`
 }
 
 func registerImageSearch(srv *mcp.Server, deps Dependencies) {
+	inputSchema := mustSchemaFor[imageSearchInput]()
+	inputSchema.Properties["size"].Enum = imageSizeEnum()
+	inputSchema.Properties["type"].Enum = imageTypeEnum()
+	inputSchema.Properties["color_type"].Enum = imageColorTypeEnum()
+	inputSchema.Properties["dominant_color"].Enum = imageDominantColorEnum()
+	inputSchema.Properties["file_type"].Enum = imageFileTypeEnum()
+	inputSchema.Properties["safe"].Enum = webSafeEnum()
+	inputSchema.Properties["provider"].Enum = webProviderEnum()
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "image_search",
 		Description:  "Find images on the web matching your description. Filter by size, type (photo, clipart, line art, etc.), dominant color, or file format (Google/SearchAPI), and localize by country/language. Returns up to 200 image links per search on Brave (up to 10 on Google). Best for finding visual references or assets — use web_search if you need text content from pages that contain images. Results stay fresh for 30 minutes.",
 		Annotations:  readOnlyAnnotations(true, true),
+		InputSchema:  inputSchema,
 		OutputSchema: imageSearchOutputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input imageSearchInput) (*mcp.CallToolResult, any, error) {
 		start := time.Now()

@@ -663,3 +663,310 @@ func TestAnnotationsStableUnderConcurrency(t *testing.T) {
 		t.Error(e)
 	}
 }
+
+// --- #548: JSON Schema enum drift gates --------------------------------
+//
+// The four checks below guard the closed-vocabulary → real-enum conversion
+// (issue #548): a described-but-unenumerated smell test, an enum-value/
+// tool-name collision guard, a tautological-description gate, and a
+// byte-for-byte parity check between a resolver's "unknown provider" error
+// list and the same field's schema Enum.
+
+// schemaEnumStrings extracts a property schema's enum values (checking both
+// a direct `enum` and an array field's `items.enum`) as []string. Returns nil
+// when neither is present or elements aren't strings.
+func schemaEnumStrings(pschema map[string]any) []string {
+	raw := pschema["enum"]
+	if raw == nil {
+		if items, ok := pschema["items"].(map[string]any); ok {
+			raw = items["enum"]
+		}
+	}
+	arr, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(arr))
+	for _, v := range arr {
+		if s, ok := v.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// toStringSlice converts an enums.go helper's []any return value (always
+// string elements in practice) to []string.
+func toStringSlice(vals []any) []string {
+	out := make([]string, 0, len(vals))
+	for _, v := range vals {
+		if s, ok := v.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// sameStringSet reports whether a and b contain the same strings, ignoring
+// order and counting duplicates (so [a a b] != [a b]).
+func sameStringSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	counts := make(map[string]int, len(a))
+	for _, s := range a {
+		counts[s]++
+	}
+	for _, s := range b {
+		counts[s]--
+	}
+	for _, c := range counts {
+		if c != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// describedButNotEnumeratedSmellRe flags a description that reads like a
+// closed vocabulary ("one of X, Y, Z", "choose X, Y, Z", or "field: X, Y, Z")
+// — a candidate for a missing real enum.
+var describedButNotEnumeratedSmellRe = regexp.MustCompile(`(?i)(one of|choose|:)\s*[a-z0-9_.'-]+(\s*,\s*[a-z0-9_.'-]+){2,}`)
+
+// describedButNotEnumeratedExceptions lists tool.field pairs whose
+// description matches the smell regex above but are deliberately prose-only
+// (#548). Each entry names why enumerating it would be wrong, not merely
+// incomplete:
+//   - web_search.lens: runtime-extensible via CUSTOM_LENSES_PATH — the valid
+//     set isn't knowable at compile time.
+//   - clinical_search.status, filing_search.form_type, legal_search.jurisdiction,
+//     econ_search.frequency, econ_search.units, monarch_search.category: each
+//     names an externally-governed, open-ended vocabulary (ClinicalTrials.gov
+//     status codes, SEC form types, court IDs, FRED resample/units codes,
+//     Biolink association categories) that this server does not — and should
+//     not — hardcode a closed list for; see each tool's own file for the
+//     field's jsonschema tag and reasoning.
+//   - audit_bibliography.bibliography: the description names the DOCUMENT
+//     FORMATS a free-text bibliography blob may be written in (CSL-JSON, RIS,
+//     BibTeX) — it constrains the field's FORMAT, not the field's own value
+//     set (which is arbitrary bibliography content). A false positive for
+//     this regex, not a missed conversion.
+var describedButNotEnumeratedExceptions = map[string]bool{
+	"web_search.lens":                 true,
+	"clinical_search.status":          true,
+	"filing_search.form_type":         true,
+	"legal_search.jurisdiction":       true,
+	"econ_search.frequency":           true,
+	"econ_search.units":               true,
+	"monarch_search.category":         true,
+	"audit_bibliography.bibliography": true,
+}
+
+// TestDescribedButNotEnumerated (#548) fails when a parameter's description
+// reads like a closed vocabulary but the schema carries no real enum — the
+// exact prose-only-enum smell issue #548 set out to eliminate. A new tool or
+// field that reintroduces this pattern must either get a real Enum (see
+// internal/tools/enums.go) or an explicit, reasoned entry in
+// describedButNotEnumeratedExceptions above.
+func TestDescribedButNotEnumerated(t *testing.T) {
+	for _, tool := range listTools(t) {
+		schemaMap, ok := tool.InputSchema.(map[string]any)
+		if !ok {
+			continue
+		}
+		props, _ := schemaMap["properties"].(map[string]any)
+		for propName, raw := range props {
+			pschema, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			desc, _ := pschema["description"].(string)
+			if desc == "" || !describedButNotEnumeratedSmellRe.MatchString(desc) {
+				continue
+			}
+			key := tool.Name + "." + propName
+			if describedButNotEnumeratedExceptions[key] {
+				continue
+			}
+			if len(schemaEnumStrings(pschema)) == 0 {
+				t.Errorf("%s: description reads like a closed vocabulary (%q) but has no enum/items.enum — add a real Enum in enums.go, or if this field is genuinely open-ended, add %q to describedButNotEnumeratedExceptions with a reason", key, desc, key)
+			}
+		}
+	}
+}
+
+// TestEnumToolNameCollision (#548) guards against the exact ambiguity that
+// motivated issue #548: a provider value (or any other enum value) that is
+// itself the name of a different registered tool, which an LLM client could
+// plausibly confuse for a tool-selection instruction (e.g. a "provider":
+// "news" value colliding with the news_search tool). A value shared across
+// two or more of the SAME tool's own enum fields (a legitimate case of one
+// tool reusing a token across semantically distinct fields) is not a
+// collision; a value that happens to equal another tool's name and appears
+// in only one field of one tool is.
+func TestEnumToolNameCollision(t *testing.T) {
+	tools := listTools(t)
+	toolNames := make(map[string]bool, len(tools))
+	for _, tool := range tools {
+		toolNames[tool.Name] = true
+	}
+
+	type fieldEnum struct {
+		field  string
+		values []string
+	}
+
+	for _, tool := range tools {
+		schemaMap, ok := tool.InputSchema.(map[string]any)
+		if !ok {
+			continue
+		}
+		props, _ := schemaMap["properties"].(map[string]any)
+		var fields []fieldEnum
+		for propName, raw := range props {
+			pschema, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			if vals := schemaEnumStrings(pschema); len(vals) > 0 {
+				fields = append(fields, fieldEnum{field: propName, values: vals})
+			}
+		}
+		for _, fe := range fields {
+			for _, v := range fe.values {
+				if v == tool.Name || !toolNames[v] {
+					continue
+				}
+				occurrences := 0
+				for _, other := range fields {
+					for _, ov := range other.values {
+						if ov == v {
+							occurrences++
+						}
+					}
+				}
+				if occurrences >= 2 {
+					continue // legitimately shared across this tool's own fields
+				}
+				t.Errorf("%s.%s enum value %q collides with registered tool name %q", tool.Name, fe.field, v, v)
+			}
+		}
+	}
+}
+
+// TestNoTautologicalDescriptions (#548) fails when a tool or parameter
+// description is a verbatim (case-insensitive) restatement of its own name
+// with underscores swapped for spaces — a description that names nothing
+// beyond the identifier the caller already has.
+func TestNoTautologicalDescriptions(t *testing.T) {
+	normalize := func(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
+
+	for _, tool := range listTools(t) {
+		toolDesc := normalize(tool.Description)
+		if toolDesc == normalize(tool.Name) || toolDesc == normalize(strings.ReplaceAll(tool.Name, "_", " ")) {
+			t.Errorf("%s: description is just the tool's own name", tool.Name)
+		}
+
+		schemaMap, ok := tool.InputSchema.(map[string]any)
+		if !ok {
+			continue
+		}
+		props, _ := schemaMap["properties"].(map[string]any)
+		for propName, raw := range props {
+			pschema, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			desc, _ := pschema["description"].(string)
+			if desc == "" {
+				continue
+			}
+			d := normalize(desc)
+			if d == normalize(propName) || d == normalize(strings.ReplaceAll(propName, "_", " ")) {
+				t.Errorf("%s.%s: description %q is just a verbatim restatement of the field name", tool.Name, propName, desc)
+			}
+		}
+	}
+}
+
+// extractToolError decodes the ToolError JSON block that structuredError
+// appends after "msg\n\n" in an error result's text content.
+func extractToolError(t *testing.T, res *mcp.CallToolResult) ToolError {
+	t.Helper()
+	if res == nil || !res.IsError {
+		t.Fatal("expected an error result")
+	}
+	text := res.Content[0].(*mcp.TextContent).Text
+	idx := strings.Index(text, "{")
+	if idx == -1 {
+		t.Fatalf("error result has no embedded JSON: %q", text)
+	}
+	var wrapper struct {
+		Error ToolError `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(text[idx:]), &wrapper); err != nil {
+		t.Fatalf("failed to parse embedded ToolError JSON: %v", err)
+	}
+	return wrapper.Error
+}
+
+// TestEnumErrorMessageParity (#548) asserts that a resolver's "unknown
+// provider" error — specifically its ToolError.Alternatives list — is the
+// same set of values as the corresponding tool field's schema Enum, so the
+// error message a caller sees on rejection never drifts from what the
+// schema itself now enforces up front.
+//
+// Scoped to the eight resolvers whose Alternatives list and enums.go helper
+// both trace to the identical underlying slice (confirmed by direct read of
+// each resolver): resolveFilingSearcher/filingProviderEnum,
+// resolveCaseSearcher/caseProviderEnum, resolveEconSearcher/econProviderEnum,
+// resolveTrialSearcher/trialProviderEnum, resolveLocalSearcher/localProviderEnum,
+// resolveMonarchSearcher/monarchProviderEnum,
+// resolveAwesomeListSearcher/awesomeListProviderEnum, and
+// resolveCitationSearcher/citationProviderEnum (both hardcoded to
+// ["semanticscholar","openalex"]).
+//
+// Deliberately excludes resolveProvider (web_search/image_search/news_search/
+// search_and_scrape/monitor_query_save/monitor_query_check) and
+// resolvePatentSearcher (patent_search): both build their Alternatives list
+// from allSupportedProviders(), a cross-family union of every provider list
+// (web + patent + academic + local + context) that is intentionally WIDER
+// than either tool's own field-level Enum (webProviderEnum() /
+// patentProviderEnum()) — a pre-existing, out-of-scope design property of the
+// generic multi-domain resolver, not a drift this test should flag.
+func TestEnumErrorMessageParity(t *testing.T) {
+	deps := setupTestDeps()
+	const unknownProvider = "definitely-not-a-real-provider-xyz123"
+
+	cases := []struct {
+		tool    string
+		resolve func(Dependencies, string) *mcp.CallToolResult
+		enum    []any
+	}{
+		{"filing_search", func(d Dependencies, p string) *mcp.CallToolResult { _, _, r := resolveFilingSearcher(d, p); return r }, filingProviderEnum()},
+		{"legal_search", func(d Dependencies, p string) *mcp.CallToolResult { _, _, r := resolveCaseSearcher(d, p); return r }, caseProviderEnum()},
+		{"econ_search", func(d Dependencies, p string) *mcp.CallToolResult { _, _, r := resolveEconSearcher(d, p); return r }, econProviderEnum()},
+		{"clinical_search", func(d Dependencies, p string) *mcp.CallToolResult { _, _, r := resolveTrialSearcher(d, p); return r }, trialProviderEnum()},
+		{"local_search", func(d Dependencies, p string) *mcp.CallToolResult { _, _, r := resolveLocalSearcher(d, p); return r }, localProviderEnum()},
+		{"monarch_search", func(d Dependencies, p string) *mcp.CallToolResult { _, _, r := resolveMonarchSearcher(d, p); return r }, monarchProviderEnum()},
+		{"awesome_list_search", func(d Dependencies, p string) *mcp.CallToolResult {
+			_, _, r := resolveAwesomeListSearcher(d, p)
+			return r
+		}, awesomeListProviderEnum()},
+		{"citation_graph", func(d Dependencies, p string) *mcp.CallToolResult { _, _, r := resolveCitationSearcher(d, p); return r }, citationProviderEnum()},
+	}
+
+	for _, c := range cases {
+		t.Run(c.tool, func(t *testing.T) {
+			res := c.resolve(deps, unknownProvider)
+			te := extractToolError(t, res)
+			if len(te.Alternatives) == 0 {
+				t.Fatalf("%s: unknown-provider error carries no Alternatives list", c.tool)
+			}
+			enumVals := toStringSlice(c.enum)
+			if !sameStringSet(te.Alternatives, enumVals) {
+				t.Errorf("%s: error Alternatives %v does not match the field's schema Enum %v", c.tool, te.Alternatives, enumVals)
+			}
+		})
+	}
+}

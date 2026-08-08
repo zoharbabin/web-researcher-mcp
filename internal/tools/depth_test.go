@@ -9,17 +9,25 @@ import (
 )
 
 // startSession creates a session and records a knowledge gap + a couple of
-// same-domain sources so coverage analysis has something to chew on.
+// same-domain sources so coverage analysis has something to chew on. depth=""
+// omits the field entirely (mirroring how a real client's omitempty JSON
+// encoding drops an unset optional string) rather than sending a literal
+// empty string, which the depth enum now correctly rejects — "" is not itself
+// a documented depth value; "not present" is how "use the default" is
+// actually expressed.
 func startSession(t *testing.T, deps Dependencies, depth string) (string, map[string]any) {
 	t.Helper()
-	out, res := callTool(t, deps, "sequential_search", map[string]any{
+	args := map[string]any{
 		"searchStep":     "Looked at transformer scaling",
 		"stepNumber":     1,
 		"nextStepNeeded": true,
 		"researchGoal":   "transformer scaling laws",
 		"knowledgeGap":   "no data past 2023",
-		"depth":          depth,
-	})
+	}
+	if depth != "" {
+		args["depth"] = depth
+	}
+	out, res := callTool(t, deps, "sequential_search", args)
 	if res.IsError {
 		t.Fatalf("sequential_search failed")
 	}
@@ -268,10 +276,23 @@ func TestDepthThoroughWarnsOnRefinementSearchError(t *testing.T) {
 	}
 }
 
-func TestDepthUnknownTreatedAsQuick(t *testing.T) {
-	_, out := startSession(t, setupTestDeps(), "ludicrous")
-	if _, ok := out["coverage"]; ok {
-		t.Error("unknown depth should behave as quick (no coverage)")
+// TestDepthUnknownIsRejected (#548): before the depth field had a real JSON
+// Schema enum, an unrecognized depth silently fell through to quick-mode
+// behavior (see applyDepth's old "quick / unknown → unchanged behavior"
+// comment). The enum now makes this a hard schema-validation rejection
+// instead — a deliberate behavior tightening, not a regression.
+func TestDepthUnknownIsRejected(t *testing.T) {
+	deps := setupTestDeps()
+	_, res := callTool(t, deps, "sequential_search", map[string]any{
+		"searchStep":     "Looked at transformer scaling",
+		"stepNumber":     1,
+		"nextStepNeeded": true,
+		"researchGoal":   "transformer scaling laws",
+		"knowledgeGap":   "no data past 2023",
+		"depth":          "ludicrous",
+	})
+	if !res.IsError {
+		t.Fatal("expected an unrecognized depth value to be rejected by the enum, got success")
 	}
 }
 
