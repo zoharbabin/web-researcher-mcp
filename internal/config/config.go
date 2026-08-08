@@ -13,43 +13,44 @@ import (
 )
 
 type Config struct {
-	GoogleAPIKey           string
-	GoogleCX               string
-	Search                 SearchConfig
-	Port                   int
-	OAuth                  OAuthConfig
-	AllowedOrigins         []string
-	CORSStrict             bool
-	HTTP                   HTTPConfig
-	CacheDir               string
-	CacheMaxMemoryMB       int
-	CacheEncryptionKey     string
-	CacheEncryptionKeyPrev string
-	CacheIsolation         string
-	RedisURL               string
-	RateLimit              RateLimitConfig
-	AllowPrivateIPs        bool
-	AllowedDomains         []string
-	ChromePath             string
-	JinaDisabled           bool
-	MaxScrapeConcurrency   int
-	MaxBrowserConcurrency  int
-	MaxHTMLBytes           int
-	MaxDocumentBytes       int
-	SessionTTL             time.Duration
-	SessionDataDir         string
-	SessionMaxSteps        int
-	LogLevel               slog.Level
-	LogFormat              string
-	MetricsEnabled         bool
-	MetricsMaxTenants      int
-	AdminAPIKey            string
-	AdminAPIKeyPrev        string
-	DataRegion             string
-	Features               FeatureConfig
-	Audit                  AuditConfig
-	ResearchPanel          ResearchPanelConfig
-	Circuit                CircuitConfig
+	GoogleAPIKey                  string
+	GoogleCX                      string
+	Search                        SearchConfig
+	Port                          int
+	OAuth                         OAuthConfig
+	AllowedOrigins                []string
+	CORSStrict                    bool
+	HTTP                          HTTPConfig
+	CacheDir                      string
+	CacheMaxMemoryMB              int
+	CacheEncryptionKey            string
+	CacheEncryptionKeyPrev        string
+	CacheIsolation                string
+	RedisURL                      string
+	RateLimit                     RateLimitConfig
+	AllowPrivateIPs               bool
+	AllowedDomains                []string
+	ChromePath                    string
+	JinaDisabled                  bool
+	MaxScrapeConcurrency          int
+	MaxBrowserConcurrency         int
+	MaxScrapeConcurrencyPerTenant int
+	MaxHTMLBytes                  int
+	MaxDocumentBytes              int
+	SessionTTL                    time.Duration
+	SessionDataDir                string
+	SessionMaxSteps               int
+	LogLevel                      slog.Level
+	LogFormat                     string
+	MetricsEnabled                bool
+	MetricsMaxTenants             int
+	AdminAPIKey                   string
+	AdminAPIKeyPrev               string
+	DataRegion                    string
+	Features                      FeatureConfig
+	Audit                         AuditConfig
+	ResearchPanel                 ResearchPanelConfig
+	Circuit                       CircuitConfig
 
 	// StdioUserID names the single local user for STDIO transport, where there
 	// is no OAuth identity (the launching app owns the process, so it IS one
@@ -514,19 +515,25 @@ func Load() (*Config, error) {
 		JinaDisabled:          envBool("JINA_READER_DISABLED", false),
 		MaxScrapeConcurrency:  envInt("MAX_SCRAPE_CONCURRENCY", 5),
 		MaxBrowserConcurrency: envInt("MAX_SCRAPE_CONCURRENCY_BROWSER", 2),
-		MaxHTMLBytes:          envInt("MAX_HTML_BYTES", 8<<20),
-		MaxDocumentBytes:      envInt("MAX_DOCUMENT_BYTES", 50<<20),
-		SessionTTL:            envDuration("SESSION_TTL", 4*time.Hour),
-		SessionDataDir:        envOrDefault("SESSION_DATA_DIR", filepath.Join(envOrDefault("CACHE_DIR", defaultCacheDir()), "sessions")),
-		SessionMaxSteps:       envInt("SESSION_MAX_STEPS", 200),
-		LogLevel:              logLevel,
-		LogFormat:             envOrDefault("LOG_FORMAT", "json"),
-		MetricsEnabled:        envBool("METRICS_ENABLED", true),
-		MetricsMaxTenants:     envInt("METRICS_MAX_TENANTS", 10000),
-		AdminAPIKey:           adminKey,
-		AdminAPIKeyPrev:       adminKeyPrev,
-		DataRegion:            os.Getenv("DATA_REGION"),
-		StdioUserID:           stdioUserID,
+		// MaxScrapeConcurrencyPerTenant defaults to the global MaxScrapeConcurrency
+		// itself (#463): unset ⇒ "no per-tenant restriction beyond the global
+		// cap" — a single-tenant deployment (the common case) sees no behavior
+		// change. In a shared multi-tenant deployment, set this below the global
+		// cap so one tenant's burst can't occupy every slot.
+		MaxScrapeConcurrencyPerTenant: envInt("MAX_SCRAPE_CONCURRENCY_PER_TENANT", envInt("MAX_SCRAPE_CONCURRENCY", 5)),
+		MaxHTMLBytes:                  envInt("MAX_HTML_BYTES", 8<<20),
+		MaxDocumentBytes:              envInt("MAX_DOCUMENT_BYTES", 50<<20),
+		SessionTTL:                    envDuration("SESSION_TTL", 4*time.Hour),
+		SessionDataDir:                envOrDefault("SESSION_DATA_DIR", filepath.Join(envOrDefault("CACHE_DIR", defaultCacheDir()), "sessions")),
+		SessionMaxSteps:               envInt("SESSION_MAX_STEPS", 200),
+		LogLevel:                      logLevel,
+		LogFormat:                     envOrDefault("LOG_FORMAT", "json"),
+		MetricsEnabled:                envBool("METRICS_ENABLED", true),
+		MetricsMaxTenants:             envInt("METRICS_MAX_TENANTS", 10000),
+		AdminAPIKey:                   adminKey,
+		AdminAPIKeyPrev:               adminKeyPrev,
+		DataRegion:                    os.Getenv("DATA_REGION"),
+		StdioUserID:                   stdioUserID,
 		Features: FeatureConfig{
 			SourceRecommendations: envBool("SOURCE_RECOMMENDATIONS", true),
 			GenerativeUI:          envBool("GENERATIVE_UI_ENABLED", false),

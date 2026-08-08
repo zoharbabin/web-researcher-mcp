@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/go-rod/stealth"
+	"github.com/zoharbabin/web-researcher-mcp/internal/auth"
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 )
 
@@ -25,9 +26,21 @@ type PipelineConfig struct {
 	// browser scrapes occupy every slot and starve fast markdown/stealth/html
 	// requests for unrelated URLs. Zero ⇒ NewPipeline defaults it to 2.
 	MaxBrowserConcurrency int
-	AllowPrivateIPs       bool
-	AllowedDomains        []string
-	ChromePath            string
+	// MaxConcurrencyPerTenant bounds how many of a SINGLE tenant's scrapes may
+	// be in flight at once, across both tiers (#463) — a noisy-neighbor
+	// fairness gate that sits IN FRONT OF the existing global semaphores, never
+	// replacing them: a tenant hitting its own cap queues without touching any
+	// other tenant's capacity, but total in-flight scrapes across all tenants
+	// still can never exceed MaxConcurrency/MaxBrowserConcurrency either way.
+	// Tenant identity comes only from auth.TenantIDFromContext(ctx) — never a
+	// tool-call-supplied field, so a request cannot spoof another tenant's
+	// fairness bucket. Zero or negative ⇒ NewPipeline defaults it to
+	// MaxConcurrency (no per-tenant restriction beyond the existing global
+	// cap — same behavior as before this field existed).
+	MaxConcurrencyPerTenant int
+	AllowPrivateIPs         bool
+	AllowedDomains          []string
+	ChromePath              string
 	// ExaAPIKey, when set, enables the Exa /contents extraction tier as a final
 	// fallback (after markdown→stealth→html→browser all fail). Exa is a paid API,
 	// so it is deliberately last: the free tiers win the overwhelming majority of
@@ -289,7 +302,17 @@ type Pipeline struct {
 	// fast requests need, and vice versa.
 	semaphore        chan struct{}
 	browserSemaphore chan struct{}
-	config           PipelineConfig
+	// tenantSemaphore and tenantBrowserSemaphore are per-tenant fair-share
+	// sub-limiters (#463) acquired BEFORE semaphore/browserSemaphore
+	// respectively: a tenant exhausting its own slots queues on its own
+	// bucket without ever touching the global channel another tenant needs,
+	// while the global channel still caps total in-flight scrapes across all
+	// tenants combined. Each Pipeline instance owns its own pair — no
+	// package-level state, so two Pipeline instances never share tenant
+	// fairness data.
+	tenantSemaphore        *tenantLimiter
+	tenantBrowserSemaphore *tenantLimiter
+	config                 PipelineConfig
 }
 
 func NewPipeline(cfg PipelineConfig) *Pipeline {
@@ -299,6 +322,9 @@ func NewPipeline(cfg PipelineConfig) *Pipeline {
 	if cfg.MaxBrowserConcurrency <= 0 {
 		cfg.MaxBrowserConcurrency = 2
 	}
+	if cfg.MaxConcurrencyPerTenant <= 0 {
+		cfg.MaxConcurrencyPerTenant = cfg.MaxConcurrency
+	}
 	if cfg.MaxHTMLBytes <= 0 {
 		cfg.MaxHTMLBytes = 8 << 20 // 8 MB
 	}
@@ -306,11 +332,27 @@ func NewPipeline(cfg PipelineConfig) *Pipeline {
 		cfg.MaxDocumentBytes = 50 << 20 // 50 MB
 	}
 
+	// Each tier's per-tenant bucket is capped at that tier's own global pool
+	// size: a per-tenant allowance larger than the tier's total capacity is
+	// meaningless (the global semaphore acquired right after already caps it),
+	// so clamping here just keeps the bucket's own size an honest reflection of
+	// its real ceiling.
+	fastPerTenant := cfg.MaxConcurrencyPerTenant
+	if fastPerTenant > cfg.MaxConcurrency {
+		fastPerTenant = cfg.MaxConcurrency
+	}
+	browserPerTenant := cfg.MaxConcurrencyPerTenant
+	if browserPerTenant > cfg.MaxBrowserConcurrency {
+		browserPerTenant = cfg.MaxBrowserConcurrency
+	}
+
 	return &Pipeline{
-		client:           NewSSRFSafeClient(cfg.AllowPrivateIPs),
-		semaphore:        make(chan struct{}, cfg.MaxConcurrency),
-		browserSemaphore: make(chan struct{}, cfg.MaxBrowserConcurrency),
-		config:           cfg,
+		client:                 NewSSRFSafeClient(cfg.AllowPrivateIPs),
+		semaphore:              make(chan struct{}, cfg.MaxConcurrency),
+		browserSemaphore:       make(chan struct{}, cfg.MaxBrowserConcurrency),
+		tenantSemaphore:        newTenantLimiter(fastPerTenant, 0),
+		tenantBrowserSemaphore: newTenantLimiter(browserPerTenant, 0),
+		config:                 cfg,
 	}
 }
 
@@ -322,17 +364,54 @@ func NewPipeline(cfg PipelineConfig) *Pipeline {
 // returned release func must be called exactly once when the caller's single
 // attempt (not the whole multi-tier fallback sequence) finishes, so a slow
 // browser attempt never occupies a slot a fast markdown/html request needs.
+//
+// Before touching either global semaphore, it first acquires a per-tenant
+// slot (#463) from tenantSemaphore/tenantBrowserSemaphore, keyed SOLELY by
+// auth.TenantIDFromContext(ctx) — never any tool-call-supplied field, so a
+// request cannot spoof another tenant's fairness bucket. A tenant that has
+// exhausted its own per-tenant allowance blocks on its own bucket, which
+// never blocks or is blocked by any other tenant's bucket; the global
+// semaphore acquired second still bounds total in-flight scrapes across every
+// tenant combined, exactly as before this change.
 func (p *Pipeline) acquireTier(ctx context.Context, tier string) (func(), error) {
 	sem := p.semaphore
+	tenantSem := p.tenantSemaphore
 	if tier == "browser" {
 		sem = p.browserSemaphore
+		tenantSem = p.tenantBrowserSemaphore
 	}
+
+	tenantID := tenantBucketKey(ctx)
+	releaseTenant, err := tenantSem.acquire(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
+
 	select {
 	case sem <- struct{}{}:
-		return func() { <-sem }, nil
+		return func() {
+			<-sem
+			releaseTenant()
+		}, nil
 	case <-ctx.Done():
+		releaseTenant()
 		return nil, ctx.Err()
 	}
+}
+
+// tenantBucketKey resolves the fairness-bucket key for ctx: the authenticated
+// tenant ID from auth.TenantIDFromContext, normalized so an explicit empty
+// string (as opposed to no value at all — TenantIDFromContext already
+// defaults that case to "default") still lands in the shared default bucket
+// rather than getting its own unbounded lane. This is the ONLY source of
+// tenant identity the limiter ever consults — no tool input field is read
+// here, so a request cannot claim another tenant's bucket or a private one of
+// its own by passing a tenant-like parameter.
+func tenantBucketKey(ctx context.Context) string {
+	if id := auth.TenantIDFromContext(ctx); id != "" {
+		return id
+	}
+	return defaultTenantBucket
 }
 
 func (p *Pipeline) Scrape(ctx context.Context, rawURL string, maxLength int) (*ScrapeResult, error) {

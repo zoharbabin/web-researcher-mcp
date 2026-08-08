@@ -553,6 +553,7 @@ DAILY_QUOTA_PER_TENANT=10000
 | `JINA_READER_DISABLED` | Set `true` to turn off the Jina Reader scrape tier (r.jina.ai) entirely, e.g. for hardened deploys or network-free tests | `false` |
 | `MAX_SCRAPE_CONCURRENCY` | Parallel scrape limit for the fast tiers (markdown/stealth/jina/html/exa) | `5` |
 | `MAX_SCRAPE_CONCURRENCY_BROWSER` | Separate parallel scrape limit for the browser (go-rod) tier, which can hold a slot for up to 30s — kept apart from `MAX_SCRAPE_CONCURRENCY` so slow browser scrapes can't starve fast ones (#472) | `2` |
+| `MAX_SCRAPE_CONCURRENCY_PER_TENANT` | Per-tenant sub-limiter bounded by the global `MAX_SCRAPE_CONCURRENCY`/`MAX_SCRAPE_CONCURRENCY_BROWSER` ceilings — a tenant acquires its own slot before the global one, so one tenant's saturation can't starve another tenant's scrapes in a shared multi-tenant HTTP deployment (#463). Tenant identity comes only from the authenticated request context; requests without one share a single "default" bucket | `MAX_SCRAPE_CONCURRENCY` |
 | `MAX_HTML_BYTES` | Decompressed HTML body read cap per scrape tier | `8388608` (8 MB) |
 | `MAX_DOCUMENT_BYTES` | Document (PDF/DOCX/PPTX) download cap | `52428800` (50 MB) |
 
