@@ -190,6 +190,36 @@ jobs:
       - name: Run Python SDK tests
         run: python3 -m pytest tests/python/ --ignore=tests/python/test_live_e2e.py -v --cov=web_researcher_mcp --cov-report=term-missing
 
+  # 📦 mcpb manifest validation — builds one representative .mcpb bundle and
+  # validates it against the official mcpb v0.3 schema + icon-presence check
+  # via the official @anthropic-ai/mcpb CLI (npx). Catches manifest schema
+  # drift, broken user_config → env wiring templating, and missing bundled
+  # assets (e.g. icon.png) before they ship in a release. Gated on `code`
+  # (not `packaging`, which covers packaging/aur|nix only) since mcpb/ and
+  # scripts/build-mcpb.sh changes already set code=true.
+  validate-mcpb:
+    name: 📦 Validate mcpb Manifest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.25.12"
+          cache: true
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install jq, zip, unzip
+        run: sudo apt-get update && sudo apt-get install -y jq zip unzip
+
+      - name: Validate mcpb manifest against an assembled bundle
+        run: make validate-mcpb
+
   # 📦 Packaging validation — PKGBUILD / .SRCINFO / flake.nix version + hash
   # consistency. Catches drift before it ships in a release.
   validate-packaging:

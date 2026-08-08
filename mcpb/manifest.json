@@ -1,8 +1,10 @@
 {
   "manifest_version": "0.3",
   "name": "web-researcher-mcp",
+  "display_name": "Web Researcher MCP",
   "version": "0.0.0-template",
   "description": "Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust. Links that work, citations you can trust, no made up closed garden pre-synthesized results.",
+  "long_description": "Give Claude real web research: search, read full page content (including PDFs, Office docs, and YouTube transcripts), and cross-check citations before they ship. Works zero-config with the DuckDuckGo fallback — no API key needed to try it. Connect Google, Brave, Serper, Tavily, or Exa for richer results, or set multiple providers with automatic fallback so one outage never stops your research. The trust suite (`verify_citation`, `audit_bibliography`, `verify_recommendation`) catches fabricated, retracted, or mischaracterized sources — evidence, never a verdict, so you stay in control of what to believe.\n\nThis bundle ships only the binary needed for Claude Desktop; the full server exposes far more tools (academic, patent, legal, and economic search, sequential multi-step research sessions, and more) — see the documentation link for the complete registry.",
   "author": {
     "name": "Zohar Babin",
     "url": "https://github.com/zoharbabin"
@@ -11,14 +13,39 @@
     "type": "git",
     "url": "https://github.com/zoharbabin/web-researcher-mcp"
   },
+  "homepage": "https://zoharbabin.com/web-researcher-mcp/docs/",
+  "documentation": "https://zoharbabin.com/web-researcher-mcp/docs/tools/",
+  "support": "https://github.com/zoharbabin/web-researcher-mcp/issues",
+  "icon": "icon.png",
   "license": "MIT",
+  "keywords": [
+    "search",
+    "research",
+    "web-search",
+    "citations",
+    "fact-checking",
+    "academic-search",
+    "scraping"
+  ],
+  "privacy_policies": [
+    "https://zoharbabin.com/web-researcher-mcp/docs/privacy/"
+  ],
+  "compatibility": {
+    "claude_desktop": ">=0.10.0",
+    "platforms": ["darwin", "win32", "linux"]
+  },
   "server": {
     "type": "binary",
     "entry_point": "server/web-researcher-mcp",
     "mcp_config": {
       "command": "${__dirname}/server/web-researcher-mcp",
       "args": [],
-      "env": {}
+      "env": {
+        "GOOGLE_CUSTOM_SEARCH_API_KEY": "${user_config.GOOGLE_CUSTOM_SEARCH_API_KEY}",
+        "GOOGLE_CUSTOM_SEARCH_ID": "${user_config.GOOGLE_CUSTOM_SEARCH_ID}",
+        "SEARCH_PROVIDER": "${user_config.SEARCH_PROVIDER}",
+        "BRAVE_API_KEY": "${user_config.BRAVE_API_KEY}"
+      }
     }
   },
   "user_config": {
@@ -38,14 +65,14 @@
     "SEARCH_PROVIDER": {
       "type": "string",
       "title": "Search Provider",
-      "description": "Search provider (google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github)",
+      "description": "Search provider (google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github). Leave unset to use Google when its keys are provided, or DuckDuckGo (no key needed) otherwise.",
       "required": false,
       "default": "google"
     },
     "BRAVE_API_KEY": {
       "type": "string",
       "title": "Brave Search API Key",
-      "description": "Brave Search API key (required when SEARCH_PROVIDER=brave)",
+      "description": "Brave Search API key (required when Search Provider is set to brave)",
       "required": false,
       "sensitive": true
     }
@@ -78,6 +105,10 @@
     {
       "name": "patent_search",
       "description": "Search patents with multi-office filtering (US, EP, WO, CN, JP, KR)"
+    },
+    {
+      "name": "verify_citation",
+      "description": "Verify a citation exists, matches a real record, and hasn't been retracted before you rely on it"
     },
     {
       "name": "sequential_search",

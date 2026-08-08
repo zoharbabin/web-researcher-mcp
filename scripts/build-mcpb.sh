@@ -31,6 +31,7 @@ for platform in "${PLATFORMS[@]}"; do
   work_dir=$(mktemp -d)
 
   mkdir -p "${work_dir}/server"
+  cp assets/logo-final-512.png "${work_dir}/icon.png"
 
   # Copy the pre-built binary from GoReleaser dist
   src_binary="dist/web-researcher-mcp_${os}_${arch}${ext:+_v1}/${binary_name}"
