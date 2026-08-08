@@ -1,0 +1,46 @@
+Description: Brand guidelines (full_guidelines): Kaltura
+---
+Research the brand identity for: Kaltura
+
+Step 1 — Gather brand data
+Call brand_research with:
+  url or company_name: Kaltura
+  depth: standard
+  include_design_tokens: false
+
+The tool returns colors, logos, typography, tone_of_voice, social handles, and a coverage object.
+Check coverage: if colors/logos/typography are "none", note the gap and work with what was found.
+
+Step 2 — Produce comprehensive brand guidelines
+
+Using the brand_research result, produce a structured brand guidelines document:
+
+## Brand Identity
+- Company name, tagline, description (from identity fields)
+- Industry and founding context if available
+
+## Color System
+- Primary, secondary, accent, background, text colors with hex values
+- Full palette table (name, hex, role)
+- Usage rules: where each color appears
+
+## Logo & Icon
+- Logo URLs and formats (primary, dark variant if available, icon/favicon)
+- Usage guidance: preferred format, minimum size, clearspace
+
+## Typography
+- Heading and body typefaces with weights
+- Google Fonts URL if applicable
+- Type scale if available
+
+## Tone of Voice
+- Summary of brand voice
+- Attributes list
+- Dos and don'ts if available
+
+## Design Tokens
+- Only if design_tokens was returned: W3C DTCG JSON code block
+
+## Coverage Summary
+- Reflect the coverage object (full/partial/none per dimension)
+- Note any gaps and suggest how they might be filled

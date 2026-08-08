@@ -23,6 +23,12 @@ var expectedPrompts = []string{
 	"fact-check",
 	"competitive-analysis",
 	"literature-review",
+	"brand-guidelines",
+	"company-recon",
+	"curriculum-research",
+	"rare-disease-research",
+	"research-panel-factcheck",
+	"research-panel-synthesis",
 }
 
 // expectedResources is the set of stats resources the server registers.

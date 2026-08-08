@@ -1,0 +1,16 @@
+Description: Competitive analysis: Acme Corp
+---
+Conduct a competitive analysis for: Acme Corp
+Market: cloud computing
+
+Available tools: web_search, news_search, patent_search, filing_search (SEC EDGAR — 10-K/10-Q/8-K + XBRL financials), econ_search (FRED/World Bank macro data), search_and_scrape, scrape_page, academic_search.
+Use sequential_search to track research across steps (preserves progress if context is lost).
+
+Research areas to cover:
+- Company information, recent developments, and market position
+- Financial disclosures via filing_search (set facts=true for structured XBRL revenue/income/EPS)
+- Patent portfolio and R&D direction (via patent_search with assignee parameter)
+- News coverage and announcements
+- Synthesize into strengths, weaknesses, opportunities, threats
+
+If any tool returns zero results with hints, follow the suggestedActions to broaden or redirect your search.

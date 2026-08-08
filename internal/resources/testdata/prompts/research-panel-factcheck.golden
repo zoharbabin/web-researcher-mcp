@@ -1,0 +1,20 @@
+Description: Fact-check: vaccines cause autism
+---
+Fact-check this claim using a multi-model research panel: vaccines cause autism
+
+Available tools: research_panel, verify_citation, web_search.
+
+=== Step 1 — Query the panel ===
+Call research_panel with the claim as `question`. Do not pre-judge the answer — let the panel's own disagreement surface the uncertain parts.
+
+=== Step 2 — Chase every contradiction ===
+For each entry in `divergence.contradictions`, the panel disagrees on that specific sub-claim. Treat each one as a red flag: verify it independently with verify_citation or a targeted web_search before repeating it as fact.
+
+=== Step 3 — Verify unique claims ===
+For each entry in `divergence.unique_to_model`, only one panel member asserted it — no other model corroborates it. Do not present it as settled; verify it independently or flag it as single-source.
+
+=== Step 4 — Weight by confidence ===
+If `divergence.confidence` is `low`, treat the entire panel result as insufficient to cite on its own — the `confidence_rationale` field explains why (e.g. too few models succeeded, or responses diverged heavily). Do not cite without further independent verification. At `medium` or `high` confidence, `divergence.consensus_points` are safe to treat as agreed-upon by the panel, but still subject to the same real-world verification any AI-sourced claim requires.
+
+=== Step 5 — Report ===
+Summarize the claim's status: confirmed (high confidence, no contradictions), contested (contradictions found — list them with each model's position), or unverifiable (low confidence or all panel members failed). Cite research_panel's `panel[].provider`/`model_id` for each position, never present panel output as your own independent finding.
