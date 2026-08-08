@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/go-rod/rod/lib/launcher/flags"
 )
@@ -135,5 +136,101 @@ func TestScrapeBrowserSuccessStillWorks(t *testing.T) {
 	}
 	if result == nil || len(result.Content) < 100 {
 		t.Fatalf("expected extracted content, got: %+v", result)
+	}
+}
+
+// TestScrapeBrowserRecoversFromCrash is the regression test for issue #464:
+// getBrowserPool must detect a dead CDP connection (Chromium crashed via OOM,
+// a malicious page, or a Chromium bug) and relaunch, rather than handing a
+// caller a non-nil *rod.Browser pointing at a dead process. Before this fix,
+// scrapeBrowser's own 30s context would eventually expire against the dead
+// connection and the call would fail with a context/deadline error; after
+// the fix it transparently relaunches and succeeds instead.
+//
+// It launches the pool, kills the real underlying Chromium OS process (a
+// real process kill — not a mock — the actual crash scenario described in
+// the issue), then asserts the next scrapeBrowser call succeeds rather than
+// erroring out. Wall-clock time is not asserted tightly against the 30s
+// figure from the issue: launching a fresh Chromium in this test environment
+// (see the multi-second launch times of the sibling tests in this file) can
+// itself take longer than 30s in a cold/throttled sandbox, and getBrowserPool
+// has no ctx parameter — the liveness check and relaunch are not bounded by
+// scrapeBrowser's own timeout. A generous outer bound below still catches a
+// genuine infinite hang; the load-bearing assertion is that the call
+// succeeds at all instead of returning the old timeout/connection error.
+func TestScrapeBrowserRecoversFromCrash(t *testing.T) {
+	skipIfNoChrome(t)
+	resetPool(t)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><article><p>` +
+			strings.Repeat("Real article content that is long enough to extract. ", 5) +
+			`</p></article></body></html>`))
+	}))
+	defer ts.Close()
+
+	// Prime the pool with a live browser.
+	bp := getBrowserPool("", 1)
+	if bp.browser == nil {
+		t.Fatalf("browser pool failed to launch: %v", bp.initErr)
+	}
+	pid := bp.launcher.PID()
+	if pid == 0 {
+		t.Fatal("expected a non-zero launcher PID")
+	}
+
+	// Simulate the crash: kill the real Chromium process out from under the
+	// pool. bp.browser stays non-nil — this is exactly the state issue #464
+	// describes; only a liveness check (not a nil check) can detect it.
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		t.Fatalf("os.FindProcess(%d) failed: %v", pid, err)
+	}
+	if err := proc.Kill(); err != nil {
+		t.Fatalf("failed to kill browser process %d: %v", pid, err)
+	}
+	// Wait for the kill to actually take effect — i.e. for the liveness probe
+	// itself to start observing a dead connection — instead of a fixed sleep,
+	// which can race the OS/websocket teardown and make this test flaky.
+	const teardownPollTimeout = 5 * time.Second
+	teardownDeadline := time.Now().Add(teardownPollTimeout)
+	for {
+		bp.mu.Lock()
+		dead := !bp.connectedLocked()
+		bp.mu.Unlock()
+		if dead {
+			break
+		}
+		if time.Now().After(teardownDeadline) {
+			t.Fatalf("browser connection still reports alive %s after killing pid %d", teardownPollTimeout, pid)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	start := time.Now()
+	p := NewPipeline(PipelineConfig{AllowPrivateIPs: true})
+	result, scrapeErr := p.scrapeBrowser(context.Background(), ts.URL, 10000, false)
+	elapsed := time.Since(start)
+
+	// Smoke bound: catches a genuine infinite/multi-minute hang without being
+	// tightly coupled to this sandbox's own Chromium cold-launch overhead.
+	const maxBound = 90 * time.Second
+	if elapsed > maxBound {
+		t.Errorf("scrapeBrowser took %s to recover from a browser crash, want <= %s", elapsed, maxBound)
+	}
+
+	if scrapeErr != nil {
+		t.Fatalf("expected scrapeBrowser to recover and succeed after a browser crash, got error after %s: %v", elapsed, scrapeErr)
+	}
+	if result == nil || len(result.Content) < 100 {
+		t.Fatalf("expected extracted content after recovery, got: %+v", result)
+	}
+
+	// The relaunch must have produced a genuinely new, live browser/launcher
+	// (issue #464's fix relaunches rather than reusing dead state).
+	newBP := getBrowserPool("", 1)
+	if newBP.launcher == nil || newBP.launcher.PID() == pid {
+		t.Errorf("expected a new launcher PID after recovery, still have old PID %d", pid)
 	}
 }

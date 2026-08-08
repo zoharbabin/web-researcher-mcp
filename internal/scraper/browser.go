@@ -34,10 +34,44 @@ func getBrowserPool(chromePath string, maxPages int) *browserPool {
 	_ = maxPages // parameter retained for call-site compatibility; page-level limiting is handled by Pipeline.browserSemaphore (#472)
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
+	if pool.browser != nil && !pool.connectedLocked() {
+		// The Chromium process behind bp.browser has died since init() ran (OOM,
+		// malicious page, Chromium bug) but the pointer is still non-nil, so the
+		// old `== nil` check never fired — every subsequent call would hang
+		// against a dead CDP connection until the caller's own 30s timeout
+		// (issue #464). Relaunch now so the caller gets a live browser instead.
+		slog.Warn("browser pool detected dead connection", "phase", "liveness-check", "action", "relaunching", "chromePath", chromePath)
+		pool.closeLocked()
+	}
 	if pool.browser == nil {
 		pool.init(chromePath)
 	}
 	return pool
+}
+
+// livenessCheckTimeout bounds only the CDP round-trip used to detect a dead
+// browser connection (issue #464) — short enough that the probe itself
+// resolves quickly, long enough that a briefly slow-but-alive browser is not
+// misdiagnosed as dead. It does NOT bound the full recovery path: the
+// getBrowserPool/init() relaunch that follows a detected-dead connection has
+// no deadline and can exceed the 30s scrapeBrowser budget on a cold or slow
+// host.
+const livenessCheckTimeout = 2 * time.Second
+
+// connectedLocked reports whether bp.browser's CDP connection is still alive
+// by making a lightweight, bounded-timeout round-trip call (Browser.getVersion)
+// to the Chromium process. go-rod has no dedicated IsConnected() method; a
+// bounded protocol call is the standard liveness probe for a possibly-dead
+// connection — a genuinely dead websocket surfaces the error near-instantly
+// (the read loop's error path notifies all pending calls), while a merely
+// slow-but-alive browser has up to livenessCheckTimeout to respond.
+// Caller must hold bp.mu.
+func (bp *browserPool) connectedLocked() bool {
+	if bp.browser == nil {
+		return false
+	}
+	_, err := bp.browser.Timeout(livenessCheckTimeout).Version()
+	return err == nil
 }
 
 func (bp *browserPool) init(chromePath string) {
@@ -98,8 +132,23 @@ func (bp *browserPool) init(chromePath string) {
 func (bp *browserPool) close() {
 	bp.mu.Lock()
 	defer bp.mu.Unlock()
+	bp.closeLocked()
+}
+
+// closeLocked is the body of close(), factored out so getBrowserPool's
+// liveness-check-then-relaunch path (issue #464) can tear down a dead
+// browser without releasing and re-acquiring bp.mu (which would let another
+// caller race in between). Caller must hold bp.mu.
+func (bp *browserPool) closeLocked() {
 	if bp.browser != nil {
-		_ = bp.browser.Close()
+		// Bound this CDP round-trip (issue #464): closeLocked() is now also
+		// reached when the browser is already known-dead (liveness check
+		// failed in getBrowserPool), in which case an un-timed-out Close()
+		// call would itself hang forever — Browser.Close() has no deadline by
+		// default (b.ctx defaults to context.Background()). A dead connection
+		// still returns near-instantly via the read loop's error path; this
+		// timeout only guards the case where it doesn't.
+		_ = bp.browser.Timeout(livenessCheckTimeout).Close()
 		bp.browser = nil
 	}
 	if bp.launcher != nil {
