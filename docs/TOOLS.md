@@ -2153,6 +2153,73 @@ These are not errors in web-researcher-mcp. The tool faithfully passes parameter
 
 MCP Prompts are LLM-facing instruction handlers — they orchestrate tool calls and synthesis for a specific use case. Unlike tools (which return structured JSON), prompts return a natural-language instruction that tells the LLM *how* to use tool outputs.
 
+### `comprehensive-research`
+
+Guide an AI assistant through a multi-step research process over a topic — tool selection, verification, and citation guidance scaled to the requested depth.
+
+#### Arguments
+
+| Argument | Required | Default | Description |
+|---|---|---|---|
+| `topic` | yes | — | Research topic |
+| `depth` | no | `standard` | `quick` (2 steps), `standard` (3 steps), `deep` (6 steps) |
+| `lens` | no | (none) | Optional search lens to restrict to trusted sources (autocompletes to the configured lenses) |
+
+#### Behavior
+
+- Surfaces the full research tool set — `web_search`, `scrape_page`, `search_and_scrape`, `news_search`, `academic_search`, `citation_graph`, `patent_search`, `filing_search`, `legal_search`, `econ_search`, `clinical_search`, `image_search` — plus `sequential_search` for progress tracking and `research_export`/`format_bibliography` for packaging results.
+- Requires verifying every citation with `verify_citation` (one citation) or `audit_bibliography` (a whole reference list) before presenting it.
+
+### `fact-check`
+
+Verify a claim using multiple independent sources, weighing supporting and contradicting evidence before reporting a confidence level.
+
+#### Arguments
+
+| Argument | Required | Default | Description |
+|---|---|---|---|
+| `claim` | yes | — | The claim to verify |
+| `context` | no | (none) | Additional context about the claim |
+
+#### Behavior
+
+- Uses `web_search`/`search_and_scrape` (both accept the claim to return claim-relevant evidence sentences), `news_search`, `scrape_page`, `academic_search`, tracked with `sequential_search`.
+- Requires `verify_citation` on any source before it is cited — a real-looking citation may be fabricated or retracted.
+- Reports a confidence level (high/medium/low) with reasoning and cited, verified sources.
+
+### `competitive-analysis`
+
+Research competitors in a given market — company profile, financial disclosures, patents, news, and a SWOT synthesis.
+
+#### Arguments
+
+| Argument | Required | Default | Description |
+|---|---|---|---|
+| `company` | yes | — | Company to analyze |
+| `market` | no | (none) | Market or industry context |
+
+#### Behavior
+
+- Orchestrates `web_search`, `news_search`, `patent_search`, `filing_search` (SEC EDGAR — 10-K/10-Q/8-K + XBRL financials via `facts=true`), `econ_search` (FRED/World Bank macro data), `search_and_scrape`, `scrape_page`, `academic_search`, tracked with `sequential_search`.
+- Synthesizes findings into strengths, weaknesses, opportunities, threats.
+
+### `literature-review`
+
+Systematic review of academic literature on a topic across a given year range, with a citation-integrity audit before the reference list is finalized.
+
+#### Arguments
+
+| Argument | Required | Default | Description |
+|---|---|---|---|
+| `topic` | yes | — | Research topic |
+| `year_from` | no | (none) | Start year for papers |
+| `year_to` | no | (none) | End year for papers |
+
+#### Behavior
+
+- Uses `academic_search`, `citation_graph` (trace what a paper cites and what cites it), `clinical_search`, `web_search`, `scrape_page`, `search_and_scrape`, tracked with `sequential_search`.
+- Assembles the reference list with `format_bibliography`, then requires running `audit_bibliography` over the whole list before finalizing — a systematic review must not cite a retracted or fabricated study.
+
 ### `brand-guidelines`
 
 Research a company's brand identity and produce use-case-specific brand-compliant guidance. Calls `brand_research`, interprets the structured JSON, and produces actionable creative direction for the requested use case.
@@ -2240,6 +2307,25 @@ Research a subject's academic curriculum footprint, institutional free-speech cl
 
 - **Open Syllabus corpus skew**: ~65% US/Anglophone — a sparse or absent Step 1 result means "not indexed," not "never assigned."
 - **Watchdog source orientation**: Step 5 sources span the political spectrum (advocacy groups, civil-liberties monitors) — cite each source's known orientation rather than treating any as neutral.
+
+### `rare-disease-research`
+
+Differential-diagnosis and gene-disease research over the Monarch Initiative biomedical knowledge graph, corroborated with published literature and active trials.
+
+#### Arguments
+
+| Argument | Required | Default | Description |
+|---|---|---|---|
+| `topic` | yes | — | Disease name or a set of phenotypes (e.g. HPO term IDs) to research |
+| `focus` | no | (omit for balanced coverage) | `differential diagnosis`, `causal genes`, `phenotype overlap` — adjusts which `monarch_search` operation to lead with |
+
+#### Behavior
+
+- If `topic` is a set of phenotypes (HPO term IDs), calls `monarch_search` with `operation=semsim`, `group="Human Diseases"` for a ranked differential of candidate diseases.
+- If `topic` is a named disease or gene, calls `monarch_search` with `operation=entity` to resolve a stable CURIE (MONDO/OMIM/Orphanet/HGNC), then `operation=associations` with `category=biolink:CausalGeneToDiseaseAssociation` for causal genes (or the reverse direction for gene-to-disease).
+- Cross-species leads: `semsim` against `group="Mouse Genes"`, `"Zebrafish Genes"`, or `"C. Elegans Genes"` surfaces model-organism orthologs for a human phenotype set.
+- Corroborates any candidate with `academic_search` (published evidence) and `clinical_search` (active interventional trials), and requires `verify_citation` before including any finding in the summary.
+- Refuses to submit identifiable patient data to `monarch_search`'s `annotate` operation. Flags that case data derived from published phenopackets (specific HPO combinations, age at onset, sex, PMID) may retain quasi-identifiers — not for patient matching without IRB approval.
 
 ### `research-panel-factcheck`
 
