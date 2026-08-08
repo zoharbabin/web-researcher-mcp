@@ -8,6 +8,7 @@ on:
     branches: [main]
   schedule:
     - cron: "0 7 * * 1" # Weekly soak test, every Monday at 07:00 UTC
+    - cron: "0 8 * * 1" # Weekly trust/GEO/panel eval, every Monday at 08:00 UTC (#466)
     - cron: "0 9 * * 1" # Weekly multi-pod Redis session continuity, every Monday at 09:00 UTC (#495)
   workflow_dispatch:
     inputs:
@@ -19,6 +20,12 @@ on:
         options: ["true", "false"]
       run_soak_test:
         description: "Run sustained-load soak test (#480; network-free, ~30-60min)"
+        required: false
+        default: "false"
+        type: choice
+        options: ["true", "false"]
+      run_trust_eval:
+        description: "Run trust-suite/GEO/research_panel accuracy evals (#466; live network, needs API keys)"
         required: false
         default: "false"
         type: choice
@@ -530,11 +537,11 @@ jobs:
   # no unbounded goroutine/heap growth. Network-free (CHROME_PATH=disabled,
   # web_search asserted for transport success only), but deliberately NOT part
   # of the required `e2e` job — its own build tag keeps it out of `test-e2e`.
-  # Runs automatically on its own weekly `schedule` trigger (network-free, so
-  # no rate-limit risk) and remains available on-demand via workflow_dispatch.
+  # Runs automatically on its own weekly `schedule` cron (network-free, so no
+  # rate-limit risk) and remains available on-demand via workflow_dispatch.
   # Gated to its own cron string (not just github.event_name == 'schedule')
-  # so it doesn't also fire on the multipod-redis-session-continuity cron now
-  # that both share the same `on.schedule` list.
+  # so it doesn't also fire on the sibling trust-eval/multipod-redis-session-
+  # continuity crons now that all three share the same `on.schedule` list.
   soak-test:
     name: 🐢 Soak Test
     if: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 7 * * 1') || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_soak_test == 'true') }}
@@ -552,6 +559,79 @@ jobs:
           SOAK_DURATION: 45m
           SOAK_WORKERS: "16"
         run: make test-soak
+
+  # 🎯 Trust-eval — labeled-gold-set accuracy suites for the project's core
+  # anti-hallucination claims (#466 half 1): the trust suite (verify_citation +
+  # audit_bibliography existence/retraction/mischaracterization/title-match,
+  # `internal/tools/trust_eval_live_test.go`), the GEO-defense suite
+  # (`internal/search/geo_eval_live_test.go` + `internal/tools/geo_eval_*_test.go`),
+  # and the research_panel divergence eval (`TestResearchPanelEvalAccuracy`).
+  # All three are `//go:build live` and hit real external APIs (Crossref, DOI
+  # handle registry, search providers, LLM providers) — live network + rate
+  # limits make this too flaky to gate merges on, so it is intentionally NOT a
+  # required per-PR check: it runs on its own weekly cron (gated to that exact
+  # cron string so it doesn't double-fire on the sibling soak-test schedule)
+  # and remains available on-demand via workflow_dispatch. Each suite skips
+  # cleanly (not a failure) when its required credentials are absent — see
+  # newEvalDeps/CROSSREF_EMAIL, geo_eval's provider fallback, and
+  # TestResearchPanelEvalAccuracy's "needs >=2 of 4 LLM keys" skip. Results
+  # (precision/recall per signal) are appended to the job summary on every run
+  # so regressions are visible in trend, not just pass/fail — see docs/TRUST_EVAL.md.
+  trust-eval:
+    name: 🎯 Trust/GEO/Panel Eval
+    if: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1') || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_trust_eval == 'true') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.25.12"
+          cache: true
+
+      - name: Run trust-suite accuracy eval
+        env:
+          CROSSREF_EMAIL: ${{ secrets.CROSSREF_EMAIL }}
+          OPENALEX_EMAIL: ${{ secrets.OPENALEX_EMAIL }}
+        run: |
+          make test-eval 2>&1 | tee /tmp/trust-eval.log || true
+          status=${PIPESTATUS[0]}
+          echo "## 🎯 Trust-suite accuracy eval ($(date -u +%Y-%m-%dT%H:%M:%SZ))" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -E 'precision=|SKIP|--- (PASS|FAIL)' /tmp/trust-eval.log >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tail -n 40 /tmp/trust-eval.log
+          exit "$status"
+
+      - name: Run GEO-defense eval
+        env:
+          GOOGLE_CUSTOM_SEARCH_API_KEY: ${{ secrets.GOOGLE_CUSTOM_SEARCH_API_KEY }}
+          GOOGLE_CUSTOM_SEARCH_ID: ${{ secrets.GOOGLE_CUSTOM_SEARCH_ID }}
+        run: |
+          make test-geo-eval 2>&1 | tee /tmp/geo-eval.log || true
+          status=${PIPESTATUS[0]}
+          echo "## 🧭 GEO-defense eval" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -E 'summary|recall|containment|SKIP|--- (PASS|FAIL)' /tmp/geo-eval.log >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tail -n 40 /tmp/geo-eval.log
+          exit "$status"
+
+      - name: Run research_panel divergence eval
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
+        run: |
+          go test -tags=live -count=1 -v -run TestResearchPanelEvalAccuracy ./internal/tools/... 2>&1 | tee /tmp/panel-eval.log || true
+          status=${PIPESTATUS[0]}
+          echo "## 🗳️ research_panel divergence eval" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -E 'skip|confidence=|--- (PASS|FAIL)' /tmp/panel-eval.log >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tail -n 40 /tmp/panel-eval.log
+          exit "$status"
 
   # ☸️ Multi-pod Redis session continuity (#495) — the automated counterpart
   # to the manual `deploy/k8s-local/` + docs/K8S_LOCAL_DEV.md verification

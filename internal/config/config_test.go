@@ -996,6 +996,54 @@ func TestLoadAuditRetentionInvalidFallback(t *testing.T) {
 	}
 }
 
+func TestLoadAuditWebhookURLValid(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("AUDIT_WEBHOOK_URL", "https://siem.example.com/ingest")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Audit.WebhookURL != "https://siem.example.com/ingest" {
+		t.Errorf("expected Audit.WebhookURL to be set, got %q", cfg.Audit.WebhookURL)
+	}
+}
+
+func TestLoadAuditWebhookURLEmptyByDefault(t *testing.T) {
+	setRequiredEnv(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Audit.WebhookURL != "" {
+		t.Errorf("expected Audit.WebhookURL to default to empty, got %q", cfg.Audit.WebhookURL)
+	}
+}
+
+func TestLoadAuditWebhookURLInvalid(t *testing.T) {
+	tests := []string{
+		"not-a-url",
+		"ftp://siem.example.com/ingest", // wrong scheme
+		"https://",                      // no host
+		"http:///path",                  // no host
+	}
+	for _, v := range tests {
+		t.Run(v, func(t *testing.T) {
+			setRequiredEnv(t)
+			t.Setenv("AUDIT_WEBHOOK_URL", v)
+
+			_, err := Load()
+			if err == nil {
+				t.Fatalf("expected error for AUDIT_WEBHOOK_URL=%q", v)
+			}
+			if !strings.Contains(err.Error(), "AUDIT_WEBHOOK_URL must be a valid absolute http(s) URL") {
+				t.Errorf("expected error about AUDIT_WEBHOOK_URL, got: %v", err)
+			}
+		})
+	}
+}
+
 func TestLoadAdminAPIKeyTooShort(t *testing.T) {
 	setRequiredEnv(t)
 	t.Setenv("ADMIN_API_KEY", strings.Repeat("a", 15)) // 15 chars
