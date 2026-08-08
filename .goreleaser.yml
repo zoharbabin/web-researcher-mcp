@@ -299,18 +299,21 @@ chocolateys:
   - name: web-researcher-mcp
     title: "Web Researcher MCP"
     authors: "Zohar Babin"
+    owners: "Zohar Babin"
     project_url: "https://github.com/zoharbabin/web-researcher-mcp"
     license_url: "https://github.com/zoharbabin/web-researcher-mcp/blob/main/LICENSE"
     project_source_url: "https://github.com/zoharbabin/web-researcher-mcp"
+    package_source_url: "https://github.com/zoharbabin/web-researcher-mcp/blob/main/.goreleaser.yml"
     docs_url: "https://github.com/zoharbabin/web-researcher-mcp/blob/main/README.md"
     bug_tracker_url: "https://github.com/zoharbabin/web-researcher-mcp/issues"
-    icon_url: "https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/logo.png"
+    icon_url: "https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/logo-final-512.png"
     copyright: "2026 Zohar Babin"
     summary: "Your AI research assistant that cites real sources and stays honest"
     description: |
       Web Researcher MCP is an MCP server that gives AI assistants web search,
       content extraction, academic / patent / SEC-filing / case-law / economic
       data lookup, and multi-step research — with real, verifiable citations.
+    release_notes: "https://github.com/zoharbabin/web-researcher-mcp/releases/tag/v{{ .Version }}"
     tags: "mcp ai research search web-scraping cli"
     require_license_acceptance: false
     source_repo: "https://push.chocolatey.org/"
