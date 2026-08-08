@@ -480,6 +480,16 @@ jobs:
       - name: Run gosec
         run: go tool gosec -exclude=G104 -exclude-dir=tests -quiet ./...
 
+      # go-licenses: enforces the permissive-only dependency policy
+      # (docs/SECURITY_AND_COMPLIANCE.md's Dependency Policy — MIT/Apache-2.0/
+      # BSD). Version-pinned in the `go run` invocation (not go.mod's `tool`
+      # block) for zero go.mod/go.sum footprint. `make license-check` pins
+      # GOROOT/PATH to the resolved toolchain to sidestep a known
+      # go-licenses/Go-toolchain incompatibility:
+      # https://github.com/google/go-licenses/issues/128.
+      - name: Run go-licenses check
+        run: make license-check
+
   # ── Manual-dispatch only ──────────────────────────────────────────────────────
 
   # 🐍 Python live E2E — hits real external APIs. Keyless providers

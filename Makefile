@@ -1,6 +1,6 @@
 .PHONY: build build-fips sync-lenses test test-race test-cover test-e2e test-soak test-live test-eval test-geo-eval test-extraction-eval test-relevance-eval test-concurrency test-bench test-fuzz test-python test-python-live \
-        lint fmt fmt-check vet vuln sec tools hooks precommit verify clean run dev docker docker-smoke e2e-oauth-docker release version-sync rebuild-local help all \
-        gen-python-client check-python-drift
+        lint fmt fmt-check vet vuln sec license-check tools hooks precommit verify clean run dev docker docker-smoke e2e-oauth-docker release version-sync rebuild-local help all \
+        gen-python-client check-python-drift harness-467 harness-21
 
 BINARY = web-researcher-mcp
 VERSION ?= $(shell cat VERSION 2>/dev/null || git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -107,9 +107,10 @@ test-bench:
 	go test -bench=. -benchmem ./tests/benchmark/
 
 # Go native fuzzing (#476) over the untrusted-input parsers: internal/documents
-# (PDF/DOCX/PPTX extraction) and internal/content's HTML/text sanitizer. Each
-# target gets a short, CI-friendly fuzztime; run with a longer FUZZTIME locally
-# (e.g. `make test-fuzz FUZZTIME=5m`) for a deeper periodic sweep.
+# (PDF/DOCX/PPTX extraction), internal/content's HTML/text sanitizer, and
+# internal/scraper's SSRF hostname/IP validator (#499). Each target gets a
+# short, CI-friendly fuzztime; run with a longer FUZZTIME locally (e.g. `make
+# test-fuzz FUZZTIME=5m`) for a deeper periodic sweep.
 FUZZTIME ?= 30s
 test-fuzz:
 	go test ./internal/documents/... -run=^$$ -fuzz=FuzzParsePDF -fuzztime=$(FUZZTIME)
@@ -117,6 +118,8 @@ test-fuzz:
 	go test ./internal/documents/... -run=^$$ -fuzz=FuzzParsePPTX -fuzztime=$(FUZZTIME)
 	go test ./internal/content/... -run=^$$ -fuzz=FuzzSanitizeHTML -fuzztime=$(FUZZTIME)
 	go test ./internal/content/... -run=^$$ -fuzz=FuzzSanitizeText -fuzztime=$(FUZZTIME)
+	go test ./internal/scraper/... -run=^$$ -fuzz=FuzzIsBlockedHostname -fuzztime=$(FUZZTIME)
+	go test ./internal/scraper/... -run=^$$ -fuzz=FuzzIsPrivateIP -fuzztime=$(FUZZTIME)
 
 # Python client library tests (no binary required — uses a mock HTTP server).
 # --cov reports coverage of the generated/hand-written client so gaps are
@@ -167,6 +170,18 @@ vuln:
 sec:
 	$(GOSEC) $(GOSEC_FLAGS) ./...
 
+# Dependency license policy (permissive only: MIT/Apache-2.0/BSD — see
+# docs/SECURITY_AND_COMPLIANCE.md's Dependency Policy). go-licenses can't join
+# the `tool` directive block (that would add it as a go.mod `require`), so
+# it's version-pinned in the `go run` invocation instead — zero go.mod/go.sum
+# footprint. GOROOT and PATH are both pinned to the resolved go.mod toolchain
+# to avoid a known go-licenses/Go-toolchain incompatibility: when the running
+# `go` binary differs from the toolchain go.mod requires, stdlib packages
+# resolve outside GOROOT and go-licenses misreports every one of them as "no
+# module info," aborting the check — https://github.com/google/go-licenses/issues/128.
+license-check:
+	GOROOT="$$(go env GOROOT)"; PATH="$$GOROOT/bin:$$PATH" GOROOT="$$GOROOT" go run github.com/google/go-licenses@v1.6.0 check ./... --disallowed_types=forbidden,restricted
+
 # --- Developer setup --------------------------------------------------------
 
 # Materialize the pinned tools into the build cache (optional; `go tool`
@@ -203,7 +218,7 @@ sync-lenses:
 	@echo "synced $$(ls internal/search/lenses_embed/*.json | wc -l | tr -d ' ') lenses into the embed"
 
 # Full verification, matching CI. Run before opening a PR.
-verify: fmt-check vet lint sec vuln validate-lenses test-race test-e2e check-python-drift test-python build
+verify: fmt-check vet lint sec vuln license-check validate-lenses test-race test-e2e check-python-drift test-python build
 
 # Permanent regression gate for the v1.47.0 Operational Hardening milestone
 # (#467). Not part of `verify` — it re-runs lint/sec/vuln plus targeted tests
@@ -211,6 +226,14 @@ verify: fmt-check vet lint sec vuln validate-lenses test-race test-e2e check-pyt
 # circuit breaker, rate limiter, scraper concurrency, or tenant isolation.
 harness-467:
 	bash scripts/harness-467.sh
+
+# Permanent regression gate for the v1.48.0 Operational Hardening II
+# milestone (#21, build constitution #555). Not part of `verify` — it
+# re-runs lint/sec/vuln/fuzz plus targeted tests already covered there; run
+# manually before cutting a release that touches per-tenant scrape
+# concurrency, browser-pool health, audit hash-chaining, or SSRF validation.
+harness-21:
+	bash scripts/harness-21.sh
 
 clean:
 	rm -f $(BINARY) coverage.out coverage.html

@@ -1,0 +1,62 @@
+name: 📜 SLSA Build Provenance
+
+# Reusable workflow, isolated from the 🏗️ GoReleaser build job by design (SLSA
+# Level 3's isolation requirement): this file's own `permissions:` block is the
+# ONLY source of the `id-token`/`attestations` scopes used to sign and publish
+# the provenance attestation. The `release` job's GoReleaser step never has
+# `attestations: write`, so nothing that runs inside it — including any
+# third-party GoReleaser plugin — can forge or influence what gets attested
+# here. This job only ever receives a release tag as input and reads the
+# already-published `checksums.txt` release asset; it never touches
+# `dist/` or any state the build job produced in-process.
+on:
+  workflow_call:
+    inputs:
+      release-tag:
+        description: "Git tag of the GitHub Release to attest (e.g. v1.48.0)"
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  attest:
+    name: 📜 Attest Build Provenance
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write      # gh release download (read) + upload (write) the attestation bundle
+      id-token: write      # Sigstore keyless OIDC signing
+      attestations: write  # publish to the GitHub attestations API
+    steps:
+      - name: Download checksums.txt from the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/provenance
+          gh release download "${{ inputs.release-tag }}" \
+            --repo zoharbabin/web-researcher-mcp \
+            --pattern checksums.txt \
+            --dir /tmp/provenance
+
+      # subject-checksums consumes GoReleaser's checksums.txt directly (it's
+      # already in the standard "sha256_hex  filename" sha256sum format this
+      # input expects) — one attestation covers every archive/binary listed.
+      - name: Generate build provenance attestation
+        id: attest
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-checksums: /tmp/provenance/checksums.txt
+
+      # Upload the bundle file exactly as the action produced it (don't rename
+      # or assume its format) — `gh attestation verify` looks it up via the
+      # GitHub attestations API by owner/repo anyway, so the release asset is
+      # for offline/`--bundle` verification convenience.
+      - name: Attach attestation bundle to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release upload "${{ inputs.release-tag }}" \
+            "${{ steps.attest.outputs.bundle-path }}" \
+            --repo zoharbabin/web-researcher-mcp --clobber

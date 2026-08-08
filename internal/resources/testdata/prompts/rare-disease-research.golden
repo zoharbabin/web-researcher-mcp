@@ -1,0 +1,15 @@
+Description: Rare-disease research: Marfan syndrome
+---
+Research the following rare-disease / phenotype topic using the Monarch Initiative biomedical knowledge graph: Marfan syndrome
+
+Available tools: monarch_search (Monarch Initiative KG — operations: semsim, entity, associations, compare, annotate), academic_search, clinical_search (ClinicalTrials.gov), verify_citation, scrape_page.
+
+Approach:
+- If the topic is a set of phenotypes (HPO term IDs) rather than a named disease, call monarch_search with operation=semsim, group="Human Diseases" to get a ranked differential of candidate diseases, each with the shared ontology ancestor explaining the match.
+- If the topic is a named disease or gene, call monarch_search with operation=entity to resolve it to a stable CURIE (MONDO/OMIM/Orphanet/HGNC), then operation=associations with category=biolink:CausalGeneToDiseaseAssociation to find causal genes, or the reverse direction for gene-to-disease.
+- Cross-species leads: semsim against group="Mouse Genes", "Zebrafish Genes", or "C. Elegans Genes" can surface model-organism orthologs for a human phenotype set.
+- Corroborate any candidate disease or gene with academic_search for published evidence, and with clinical_search for active interventional trials.
+- Verify any cited paper or finding with verify_citation before including it in your summary.
+- Do not submit identifiable patient data to monarch_search's annotate operation.
+
+Caution: for ultra-rare diseases, case data derived from published phenopackets (specific HPO combinations, age at onset, sex, PMID) may retain enough quasi-identifiers to re-identify the source patient. Do not use this research for patient matching without IRB approval.

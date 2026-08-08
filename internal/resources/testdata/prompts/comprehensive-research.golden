@@ -1,0 +1,18 @@
+Description: Comprehensive research guide for: quantum computing
+---
+Research the topic: quantum computing
+
+Available tools: web_search (add a lens to restrict to trusted sources, or a claim to get per-result evidence), scrape_page, search_and_scrape, news_search, academic_search, citation_graph, patent_search, filing_search (SEC), legal_search (US case law), econ_search (FRED/World Bank), clinical_search (ClinicalTrials.gov), image_search.
+Track progress with sequential_search (pass sessionId between calls); package results with research_export + format_bibliography.
+Before relying on any source, verify it: verify_citation (one citation) or audit_bibliography (a whole reference list) — checks existence, retraction, dead links, and whether a source actually supports a claim.
+
+Research depth: deep (6 steps)
+
+Guidance:
+- Start broad, then go deeper based on what you find.
+- If a tool returns zero results with a 'hints' object, follow its suggestedActions.
+- If errors include retryable:true, respect retryAfterSeconds before retrying.
+- Cross-reference findings across multiple sources for accuracy.
+- Verify citations before presenting them; never cite a source you haven't confirmed exists.
+- Check wordCount per source in search_and_scrape results; low-word sources may be paywalls or bot-walls.
+- End with a summary including citations from scrape_page results.
