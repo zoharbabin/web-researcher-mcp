@@ -1,0 +1,17 @@
+Description: Fact-check: The earth is flat
+---
+Fact-check the following claim: "The earth is flat"
+
+Context: social media debate
+
+Available tools: web_search and search_and_scrape (both accept a claim parameter that returns the most claim-relevant sentences as evidence), news_search, scrape_page, academic_search.
+To check a specific source you find: verify_citation confirms a DOI/URL/reference exists, matches a real record, isn't retracted, and still resolves — evidence, never a verdict.
+Use sequential_search to track your verification steps.
+
+Approach:
+- Search for evidence both supporting and contradicting the claim; pass the claim to web_search/search_and_scrape to surface the relevant sentences.
+- Evaluate source authority and recency.
+- Run verify_citation on any source you intend to cite — a real-looking citation may be fabricated or retracted.
+- If search_and_scrape returns status:'partial', check scrapeFailures for context.
+- If a source has sparsityWarning set or scores.contentQuality < 0.2, treat it as inconclusive — do not cite it as supporting or contradicting a claim.
+- Report confidence level (high/medium/low) with reasoning and cited, verified sources.

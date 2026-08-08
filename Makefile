@@ -1,6 +1,6 @@
 .PHONY: build build-fips sync-lenses test test-race test-cover test-e2e test-soak test-live test-eval test-geo-eval test-extraction-eval test-relevance-eval test-concurrency test-bench test-fuzz test-python test-python-live \
         lint fmt fmt-check vet vuln sec license-check tools hooks precommit verify clean run dev docker docker-smoke e2e-oauth-docker release version-sync rebuild-local help all \
-        gen-python-client check-python-drift
+        gen-python-client check-python-drift harness-467 harness-21
 
 BINARY = web-researcher-mcp
 VERSION ?= $(shell cat VERSION 2>/dev/null || git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -107,9 +107,10 @@ test-bench:
 	go test -bench=. -benchmem ./tests/benchmark/
 
 # Go native fuzzing (#476) over the untrusted-input parsers: internal/documents
-# (PDF/DOCX/PPTX extraction) and internal/content's HTML/text sanitizer. Each
-# target gets a short, CI-friendly fuzztime; run with a longer FUZZTIME locally
-# (e.g. `make test-fuzz FUZZTIME=5m`) for a deeper periodic sweep.
+# (PDF/DOCX/PPTX extraction), internal/content's HTML/text sanitizer, and
+# internal/scraper's SSRF hostname/IP validator (#499). Each target gets a
+# short, CI-friendly fuzztime; run with a longer FUZZTIME locally (e.g. `make
+# test-fuzz FUZZTIME=5m`) for a deeper periodic sweep.
 FUZZTIME ?= 30s
 test-fuzz:
 	go test ./internal/documents/... -run=^$$ -fuzz=FuzzParsePDF -fuzztime=$(FUZZTIME)
@@ -117,6 +118,8 @@ test-fuzz:
 	go test ./internal/documents/... -run=^$$ -fuzz=FuzzParsePPTX -fuzztime=$(FUZZTIME)
 	go test ./internal/content/... -run=^$$ -fuzz=FuzzSanitizeHTML -fuzztime=$(FUZZTIME)
 	go test ./internal/content/... -run=^$$ -fuzz=FuzzSanitizeText -fuzztime=$(FUZZTIME)
+	go test ./internal/scraper/... -run=^$$ -fuzz=FuzzIsBlockedHostname -fuzztime=$(FUZZTIME)
+	go test ./internal/scraper/... -run=^$$ -fuzz=FuzzIsPrivateIP -fuzztime=$(FUZZTIME)
 
 # Python client library tests (no binary required — uses a mock HTTP server).
 # --cov reports coverage of the generated/hand-written client so gaps are
@@ -223,6 +226,14 @@ verify: fmt-check vet lint sec vuln license-check validate-lenses test-race test
 # circuit breaker, rate limiter, scraper concurrency, or tenant isolation.
 harness-467:
 	bash scripts/harness-467.sh
+
+# Permanent regression gate for the v1.48.0 Operational Hardening II
+# milestone (#21, build constitution #555). Not part of `verify` — it
+# re-runs lint/sec/vuln/fuzz plus targeted tests already covered there; run
+# manually before cutting a release that touches per-tenant scrape
+# concurrency, browser-pool health, audit hash-chaining, or SSRF validation.
+harness-21:
+	bash scripts/harness-21.sh
 
 clean:
 	rm -f $(BINARY) coverage.out coverage.html

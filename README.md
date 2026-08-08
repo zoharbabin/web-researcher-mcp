@@ -17,6 +17,7 @@
 <p align="center">
   <a href="https://github.com/zoharbabin/web-researcher-mcp/actions/workflows/ci.yml"><img src="https://github.com/zoharbabin/web-researcher-mcp/actions/workflows/ci.yml/badge.svg" height="20" alt="CI"></a>
   <a href="https://goreportcard.com/report/github.com/zoharbabin/web-researcher-mcp"><img src="https://goreportcard.com/badge/github.com/zoharbabin/web-researcher-mcp" height="20" alt="Go Report Card"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/zoharbabin/web-researcher-mcp"><img src="https://api.scorecard.dev/projects/github.com/zoharbabin/web-researcher-mcp/badge" height="20" alt="OpenSSF Scorecard"></a>
   <a href="https://pkg.go.dev/github.com/zoharbabin/web-researcher-mcp"><img src="https://pkg.go.dev/badge/github.com/zoharbabin/web-researcher-mcp.svg" height="20" alt="Go Reference"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" height="20" alt="License: MIT"></a>
   <a href="https://github.com/zoharbabin/web-researcher-mcp/releases"><img src="https://img.shields.io/github/v/release/zoharbabin/web-researcher-mcp" height="20" alt="Release"></a>
