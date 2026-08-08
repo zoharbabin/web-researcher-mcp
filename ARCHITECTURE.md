@@ -268,8 +268,10 @@ For exact versions, see `go.mod`. All dependencies use MIT, Apache 2.0, or BSD l
 Default values are all configurable via environment variables — see `docs/DEPLOYMENT.md` for the full list with defaults.
 
 ```
-Browser pool (go-rod):        concurrent (mutex guards init only; page concurrency bounded by browserSemaphore)
+Browser pool (go-rod):        concurrent (mutex guards init/liveness-check/relaunch only; page concurrency bounded by browserSemaphore)
 ```
+
+A dead CDP connection (Chromium crashed via OOM, a malicious page, or a Chromium bug) is detected on the next `getBrowserPool` call via a bounded liveness probe and transparently relaunched — a crash no longer leaves the browser tier hanging toward its 30s timeout until the whole process restarts (#464).
 
 Rate limiting applies only in HTTP mode. STDIO mode (the default for Claude Code, Cursor, and Claude Desktop) has no internal rate limiting — only upstream API quotas apply.
 
