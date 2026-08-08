@@ -9,6 +9,7 @@ on:
   schedule:
     - cron: "0 7 * * 1" # Weekly soak test, every Monday at 07:00 UTC
     - cron: "0 8 * * 1" # Weekly trust/GEO/panel eval, every Monday at 08:00 UTC (#466)
+    - cron: "0 9 * * 1" # Weekly multi-pod Redis session continuity, every Monday at 09:00 UTC (#495)
   workflow_dispatch:
     inputs:
       run_python_live:
@@ -25,6 +26,12 @@ on:
         options: ["true", "false"]
       run_trust_eval:
         description: "Run trust-suite/GEO/research_panel accuracy evals (#466; live network, needs API keys)"
+        required: false
+        default: "false"
+        type: choice
+        options: ["true", "false"]
+      run_multipod_session_test:
+        description: "Run multi-pod Redis session continuity test (#495; needs a kind cluster, ~3-5min)"
         required: false
         default: "false"
         type: choice
@@ -532,8 +539,9 @@ jobs:
   # of the required `e2e` job — its own build tag keeps it out of `test-e2e`.
   # Runs automatically on its own weekly `schedule` cron (network-free, so no
   # rate-limit risk) and remains available on-demand via workflow_dispatch.
-  # Gated to its own cron string (not just github.event_name == 'schedule') so
-  # it doesn't also fire on the sibling trust-eval cron below.
+  # Gated to its own cron string (not just github.event_name == 'schedule')
+  # so it doesn't also fire on the sibling trust-eval/multipod-redis-session-
+  # continuity crons now that all three share the same `on.schedule` list.
   soak-test:
     name: 🐢 Soak Test
     if: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 7 * * 1') || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_soak_test == 'true') }}
@@ -624,3 +632,44 @@ jobs:
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           tail -n 40 /tmp/panel-eval.log
           exit "$status"
+
+  # ☸️ Multi-pod Redis session continuity (#495) — the automated counterpart
+  # to the manual `deploy/k8s-local/` + docs/K8S_LOCAL_DEV.md verification
+  # (a real 3-replica deployment + Redis, done by hand per commit a13dbe0).
+  # tests/e2e/operational_hardening_467_e2e_test.go proves stateless-HTTP
+  # correctness across two client connections, but both hit the SAME server
+  # process — this job is the one that spins up REAL separate pods and proves
+  # a sequential_search session created on pod 1 is readable via
+  # get_research_session from pod 3, with Redis as the only shared state.
+  # Deterministic by design: scripts/k8s-ci-session-continuity.sh
+  # kubectl port-forwards to each pod's own IP in turn, so the test proves
+  # cross-pod visibility directly rather than hoping kube-proxy load-balancing
+  # spreads N requests across replicas. NOT a required gate — kind cluster
+  # spin-up is extra CI minutes for a property that changes rarely (only
+  # internal/session/ or internal/redisbackend/ changes could break it), so
+  # this stays opt-in via workflow_dispatch, plus the weekly schedule (kind
+  # startup is ~1-2min, cheap enough for continuous verification). Gated to
+  # its own cron string (not just github.event_name == 'schedule') so it
+  # doesn't also fire on the soak-test/trust-eval crons once those share the
+  # same `on.schedule` list.
+  multipod-redis-session-continuity:
+    name: ☸️ Multi-Pod Redis Session Continuity
+    if: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 9 * * 1') || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_multipod_session_test == 'true') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: wrm-ci-495
+          wait: 120s
+
+      - name: Run multi-pod Redis session continuity check
+        env:
+          KIND_CLUSTER_EXISTS: "true"
+          KIND_CLUSTER_NAME: wrm-ci-495
+        run: bash scripts/k8s-ci-session-continuity.sh

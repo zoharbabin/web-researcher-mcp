@@ -1,0 +1,10 @@
+# CI-specific counterpart to deploy/k8s-local/00-namespace.yaml — identical
+# content, kept as its own copy (not a symlink/kustomize base) so this
+# directory is a fully self-contained manifest set a CI job can `kubectl
+# apply -f deploy/k8s-ci/` without also pulling in deploy/k8s-local/'s
+# Rancher-Desktop-specific pieces (Ingress, OAuth issuer). See
+# docs/K8S_LOCAL_DEV.md for why the two sets diverge.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: web-researcher
