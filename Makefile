@@ -1,6 +1,6 @@
 .PHONY: build build-fips sync-lenses test test-race test-cover test-e2e test-soak test-live test-eval test-geo-eval test-extraction-eval test-relevance-eval test-concurrency test-bench test-fuzz test-python test-python-live \
         lint fmt fmt-check vet vuln sec license-check tools hooks precommit verify clean run dev docker docker-smoke e2e-oauth-docker release version-sync rebuild-local help all \
-        gen-python-client check-python-drift harness-467 harness-21
+        gen-python-client check-python-drift harness-467 harness-21 validate-mcpb
 
 BINARY = web-researcher-mcp
 VERSION ?= $(shell cat VERSION 2>/dev/null || git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -217,8 +217,16 @@ sync-lenses:
 	cp lenses/*.json internal/search/lenses_embed/
 	@echo "synced $$(ls internal/search/lenses_embed/*.json | wc -l | tr -d ' ') lenses into the embed"
 
+# Validate mcpb/manifest.json against the official mcpb v0.3 schema, checked
+# against a fully assembled bundle (via build-mcpb.sh) so the icon-presence
+# check is meaningful, not just the bare manifest template. Requires Node
+# (npx) to fetch the official @anthropic-ai/mcpb CLI. Run after editing the
+# manifest or scripts/build-mcpb.sh.
+validate-mcpb:
+	bash scripts/validate-mcpb.sh
+
 # Full verification, matching CI. Run before opening a PR.
-verify: fmt-check vet lint sec vuln license-check validate-lenses test-race test-e2e check-python-drift test-python build
+verify: fmt-check vet lint sec vuln license-check validate-lenses validate-mcpb test-race test-e2e check-python-drift test-python build
 
 # Permanent regression gate for the v1.47.0 Operational Hardening milestone
 # (#467). Not part of `verify` — it re-runs lint/sec/vuln plus targeted tests

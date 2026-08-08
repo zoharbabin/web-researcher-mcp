@@ -1,170 +1,123 @@
 {
   "manifest_version": "0.3",
   "name": "web-researcher-mcp",
+  "display_name": "Web Researcher MCP",
   "version": "0.0.0-template",
   "description": "Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust. Links that work, citations you can trust, no made up closed garden pre-synthesized results.",
+  "long_description": "Give Claude real web research: search, read full page content (including PDFs, Office docs, and YouTube transcripts), and cross-check citations before they ship. Works zero-config with the DuckDuckGo fallback — no API key needed to try it. Connect Google, Brave, Serper, Tavily, or Exa for richer results, or set multiple providers with automatic fallback so one outage never stops your research. The trust suite (`verify_citation`, `audit_bibliography`, `verify_recommendation`) catches fabricated, retracted, or mischaracterized sources — evidence, never a verdict, so you stay in control of what to believe.\n\nThis bundle ships only the binary needed for Claude Desktop; the full server exposes far more tools (academic, patent, legal, and economic search, sequential multi-step research sessions, and more) — see the documentation link for the complete registry.",
   "author": {
     "name": "Zohar Babin",
     "url": "https://github.com/zoharbabin"
   },
-  "repository": "https://github.com/zoharbabin/web-researcher-mcp",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zoharbabin/web-researcher-mcp"
+  },
+  "homepage": "https://zoharbabin.com/web-researcher-mcp/docs/",
+  "documentation": "https://zoharbabin.com/web-researcher-mcp/docs/tools/",
+  "support": "https://github.com/zoharbabin/web-researcher-mcp/issues",
+  "icon": "icon.png",
   "license": "MIT",
+  "keywords": [
+    "search",
+    "research",
+    "web-search",
+    "citations",
+    "fact-checking",
+    "academic-search",
+    "scraping"
+  ],
+  "privacy_policies": [
+    "https://zoharbabin.com/web-researcher-mcp/docs/privacy/"
+  ],
+  "compatibility": {
+    "claude_desktop": ">=0.10.0",
+    "platforms": ["darwin", "win32", "linux"]
+  },
   "server": {
     "type": "binary",
     "entry_point": "server/web-researcher-mcp",
     "mcp_config": {
       "command": "${__dirname}/server/web-researcher-mcp",
       "args": [],
-      "env": {}
+      "env": {
+        "GOOGLE_CUSTOM_SEARCH_API_KEY": "${user_config.GOOGLE_CUSTOM_SEARCH_API_KEY}",
+        "GOOGLE_CUSTOM_SEARCH_ID": "${user_config.GOOGLE_CUSTOM_SEARCH_ID}",
+        "SEARCH_PROVIDER": "${user_config.SEARCH_PROVIDER}",
+        "BRAVE_API_KEY": "${user_config.BRAVE_API_KEY}"
+      }
     }
   },
   "user_config": {
     "GOOGLE_CUSTOM_SEARCH_API_KEY": {
       "type": "string",
+      "title": "Google Custom Search API Key",
       "description": "Google Custom Search API key (optional if using Brave or other providers)",
       "required": false,
-      "is_secret": true
+      "sensitive": true
     },
     "GOOGLE_CUSTOM_SEARCH_ID": {
       "type": "string",
+      "title": "Google Custom Search Engine ID",
       "description": "Google Custom Search engine ID (optional if using Brave or other providers)",
-      "required": false,
-      "is_secret": false
+      "required": false
     },
     "SEARCH_PROVIDER": {
       "type": "string",
-      "description": "Search provider (google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github)",
+      "title": "Search Provider",
+      "description": "Search provider (google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github). Leave unset to use Google when its keys are provided, or DuckDuckGo (no key needed) otherwise.",
       "required": false,
       "default": "google"
     },
     "BRAVE_API_KEY": {
       "type": "string",
-      "description": "Brave Search API key (required when SEARCH_PROVIDER=brave)",
+      "title": "Brave Search API Key",
+      "description": "Brave Search API key (required when Search Provider is set to brave)",
       "required": false,
-      "is_secret": true
+      "sensitive": true
     }
   },
-  "tools_note": "Illustrative sample of the 11 most common tools — the full server exposes 35+ tools; see docs/TOOLS.md for the complete registry.",
   "tools": [
     {
       "name": "web_search",
-      "description": "Search the web and get results from only the sites you trust, using search lenses",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "query": {"type": "string", "description": "Search query"},
-          "lens": {"type": "string", "description": "Search lens to restrict results to trusted domains"},
-          "num_results": {"type": "integer", "description": "Number of results to return"}
-        },
-        "required": ["query"]
-      }
+      "description": "Search the web and get results from only the sites you trust, using search lenses"
     },
     {
       "name": "scrape_page",
-      "description": "Read the full text from any URL — web pages, PDFs, Word docs, YouTube transcripts, Hacker News threads",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "url": {"type": "string", "description": "URL to scrape"},
-          "extract_links": {"type": "boolean", "description": "Whether to extract links"}
-        },
-        "required": ["url"]
-      }
+      "description": "Read the full text from any URL — web pages, PDFs, Word docs, YouTube transcripts, Hacker News threads"
     },
     {
       "name": "search_and_scrape",
-      "description": "Search the web and read the top results in one step, ranked by quality",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "query": {"type": "string", "description": "Search query"},
-          "num_results": {"type": "integer", "description": "Number of results to scrape"},
-          "lens": {"type": "string", "description": "Search lens to restrict results"}
-        },
-        "required": ["query"]
-      }
+      "description": "Search the web and read the top results in one step, ranked by quality"
     },
     {
       "name": "image_search",
-      "description": "Search for images with size and type filters",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "query": {"type": "string", "description": "Image search query"},
-          "size": {"type": "string", "description": "Image size filter"},
-          "type": {"type": "string", "description": "Image type filter"}
-        },
-        "required": ["query"]
-      }
+      "description": "Search for images with size and type filters"
     },
     {
       "name": "news_search",
-      "description": "Search news articles with freshness controls",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "query": {"type": "string", "description": "News search query"},
-          "freshness": {"type": "string", "description": "Freshness filter (day, week, month)"}
-        },
-        "required": ["query"]
-      }
+      "description": "Search news articles with freshness controls"
     },
     {
       "name": "academic_search",
-      "description": "Search academic papers via Scholar, arXiv, and PubMed",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "query": {"type": "string", "description": "Academic search query"},
-          "source": {"type": "string", "description": "Restrict to an academic source: all (default), arxiv, pubmed, ieee, nature, springer"}
-        },
-        "required": ["query"]
-      }
+      "description": "Search academic papers via Scholar, arXiv, and PubMed"
     },
     {
       "name": "patent_search",
-      "description": "Search patents with multi-office filtering (US, EP, WO, CN, JP, KR)",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "query": {"type": "string", "description": "Patent search query"},
-          "office": {"type": "string", "description": "Patent office filter"}
-        },
-        "required": ["query"]
-      }
+      "description": "Search patents with multi-office filtering (US, EP, WO, CN, JP, KR)"
+    },
+    {
+      "name": "verify_citation",
+      "description": "Verify a citation exists, matches a real record, and hasn't been retracted before you rely on it"
     },
     {
       "name": "sequential_search",
-      "description": "Track multi-step research projects, noting what you found and what's still unanswered. Sessions persist for 4 hours and survive restarts.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "searchStep": {"type": "string", "description": "Summary of what was researched or discovered in this step"},
-          "stepNumber": {"type": "integer", "description": "Current step number (start at 1 for new session)"},
-          "nextStepNeeded": {"type": "boolean", "description": "True if more steps follow; false to complete"},
-          "sessionId": {"type": "string", "description": "Session ID from first call. Required for steps 2+"},
-          "researchGoal": {"type": "string", "description": "The question or goal driving this research (step 1)"},
-          "reasoning": {"type": "string", "description": "Why you chose this direction over alternatives"},
-          "confidence": {"type": "string", "description": "Confidence in findings: high, medium, or low"},
-          "rejectedApproaches": {"type": "array", "items": {"type": "string"}, "description": "Approaches rejected with reasons"},
-          "sessionSummary": {"type": "string", "description": "Running summary for session recovery"},
-          "responseMode": {"type": "string", "description": "Force response format: full or summary"},
-          "knowledgeGap": {"type": "string", "description": "Unanswered question identified in this step"}
-        },
-        "required": ["searchStep", "stepNumber", "nextStepNeeded"]
-      }
+      "description": "Track multi-step research projects, noting what you found and what's still unanswered. Sessions persist for 4 hours and survive restarts."
     },
     {
       "name": "get_research_session",
-      "description": "Recover a sequential_search session after context loss. Returns summary and recent steps.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "sessionId": {"type": "string", "description": "The session ID to recover"},
-          "stepId": {"type": "integer", "description": "Specific step number for full details"}
-        },
-        "required": ["sessionId"]
-      }
+      "description": "Recover a sequential_search session after context loss. Returns summary and recent steps."
     }
-  ]
+  ],
+  "tools_generated": true
 }
