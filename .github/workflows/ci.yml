@@ -520,11 +520,14 @@ jobs:
   # no unbounded goroutine/heap growth. Network-free (CHROME_PATH=disabled,
   # web_search asserted for transport success only), but deliberately NOT part
   # of the required `e2e` job — its own build tag keeps it out of `test-e2e`.
-  # Runs automatically on the weekly `schedule` trigger (network-free, so no
-  # rate-limit risk) and remains available on-demand via workflow_dispatch.
+  # Runs automatically on its own weekly `schedule` trigger (network-free, so
+  # no rate-limit risk) and remains available on-demand via workflow_dispatch.
+  # Gated to its own cron string (not just github.event_name == 'schedule')
+  # so it doesn't also fire on the multipod-redis-session-continuity cron now
+  # that both share the same `on.schedule` list.
   soak-test:
     name: 🐢 Soak Test
-    if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_soak_test == 'true') }}
+    if: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 7 * * 1') || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_soak_test == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

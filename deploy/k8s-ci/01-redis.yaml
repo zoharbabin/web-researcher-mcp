@@ -1,7 +1,9 @@
-# Same Redis sidecar as deploy/k8s-local/02-redis.yaml, giving the CI job a
-# real cross-pod session backend without any external dependency — kind
-# clusters have no persistent volume story and don't need one here: sessions
-# are ephemeral for the lifetime of a single CI job.
+# Same standalone Redis Deployment+Service as deploy/k8s-local/02-redis.yaml
+# (not a sidecar container — it runs as its own pod, shared by all app
+# replicas via the Service below), giving the CI job a real cross-pod session
+# backend without any external dependency — kind clusters have no persistent
+# volume story and don't need one here: sessions are ephemeral for the
+# lifetime of a single CI job.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

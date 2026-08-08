@@ -13,9 +13,9 @@
 #   KIND_CLUSTER_EXISTS=true scripts/k8s-ci-session-continuity.sh   # reuses an already-running
 #                                                                     cluster (the CI job creates one
 #                                                                     via helm/kind-action first)
-# Requires: kind (unless KIND_CLUSTER_EXISTS=true), kubectl, docker. Exits
-# non-zero (and dumps pod logs) on any failure, so the CI job that calls this
-# fails loudly on a real regression.
+# Requires: kind (unless KIND_CLUSTER_EXISTS=true), kubectl, docker, curl, jq,
+# openssl. Exits non-zero (and dumps pod logs) on any failure, so the CI job
+# that calls this fails loudly on a real regression.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -38,9 +38,21 @@ check() {
   fi
 }
 
+# kill_background_jobs is a POSIX-safe substitute for `jobs -p | xargs -r
+# kill` — `xargs -r` (skip invocation on empty input) is GNU-only and this
+# script must also run on macOS/BSD xargs for local pre-PR validation.
+kill_background_jobs() {
+  local pids
+  pids="$(jobs -p)"
+  if [ -n "${pids}" ]; then
+    # shellcheck disable=SC2086 # word-splitting is intended: one PID per arg
+    kill ${pids} >/dev/null 2>&1 || true
+  fi
+}
+
 cleanup() {
   echo "=== cleanup: stopping any lingering port-forward"
-  jobs -p | xargs -r kill >/dev/null 2>&1 || true
+  kill_background_jobs
   if [ "${CLUSTER_EXISTS}" != "true" ]; then
     echo "=== cleanup: deleting kind cluster ${CLUSTER}"
     kind delete cluster --name "${CLUSTER}" >/dev/null 2>&1 || true
@@ -95,7 +107,7 @@ fi
 # any previous forward first since PF_PORT is reused across pods.
 port_forward_pod() {
   local pod="$1"
-  jobs -p | xargs -r kill >/dev/null 2>&1 || true
+  kill_background_jobs
   wait >/dev/null 2>&1 || true
   kubectl -n "${NS}" port-forward "pod/${pod}" "${PF_PORT}:8080" >/tmp/pf-"${pod}".log 2>&1 &
   local pf_pid=$!
