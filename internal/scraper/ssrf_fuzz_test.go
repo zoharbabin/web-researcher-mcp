@@ -17,17 +17,8 @@ import (
 // net.IP/To4/Contains).
 
 func FuzzIsBlockedHostname(f *testing.F) {
-	seeds := []string{
-		// Every entry in blockedHostnames (ssrf.go), verbatim.
-		"metadata.google.internal",
-		"metadata.azure.com",
-		"metadata.tencentyun.com",
-		"169.254.169.254",
-		"192.0.0.192",
-		"100.100.100.200",
-		"instance-data",
-		"kubernetes.default.svc",
-		"svc.cluster.local",
+	seeds := append([]string{}, blockedHostnames...)
+	seeds = append(seeds,
 		// Suffix-match case: a subdomain of a blocked suffix.
 		"foo.svc.cluster.local",
 		"pod.kubernetes.default.svc",
@@ -42,7 +33,7 @@ func FuzzIsBlockedHostname(f *testing.F) {
 		"svc.cluster.local.evil.com",
 		// Empty string.
 		"",
-	}
+	)
 	for _, s := range seeds {
 		f.Add(s)
 	}
