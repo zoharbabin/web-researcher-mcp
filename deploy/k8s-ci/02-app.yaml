@@ -1,0 +1,106 @@
+# CI counterpart to deploy/k8s-local/03-app.yaml, trimmed to exactly what
+# #495's cross-pod Redis session continuity check needs:
+#   - No OAuth issuer / Ingress / TLS: internal/auth/middleware.go runs fully
+#     unauthenticated when OAUTH_ISSUER_URL is unset (tenant=default,
+#     user=anonymous — internal/config/config.go's only reaction is a
+#     startup warning, not a failure), so a bare ClusterIP Service is enough
+#     to drive tools/call over HTTP.
+#   - No HorizontalPodAutoscaler / PodDisruptionBudget / NetworkPolicy: this
+#     manifest set is a single-purpose CI fixture, not a parity deployment;
+#     kind's default CNI (kindnet) does not enforce NetworkPolicy, so
+#     including one here would silently be a no-op rather than a real
+#     control — see deploy/k8s-local/03-app.yaml for the parity version that
+#     documents real Rancher Desktop/Traefik enforcement.
+#   - Fixed replicas: 3 (not HPA-driven): the test needs a known, stable pod
+#     count so it can prove it deterministically reached at least 2 distinct
+#     pods, not hope autoscaling produced more than one.
+#
+# Expects an image built and loaded into the kind cluster as
+# web-researcher-mcp:ci-test (see .github/workflows/ci.yml's
+# multipod-redis-session-continuity job) and a `web-researcher-secrets`
+# Secret providing CACHE_ENCRYPTION_KEY (mandatory once REDIS_URL is set —
+# internal/redisbackend/redisbackend.go's ErrEncryptionRequired).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-researcher-mcp
+  namespace: web-researcher
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web-researcher-mcp
+  template:
+    metadata:
+      labels:
+        app: web-researcher-mcp
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: server
+        image: web-researcher-mcp:ci-test
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+        env:
+        - name: PORT
+          value: "8080"
+        - name: REDIS_URL
+          value: "redis://redis.web-researcher.svc.cluster.local:6379"
+        - name: CHROME_PATH
+          value: "disabled"
+        - name: LOG_LEVEL
+          value: "info"
+        - name: LOG_FORMAT
+          value: "json"
+        envFrom:
+        - secretRef:
+            name: web-researcher-secrets
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 768Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-researcher-mcp
+  namespace: web-researcher
+spec:
+  selector:
+    app: web-researcher-mcp
+  ports:
+  - port: 8080
+    targetPort: 8080
