@@ -107,9 +107,10 @@ test-bench:
 	go test -bench=. -benchmem ./tests/benchmark/
 
 # Go native fuzzing (#476) over the untrusted-input parsers: internal/documents
-# (PDF/DOCX/PPTX extraction) and internal/content's HTML/text sanitizer. Each
-# target gets a short, CI-friendly fuzztime; run with a longer FUZZTIME locally
-# (e.g. `make test-fuzz FUZZTIME=5m`) for a deeper periodic sweep.
+# (PDF/DOCX/PPTX extraction), internal/content's HTML/text sanitizer, and
+# internal/scraper's SSRF hostname/IP validator (#499). Each target gets a
+# short, CI-friendly fuzztime; run with a longer FUZZTIME locally (e.g. `make
+# test-fuzz FUZZTIME=5m`) for a deeper periodic sweep.
 FUZZTIME ?= 30s
 test-fuzz:
 	go test ./internal/documents/... -run=^$$ -fuzz=FuzzParsePDF -fuzztime=$(FUZZTIME)
@@ -117,6 +118,8 @@ test-fuzz:
 	go test ./internal/documents/... -run=^$$ -fuzz=FuzzParsePPTX -fuzztime=$(FUZZTIME)
 	go test ./internal/content/... -run=^$$ -fuzz=FuzzSanitizeHTML -fuzztime=$(FUZZTIME)
 	go test ./internal/content/... -run=^$$ -fuzz=FuzzSanitizeText -fuzztime=$(FUZZTIME)
+	go test ./internal/scraper/... -run=^$$ -fuzz=FuzzIsBlockedHostname -fuzztime=$(FUZZTIME)
+	go test ./internal/scraper/... -run=^$$ -fuzz=FuzzIsPrivateIP -fuzztime=$(FUZZTIME)
 
 # Python client library tests (no binary required — uses a mock HTTP server).
 # --cov reports coverage of the generated/hand-written client so gaps are
