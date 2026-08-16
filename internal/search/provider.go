@@ -164,7 +164,7 @@ type Deps struct {
 }
 
 // SupportedProviders lists all provider names that can be configured.
-var SupportedProviders = []string{"google", "brave", "serper", "searxng", "searchapi", "duckduckgo", "tavily", "exa", "hackernews", "reddit", "bluesky", "github"}
+var SupportedProviders = []string{"google", "brave", "serper", "serpbase", "searxng", "searchapi", "duckduckgo", "tavily", "exa", "hackernews", "reddit", "bluesky", "github"}
 
 func NewProvider(cfg config.SearchConfig, deps Deps) Provider {
 	switch cfg.Provider {
@@ -172,6 +172,8 @@ func NewProvider(cfg config.SearchConfig, deps Deps) Provider {
 		return NewBraveProvider(cfg.BraveAPIKey, BraveConfig{ExtraSnippets: cfg.BraveExtraSnippets}, deps)
 	case "serper":
 		return NewSerperProvider(cfg.SerperAPIKey, deps)
+	case "serpbase":
+		return NewSerpBaseProvider(cfg.SerpBaseAPIKey, deps)
 	case "searxng":
 		return NewSearXNGProvider(cfg.SearXNGURL, cfg.SearXNGBasicAuth, cfg.SearXNGHeaders, deps)
 	case "searchapi":
@@ -213,6 +215,10 @@ func NewProviderByName(name string, cfg config.SearchConfig, deps Deps) Provider
 	case "serper":
 		if cfg.SerperAPIKey != "" {
 			return NewSerperProvider(cfg.SerperAPIKey, deps)
+		}
+	case "serpbase":
+		if cfg.SerpBaseAPIKey != "" {
+			return NewSerpBaseProvider(cfg.SerpBaseAPIKey, deps)
 		}
 	case "searxng":
 		if cfg.SearXNGURL != "" {

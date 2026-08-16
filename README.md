@@ -365,6 +365,7 @@ Set `SEARCH_PROVIDER=<name>` and supply that provider's key. Every provider work
 | Google PSE | `google` | `GOOGLE_CUSTOM_SEARCH_API_KEY` + `GOOGLE_CUSTOM_SEARCH_ID` | [cloud console](https://console.cloud.google.com/) + [engine](https://programmablesearchengine.google.com/) |
 | Brave | `brave` | `BRAVE_API_KEY` | [brave.com/search/api](https://brave.com/search/api/) |
 | Serper | `serper` | `SERPER_API_KEY` | [serper.dev](https://serper.dev/) |
+| SerpBase | `serpbase` | `SERPBASE_API_KEY` | [serpbase.dev](https://serpbase.dev/) |
 | SearchAPI.io | `searchapi` | `SEARCHAPI_API_KEY` | [searchapi.io](https://www.searchapi.io/) |
 | SearXNG | `searxng` | `SEARXNG_URL` | [self-hosted](https://docs.searxng.org/) |
 | Tavily | `tavily` | `TAVILY_API_KEY` | [app.tavily.com](https://app.tavily.com/) |

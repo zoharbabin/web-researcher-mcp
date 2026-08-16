@@ -148,6 +148,7 @@ type SearchConfig struct {
 	BraveAPIKey        string
 	BraveExtraSnippets bool
 	SerperAPIKey       string
+	SerpBaseAPIKey     string
 	SearchAPIKey       string
 	TavilyAPIKey       string
 	ExaAPIKey          string
@@ -286,6 +287,11 @@ func Load() (*Config, error) {
 	serperKey := os.Getenv("SERPER_API_KEY")
 	if provider == "serper" && serperKey == "" {
 		errs = append(errs, "SERPER_API_KEY is required when SEARCH_PROVIDER=serper")
+	}
+
+	serpbaseKey := os.Getenv("SERPBASE_API_KEY")
+	if provider == "serpbase" && serpbaseKey == "" {
+		errs = append(errs, "SERPBASE_API_KEY is required when SEARCH_PROVIDER=serpbase")
 	}
 
 	searxngURL := os.Getenv("SEARXNG_URL")
@@ -436,6 +442,7 @@ func Load() (*Config, error) {
 			BraveAPIKey:           braveKey,
 			BraveExtraSnippets:    braveExtraSnippets,
 			SerperAPIKey:          serperKey,
+			SerpBaseAPIKey:        serpbaseKey,
 			SearchAPIKey:          searchAPIKey,
 			TavilyAPIKey:          tavilyKey,
 			ExaAPIKey:             exaKey,

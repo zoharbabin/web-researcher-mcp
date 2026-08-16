@@ -164,6 +164,34 @@ export SERPER_API_KEY=your-serper-key
 
 ---
 
+## SerpBase
+
+**Free tier**: 100 free searches (no credit card), then pay-as-you-go at $0.30 / 1,000 queries
+
+SerpBase is a Google Search Results API — it returns Google organic results (plus AI Overviews when the SERP has them) as JSON, no browser and no scraping. It supports web search only; image and news queries fall through to another provider when `SEARCH_ROUTING` is enabled.
+
+### Step 1: Get an API Key
+
+1. Go to [SerpBase.dev](https://serpbase.dev/)
+2. Sign up for an account (100 free searches, no credit card required)
+3. Copy the API key from your dashboard
+4. The key is sent as an `X-API-Key` header (never in the request body)
+
+### Step 2: Configure
+
+```bash
+export SERPBASE_API_KEY=your-serpbase-key
+```
+
+To use SerpBase as your primary provider:
+
+```bash
+export SEARCH_PROVIDER=serpbase
+export SERPBASE_API_KEY=your-serpbase-key
+```
+
+---
+
 ## Tavily
 
 **Free tier**: monthly credits for development; paid plans for higher volume

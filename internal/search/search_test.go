@@ -56,6 +56,14 @@ func TestNewProvider_Serper(t *testing.T) {
 	}
 }
 
+func TestNewProvider_SerpBase(t *testing.T) {
+	cfg := config.SearchConfig{Provider: "serpbase", SerpBaseAPIKey: "key"}
+	p := NewProvider(cfg, newTestDeps(http.DefaultClient))
+	if p.Name() != "serpbase" {
+		t.Errorf("expected provider name 'serpbase', got %q", p.Name())
+	}
+}
+
 func TestNewProvider_SearXNG(t *testing.T) {
 	cfg := config.SearchConfig{Provider: "searxng", SearXNGURL: "http://localhost:8080"}
 	p := NewProvider(cfg, newTestDeps(http.DefaultClient))
