@@ -106,6 +106,32 @@ func TestLoadExaAPIKeyThreaded(t *testing.T) {
 	}
 }
 
+func TestLoadMissingXQuikAPIKey(t *testing.T) {
+	t.Setenv("SEARCH_PROVIDER", "xquik")
+	t.Setenv("XQUIK_API_KEY", "")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error when XQUIK_API_KEY is missing under SEARCH_PROVIDER=xquik")
+	}
+	if !strings.Contains(err.Error(), "XQUIK_API_KEY is required") {
+		t.Errorf("expected error about XQUIK_API_KEY, got: %v", err)
+	}
+}
+
+func TestLoadXQuikAPIKeyThreaded(t *testing.T) {
+	t.Setenv("SEARCH_PROVIDER", "xquik")
+	t.Setenv("XQUIK_API_KEY", "test-xquik-key")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Search.XQuikAPIKey != "test-xquik-key" {
+		t.Errorf("XQUIK_API_KEY should be threaded into Search.XQuikAPIKey, got %q", cfg.Search.XQuikAPIKey)
+	}
+}
+
 // TestLoadMissingTavilyAPIKey closes the pre-existing coverage gap for the
 // tavily required-key gate (parity with the exa/brave/serper gates).
 func TestLoadMissingTavilyAPIKey(t *testing.T) {

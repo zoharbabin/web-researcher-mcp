@@ -44,7 +44,8 @@
         "GOOGLE_CUSTOM_SEARCH_API_KEY": "${user_config.GOOGLE_CUSTOM_SEARCH_API_KEY}",
         "GOOGLE_CUSTOM_SEARCH_ID": "${user_config.GOOGLE_CUSTOM_SEARCH_ID}",
         "SEARCH_PROVIDER": "${user_config.SEARCH_PROVIDER}",
-        "BRAVE_API_KEY": "${user_config.BRAVE_API_KEY}"
+        "BRAVE_API_KEY": "${user_config.BRAVE_API_KEY}",
+        "XQUIK_API_KEY": "${user_config.XQUIK_API_KEY}"
       }
     }
   },
@@ -65,7 +66,7 @@
     "SEARCH_PROVIDER": {
       "type": "string",
       "title": "Search Provider",
-      "description": "Search provider (google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github). Leave unset to use Google when its keys are provided, or DuckDuckGo (no key needed) otherwise.",
+      "description": "Search provider (google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik). Leave unset to use Google when its keys are provided, or DuckDuckGo (no key needed) otherwise.",
       "required": false,
       "default": "google"
     },
@@ -73,6 +74,13 @@
       "type": "string",
       "title": "Brave Search API Key",
       "description": "Brave Search API key (required when Search Provider is set to brave)",
+      "required": false,
+      "sensitive": true
+    },
+    "XQUIK_API_KEY": {
+      "type": "string",
+      "title": "Xquik API Key",
+      "description": "Xquik API key (required when Search Provider is set to xquik)",
       "required": false,
       "sensitive": true
     }

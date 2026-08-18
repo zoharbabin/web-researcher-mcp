@@ -360,7 +360,7 @@ Note: Google keys are validated as required only when you explicitly select `SEA
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SEARCH_PROVIDER` | Primary provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews | `google` (variable default); at runtime, when `google` is selected but no Google key is set, the server falls back to the zero-config `duckduckgo` provider |
+| `SEARCH_PROVIDER` | Primary provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik | `google` (variable default); at runtime, when `google` is selected but no Google key is set, the server falls back to the zero-config `duckduckgo` provider |
 | `SEARCH_ROUTING` | Multi-provider routing (see below) | — |
 | `BRAVE_API_KEY` | Brave Search API key | — |
 | `BRAVE_EXTRA_SNIPPETS` | Return up to 5 extra snippets per Brave result | `false` |
@@ -368,6 +368,7 @@ Note: Google keys are validated as required only when you explicitly select `SEA
 | `SEARCHAPI_API_KEY` | SearchAPI.io API key | — |
 | `TAVILY_API_KEY` | Tavily API key (AI-agent search; sent as a Bearer token) | — |
 | `EXA_API_KEY` | Exa API key (neural/semantic search; sent as `x-api-key`). Also backs `academic_search` and a paid `/contents` scrape fallback tier | — |
+| `XQUIK_API_KEY` | Xquik API key for metered X/Twitter post search through `web_search` and `news_search`. Sent only as `x-api-key`; never logged | — |
 | `SEARXNG_URL` | SearXNG instance URL | — |
 | `SEARXNG_BASIC_AUTH` | HTTP Basic credential `user:password` for a SearXNG behind Basic auth (malformed value fails startup; never logged) | — |
 | `SEARXNG_HEADERS` | Static request headers for SearXNG as comma-separated `Name: Value` pairs (no commas/newlines in a value; a custom `Authorization` overrides `SEARXNG_BASIC_AUTH`) | — |

@@ -81,6 +81,37 @@ web-researcher-mcp
 
 ---
 
+## Xquik
+
+**Paid**: Xquik uses metered credits. Check the [current pricing page](https://xquik.com/#pricing) before enabling this provider.
+
+Xquik provides X/Twitter post search with author, timestamp, and engagement counts. It is a focused social-data provider, not a general-web search engine.
+
+### Step 1: Get an API Key
+
+1. Create an account in the [Xquik dashboard](https://dashboard.xquik.com/).
+2. Add credits or choose a plan.
+3. Create an API key in the dashboard.
+
+### Step 2: Configure
+
+```bash
+export SEARCH_PROVIDER=xquik
+export XQUIK_API_KEY=your-xquik-key
+```
+
+The key is sent only in the `x-api-key` header. It never appears in logs or errors.
+
+### Good to know
+
+- **X/Twitter posts only.** `web_search` returns engagement-ranked posts. `news_search` returns latest posts. `image_search` returns empty without error.
+- **Bounded spend.** Every request is capped at 10 results. Xquik charges metered credits, so include it deliberately in `SEARCH_ROUTING`.
+- **Bring your own key.** This client makes direct API calls with the operator's key. It does not pool keys or resell access.
+- **Check permissions.** Xquik's [Terms of Service](https://xquik.com/en/terms) allow REST API and automation use, but require a lawful basis and any needed permissions for search and reuse. Do not redistribute or resell data or access unless you hold every required permission.
+- **Independent service.** Xquik is not affiliated with or endorsed by X Corp. "Twitter" and "X" are trademarks of X Corp.
+
+---
+
 ## Google Custom Search (Programmable Search Engine)
 
 **Free tier**: 100 queries/day (paid: $5 per 1,000 queries)
