@@ -944,6 +944,7 @@ Read-only Resources beside `stats://*`, for operators to read on demand:
 |-----|---------|
 | `diagnostics://errors/recent` | The most recent tool errors (bounded ring, newest-first): tool, error kind, provider, redacted cause. Memory-only and bounded — no unbounded accumulation, no disk. Scoped to the caller's tenant when authenticated. Causes pass through `audit.MaskSecrets`, so no secrets, user queries, or full URLs appear |
 | `diagnostics://health` | Live provider health: an overall status (`healthy` / `degraded` / `unhealthy`) plus each routed provider's circuit-breaker state. Complements `stats://providers` (which lists *configured* providers) with *current* availability. Empty/`healthy` when multi-provider routing is not enabled (no breaker ladder to observe) |
+| `diagnostics://panel/spend` | `research_panel`'s per-tenant daily cost tracking (#303): today's spend, the configured `RESEARCH_PANEL_MAX_DAILY_COST_USD` cap, and remaining budget. `"configured": false` when no price table or cap is set |
 
 ### Operator dashboard (HTTP mode)
 
@@ -1003,6 +1004,7 @@ To force immediate re-encryption rather than waiting for natural reads, flush th
 | `lenses://catalog` | All registered lenses with their names, domains, and descriptions |
 | `diagnostics://errors/recent` | Bounded ring of recent errors for operator diagnostics |
 | `diagnostics://health` | Server health — version, uptime, provider availability |
+| `diagnostics://panel/spend` | `research_panel` per-tenant daily spend, cap, and remaining budget (#303) |
 | `research://artifact/{id}` | Large-payload resource store for tool results that exceed inline size limits |
 
 ### Prompts

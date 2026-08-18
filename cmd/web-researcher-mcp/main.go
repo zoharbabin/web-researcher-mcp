@@ -499,6 +499,18 @@ func main() {
 	}
 	defer auditor.Close()
 
+	// research_panel cost tracking (#303): the price table load can fail on a
+	// malformed RESEARCH_PANEL_PRICE_TABLE_PATH — degrade to no pricing data
+	// (every estimate $0, no caps enforceable) rather than failing startup,
+	// matching the persist-store construction tolerance above.
+	panelCostGuard, pcgErr := tools.NewPanelCostGuard(cfg.ResearchPanel, persistStore)
+	if pcgErr != nil {
+		logger.Warn("research_panel price table unavailable, cost estimates will be $0", "path", cfg.ResearchPanel.PriceTablePath, "err", pcgErr)
+		unpriced := cfg.ResearchPanel
+		unpriced.PriceTablePath = ""
+		panelCostGuard, _ = tools.NewPanelCostGuard(unpriced, persistStore)
+	}
+
 	toolDeps := tools.Dependencies{
 		Cache:                     cacheStore,
 		Search:                    searchProvider,
@@ -538,6 +550,7 @@ func main() {
 		CTLogResolver:          ctLogResolver,
 		ArchiveResolver:        archiveResolver,
 		ResearchPanelProviders: tools.AvailableModelProviders(cfg.ResearchPanel, cfg.AllowPrivateIPs),
+		ResearchPanelCost:      panelCostGuard,
 		Singleflight:           &singleflight.Group{},
 	}
 
@@ -613,7 +626,14 @@ func main() {
 		}
 	}
 
-	resources.RegisterAll(srv.MCP(), metricsCollector, sessionManager, rateLimiter, providerInfos, healthProvider, lensInfos)
+	// research_panel not configured (no providers) leaves ResearchPanelCost
+	// nil, which resources.RegisterAll's PanelSpendProvider param accepts —
+	// diagnostics://panel/spend then reports "configured": false.
+	var panelSpendProvider resources.PanelSpendProvider
+	if toolDeps.ResearchPanelCost != nil {
+		panelSpendProvider = toolDeps.ResearchPanelCost
+	}
+	resources.RegisterAll(srv.MCP(), metricsCollector, sessionManager, rateLimiter, providerInfos, healthProvider, lensInfos, panelSpendProvider)
 
 	// STDIO single-user identity (opt-in). When STDIO_USER_ID is set (only ever
 	// populated in STDIO mode — see config.Load), two things happen:

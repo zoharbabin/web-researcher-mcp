@@ -34,7 +34,7 @@ func (fakeHealth) Health() any {
 func createTestServer(m *metrics.Collector, s session.Manager) *mcp.Server {
 	srv := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1.0.0"}, nil)
 	rl := ratelimit.New(config.RateLimitConfig{PerTenant: 120, Global: 1000, DailyQuota: 5000})
-	RegisterAll(srv, m, s, rl, []ProviderInfo{{Name: "google", Type: "web"}}, fakeHealth{}, []LensInfo{{Name: "academic", Description: "Academic sources", DomainCount: 5, HasCX: false}})
+	RegisterAll(srv, m, s, rl, []ProviderInfo{{Name: "google", Type: "web"}}, fakeHealth{}, []LensInfo{{Name: "academic", Description: "Academic sources", DomainCount: 5, HasCX: false}}, nil)
 	return srv
 }
 
@@ -505,7 +505,7 @@ func TestDiagnosticsHealthResource_NilProvider(t *testing.T) {
 	s, _ := session.NewManager(session.Config{MaxSessions: 10})
 	srv := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1.0.0"}, nil)
 	rl := ratelimit.New(config.RateLimitConfig{PerTenant: 120, Global: 1000, DailyQuota: 5000})
-	RegisterAll(srv, m, s, rl, []ProviderInfo{{Name: "google", Type: "web"}}, nil, nil)
+	RegisterAll(srv, m, s, rl, []ProviderInfo{{Name: "google", Type: "web"}}, nil, nil, nil)
 	cs := connectTestClient(ctx, t, srv)
 	defer cs.Close()
 
@@ -575,7 +575,7 @@ func TestLensesCatalogResourceEmpty(t *testing.T) {
 	s, _ := session.NewManager(session.Config{MaxSessions: 10})
 	srv := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1.0.0"}, nil)
 	rl := ratelimit.New(config.RateLimitConfig{PerTenant: 120, Global: 1000, DailyQuota: 5000})
-	RegisterAll(srv, m, s, rl, nil, nil, nil)
+	RegisterAll(srv, m, s, rl, nil, nil, nil, nil)
 	cs := connectTestClient(ctx, t, srv)
 	defer cs.Close()
 

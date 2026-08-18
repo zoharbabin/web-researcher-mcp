@@ -44,9 +44,21 @@ type HealthProvider interface {
 	Health() any
 }
 
-func RegisterAll(srv *mcp.Server, metricsCollector *metrics.Collector, sessionManager session.Manager, rateLimiter *ratelimit.Limiter, providers []ProviderInfo, health HealthProvider, lenses []LensInfo) {
+// PanelSpendProvider supplies research_panel's per-tenant daily-spend
+// snapshot for the diagnostics://panel/spend Resource (#303). Implemented
+// directly by tools.PanelCostGuard; resources depends on this small interface
+// (not the tools package) to stay decoupled — the same pattern as
+// HealthProvider. A nil provider (research_panel not configured, or cost
+// tracking not enabled) makes diagnostics://panel/spend report "not
+// configured".
+type PanelSpendProvider interface {
+	// Snapshot returns a JSON-marshalable per-tenant spend view for tenantID.
+	Snapshot(tenantID string) any
+}
+
+func RegisterAll(srv *mcp.Server, metricsCollector *metrics.Collector, sessionManager session.Manager, rateLimiter *ratelimit.Limiter, providers []ProviderInfo, health HealthProvider, lenses []LensInfo, panelSpend PanelSpendProvider) {
 	registerResources(srv, metricsCollector, sessionManager, rateLimiter, providers, lenses)
-	registerDiagnostics(srv, metricsCollector, health)
+	registerDiagnostics(srv, metricsCollector, health, panelSpend)
 	registerPrompts(srv)
 }
 
@@ -162,7 +174,7 @@ func registerResources(srv *mcp.Server, metricsCollector *metrics.Collector, ses
 // (#81): a bounded recent-errors view and a live provider/breaker health view.
 // Both are read-only, redacted (errors pass through audit.MaskSecrets at insert
 // in the metrics ring), and aggregate/operator data — never LLM content.
-func registerDiagnostics(srv *mcp.Server, metricsCollector *metrics.Collector, health HealthProvider) {
+func registerDiagnostics(srv *mcp.Server, metricsCollector *metrics.Collector, health HealthProvider, panelSpend PanelSpendProvider) {
 	srv.AddResource(&mcp.Resource{
 		URI:         "diagnostics://errors/recent",
 		Name:        "Recent Errors",
@@ -214,6 +226,34 @@ func registerDiagnostics(srv *mcp.Server, metricsCollector *metrics.Collector, h
 			Contents: []*mcp.ResourceContents{
 				{
 					URI:      "diagnostics://health",
+					MIMEType: "application/json",
+					Text:     string(jsonBytes),
+				},
+			},
+		}, nil
+	})
+
+	srv.AddResource(&mcp.Resource{
+		URI:         "diagnostics://panel/spend",
+		Name:        "Research Panel Spend",
+		Description: "research_panel's per-tenant cost tracking (#303): today's spend, the configured daily cap, and remaining budget. Scoped to your tenant when authenticated, same as diagnostics://errors/recent. Reports \"configured\": false when research_panel isn't registered or cost tracking isn't enabled (no price table / caps set).",
+		MIMEType:    "application/json",
+	}, func(ctx context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		tenantID := auth.TenantIDFromContext(ctx)
+		var snapshot any
+		if panelSpend != nil {
+			snapshot = panelSpend.Snapshot(tenantID)
+		} else {
+			snapshot = map[string]any{"tenant_id": tenantID, "configured": false}
+		}
+		jsonBytes, err := json.MarshalIndent(snapshot, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		return &mcp.ReadResourceResult{
+			Contents: []*mcp.ResourceContents{
+				{
+					URI:      "diagnostics://panel/spend",
 					MIMEType: "application/json",
 					Text:     string(jsonBytes),
 				},
