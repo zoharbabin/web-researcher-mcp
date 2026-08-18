@@ -27,7 +27,7 @@ type verifyCitationInput struct {
 }
 
 // doiPattern matches a bare or doi.org-prefixed DOI (10.<registrant>/<suffix>).
-var doiPattern = regexp.MustCompile(`(?i)\b10\.\d{4,9}/[-._;()/:a-z0-9]+`)
+var doiPattern = regexp.MustCompile(`(?i)\b10\.\d{4,9}/[-._;()/:<>a-z0-9]+`)
 
 // verificationConfirmed/Uncertain/NotFound (#510) are the three states of the
 // verificationStatus sibling field. exists stays a strict bool for backward

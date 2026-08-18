@@ -879,6 +879,37 @@ func TestDetectDOIStripsFrontiersViewerSuffix(t *testing.T) {
 	}
 }
 
+// TestDetectDOI_SICIFormat verifies #490: legacy Wiley "SICI"-format DOIs
+// contain literal "<" and ">" (e.g. Haddon & Lewis, J. Comp. Neurol. 1996,
+// a real Crossref-registered DOI). doiPattern's character class previously
+// excluded both, so FindString truncated the match at the first "<",
+// silently dropping the rest of a real identifier.
+func TestDetectDOI_SICIFormat(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "bare SICI DOI",
+			in:   "10.1002/(SICI)1096-9861(19960129)365:1<113::AID-CNE9>3.0.CO;2-6",
+			want: "10.1002/(sici)1096-9861(19960129)365:1<113::aid-cne9>3.0.co;2-6",
+		},
+		{
+			name: "SICI DOI embedded in a doi.org URL",
+			in:   "https://doi.org/10.1002/(SICI)1096-9861(19960129)365:1<113::AID-CNE9>3.0.CO;2-6",
+			want: "10.1002/(sici)1096-9861(19960129)365:1<113::aid-cne9>3.0.co;2-6",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := detectDOI(tc.in); got != tc.want {
+				t.Errorf("detectDOI(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestVerifyCitation_EmptyInput(t *testing.T) {
 	ctx := context.Background()
 	deps := setupTestDeps()
