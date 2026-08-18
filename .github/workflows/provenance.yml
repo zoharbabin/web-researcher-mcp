@@ -44,7 +44,7 @@ jobs:
       # input expects) — one attestation covers every archive/binary listed.
       - name: Generate build provenance attestation
         id: attest
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           subject-checksums: /tmp/provenance/checksums.txt
 

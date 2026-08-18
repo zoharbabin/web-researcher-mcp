@@ -1,5 +1,6 @@
 # Binary
 /web-researcher-mcp
+/cmd/web-researcher-mcp/web-researcher-mcp
 /gen-python-client
 /dist/
 
