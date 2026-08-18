@@ -16,10 +16,12 @@ import (
 )
 
 type browserPool struct {
-	mu       sync.Mutex
-	browser  *rod.Browser
-	launcher *launcher.Launcher
-	initErr  error
+	mu          sync.Mutex
+	browser     *rod.Browser
+	launcher    *launcher.Launcher
+	initErr     error
+	idleTimeout time.Duration
+	idleTimer   *time.Timer
 }
 
 var (
@@ -27,7 +29,13 @@ var (
 	poolOnce sync.Once
 )
 
-func getBrowserPool(chromePath string, maxPages int) *browserPool {
+// getBrowserPool returns the singleton browser pool, launching Chromium if it
+// is not already running. idleTimeout (#460) is re-armed on every call that
+// finds (or creates) a live browser: if no caller touches the pool again
+// within idleTimeout, it is closed automatically, bounding how long a single
+// browser-tier scrape pins a Chromium process — and its macOS Dock icon —
+// after activity stops. Zero disables the idle-close timer.
+func getBrowserPool(chromePath string, maxPages int, idleTimeout time.Duration) *browserPool {
 	poolOnce.Do(func() {
 		pool = &browserPool{}
 	})
@@ -46,7 +54,25 @@ func getBrowserPool(chromePath string, maxPages int) *browserPool {
 	if pool.browser == nil {
 		pool.init(chromePath)
 	}
+	pool.idleTimeout = idleTimeout
+	if pool.browser != nil {
+		pool.touchLocked()
+	}
 	return pool
+}
+
+// touchLocked (re)arms the idle-close timer from now. Caller must hold bp.mu.
+func (bp *browserPool) touchLocked() {
+	if bp.idleTimer != nil {
+		bp.idleTimer.Stop()
+		bp.idleTimer = nil
+	}
+	if bp.idleTimeout > 0 {
+		bp.idleTimer = time.AfterFunc(bp.idleTimeout, func() {
+			slog.Info("browser pool idle timeout reached, closing", "idleTimeout", bp.idleTimeout)
+			bp.close()
+		})
+	}
 }
 
 // livenessCheckTimeout bounds only the CDP round-trip used to detect a dead
@@ -140,6 +166,10 @@ func (bp *browserPool) close() {
 // browser without releasing and re-acquiring bp.mu (which would let another
 // caller race in between). Caller must hold bp.mu.
 func (bp *browserPool) closeLocked() {
+	if bp.idleTimer != nil {
+		bp.idleTimer.Stop()
+		bp.idleTimer = nil
+	}
 	if bp.browser != nil {
 		// Bound this CDP round-trip (issue #464): closeLocked() is now also
 		// reached when the browser is already known-dead (liveness check
@@ -174,7 +204,7 @@ func (p *Pipeline) scrapeBrowser(ctx context.Context, url string, maxLength int,
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	bp := getBrowserPool(p.config.ChromePath, p.config.MaxBrowserConcurrency)
+	bp := getBrowserPool(p.config.ChromePath, p.config.MaxBrowserConcurrency, p.config.BrowserIdleTimeout)
 	bp.mu.Lock()
 	browser := bp.browser
 	bp.mu.Unlock()

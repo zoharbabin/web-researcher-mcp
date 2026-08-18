@@ -41,6 +41,15 @@ type PipelineConfig struct {
 	AllowPrivateIPs         bool
 	AllowedDomains          []string
 	ChromePath              string
+	// BrowserIdleTimeout closes the browser pool's Chromium process after this
+	// long with no scrapeBrowser/ExtractLinks call (#460), bounding how long a
+	// single browser-tier scrape pins a Chromium process (and its Dock icon on
+	// macOS) after activity stops. Zero disables the idle-close timer — the
+	// browser stays open for the full server lifetime, same as before this
+	// field existed. Unlike MaxConcurrency et al., this is NOT defaulted by
+	// NewPipeline when zero: zero is a deliberate, documented "disabled" value
+	// (see config.BrowserIdleTimeout), not an unset sentinel.
+	BrowserIdleTimeout time.Duration
 	// ExaAPIKey, when set, enables the Exa /contents extraction tier as a final
 	// fallback (after markdown→stealth→html→browser all fail). Exa is a paid API,
 	// so it is deliberately last: the free tiers win the overwhelming majority of
@@ -1017,7 +1026,7 @@ func (p *Pipeline) ExtractLinks(ctx context.Context, rawURL string) []string {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	bp := getBrowserPool(p.config.ChromePath, p.config.MaxBrowserConcurrency)
+	bp := getBrowserPool(p.config.ChromePath, p.config.MaxBrowserConcurrency, p.config.BrowserIdleTimeout)
 	bp.mu.Lock()
 	browser := bp.browser
 	bp.mu.Unlock()
