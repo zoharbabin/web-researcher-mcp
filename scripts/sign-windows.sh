@@ -59,7 +59,15 @@ if ! command -v java >/dev/null 2>&1; then
   sudo apt-get install -y -qq default-jre-headless
 fi
 if ! command -v az >/dev/null 2>&1; then
-  curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash >/dev/null
+  # Install via Microsoft's signed apt repo (GPG-verified packages) rather than
+  # curl | bash — the aka.ms installer script has no fixed hash to pin against.
+  curl -sLS https://packages.microsoft.com/keys/microsoft.asc \
+    | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/microsoft.gpg >/dev/null
+  AZ_REPO="$(lsb_release -cs)"
+  echo "deb [arch=amd64] https://packages.microsoft.com/repos/azure-cli/ ${AZ_REPO} main" \
+    | sudo tee /etc/apt/sources.list.d/azure-cli.list >/dev/null
+  sudo apt-get update -qq
+  sudo apt-get install -y -qq azure-cli
 fi
 
 JSIGN_VERSION="${JSIGN_VERSION:-7.4}"
