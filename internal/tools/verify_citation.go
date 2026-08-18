@@ -643,6 +643,13 @@ var doiViewerSuffixes = map[string]bool{
 
 func detectDOI(s string) string {
 	doi := strings.ToLower(strings.TrimSpace(doiPattern.FindString(s)))
+	// A DOI never legitimately ends in "<" or ">" — those only appear as
+	// SICI-format interior delimiters (e.g. "...365:1<113::AID-CNE9>3.0.CO;2-6").
+	// doiPattern's suffix class permits both characters to support that format,
+	// so a DOI wrapped in a Markdown/HTML autolink (e.g.
+	// "<https://doi.org/10.1038/nature12373>") would otherwise have FindString
+	// swallow the closing ">" onto the end of the match (#490 follow-up).
+	doi = strings.TrimRight(doi, "<>")
 	// Only strip a trailing viewer suffix when s is itself a URL — a bare DOI
 	// string (e.g. a citation_doi meta value or an explicit bibliography `doi`
 	// field) never carries a publisher viewer path, so a DOI whose own last

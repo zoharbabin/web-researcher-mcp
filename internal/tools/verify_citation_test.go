@@ -910,6 +910,36 @@ func TestDetectDOI_SICIFormat(t *testing.T) {
 	}
 }
 
+// TestDetectDOI_MarkdownAutolinkDelimiterNotCaptured verifies the fix for
+// #490's own regression: permitting "<"/">" in doiPattern for SICI DOIs must
+// not cause a Markdown/HTML autolink's closing ">" delimiter to be captured
+// as part of an ordinary (non-SICI) DOI.
+func TestDetectDOI_MarkdownAutolinkDelimiterNotCaptured(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "markdown autolink around a doi.org URL",
+			in:   "See <https://doi.org/10.1038/nature12373> for details.",
+			want: "10.1038/nature12373",
+		},
+		{
+			name: "bare DOI wrapped in angle brackets",
+			in:   "<10.1038/nature12373>",
+			want: "10.1038/nature12373",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := detectDOI(tc.in); got != tc.want {
+				t.Errorf("detectDOI(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestVerifyCitation_EmptyInput(t *testing.T) {
 	ctx := context.Background()
 	deps := setupTestDeps()
