@@ -13,7 +13,7 @@ startCommand:
         description: "Google Custom Search engine ID"
       search_provider:
         type: string
-        description: "Search provider (google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews)"
+        description: "Search provider (google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik)"
         default: "google"
       search_routing:
         type: string
@@ -36,6 +36,9 @@ startCommand:
       exa_api_key:
         type: string
         description: "Exa API key (required if using exa provider)"
+      xquik_api_key:
+        type: string
+        description: "Xquik API key (required if using xquik provider)"
       edgar_contact_email:
         type: string
         description: "Contact email for SEC EDGAR (enables filing_search); falls back to OPENALEX_EMAIL"
@@ -59,6 +62,7 @@ startCommand:
     SEARXNG_URL: "{{config.searxng_url}}"
     TAVILY_API_KEY: "{{config.tavily_api_key}}"
     EXA_API_KEY: "{{config.exa_api_key}}"
+    XQUIK_API_KEY: "{{config.xquik_api_key}}"
     EDGAR_CONTACT_EMAIL: "{{config.edgar_contact_email}}"
     COURTLISTENER_API_TOKEN: "{{config.courtlistener_api_token}}"
     FRED_API_KEY: "{{config.fred_api_key}}"

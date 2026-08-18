@@ -30,7 +30,7 @@
         },
         {
           "name": "SEARCH_PROVIDER",
-          "description": "Search provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, or hackernews",
+          "description": "Search provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, or xquik",
           "isRequired": false
         },
         {
@@ -70,6 +70,12 @@
         {
           "name": "EXA_API_KEY",
           "description": "Exa API key (neural/semantic web search provider)",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "XQUIK_API_KEY",
+          "description": "Xquik API key (metered X/Twitter post search provider)",
           "isRequired": false,
           "isSecret": true
         },

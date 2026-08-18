@@ -164,7 +164,7 @@ type Deps struct {
 }
 
 // SupportedProviders lists all provider names that can be configured.
-var SupportedProviders = []string{"google", "brave", "serper", "searxng", "searchapi", "duckduckgo", "tavily", "exa", "hackernews", "reddit", "bluesky", "github"}
+var SupportedProviders = []string{"google", "brave", "serper", "searxng", "searchapi", "duckduckgo", "tavily", "exa", "hackernews", "reddit", "bluesky", "github", "xquik"}
 
 func NewProvider(cfg config.SearchConfig, deps Deps) Provider {
 	switch cfg.Provider {
@@ -190,6 +190,8 @@ func NewProvider(cfg config.SearchConfig, deps Deps) Provider {
 		return NewBlueskyProvider(deps)
 	case "github":
 		return NewGitHubProvider(cfg.GitHubToken, deps)
+	case "xquik":
+		return NewXQuikProvider(cfg.XQuikAPIKey, deps)
 	default:
 		if cfg.GoogleAPIKey != "" && cfg.GoogleCX != "" {
 			return NewGoogleProvider(cfg.GoogleAPIKey, cfg.GoogleCX, deps)
@@ -240,6 +242,10 @@ func NewProviderByName(name string, cfg config.SearchConfig, deps Deps) Provider
 		return NewBlueskyProvider(deps)
 	case "github":
 		return NewGitHubProvider(cfg.GitHubToken, deps)
+	case "xquik":
+		if cfg.XQuikAPIKey != "" {
+			return NewXQuikProvider(cfg.XQuikAPIKey, deps)
+		}
 	}
 	return nil
 }

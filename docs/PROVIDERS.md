@@ -44,6 +44,7 @@ Understanding what backs each provider helps you reason about result overlap and
 | **[Reddit](https://www.reddit.com/)** | Niche | Reddit Atom RSS — Reddit posts and community discussions only |
 | **[Bluesky](https://bsky.app/)** | Niche | AT Protocol AppView (`public.api.bsky.app`) — Bluesky posts only |
 | **[GitHub](https://docs.github.com/en/rest/search/search)** | Niche | GitHub REST Search API — issues and pull requests only |
+| **[Xquik](https://xquik.com/)** | Niche | Xquik REST API — public X/Twitter posts with engagement counts only |
 
 **Practical implication**: Google PSE, Serper, and SearchAPI.io draw from the same index — using more than one adds no coverage, only redundancy. Brave and Exa bring genuinely independent results. Tavily and SearXNG aggregate results from others rather than crawling themselves.
 
@@ -67,6 +68,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 | **[Reddit](https://www.reddit.com/)** | ✓ | — | ✓ | — | — |
 | **[Bluesky](https://bsky.app/)** | ✓ | — | — | — | — |
 | **[GitHub](https://docs.github.com/en/rest/search/search)** | ✓ | — | ✓ | — | — |
+| **[Xquik](https://xquik.com/)** | ✓ | — | ✓ | — | — |
 
 **Notes:**
 - `local_search` is Brave-only — it requires `BRAVE_API_KEY`. No other web provider supports the three-call local pipeline (locations → POIs → descriptions).
@@ -92,6 +94,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 | **[SearchAPI.io](https://www.searchapi.io/)** | 100 searches/month | Paid plans |
 | **[Exa](https://exa.ai/)** | 1,000 requests/month | Per call beyond free tier |
 | **[Tavily](https://app.tavily.com/)** | Monthly dev credits | Paid plans |
+| **[Xquik](https://xquik.com/#pricing)** | No free tier documented | Metered credits; current rates appear on the pricing and checkout pages |
 
 ---
 
@@ -110,6 +113,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 | Reddit / community discussion signal | [Reddit](https://www.reddit.com/) |
 | Bluesky community signal | [Bluesky](https://bsky.app/) |
 | GitHub issue and PR search | [GitHub](https://docs.github.com/en/rest/search/search) |
+| X/Twitter post search with engagement counts | [Xquik](https://xquik.com/) |
 | Maximum reliability | `SEARCH_ROUTING=brave,google,serper` (three independent providers) |
 
 ---
@@ -137,6 +141,10 @@ Which tools each web search provider enables. `—` means the provider returns e
 **[Bluesky](https://bsky.app/)** — Searches Bluesky posts via the AT Protocol public AppView (`public.api.bsky.app`, falling back to `api.bsky.app` — same backend, no caching layer — if the cached host 403s the search endpoint specifically). No key or registration required. Not general web — use only when you specifically want Bluesky community signal. Supports `web_search` only (no images, no news); returns up to 100 results per request (defaults to 10). No `time_range` filtering. `scrape_page` on any bsky.app post or profile URL reads natively through the same AT Protocol API regardless of which `SEARCH_PROVIDER` is set, surfacing engagement (likes, reposts, replies) via `forumSignals`.
 
 **[GitHub](https://docs.github.com/en/rest/search/search)** — Searches GitHub issues and pull requests via the public REST Search API. No token required (10 req/min unauthenticated); set GITHUB_TOKEN to raise the limit to 30 req/min. Not general web — use only when you specifically want GitHub issue/PR signal: bug reports, feature requests, open-source community traction, or developer discussion history. Results include issue number, state, kind (issue/PR), reaction count, comment count, author, and creation date. `scrape_page` on any GitHub URL works through the standard scrape pipeline regardless of which `SEARCH_PROVIDER` is set.
+
+**[Xquik](https://xquik.com/)** — Searches public X/Twitter posts through Xquik's paid REST API. `web_search` requests engagement-ranked `Top` results; `news_search` requests chronological `Latest` results. Each call returns at most 10 posts with likes, reposts, replies, views, author, timestamp, and canonical `x.com` URL. Image search is unsupported. This is a niche social-data provider, not a general-web index. Xquik is an independent third-party service and is not affiliated with X Corp.
+
+The integration uses the operator's own key for direct API calls. It does not pool credentials or resell Xquik access. Xquik's [Terms of Service](https://xquik.com/en/terms) permit REST API and automation use, while requiring a lawful basis and any needed permissions for each search and reuse. The terms prohibit reselling data or access without every required permission. Operators planning downstream redistribution or a hosted multi-user service must confirm their use and permissions comply.
 
 ---
 

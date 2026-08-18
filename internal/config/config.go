@@ -151,6 +151,7 @@ type SearchConfig struct {
 	SearchAPIKey       string
 	TavilyAPIKey       string
 	ExaAPIKey          string
+	XQuikAPIKey        string
 	JinaAPIKey         string // optional; the Jina Reader scraper tier works keyless, a key raises its rate limit
 	SearXNGURL         string
 	SearXNGBasicAuth   string            // raw "user:password" for a SearXNG behind HTTP Basic auth; "" => none (never logged)
@@ -334,6 +335,11 @@ func Load() (*Config, error) {
 		errs = append(errs, "EXA_API_KEY is required when SEARCH_PROVIDER=exa")
 	}
 
+	xquikKey := os.Getenv("XQUIK_API_KEY")
+	if provider == "xquik" && xquikKey == "" {
+		errs = append(errs, "XQUIK_API_KEY is required when SEARCH_PROVIDER=xquik")
+	}
+
 	port := envInt("PORT", 0)
 	encKey := os.Getenv("CACHE_ENCRYPTION_KEY")
 	if encKey != "" && !isHex64(encKey) {
@@ -439,6 +445,7 @@ func Load() (*Config, error) {
 			SearchAPIKey:          searchAPIKey,
 			TavilyAPIKey:          tavilyKey,
 			ExaAPIKey:             exaKey,
+			XQuikAPIKey:           xquikKey,
 			JinaAPIKey:            os.Getenv("JINA_API_KEY"),
 			SearXNGURL:            searxngURL,
 			SearXNGBasicAuth:      searxngBasicAuth,
