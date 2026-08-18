@@ -1,0 +1,2 @@
+mkdocs-material==9.7.7
+pymdown-extensions>=11.0.1  # CVE-2026-67422 (ReDoS), CVE-2026-61632 (b64 path traversal) — mkdocs-material's own pin allows 10.x

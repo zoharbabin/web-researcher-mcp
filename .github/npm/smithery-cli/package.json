@@ -1,0 +1,8 @@
+{
+  "name": "smithery-cli-pin",
+  "private": true,
+  "description": "Pinned, hash-locked install of @smithery/cli for release.yml — isolated package.json so `npm ci` (integrity-verified) can be used instead of an unpinned `npm install -g`.",
+  "dependencies": {
+    "@smithery/cli": "4.11.1"
+  }
+}
