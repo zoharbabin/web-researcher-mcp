@@ -475,7 +475,9 @@ jobs:
           node-version: "22"
 
       - name: Install Smithery CLI
-        run: npm install -g @smithery/cli@4.11.1
+        run: |
+          npm ci --prefix .github/npm/smithery-cli
+          echo "$PWD/.github/npm/smithery-cli/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Download .mcpb bundle from release
         env:
@@ -535,12 +537,11 @@ jobs:
           # Install the linux/amd64 (manylinux) wheel and verify the package is
           # importable with its full public API surface — catches wheel assembly
           # bugs (missing files, broken __init__) before they land on PyPI.
-          whl=$(ls dist/wheels/web_researcher_mcp-*-manylinux_2_17_x86_64.whl 2>/dev/null | head -1)
-          if [ -z "$whl" ]; then
+          if ! ls dist/wheels/web_researcher_mcp-*-manylinux_2_17_x86_64.whl >/dev/null 2>&1; then
             echo "::warning::manylinux wheel not found — skipping smoke test"
             exit 0
           fi
-          pip install --quiet "$whl"
+          pip install dist/wheels/web_researcher_mcp-*-manylinux_2_17_x86_64.whl
           python3 -c "
           import web_researcher_mcp as pkg
           assert hasattr(pkg, 'WebResearcherClient'), 'WebResearcherClient missing'

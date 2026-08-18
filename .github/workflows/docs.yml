@@ -32,7 +32,7 @@ jobs:
           python-version: "3.x"
 
       - name: Install mkdocs-material
-        run: pip install mkdocs-material==9.6.14
+        run: pip install --require-hashes -r .github/pip/docs-requirements.txt
 
       - name: Assemble docs from source files
         run: |
