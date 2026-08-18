@@ -136,6 +136,45 @@ func TestCategorizeArchiveURL(t *testing.T) {
 	}
 }
 
+// TestWaybackCDX_PercentEncodedURLDecoded is the regression test for issue
+// #438: a percent-encoded capture (e.g. "%2Flogin" instead of "/login") used
+// to reach categorizeArchiveURL unescaped, both categorizing as "other" noise
+// and surfacing a garbled URL in the result — decodeArchiveURL now runs first.
+func TestWaybackCDX_PercentEncodedURLDecoded(t *testing.T) {
+	r := newWaybackTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`[
+			["original","timestamp","statuscode","mimetype"],
+			["https://acme.com/account%2Flogin","20260101000000","200","text/html"]
+		]`))
+	})
+	entries, err := r.Lookup(context.Background(), "acme.com", 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("want 1 entry, got %d: %+v", len(entries), entries)
+	}
+	if entries[0].URL != "https://acme.com/account/login" {
+		t.Errorf("URL = %q, want percent-decoded https://acme.com/account/login", entries[0].URL)
+	}
+	if entries[0].Category != "login" {
+		t.Errorf("Category = %q, want login (decoding should let categorization match /login)", entries[0].Category)
+	}
+}
+
+func TestDecodeArchiveURL(t *testing.T) {
+	cases := map[string]string{
+		"https://acme.com/account%2Flogin":    "https://acme.com/account/login",
+		"https://acme.com/path+with+plus":     "https://acme.com/path+with+plus",     // '+' is literal, not a space, outside a query string
+		"https://acme.com/not%a-valid%escape": "https://acme.com/not%a-valid%escape", // malformed escape falls back to raw
+	}
+	for raw, want := range cases {
+		if got := decodeArchiveURL(raw); got != want {
+			t.Errorf("decodeArchiveURL(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}
+
 func TestWaybackCDX_Interface(t *testing.T) {
 	var _ ArchiveResolver = (*WaybackCDXResolver)(nil)
 }

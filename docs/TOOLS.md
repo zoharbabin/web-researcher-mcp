@@ -1843,12 +1843,13 @@ OSINT company reconnaissance with typed structured output: Certificate Transpare
 | `archive_urls` | array | Wayback CDX historical URLs, filtered to 200/301/302 captures: `url`, `timestamp`, `status_code`, `mime_type`, `category` (`login`/`api`/`admin`/`asset`/`doc`/`other`). Present only when the `archives` phase ran |
 | `subdomains` | array | Deduplicated subdomains derived from `cert_sans` + `archive_urls`: `subdomain`, `source` (`ct_logs`/`archive`) |
 | `sources` | array | Which phases actually ran and contributed data: `phase`, `name`, `url` — check this to see what was skipped (resolver dependency absent, or an upstream error) |
+| `phase_errors` | array | `phase` (`ct_logs`/`archives`), `error` — populated when that phase's resolver returned an error (upstream 5xx/429, malformed response), distinguishing a genuine upstream failure from a resolver that simply found nothing |
 | `cache_age` | integer | Seconds since cache was written. `0` = live fetch. Cache TTL: 24 hours |
 | `trust` | string | Always `untrusted-external-content` |
 
 ### Behavior
 
-- **Independent, soft-failing phases.** `ct_logs` (crt.sh), `archives` (Wayback CDX), and `profiling` (one `web_search` call) run concurrently; each writes only its own result fields. A phase failing (resolver absent, upstream 5xx/429, rate limit) drops that phase's contribution but never fails the whole call — check `sources` for what actually ran.
+- **Independent, soft-failing phases.** `ct_logs` (crt.sh), `archives` (Wayback CDX), and `profiling` (one `web_search` call) run concurrently; each writes only its own result fields. A phase failing (resolver absent, upstream 5xx/429, rate limit) drops that phase's contribution but never fails the whole call — check `sources` for what actually ran, and `phase_errors` for why a `ct_logs`/`archives` phase came back empty when a resolver was configured.
 - **Domain resolution.** `target` is parsed as a domain first (`canonicalDomain`); if that fails, it's treated as a company name and resolved via the same web-search fallback `brand_research` uses. The resolved domain is rejected if it's a private/internal host.
 - **Subdomain derivation.** `subdomains` merges every host seen in `cert_sans` (SAN wildcards un-prefixed) and every host extracted from `archive_urls`, deduplicated against the resolved domain's suffix.
 - **`web` phase.** Selecting `web` without `profiling` adds a `sources` note pointing the caller at `profiling` — `web` on its own does no independent lookup; the two phases are conceptually linked (profiling's contribution *is* the web-search summary).
