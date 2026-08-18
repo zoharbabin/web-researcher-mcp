@@ -16,17 +16,18 @@ on:
       - "mkdocs.yml"
       - ".github/workflows/docs.yml"
 
-permissions:
-  contents: write
+permissions: {}
 
 jobs:
   deploy:
     name: 📚 Deploy Docs to GitHub Pages
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # peaceiris/actions-gh-pages pushes to gh-pages branch
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.x"
 
@@ -147,7 +148,7 @@ jobs:
           printf 'User-agent: *\nAllow: /\n\nSitemap: https://zoharbabin.com/web-researcher-mcp/docs/sitemap.xml\n' > publish/robots.txt
 
       - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
+        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: publish
