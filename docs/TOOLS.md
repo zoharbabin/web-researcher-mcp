@@ -1488,6 +1488,7 @@ Search **ClinicalTrials.gov** — the NIH registry of 400K+ clinical studies —
 | `intervention` | string | yes* | — | Drug/device/treatment (e.g. `remdesivir`) |
 | `sponsor` | string | yes* | — | Lead sponsor / funder |
 | `status` | string | no | — | Recruitment status filter: `RECRUITING`, `COMPLETED`, `TERMINATED`, … |
+| `phase` | string | no | — | Trial phase filter: `PHASE1`, `PHASE2`, `PHASE3`, `PHASE4`, `EARLY_PHASE1` |
 | `num_results` | int | no | 10 | 1–100 |
 | `provider` | string | no | — | Force a clinical-trials provider: `clinicaltrials` |
 | `sessionId` | string | no | — | Record results as sources on a `sequential_search` session |
@@ -1497,7 +1498,8 @@ Search **ClinicalTrials.gov** — the NIH registry of 400K+ clinical studies —
 Each `trials[]` item: `nctId`, `title`, `status`, `phases` (array), `conditions` (array), `interventions` (array), `sponsor`, `startDate`, `hasResults` (bool — whether results are posted), `url` (study page; `scrape_page` for the full registration), `source`. Plus `query`, `resultCount`, `provider`, `hints` (when empty), and `trust` (`untrusted-external-content`).
 
 ### Behavior
-- Combine `query`/`condition`/`intervention`/`sponsor`/`status` to narrow the registry's structured facets; at least one is required.
+- Combine `query`/`condition`/`intervention`/`sponsor`/`status`/`phase` to narrow the registry's structured facets; at least one of `query`/`condition`/`intervention`/`sponsor` is required.
+- **Phase inference**: if `phase` is omitted, a phase phrase mentioned in `query` (e.g. `"phase 3"`, `"early phase 1"`) is extracted automatically and stripped from the free-text term sent upstream, so the phrase doesn't dilute full-text relevance. An explicit `phase` always wins over anything inferred from `query`.
 - **Provider honoring**: an explicit `provider` is used exclusively; otherwise the first configured provider answers. An error/empty returns a structured zero-result with hints (no silent fallback).
 - A bad request surfaces as a structured upstream error (the API returns `text/plain` errors, decoded as a message snippet); a `404`/no-match is an empty result, never a panic.
 - **Auth**: keyless — ClinicalTrials.gov v2 needs no API key.

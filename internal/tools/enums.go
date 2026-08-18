@@ -234,3 +234,12 @@ func researchExportFormatEnum() []any { return []any{"markdown", "json"} }
 // companyReconPhasesEnum covers company_recon's phases field (a []string —
 // assign to customSchema.Properties["phases"].Items.Enum, not .Enum).
 func companyReconPhasesEnum() []any { return toAny(companyReconDefaultPhases) }
+
+// clinicalPhaseEnum covers clinical_search's phase field — ClinicalTrials.gov
+// v2's closed phase vocabulary (verified against the live API, 2026-08-18;
+// see clinicalPhaseCodes in clinicaltrials.go). Free-form variants ("Phase 3",
+// "phase_3", "3") are still accepted at runtime via normalizePhase — the enum
+// documents the canonical spelling, matching the registry's own Phases output.
+func clinicalPhaseEnum() []any {
+	return []any{"PHASE1", "PHASE2", "PHASE3", "PHASE4", "EARLY_PHASE1"}
+}

@@ -139,3 +139,99 @@ func TestClinicalTrialsBadRequestErrors(t *testing.T) {
 func TestClinicalTrialsInterface(t *testing.T) {
 	var _ TrialProvider = (*ClinicalTrialsProvider)(nil)
 }
+
+// TestClinicalTrialsExplicitPhaseSetsAggFilter is the regression test for
+// #437 fix 1: a structured Phase param must translate to the verified
+// aggFilters=phase:N query param (there is no filter.phase).
+func TestClinicalTrialsExplicitPhaseSetsAggFilter(t *testing.T) {
+	p := newClinicalTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("aggFilters") != "phase:3" {
+			t.Errorf("aggFilters = %q, want phase:3", q.Get("aggFilters"))
+		}
+		if q.Get("query.term") != "diabetes" {
+			t.Errorf("query.term should be unmodified when Phase is set explicitly, got %q", q.Get("query.term"))
+		}
+		w.Write([]byte(`{"studies":[],"totalCount":0}`))
+	})
+	_, err := p.Trials(context.Background(), TrialSearchParams{Query: "diabetes", Phase: "Phase 3"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestClinicalTrialsPhaseInferredFromQuery is the regression test for #437
+// fix 2: a phase phrase embedded in free text (the shape an LLM caller that
+// hasn't split query into structured fields would produce) is extracted into
+// the aggFilters param and stripped from query.term.
+func TestClinicalTrialsPhaseInferredFromQuery(t *testing.T) {
+	p := newClinicalTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("aggFilters") != "phase:3" {
+			t.Errorf("aggFilters = %q, want phase:3 inferred from query", q.Get("aggFilters"))
+		}
+		if q.Get("query.term") != "type 2 diabetes trial" {
+			t.Errorf("query.term = %q, want the phase phrase stripped", q.Get("query.term"))
+		}
+		w.Write([]byte(`{"studies":[],"totalCount":0}`))
+	})
+	_, err := p.Trials(context.Background(), TrialSearchParams{Query: "type 2 diabetes phase 3 trial"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestClinicalTrialsExplicitPhaseWinsOverInference proves #434 Rule 2's
+// explicit-wins-over-inference precedent holds for clinical_search too.
+func TestClinicalTrialsExplicitPhaseWinsOverInference(t *testing.T) {
+	p := newClinicalTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("aggFilters") != "phase:1" {
+			t.Errorf("aggFilters = %q, want phase:1 (explicit Phase, not the phase 3 in query)", q.Get("aggFilters"))
+		}
+		if q.Get("query.term") != "diabetes phase 3 trial" {
+			t.Errorf("query.term should be unmodified when Phase is set explicitly, got %q", q.Get("query.term"))
+		}
+		w.Write([]byte(`{"studies":[],"totalCount":0}`))
+	})
+	_, err := p.Trials(context.Background(), TrialSearchParams{Query: "diabetes phase 3 trial", Phase: "PHASE1"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestNormalizePhase(t *testing.T) {
+	cases := map[string]string{
+		"":              "",
+		"PHASE3":        "3",
+		"Phase 3":       "3",
+		"phase_3":       "3",
+		"3":             "3",
+		"EARLY_PHASE1":  "0",
+		"early phase 1": "0",
+		"PHASE5":        "", // out of range
+		"not a phase":   "",
+	}
+	for raw, want := range cases {
+		if got := normalizePhase(raw); got != want {
+			t.Errorf("normalizePhase(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}
+
+func TestInferPhaseFromQuery(t *testing.T) {
+	cases := []struct {
+		query, wantCode, wantRemaining string
+	}{
+		{"type 2 diabetes phase 3 trial", "3", "type 2 diabetes trial"},
+		{"early phase 1 oncology study", "0", "oncology study"},
+		{"phase2 lung cancer", "2", "lung cancer"},
+		{"remdesivir covid-19", "", "remdesivir covid-19"},
+	}
+	for _, c := range cases {
+		gotCode, gotRemaining := inferPhaseFromQuery(c.query)
+		if gotCode != c.wantCode || gotRemaining != c.wantRemaining {
+			t.Errorf("inferPhaseFromQuery(%q) = (%q, %q), want (%q, %q)", c.query, gotCode, gotRemaining, c.wantCode, c.wantRemaining)
+		}
+	}
+}
