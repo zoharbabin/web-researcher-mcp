@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -466,4 +467,57 @@ func TestTrustSuiteAccuracy_TitleMatch(t *testing.T) {
 		t.Logf("%-50s titleMatch=%q wantMismatch=%v", c.name, tm, c.wantMismatch)
 	}
 	mismatch.report(t, "titleMatch")
+}
+
+// TestTrustSuiteAccuracy_LegalSearchCaseName is the regression test for #436:
+// an exact case-name query must surface the landmark/highest-authority case
+// at rank 1 against the live CourtListener API, not an unrelated lower-court
+// case that merely shares the party-name string — proving the case_name
+// field-scope + order_by=citeCount fix (verified against the live API,
+// 2026-08-18) actually changes result composition, not just that the
+// request doesn't error.
+func TestTrustSuiteAccuracy_LegalSearchCaseName(t *testing.T) {
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	breakerCfg := circuit.Config{FailureThreshold: 10, ResetTimeout: 60}
+	caseProvider := search.NewCourtListenerProvider(os.Getenv("COURTLISTENER_API_TOKEN"), search.Deps{HTTPClient: httpClient, Breaker: circuit.New(breakerCfg)})
+	deps := Dependencies{
+		Cache:         cache.NewMemory(cache.MemoryConfig{MaxSizeMB: 16}),
+		Metrics:       metrics.NewCollector(),
+		Auditor:       audit.NewNoop(),
+		CaseProviders: map[string]search.CaseProvider{caseProvider.Name(): caseProvider},
+	}
+
+	// The exact repro from #436: before the fix, all 5 results were unrelated
+	// lower-court cases sharing the party names; none were the 1954 SCOTUS
+	// landmark ruling.
+	cases := []struct {
+		query string
+		court string // want this substring in the top result's court
+	}{
+		{"Brown v. Board of Education", "Supreme Court"},
+		{"Roe v. Wade", "Supreme Court"},
+		{"Marbury v. Madison", "Supreme Court"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.query, func(t *testing.T) {
+			out, res := callTool(t, deps, "legal_search", map[string]any{
+				"query":       c.query,
+				"num_results": 5,
+			})
+			if res.IsError {
+				t.Fatalf("legal_search(%s) returned a tool error: %v", c.query, res.Content)
+			}
+			result, _ := out["cases"].([]any)
+			if len(result) == 0 {
+				t.Fatalf("legal_search(%s): expected at least one case result", c.query)
+			}
+			top, _ := result[0].(map[string]any)
+			t.Logf("top result: caseName=%v court=%v citationCount=%v", top["caseName"], top["court"], top["citationCount"])
+			court, _ := top["court"].(string)
+			if !strings.Contains(court, c.court) {
+				t.Errorf("legal_search(%s) top result court = %q, want to contain %q", c.query, court, c.court)
+			}
+		})
+	}
 }

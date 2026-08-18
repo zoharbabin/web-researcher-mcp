@@ -88,3 +88,66 @@ func TestCourtListenerRateLimit(t *testing.T) {
 func TestCourtListenerInterface(t *testing.T) {
 	var _ CaseProvider = (*CourtListenerProvider)(nil)
 }
+
+// TestCourtListenerCaseNameQueryUsesFieldScopeAndCiteCountOrder is the
+// regression test for #436: an exact case-name query must be scoped to the
+// case_name field and ordered by citeCount, not sent as a generic q=
+// full-text search.
+func TestCourtListenerCaseNameQueryUsesFieldScopeAndCiteCountOrder(t *testing.T) {
+	var q url.Values
+	p := newCourtListenerTestProvider(t, "", func(w http.ResponseWriter, r *http.Request) {
+		q = r.URL.Query()
+		w.Write([]byte(`{"results":[]}`))
+	})
+	_, _ = p.Cases(context.Background(), CaseSearchParams{Query: "Brown v. Board of Education"})
+	if q.Get("case_name") != "Brown v. Board of Education" {
+		t.Errorf("case_name = %q, want the full query", q.Get("case_name"))
+	}
+	if q.Get("q") != "" {
+		t.Errorf("q should be empty when case_name is used, got %q", q.Get("q"))
+	}
+	if q.Get("order_by") != "citeCount desc" {
+		t.Errorf("order_by = %q, want %q", q.Get("order_by"), "citeCount desc")
+	}
+}
+
+// TestCourtListenerGeneralQueryUsesFullText confirms a non-case-name query
+// (no " v. "/" vs. " separator) is unaffected — still a plain q= full-text
+// search with no order_by override, preserving CourtListener's default
+// relevance ranking for topical searches.
+func TestCourtListenerGeneralQueryUsesFullText(t *testing.T) {
+	var q url.Values
+	p := newCourtListenerTestProvider(t, "", func(w http.ResponseWriter, r *http.Request) {
+		q = r.URL.Query()
+		w.Write([]byte(`{"results":[]}`))
+	})
+	_, _ = p.Cases(context.Background(), CaseSearchParams{Query: "qualified immunity excessive force"})
+	if q.Get("q") != "qualified immunity excessive force" {
+		t.Errorf("q = %q, want the full query", q.Get("q"))
+	}
+	if q.Get("case_name") != "" {
+		t.Errorf("case_name should be empty for a general query, got %q", q.Get("case_name"))
+	}
+	if q.Get("order_by") != "" {
+		t.Errorf("order_by should be empty for a general query, got %q", q.Get("order_by"))
+	}
+}
+
+func TestIsCaseNameQuery(t *testing.T) {
+	cases := []struct {
+		query string
+		want  bool
+	}{
+		{"Brown v. Board of Education", true},
+		{"Roe v. Wade", true},
+		{"Miranda vs. Arizona", true},
+		{"qualified immunity excessive force", false},
+		{"fourth amendment search and seizure", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		if got := isCaseNameQuery(c.query); got != c.want {
+			t.Errorf("isCaseNameQuery(%q) = %v, want %v", c.query, got, c.want)
+		}
+	}
+}
