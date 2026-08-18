@@ -186,7 +186,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install pytest
-        run: python3 -m pip install pytest==9.1.1 pytest-cov==7.1.0
+        run: python3 -m pip install --require-hashes -r .github/pip/pytest-requirements.txt
       - name: Run Python SDK tests
         run: python3 -m pytest tests/python/ --ignore=tests/python/test_live_e2e.py -v --cov=web_researcher_mcp --cov-report=term-missing
 
@@ -553,7 +553,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install pytest
-        run: python3 -m pip install pytest==9.1.1
+        run: python3 -m pip install --require-hashes -r .github/pip/pytest-requirements.txt
 
       - name: Run Python SDK live E2E tests
         env:
