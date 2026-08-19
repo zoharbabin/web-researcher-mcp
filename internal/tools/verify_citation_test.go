@@ -445,6 +445,61 @@ func TestVerifyCitation_DOIClaimPrefersOAURL(t *testing.T) {
 	}
 }
 
+// TestVerifyCitation_PDFUrlServingHTML_StillAddressed reproduces #631
+// end-to-end: a DOI record's PDFUrl ends in .pdf (routing the claim-check
+// fetch through the document tier), but the server actually serves the full
+// HTML article (nature.com's OA "grover" auth-handshake redirect does
+// exactly this for 10.1038/nature12373.pdf). The claim check must still
+// extract the HTML and address the claim, not collapse to
+// source_unavailable.
+func TestVerifyCitation_PDFUrlServingHTML_StillAddressed(t *testing.T) {
+	oaPage := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><article><p>The vaccine trial demonstrated significant efficacy in reducing infection rates across all age groups.</p></article></body></html>`))
+	}))
+	defer oaPage.Close()
+
+	deps := verifyClaimDeps(t)
+	deps.AcademicProviders = map[string]search.AcademicProvider{
+		"openalex": &mockOAURLProvider{oaURL: oaPage.URL + "/nature12373.pdf"},
+	}
+
+	out := callVerifyClaim(t, deps, "10.1234/oa-test", "vaccine efficacy reduced infection")
+	if out["claimSupport"] != "addressed" {
+		t.Errorf("claimSupport = %v, want addressed (HTML served at a .pdf-suffixed URL must still be read)", out["claimSupport"])
+	}
+	if _, present := out["claimFetchError"]; present {
+		t.Errorf("claimFetchError should be absent on a successful fetch, got %v", out["claimFetchError"])
+	}
+}
+
+// TestVerifyCitation_ClaimFetchError_Surfaced verifies the #631
+// claimFetchError field: when the claim-check fetch genuinely fails, the
+// caller sees why instead of an unattributed source_unavailable. Uses the
+// DOI path (mockOAURLProvider's PDFUrl points at a closed server) because
+// verifyByURL's own link-liveness pre-check short-circuits fetchURL to ""
+// for a dead URL — a distinct, already-correct "no fetch attempted" case
+// that must NOT populate claimFetchError.
+func TestVerifyCitation_ClaimFetchError_Surfaced(t *testing.T) {
+	dead := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	deadURL := dead.URL
+	dead.Close() // closed before use: connection refused, not a 404
+
+	deps := verifyClaimDeps(t)
+	deps.AcademicProviders = map[string]search.AcademicProvider{
+		"openalex": &mockOAURLProvider{oaURL: deadURL},
+	}
+
+	out := callVerifyClaim(t, deps, "10.1234/oa-test", "vaccine efficacy reduced infection")
+	if out["claimSupport"] != "source_unavailable" {
+		t.Fatalf("claimSupport = %v, want source_unavailable", out["claimSupport"])
+	}
+	fetchErr, _ := out["claimFetchError"].(string)
+	if fetchErr == "" {
+		t.Error("expected claimFetchError to be populated when the fetch itself failed (connection refused)")
+	}
+}
+
 // mockOAURLProvider returns a record whose PDFUrl is a given OA URL and whose
 // rec.URL is a doi.org redirect — used to verify bestClaimURL's OA preference.
 type mockOAURLProvider struct {

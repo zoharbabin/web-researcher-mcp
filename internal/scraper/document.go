@@ -1,6 +1,7 @@
 package scraper
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -20,6 +21,22 @@ func isPDFContentType(ct string) bool {
 // servers that serve PDFs with an incorrect or absent Content-Type header.
 func looksLikePDF(body []byte) bool {
 	return len(body) >= 4 && body[0] == '%' && body[1] == 'P' && body[2] == 'D' && body[3] == 'F'
+}
+
+// looksLikeHTML reports whether a document-route response is actually HTML,
+// the reverse case of looksLikePDF/isPDFContentType (#631): a URL whose path
+// ends in .pdf/.docx/.pptx is a naming convention, not a guarantee — a
+// publisher's "download" link can gate the real file behind a session/auth
+// redirect that lands on an HTML page instead (nature.com's open-access PDF
+// link 303s through an auth handshake onto the full HTML article). Checked
+// before any document parse is attempted, so that case gets real HTML
+// extraction instead of a doomed PDF/DOCX/PPTX parse.
+func looksLikeHTML(contentType string, body []byte) bool {
+	if strings.Contains(strings.ToLower(contentType), "text/html") {
+		return true
+	}
+	trimmed := bytes.ToLower(bytes.TrimSpace(body))
+	return bytes.HasPrefix(trimmed, []byte("<!doctype html")) || bytes.HasPrefix(trimmed, []byte("<html"))
 }
 
 // scrapeBodyAsPDF parses already-downloaded bytes as a PDF document (#206), so
@@ -87,7 +104,12 @@ func (p *Pipeline) scrapeDocument(ctx context.Context, url string, maxLength int
 		return nil, err
 	}
 
-	contentType := detectDocType(url, resp.Header.Get("Content-Type"))
+	respContentType := resp.Header.Get("Content-Type")
+	if looksLikeHTML(respContentType, body) {
+		return p.parseHTMLBody(ctx, url, body, respContentType, maxLength)
+	}
+
+	contentType := detectDocType(url, respContentType)
 	text, meta, err := documents.Parse(body, contentType)
 	if err != nil {
 		if len(body) >= p.config.MaxDocumentBytes {
