@@ -133,12 +133,24 @@ func (e *EPOProvider) buildCQL(params PatentSearchParams) string {
 	if params.Query != "" {
 		// Split query into individual keywords for broad matching.
 		// EPO CQL treats quoted strings as exact phrases which is too restrictive.
+		//
+		// Use ta= (title+abstract), not txt= (title+abstract+description+claims)
+		// (#623). txt= matches anywhere in a patent's full text, including
+		// boilerplate background sections — a query like "lithium ion battery
+		// anode" ANDed via txt= matched 201,808 documents live against EPO OPS,
+		// because unrelated filings (e.g. Japanese gaming-machine patents
+		// describing a generic backup battery in passing) satisfy all four
+		// keyword clauses without being topically about the query at all. OPS
+		// returns no relevance ranking for such a broad full-text match, so
+		// these false positives can surface anywhere, including position 1.
+		// The same live query scoped to ta= matched 14,199 documents, and every
+		// one of the top 25 was genuinely about a lithium-ion battery anode.
 		words := strings.Fields(params.Query)
 		if len(words) == 1 {
-			clauses = append(clauses, "txt="+words[0])
+			clauses = append(clauses, "ta="+words[0])
 		} else {
 			for _, w := range words {
-				clauses = append(clauses, "txt="+w)
+				clauses = append(clauses, "ta="+w)
 			}
 		}
 	}
@@ -162,7 +174,7 @@ func (e *EPOProvider) buildCQL(params PatentSearchParams) string {
 	}
 
 	if len(clauses) == 0 {
-		return "txt=patent"
+		return "ta=patent"
 	}
 	return strings.Join(clauses, " AND ")
 }

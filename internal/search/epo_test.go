@@ -244,28 +244,37 @@ func TestEPOProvider_CQLConstruction(t *testing.T) {
 		{
 			name:   "multi-word query splits into keywords",
 			params: PatentSearchParams{Query: "video encoding"},
-			want:   `txt=video AND txt=encoding`,
+			want:   `ta=video AND ta=encoding`,
 		},
 		{
 			name:   "single word query",
 			params: PatentSearchParams{Query: "AI", Assignee: "Google", Inventor: "Smith"},
-			want:   `txt=AI AND pa="Google" AND in="Smith"`,
+			want:   `ta=AI AND pa="Google" AND in="Smith"`,
 		},
 		{
 			name:   "with date range and office",
 			params: PatentSearchParams{Query: "network", PatentOffice: "EP", YearFrom: 2020, YearTo: 2024},
-			want:   `txt=network AND pn=EP AND pd>=2020 AND pd<=2024`,
+			want:   `ta=network AND pn=EP AND pd>=2020 AND pd<=2024`,
 		},
 		{
 			name:   "multi-word with all fields",
 			params: PatentSearchParams{Query: "language model inference", Assignee: "Apple", PatentOffice: "EP"},
-			want:   `txt=language AND txt=model AND txt=inference AND pa="Apple" AND pn=EP`,
+			want:   `ta=language AND ta=model AND ta=inference AND pa="Apple" AND pn=EP`,
 		},
 		{
 			// #530: cpc_code becomes an actual cpc= CQL clause, not free text.
 			name:   "with cpc code",
 			params: PatentSearchParams{Query: "battery", CPCCode: "H01M10/00"},
-			want:   `txt=battery AND cpc=H01M10/00`,
+			want:   `ta=battery AND cpc=H01M10/00`,
+		},
+		{
+			// #623: ta= (title+abstract) replaces txt= (full text including
+			// description/claims) to avoid boilerplate-text false positives —
+			// see the doc comment on buildCQL's query clause for the live
+			// EPO OPS evidence (201,808 vs 14,199 matches for the same query).
+			name:   "keyword-only query uses ta not txt",
+			params: PatentSearchParams{Query: "lithium ion battery anode"},
+			want:   `ta=lithium AND ta=ion AND ta=battery AND ta=anode`,
 		},
 	}
 
