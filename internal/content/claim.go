@@ -163,6 +163,12 @@ func ExtractClaimEvidence(text, claim string) ClaimEvidence {
 		if ContainsAny(lower, stanceMarkers) {
 			score += 1.5 // a stance-bearing sentence is worth more than a bare mention
 		}
+		if claimHasMatchedNumber(terms, words) {
+			// A sentence naming the claim's own specific number is stronger
+			// evidence for that claim than one merely repeating proper nouns
+			// from it (#594) — weight it at least as high as the stance bonus.
+			score += 1.5
+		}
 		hits = append(hits, scored{idx: i, text: strings.TrimSpace(s), score: score})
 	}
 	if len(hits) == 0 {
@@ -370,6 +376,19 @@ func isNumericToken(f string) bool {
 	return true
 }
 
+// claimHasMatchedNumber reports whether any of the claim's numeric terms
+// (e.g. "330" from "330 meters tall") appears in words — i.e. this sentence
+// names the specific number the claim is about, not just a proper noun the
+// claim happens to mention (#594).
+func claimHasMatchedNumber(terms []string, words map[string]struct{}) bool {
+	for _, t := range terms {
+		if isNumericToken(t) && termMatches(words, t) {
+			return true
+		}
+	}
+	return false
+}
+
 // termSuffixes are inflectional endings stripped by stemTerm so a claim term
 // and its inflected form in the source text (e.g. claim "voted" vs. source
 // "vote") are recognized as the same word (#523). Ordered longest first so
@@ -392,14 +411,47 @@ func stemTerm(w string) string {
 	return w
 }
 
-// wordSet tokenizes lowerText into a set of whole words plus each word's stem,
-// for exact (never substring) claim-term matching. A raw substring match on a
-// stemmed term (e.g. claim "proves" stemmed to "prov") would wrongly match
-// unrelated words that merely CONTAIN that fragment — "improved", "provide"
-// — which is exactly the false-positive a live wet-test against the real
-// arXiv:1304.1068 PDF text surfaced after the initial #523 fix. Matching
-// against whole tokens (and their stems) instead of raw substrings closes
-// that hole while still tolerating simple inflection.
+// britishToAmericanSpelling maps a British spelling to its American
+// equivalent (#594), so a claim term and its cross-variant spelling in
+// source text (e.g. claim "meters" vs. a Wikipedia article's "metres") are
+// recognized as the same word instead of undercounting one of them. Small,
+// explicit, and one-directional by design: normalizeSpelling always
+// canonicalizes toward the American form, so American-spelled input passes
+// through unchanged and needs no reverse entries.
+var britishToAmericanSpelling = map[string]string{
+	"metre": "meter", "kilometre": "kilometer", "centimetre": "centimeter",
+	"millimetre": "millimeter", "litre": "liter",
+	"colour": "color", "favour": "favor", "flavour": "flavor",
+	"honour": "honor", "humour": "humor", "labour": "labor",
+	"neighbour": "neighbor", "rumour": "rumor", "armour": "armor",
+	"behaviour": "behavior", "endeavour": "endeavor",
+}
+
+// normalizeSpelling canonicalizes a lowercased word toward its American
+// spelling so British/American variants compare equal (#594). Falls back to
+// a productive suffix rule for the common "-ise" -> "-ize" verb pattern
+// (organise/organize, realise/realize) not covered by the explicit map.
+// Returns w unchanged when no variant applies — safe as a no-op identity for
+// already-American or unrelated words.
+func normalizeSpelling(w string) string {
+	if american, ok := britishToAmericanSpelling[w]; ok {
+		return american
+	}
+	if strings.HasSuffix(w, "ise") && len(w) > 5 {
+		return strings.TrimSuffix(w, "ise") + "ize"
+	}
+	return w
+}
+
+// wordSet tokenizes lowerText into a set of whole words plus each word's stem
+// and spelling-normalized form, for exact (never substring) claim-term
+// matching. A raw substring match on a stemmed term (e.g. claim "proves"
+// stemmed to "prov") would wrongly match unrelated words that merely CONTAIN
+// that fragment — "improved", "provide" — which is exactly the false-positive
+// a live wet-test against the real arXiv:1304.1068 PDF text surfaced after
+// the initial #523 fix. Matching against whole tokens (and their stems)
+// instead of raw substrings closes that hole while still tolerating simple
+// inflection.
 func wordSet(lowerText string) map[string]struct{} {
 	fields := strings.FieldsFunc(lowerText, func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
@@ -407,26 +459,46 @@ func wordSet(lowerText string) map[string]struct{} {
 	set := make(map[string]struct{}, len(fields)*2)
 	for _, f := range fields {
 		set[f] = struct{}{}
-		if stemmed := stemTerm(f); stemmed != f {
+		stemmed := stemTerm(f)
+		if stemmed != f {
 			set[stemmed] = struct{}{}
+		}
+		if normalized := normalizeSpelling(f); normalized != f {
+			set[normalized] = struct{}{}
+		}
+		if normalizedStem := normalizeSpelling(stemmed); normalizedStem != stemmed {
+			set[normalizedStem] = struct{}{}
 		}
 	}
 	return set
 }
 
 // termMatches reports whether claim term t appears as a whole word (or its
-// stem) in the set of words produced by wordSet, tolerating simple inflection
-// in either direction without falling back to substring containment.
+// stem, or a British/American spelling variant of either — #594) in the set
+// of words produced by wordSet, tolerating simple inflection and spelling
+// variation in either direction without falling back to substring
+// containment.
 func termMatches(words map[string]struct{}, t string) bool {
 	if _, ok := words[t]; ok {
 		return true
 	}
-	stemmed := stemTerm(t)
-	if stemmed == t {
-		return false
+	if normalized := normalizeSpelling(t); normalized != t {
+		if _, ok := words[normalized]; ok {
+			return true
+		}
 	}
-	_, ok := words[stemmed]
-	return ok
+	stemmed := stemTerm(t)
+	if stemmed != t {
+		if _, ok := words[stemmed]; ok {
+			return true
+		}
+		if normalizedStem := normalizeSpelling(stemmed); normalizedStem != stemmed {
+			if _, ok := words[normalizedStem]; ok {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // referenceSectionHeader matches a line that starts an academic

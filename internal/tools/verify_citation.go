@@ -61,6 +61,26 @@ func setVerificationStatus(out map[string]any) {
 	}
 }
 
+// authenticityCaveatText is the caveat surfaced by setAuthenticityCaveat.
+const authenticityCaveatText = "Existence and retraction status were confirmed via DOI record lookup only; no title/authenticity comparison was performed. Pass expected title text alongside the DOI (e.g. \"10.1038/nature12373 Some Title\") to enable that check."
+
+// setAuthenticityCaveat (#599) flags the gap in the DOI path's confidence: a
+// bare DOI resolves verificationStatus:"confirmed" from existence +
+// non-retraction alone, while titleMatch stays "not_checked" because there was
+// no title text to compare against the matched record. A caller checking only
+// the headline verificationStatus field would otherwise read "confirmed" as
+// full authenticity confidence when no title/authenticity check ever ran. Only
+// applies to the DOI path — a URL input's "confirmed" already comes from link
+// liveness, not a title comparison, so it carries no such gap.
+func setAuthenticityCaveat(out map[string]any) {
+	if out["inputType"] != "doi" || out["verificationStatus"] != verificationConfirmed {
+		return
+	}
+	if tm, _ := out["titleMatch"].(string); tm == "" || tm == "not_checked" {
+		out["authenticityCaveat"] = authenticityCaveatText
+	}
+}
+
 func registerVerifyCitation(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "verify_citation",
@@ -105,6 +125,7 @@ func registerVerifyCitation(srv *mcp.Server, deps Dependencies) {
 		}
 
 		setVerificationStatus(out)
+		setAuthenticityCaveat(out)
 
 		if len(provenance) > 0 {
 			out["provenance"] = provenance

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -248,6 +249,26 @@ func TestGitHubProviderSendsTokenWhenConfigured(t *testing.T) {
 	}
 	if gotAuth != "Bearer secret-token" {
 		t.Errorf("Authorization = %q, want Bearer secret-token", gotAuth)
+	}
+}
+
+// TestGitHubProviderDefaultsToRelevanceRanking proves issue #593: the search
+// query must not force sort=reactions, which discards GitHub's own best-match
+// relevance ranking in favor of raw popularity (surfacing unrelated
+// high-reaction items over an exact-name match).
+func TestGitHubProviderDefaultsToRelevanceRanking(t *testing.T) {
+	t.Parallel()
+	var gotQuery url.Values
+	p := newGHTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query()
+		w.Write([]byte(`{"total_count":0,"items":[]}`))
+	})
+
+	if _, err := p.Web(context.Background(), WebSearchParams{Query: "web-researcher-mcp"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := gotQuery.Get("sort"); got == "reactions" {
+		t.Errorf("sort = %q, must not force reactions sort — it discards relevance ranking (issue #593)", got)
 	}
 }
 

@@ -246,6 +246,34 @@ func TestMonarchAnnotate(t *testing.T) {
 	}
 }
 
+// TestMonarchAnnotateFiltersNonHPOAndStopwords is a regression test for #598:
+// annotate() must ground only HP:-namespace terms (per its documented "ground
+// to HPO terms" contract) and must not report generic clinical-narrative
+// stopwords (e.g. "Patient") as grounded terms even if SciGraph's NER matches
+// them to some unrelated specific entity.
+func TestMonarchAnnotateFiltersNonHPOAndStopwords(t *testing.T) {
+	p := newMonarchTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(strings.Join([]string{
+			`<span class="sciCrunchAnnotation" data-sciGraph="Some Case Report,LITERATURE:12345,CaseReport,">Patient</span>`,
+			`presented with`,
+			`<span class="sciCrunchAnnotation" data-sciGraph="Arachnodactyly,HP:0001166,Phenotype,">long fingers</span>`,
+			`and`,
+			`<span class="sciCrunchAnnotation" data-sciGraph="Abnormal mouse phenotype,MP:0001166,Phenotype,">abnormal gait</span>`,
+		}, " ")))
+	})
+	res, err := p.Search(context.Background(), MonarchSearchParams{Operation: "annotate", Text: "Patient presented with long fingers and abnormal gait"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res) != 1 {
+		t.Fatalf("want exactly 1 grounded HP: term (non-HPO and stopword spans must be dropped), got %d: %+v", len(res), res)
+	}
+	if res[0].ID != "HP:0001166" || res[0].Label != "Arachnodactyly" || res[0].Text != "long fingers" {
+		t.Errorf("annotate mapping wrong: %+v", res[0])
+	}
+}
+
 func TestMonarchEntity404IsEmpty(t *testing.T) {
 	p := newMonarchTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(404)

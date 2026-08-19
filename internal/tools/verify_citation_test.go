@@ -490,6 +490,37 @@ func TestVerifyCitation_TitleMatch_NotChecked(t *testing.T) {
 	}
 }
 
+// TestVerifyCitation_BareDOIConfirmedCarriesCaveat (#599): a bare DOI resolves
+// verificationStatus:"confirmed" from existence + non-retraction alone, with
+// titleMatch:"not_checked" — no authenticity/title comparison ever ran. That
+// combination must surface an explicit authenticityCaveat so a caller checking
+// only the headline verificationStatus field isn't misled into full confidence.
+func TestVerifyCitation_BareDOIConfirmedCarriesCaveat(t *testing.T) {
+	out := callVerify(t, setupTestDeps(), "10.1234/x")
+	if out["verificationStatus"] != verificationConfirmed {
+		t.Fatalf("verificationStatus = %v, want confirmed (precondition for this test)", out["verificationStatus"])
+	}
+	if out["titleMatch"] != "not_checked" {
+		t.Fatalf("titleMatch = %v, want not_checked (precondition for this test)", out["titleMatch"])
+	}
+	caveat, ok := out["authenticityCaveat"].(string)
+	if !ok || caveat == "" {
+		t.Errorf("authenticityCaveat missing/empty for a confirmed bare-DOI result with titleMatch:not_checked, got %v", out["authenticityCaveat"])
+	}
+}
+
+// TestVerifyCitation_TitledDOINoCaveat: a DOI supplied WITH comparison title text
+// runs titleMatch for real ("match"), so no authenticityCaveat should appear.
+func TestVerifyCitation_TitledDOINoCaveat(t *testing.T) {
+	out := callVerify(t, setupTestDeps(), "10.1234/x Mock Paper")
+	if out["titleMatch"] != "match" {
+		t.Fatalf("titleMatch = %v, want match (precondition for this test)", out["titleMatch"])
+	}
+	if _, present := out["authenticityCaveat"]; present {
+		t.Errorf("authenticityCaveat must not be present when titleMatch actually ran, got %v", out["authenticityCaveat"])
+	}
+}
+
 // TestVerifyCitation_TitleMatch_InSchema: titleMatch is declared in verifyCitationOutputSchema.
 func TestVerifyCitation_TitleMatch_InSchema(t *testing.T) {
 	out := callVerify(t, setupTestDeps(), "10.1234/x Mock Paper")
