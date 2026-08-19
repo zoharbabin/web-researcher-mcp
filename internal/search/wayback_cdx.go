@@ -228,14 +228,21 @@ func waybackRowsToEntries(rows [][]string) []ArchiveEntry {
 // field (#438): the raw captured URL is frequently percent-encoded
 // (%2F, %20, etc.), which both reads as noise in the returned ArchiveEntry.URL
 // and defeats categorizeArchiveURL's substring matching against encoded path
-// segments. url.PathUnescape (rather than QueryUnescape) is used because the
-// input is a full URL, not a query string — it decodes %XX sequences without
-// also treating a literal '+' in the path as a space. On any decode error
-// (e.g. a lone '%' from a malformed/double-encoded capture) the raw string is
-// returned unchanged rather than dropping the entry.
+// segments. Only the path portion (before any '?' or '#') is decoded —
+// percent-escapes inside a query string or fragment (e.g. "%26" for '&')
+// carry query/fragment syntax meaning, so decoding them there could change
+// the URL's semantics rather than just its readability. url.PathUnescape
+// (rather than QueryUnescape) is used on that path portion because it decodes
+// %XX sequences without also treating a literal '+' as a space. On any decode
+// error (e.g. a lone '%' from a malformed/double-encoded capture) the raw
+// string is returned unchanged rather than dropping the entry.
 func decodeArchiveURL(raw string) string {
-	if decoded, err := url.PathUnescape(raw); err == nil {
-		return decoded
+	pathPart, rest := raw, ""
+	if idx := strings.IndexAny(raw, "?#"); idx >= 0 {
+		pathPart, rest = raw[:idx], raw[idx:]
+	}
+	if decoded, err := url.PathUnescape(pathPart); err == nil {
+		return decoded + rest
 	}
 	return raw
 }

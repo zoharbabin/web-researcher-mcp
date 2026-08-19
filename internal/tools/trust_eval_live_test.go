@@ -475,10 +475,15 @@ func TestTrustSuiteAccuracy_TitleMatch(t *testing.T) {
 // upstream error. Named with the TestTrustSuiteAccuracy prefix so `make
 // test-eval`'s `-run TestTrustSuiteAccuracy` picks it up in the weekly
 // trust-eval CI job (.github/workflows/ci.yml) alongside the rest of the
-// suite, with no workflow change needed. Unlike the other cases here, this
-// one needs no newEvalDeps/CROSSREF_EMAIL: crt.sh and Wayback CDX are both
-// keyless.
+// suite, with no workflow change needed. Its own providers (crt.sh, Wayback
+// CDX) are keyless and need no newEvalDeps, but it still gates on
+// CROSSREF_EMAIL like every other case in this file — otherwise `make
+// test-eval` would make live network calls from this one test even in an
+// environment that unset CROSSREF_EMAIL specifically to skip the whole suite.
 func TestTrustSuiteAccuracy_CompanyRecon(t *testing.T) {
+	if os.Getenv("CROSSREF_EMAIL") == "" {
+		t.Skip("CROSSREF_EMAIL not set — skipping live trust-suite eval")
+	}
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 	breakerCfg := circuit.Config{FailureThreshold: 10, ResetTimeout: 60}
 	deps := Dependencies{

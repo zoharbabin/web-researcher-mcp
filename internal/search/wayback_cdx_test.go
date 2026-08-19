@@ -164,9 +164,11 @@ func TestWaybackCDX_PercentEncodedURLDecoded(t *testing.T) {
 
 func TestDecodeArchiveURL(t *testing.T) {
 	cases := map[string]string{
-		"https://acme.com/account%2Flogin":    "https://acme.com/account/login",
-		"https://acme.com/path+with+plus":     "https://acme.com/path+with+plus",     // '+' is literal, not a space, outside a query string
-		"https://acme.com/not%a-valid%escape": "https://acme.com/not%a-valid%escape", // malformed escape falls back to raw
+		"https://acme.com/account%2Flogin":             "https://acme.com/account/login",
+		"https://acme.com/path+with+plus":              "https://acme.com/path+with+plus",            // '+' is literal, not a space, outside a query string
+		"https://acme.com/not%a-valid%escape":          "https://acme.com/not%a-valid%escape",        // malformed escape falls back to raw
+		"https://acme.com/account%2Flogin?a=1%26b=2":   "https://acme.com/account/login?a=1%26b=2",   // query-string "%26" (encoded '&') must NOT be decoded — that would change the query's meaning
+		"https://acme.com/account%2Flogin#frag%2Fpart": "https://acme.com/account/login#frag%2Fpart", // fragment escapes are likewise left untouched
 	}
 	for raw, want := range cases {
 		if got := decodeArchiveURL(raw); got != want {
