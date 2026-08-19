@@ -96,8 +96,8 @@ func TestFormatCSLJSONValidAndComplete(t *testing.T) {
 		t.Fatalf("expected 2 authors, got %v", it["author"])
 	}
 	first, _ := authors[0].(map[string]any)
-	if first["literal"] != "LeCun, Yann" {
-		t.Errorf("first author literal = %v", first["literal"])
+	if first["family"] != "LeCun" || first["given"] != "Yann" {
+		t.Errorf("first author family/given = %v/%v, want LeCun/Yann", first["family"], first["given"])
 	}
 	issued, _ := it["issued"].(map[string]any)
 	if issued == nil {
@@ -307,5 +307,85 @@ func TestSplitAuthors(t *testing.T) {
 		if got := len(splitAuthors(in)); got != want {
 			t.Errorf("splitAuthors(%q) = %d names, want %d", in, got, want)
 		}
+	}
+}
+
+// TestSplitPersonalName proves the shared family/given parser (#621) matches
+// the last-token-is-surname convention invertNameAPA/invertNameMLA already
+// use, plus the pre-inverted-comma and unsplittable-single-token cases.
+func TestSplitPersonalName(t *testing.T) {
+	cases := []struct {
+		name          string
+		family, given string
+		wantLiteral   bool
+	}{
+		{"James Watson", "Watson", "James", false},
+		{"Francis Harry Compton Crick", "Crick", "Francis Harry Compton", false},
+		{"Watson, James", "Watson", "James", false},
+		{"Smith, J.", "Smith", "J.", false},
+		{"NASA", "NASA", "", true},
+		{"Prince", "Prince", "", true},
+		{"", "", "", true},
+	}
+	for _, c := range cases {
+		family, given, isLiteral := splitPersonalName(c.name)
+		if family != c.family || given != c.given || isLiteral != c.wantLiteral {
+			t.Errorf("splitPersonalName(%q) = (%q, %q, %v), want (%q, %q, %v)",
+				c.name, family, given, isLiteral, c.family, c.given, c.wantLiteral)
+		}
+	}
+}
+
+// TestCSLAuthorsFamilyGivenSplit proves the #621 fix: an ordinary "Given
+// Family" personal name becomes {"family", "given"} in CSL-JSON's author
+// array, not {"literal": "James Watson"} — literal is reserved for names that
+// genuinely can't be split (a single-token surname or organization).
+func TestCSLAuthorsFamilyGivenSplit(t *testing.T) {
+	entries := []BibEntry{
+		{URL: "https://example.com/dna", Title: "Molecular Structure of Nucleic Acids", Author: "James Watson and Francis Crick", Date: "1953"},
+	}
+	out, _ := FormatBibliography(entries, "csl-json")
+	var items []map[string]any
+	if err := json.Unmarshal([]byte(out), &items); err != nil {
+		t.Fatalf("CSL-JSON is not valid JSON: %v\n%s", err, out)
+	}
+	authors, ok := items[0]["author"].([]any)
+	if !ok || len(authors) != 2 {
+		t.Fatalf("expected 2 authors, got %v", items[0]["author"])
+	}
+	watson, _ := authors[0].(map[string]any)
+	if watson["family"] != "Watson" || watson["given"] != "James" {
+		t.Errorf("first author = %v, want family=Watson given=James", watson)
+	}
+	if _, hasLiteral := watson["literal"]; hasLiteral {
+		t.Errorf("first author should not carry literal once split: %v", watson)
+	}
+	crick, _ := authors[1].(map[string]any)
+	if crick["family"] != "Crick" || crick["given"] != "Francis" {
+		t.Errorf("second author = %v, want family=Crick given=Francis", crick)
+	}
+	// The id/cite-key must key on the surname too — same root cause, same fix.
+	if items[0]["id"] != "watson1953molecular" {
+		t.Errorf("id = %v, want watson1953molecular", items[0]["id"])
+	}
+}
+
+// TestCSLAuthorsOrgNameStaysLiteral proves a single-token name (an
+// organization, or a bare surname with no given name to split out) still
+// falls back to {"literal": …} rather than being force-split.
+func TestCSLAuthorsOrgNameStaysLiteral(t *testing.T) {
+	entries := []BibEntry{{URL: "https://example.com/x", Title: "Report", Author: "NASA", Date: "2020"}}
+	out, _ := FormatBibliography(entries, "csl-json")
+	var items []map[string]any
+	if err := json.Unmarshal([]byte(out), &items); err != nil {
+		t.Fatalf("CSL-JSON is not valid JSON: %v\n%s", err, out)
+	}
+	authors, ok := items[0]["author"].([]any)
+	if !ok || len(authors) != 1 {
+		t.Fatalf("expected 1 author, got %v", items[0]["author"])
+	}
+	org, _ := authors[0].(map[string]any)
+	if org["literal"] != "NASA" {
+		t.Errorf("org author = %v, want literal=NASA", org)
 	}
 }

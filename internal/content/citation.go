@@ -85,6 +85,30 @@ func invertNameAPA(name string) string {
 	return last + ", " + strings.Join(initials, " ")
 }
 
+// splitPersonalName parses a single author name into family/given components,
+// generalizing the last-token-is-surname convention already used by
+// invertNameAPA/invertNameMLA so cite-key generation and CSL-JSON export can
+// share it (#621). A name already containing a comma is assumed pre-inverted
+// ("Family, Given") and is split on the comma. A single token (no space) has
+// nothing to split — a bare surname or an organization name — and is returned
+// with isLiteral=true so the caller keeps it verbatim instead of guessing.
+func splitPersonalName(name string) (family, given string, isLiteral bool) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", "", true
+	}
+	if idx := strings.Index(name, ","); idx != -1 {
+		return strings.TrimSpace(name[:idx]), strings.TrimSpace(name[idx+1:]), false
+	}
+	tokens := strings.Fields(name)
+	if len(tokens) < 2 {
+		return name, "", true
+	}
+	family = tokens[len(tokens)-1]
+	given = strings.Join(tokens[:len(tokens)-1], " ")
+	return family, given, false
+}
+
 // formatAuthorsAPA renders a free-form (";"/" and "-delimited) author string in
 // APA7 form: each name inverted to "Last, F. M." via invertNameAPA, then joined
 // with a comma between middle authors and "&" before the last (e.g. "Kucsko,
@@ -232,7 +256,7 @@ func formatBibTeX(title, author, site, date, url, accessed string) string {
 // word — e.g. "smith2024attention". Exported so the bibliography tool can
 // de-duplicate and order entries consistently.
 func BibTeXKey(author, date, title string) string {
-	surname := firstAlnumToken(author)
+	surname := firstAlnumToken(citeKeySurname(author))
 	if surname == "" {
 		surname = "anon"
 	}
@@ -243,6 +267,19 @@ func BibTeXKey(author, date, title string) string {
 		return "ref"
 	}
 	return key
+}
+
+// citeKeySurname returns the first author's family-name component, so a cite
+// key keys on "Watson" rather than "James" for "James Watson and Francis
+// Crick" (#621) — passed through firstAlnumToken by the caller to strip any
+// stray punctuation from the split.
+func citeKeySurname(author string) string {
+	names := splitAuthors(author)
+	if len(names) == 0 {
+		return ""
+	}
+	family, _, _ := splitPersonalName(names[0])
+	return family
 }
 
 // firstAlnumToken returns the first run of letters/digits in s (lowercased by

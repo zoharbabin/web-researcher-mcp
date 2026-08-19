@@ -142,9 +142,11 @@ func formatCSLJSON(e BibEntry, id string) string {
 	return "  {\n" + strings.Join(fields, ",\n") + "\n  }"
 }
 
-// cslAuthors renders the CSL author array. Each author becomes a {"literal": …}
-// object — we don't reliably know the family/given split for web sources, and
-// "literal" is the CSL-sanctioned way to give a name verbatim. Returns "" when
+// cslAuthors renders the CSL author array. Each name is split via
+// splitPersonalName into {"family", "given"} — the CSL-standard shape a
+// reference manager actually indexes authors by (#621). A name that can't be
+// split (a single token — a bare surname or an organization) falls back to
+// {"literal": …}, CSL's sanctioned way to give a name verbatim. Returns "" when
 // there are no authors.
 func cslAuthors(author string) string {
 	names := splitAuthors(author)
@@ -153,7 +155,17 @@ func cslAuthors(author string) string {
 	}
 	objs := make([]string, 0, len(names))
 	for _, n := range names {
-		objs = append(objs, `{"literal": `+jsonString(n)+`}`)
+		family, given, isLiteral := splitPersonalName(n)
+		if isLiteral {
+			objs = append(objs, `{"literal": `+jsonString(n)+`}`)
+			continue
+		}
+		obj := `{"family": ` + jsonString(family)
+		if given != "" {
+			obj += `, "given": ` + jsonString(given)
+		}
+		obj += `}`
+		objs = append(objs, obj)
 	}
 	return "[" + strings.Join(objs, ", ") + "]"
 }
