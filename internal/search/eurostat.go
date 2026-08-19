@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -221,6 +222,13 @@ func (e *EurostatProvider) observations(ctx context.Context, params EconSearchPa
 	}
 	if params.DateTo != "" {
 		q.Set("untilTimePeriod", eurostatPeriod(params.DateTo))
+	}
+	if params.DateFrom == "" && params.DateTo == "" {
+		// No range given — Eurostat returns the FULL history for the
+		// dataset/geo by default, and ascending-sort-then-head-truncate below
+		// would keep the OLDEST num observations, not the most recent (#597).
+		// Ask the API for just the most recent `num` periods directly.
+		q.Set("lastTimePeriod", strconv.Itoa(num))
 	}
 
 	endpoint := e.dataBaseURL + "/" + url.PathEscape(strings.TrimSpace(params.SeriesID)) + "?" + q.Encode()
