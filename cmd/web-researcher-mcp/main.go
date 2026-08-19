@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -377,15 +378,17 @@ func main() {
 	// and Wayback CDX historical URL inventories, both keyless so always
 	// constructed. Own breakers isolate failures from every other subsystem;
 	// company_recon degrades gracefully (per-phase soft failure) if either 5xxs.
+	// Both crt.sh and Wayback CDX have documented p50-p99 latency (30-60s+)
+	// that regularly exceeds the 30s shared SSRF client timeout, so both get
+	// the same dedicated longer-timeout client rather than starving on
+	// searchDeps.HTTPClient's deadline (#592 — ct_logs originally lacked the
+	// treatment archives had).
 	ctLogResolver := search.NewCrtShResolver(search.Deps{
-		HTTPClient: searchDeps.HTTPClient,
+		HTTPClient: osintClient(cfg.AllowPrivateIPs),
 		Breaker:    circuit.New(circuitDefaults),
 	})
-	// Wayback CDX's observed p50-p99 latency (30-60s+) regularly exceeds the
-	// 30s shared SSRF client timeout, so this resolver gets its own longer-
-	// timeout client rather than starving on searchDeps.HTTPClient's deadline.
 	archiveResolver := search.NewWaybackCDXResolver(search.Deps{
-		HTTPClient: scraper.NewSSRFSafeClientWithTimeout(cfg.AllowPrivateIPs, 90*time.Second),
+		HTTPClient: osintClient(cfg.AllowPrivateIPs),
 		Breaker:    circuit.New(circuitDefaults),
 	})
 
@@ -833,6 +836,18 @@ func main() {
 	}
 
 	logger.Info("shutdown complete")
+}
+
+// osintClientTimeout is the dedicated timeout for keyless OSINT enrichment
+// resolvers (crt.sh, Wayback CDX) whose upstreams both have documented
+// p50-p99 latency exceeding the 30s shared SSRF client timeout (#592).
+const osintClientTimeout = 90 * time.Second
+
+// osintClient builds the shared SSRF-safe client used by every OSINT
+// enrichment resolver in company_recon (#592 — ct_logs and archives must get
+// identical timeout treatment for their identical latency problem).
+func osintClient(allowPrivateIPs bool) *http.Client {
+	return scraper.NewSSRFSafeClientWithTimeout(allowPrivateIPs, osintClientTimeout)
 }
 
 // edgarUserAgent builds the SEC-required descriptive User-Agent for EDGAR, or
