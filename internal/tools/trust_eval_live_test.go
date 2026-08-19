@@ -335,6 +335,69 @@ func TestTrustSuiteAccuracy_VerifyCitationClaim(t *testing.T) {
 	mis.report(t, "verify_citation-claim")
 }
 
+// TestTrustSuiteAccuracy_CorroborationCoverageGate (#600) is the live-eval
+// regression guard for verify_recommendation's corroboration over-counting bug:
+// a result must never count toward agreeCount unless its snippet clears the
+// ClaimTermCoverageWindowed/claimAddressedThreshold ratio against "title +
+// claim". Drives the real corroborateRecommendation path — live news/tech
+// search results — against a claim shape known to collide with incidental
+// single-token mentions ("reacted" stems to "react", "COVID-19" contains the
+// numeric token "19"): exactly the class of bug #600 fixed. The assertion is
+// an invariant recount (not a fixed expected count, since live web results
+// vary over time): every result contributing to a lens's AgreeCount must
+// independently clear the coverage threshold. Gated on CROSSREF_EMAIL like
+// every other case in this file, to keep `make test-eval` a single
+// skip/run switch, even though this case itself only needs network + a
+// zero-config search provider.
+func TestTrustSuiteAccuracy_CorroborationCoverageGate(t *testing.T) {
+	if os.Getenv("CROSSREF_EMAIL") == "" {
+		t.Skip("CROSSREF_EMAIL not set — skipping live trust-suite eval")
+	}
+	if err := search.GetLensRegistry().LoadEmbedded(); err != nil {
+		t.Fatalf("LoadEmbedded: %v", err)
+	}
+
+	deps := Dependencies{
+		Cache: cache.NewMemory(cache.MemoryConfig{MaxSizeMB: 16}),
+		Search: search.NewDuckDuckGoProvider(search.Deps{
+			HTTPClient: &http.Client{Timeout: 30 * time.Second},
+			Breaker:    circuit.New(circuit.Config{FailureThreshold: 10, ResetTimeout: 60}),
+		}),
+		Metrics: metrics.NewCollector(),
+		Auditor: audit.NewNoop(),
+	}
+
+	ctx := context.Background()
+	title, claim := "React 19", "React 19 introduced Actions"
+	corroborations := corroborateRecommendation(ctx, deps, title, claim, 5)
+	if len(corroborations) == 0 {
+		t.Skip("no live corroboration results returned — search unavailable in this environment")
+	}
+
+	fullClaim := title + " " + claim
+	for _, cr := range corroborations {
+		expectedAgree := 0
+		for _, r := range cr.TopResults {
+			signal, _ := r["claimSignal"].(string)
+			resultTitle, _ := r["title"].(string)
+			snippet, _ := r["snippet"].(string)
+			if content.HasContrastCue([]string{signal, resultTitle}) {
+				continue
+			}
+			matched, total := content.ClaimTermCoverageWindowed(snippet, fullClaim, 0)
+			if total > 0 && float64(matched)/float64(total) >= claimAddressedThreshold {
+				expectedAgree++
+			}
+		}
+		if cr.AgreeCount != expectedAgree {
+			t.Errorf("lens %q: agreeCount=%d does not match coverage-gated recount=%d — a result below claimAddressedThreshold was counted as agreement (regression of #600)",
+				cr.Lens, cr.AgreeCount, expectedAgree)
+		}
+		t.Logf("lens=%s resultCount=%d agree=%d disagree=%d silent=%d",
+			cr.Lens, cr.ResultCount, cr.AgreeCount, cr.DisagreeCount, cr.SilentCount)
+	}
+}
+
 // TestTrustSuiteAccuracy_ScrapedDOIRetraction validates #199 end-to-end: scraping
 // a known-retracted paper's publisher landing page surfaces detectedDoi and a
 // retracted retractionStatus. Needs the live scraper + Crossref resolver; skips
