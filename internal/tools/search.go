@@ -89,6 +89,10 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 		}
 
 		numResults := input.NumResults
+		// Requested count above the ceiling, captured before the clamp below so the
+		// response body can tell the caller their request was reduced (#624) — an
+		// unset/in-range value (<=0 or <=maxNumResults) needs no such signal.
+		requestedOverLimit := numResults > maxNumResults
 		if numResults <= 0 {
 			numResults = 5
 		}
@@ -105,7 +109,11 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 			deps.Metrics.RecordToolCall("web_search", time.Since(start), nil, "", true)
 			rt := routingMeta(search.RoutingDecision{}, time.Since(start), true)
 			auditToolCallQuery(ctx, deps, "web_search", time.Since(start), nil, "", input.Query, map[string]any{"cache_hit": true, "routing": rt})
-			return withRoutingMeta(cachedResultWithMeta(cached, meta), rt), nil, nil
+			cachedResult := cachedResultWithMeta(cached, meta)
+			if requestedOverLimit {
+				cachedResult = withRequestedNumResults(cachedResult, input.NumResults)
+			}
+			return withRoutingMeta(cachedResult, rt), nil, nil
 		}
 
 		params := search.WebSearchParams{
@@ -211,7 +219,11 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 		}
 
 		moreVal, moreOK := resultMeta.MoreResultsAvailable()
-		return withMoreResults(withRoutingMeta(freshResult(jsonBytes, webSearchTTL), rt), moreVal, moreOK), nil, nil
+		freshRes := freshResult(jsonBytes, webSearchTTL)
+		if requestedOverLimit {
+			freshRes = withRequestedNumResults(freshRes, input.NumResults)
+		}
+		return withMoreResults(withRoutingMeta(freshRes, rt), moreVal, moreOK), nil, nil
 	})
 }
 

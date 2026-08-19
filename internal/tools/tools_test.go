@@ -2392,7 +2392,10 @@ func (p *numCapturingProvider) Name() string { return "numcap" }
 
 // TestNumResultsClampedAtBoundary verifies web_search clamps an over-limit
 // num_results to the documented ceiling before it reaches the provider (ASI06
-// fan-out / billing bound, defense-in-depth).
+// fan-out / billing bound, defense-in-depth), AND (#624) that the response
+// body surfaces the original request via requestedNumResults so a caller
+// relying on a specific count sees the gap instead of silently
+// under-receiving.
 func TestNumResultsClampedAtBoundary(t *testing.T) {
 	cap := &numCapturingProvider{}
 	deps := setupTestDeps()
@@ -2402,10 +2405,11 @@ func TestNumResultsClampedAtBoundary(t *testing.T) {
 	sess := connectTestClient(ctx, t, srv)
 	defer sess.Close()
 
-	if _, err := sess.CallTool(ctx, &mcp.CallToolParams{
+	res, err := sess.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "web_search",
 		Arguments: map[string]any{"query": "x", "num_results": 50},
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("CallTool: %v", err)
 	}
 	cap.mu.Lock()
@@ -2413,6 +2417,88 @@ func TestNumResultsClampedAtBoundary(t *testing.T) {
 	cap.mu.Unlock()
 	if got != maxNumResults {
 		t.Errorf("num_results=50 should clamp to %d at the boundary, provider saw %d", maxNumResults, got)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &body); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+	if got, want := body["requestedNumResults"], float64(50); got != want {
+		t.Errorf("requestedNumResults = %v, want %v", got, want)
+	}
+	if rc, ok := body["resultCount"].(float64); !ok || rc > float64(maxNumResults) {
+		t.Errorf("resultCount = %v, want <= %d", body["resultCount"], maxNumResults)
+	}
+}
+
+// TestNumResultsClampedAtBoundary_CacheHit verifies the requestedNumResults
+// signal (#624) is applied on a cache-hit response too, keyed to the CALLING
+// request rather than baked into the cached blob — two different callers
+// hitting the same cache entry with different over-limit requests must each
+// see their own requested value, not whichever value first populated the
+// cache.
+func TestNumResultsClampedAtBoundary_CacheHit(t *testing.T) {
+	cap := &numCapturingProvider{}
+	deps := setupTestDeps()
+	deps.Search = cap
+	ctx := context.Background()
+	srv := createTestServer(deps)
+	sess := connectTestClient(ctx, t, srv)
+	defer sess.Close()
+
+	// First call populates the cache (also over-limit, at a different value).
+	if _, err := sess.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "web_search",
+		Arguments: map[string]any{"query": "cache-hit-test", "num_results": 50},
+	}); err != nil {
+		t.Fatalf("CallTool (populate): %v", err)
+	}
+
+	// Second call: same query (post-clamp num_results is identical, so this
+	// hits the same cache key), but a different over-limit request.
+	res, err := sess.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "web_search",
+		Arguments: map[string]any{"query": "cache-hit-test", "num_results": 99999},
+	})
+	if err != nil {
+		t.Fatalf("CallTool (cache hit): %v", err)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &body); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+	if got, want := body["requestedNumResults"], float64(99999); got != want {
+		t.Errorf("requestedNumResults = %v, want %v (this call's own request, not the cache-populating call's)", got, want)
+	}
+}
+
+// TestNumResultsWithinBounds_NoRequestedField verifies requestedNumResults
+// (#624) is absent entirely when num_results is within the documented ceiling
+// — the field signals a clamp, so it must not appear on ordinary requests.
+func TestNumResultsWithinBounds_NoRequestedField(t *testing.T) {
+	cap := &numCapturingProvider{}
+	deps := setupTestDeps()
+	deps.Search = cap
+	ctx := context.Background()
+	srv := createTestServer(deps)
+	sess := connectTestClient(ctx, t, srv)
+	defer sess.Close()
+
+	res, err := sess.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "web_search",
+		Arguments: map[string]any{"query": "y", "num_results": 5},
+	})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &body); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+	if _, present := body["requestedNumResults"]; present {
+		t.Errorf("requestedNumResults must be absent for an in-bounds request, got %v", body["requestedNumResults"])
 	}
 }
 

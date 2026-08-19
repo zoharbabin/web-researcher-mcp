@@ -2583,6 +2583,7 @@ class VerifyRecommendationResponse:
 class WebSearchResponse:
     hints: dict[str, Any] = field(default_factory=dict)
     query: Optional[str] = None
+    requestedNumResults: Optional[int] = None
     resultCount: Optional[int] = None
     results: list[WebSearchResult] = field(default_factory=list)
     trust: Optional[str] = None
@@ -2595,6 +2596,7 @@ class WebSearchResponse:
         return cls(
             hints=dict(d.get('hints') or {}),
             query=d.get('query'),
+            requestedNumResults=d.get('requestedNumResults'),
             resultCount=d.get('resultCount'),
             results=[WebSearchResult.from_dict(i) for i in (d.get('results') or [])],
             trust=d.get('trust'),

@@ -42,11 +42,12 @@ var engagementSignalsSchema = map[string]any{
 var webSearchOutputSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{
-		"urls":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-		"query":       map[string]any{"type": "string"},
-		"resultCount": map[string]any{"type": "integer"},
-		"hints":       map[string]any{"type": "object"},
-		"trust":       trustUntrustedExternal,
+		"urls":                map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+		"query":               map[string]any{"type": "string"},
+		"resultCount":         map[string]any{"type": "integer"},
+		"requestedNumResults": map[string]any{"type": "integer", "description": "The num_results value you requested, present only when it exceeded the server's ceiling (10) and was clamped — compare against resultCount to see how many fewer results you received than asked for."},
+		"hints":               map[string]any{"type": "object"},
+		"trust":               trustUntrustedExternal,
 		"results": map[string]any{
 			"type": "array",
 			"items": map[string]any{

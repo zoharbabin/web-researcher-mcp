@@ -490,6 +490,36 @@ func withMoreResults(result *mcp.CallToolResult, val, ok bool) *mcp.CallToolResu
 	return result
 }
 
+// withRequestedNumResults stamps the originally requested num_results onto the
+// response BODY (not _meta — a caller relying on a specific count needs this
+// in model-visible content, not operator-only metadata) when the tool-boundary
+// clamp (maxNumResults, ASI06 defense-in-depth) reduced it below what was asked
+// for (#624). Applies uniformly to cached and freshly fetched results since
+// both share the structuredResult() body shape (TextContent JSON with a
+// matching StructuredContent). A nil result, or a result whose content isn't
+// the expected single TextContent JSON body, is returned unchanged.
+func withRequestedNumResults(result *mcp.CallToolResult, requested int) *mcp.CallToolResult {
+	if result == nil || len(result.Content) == 0 {
+		return result
+	}
+	text, ok := result.Content[0].(*mcp.TextContent)
+	if !ok {
+		return result
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(text.Text), &body); err != nil {
+		return result
+	}
+	body["requestedNumResults"] = requested
+	out, err := json.Marshal(body)
+	if err != nil {
+		return result
+	}
+	result.Content[0] = &mcp.TextContent{Text: string(out)}
+	result.StructuredContent = json.RawMessage(out)
+	return result
+}
+
 // withRoutingMeta merges a routing block into an existing result's `_meta`,
 // preserving any cache-freshness keys already present (it never clobbers the
 // cache block). A nil routing block leaves the result untouched. The merged
