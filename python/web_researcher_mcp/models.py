@@ -2424,6 +2424,7 @@ class Typography:
 @dataclass
 class VerifyCitationResponse:
     archivedUrl: Optional[str] = None
+    authenticityCaveat: Optional[str] = None
     claim: Optional[str] = None
     claimCheckSkipped: Optional[bool] = None
     claimCheckSkippedReason: Optional[str] = None
@@ -2454,6 +2455,7 @@ class VerifyCitationResponse:
             return None
         return cls(
             archivedUrl=d.get('archivedUrl'),
+            authenticityCaveat=d.get('authenticityCaveat'),
             claim=d.get('claim'),
             claimCheckSkipped=d.get('claimCheckSkipped'),
             claimCheckSkippedReason=d.get('claimCheckSkippedReason'),
