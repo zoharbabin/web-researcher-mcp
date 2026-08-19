@@ -131,6 +131,11 @@ type Dependencies struct {
 	// configured via AvailableModelProviders(). Empty ⇒ the tool is not
 	// registered — a research panel with zero members can't run.
 	ResearchPanelProviders []ModelProvider
+	// ResearchPanelCost backs research_panel's cost tracking (#303): price
+	// table, per-call/daily USD caps, dry-run switch, and the persisted
+	// daily-spend tracker. nil ⇒ every guard is a no-op (cost tracking is
+	// entirely opt-in) — see PanelCostGuard's nil-safe methods.
+	ResearchPanelCost *PanelCostGuard
 	// Singleflight coalesces concurrent identical cache-miss requests into a
 	// single upstream call (#474), keyed tenant-scoped (coalesceKey) so two
 	// tenants' identical queries never dedup into the same in-flight result.

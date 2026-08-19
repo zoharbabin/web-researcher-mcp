@@ -252,6 +252,13 @@ type ResearchPanelConfig struct {
 	LMStudioBaseURL  string // LM_STUDIO_BASE_URL — local LM Studio, same gating as Ollama
 	DefaultModels    []string
 	MaxModels        int
+
+	// Cost tracking (#303). All optional; zero values disable the
+	// corresponding guard so cost tracking stays entirely opt-in.
+	PriceTablePath  string  // RESEARCH_PANEL_PRICE_TABLE_PATH — operator-managed JSON {"model_id":{"input_per_1k":0.003,"output_per_1k":0.015}}
+	MaxCallCostUSD  float64 // RESEARCH_PANEL_MAX_CALL_COST_USD — per-call pre-flight hard cap; 0 = no cap
+	MaxDailyCostUSD float64 // RESEARCH_PANEL_MAX_DAILY_COST_USD — per-tenant daily spend cap; 0 = no cap
+	DryRun          bool    // RESEARCH_PANEL_DRY_RUN — return cost estimates only, call no models
 }
 
 func Load() (*Config, error) {
@@ -581,6 +588,10 @@ func Load() (*Config, error) {
 			LMStudioBaseURL:  os.Getenv("LM_STUDIO_BASE_URL"),
 			DefaultModels:    splitCSV(os.Getenv("RESEARCH_PANEL_DEFAULT_MODELS")),
 			MaxModels:        envInt("RESEARCH_PANEL_MAX_MODELS", 3),
+			PriceTablePath:   os.Getenv("RESEARCH_PANEL_PRICE_TABLE_PATH"),
+			MaxCallCostUSD:   envFloat("RESEARCH_PANEL_MAX_CALL_COST_USD", 0),
+			MaxDailyCostUSD:  envFloat("RESEARCH_PANEL_MAX_DAILY_COST_USD", 0),
+			DryRun:           envBool("RESEARCH_PANEL_DRY_RUN", false),
 		},
 		Warnings: warnings,
 	}
@@ -608,6 +619,18 @@ func envInt(key string, fallback int) int {
 		return fallback
 	}
 	return n
+}
+
+func envFloat(key string, fallback float64) float64 {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return fallback
+	}
+	return f
 }
 
 func envDuration(key string, fallback time.Duration) time.Duration {
