@@ -1352,6 +1352,7 @@ Each item in `cases[]`: `caseName`, `citation` (Bluebook), `court`, `courtId`, `
 
 ### Behavior
 - Searches the CourtListener v4 opinions index; `jurisdiction` maps to the `court` filter, dates to `filed_after`/`filed_before`.
+- **Case-name ranking**: a `query` containing a `" v. "`/`" vs. "` party separator (e.g. `Brown v. Board of Education`) is treated as an exact case-name lookup — matched against the case-name field only and ordered by citation count, so the landmark/highest-authority case ranks first instead of an unrelated case that merely shares the party names in its opinion text. A query without that separator still gets CourtListener's default full-text relevance ranking.
 - **Auth**: works keyless at ~100 req/day; `COURTLISTENER_API_TOKEN` raises the limit (~5000/day). The token is sent as an `Authorization` header and never logged.
 - **Anti-hallucination workflow**: pair with the **`legal` lens** (`web_search` with `lens: legal`, an authority-weighted primary-source pack — see `lenses/README.md`) for context, and with `verify_citation` to confirm a cited case actually exists before relying on it.
 
