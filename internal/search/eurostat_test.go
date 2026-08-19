@@ -80,6 +80,72 @@ func TestEurostatObservations(t *testing.T) {
 	}
 }
 
+// TestEurostatObservationsNoDateRangeRequestsLastPeriod (#597): with no
+// date_from/date_to, Eurostat returns the FULL history for a dataset/geo —
+// ascending-sort-then-head-truncate would then keep the OLDEST num_results
+// observations (e.g. starting ~1991), not the most recent. The fix asks the
+// API directly for only the most recent num_results periods via
+// lastTimePeriod, mirroring FRED's own no-date_from recency handling (#233).
+func TestEurostatObservationsNoDateRangeRequestsLastPeriod(t *testing.T) {
+	p := newEurostatTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if got := q.Get("lastTimePeriod"); got != "5" {
+			t.Errorf("lastTimePeriod = %q, want 5", got)
+		}
+		if _, set := q["sinceTimePeriod"]; set {
+			t.Error("sinceTimePeriod must be omitted when no date range is given")
+		}
+		if _, set := q["untilTimePeriod"]; set {
+			t.Error("untilTimePeriod must be omitted when no date range is given")
+		}
+		// A multi-decade single-series cube; the mock doesn't actually filter by
+		// lastTimePeriod (a real Eurostat server would) — this test only checks
+		// the request shape, per the same convention as
+		// TestFREDSeriesSearchOrdersByPopularity.
+		w.Write([]byte(`{
+			"label":"Unemployment rate",
+			"id":["geo","time"],
+			"size":[1,3],
+			"value":{"0":6.1,"1":6.0,"2":5.9},
+			"dimension":{
+				"geo":{"category":{"index":{"DE":0},"label":{"DE":"Germany"}}},
+				"time":{"category":{"index":{"1991-01":0,"1991-02":1,"1991-03":2},"label":{}}}
+			}
+		}`))
+	})
+	res, err := p.Econ(context.Background(), EconSearchParams{SeriesID: "une_rt_m", Country: "DE", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res) != 3 {
+		t.Fatalf("want 3 observations, got %d", len(res))
+	}
+}
+
+// TestEurostatObservationsDateRangeOmitsLastTimePeriod guards the counterpart
+// of #597: an explicit date range must keep using sinceTimePeriod/untilTimePeriod
+// exactly as before — lastTimePeriod must not also be sent, which would
+// conflict with an explicit range on the real API.
+func TestEurostatObservationsDateRangeOmitsLastTimePeriod(t *testing.T) {
+	p := newEurostatTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if _, set := q["lastTimePeriod"]; set {
+			t.Error("lastTimePeriod must be omitted when an explicit date range is given")
+		}
+		if got := q.Get("sinceTimePeriod"); got != "2024-01" {
+			t.Errorf("sinceTimePeriod = %q, want 2024-01", got)
+		}
+		if got := q.Get("untilTimePeriod"); got != "2024-03" {
+			t.Errorf("untilTimePeriod = %q, want 2024-03", got)
+		}
+		w.Write([]byte(`{"id":["time"],"size":[0],"value":{},"dimension":{"time":{"category":{"index":{},"label":{}}}}}`))
+	})
+	_, err := p.Econ(context.Background(), EconSearchParams{SeriesID: "une_rt_m", DateFrom: "2024-01", DateTo: "2024-03", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestEurostatMultiDimDecode(t *testing.T) {
 	// geo=DE,FR × 3 months, time fastest: keys 0-2 = DE Jan-Mar, 3-5 = FR Jan-Mar.
 	p := newEurostatTestProvider(t, func(w http.ResponseWriter, _ *http.Request) {

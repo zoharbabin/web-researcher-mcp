@@ -362,11 +362,16 @@ func selectCorroborationLenses(title, claim string) []string {
 // recommendation positively (agree), negatively
 // (disagree), or neutrally/silently (silent). Each result's claimSignal is the
 // single most claim-relevant snippet sentence (content.ExtractClaimEvidence),
-// not a fixed enum: an empty signal means no sentence mentioned the title
-// (silentCount); a non-empty signal carrying a negation/refutation cue
-// (content.HasContrastCue) means independent coverage disputes it
-// (disagreeCount); any other non-empty signal means independent agreement
-// (agreeCount).
+// computed against the FULL "title + claim" text (not the bare title alone)
+// so the more discriminating claim terms take part in matching (#600).
+//
+// A result only counts toward agreeCount when its snippet clears
+// content.ClaimTermCoverageWindowed's claimAddressedThreshold ratio against
+// "title + claim" — not merely >=1 term matched. A single coincidental token
+// match (e.g. claim "React 19 introduced Actions" against a snippet
+// mentioning "COVID-19" or "reacted") no longer counts as agreement; it falls
+// to silentCount instead, matching the ratio-gated approach already shipped
+// for audit_bibliography/verify_citation in claim_coverage.go (#600).
 //
 // The disagree check also scans the result's title, not just claimSignal:
 // enrichResultsWithReputation only extracts claim evidence from the snippet
@@ -375,7 +380,9 @@ func selectCorroborationLenses(title, claim string) []string {
 // falsely links vaccines and autism" backed by an unrelated snippet — would
 // otherwise be missed and mistallied as silent/agree. This is scoped to the
 // corroboration tally only; it does not change claimSignal's public,
-// documented snippet-only contract used by web_search.
+// documented snippet-only contract used by web_search. Disagree takes
+// priority over the coverage gate: a title-only refutation counts as
+// disagreement even when the snippet itself shows no claim-term coverage.
 //
 // The function is fail-open: a nil provider, missing lens, or network error
 // produces an empty slice rather than propagating an error — the audit's
@@ -386,13 +393,14 @@ func corroborateRecommendation(ctx context.Context, deps Dependencies, title, cl
 		return nil
 	}
 	registry := search.GetLensRegistry()
+	fullClaim := title + " " + claim
 	var corroborations []corroborationResult
 	for _, lensName := range selectCorroborationLenses(title, claim) {
 		lensData, ok := registry.Get(lensName)
 		if !ok {
 			continue
 		}
-		query := registry.BuildSiteQuery(title+" "+claim, lensData)
+		query := registry.BuildSiteQuery(fullClaim, lensData)
 		results, err := deps.Search.Web(ctx, search.WebSearchParams{
 			Query:      query,
 			NumResults: numResults,
@@ -400,7 +408,7 @@ func corroborateRecommendation(ctx context.Context, deps Dependencies, title, cl
 		if err != nil || len(results) == 0 {
 			continue
 		}
-		enriched := enrichResultsWithReputation(results, title)
+		enriched := enrichResultsWithReputation(results, fullClaim)
 		cr := corroborationResult{
 			Query:       query,
 			Lens:        lensName,
@@ -409,6 +417,9 @@ func corroborateRecommendation(ctx context.Context, deps Dependencies, title, cl
 		for _, r := range enriched {
 			signal, _ := r["claimSignal"].(string)
 			resultTitle, _ := r["title"].(string)
+			snippet, _ := r["snippet"].(string)
+			matched, total := content.ClaimTermCoverageWindowed(snippet, fullClaim, 0)
+			addressed := total > 0 && float64(matched)/float64(total) >= claimAddressedThreshold
 			switch {
 			case content.HasContrastCue([]string{signal, resultTitle}):
 				// The claimSignal sentence or the result's own title carries a
@@ -416,12 +427,14 @@ func corroborateRecommendation(ctx context.Context, deps Dependencies, title, cl
 				// the recommendation (checking the title too catches refutation
 				// language that lands in a headline but not the snippet).
 				cr.DisagreeCount++
-			case signal == "":
-				// No snippet sentence mentioned the title at all, and the title
-				// itself carries no refutation cue — independent silence.
+			case !addressed:
+				// The snippet doesn't clear the claim-term coverage ratio — no
+				// contrast cue either, so this is independent silence rather
+				// than a coincidental token match counted as agreement.
 				cr.SilentCount++
 			default:
-				// A relevant sentence with no refutation cue — independent agreement.
+				// Coverage clears the threshold with no refutation cue —
+				// independent agreement.
 				cr.AgreeCount++
 			}
 		}
