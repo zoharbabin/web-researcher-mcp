@@ -151,8 +151,13 @@ func TestSessionManagerGetStep(t *testing.T) {
 		t.Errorf("StepNumber = %d, want 2", step.StepNumber)
 	}
 
-	if _, err := m.GetStep("tenant-1", "u1", idx.ID, 99); err == nil {
-		t.Error("expected error for nonexistent step number")
+	_, err = m.GetStep("tenant-1", "u1", idx.ID, 99)
+	var stepErr *session.StepNotFoundError
+	if !errors.As(err, &stepErr) {
+		t.Fatalf("expected *session.StepNotFoundError for an out-of-range step on a valid session, got %T: %v", err, err)
+	}
+	if stepErr.StepID != 99 || stepErr.StepCount != 3 {
+		t.Errorf("expected StepID=99 StepCount=3, got StepID=%d StepCount=%d", stepErr.StepID, stepErr.StepCount)
 	}
 
 	if _, err := m.GetStep("tenant-1", "u1", "missing-id", 1); err == nil {

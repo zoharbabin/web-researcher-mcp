@@ -234,7 +234,7 @@ func (m *SessionManager) GetStep(tenantID, userID, sessionID string, stepNum int
 			return &step, nil
 		}
 	}
-	return nil, session.ErrSessionNotFound
+	return nil, &session.StepNotFoundError{SessionID: sessionID, StepID: stepNum, StepCount: len(sess.Steps)}
 }
 
 func (m *SessionManager) Delete(tenantID, userID, sessionID string) {

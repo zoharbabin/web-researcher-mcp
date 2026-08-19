@@ -944,8 +944,8 @@ Recorded outcome state is bounded (most-recent 200 events, FIFO) and tenant/user
 - OpenWorld: false (reads internal state only)
 
 ### Error Conditions
-- Session not found → "Session not found or expired. Sessions last 4 hours from last activity."
-- Step not found → error with step number
+- Session not found or expired → "Session not found or expired. Sessions last 4 hours from last activity."
+- `stepId` out of range on a valid session (#620) → distinct message stating the requested step and the session's actual valid range, e.g. "Step 99 not found — this session has steps 1-3." — kept separate from the session-missing message above so a caller can tell "the session is fine, you asked for a step it doesn't have" apart from "the whole session is gone."
 
 ### Cache
 - No cache (reads internal session state)

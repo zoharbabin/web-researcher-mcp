@@ -36,3 +36,20 @@ type SessionNotFoundError struct {
 func (e *SessionNotFoundError) Error() string { return "session not found" }
 
 func (e *SessionNotFoundError) Unwrap() error { return ErrSessionNotFound }
+
+// StepNotFoundError indicates the session itself exists (and is unexpired)
+// but the requested step number was never recorded — distinct from
+// SessionNotFoundError/ErrSessionExpired so a caller can tell "your session
+// is fine, you just asked for a step it doesn't have" apart from "your whole
+// session is gone" (#620).
+type StepNotFoundError struct {
+	SessionID string
+	StepID    int
+	// StepCount is the number of steps currently recorded on the session, so
+	// callers can report the valid range (1..StepCount).
+	StepCount int
+}
+
+func (e *StepNotFoundError) Error() string {
+	return "step not found"
+}

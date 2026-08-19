@@ -447,6 +447,21 @@ func TestGetStep(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for nonexistent step")
 	}
+	var stepErr *StepNotFoundError
+	if !errors.As(err, &stepErr) {
+		t.Fatalf("expected *StepNotFoundError for an out-of-range step on a valid session, got %T: %v", err, err)
+	}
+	if stepErr.StepID != 99 || stepErr.StepCount != 3 {
+		t.Errorf("expected StepID=99 StepCount=3, got StepID=%d StepCount=%d", stepErr.StepID, stepErr.StepCount)
+	}
+
+	// A truly missing session must still surface SessionNotFoundError, not
+	// StepNotFoundError — the two failure modes stay distinguishable (#620).
+	_, err = m.GetStep("tenant-1", "u1", "nonexistent-id", 1)
+	var notFound *SessionNotFoundError
+	if !errors.As(err, &notFound) {
+		t.Fatalf("expected *SessionNotFoundError for a nonexistent session, got %T: %v", err, err)
+	}
 }
 
 func TestMaxStepsEnforcement(t *testing.T) {

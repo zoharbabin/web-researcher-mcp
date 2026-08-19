@@ -3,11 +3,14 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/auth"
+	"github.com/zoharbabin/web-researcher-mcp/internal/session"
 )
 
 type getSessionInput struct {
@@ -36,6 +39,14 @@ func registerGetSession(srv *mcp.Server, deps Dependencies) {
 			if err != nil {
 				recordToolCall(deps, "get_research_session", time.Since(start), err, "upstream_error", false)
 				auditToolCall(ctx, deps, "get_research_session", time.Since(start), err, "upstream_error")
+
+				var stepErr *session.StepNotFoundError
+				if errors.As(err, &stepErr) {
+					if stepErr.StepCount <= 0 {
+						return toolError(fmt.Sprintf("Step %d not found — this session has no recorded steps yet.", stepErr.StepID)), nil, nil
+					}
+					return toolError(fmt.Sprintf("Step %d not found — this session has steps 1-%d.", stepErr.StepID, stepErr.StepCount)), nil, nil
+				}
 				return toolError("Session not found or expired. Sessions last 4 hours from last activity."), nil, nil
 			}
 
