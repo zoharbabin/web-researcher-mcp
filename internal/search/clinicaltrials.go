@@ -210,22 +210,37 @@ func normalizePhase(raw string) string {
 }
 
 // clinicalPhaseTokenPattern matches a phase-intent phrase embedded in free
-// text: "phase 3", "phase3", "early phase 1". Roman numerals ("phase III")
-// are not matched here — rare in LLM-generated queries; a caller needing that
-// precision sets Phase explicitly.
-var clinicalPhaseTokenPattern = regexp.MustCompile(`(?i)\b(?:early\s*phase\s*[0-4]|phase\s*[0-4])\b`)
+// text: "phase 3", "phase3", "early phase 1", "phase 0". The optional
+// "early" prefix is captured as part of the SAME match — rather than as a
+// separate top-level alternative — so a bare "phase\s*[0-9]" branch can
+// never match starting past an "early " prefix and leave it dangling in the
+// remaining query text. Not every matched phrase is a real
+// ClinicalTrials.gov phase (e.g. "phase 0", "early phase 2" have no
+// clinicalPhaseCodes entry); inferPhaseFromQuery below rejects those via
+// normalizePhase rather than stripping a phrase that maps to no actual
+// filter. Roman numerals ("phase III") are not matched here — rare in
+// LLM-generated queries; a caller needing that precision sets Phase
+// explicitly.
+var clinicalPhaseTokenPattern = regexp.MustCompile(`(?i)\b(?:early\s*)?phase\s*[0-9]+\b`)
 
 // inferPhaseFromQuery extracts a phase-intent phrase from free text (#437
 // fix 2, mirroring the form_type inference added for filing_search in #434).
 // It returns the normalized aggFilters code plus the query with that phrase
 // removed, so the literal words "phase 3" don't dilute query.term's full-text
-// relevance — the same rationale as EDGAR's queryStopWords stripping.
+// relevance — the same rationale as EDGAR's queryStopWords stripping. A
+// matched phrase normalizePhase doesn't recognize (e.g. "phase 0", "early
+// phase 2" — not real ClinicalTrials.gov phases) is left in place: no code is
+// returned and the query comes back unmodified, rather than silently
+// dropping text that would apply no actual filter.
 func inferPhaseFromQuery(query string) (code, remaining string) {
 	loc := clinicalPhaseTokenPattern.FindStringIndex(query)
 	if loc == nil {
 		return "", query
 	}
 	code = normalizePhase(query[loc[0]:loc[1]])
+	if code == "" {
+		return "", query
+	}
 	remaining = strings.Join(strings.Fields(query[:loc[0]]+" "+query[loc[1]:]), " ")
 	return code, remaining
 }

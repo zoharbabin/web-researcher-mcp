@@ -227,6 +227,11 @@ func TestInferPhaseFromQuery(t *testing.T) {
 		{"early phase 1 oncology study", "0", "oncology study"},
 		{"phase2 lung cancer", "2", "lung cancer"},
 		{"remdesivir covid-19", "", "remdesivir covid-19"},
+		// "phase 0" and "early phase 2" are not real ClinicalTrials.gov phases
+		// (normalizePhase has no mapping for them) — the phrase must be left in
+		// place rather than stripped for a filter that never gets applied.
+		{"phase 0 dose escalation study", "", "phase 0 dose escalation study"},
+		{"early phase 2 oncology study", "", "early phase 2 oncology study"},
 	}
 	for _, c := range cases {
 		gotCode, gotRemaining := inferPhaseFromQuery(c.query)
