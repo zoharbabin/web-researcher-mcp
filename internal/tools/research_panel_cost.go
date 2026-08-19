@@ -164,7 +164,7 @@ func (g *PanelCostGuard) getTenantSpend(tenantID string) *tenantSpend {
 		g.mu.Unlock()
 		return ts
 	}
-	ts = &tenantSpend{reset: time.Now().Truncate(24 * time.Hour).Add(24 * time.Hour)}
+	ts = &tenantSpend{reset: time.Now().Add(24 * time.Hour)}
 	g.tenants[tenantID] = ts
 	g.mu.Unlock()
 	g.hydrateSpend(tenantID, ts)
@@ -214,7 +214,7 @@ func (g *PanelCostGuard) dailySpent(tenantID string) (float64, *tenantSpend) {
 	defer ts.mu.Unlock()
 	if time.Now().After(ts.reset) {
 		ts.total = 0
-		ts.reset = time.Now().Truncate(24 * time.Hour).Add(24 * time.Hour)
+		ts.reset = time.Now().Add(24 * time.Hour)
 	}
 	return ts.total, ts
 }

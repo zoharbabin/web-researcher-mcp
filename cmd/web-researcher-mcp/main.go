@@ -499,16 +499,22 @@ func main() {
 	}
 	defer auditor.Close()
 
-	// research_panel cost tracking (#303): the price table load can fail on a
-	// malformed RESEARCH_PANEL_PRICE_TABLE_PATH — degrade to no pricing data
-	// (every estimate $0, no caps enforceable) rather than failing startup,
-	// matching the persist-store construction tolerance above.
-	panelCostGuard, pcgErr := tools.NewPanelCostGuard(cfg.ResearchPanel, persistStore)
-	if pcgErr != nil {
-		logger.Warn("research_panel price table unavailable, cost estimates will be $0", "path", cfg.ResearchPanel.PriceTablePath, "err", pcgErr)
-		unpriced := cfg.ResearchPanel
-		unpriced.PriceTablePath = ""
-		panelCostGuard, _ = tools.NewPanelCostGuard(unpriced, persistStore)
+	// research_panel cost tracking (#303) is entirely opt-in (registry.go's
+	// documented contract: nil ResearchPanelCost ⇒ every guard is a no-op) —
+	// only construct the guard when an operator actually set a cost env var,
+	// so deps.ResearchPanelCost stays nil in zero-config deployments. A
+	// malformed RESEARCH_PANEL_PRICE_TABLE_PATH fails closed: cost tracking is
+	// disabled entirely (caps included) rather than left silently ineffective
+	// with every estimate at $0.
+	var panelCostGuard *tools.PanelCostGuard
+	rpc := cfg.ResearchPanel
+	if rpc.PriceTablePath != "" || rpc.MaxCallCostUSD > 0 || rpc.MaxDailyCostUSD > 0 || rpc.DryRun {
+		guard, pcgErr := tools.NewPanelCostGuard(rpc, persistStore)
+		if pcgErr != nil {
+			logger.Error("research_panel cost tracking disabled: price table failed to load", "path", rpc.PriceTablePath, "err", pcgErr)
+		} else {
+			panelCostGuard = guard
+		}
 	}
 
 	toolDeps := tools.Dependencies{

@@ -41,7 +41,7 @@ const (
 	researchPanelMinTimeout   = 5
 	researchPanelMaxTimeout   = 120
 	researchPanelMaxQuestion  = 4000
-	researchPanelCacheVersion = "v1"
+	researchPanelCacheVersion = "v2" // v2 (#303): cost-tracking _meta fields
 )
 
 type researchPanelInput struct {

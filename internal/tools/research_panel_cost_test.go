@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -170,6 +171,49 @@ func TestPanelCostGuardDailyCapAndRecordSpend(t *testing.T) {
 	}
 	if !guard2.ExceedsDailyCap("tenant-a", 0.5) {
 		t.Error("a new guard sharing the same persist.Store should see tenant-a's persisted $0.70 spend")
+	}
+}
+
+// TestPanelCostGuardDailyCapResetIsRolling24h proves the daily-spend window
+// is a true rolling 24h period anchored to "now" — not truncated to a fixed
+// calendar boundary, which would make the window's actual length depend on
+// when the first request of the "day" lands.
+func TestPanelCostGuardDailyCapResetIsRolling24h(t *testing.T) {
+	guard, err := NewPanelCostGuard(config.ResearchPanelConfig{MaxDailyCostUSD: 1.0}, persist.NewMemoryStore())
+	if err != nil {
+		t.Fatalf("NewPanelCostGuard: %v", err)
+	}
+
+	before := time.Now()
+	_, ts := guard.dailySpent("tenant-a")
+	after := time.Now()
+
+	ts.mu.Lock()
+	reset := ts.reset
+	ts.mu.Unlock()
+
+	if reset.Before(before.Add(24*time.Hour)) || reset.After(after.Add(24*time.Hour)) {
+		t.Errorf("reset = %v, want within [now+24h] at call time (between %v and %v) — got a truncated boundary instead of a rolling window", reset, before.Add(24*time.Hour), after.Add(24*time.Hour))
+	}
+
+	// Force a rollover and confirm it re-anchors to now+24h too, not to the
+	// next calendar-truncated boundary.
+	ts.mu.Lock()
+	ts.total = 5
+	ts.reset = time.Now().Add(-time.Second) // already elapsed
+	ts.mu.Unlock()
+
+	before = time.Now()
+	spent, ts2 := guard.dailySpent("tenant-a")
+	after = time.Now()
+	if spent != 0 {
+		t.Errorf("rollover should reset total to 0, got %v", spent)
+	}
+	ts2.mu.Lock()
+	reset2 := ts2.reset
+	ts2.mu.Unlock()
+	if reset2.Before(before.Add(24*time.Hour)) || reset2.After(after.Add(24*time.Hour)) {
+		t.Errorf("post-rollover reset = %v, want within [now+24h] at rollover time", reset2)
 	}
 }
 
