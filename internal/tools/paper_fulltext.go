@@ -124,7 +124,11 @@ func registerPaperFulltext(srv *mcp.Server, deps Dependencies) {
 			output["scrapeTier"] = result.Tier
 		}
 		if meta != nil {
-			output["source"] = "semanticscholar"
+			if meta.Source != "" {
+				output["source"] = meta.Source
+			} else {
+				output["source"] = "semanticscholar"
+			}
 			if len(meta.Authors) > 0 {
 				output["authors"] = meta.Authors
 			}
@@ -186,6 +190,7 @@ func resolvePaperURL(ctx context.Context, deps Dependencies, identifier string) 
 	doi := detectDOI(identifier)
 	fetcher := resolvePaperFetcher(deps)
 	var fetchErr error
+	oaAttempted := false
 	if fetcher != nil {
 		lookupID := identifier
 		if doi != "" {
@@ -201,6 +206,7 @@ func resolvePaperURL(ctx context.Context, deps Dependencies, identifier string) 
 			// enrichment academic_search performs via search.EnrichOpenAccess —
 			// never overwrites a fetcher-supplied PDFUrl, best-effort only.
 			if result.PDFUrl == "" && result.DOI != "" && deps.OAResolver != nil {
+				oaAttempted = true
 				if oa, pdf, found, oaErr := deps.OAResolver.Resolve(ctx, result.DOI); oaErr == nil && found {
 					if pdf != "" {
 						result.PDFUrl = pdf
@@ -216,6 +222,20 @@ func resolvePaperURL(ctx context.Context, deps Dependencies, identifier string) 
 			case result.URL != "":
 				return result.URL, result, nil, nil
 			}
+		}
+	}
+
+	// Unpaywall fallback (#601): every path above (no PaperFetcher configured,
+	// FetchPaper's "not found" (nil, nil) convention, or a genuine upstream
+	// error) leaves the in-result Unpaywall check unreached, since it lives
+	// inside the `result != nil` branch. Unpaywall resolves directly from the
+	// DOI with no dependency on Semantic Scholar's own coverage, so it's still
+	// worth trying here before degrading to the bare doi.org redirect.
+	// oaAttempted guards against a redundant second lookup in the case that
+	// already tried Unpaywall above (result found, but no PDF from either).
+	if doi != "" && !oaAttempted && deps.OAResolver != nil {
+		if oa, pdf, found, oaErr := deps.OAResolver.Resolve(ctx, doi); oaErr == nil && found && pdf != "" {
+			return pdf, &search.AcademicResult{DOI: doi, PDFUrl: pdf, OpenAccess: oa, Source: "unpaywall"}, nil, fetchErr
 		}
 	}
 

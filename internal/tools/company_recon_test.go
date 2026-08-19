@@ -27,7 +27,9 @@ func TestCompanyReconPrivateHostRejected(t *testing.T) {
 
 func TestCompanyReconAllPhases(t *testing.T) {
 	t.Parallel()
-	out, res := callTool(t, setupTestDeps(), "company_recon", map[string]any{"target": "acme.com"})
+	deps := setupTestDeps()
+	deps.Search = &companyRelevantWebProvider{}
+	out, res := callTool(t, deps, "company_recon", map[string]any{"target": "acme.com"})
 	if res.IsError {
 		t.Fatalf("unexpected tool error: %v", res.Content)
 	}
@@ -197,6 +199,7 @@ func TestCompanyReconNumResultsClampedPerPhase(t *testing.T) {
 func TestCompanyReconNilResolverSkipsPhase(t *testing.T) {
 	t.Parallel()
 	deps := setupTestDeps()
+	deps.Search = &companyRelevantWebProvider{}
 	deps.CTLogResolver = nil
 	deps.ArchiveResolver = nil
 	out, res := callTool(t, deps, "company_recon", map[string]any{"target": "acme.com"})
@@ -261,6 +264,20 @@ func TestCompanyReconSessionTracking(t *testing.T) {
 	}
 }
 
+// companyRelevantWebProvider stubs a top-1 web-search hit that actually names
+// the queried company. The shared mockProvider's generic "Test Result"/"A
+// test snippet" fixture bears no relation to any company name, so since #591
+// added a relevance check to companyProfileSummary, tests that need a summary
+// to be PRODUCED must supply a hit that would legitimately pass it.
+type companyRelevantWebProvider struct{ mockProvider }
+
+func (p *companyRelevantWebProvider) Web(_ context.Context, _ search.WebSearchParams) ([]search.SearchResult, error) {
+	return []search.SearchResult{
+		{Title: "Acme - About, Founders, and Leadership", URL: "https://acme.com/about",
+			Snippet: "Acme was founded in 1999. Its CEO leads the company from its headquarters."},
+	}, nil
+}
+
 // TestCompanyReconWebPhaseAloneProducesSummary is the regression test for
 // issue #432: the tool description promises phases "profiling|ct_logs|
 // archives|web" are independently selectable, but "web" alone used to be a
@@ -268,7 +285,9 @@ func TestCompanyReconSessionTracking(t *testing.T) {
 // same web-search company summary "profiling" alone would.
 func TestCompanyReconWebPhaseAloneProducesSummary(t *testing.T) {
 	t.Parallel()
-	out, res := callTool(t, setupTestDeps(), "company_recon", map[string]any{
+	deps := setupTestDeps()
+	deps.Search = &companyRelevantWebProvider{}
+	out, res := callTool(t, deps, "company_recon", map[string]any{
 		"target": "acme.com",
 		"phases": []any{"web"},
 	})
@@ -303,7 +322,9 @@ func TestCompanyReconWebPhaseAloneProducesSummary(t *testing.T) {
 // two phase names share one underlying web-search call.
 func TestCompanyReconWebAndProfilingNoDuplicateSource(t *testing.T) {
 	t.Parallel()
-	out, res := callTool(t, setupTestDeps(), "company_recon", map[string]any{
+	deps := setupTestDeps()
+	deps.Search = &companyRelevantWebProvider{}
+	out, res := callTool(t, deps, "company_recon", map[string]any{
 		"target": "acme.com",
 		"phases": []any{"web", "profiling"},
 	})
@@ -313,6 +334,29 @@ func TestCompanyReconWebAndProfilingNoDuplicateSource(t *testing.T) {
 	sources, ok := out["sources"].([]any)
 	if !ok || len(sources) != 1 {
 		t.Fatalf("sources = %v, want exactly 1 entry (no duplicate web-search source)", out["sources"])
+	}
+}
+
+// TestCompanyReconOffTopicTopHitYieldsNoProfile is the regression test for
+// #591: companyProfileSummary must reject an unconditional top-1 hit that
+// bears no relation to the queried company name (a low-relevance or
+// near-miss result), rather than surfacing an unrelated result's snippet as
+// if it were a confident company profile. The shared mockProvider's generic
+// "Test Result"/"A test snippet" fixture has no relation to "acme.com".
+func TestCompanyReconOffTopicTopHitYieldsNoProfile(t *testing.T) {
+	t.Parallel()
+	out, res := callTool(t, setupTestDeps(), "company_recon", map[string]any{
+		"target": "acme.com",
+		"phases": []any{"web"},
+	})
+	if res.IsError {
+		t.Fatalf("unexpected tool error: %v", res.Content)
+	}
+	if _, present := out["profile"]; present {
+		t.Errorf("off-topic top-1 hit must not produce a profile, got: %v", out["profile"])
+	}
+	if sources, ok := out["sources"].([]any); ok && len(sources) != 0 {
+		t.Errorf("off-topic hit must not be credited as a source, got: %v", sources)
 	}
 }
 

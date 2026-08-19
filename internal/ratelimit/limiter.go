@@ -327,7 +327,10 @@ type TenantStats struct {
 	DailyLimit     int    `json:"dailyLimit"`
 	DailyUsed      int64  `json:"dailyUsed"`
 	DailyRemaining int64  `json:"dailyRemaining"`
-	DailyResetsAt  string `json:"dailyResetsAt"`
+	// DailyResetsAt is nil when there is no scheduled daily-quota reset for
+	// this tenant (no daily quota configured, or the tenant has never been
+	// seen), distinguishing that state from a real reset timestamp (#603).
+	DailyResetsAt *time.Time `json:"dailyResetsAt,omitempty"`
 }
 
 // Stats returns rate limit configuration and usage for a tenant. When a store is
@@ -340,15 +343,22 @@ func (l *Limiter) Stats(tenantID string) TenantStats {
 		DailyLimit:     l.config.DailyQuota,
 	}
 
-	if v, ok := l.tenants.Load(tenantID); ok {
-		tl := v.(*tenantLimiter)
-		tl.mu.Lock()
-		stats.DailyUsed = tl.dailyCount
-		stats.DailyResetsAt = tl.dailyReset.UTC().Format(time.RFC3339)
-		tl.mu.Unlock()
-	} else if count, reset, ok := l.loadCount(tenantID); ok && time.Now().Before(reset) {
-		stats.DailyUsed = count
-		stats.DailyResetsAt = reset.UTC().Format(time.RFC3339)
+	// No daily quota configured: there is nothing to reset, so leave
+	// DailyResetsAt nil rather than reporting a materialized tenant's
+	// incidental reset window (#603).
+	if l.config.DailyQuota > 0 {
+		if v, ok := l.tenants.Load(tenantID); ok {
+			tl := v.(*tenantLimiter)
+			tl.mu.Lock()
+			stats.DailyUsed = tl.dailyCount
+			resetsAt := tl.dailyReset.UTC()
+			stats.DailyResetsAt = &resetsAt
+			tl.mu.Unlock()
+		} else if count, reset, ok := l.loadCount(tenantID); ok && time.Now().Before(reset) {
+			stats.DailyUsed = count
+			resetsAt := reset.UTC()
+			stats.DailyResetsAt = &resetsAt
+		}
 	}
 
 	stats.DailyRemaining = int64(l.config.DailyQuota) - stats.DailyUsed

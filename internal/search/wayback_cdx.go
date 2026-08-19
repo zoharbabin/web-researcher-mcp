@@ -78,7 +78,7 @@ type ArchiveEntry struct {
 	Timestamp  string `json:"timestamp"` // yyyyMMddHHmmss
 	StatusCode string `json:"status_code"`
 	MimeType   string `json:"mime_type"`
-	Category   string `json:"category"` // login|api|admin|asset|doc|other
+	Category   string `json:"category"` // login|api|admin|doc|asset|blog|docs|legal|other
 }
 
 // ArchiveResolver looks up historical Wayback Machine captures for a domain.
@@ -270,6 +270,15 @@ func categorizeArchiveURL(rawURL string) string {
 		strings.HasSuffix(path, ".jpg") || strings.HasSuffix(path, ".jpeg") || strings.HasSuffix(path, ".gif") ||
 		strings.HasSuffix(path, ".svg") || strings.HasSuffix(path, ".woff") || strings.HasSuffix(path, ".woff2") || strings.HasSuffix(path, ".ico"):
 		return "asset"
+	// #596: content-site buckets. The original 5 (+ catch-all "other") gave
+	// near-zero triage signal on marketing/content-heavy domains, where most
+	// archived paths are blog/docs/legal pages rather than login/api/admin.
+	case strings.Contains(path, "/blog/") || strings.Contains(path, "/news/") || strings.Contains(path, "/press/"):
+		return "blog"
+	case strings.Contains(path, "/docs/") || strings.Contains(path, "/help/") || strings.Contains(path, "/support/") || strings.Contains(path, "/kb/"):
+		return "docs"
+	case strings.Contains(path, "/privacy") || strings.Contains(path, "/terms") || strings.Contains(path, "/legal"):
+		return "legal"
 	default:
 		return "other"
 	}

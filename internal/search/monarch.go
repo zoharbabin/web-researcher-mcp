@@ -282,6 +282,9 @@ func (m *MonarchAPIProvider) annotate(ctx context.Context, params MonarchSearchP
 	terms := parseAnnotateSpans(string(respBody))
 	out := make([]MonarchResult, 0, len(terms))
 	for _, t := range terms {
+		if !isGroundedHPOTerm(t) {
+			continue
+		}
 		out = append(out, MonarchResult{
 			ID:     t.id,
 			Label:  t.label,
@@ -290,6 +293,28 @@ func (m *MonarchAPIProvider) annotate(ctx context.Context, params MonarchSearchP
 		})
 	}
 	return out, nil
+}
+
+// monarchAnnotateStopwords is a minimal deny-list of generic clinical-narrative
+// words that carry no diagnostic meaning themselves but that SciGraph's NER can
+// still ground to some unrelated specific literature/ontology entity, actively
+// misleading a caller who treats every returned term as a confirmed HPO match.
+var monarchAnnotateStopwords = map[string]bool{
+	"patient": true, "patients": true, "presented": true, "presenting": true,
+	"history": true, "reported": true, "noted": true, "male": true, "female": true,
+	"man": true, "woman": true, "child": true, "born": true, "year": true,
+	"years": true, "old": true, "case": true,
+}
+
+// isGroundedHPOTerm reports whether a parsed annotate span meets the
+// documented "ground to HPO terms" contract: an HP:-namespace CURIE (excluding
+// other Monarch/SciGraph namespaces such as MP:, NCBITaxon:, or literature/case
+// references) whose matched text isn't a generic clinical-narrative stopword.
+func isGroundedHPOTerm(t groundedTerm) bool {
+	if !strings.HasPrefix(t.id, "HP:") {
+		return false
+	}
+	return !monarchAnnotateStopwords[strings.ToLower(strings.TrimSpace(t.text))]
 }
 
 // isSafeAssocValue rejects characters that could smuggle extra query params or

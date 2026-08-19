@@ -59,13 +59,95 @@ func ensureTerminalPeriod(s string) string {
 	return s + "."
 }
 
+// invertNameAPA converts a single "First [Middle] Last" name to APA7's
+// surname-first, initialized form: "Last, F. M.". A name that already contains
+// a comma is assumed pre-inverted ("Last, First" or "Last, F.") and is returned
+// unchanged, so a correctly formatted input is never double-inverted. A single
+// token (no space) has nothing to invert and is also returned unchanged.
+func invertNameAPA(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" || strings.Contains(name, ",") {
+		return name
+	}
+	tokens := strings.Fields(name)
+	if len(tokens) < 2 {
+		return name
+	}
+	last := tokens[len(tokens)-1]
+	initials := make([]string, 0, len(tokens)-1)
+	for _, t := range tokens[:len(tokens)-1] {
+		r := []rune(t)
+		if len(r) == 0 {
+			continue
+		}
+		initials = append(initials, string(r[0])+".")
+	}
+	return last + ", " + strings.Join(initials, " ")
+}
+
+// formatAuthorsAPA renders a free-form (";"/" and "-delimited) author string in
+// APA7 form: each name inverted to "Last, F. M." via invertNameAPA, then joined
+// with a comma between middle authors and "&" before the last (e.g. "Kucsko,
+// G., & Maurer, P. C."). A single author is returned with no joiner.
+func formatAuthorsAPA(author string) string {
+	names := splitAuthors(author)
+	if len(names) == 0 {
+		return ""
+	}
+	for i, n := range names {
+		names[i] = invertNameAPA(n)
+	}
+	if len(names) == 1 {
+		return names[0]
+	}
+	return strings.Join(names[:len(names)-1], ", ") + ", & " + names[len(names)-1]
+}
+
+// invertNameMLA converts a single "First [Middle] Last" name to MLA9's
+// surname-first form: "Last, First Middle" (full given name, not initialized —
+// unlike APA). A name already containing a comma is assumed pre-inverted and
+// returned unchanged.
+func invertNameMLA(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" || strings.Contains(name, ",") {
+		return name
+	}
+	tokens := strings.Fields(name)
+	if len(tokens) < 2 {
+		return name
+	}
+	last := tokens[len(tokens)-1]
+	rest := strings.Join(tokens[:len(tokens)-1], " ")
+	return last + ", " + rest
+}
+
+// formatAuthorsMLA renders a free-form author string in MLA9 form: MLA9 inverts
+// only the first author ("Last, First Middle"); a second author stays "First
+// Last", joined with "and"; three or more collapse to the first author plus
+// "et al."
+func formatAuthorsMLA(author string) string {
+	names := splitAuthors(author)
+	if len(names) == 0 {
+		return ""
+	}
+	names[0] = invertNameMLA(names[0])
+	switch len(names) {
+	case 1:
+		return names[0]
+	case 2:
+		return names[0] + ", and " + names[1]
+	default:
+		return names[0] + ", et al."
+	}
+}
+
 func formatAPA(title, author, site, date, url, accessed string) string {
 	parts := []string{}
 
 	if author != "" {
 		// Avoid a doubled period when the author string already ends in one
 		// (e.g. an initial like "Hassabis, D." or "Gordon, L. I.").
-		parts = append(parts, ensureTerminalPeriod(author))
+		parts = append(parts, ensureTerminalPeriod(formatAuthorsAPA(author)))
 	}
 
 	if date != "" {
@@ -91,7 +173,7 @@ func formatMLA(title, author, site, date, url, accessed string) string {
 	parts := []string{}
 
 	if author != "" {
-		parts = append(parts, ensureTerminalPeriod(author))
+		parts = append(parts, ensureTerminalPeriod(formatAuthorsMLA(author)))
 	}
 
 	if title != "" {

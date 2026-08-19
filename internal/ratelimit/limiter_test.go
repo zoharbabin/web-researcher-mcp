@@ -190,6 +190,52 @@ func TestStatsUnknownTenant(t *testing.T) {
 	if stats.DailyRemaining != 500 {
 		t.Fatalf("expected full daily remaining for unknown tenant, got %d", stats.DailyRemaining)
 	}
+	// #603: a tenant that has never made a request has no scheduled daily
+	// reset. This must be nil/absent, never an ambiguous empty string that
+	// looks like "resets right now".
+	if stats.DailyResetsAt != nil {
+		t.Fatalf("expected nil dailyResetsAt for a tenant that never called, got %v", stats.DailyResetsAt)
+	}
+}
+
+// TestStatsNoDailyQuotaConfigured covers #603: when no daily quota is
+// configured (DailyQuota <= 0), there is nothing to reset, so dailyResetsAt
+// must stay nil even for a tenant that has been materialized in-process.
+func TestStatsNoDailyQuotaConfigured(t *testing.T) {
+	l := New(config.RateLimitConfig{
+		Global:     100,
+		PerTenant:  60,
+		DailyQuota: 0,
+	})
+
+	// Materialize the tenant (as Wrap's unconditional AllowDaily call would).
+	l.getTenantLimiter("tenant1")
+
+	stats := l.Stats("tenant1")
+	if stats.DailyResetsAt != nil {
+		t.Fatalf("expected nil dailyResetsAt when no daily quota is configured, got %v", stats.DailyResetsAt)
+	}
+}
+
+// TestStatsDailyResetsAtPopulatedWhenActive covers #603's non-regression
+// requirement: a tenant with an active daily counter must still return a
+// real RFC3339 timestamp, not nil.
+func TestStatsDailyResetsAtPopulatedWhenActive(t *testing.T) {
+	l := New(config.RateLimitConfig{
+		Global:     100,
+		PerTenant:  60,
+		DailyQuota: 500,
+	})
+
+	l.AllowDaily("tenant1")
+
+	stats := l.Stats("tenant1")
+	if stats.DailyResetsAt == nil {
+		t.Fatal("expected a populated dailyResetsAt for a tenant with an active daily counter")
+	}
+	if _, err := time.Parse(time.RFC3339, stats.DailyResetsAt.Format(time.RFC3339)); err != nil {
+		t.Fatalf("expected dailyResetsAt to format as RFC3339, got error: %v", err)
+	}
 }
 
 func TestWrapMiddlewareErrorMessage(t *testing.T) {
