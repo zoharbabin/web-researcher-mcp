@@ -32,6 +32,7 @@ type Config struct {
 	AllowedDomains                []string
 	ChromePath                    string
 	JinaDisabled                  bool
+	BrowserIdleTimeout            time.Duration
 	MaxScrapeConcurrency          int
 	MaxBrowserConcurrency         int
 	MaxScrapeConcurrencyPerTenant int
@@ -151,6 +152,7 @@ type SearchConfig struct {
 	SearchAPIKey       string
 	TavilyAPIKey       string
 	ExaAPIKey          string
+	XQuikAPIKey        string
 	JinaAPIKey         string // optional; the Jina Reader scraper tier works keyless, a key raises its rate limit
 	SearXNGURL         string
 	SearXNGBasicAuth   string            // raw "user:password" for a SearXNG behind HTTP Basic auth; "" => none (never logged)
@@ -250,6 +252,13 @@ type ResearchPanelConfig struct {
 	LMStudioBaseURL  string // LM_STUDIO_BASE_URL — local LM Studio, same gating as Ollama
 	DefaultModels    []string
 	MaxModels        int
+
+	// Cost tracking (#303). All optional; zero values disable the
+	// corresponding guard so cost tracking stays entirely opt-in.
+	PriceTablePath  string  // RESEARCH_PANEL_PRICE_TABLE_PATH — operator-managed JSON {"model_id":{"input_per_1k":0.003,"output_per_1k":0.015}}
+	MaxCallCostUSD  float64 // RESEARCH_PANEL_MAX_CALL_COST_USD — per-call pre-flight hard cap; 0 = no cap
+	MaxDailyCostUSD float64 // RESEARCH_PANEL_MAX_DAILY_COST_USD — per-tenant daily spend cap; 0 = no cap
+	DryRun          bool    // RESEARCH_PANEL_DRY_RUN — return cost estimates only, call no models
 }
 
 func Load() (*Config, error) {
@@ -332,6 +341,11 @@ func Load() (*Config, error) {
 	exaKey := os.Getenv("EXA_API_KEY")
 	if provider == "exa" && exaKey == "" {
 		errs = append(errs, "EXA_API_KEY is required when SEARCH_PROVIDER=exa")
+	}
+
+	xquikKey := os.Getenv("XQUIK_API_KEY")
+	if provider == "xquik" && xquikKey == "" {
+		errs = append(errs, "XQUIK_API_KEY is required when SEARCH_PROVIDER=xquik")
 	}
 
 	port := envInt("PORT", 0)
@@ -439,6 +453,7 @@ func Load() (*Config, error) {
 			SearchAPIKey:          searchAPIKey,
 			TavilyAPIKey:          tavilyKey,
 			ExaAPIKey:             exaKey,
+			XQuikAPIKey:           xquikKey,
 			JinaAPIKey:            os.Getenv("JINA_API_KEY"),
 			SearXNGURL:            searxngURL,
 			SearXNGBasicAuth:      searxngBasicAuth,
@@ -509,10 +524,16 @@ func Load() (*Config, error) {
 			Persist:        envBool("RATE_LIMIT_PERSIST", false),
 			MaxCallsPerDay: envInt("MAX_CALLS_PER_DAY", 0),
 		},
-		AllowPrivateIPs:       envBool("ALLOW_PRIVATE_IPS", false),
-		AllowedDomains:        splitCSV(os.Getenv("ALLOWED_DOMAINS")),
-		ChromePath:            os.Getenv("CHROME_PATH"),
-		JinaDisabled:          envBool("JINA_READER_DISABLED", false),
+		AllowPrivateIPs: envBool("ALLOW_PRIVATE_IPS", false),
+		AllowedDomains:  splitCSV(os.Getenv("ALLOWED_DOMAINS")),
+		ChromePath:      os.Getenv("CHROME_PATH"),
+		JinaDisabled:    envBool("JINA_READER_DISABLED", false),
+		// BrowserIdleTimeout closes the browser-tier Chromium process after this
+		// long with no scrapeBrowser/ExtractLinks call (#460) — without it, one
+		// browser-tier scrape pins a Chromium process (and its macOS Dock icon)
+		// for the full server lifetime. Explicit "0" disables the idle-close
+		// timer entirely (env unset ⇒ the 5-minute default; env="0" ⇒ disabled).
+		BrowserIdleTimeout:    envDuration("BROWSER_IDLE_TIMEOUT", 5*time.Minute),
 		MaxScrapeConcurrency:  envInt("MAX_SCRAPE_CONCURRENCY", 5),
 		MaxBrowserConcurrency: envInt("MAX_SCRAPE_CONCURRENCY_BROWSER", 2),
 		// MaxScrapeConcurrencyPerTenant defaults to the global MaxScrapeConcurrency
@@ -567,6 +588,10 @@ func Load() (*Config, error) {
 			LMStudioBaseURL:  os.Getenv("LM_STUDIO_BASE_URL"),
 			DefaultModels:    splitCSV(os.Getenv("RESEARCH_PANEL_DEFAULT_MODELS")),
 			MaxModels:        envInt("RESEARCH_PANEL_MAX_MODELS", 3),
+			PriceTablePath:   os.Getenv("RESEARCH_PANEL_PRICE_TABLE_PATH"),
+			MaxCallCostUSD:   envFloat("RESEARCH_PANEL_MAX_CALL_COST_USD", 0),
+			MaxDailyCostUSD:  envFloat("RESEARCH_PANEL_MAX_DAILY_COST_USD", 0),
+			DryRun:           envBool("RESEARCH_PANEL_DRY_RUN", false),
 		},
 		Warnings: warnings,
 	}
@@ -594,6 +619,18 @@ func envInt(key string, fallback int) int {
 		return fallback
 	}
 	return n
+}
+
+func envFloat(key string, fallback float64) float64 {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return fallback
+	}
+	return f
 }
 
 func envDuration(key string, fallback time.Duration) time.Duration {

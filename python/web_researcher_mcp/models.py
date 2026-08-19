@@ -604,11 +604,26 @@ class CompanyReconCertSan:
         )
 
 @dataclass
+class CompanyReconPhaseError:
+    error: Optional[str] = None
+    phase: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "CompanyReconPhaseError | None":
+        if d is None:
+            return None
+        return cls(
+            error=d.get('error'),
+            phase=d.get('phase'),
+        )
+
+@dataclass
 class CompanyReconResponse:
     archive_urls: list[CompanyReconArchiveUrl] = field(default_factory=list)
     cache_age: Optional[int] = None
     cert_sans: list[CompanyReconCertSan] = field(default_factory=list)
     domain: Optional[str] = None
+    phase_errors: list[CompanyReconPhaseError] = field(default_factory=list)
     profile: Optional[Profile] = None
     sources: list[CompanyReconSource] = field(default_factory=list)
     subdomains: list[CompanyReconSubdomain] = field(default_factory=list)
@@ -624,6 +639,7 @@ class CompanyReconResponse:
             cache_age=d.get('cache_age'),
             cert_sans=[CompanyReconCertSan.from_dict(i) for i in (d.get('cert_sans') or [])],
             domain=d.get('domain'),
+            phase_errors=[CompanyReconPhaseError.from_dict(i) for i in (d.get('phase_errors') or [])],
             profile=Profile.from_dict(d.get('profile')) if d.get('profile') else None,
             sources=[CompanyReconSource.from_dict(i) for i in (d.get('sources') or [])],
             subdomains=[CompanyReconSubdomain.from_dict(i) for i in (d.get('subdomains') or [])],
@@ -1410,6 +1426,9 @@ class MemorySaveResponse:
 @dataclass
 class Meta:
     cached: Optional[bool] = None
+    cost_breakdown: list[ResearchPanelCostBreakdown] = field(default_factory=list)
+    dry_run: Optional[bool] = None
+    estimated_cost_usd: Optional[float] = None
     models_failed: Optional[int] = None
     models_queried: Optional[int] = None
     models_succeeded: Optional[int] = None
@@ -1421,6 +1440,9 @@ class Meta:
             return None
         return cls(
             cached=d.get('cached'),
+            cost_breakdown=[ResearchPanelCostBreakdown.from_dict(i) for i in (d.get('cost_breakdown') or [])],
+            dry_run=d.get('dry_run'),
+            estimated_cost_usd=d.get('estimated_cost_usd'),
             models_failed=d.get('models_failed'),
             models_queried=d.get('models_queried'),
             models_succeeded=d.get('models_succeeded'),
@@ -1852,6 +1874,26 @@ class ResearchPanelContradiction:
         )
 
 @dataclass
+class ResearchPanelCostBreakdown:
+    model_id: Optional[str] = None
+    provider: Optional[str] = None
+    tokens_in: Optional[int] = None
+    tokens_out: Optional[int] = None
+    usd: Optional[float] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "ResearchPanelCostBreakdown | None":
+        if d is None:
+            return None
+        return cls(
+            model_id=d.get('model_id'),
+            provider=d.get('provider'),
+            tokens_in=d.get('tokens_in'),
+            tokens_out=d.get('tokens_out'),
+            usd=d.get('usd'),
+        )
+
+@dataclass
 class ResearchPanelPanel:
     error: Optional[str] = None
     latency_ms: Optional[int] = None
@@ -1877,9 +1919,11 @@ class ResearchPanelPanel:
 class ResearchPanelResponse:
     _meta: Optional[Meta] = None
     divergence: Optional[Divergence] = None
+    dry_run: Optional[bool] = None
     panel: list[ResearchPanelPanel] = field(default_factory=list)
     query: Optional[str] = None
     trust: Optional[str] = None
+    would_call: list[ResearchPanelWouldCall] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, d: dict[str, Any] | None) -> "ResearchPanelResponse | None":
@@ -1888,9 +1932,25 @@ class ResearchPanelResponse:
         return cls(
             _meta=Meta.from_dict(d.get('_meta')) if d.get('_meta') else None,
             divergence=Divergence.from_dict(d.get('divergence')) if d.get('divergence') else None,
+            dry_run=d.get('dry_run'),
             panel=[ResearchPanelPanel.from_dict(i) for i in (d.get('panel') or [])],
             query=d.get('query'),
             trust=d.get('trust'),
+            would_call=[ResearchPanelWouldCall.from_dict(i) for i in (d.get('would_call') or [])],
+        )
+
+@dataclass
+class ResearchPanelWouldCall:
+    model_id: Optional[str] = None
+    provider: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "ResearchPanelWouldCall | None":
+        if d is None:
+            return None
+        return cls(
+            model_id=d.get('model_id'),
+            provider=d.get('provider'),
         )
 
 @dataclass

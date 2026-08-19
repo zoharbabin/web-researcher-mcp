@@ -106,6 +106,32 @@ func TestLoadExaAPIKeyThreaded(t *testing.T) {
 	}
 }
 
+func TestLoadMissingXQuikAPIKey(t *testing.T) {
+	t.Setenv("SEARCH_PROVIDER", "xquik")
+	t.Setenv("XQUIK_API_KEY", "")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error when XQUIK_API_KEY is missing under SEARCH_PROVIDER=xquik")
+	}
+	if !strings.Contains(err.Error(), "XQUIK_API_KEY is required") {
+		t.Errorf("expected error about XQUIK_API_KEY, got: %v", err)
+	}
+}
+
+func TestLoadXQuikAPIKeyThreaded(t *testing.T) {
+	t.Setenv("SEARCH_PROVIDER", "xquik")
+	t.Setenv("XQUIK_API_KEY", "test-xquik-key")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Search.XQuikAPIKey != "test-xquik-key" {
+		t.Errorf("XQUIK_API_KEY should be threaded into Search.XQuikAPIKey, got %q", cfg.Search.XQuikAPIKey)
+	}
+}
+
 // TestLoadMissingTavilyAPIKey closes the pre-existing coverage gap for the
 // tavily required-key gate (parity with the exa/brave/serper gates).
 func TestLoadMissingTavilyAPIKey(t *testing.T) {
@@ -201,6 +227,41 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.CacheIsolation != "shared" {
 		t.Errorf("expected default CacheIsolation=shared, got %s", cfg.CacheIsolation)
+	}
+	if cfg.BrowserIdleTimeout != 5*time.Minute {
+		t.Errorf("expected default BrowserIdleTimeout=5m, got %s", cfg.BrowserIdleTimeout)
+	}
+}
+
+// TestLoadBrowserIdleTimeoutExplicitZeroDisables proves #460's env knob:
+// BROWSER_IDLE_TIMEOUT=0 must resolve to a real, explicit zero (disabling the
+// browser pool's idle-close timer), not silently fall back to the 5-minute
+// default the way an unset/empty env var would.
+func TestLoadBrowserIdleTimeoutExplicitZeroDisables(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("BROWSER_IDLE_TIMEOUT", "0")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.BrowserIdleTimeout != 0 {
+		t.Errorf("expected BrowserIdleTimeout=0 when explicitly disabled, got %s", cfg.BrowserIdleTimeout)
+	}
+}
+
+// TestLoadBrowserIdleTimeoutCustom proves the env knob threads a custom
+// duration through unchanged.
+func TestLoadBrowserIdleTimeoutCustom(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("BROWSER_IDLE_TIMEOUT", "90s")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.BrowserIdleTimeout != 90*time.Second {
+		t.Errorf("expected BrowserIdleTimeout=90s, got %s", cfg.BrowserIdleTimeout)
 	}
 }
 

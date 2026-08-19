@@ -2435,6 +2435,9 @@ func TestAvailableProviders(t *testing.T) {
 	if _, ok := providers["bluesky"]; !ok {
 		t.Error("expected bluesky provider (zero-config, always available)")
 	}
+	if _, ok := providers["xquik"]; ok {
+		t.Error("did not expect xquik provider (no key)")
+	}
 }
 
 // TestProviderSupportedListContainsReddit (#277): reddit must be a recognized
@@ -2506,6 +2509,35 @@ func TestNewProvider_Bluesky(t *testing.T) {
 	p := NewProvider(config.SearchConfig{Provider: "bluesky"}, newTestDeps(http.DefaultClient))
 	if p.Name() != "bluesky" {
 		t.Errorf("expected provider name 'bluesky', got %q", p.Name())
+	}
+}
+
+func TestXQuikProviderWiring(t *testing.T) {
+	t.Parallel()
+	cfg := config.SearchConfig{Provider: "xquik", XQuikAPIKey: "key"}
+	deps := newTestDeps(http.DefaultClient)
+
+	provider := NewProvider(cfg, deps)
+	if provider.Name() != "xquik" {
+		t.Errorf("NewProvider() name = %q, want xquik", provider.Name())
+	}
+	if NewProviderByName("xquik", config.SearchConfig{}, deps) != nil {
+		t.Error("NewProviderByName() returned xquik without a key")
+	}
+	if provider := NewProviderByName("xquik", cfg, deps); provider == nil || provider.Name() != "xquik" {
+		t.Errorf("NewProviderByName() = %v, want xquik provider", provider)
+	}
+}
+
+func TestAvailableProvidersIncludesXQuikWithKey(t *testing.T) {
+	t.Parallel()
+	providers := AvailableProviders(
+		config.SearchConfig{XQuikAPIKey: "key"},
+		newTestDeps(http.DefaultClient),
+	)
+	provider, ok := providers["xquik"]
+	if !ok || provider.Name() != "xquik" {
+		t.Errorf("AvailableProviders()[xquik] = %v, %v; want xquik provider", provider, ok)
 	}
 }
 

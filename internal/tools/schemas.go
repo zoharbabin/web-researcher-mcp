@@ -1290,6 +1290,17 @@ var companyReconOutputSchema = map[string]any{
 				},
 			},
 		},
+		"phase_errors": map[string]any{
+			"type":        "array",
+			"description": "Per-phase resolver errors for ct_logs/archives — distinguishes a genuine zero-result phase (absent from phase_errors, phase still listed in sources on success) from an upstream failure (resolver returned an error; the phase's field is absent from the result AND recorded here).",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"phase": map[string]any{"type": "string", "enum": []any{"ct_logs", "archives"}},
+					"error": map[string]any{"type": "string"},
+				},
+			},
+		},
 	},
 }
 
@@ -1427,8 +1438,10 @@ var brandResearchOutputSchema = map[string]any{
 var researchPanelOutputSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{
-		"query": map[string]any{"type": "string"},
-		"trust": trustUntrustedExternal,
+		"query":      map[string]any{"type": "string"},
+		"trust":      trustUntrustedExternal,
+		"dry_run":    map[string]any{"type": "boolean", "description": "Present (always true) only when RESEARCH_PANEL_DRY_RUN=true — no model was called; see would_call/_meta.estimated_cost_usd instead of panel/divergence."},
+		"would_call": map[string]any{"type": "array", "items": map[string]any{"type": "object", "properties": map[string]any{"model_id": map[string]any{"type": "string"}, "provider": map[string]any{"type": "string"}}}, "description": "Dry-run only: the panel members that would have been called."},
 		"panel": map[string]any{
 			"type": "array",
 			"items": map[string]any{
@@ -1466,11 +1479,27 @@ var researchPanelOutputSchema = map[string]any{
 		"_meta": map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"cached":            map[string]any{"type": "boolean"},
-				"models_queried":    map[string]any{"type": "integer"},
-				"models_succeeded":  map[string]any{"type": "integer"},
-				"models_failed":     map[string]any{"type": "integer"},
-				"total_tokens_used": map[string]any{"type": "integer"},
+				"cached":             map[string]any{"type": "boolean"},
+				"models_queried":     map[string]any{"type": "integer"},
+				"models_succeeded":   map[string]any{"type": "integer"},
+				"models_failed":      map[string]any{"type": "integer"},
+				"total_tokens_used":  map[string]any{"type": "integer"},
+				"dry_run":            map[string]any{"type": "boolean", "description": "Present (always true) only on a RESEARCH_PANEL_DRY_RUN=true response."},
+				"estimated_cost_usd": map[string]any{"type": "number", "description": "USD estimate from the operator-managed price table (RESEARCH_PANEL_PRICE_TABLE_PATH); $0 for any model absent from the table. On a dry run this is a pre-flight estimate; otherwise it is computed from real token usage."},
+				"cost_breakdown": map[string]any{
+					"type":        "array",
+					"description": "Per-model cost detail backing estimated_cost_usd. Absent on a dry-run response (use would_call instead).",
+					"items": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"model_id":   map[string]any{"type": "string"},
+							"provider":   map[string]any{"type": "string"},
+							"tokens_in":  map[string]any{"type": "integer"},
+							"tokens_out": map[string]any{"type": "integer"},
+							"usd":        map[string]any{"type": "number"},
+						},
+					},
+				},
 			},
 		},
 	},

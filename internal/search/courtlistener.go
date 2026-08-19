@@ -21,6 +21,16 @@ import (
 //	GET https://www.courtlistener.com/api/rest/v4/search/?q=&type=o&court=&filed_after=&filed_before=
 //	→ {count, results:[{caseName,citation:[…],court,court_id,dateFiled,
 //	    docketNumber,citeCount,absolute_url}]}
+//
+// Live-verified (2026-08-18), for #436: the default q= full-text search ranks
+// by keyword relevance across the whole opinion body, so an exact case-name
+// query like "Brown v. Board of Education" surfaces unrelated lower-court
+// cases that merely share the party names in body text, never the landmark
+// case. case_name= scopes the match to the case-name field only, and
+// order_by=citeCount+desc then ranks by citation count within that
+// field-scoped match — the combination reliably puts the landmark/
+// highest-authority case first (confirmed for Brown v. Board of Education,
+// Roe v. Wade, and Marbury v. Madison).
 type CourtListenerProvider struct {
 	token   string
 	baseURL string
@@ -64,7 +74,12 @@ func (c *CourtListenerProvider) doSearch(ctx context.Context, params CaseSearchP
 	num := clamp(params.NumResults, 1, 20)
 
 	q := url.Values{}
-	q.Set("q", params.Query)
+	if isCaseNameQuery(params.Query) {
+		q.Set("case_name", params.Query)
+		q.Set("order_by", "citeCount desc")
+	} else {
+		q.Set("q", params.Query)
+	}
 	q.Set("type", "o") // opinions
 	if params.Jurisdiction != "" {
 		q.Set("court", params.Jurisdiction)
@@ -144,6 +159,14 @@ func (c *CourtListenerProvider) doSearch(ctx context.Context, params CaseSearchP
 		}
 	}
 	return out, nil
+}
+
+// isCaseNameQuery reports whether query looks like an exact case-name lookup
+// (e.g. "Brown v. Board of Education") rather than a general full-text
+// search — the signal is a " v. " or " vs. " party separator (#436).
+func isCaseNameQuery(query string) bool {
+	lower := strings.ToLower(query)
+	return strings.Contains(lower, " v. ") || strings.Contains(lower, " vs. ")
 }
 
 // courtListenerURL absolutizes the API's relative absolute_url ("/opinion/…").

@@ -437,9 +437,10 @@ func main() {
 		AllowPrivateIPs:         cfg.AllowPrivateIPs,
 		AllowedDomains:          cfg.AllowedDomains,
 		ChromePath:              cfg.ChromePath,
-		ExaAPIKey:               cfg.Search.ExaAPIKey,  // enables the paid Exa /contents fallback tier
-		JinaAPIKey:              cfg.Search.JinaAPIKey, // raises the keyless Jina Reader tier's rate limit
-		JinaDisabled:            cfg.JinaDisabled,      // JINA_READER_DISABLED: opt out of the Jina Reader tier entirely
+		BrowserIdleTimeout:      cfg.BrowserIdleTimeout, // auto-close idle Chromium process (#460)
+		ExaAPIKey:               cfg.Search.ExaAPIKey,   // enables the paid Exa /contents fallback tier
+		JinaAPIKey:              cfg.Search.JinaAPIKey,  // raises the keyless Jina Reader tier's rate limit
+		JinaDisabled:            cfg.JinaDisabled,       // JINA_READER_DISABLED: opt out of the Jina Reader tier entirely
 		MaxHTMLBytes:            cfg.MaxHTMLBytes,
 		MaxDocumentBytes:        cfg.MaxDocumentBytes,
 		GitHubToken:             cfg.Search.GitHubToken, // raises GitHub's unauth rate limit for native README/blob/gist routing (#395)
@@ -499,6 +500,24 @@ func main() {
 	}
 	defer auditor.Close()
 
+	// research_panel cost tracking (#303) is entirely opt-in (registry.go's
+	// documented contract: nil ResearchPanelCost ⇒ every guard is a no-op) —
+	// only construct the guard when an operator actually set a cost env var,
+	// so deps.ResearchPanelCost stays nil in zero-config deployments. A
+	// malformed RESEARCH_PANEL_PRICE_TABLE_PATH fails closed: cost tracking is
+	// disabled entirely (caps included) rather than left silently ineffective
+	// with every estimate at $0.
+	var panelCostGuard *tools.PanelCostGuard
+	rpc := cfg.ResearchPanel
+	if rpc.PriceTablePath != "" || rpc.MaxCallCostUSD > 0 || rpc.MaxDailyCostUSD > 0 || rpc.DryRun {
+		guard, pcgErr := tools.NewPanelCostGuard(rpc, persistStore)
+		if pcgErr != nil {
+			logger.Error("research_panel cost tracking disabled: price table failed to load", "path", rpc.PriceTablePath, "err", pcgErr)
+		} else {
+			panelCostGuard = guard
+		}
+	}
+
 	toolDeps := tools.Dependencies{
 		Cache:                     cacheStore,
 		Search:                    searchProvider,
@@ -538,6 +557,7 @@ func main() {
 		CTLogResolver:          ctLogResolver,
 		ArchiveResolver:        archiveResolver,
 		ResearchPanelProviders: tools.AvailableModelProviders(cfg.ResearchPanel, cfg.AllowPrivateIPs),
+		ResearchPanelCost:      panelCostGuard,
 		Singleflight:           &singleflight.Group{},
 	}
 
@@ -613,7 +633,14 @@ func main() {
 		}
 	}
 
-	resources.RegisterAll(srv.MCP(), metricsCollector, sessionManager, rateLimiter, providerInfos, healthProvider, lensInfos)
+	// research_panel not configured (no providers) leaves ResearchPanelCost
+	// nil, which resources.RegisterAll's PanelSpendProvider param accepts —
+	// diagnostics://panel/spend then reports "configured": false.
+	var panelSpendProvider resources.PanelSpendProvider
+	if toolDeps.ResearchPanelCost != nil {
+		panelSpendProvider = toolDeps.ResearchPanelCost
+	}
+	resources.RegisterAll(srv.MCP(), metricsCollector, sessionManager, rateLimiter, providerInfos, healthProvider, lensInfos, panelSpendProvider)
 
 	// STDIO single-user identity (opt-in). When STDIO_USER_ID is set (only ever
 	// populated in STDIO mode — see config.Load), two things happen:

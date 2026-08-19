@@ -46,7 +46,7 @@ func TestBrowserPoolCloseIdempotent(t *testing.T) {
 	skipIfNoChrome(t)
 	resetPool(t)
 
-	bp := getBrowserPool("", 1)
+	bp := getBrowserPool("", 1, 0)
 	if bp.browser == nil {
 		t.Fatalf("browser pool failed to launch: %v", bp.initErr)
 	}
@@ -64,7 +64,7 @@ func TestBrowserPoolCleanupRemovesUserDataDir(t *testing.T) {
 	skipIfNoChrome(t)
 	resetPool(t)
 
-	bp := getBrowserPool("", 1)
+	bp := getBrowserPool("", 1, 0)
 	if bp.browser == nil {
 		t.Fatalf("browser pool failed to launch: %v", bp.initErr)
 	}
@@ -80,6 +80,140 @@ func TestBrowserPoolCleanupRemovesUserDataDir(t *testing.T) {
 
 	if _, err := os.Stat(userDataDir); !os.IsNotExist(err) {
 		t.Errorf("expected UserDataDir %q to be removed after close, stat err = %v", userDataDir, err)
+	}
+}
+
+// TestBrowserPoolIdleTimeoutCloses proves #460's fix: a browser pool armed
+// with a short idle timeout closes itself — killing the Chromium process —
+// after no getBrowserPool call touches it within that window, instead of
+// staying open for the full server lifetime.
+func TestBrowserPoolIdleTimeoutCloses(t *testing.T) {
+	skipIfNoChrome(t)
+	resetPool(t)
+
+	const idleTimeout = 150 * time.Millisecond
+	bp := getBrowserPool("", 1, idleTimeout)
+	if bp.browser == nil {
+		t.Fatalf("browser pool failed to launch: %v", bp.initErr)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		bp.mu.Lock()
+		closed := bp.browser == nil
+		bp.mu.Unlock()
+		if closed {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("browser pool did not auto-close within the deadline after going idle")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// TestBrowserPoolIdleTimeoutResetsOnUse proves the idle timer is re-armed by
+// every getBrowserPool call, not just the first: a pool touched more often
+// than its idle timeout must stay open across that whole span, not close
+// partway through because the ORIGINAL timer (from launch) fired.
+func TestBrowserPoolIdleTimeoutResetsOnUse(t *testing.T) {
+	skipIfNoChrome(t)
+	resetPool(t)
+
+	// A generous idleTimeout with a small sleep fraction (rather than half)
+	// keeps this robust on loaded CI runners: a sleep intended to be well
+	// inside the window must not be able to overshoot it under scheduling
+	// delay, which would make the test intermittently fail even when the
+	// implementation is correct.
+	const idleTimeout = 1 * time.Second
+	bp := getBrowserPool("", 1, idleTimeout)
+	if bp.browser == nil {
+		t.Fatalf("browser pool failed to launch: %v", bp.initErr)
+	}
+
+	// Touch well inside the idle window, several times, for longer than the
+	// idle timeout itself would allow if it were not being reset.
+	for i := 0; i < 4; i++ {
+		time.Sleep(idleTimeout / 5)
+		bp2 := getBrowserPool("", 1, idleTimeout)
+		bp2.mu.Lock()
+		alive := bp2.browser != nil
+		bp2.mu.Unlock()
+		if !alive {
+			t.Fatalf("browser pool closed after repeated touches within the idle window (iteration %d)", i)
+		}
+	}
+}
+
+// TestBrowserPoolIdleTimeoutDoesNotFireDuringActiveUse proves the #460
+// follow-up fix: acquire() disarms the idle timer for the duration of an
+// in-progress operation, so an idle timeout shorter than that operation
+// cannot close the browser out from under it. Without the fix, the timer
+// armed by getBrowserPool would fire mid-"scrape" and close bp.browser while
+// acquire() still holds it checked out.
+func TestBrowserPoolIdleTimeoutDoesNotFireDuringActiveUse(t *testing.T) {
+	skipIfNoChrome(t)
+	resetPool(t)
+
+	const idleTimeout = 50 * time.Millisecond
+	bp := getBrowserPool("", 1, idleTimeout)
+	if bp.browser == nil {
+		t.Fatalf("browser pool failed to launch: %v", bp.initErr)
+	}
+
+	browser := bp.acquire()
+	if browser == nil {
+		t.Fatal("acquire() returned nil browser")
+	}
+
+	// Longer than idleTimeout: if the timer were still armed, it would have
+	// fired and closed the pool well before this returns.
+	time.Sleep(idleTimeout * 4)
+
+	bp.mu.Lock()
+	stillOpen := bp.browser != nil
+	bp.mu.Unlock()
+	if !stillOpen {
+		t.Fatal("browser pool closed while acquire() held it checked out")
+	}
+
+	bp.release()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		bp.mu.Lock()
+		closed := bp.browser == nil
+		bp.mu.Unlock()
+		if closed {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("browser pool did not auto-close within the deadline after release()")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// TestBrowserPoolIdleTimeoutZeroDisabled proves idleTimeout=0 (the
+// PipelineConfig zero value, and BROWSER_IDLE_TIMEOUT=0 at the config layer)
+// disables the auto-close timer entirely — the pre-#460 behavior every other
+// test in this file relies on.
+func TestBrowserPoolIdleTimeoutZeroDisabled(t *testing.T) {
+	skipIfNoChrome(t)
+	resetPool(t)
+
+	bp := getBrowserPool("", 1, 0)
+	if bp.browser == nil {
+		t.Fatalf("browser pool failed to launch: %v", bp.initErr)
+	}
+
+	time.Sleep(300 * time.Millisecond)
+
+	bp.mu.Lock()
+	alive := bp.browser != nil
+	bp.mu.Unlock()
+	if !alive {
+		t.Error("expected browser pool to stay open indefinitely with idleTimeout=0, but it closed")
 	}
 }
 
@@ -171,7 +305,7 @@ func TestScrapeBrowserRecoversFromCrash(t *testing.T) {
 	defer ts.Close()
 
 	// Prime the pool with a live browser.
-	bp := getBrowserPool("", 1)
+	bp := getBrowserPool("", 1, 0)
 	if bp.browser == nil {
 		t.Fatalf("browser pool failed to launch: %v", bp.initErr)
 	}
@@ -229,7 +363,7 @@ func TestScrapeBrowserRecoversFromCrash(t *testing.T) {
 
 	// The relaunch must have produced a genuinely new, live browser/launcher
 	// (issue #464's fix relaunches rather than reusing dead state).
-	newBP := getBrowserPool("", 1)
+	newBP := getBrowserPool("", 1, 0)
 	if newBP.launcher == nil || newBP.launcher.PID() == pid {
 		t.Errorf("expected a new launcher PID after recovery, still have old PID %d", pid)
 	}

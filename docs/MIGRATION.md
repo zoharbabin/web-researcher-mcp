@@ -17,7 +17,7 @@ This guide is for users of the deprecated [`google-researcher-mcp`](https://gith
 | Language | TypeScript / Node.js 20+ | Go (single static binary) |
 | Install | `npx -y google-researcher-mcp` | `uvx web-researcher-mcp` (one-line swap), Homebrew, binary download, or Docker |
 | Process model | npm spawns Node.js — orphan detection issues | Native binary — clean EOF/SIGPIPE lifecycle |
-| Search backends | Google PSE only | Google PSE plus multiple alternatives (Brave, Serper, SearXNG, SearchAPI, Tavily, Exa, HackerNews) and a zero-config DuckDuckGo fallback, with multi-provider routing — canonical list: `search.SupportedProviders` |
+| Search backends | Google PSE only | Google PSE plus multiple alternatives, including niche social and developer sources, and a zero-config DuckDuckGo fallback, with multi-provider routing — canonical list: `search.SupportedProviders` |
 | Caching | In-memory only | Hybrid (memory + AES-encrypted disk) |
 | Architecture | Monolithic `server.ts` | Modular (one package per concern) |
 | Binary size | ~200MB (Node.js + Chromium) | Single static binary, no runtime bundled (Chromium optional; auto-detects a local install) |
@@ -122,7 +122,7 @@ The new version supports multiple backends for unrestricted whole-web search:
 }
 ```
 
-Supported providers: `google` (default), `brave`, `serper`, `searxng`, `searchapi`, `tavily`, `exa`, `duckduckgo` (zero-config fallback, no API key), `hackernews` (HN Algolia index, no API key). Canonical list: `search.SupportedProviders`.
+Supported providers are defined by `search.SupportedProviders`. The list includes general-web engines plus niche Hacker News, Reddit, Bluesky, GitHub, and Xquik sources. DuckDuckGo remains the zero-config fallback.
 
 You can also enable multi-provider routing with automatic fallback:
 

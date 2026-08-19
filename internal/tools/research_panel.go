@@ -24,9 +24,16 @@ import (
 // (OpenRouter, direct provider keys, AWS Bedrock, local Ollama/LM Studio —
 // see AvailableModelProviders); an explicit `models` list overrides it for one
 // call. Panel responses are untrusted external content, same as web_search or
-// academic_search results — read them as evidence, not instructions. Cost
-// tracking (per-call USD estimates, dry-run mode, spend caps) is deferred to
-// issue #303.
+// academic_search results — read them as evidence, not instructions.
+//
+// Cost tracking (#303, see research_panel_cost.go): every non-cached response
+// carries `_meta.estimated_cost_usd` + `_meta.cost_breakdown`, priced from an
+// operator-managed table (RESEARCH_PANEL_PRICE_TABLE_PATH). A per-call cap
+// (RESEARCH_PANEL_MAX_CALL_COST_USD) and per-tenant daily cap
+// (RESEARCH_PANEL_MAX_DAILY_COST_USD) reject a call before any model is
+// queried when the pre-flight estimate would exceed them.
+// RESEARCH_PANEL_DRY_RUN=true returns the estimate and which models would be
+// called without querying any of them.
 
 const (
 	researchPanelConcurrency  = 5
@@ -34,7 +41,7 @@ const (
 	researchPanelMinTimeout   = 5
 	researchPanelMaxTimeout   = 120
 	researchPanelMaxQuestion  = 4000
-	researchPanelCacheVersion = "v1"
+	researchPanelCacheVersion = "v2" // v2 (#303): cost-tracking _meta fields
 )
 
 type researchPanelInput struct {
@@ -71,6 +78,39 @@ func registerResearchPanel(srv *mcp.Server, deps Dependencies) {
 			return toolError("no research panel members are configured or resolvable from the requested models"), nil, nil
 		}
 
+		costGuard := deps.ResearchPanelCost
+
+		// Dry-run (#303): an operator-wide mode for previewing cost without
+		// spending — always bypasses the cache (it never reflects a real spend)
+		// and calls no model.
+		if costGuard.isDryRun() {
+			estimated := costGuard.EstimateCall(panel, question)
+			wouldCall := make([]map[string]any, 0, len(panel))
+			for _, m := range panel {
+				wouldCall = append(wouldCall, map[string]any{
+					"model_id": m.ModelID(),
+					"provider": m.Name(),
+				})
+			}
+			output := map[string]any{
+				"query":      question,
+				"dry_run":    true,
+				"would_call": wouldCall,
+				"_meta": map[string]any{
+					"estimated_cost_usd": estimated,
+					"models_queried":     len(panel),
+					"dry_run":            true,
+				},
+			}
+			jsonBytes, err := json.Marshal(output)
+			if err != nil {
+				return upstreamErrorResponse("research_panel", err), nil, nil
+			}
+			auditToolCallQuery(ctx, deps, "research_panel", time.Since(start), nil, "", question, map[string]any{"dry_run": true, "models_queried": len(panel)})
+			recordToolCall(deps, "research_panel", time.Since(start), nil, "", false)
+			return structuredResult(jsonBytes), nil, nil
+		}
+
 		useCache := input.UseCache == nil || *input.UseCache
 		modelIDs := make([]string, len(panel))
 		for i, p := range panel {
@@ -80,7 +120,8 @@ func registerResearchPanel(srv *mcp.Server, deps Dependencies) {
 		sort.Strings(sortedIDs)
 		// Cache key includes tenantID (issue #302 security notes): the tenant
 		// namespace prevents cross-tenant cache reads of panel responses.
-		cacheKey := searchCacheKey("research_panel|"+researchPanelCacheVersion, auth.TenantIDFromContext(ctx), question, strings.Join(sortedIDs, ","))
+		tenantID := auth.TenantIDFromContext(ctx)
+		cacheKey := searchCacheKey("research_panel|"+researchPanelCacheVersion, tenantID, question, strings.Join(sortedIDs, ","))
 
 		if useCache {
 			if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
@@ -88,6 +129,20 @@ func registerResearchPanel(srv *mcp.Server, deps Dependencies) {
 				auditToolCall(ctx, deps, "research_panel", time.Since(start), nil, "")
 				return cachedResultWithMeta(cached, meta), nil, nil
 			}
+		}
+
+		// Cost caps (#303): reject before any model is queried when the
+		// pre-flight estimate would exceed the configured per-call or
+		// per-tenant-daily cap. A cache hit above never reaches here, so a
+		// free (cached) answer is never blocked by a cost cap.
+		estimatedUSD := costGuard.EstimateCall(panel, question)
+		if costGuard.ExceedsCallCap(estimatedUSD) {
+			auditToolDenial(ctx, deps, "research_panel", time.Since(start), "call_cost_cap_exceeded")
+			return toolError(fmt.Sprintf("estimated cost $%.4f exceeds the per-call cap $%.4f (RESEARCH_PANEL_MAX_CALL_COST_USD) — no models were called", estimatedUSD, costGuard.MaxCallUSD)), nil, nil
+		}
+		if costGuard.ExceedsDailyCap(tenantID, estimatedUSD) {
+			auditToolDenial(ctx, deps, "research_panel", time.Since(start), "daily_cost_cap_exceeded")
+			return toolError(fmt.Sprintf("estimated cost $%.4f would exceed today's remaining budget under the per-tenant daily cap $%.4f (RESEARCH_PANEL_MAX_DAILY_COST_USD) — no models were called", estimatedUSD, costGuard.MaxDailyUSD)), nil, nil
 		}
 
 		timeoutSecs := input.TimeoutSecs
@@ -143,7 +198,9 @@ func registerResearchPanel(srv *mcp.Server, deps Dependencies) {
 
 		responses := make(map[string]string)
 		panelItems := make([]map[string]any, 0, len(results))
+		costBreakdown := make([]map[string]any, 0, len(results))
 		modelsSucceeded, modelsFailed, totalTokens := 0, 0, 0
+		var actualCostUSD float64
 		for _, r := range results {
 			key := r.provider + "/" + r.modelID
 			item := map[string]any{
@@ -160,6 +217,16 @@ func registerResearchPanel(srv *mcp.Server, deps Dependencies) {
 				item["tokens_used"] = r.inTok + r.outTok
 				totalTokens += r.inTok + r.outTok
 				responses[key] = r.text
+
+				usd := costGuard.modelCost(key, r.inTok, r.outTok)
+				actualCostUSD += usd
+				costBreakdown = append(costBreakdown, map[string]any{
+					"model_id":   r.modelID,
+					"provider":   r.provider,
+					"tokens_in":  r.inTok,
+					"tokens_out": r.outTok,
+					"usd":        usd,
+				})
 			}
 			panelItems = append(panelItems, item)
 		}
@@ -169,6 +236,8 @@ func registerResearchPanel(srv *mcp.Server, deps Dependencies) {
 			return toolError("every panel member failed to answer — check per-model errors and provider credentials"), nil, nil
 		}
 
+		costGuard.RecordSpend(tenantID, actualCostUSD)
+
 		divergence := AnalyzeDivergence(responses)
 
 		output := map[string]any{
@@ -177,11 +246,13 @@ func registerResearchPanel(srv *mcp.Server, deps Dependencies) {
 			"divergence": divergence,
 			"trust":      untrustedContentTrust,
 			"_meta": map[string]any{
-				"cached":            false,
-				"models_queried":    len(panel),
-				"models_succeeded":  modelsSucceeded,
-				"models_failed":     modelsFailed,
-				"total_tokens_used": totalTokens,
+				"cached":             false,
+				"models_queried":     len(panel),
+				"models_succeeded":   modelsSucceeded,
+				"models_failed":      modelsFailed,
+				"total_tokens_used":  totalTokens,
+				"estimated_cost_usd": actualCostUSD,
+				"cost_breakdown":     costBreakdown,
 			},
 		}
 

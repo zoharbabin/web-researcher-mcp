@@ -296,6 +296,7 @@ type TrialSearchParams struct {
 	Intervention string // drug/treatment (e.g. "remdesivir")
 	Sponsor      string // lead sponsor / funder
 	Status       string // recruitment status filter (registry vocabulary)
+	Phase        string // trial phase filter (e.g. "PHASE3", "phase 3", "early phase 1")
 	NumResults   int
 }
 
