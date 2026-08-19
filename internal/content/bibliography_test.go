@@ -65,6 +65,26 @@ func TestBibTeXAuthorSeparator(t *testing.T) {
 	}
 }
 
+// TestBibTeXKeyUsesSurnameNotGivenName proves the #621 fix: a "Given Family"
+// author string must key on the surname ("Watson"), not the first
+// whitespace-delimited token ("James") — across every style that calls
+// BibTeXKey, so bibtex/apa/mla/csl-json cite keys stay consistent.
+func TestBibTeXKeyUsesSurnameNotGivenName(t *testing.T) {
+	cases := []struct {
+		author string
+		want   string
+	}{
+		{"James Watson and Francis Crick", "watson1953molecular"},
+		{"Watson, James and Crick, Francis", "watson1953molecular"}, // pre-inverted, unaffected
+		{"Smith, J.", "smith1953molecular"},                         // comma form must still work
+	}
+	for _, c := range cases {
+		if got := BibTeXKey(c.author, "1953", "Molecular Structure of Nucleic Acids"); got != c.want {
+			t.Errorf("BibTeXKey(%q, ...) = %q, want %q", c.author, got, c.want)
+		}
+	}
+}
+
 func TestBibTeXKeyFallback(t *testing.T) {
 	if got := BibTeXKey("", "", ""); got != "anon" {
 		t.Errorf("empty fallback = %q, want anon", got)
