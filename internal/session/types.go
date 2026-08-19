@@ -10,12 +10,17 @@ type Session struct {
 	// TotalStepsEstimate is the caller's latest estimate of total steps needed,
 	// set via sequential_search's totalStepsEstimate field and persisted across
 	// steps so it survives even when a later step omits it (#525).
-	TotalStepsEstimate int              `json:"totalStepsEstimate,omitempty"`
-	CreatedAt          time.Time        `json:"createdAt"`
-	LastUsed           time.Time        `json:"lastUsed"`
-	Steps              []ResearchStep   `json:"steps"`
-	Sources            []ResearchSource `json:"sources"`
-	Gaps               []KnowledgeGap   `json:"gaps"`
+	TotalStepsEstimate int       `json:"totalStepsEstimate,omitempty"`
+	CreatedAt          time.Time `json:"createdAt"`
+	LastUsed           time.Time `json:"lastUsed"`
+	// Completed is set by MarkComplete when the caller submits a step with
+	// nextStepNeeded:false. It exists solely so ActiveCount can exclude finished
+	// sessions from the "live" gauge (#622) — a completed session is not deleted
+	// and stays readable via GetFull/GetIndex until its TTL expires.
+	Completed bool             `json:"completed,omitempty"`
+	Steps     []ResearchStep   `json:"steps"`
+	Sources   []ResearchSource `json:"sources"`
+	Gaps      []KnowledgeGap   `json:"gaps"`
 	// Outcomes is the bounded per-session record of tool outcomes (provider
 	// attempt/success + error kind), feeding the cross-call error-pattern and
 	// provider-stats aggregation surfaced in get_research_session (#99). Capped
@@ -123,16 +128,20 @@ type SessionIndex struct {
 	ResearchGoal    string `json:"researchGoal"`
 	// TotalStepsEstimate mirrors Session.TotalStepsEstimate (#525) — the latest
 	// caller-supplied estimate, persisted so it survives steps that omit it.
-	TotalStepsEstimate int              `json:"totalStepsEstimate,omitempty"`
-	CreatedAt          time.Time        `json:"createdAt"`
-	LastUsed           time.Time        `json:"lastUsed"`
-	StepCount          int              `json:"stepCount"`
-	Summary            string           `json:"summary"`
-	StepIndex          []StepIndexEntry `json:"stepIndex"`
-	LastSteps          []ResearchStep   `json:"lastSteps"`
-	ActiveGaps         []KnowledgeGap   `json:"activeGaps"`
-	Sources            []ResearchSource `json:"sources"`
-	Warning            string           `json:"warning,omitempty"`
+	TotalStepsEstimate int       `json:"totalStepsEstimate,omitempty"`
+	CreatedAt          time.Time `json:"createdAt"`
+	LastUsed           time.Time `json:"lastUsed"`
+	// Completed mirrors Session.Completed (#622) — surfaced on the index so
+	// get_research_session and ActiveCount agree on completion state without
+	// loading the full session.
+	Completed  bool             `json:"completed,omitempty"`
+	StepCount  int              `json:"stepCount"`
+	Summary    string           `json:"summary"`
+	StepIndex  []StepIndexEntry `json:"stepIndex"`
+	LastSteps  []ResearchStep   `json:"lastSteps"`
+	ActiveGaps []KnowledgeGap   `json:"activeGaps"`
+	Sources    []ResearchSource `json:"sources"`
+	Warning    string           `json:"warning,omitempty"`
 	// ErrorPatterns surfaces recurring error kinds (count >= ErrorPatternMinCount)
 	// across the session; ProviderStats reports per-provider attempt/success
 	// counts. Both are derived from Session.Outcomes at index-build time (#99).

@@ -379,6 +379,50 @@ func TestActiveCount(t *testing.T) {
 	}
 }
 
+// TestActiveCountExcludesCompletedSessions proves the #622 fix: ActiveCount
+// decrements when a session is marked complete, but the session itself stays
+// readable (get_research_session / format_bibliography still work on it) —
+// completion is a flag, not a deletion.
+func TestActiveCountExcludesCompletedSessions(t *testing.T) {
+	m := newTestManager(5*time.Minute, 10)
+	defer m.Close()
+
+	idx1, _ := m.Create("tenant-1", "u1")
+	m.Create("tenant-1", "u1")
+
+	if got := m.ActiveCount(); got != 2 {
+		t.Fatalf("expected 2 active sessions before completion, got %d", got)
+	}
+
+	if err := m.MarkComplete("tenant-1", "u1", idx1.ID); err != nil {
+		t.Fatalf("MarkComplete failed: %v", err)
+	}
+
+	if got := m.ActiveCount(); got != 1 {
+		t.Errorf("expected 1 active session after completing one, got %d", got)
+	}
+
+	got, ok := m.GetIndex("tenant-1", "u1", idx1.ID)
+	if !ok {
+		t.Fatal("completed session should still be readable via GetIndex")
+	}
+	if !got.Completed {
+		t.Error("index should report Completed=true after MarkComplete")
+	}
+}
+
+// TestMarkCompleteNotFound proves MarkComplete surfaces ErrSessionNotFound for
+// a missing session, same convention as SetResearchGoal — sequential_search
+// treats this as best-effort and ignores the error.
+func TestMarkCompleteNotFound(t *testing.T) {
+	m := newTestManager(5*time.Minute, 10)
+	defer m.Close()
+
+	if err := m.MarkComplete("tenant-1", "u1", "does-not-exist"); !errors.Is(err, ErrSessionNotFound) {
+		t.Errorf("expected ErrSessionNotFound, got %v", err)
+	}
+}
+
 func TestSessionIDsAreUnique(t *testing.T) {
 	m := newTestManager(5*time.Minute, 100)
 	defer m.Close()

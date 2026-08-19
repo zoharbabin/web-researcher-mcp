@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/cipher"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -56,6 +57,14 @@ func (m *SessionManager) blobKey(tenantID, userID, sessionID string) string {
 // are "userID:sessionID" so per-session keys can be reconstructed.
 func (m *SessionManager) tenantSetKey(tenantID string) string {
 	return m.b.key("session:index", tenantID)
+}
+
+// completedSetKey indexes sessions in a tenant that have been marked complete
+// via MarkComplete, so ActiveCount can subtract a cheap SCard from the raw
+// per-tenant SCard instead of loading every session blob to check a field
+// (#622) — the same cost profile the existing ActiveCount already relies on.
+func (m *SessionManager) completedSetKey(tenantID string) string {
+	return m.b.key("session:completed", tenantID)
 }
 
 func setMember(userID, sessionID string) string { return normUser(userID) + ":" + sessionID }
@@ -210,6 +219,27 @@ func (m *SessionManager) RecordOutcome(tenantID, userID, sessionID string, ev se
 	return nil
 }
 
+// MarkComplete flags a session as finished (#622) so ActiveCount stops
+// counting it toward the live-session gauge, without deleting it — a
+// completed session stays readable via GetFull/GetIndex until its TTL
+// expires.
+func (m *SessionManager) MarkComplete(tenantID, userID, sessionID string) error {
+	sess, err := m.load(tenantID, userID, sessionID)
+	if err != nil {
+		return err
+	}
+	sess.Completed = true
+	sess.LastUsed = nowUTC()
+	if err := m.save(sess); err != nil {
+		return err
+	}
+	pipe := m.b.client.TxPipeline()
+	pipe.SAdd(m.ctx, m.completedSetKey(tenantID), setMember(userID, sessionID))
+	pipe.Expire(m.ctx, m.completedSetKey(tenantID), m.ttl)
+	_, err = pipe.Exec(m.ctx)
+	return err
+}
+
 func (m *SessionManager) GetIndex(tenantID, userID, sessionID string) (*session.SessionIndex, bool) {
 	sess, err := m.load(tenantID, userID, sessionID)
 	if err != nil {
@@ -246,6 +276,9 @@ func (m *SessionManager) Delete(tenantID, userID, sessionID string) {
 	// Remove both the new member form ("userID:sessionID") and the legacy bare
 	// "sessionID" member, so no stale index entry inflates SCard/eviction.
 	pipe.SRem(m.ctx, m.tenantSetKey(tenantID), setMember(userID, sessionID), sessionID)
+	// Also drop it from the completed-set (#622) so a deleted session never
+	// inflates that set's SCard against a since-reused tenant.
+	pipe.SRem(m.ctx, m.completedSetKey(tenantID), setMember(userID, sessionID))
 	_, _ = pipe.Exec(m.ctx)
 }
 
@@ -259,6 +292,10 @@ func (m *SessionManager) DeleteAll() {
 	idxIter := m.b.client.Scan(m.ctx, 0, m.b.key("session:index", "*"), 100).Iterator()
 	for idxIter.Next(m.ctx) {
 		_ = m.b.client.Del(m.ctx, idxIter.Val()).Err()
+	}
+	completedIter := m.b.client.Scan(m.ctx, 0, m.b.key("session:completed", "*"), 100).Iterator()
+	for completedIter.Next(m.ctx) {
+		_ = m.b.client.Del(m.ctx, completedIter.Val()).Err()
 	}
 }
 
@@ -312,18 +349,40 @@ func (m *SessionManager) DeleteByTenant(tenantID string) int {
 		m.Delete(tenantID, uid, sid)
 	}
 	_ = m.b.client.Del(m.ctx, m.tenantSetKey(tenantID)).Err()
+	_ = m.b.client.Del(m.ctx, m.completedSetKey(tenantID)).Err()
 	return len(members)
 }
 
+// ActiveCount returns the number of live, NOT-YET-COMPLETED sessions (#622):
+// per tenant, the index set's cardinality minus the completed-set's
+// cardinality. Both are cheap SCards — this deliberately avoids loading every
+// session blob just to check a Completed field, which would turn a stats call
+// into an O(sessions) fan-out of Redis GETs.
 func (m *SessionManager) ActiveCount() int {
 	var total int
 	iter := m.b.client.Scan(m.ctx, 0, m.b.key("session:index", "*"), 100).Iterator()
 	for iter.Next(m.ctx) {
-		if n, err := m.b.client.SCard(m.ctx, iter.Val()).Result(); err == nil {
-			total += int(n)
+		indexKey := iter.Val()
+		n, err := m.b.client.SCard(m.ctx, indexKey).Result()
+		if err != nil {
+			continue
+		}
+		tenantID := m.tenantIDFromIndexKey(indexKey)
+		completed, _ := m.b.client.SCard(m.ctx, m.completedSetKey(tenantID)).Result()
+		if live := int(n) - int(completed); live > 0 {
+			total += live
 		}
 	}
 	return total
+}
+
+// tenantIDFromIndexKey inverts tenantSetKey: strips the "session:index:"
+// namespace prefix (with the deployment's KeyPrefix) to recover the tenantID
+// that was scanned, so ActiveCount can look up that tenant's completed-set
+// without a separate tenant enumeration.
+func (m *SessionManager) tenantIDFromIndexKey(key string) string {
+	prefix := m.b.key("session:index", "")
+	return strings.TrimPrefix(key, prefix)
 }
 
 func (m *SessionManager) Close() {} // client lifecycle owned by Backends.Close

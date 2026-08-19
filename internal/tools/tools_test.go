@@ -813,6 +813,69 @@ func TestSequentialSearchTool(t *testing.T) {
 	}
 }
 
+// TestSequentialSearchMarkCompleteDecrementsActiveCount proves the #622 fix
+// end-to-end: creating a session increments deps.Sessions.ActiveCount() (what
+// stats://sessions' activeSessions passes through), and completing it via
+// nextStepNeeded:false decrements it back — without deleting the session, so
+// it stays readable via get_research_session.
+func TestSequentialSearchMarkCompleteDecrementsActiveCount(t *testing.T) {
+	ctx := context.Background()
+	deps := setupTestDeps()
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	before := deps.Sessions.ActiveCount()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "sequential_search",
+		Arguments: map[string]any{
+			"searchStep":     "Initial search for topic X",
+			"stepNumber":     float64(1),
+			"nextStepNeeded": true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	var output map[string]any
+	if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &output); err != nil {
+		t.Fatalf("failed to parse output: %v", err)
+	}
+	sessionID := output["sessionId"].(string)
+
+	if got := deps.Sessions.ActiveCount(); got != before+1 {
+		t.Fatalf("ActiveCount after creating a session = %d, want %d", got, before+1)
+	}
+
+	res, err = session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "sequential_search",
+		Arguments: map[string]any{
+			"searchStep":     "Found relevant paper on topic X",
+			"stepNumber":     float64(2),
+			"nextStepNeeded": false,
+			"sessionId":      sessionID,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool step 2 failed: %v", err)
+	}
+	if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &output); err != nil {
+		t.Fatalf("failed to parse step 2 output: %v", err)
+	}
+	if output["isComplete"] != true {
+		t.Fatal("expected isComplete=true on final step")
+	}
+
+	if got := deps.Sessions.ActiveCount(); got != before {
+		t.Errorf("ActiveCount after completing the session = %d, want %d (back to baseline)", got, before)
+	}
+
+	if _, ok := deps.Sessions.GetIndex("default", "", sessionID); !ok {
+		t.Error("completed session should still be readable via get_research_session's backing GetIndex")
+	}
+}
+
 // TestSequentialSearchMissingSessionOnStep2 verifies that a step > 1 with no
 // sessionId is rejected with guidance rather than silently forking a new,
 // orphaned session (which would abandon the real research trail after a caller

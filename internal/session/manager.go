@@ -210,6 +210,35 @@ func (m *MemoryManager) SetTotalStepsEstimate(tenantID, userID, sessionID string
 	return nil
 }
 
+// MarkComplete flags a session as finished (#622) so ActiveCount stops
+// counting it toward the live-session gauge, without deleting it — a
+// completed session stays readable via GetFull/GetIndex until its TTL expires.
+func (m *MemoryManager) MarkComplete(tenantID, userID, sessionID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	key := sessionKey(tenantID, userID, sessionID)
+	idx, ok := m.index[key]
+	if !ok {
+		return ErrSessionNotFound
+	}
+
+	sess, err := m.store.Load(key)
+	if err != nil {
+		return err
+	}
+
+	sess.Completed = true
+	sess.LastUsed = time.Now()
+	if err := m.store.Save(key, sess, m.config.SessionTTL); err != nil {
+		return err
+	}
+
+	idx.Completed = true
+	idx.LastUsed = sess.LastUsed
+	return nil
+}
+
 func (m *MemoryManager) AddSources(tenantID, userID, sessionID string, sources []ResearchSource) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -412,10 +441,19 @@ func (m *MemoryManager) Close() {
 	close(m.done)
 }
 
+// ActiveCount returns the number of live, NOT-YET-COMPLETED sessions (#622) —
+// a session marked complete via MarkComplete stays in m.index (readable until
+// TTL expiry) but no longer counts toward this gauge.
 func (m *MemoryManager) ActiveCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return len(m.index)
+	n := 0
+	for _, idx := range m.index {
+		if !idx.Completed {
+			n++
+		}
+	}
+	return n
 }
 
 func (m *MemoryManager) deleteUnlocked(key string) {
@@ -527,6 +565,7 @@ func buildIndexFromSession(sess *Session) *SessionIndex {
 		TotalStepsEstimate: sess.TotalStepsEstimate,
 		CreatedAt:          sess.CreatedAt,
 		LastUsed:           sess.LastUsed,
+		Completed:          sess.Completed,
 		StepCount:          len(sess.Steps),
 		ActiveGaps:         sess.Gaps,
 		Sources:            sess.Sources,
