@@ -1027,9 +1027,8 @@ func (p *Pipeline) ExtractLinks(ctx context.Context, rawURL string) []string {
 	defer cancel()
 
 	bp := getBrowserPool(p.config.ChromePath, p.config.MaxBrowserConcurrency, p.config.BrowserIdleTimeout)
-	bp.mu.Lock()
-	browser := bp.browser
-	bp.mu.Unlock()
+	browser := bp.acquire()
+	defer bp.release()
 	if browser == nil {
 		return nil
 	}
