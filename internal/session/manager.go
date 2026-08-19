@@ -355,7 +355,7 @@ func (m *MemoryManager) GetStep(tenantID, userID, sessionID string, stepNum int)
 			return &step, nil
 		}
 	}
-	return nil, fmt.Errorf("step %d not found", stepNum)
+	return nil, &StepNotFoundError{SessionID: sessionID, StepID: stepNum, StepCount: len(sess.Steps)}
 }
 
 func (m *MemoryManager) Delete(tenantID, userID, sessionID string) {
