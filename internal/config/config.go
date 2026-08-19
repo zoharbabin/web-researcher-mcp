@@ -253,6 +253,20 @@ type ResearchPanelConfig struct {
 	DefaultModels    []string
 	MaxModels        int
 
+	// Per-provider default-model overrides for the auto-detected panel (no
+	// RESEARCH_PANEL_DEFAULT_MODELS set). Each is optional; empty falls back
+	// to the built-in default in research_panel_providers.go. Use
+	// RESEARCH_PANEL_DEFAULT_MODELS instead to override the whole panel at once.
+	OpenAIModel              string // RESEARCH_PANEL_OPENAI_MODEL
+	AnthropicModel           string // RESEARCH_PANEL_ANTHROPIC_MODEL
+	GoogleModel              string // RESEARCH_PANEL_GOOGLE_MODEL
+	BedrockModel             string // RESEARCH_PANEL_BEDROCK_MODEL
+	OllamaModel              string // RESEARCH_PANEL_OLLAMA_MODEL
+	LMStudioModel            string // RESEARCH_PANEL_LMSTUDIO_MODEL
+	OpenRouterAnthropicModel string // RESEARCH_PANEL_OPENROUTER_ANTHROPIC_MODEL
+	OpenRouterOpenAIModel    string // RESEARCH_PANEL_OPENROUTER_OPENAI_MODEL
+	OpenRouterGoogleModel    string // RESEARCH_PANEL_OPENROUTER_GOOGLE_MODEL
+
 	// Cost tracking (#303). All optional; zero values disable the
 	// corresponding guard so cost tracking stays entirely opt-in.
 	PriceTablePath  string  // RESEARCH_PANEL_PRICE_TABLE_PATH — operator-managed JSON {"model_id":{"input_per_1k":0.003,"output_per_1k":0.015}}
@@ -592,6 +606,16 @@ func Load() (*Config, error) {
 			MaxCallCostUSD:   envFloat("RESEARCH_PANEL_MAX_CALL_COST_USD", 0),
 			MaxDailyCostUSD:  envFloat("RESEARCH_PANEL_MAX_DAILY_COST_USD", 0),
 			DryRun:           envBool("RESEARCH_PANEL_DRY_RUN", false),
+
+			OpenAIModel:              os.Getenv("RESEARCH_PANEL_OPENAI_MODEL"),
+			AnthropicModel:           os.Getenv("RESEARCH_PANEL_ANTHROPIC_MODEL"),
+			GoogleModel:              os.Getenv("RESEARCH_PANEL_GOOGLE_MODEL"),
+			BedrockModel:             os.Getenv("RESEARCH_PANEL_BEDROCK_MODEL"),
+			OllamaModel:              os.Getenv("RESEARCH_PANEL_OLLAMA_MODEL"),
+			LMStudioModel:            os.Getenv("RESEARCH_PANEL_LMSTUDIO_MODEL"),
+			OpenRouterAnthropicModel: os.Getenv("RESEARCH_PANEL_OPENROUTER_ANTHROPIC_MODEL"),
+			OpenRouterOpenAIModel:    os.Getenv("RESEARCH_PANEL_OPENROUTER_OPENAI_MODEL"),
+			OpenRouterGoogleModel:    os.Getenv("RESEARCH_PANEL_OPENROUTER_GOOGLE_MODEL"),
 		},
 		Warnings: warnings,
 	}

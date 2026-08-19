@@ -18,13 +18,13 @@ import (
 
 // Defaults used when auto-detecting a panel without an explicit model list.
 const (
-	defaultOpenRouterAnthropicModel = "anthropic/claude-sonnet-4-6"
-	defaultOpenRouterOpenAIModel    = "openai/gpt-4o"
-	defaultOpenRouterGoogleModel    = "google/gemini-2.5-pro"
-	defaultAnthropicModel           = "claude-sonnet-4-6"
-	defaultOpenAIModel              = "gpt-4o"
-	defaultGoogleModel              = "gemini-2.5-pro"
-	defaultBedrockModel             = "anthropic.claude-sonnet-4-20250514-v1:0"
+	defaultOpenRouterAnthropicModel = "anthropic/claude-sonnet-5"
+	defaultOpenRouterOpenAIModel    = "openai/gpt-5.6-sol"
+	defaultOpenRouterGoogleModel    = "google/gemini-3.5-flash"
+	defaultAnthropicModel           = "claude-sonnet-5"
+	defaultOpenAIModel              = "gpt-5.6-sol"
+	defaultGoogleModel              = "gemini-3.5-flash"
+	defaultBedrockModel             = "anthropic.claude-sonnet-5"
 	defaultOllamaModel              = "llama3.2"
 	defaultLMStudioModel            = "local-model"
 	defaultOllamaBaseURL            = "http://localhost:11434"
@@ -36,8 +36,11 @@ const (
 // from configured credentials, in priority order: OpenRouter (single key,
 // widest model coverage) > direct provider keys > AWS Bedrock > local
 // Ollama/LM Studio. RESEARCH_PANEL_DEFAULT_MODELS (cfg.DefaultModels)
-// overrides auto-detection entirely. Returns an empty slice when nothing is
-// configured — the caller skips registering research_panel in that case.
+// overrides auto-detection entirely; short of that, each provider's model
+// within auto-detection can be overridden individually via its own
+// RESEARCH_PANEL_<PROVIDER>_MODEL env var (see ResearchPanelConfig), falling
+// back to the default* constants below. Returns an empty slice when nothing
+// is configured — the caller skips registering research_panel in that case.
 func AvailableModelProviders(cfg config.ResearchPanelConfig, allowPrivateIPs bool) []ModelProvider {
 	var providers []ModelProvider
 
@@ -52,38 +55,44 @@ func AvailableModelProviders(cfg config.ResearchPanelConfig, allowPrivateIPs boo
 
 	switch {
 	case cfg.OpenRouterAPIKey != "":
+		anthropicModel := modelOrDefault(cfg.OpenRouterAnthropicModel, defaultOpenRouterAnthropicModel)
+		openaiModel := modelOrDefault(cfg.OpenRouterOpenAIModel, defaultOpenRouterOpenAIModel)
+		googleModel := modelOrDefault(cfg.OpenRouterGoogleModel, defaultOpenRouterGoogleModel)
 		providers = append(providers,
-			newGoaiModelProvider("openrouter", defaultOpenRouterAnthropicModel,
-				openrouter.Chat(defaultOpenRouterAnthropicModel, openrouter.WithAPIKey(cfg.OpenRouterAPIKey))),
-			newGoaiModelProvider("openrouter", defaultOpenRouterOpenAIModel,
-				openrouter.Chat(defaultOpenRouterOpenAIModel, openrouter.WithAPIKey(cfg.OpenRouterAPIKey))),
-			newGoaiModelProvider("openrouter", defaultOpenRouterGoogleModel,
-				openrouter.Chat(defaultOpenRouterGoogleModel, openrouter.WithAPIKey(cfg.OpenRouterAPIKey))),
+			newGoaiModelProvider("openrouter", anthropicModel,
+				openrouter.Chat(anthropicModel, openrouter.WithAPIKey(cfg.OpenRouterAPIKey))),
+			newGoaiModelProvider("openrouter", openaiModel,
+				openrouter.Chat(openaiModel, openrouter.WithAPIKey(cfg.OpenRouterAPIKey))),
+			newGoaiModelProvider("openrouter", googleModel,
+				openrouter.Chat(googleModel, openrouter.WithAPIKey(cfg.OpenRouterAPIKey))),
 		)
 	default:
 		if cfg.AnthropicAPIKey != "" {
-			providers = append(providers, newGoaiModelProvider("anthropic", defaultAnthropicModel,
-				anthropic.Chat(defaultAnthropicModel, anthropic.WithAPIKey(cfg.AnthropicAPIKey))))
+			model := modelOrDefault(cfg.AnthropicModel, defaultAnthropicModel)
+			providers = append(providers, newGoaiModelProvider("anthropic", model,
+				anthropic.Chat(model, anthropic.WithAPIKey(cfg.AnthropicAPIKey))))
 		}
 		if cfg.OpenAIAPIKey != "" {
-			providers = append(providers, newGoaiModelProvider("openai", defaultOpenAIModel,
-				openai.Chat(defaultOpenAIModel, openai.WithAPIKey(cfg.OpenAIAPIKey))))
+			model := modelOrDefault(cfg.OpenAIModel, defaultOpenAIModel)
+			providers = append(providers, newGoaiModelProvider("openai", model,
+				openai.Chat(model, openai.WithAPIKey(cfg.OpenAIAPIKey))))
 		}
 		if cfg.GoogleAIAPIKey != "" {
-			providers = append(providers, newGoaiModelProvider("google", defaultGoogleModel,
-				google.Chat(defaultGoogleModel, google.WithAPIKey(cfg.GoogleAIAPIKey))))
+			model := modelOrDefault(cfg.GoogleModel, defaultGoogleModel)
+			providers = append(providers, newGoaiModelProvider("google", model,
+				google.Chat(model, google.WithAPIKey(cfg.GoogleAIAPIKey))))
 		}
 	}
 
-	if p := bedrockProviderFromEnv(); p != nil {
+	if p := bedrockProviderFromEnv(modelOrDefault(cfg.BedrockModel, defaultBedrockModel)); p != nil {
 		providers = append(providers, p)
 	}
 
 	if cfg.OllamaBaseURL != "" || allowPrivateIPs {
-		providers = append(providers, ollamaProvider(cfg.OllamaBaseURL, allowPrivateIPs))
+		providers = append(providers, ollamaProvider(cfg.OllamaBaseURL, modelOrDefault(cfg.OllamaModel, defaultOllamaModel), allowPrivateIPs))
 	}
 	if cfg.LMStudioBaseURL != "" || allowPrivateIPs {
-		providers = append(providers, lmStudioProvider(cfg.LMStudioBaseURL, allowPrivateIPs))
+		providers = append(providers, lmStudioProvider(cfg.LMStudioBaseURL, modelOrDefault(cfg.LMStudioModel, defaultLMStudioModel), allowPrivateIPs))
 	}
 
 	maxModels := cfg.MaxModels
@@ -94,36 +103,46 @@ func AvailableModelProviders(cfg config.ResearchPanelConfig, allowPrivateIPs boo
 }
 
 // bedrockProviderFromEnv adds an AWS Bedrock Claude model when standard AWS
-// credentials are present. Bedrock has no dedicated config fields — it reads
-// AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_REGION itself, matching every
-// other AWS CLI-configured tool (no new env vars per issue #302).
-func bedrockProviderFromEnv() ModelProvider {
+// credentials are present. Bedrock has no dedicated credential config fields
+// — it reads AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_REGION itself,
+// matching every other AWS CLI-configured tool (no new env vars per issue
+// #302); its default model is overridable via RESEARCH_PANEL_BEDROCK_MODEL.
+func bedrockProviderFromEnv(model string) ModelProvider {
 	if os.Getenv("AWS_ACCESS_KEY_ID") == "" || os.Getenv("AWS_REGION") == "" {
 		return nil
 	}
-	return newGoaiModelProvider("bedrock", defaultBedrockModel, bedrock.Chat(defaultBedrockModel))
+	return newGoaiModelProvider("bedrock", model, bedrock.Chat(model))
 }
 
-func ollamaProvider(baseURL string, allowPrivateIPs bool) ModelProvider {
+func ollamaProvider(baseURL, model string, allowPrivateIPs bool) ModelProvider {
 	if baseURL == "" {
 		baseURL = defaultOllamaBaseURL
 	}
 	client := scraper.NewSSRFSafeClient(allowPrivateIPs)
-	model := ollama.Chat(defaultOllamaModel, ollama.WithBaseURL(baseURL), ollama.WithHTTPClient(client))
-	return newGoaiModelProvider("ollama", defaultOllamaModel, model)
+	chat := ollama.Chat(model, ollama.WithBaseURL(baseURL), ollama.WithHTTPClient(client))
+	return newGoaiModelProvider("ollama", model, chat)
 }
 
-func lmStudioProvider(baseURL string, allowPrivateIPs bool) ModelProvider {
+func lmStudioProvider(baseURL, model string, allowPrivateIPs bool) ModelProvider {
 	if baseURL == "" {
 		baseURL = defaultLMStudioBaseURL
 	}
 	client := scraper.NewSSRFSafeClient(allowPrivateIPs)
-	model := compat.Chat(defaultLMStudioModel,
+	chat := compat.Chat(model,
 		compat.WithProviderID("lmstudio"),
 		compat.WithBaseURL(strings.TrimSuffix(baseURL, "/")+"/v1"),
 		compat.WithHTTPClient(client),
 	)
-	return newGoaiModelProvider("lmstudio", defaultLMStudioModel, model)
+	return newGoaiModelProvider("lmstudio", model, chat)
+}
+
+// modelOrDefault returns override when non-empty, else fallback — the shared
+// pattern behind every RESEARCH_PANEL_<PROVIDER>_MODEL env var override.
+func modelOrDefault(override, fallback string) string {
+	if override != "" {
+		return override
+	}
+	return fallback
 }
 
 // resolveModelProviderSpec parses a "<provider>/<model-id>" spec (the

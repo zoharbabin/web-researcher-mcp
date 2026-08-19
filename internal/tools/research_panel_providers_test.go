@@ -91,6 +91,60 @@ func TestAvailableModelProviders_DefaultModelsUnresolvableSpecDropped(t *testing
 	}
 }
 
+func TestAvailableModelProviders_PerProviderModelOverride(t *testing.T) {
+	t.Setenv("AWS_ACCESS_KEY_ID", "")
+	t.Setenv("AWS_REGION", "")
+	cfg := config.ResearchPanelConfig{
+		OpenAIAPIKey:    "test-key",
+		AnthropicAPIKey: "test-key",
+		OpenAIModel:     "gpt-custom",
+		AnthropicModel:  "claude-custom",
+	}
+	providers := AvailableModelProviders(cfg, false)
+	got := map[string]string{}
+	for _, p := range providers {
+		got[p.Name()] = p.ModelID()
+	}
+	if got["openai"] != "gpt-custom" {
+		t.Errorf("expected RESEARCH_PANEL_OPENAI_MODEL override to apply, got openai model %q", got["openai"])
+	}
+	if got["anthropic"] != "claude-custom" {
+		t.Errorf("expected RESEARCH_PANEL_ANTHROPIC_MODEL override to apply, got anthropic model %q", got["anthropic"])
+	}
+}
+
+func TestAvailableModelProviders_PerProviderModelOverride_OpenRouterAndBedrock(t *testing.T) {
+	t.Setenv("AWS_ACCESS_KEY_ID", "test-key")
+	t.Setenv("AWS_REGION", "us-east-1")
+	cfg := config.ResearchPanelConfig{
+		OpenRouterAPIKey:         "test-key",
+		OpenRouterOpenAIModel:    "openai/custom-model",
+		OpenRouterAnthropicModel: "anthropic/custom-model",
+		OpenRouterGoogleModel:    "google/custom-model",
+		BedrockModel:             "anthropic.custom-bedrock-model",
+		MaxModels:                4, // the 3 openrouter members + bedrock; default clamp of 3 would drop bedrock
+	}
+	providers := AvailableModelProviders(cfg, false)
+	var sawBedrockOverride bool
+	openrouterModels := map[string]bool{}
+	for _, p := range providers {
+		if p.Name() == "openrouter" {
+			openrouterModels[p.ModelID()] = true
+		}
+		if p.Name() == "bedrock" && p.ModelID() == "anthropic.custom-bedrock-model" {
+			sawBedrockOverride = true
+		}
+	}
+	for _, want := range []string{"openai/custom-model", "anthropic/custom-model", "google/custom-model"} {
+		if !openrouterModels[want] {
+			t.Errorf("expected openrouter panel to include overridden model %q, got %v", want, openrouterModels)
+		}
+	}
+	if !sawBedrockOverride {
+		t.Errorf("expected RESEARCH_PANEL_BEDROCK_MODEL override to apply to the bedrock provider")
+	}
+}
+
 func TestAvailableModelProviders_OllamaGatedByAllowPrivateIPs(t *testing.T) {
 	cfg := config.ResearchPanelConfig{}
 	providers := AvailableModelProviders(cfg, false)
