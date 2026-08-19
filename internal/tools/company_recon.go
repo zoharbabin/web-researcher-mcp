@@ -9,6 +9,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 	"github.com/zoharbabin/web-researcher-mcp/internal/session"
 )
@@ -216,16 +217,38 @@ func registerCompanyRecon(srv *mcp.Server, deps Dependencies) {
 
 // companyProfileSummary produces a one-line company summary from the top
 // web_search hit — a lightweight stand-in for the prompt's multi-query
-// profiling phase. Best-effort: any search failure or empty result yields "".
+// profiling phase. Best-effort: any search failure, empty result, or an
+// off-topic top-1 hit (#591) yields "".
 func companyProfileSummary(ctx context.Context, deps Dependencies, companyName string) string {
 	results, err := deps.Search.Web(ctx, search.WebSearchParams{
 		Query:      companyName + " about founded CEO headquarters",
 		NumResults: 1,
 	})
-	if err != nil || len(results) == 0 {
+	if err != nil || len(results) == 0 || !companyResultIsRelevant(companyName, results[0]) {
 		return ""
 	}
 	return results[0].Snippet
+}
+
+// companyResultIsRelevant requires at least one normalized token of
+// companyName to appear in the result's title or snippet, so a low-relevance
+// or off-topic top-1 hit (common for obscure names or near-miss domains) isn't
+// mistaken for the queried company's profile (#591). Falls back to a raw
+// substring match when the name yields no significant terms (e.g. a short
+// name like "3M" that content.SignificantTerms' length filter would drop).
+func companyResultIsRelevant(companyName string, r search.SearchResult) bool {
+	haystack := strings.ToLower(r.Title + " " + r.Snippet)
+	terms := content.SignificantTerms(companyName)
+	if len(terms) == 0 {
+		name := strings.ToLower(strings.TrimSpace(companyName))
+		return name != "" && strings.Contains(haystack, name)
+	}
+	for _, term := range terms {
+		if strings.Contains(haystack, term) {
+			return true
+		}
+	}
+	return false
 }
 
 // deriveSubdomains merges CT-log SANs and archive URLs (via their host) into a

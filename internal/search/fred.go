@@ -7,7 +7,10 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
+	"strings"
+	"unicode"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
@@ -68,10 +71,17 @@ func (f *FREDProvider) doEcon(ctx context.Context, params EconSearchParams) ([]E
 	return f.seriesSearch(ctx, params)
 }
 
-// seriesSearch ranks by FRED's own popularity signal (order_by=popularity,
+// seriesSearch fetches FRED's own popularity-ranked results (order_by=popularity,
 // sort_order=desc — see #434) so a canonical, heavily-referenced series (e.g.
-// "GDP") surfaces ahead of a series that merely matches the query text more
-// closely by coincidence.
+// "GDP") isn't buried behind a series that merely matches the query text more
+// closely by coincidence, then re-sorts client-side by query/title term overlap
+// (see reorderByRelevance, #595): FRED's API offers no combined
+// field-scope+popularity ordering, so a purely site-wide-popular but
+// topically-unrelated series (e.g. CPIAUCSL for a "US unemployment rate"
+// query) no longer outranks the topically-matching one (UNRATE). Popularity
+// remains the tiebreak when term overlap is equal — preserving the original
+// #434 fix for acronym queries like "GDP" that don't literally appear as a
+// word in any candidate's spelled-out title.
 func (f *FREDProvider) seriesSearch(ctx context.Context, params EconSearchParams) ([]EconResult, error) {
 	num := clamp(params.NumResults, 1, 25)
 	q := f.baseParams()
@@ -111,7 +121,59 @@ func (f *FREDProvider) seriesSearch(ctx context.Context, params EconSearchParams
 			Source:      "fred",
 		})
 	}
+	reorderByRelevance(out, params.Query)
 	return out, nil
+}
+
+// reorderByRelevance stable-sorts results by descending count of distinct
+// query words (length >= 3) that appear as whole words in the title, falling
+// back to FRED's own popularity ordering (already reflected in the input
+// order) when two results tie on term overlap — see seriesSearch (#595).
+func reorderByRelevance(results []EconResult, query string) {
+	queryWords := fredSignificantWords(query)
+	if len(queryWords) == 0 {
+		return
+	}
+	overlap := make([]int, len(results))
+	for i, r := range results {
+		titleWords := fredSignificantWords(r.Title)
+		n := 0
+		for w := range queryWords {
+			if _, ok := titleWords[w]; ok {
+				n++
+			}
+		}
+		overlap[i] = n
+	}
+	idx := make([]int, len(results))
+	for i := range idx {
+		idx[i] = i
+	}
+	sort.SliceStable(idx, func(i, j int) bool {
+		return overlap[idx[i]] > overlap[idx[j]]
+	})
+	reordered := make([]EconResult, len(results))
+	for i, oi := range idx {
+		reordered[i] = results[oi]
+	}
+	copy(results, reordered)
+}
+
+// fredSignificantWords lowercases s and returns its distinct words of length
+// >= 3 as a set — a short, self-contained tokenizer scoped to this ranking
+// heuristic (internal/search has no existing dependency on internal/content's
+// claim-matching tokenizer, and this doesn't need its stemming/stopword rules).
+func fredSignificantWords(s string) map[string]struct{} {
+	fields := strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+	})
+	set := make(map[string]struct{}, len(fields))
+	for _, w := range fields {
+		if len(w) >= 3 {
+			set[w] = struct{}{}
+		}
+	}
+	return set
 }
 
 func (f *FREDProvider) observations(ctx context.Context, params EconSearchParams) ([]EconResult, error) {
