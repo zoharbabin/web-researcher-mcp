@@ -475,8 +475,15 @@ func TestTrustSuiteAccuracy_TitleMatch(t *testing.T) {
 // case that merely shares the party-name string — proving the case_name
 // field-scope + order_by=citeCount fix (verified against the live API,
 // 2026-08-18) actually changes result composition, not just that the
-// request doesn't error.
+// request doesn't error. CourtListener is keyless and needs no newEvalDeps,
+// but it still gates on CROSSREF_EMAIL like every other case in this file —
+// otherwise `make test-eval` would make live network calls from this one
+// test even in an environment that unset CROSSREF_EMAIL specifically to skip
+// the whole suite.
 func TestTrustSuiteAccuracy_LegalSearchCaseName(t *testing.T) {
+	if os.Getenv("CROSSREF_EMAIL") == "" {
+		t.Skip("CROSSREF_EMAIL not set — skipping live trust-suite eval")
+	}
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 	breakerCfg := circuit.Config{FailureThreshold: 10, ResetTimeout: 60}
 	caseProvider := search.NewCourtListenerProvider(os.Getenv("COURTLISTENER_API_TOKEN"), search.Deps{HTTPClient: httpClient, Breaker: circuit.New(breakerCfg)})
