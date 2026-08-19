@@ -2507,6 +2507,7 @@ class VerifyRecommendationConflictOfInterest:
 class VerifyRecommendationCorroborationsearch:
     agreeCount: Optional[int] = None
     disagreeCount: Optional[int] = None
+    flags: list[str] = field(default_factory=list)
     lens: Optional[str] = None
     query: Optional[str] = None
     resultCount: Optional[int] = None
@@ -2520,6 +2521,7 @@ class VerifyRecommendationCorroborationsearch:
         return cls(
             agreeCount=d.get('agreeCount'),
             disagreeCount=d.get('disagreeCount'),
+            flags=list(d.get('flags') or []),
             lens=d.get('lens'),
             query=d.get('query'),
             resultCount=d.get('resultCount'),

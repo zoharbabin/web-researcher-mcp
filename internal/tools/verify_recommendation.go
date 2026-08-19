@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -51,6 +52,12 @@ type corroborationResult struct {
 	DisagreeCount int              `json:"disagreeCount"`
 	SilentCount   int              `json:"silentCount"`
 	TopResults    []map[string]any `json:"topResults,omitempty"`
+	// Flags carries "lens_restriction_unreliable" when one or more results
+	// returned for this lens's site:-restricted query fell outside the
+	// lens's domain allowlist (#619) — evidence that the provider ignored or
+	// mis-parsed the multi-domain site: OR syntax. Off-allowlist results are
+	// dropped before tallying, never counted as agree/disagree/silent.
+	Flags []string `json:"flags,omitempty"`
 }
 
 type recommendationResult struct {
@@ -388,6 +395,17 @@ func selectCorroborationLenses(title, claim string) []string {
 // produces an empty slice rather than propagating an error — the audit's
 // reputation/liveness signals are unaffected. deps.Search (the default provider
 // or router) is used; provider-agnostic, no hardcoded preference.
+//
+// Results are validated against the lens's own domain allowlist before
+// tallying (#619): a provider that ignores or mis-parses the multi-domain
+// site: OR syntax could otherwise return off-allowlist results that get
+// silently counted as if they were legitimate domain-restricted corroboration.
+// Off-allowlist results are dropped, never tallied, and the corroborationResult
+// carries "lens_restriction_unreliable" in Flags so the caller can tell "the
+// restriction held and found nothing" apart from "the restriction didn't
+// hold". A lens routed via cx/goggle instead of domains has no site:
+// restriction injected (BuildSiteQuery is a no-op for it), so there is
+// nothing to validate — every result passes for such a lens.
 func corroborateRecommendation(ctx context.Context, deps Dependencies, title, claim string, numResults int) []corroborationResult {
 	if deps.Search == nil {
 		return nil
@@ -408,11 +426,28 @@ func corroborateRecommendation(ctx context.Context, deps Dependencies, title, cl
 		if err != nil || len(results) == 0 {
 			continue
 		}
-		enriched := enrichResultsWithReputation(results, fullClaim)
+
+		onAllowlist := results
+		offAllowlistDropped := 0
+		if len(lensData.Domains) > 0 {
+			onAllowlist = make([]search.SearchResult, 0, len(results))
+			for _, r := range results {
+				if resultWithinLensDomains(r.URL, lensData.Domains) {
+					onAllowlist = append(onAllowlist, r)
+				} else {
+					offAllowlistDropped++
+				}
+			}
+		}
+
+		enriched := enrichResultsWithReputation(onAllowlist, fullClaim)
 		cr := corroborationResult{
 			Query:       query,
 			Lens:        lensName,
 			ResultCount: len(enriched),
+		}
+		if offAllowlistDropped > 0 {
+			cr.Flags = append(cr.Flags, "lens_restriction_unreliable")
 		}
 		for _, r := range enriched {
 			signal, _ := r["claimSignal"].(string)
@@ -442,6 +477,32 @@ func corroborateRecommendation(ctx context.Context, deps Dependencies, title, cl
 		corroborations = append(corroborations, cr)
 	}
 	return corroborations
+}
+
+// resultWithinLensDomains reports whether rawURL's host falls within domains
+// — the site: allowlist that was supposed to restrict this lens's search
+// (#619). A host matches a domain entry exactly or as a subdomain
+// ("cooking.nytimes.com" matches "nytimes.com", "nytimes.com.evil.example"
+// does not). A path-scoped entry ("github.com/advisories") additionally
+// requires rawURL's path to start with that prefix. Returns false on an
+// unparseable URL or a host with no matching entry.
+func resultWithinLensDomains(rawURL string, domains []string) bool {
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || u.Host == "" {
+		return false
+	}
+	host := strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
+	for _, d := range domains {
+		domHost, domPath, hasPath := strings.Cut(d, "/")
+		domHost = strings.ToLower(domHost)
+		if host != domHost && !strings.HasSuffix(host, "."+domHost) {
+			continue
+		}
+		if !hasPath || strings.HasPrefix(strings.TrimPrefix(u.Path, "/"), domPath) {
+			return true
+		}
+	}
+	return false
 }
 
 var verifyRecommendationOutputSchema = map[string]any{
@@ -489,6 +550,11 @@ var verifyRecommendationOutputSchema = map[string]any{
 								"disagreeCount": map[string]any{"type": "integer", "description": "Results whose snippet or title contradicts or does not address the recommendation." + languageHeuristicCaveat},
 								"silentCount":   map[string]any{"type": "integer", "description": "Results that mention the item but neither agree nor disagree with the claim context." + languageHeuristicCaveat},
 								"topResults":    map[string]any{"type": "array", "description": "Enriched search results including claimSignal and sourceReputation per result." + languageHeuristicCaveat},
+								"flags": map[string]any{
+									"type":        "array",
+									"items":       map[string]any{"type": "string", "enum": []any{"lens_restriction_unreliable"}},
+									"description": "'lens_restriction_unreliable' fires when the search provider returned one or more results outside this lens's domain allowlist — evidence it ignored or mis-parsed the site: OR restriction. Those off-allowlist results are dropped and never tallied into agree/disagree/silent.",
+								},
 							},
 						},
 					},
