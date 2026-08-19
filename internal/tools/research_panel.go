@@ -46,7 +46,7 @@ const (
 
 type researchPanelInput struct {
 	Query       string   `json:"query" jsonschema:"The research question to pose identically to every panel member.,required"`
-	Models      []string `json:"models,omitempty" jsonschema:"Optional explicit panel override, each '<provider>/<model-id>' (e.g. 'openrouter/anthropic/claude-sonnet-4-6', 'anthropic/claude-sonnet-4-6'). Only members whose provider credentials are configured are used. Omit to use the auto-detected default panel."`
+	Models      []string `json:"models,omitempty" jsonschema:"Optional explicit panel override, each '<provider>/<model-id>' (e.g. 'openrouter/anthropic/claude-sonnet-5', 'anthropic/claude-sonnet-5'). Only members whose provider credentials are configured are used. Omit to use the auto-detected default panel."`
 	MaxModels   int      `json:"max_models,omitempty" jsonschema:"Cap on panel size (default 3)."`
 	TimeoutSecs int      `json:"timeout_secs,omitempty" jsonschema:"Per-model timeout in seconds (default 30, range 5-120). A model that exceeds this is recorded as failed, not retried."`
 	UseCache    *bool    `json:"use_cache,omitempty" jsonschema:"Cache the full panel result by question + model set (default true). Set false to force a fresh run of every model."`

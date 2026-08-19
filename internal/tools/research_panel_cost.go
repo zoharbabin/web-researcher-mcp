@@ -17,7 +17,7 @@ import (
 // {"<provider>/<model-id>": {"input_per_1k": 0.003, "output_per_1k": 0.015}}.
 // The key matches a panel member's "<provider>/<model-id>" identity — the same
 // format resolveResearchPanel matches an explicit models override against —
-// e.g. "openrouter/anthropic/claude-sonnet-4-6".
+// e.g. "openrouter/anthropic/claude-sonnet-5".
 type modelPrice struct {
 	InputPer1K  float64 `json:"input_per_1k"`
 	OutputPer1K float64 `json:"output_per_1k"`

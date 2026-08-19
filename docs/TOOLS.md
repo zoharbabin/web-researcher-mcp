@@ -1875,7 +1875,7 @@ Ask the same research question to a panel of independently configured LLMs and c
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `query` | string | yes | — | The research question to pose identically to every panel member. Capped at 4000 characters. |
-| `models` | array of string | no | auto-detected panel | Explicit panel override, each `<provider>/<model-id>` (e.g. `openrouter/anthropic/claude-sonnet-4-6`). Only members whose provider credentials are configured are used; unresolvable entries are silently dropped. |
+| `models` | array of string | no | auto-detected panel | Explicit panel override, each `<provider>/<model-id>` (e.g. `openrouter/anthropic/claude-sonnet-5`). Only members whose provider credentials are configured are used; unresolvable entries are silently dropped. |
 | `max_models` | int | no | 3 | Cap on panel size. |
 | `timeout_secs` | int | no | 30 | Per-model timeout in seconds, clamped to 5–120. A model that exceeds this is recorded as failed, not retried. |
 | `use_cache` | bool | no | true | Cache the full panel result by tenant + question + sorted model set. Set false to force a fresh run of every model. |
