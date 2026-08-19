@@ -3,7 +3,28 @@ package tools
 import (
 	"strings"
 	"testing"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
 )
+
+// TestSanitizeClaimFetchError_MasksSecrets: a ScrapeError.Message frequently
+// embeds the fetchURL verbatim (#631's composite tiered-fallback error), so a
+// URL carrying an access token in its query string must never reach the
+// claimFetchError field unmasked — matching the masking already applied to
+// every other scrape-error-to-LLM-facing-field path (errors.go).
+func TestSanitizeClaimFetchError_MasksSecrets(t *testing.T) {
+	err := &scraper.ScrapeError{
+		Kind:    scraper.ErrNetwork,
+		Message: "no content extracted from https://example.com/doc?access_token=super-secret-value (network error)",
+	}
+	got := sanitizeClaimFetchError(err)
+	if strings.Contains(got, "super-secret-value") {
+		t.Errorf("sanitizeClaimFetchError leaked an unmasked secret: %q", got)
+	}
+	if !strings.Contains(got, "[REDACTED]") {
+		t.Errorf("expected the masked placeholder in output, got %q", got)
+	}
+}
 
 // TestClaimCoverageFromContent_CJKNotMisflaggedAsSparse is a regression test:
 // claimCoverageFromContent used strings.Fields to count words, which collapses

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/zoharbabin/web-researcher-mcp/internal/audit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
 )
@@ -68,13 +69,17 @@ func claimCoverageFor(ctx context.Context, deps Dependencies, fetchURL, claim st
 // reason (#631) — "<kind>: <message>", capped so a tiered-fallback composite
 // error (which lists every tier's outcome) never balloons the tool response.
 // Falls back to err.Error() capped the same way when err isn't a
-// *scraper.ScrapeError (e.g. a bare context error).
+// *scraper.ScrapeError (e.g. a bare context error). A ScrapeError's Message
+// frequently embeds the fetchURL verbatim (pipeline.go's composite
+// tiered-fallback error), so it is masked exactly like every other
+// scrape-error-to-LLM-facing-field path (errors.go's scrapeErrorToToolError /
+// failureFromScrapeError) before being returned.
 func sanitizeClaimFetchError(err error) string {
 	const maxLen = 200
-	msg := err.Error()
+	msg := audit.MaskSecrets(err.Error())
 	var se *scraper.ScrapeError
 	if errors.As(err, &se) {
-		msg = string(mapScrapeErrorKind(se.Kind)) + ": " + se.Message
+		msg = string(mapScrapeErrorKind(se.Kind)) + ": " + audit.MaskSecrets(se.Message)
 	}
 	if len(msg) > maxLen {
 		runes := []rune(msg)
