@@ -1352,6 +1352,7 @@ Each item in `cases[]`: `caseName`, `citation` (Bluebook), `court`, `courtId`, `
 
 ### Behavior
 - Searches the CourtListener v4 opinions index; `jurisdiction` maps to the `court` filter, dates to `filed_after`/`filed_before`.
+- **Case-name ranking**: a `query` containing a `" v. "`/`" vs. "` party separator (e.g. `Brown v. Board of Education`) is treated as an exact case-name lookup — matched against the case-name field only and ordered by citation count, so the landmark/highest-authority case ranks first instead of an unrelated case that merely shares the party names in its opinion text. A query without that separator still gets CourtListener's default full-text relevance ranking.
 - **Auth**: works keyless at ~100 req/day; `COURTLISTENER_API_TOKEN` raises the limit (~5000/day). The token is sent as an `Authorization` header and never logged.
 - **Anti-hallucination workflow**: pair with the **`legal` lens** (`web_search` with `lens: legal`, an authority-weighted primary-source pack — see `lenses/README.md`) for context, and with `verify_citation` to confirm a cited case actually exists before relying on it.
 
@@ -1488,6 +1489,7 @@ Search **ClinicalTrials.gov** — the NIH registry of 400K+ clinical studies —
 | `intervention` | string | yes* | — | Drug/device/treatment (e.g. `remdesivir`) |
 | `sponsor` | string | yes* | — | Lead sponsor / funder |
 | `status` | string | no | — | Recruitment status filter: `RECRUITING`, `COMPLETED`, `TERMINATED`, … |
+| `phase` | string | no | — | Trial phase filter: `PHASE1`, `PHASE2`, `PHASE3`, `PHASE4`, `EARLY_PHASE1` |
 | `num_results` | int | no | 10 | 1–100 |
 | `provider` | string | no | — | Force a clinical-trials provider: `clinicaltrials` |
 | `sessionId` | string | no | — | Record results as sources on a `sequential_search` session |
@@ -1497,7 +1499,8 @@ Search **ClinicalTrials.gov** — the NIH registry of 400K+ clinical studies —
 Each `trials[]` item: `nctId`, `title`, `status`, `phases` (array), `conditions` (array), `interventions` (array), `sponsor`, `startDate`, `hasResults` (bool — whether results are posted), `url` (study page; `scrape_page` for the full registration), `source`. Plus `query`, `resultCount`, `provider`, `hints` (when empty), and `trust` (`untrusted-external-content`).
 
 ### Behavior
-- Combine `query`/`condition`/`intervention`/`sponsor`/`status` to narrow the registry's structured facets; at least one is required.
+- Combine `query`/`condition`/`intervention`/`sponsor`/`status`/`phase` to narrow the registry's structured facets; at least one of `query`/`condition`/`intervention`/`sponsor` is required.
+- **Phase inference**: if `phase` is omitted, a phase phrase mentioned in `query` (e.g. `"phase 3"`, `"early phase 1"`) is extracted automatically and stripped from the free-text term sent upstream, so the phrase doesn't dilute full-text relevance. An explicit `phase` always wins over anything inferred from `query`.
 - **Provider honoring**: an explicit `provider` is used exclusively; otherwise the first configured provider answers. An error/empty returns a structured zero-result with hints (no silent fallback).
 - A bad request surfaces as a structured upstream error (the API returns `text/plain` errors, decoded as a message snippet); a `404`/no-match is an empty result, never a panic.
 - **Auth**: keyless — ClinicalTrials.gov v2 needs no API key.
@@ -1843,12 +1846,13 @@ OSINT company reconnaissance with typed structured output: Certificate Transpare
 | `archive_urls` | array | Wayback CDX historical URLs, filtered to 200/301/302 captures: `url`, `timestamp`, `status_code`, `mime_type`, `category` (`login`/`api`/`admin`/`asset`/`doc`/`other`). Present only when the `archives` phase ran |
 | `subdomains` | array | Deduplicated subdomains derived from `cert_sans` + `archive_urls`: `subdomain`, `source` (`ct_logs`/`archive`) |
 | `sources` | array | Which phases actually ran and contributed data: `phase`, `name`, `url` — check this to see what was skipped (resolver dependency absent, or an upstream error) |
+| `phase_errors` | array | `phase` (`ct_logs`/`archives`), `error` — populated when that phase's resolver returned an error (upstream 5xx/429, malformed response), distinguishing a genuine upstream failure from a resolver that simply found nothing |
 | `cache_age` | integer | Seconds since cache was written. `0` = live fetch. Cache TTL: 24 hours |
 | `trust` | string | Always `untrusted-external-content` |
 
 ### Behavior
 
-- **Independent, soft-failing phases.** `ct_logs` (crt.sh), `archives` (Wayback CDX), and `profiling` (one `web_search` call) run concurrently; each writes only its own result fields. A phase failing (resolver absent, upstream 5xx/429, rate limit) drops that phase's contribution but never fails the whole call — check `sources` for what actually ran.
+- **Independent, soft-failing phases.** `ct_logs` (crt.sh), `archives` (Wayback CDX), and `profiling` (one `web_search` call) run concurrently; each writes only its own result fields. A phase failing (resolver absent, upstream 5xx/429, rate limit) drops that phase's contribution but never fails the whole call — check `sources` for what actually ran, and `phase_errors` for why a `ct_logs`/`archives` phase came back empty when a resolver was configured.
 - **Domain resolution.** `target` is parsed as a domain first (`canonicalDomain`); if that fails, it's treated as a company name and resolved via the same web-search fallback `brand_research` uses. The resolved domain is rejected if it's a private/internal host.
 - **Subdomain derivation.** `subdomains` merges every host seen in `cert_sans` (SAN wildcards un-prefixed) and every host extracted from `archive_urls`, deduplicated against the resolved domain's suffix.
 - **`web` phase.** Selecting `web` without `profiling` adds a `sources` note pointing the caller at `profiling` — `web` on its own does no independent lookup; the two phases are conceptually linked (profiling's contribution *is* the web-search summary).

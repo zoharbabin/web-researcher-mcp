@@ -551,6 +551,7 @@ DAILY_QUOTA_PER_TENANT=10000
 | `ALLOW_PRIVATE_IPS` | Disable SSRF protection | `false` |
 | `ALLOWED_DOMAINS` | Domain whitelist (comma-separated) | — (all allowed) |
 | `CHROME_PATH` | Custom Chrome/Chromium binary path; set to `"disabled"` to turn the browser tier off entirely (no autodetect, no download) | auto-detect |
+| `BROWSER_IDLE_TIMEOUT` | Auto-close the browser tier's Chromium process after this long with no browser-tier scrape (#460), so one scrape doesn't pin Chromium (and its Dock icon on macOS) for the server's full lifetime; a later scrape transparently relaunches it. `0` disables the idle-close timer | `5m` |
 | `JINA_READER_DISABLED` | Set `true` to turn off the Jina Reader scrape tier (r.jina.ai) entirely, e.g. for hardened deploys or network-free tests | `false` |
 | `MAX_SCRAPE_CONCURRENCY` | Parallel scrape limit for the fast tiers (markdown/stealth/jina/html/exa) | `5` |
 | `MAX_SCRAPE_CONCURRENCY_BROWSER` | Separate parallel scrape limit for the browser (go-rod) tier, which can hold a slot for up to 30s — kept apart from `MAX_SCRAPE_CONCURRENCY` so slow browser scrapes can't starve fast ones (#472) | `2` |

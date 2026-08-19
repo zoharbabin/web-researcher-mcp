@@ -212,7 +212,7 @@ func waybackRowsToEntries(rows [][]string) []ArchiveEntry {
 		if okMime && mimeIdx < len(row) {
 			mime = row[mimeIdx]
 		}
-		entryURL := row[urlIdx]
+		entryURL := decodeArchiveURL(row[urlIdx])
 		out = append(out, ArchiveEntry{
 			URL:        entryURL,
 			Timestamp:  row[tsIdx],
@@ -222,6 +222,29 @@ func waybackRowsToEntries(rows [][]string) []ArchiveEntry {
 		})
 	}
 	return out
+}
+
+// decodeArchiveURL best-effort percent-decodes a Wayback CDX "original"
+// field (#438): the raw captured URL is frequently percent-encoded
+// (%2F, %20, etc.), which both reads as noise in the returned ArchiveEntry.URL
+// and defeats categorizeArchiveURL's substring matching against encoded path
+// segments. Only the path portion (before any '?' or '#') is decoded —
+// percent-escapes inside a query string or fragment (e.g. "%26" for '&')
+// carry query/fragment syntax meaning, so decoding them there could change
+// the URL's semantics rather than just its readability. url.PathUnescape
+// (rather than QueryUnescape) is used on that path portion because it decodes
+// %XX sequences without also treating a literal '+' as a space. On any decode
+// error (e.g. a lone '%' from a malformed/double-encoded capture) the raw
+// string is returned unchanged rather than dropping the entry.
+func decodeArchiveURL(raw string) string {
+	pathPart, rest := raw, ""
+	if idx := strings.IndexAny(raw, "?#"); idx >= 0 {
+		pathPart, rest = raw[:idx], raw[idx:]
+	}
+	if decoded, err := url.PathUnescape(pathPart); err == nil {
+		return decoded + rest
+	}
+	return raw
 }
 
 // categorizeArchiveURL infers a coarse category from URL path patterns so

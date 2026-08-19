@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -466,4 +467,171 @@ func TestTrustSuiteAccuracy_TitleMatch(t *testing.T) {
 		t.Logf("%-50s titleMatch=%q wantMismatch=%v", c.name, tm, c.wantMismatch)
 	}
 	mismatch.report(t, "titleMatch")
+}
+
+// TestTrustSuiteAccuracy_LegalSearchCaseName is the regression test for #436:
+// an exact case-name query must surface the landmark/highest-authority case
+// at rank 1 against the live CourtListener API, not an unrelated lower-court
+// case that merely shares the party-name string — proving the case_name
+// field-scope + order_by=citeCount fix (verified against the live API,
+// 2026-08-18) actually changes result composition, not just that the
+// request doesn't error. CourtListener is keyless and needs no newEvalDeps,
+// but it still gates on CROSSREF_EMAIL like every other case in this file —
+// otherwise `make test-eval` would make live network calls from this one
+// test even in an environment that unset CROSSREF_EMAIL specifically to skip
+// the whole suite.
+func TestTrustSuiteAccuracy_LegalSearchCaseName(t *testing.T) {
+	if os.Getenv("CROSSREF_EMAIL") == "" {
+		t.Skip("CROSSREF_EMAIL not set — skipping live trust-suite eval")
+	}
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	breakerCfg := circuit.Config{FailureThreshold: 10, ResetTimeout: 60}
+	caseProvider := search.NewCourtListenerProvider(os.Getenv("COURTLISTENER_API_TOKEN"), search.Deps{HTTPClient: httpClient, Breaker: circuit.New(breakerCfg)})
+	deps := Dependencies{
+		Cache:         cache.NewMemory(cache.MemoryConfig{MaxSizeMB: 16}),
+		Metrics:       metrics.NewCollector(),
+		Auditor:       audit.NewNoop(),
+		CaseProviders: map[string]search.CaseProvider{caseProvider.Name(): caseProvider},
+	}
+
+	// The exact repro from #436: before the fix, all 5 results were unrelated
+	// lower-court cases sharing the party names; none were the 1954 SCOTUS
+	// landmark ruling.
+	cases := []struct {
+		query string
+		court string // want this substring in the top result's court
+	}{
+		{"Brown v. Board of Education", "Supreme Court"},
+		{"Roe v. Wade", "Supreme Court"},
+		{"Marbury v. Madison", "Supreme Court"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.query, func(t *testing.T) {
+			out, res := callTool(t, deps, "legal_search", map[string]any{
+				"query":       c.query,
+				"num_results": 5,
+			})
+			if res.IsError {
+				t.Fatalf("legal_search(%s) returned a tool error: %v", c.query, res.Content)
+			}
+			result, _ := out["cases"].([]any)
+			if len(result) == 0 {
+				t.Fatalf("legal_search(%s): expected at least one case result", c.query)
+			}
+			top, _ := result[0].(map[string]any)
+			t.Logf("top result: caseName=%v court=%v citationCount=%v", top["caseName"], top["court"], top["citationCount"])
+			court, _ := top["court"].(string)
+			if !strings.Contains(court, c.court) {
+				t.Errorf("legal_search(%s) top result court = %q, want to contain %q", c.query, court, c.court)
+			}
+		})
+	}
+}
+
+// TestTrustSuiteAccuracy_ClinicalSearchPhase is the regression test for #437
+// fix 3: a free-text query carrying an implied phase (the shape an LLM caller
+// that hasn't split it into structured fields would produce) must surface
+// majority phase-matching results against the live ClinicalTrials.gov v2 API
+// — proving the aggFilters=phase:N fix (verified against the live API,
+// 2026-08-18) actually changes result composition, not just that the request
+// doesn't error.
+func TestTrustSuiteAccuracy_ClinicalSearchPhase(t *testing.T) {
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	breakerCfg := circuit.Config{FailureThreshold: 10, ResetTimeout: 60}
+	trial := search.NewClinicalTrialsProvider(search.Deps{HTTPClient: httpClient, Breaker: circuit.New(breakerCfg)})
+	deps := Dependencies{
+		Cache:          cache.NewMemory(cache.MemoryConfig{MaxSizeMB: 16}),
+		Metrics:        metrics.NewCollector(),
+		Auditor:        audit.NewNoop(),
+		TrialProviders: map[string]search.TrialProvider{trial.Name(): trial},
+	}
+
+	// The exact repro from #437: before the fix, 1 of 5 results plausibly
+	// matched phase 3; the rest were off-phase or off-condition.
+	out, res := callTool(t, deps, "clinical_search", map[string]any{
+		"query":       "type 2 diabetes phase 3 trial",
+		"num_results": 10,
+	})
+	if res.IsError {
+		t.Fatalf("clinical_search returned a tool error: %v", res.Content)
+	}
+	trials, _ := out["trials"].([]any)
+	if len(trials) == 0 {
+		t.Fatal("expected at least one trial result")
+	}
+
+	matching := 0
+	for _, tr := range trials {
+		m, _ := tr.(map[string]any)
+		phases, _ := m["phases"].([]any)
+		for _, p := range phases {
+			if p == "PHASE3" {
+				matching++
+				break
+			}
+		}
+		t.Logf("nctId=%v phases=%v conditions=%v", m["nctId"], m["phases"], m["conditions"])
+	}
+	if matching*2 < len(trials) { // majority (>=50%) phase-3 matching
+		t.Errorf("phase-3-matching = %d/%d, want majority (>=50%%)", matching, len(trials))
+	}
+}
+
+// TestTrustSuiteAccuracy_CompanyRecon is the live regression case for #438:
+// company_recon's ct_logs (crt.sh) and archives (Wayback CDX) phases against
+// known real, high-traffic domains must return real signal — not a silent
+// zero-result that (before this fix) was indistinguishable from a swallowed
+// upstream error. Named with the TestTrustSuiteAccuracy prefix so `make
+// test-eval`'s `-run TestTrustSuiteAccuracy` picks it up in the weekly
+// trust-eval CI job (.github/workflows/ci.yml) alongside the rest of the
+// suite, with no workflow change needed. Its own providers (crt.sh, Wayback
+// CDX) are keyless and need no newEvalDeps, but it still gates on
+// CROSSREF_EMAIL like every other case in this file — otherwise `make
+// test-eval` would make live network calls from this one test even in an
+// environment that unset CROSSREF_EMAIL specifically to skip the whole suite.
+func TestTrustSuiteAccuracy_CompanyRecon(t *testing.T) {
+	if os.Getenv("CROSSREF_EMAIL") == "" {
+		t.Skip("CROSSREF_EMAIL not set — skipping live trust-suite eval")
+	}
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	breakerCfg := circuit.Config{FailureThreshold: 10, ResetTimeout: 60}
+	deps := Dependencies{
+		Cache:           cache.NewMemory(cache.MemoryConfig{MaxSizeMB: 16}),
+		Metrics:         metrics.NewCollector(),
+		Auditor:         audit.NewNoop(),
+		CTLogResolver:   search.NewCrtShResolver(search.Deps{HTTPClient: httpClient, Breaker: circuit.New(breakerCfg)}),
+		ArchiveResolver: search.NewWaybackCDXResolver(search.Deps{HTTPClient: httpClient, Breaker: circuit.New(breakerCfg)}),
+	}
+
+	// Long-established, high-traffic domains with a large public certificate
+	// and web-archive history — a near-zero result here reliably indicates a
+	// resolver/parsing regression, not the domain genuinely lacking history.
+	targets := []string{"stripe.com", "github.com"}
+	const minSubdomains = 2
+	const minArchiveEntries = 5
+
+	for _, target := range targets {
+		t.Run(target, func(t *testing.T) {
+			out, res := callTool(t, deps, "company_recon", map[string]any{
+				"target": target,
+				"phases": []any{"ct_logs", "archives"},
+			})
+			if res.IsError {
+				t.Fatalf("company_recon(%s) returned a tool error: %v", target, res.Content)
+			}
+			if phaseErrors, ok := out["phase_errors"].([]any); ok && len(phaseErrors) > 0 {
+				t.Errorf("company_recon(%s) phase_errors: %v", target, phaseErrors)
+			}
+			subdomains, _ := out["subdomains"].([]any)
+			archiveURLs, _ := out["archive_urls"].([]any)
+			t.Logf("company_recon(%s): %d subdomains, %d archive entries", target, len(subdomains), len(archiveURLs))
+			if len(subdomains) < minSubdomains {
+				t.Errorf("company_recon(%s) subdomains = %d, want >= %d", target, len(subdomains), minSubdomains)
+			}
+			if len(archiveURLs) < minArchiveEntries {
+				t.Errorf("company_recon(%s) archive_urls = %d, want >= %d", target, len(archiveURLs), minArchiveEntries)
+			}
+		})
+	}
 }
