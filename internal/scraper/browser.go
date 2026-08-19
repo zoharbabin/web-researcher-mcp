@@ -16,10 +16,13 @@ import (
 )
 
 type browserPool struct {
-	mu       sync.Mutex
-	browser  *rod.Browser
-	launcher *launcher.Launcher
-	initErr  error
+	mu          sync.Mutex
+	browser     *rod.Browser
+	launcher    *launcher.Launcher
+	initErr     error
+	idleTimeout time.Duration
+	idleTimer   *time.Timer
+	activeUses  int
 }
 
 var (
@@ -27,7 +30,13 @@ var (
 	poolOnce sync.Once
 )
 
-func getBrowserPool(chromePath string, maxPages int) *browserPool {
+// getBrowserPool returns the singleton browser pool, launching Chromium if it
+// is not already running. idleTimeout (#460) is re-armed on every call that
+// finds (or creates) a live browser: if no caller touches the pool again
+// within idleTimeout, it is closed automatically, bounding how long a single
+// browser-tier scrape pins a Chromium process — and its macOS Dock icon —
+// after activity stops. Zero disables the idle-close timer.
+func getBrowserPool(chromePath string, maxPages int, idleTimeout time.Duration) *browserPool {
 	poolOnce.Do(func() {
 		pool = &browserPool{}
 	})
@@ -46,7 +55,70 @@ func getBrowserPool(chromePath string, maxPages int) *browserPool {
 	if pool.browser == nil {
 		pool.init(chromePath)
 	}
+	pool.idleTimeout = idleTimeout
+	if pool.browser != nil {
+		pool.touchLocked()
+	}
 	return pool
+}
+
+// touchLocked (re)arms the idle-close timer from now. A no-op while the pool
+// is in active use (bp.activeUses > 0) — acquire()/release() bracket that
+// window so the timer can never fire mid-operation. Caller must hold bp.mu.
+func (bp *browserPool) touchLocked() {
+	if bp.idleTimer != nil {
+		bp.idleTimer.Stop()
+		bp.idleTimer = nil
+	}
+	if bp.idleTimeout <= 0 || bp.activeUses > 0 {
+		return
+	}
+	// Capture idleTimeout under the lock rather than reading bp.idleTimeout
+	// from the callback goroutine, which runs without bp.mu held.
+	timeout := bp.idleTimeout
+	var timer *time.Timer
+	timer = time.AfterFunc(timeout, func() {
+		bp.mu.Lock()
+		defer bp.mu.Unlock()
+		// A later touchLocked/acquire call may have replaced this timer (or
+		// put the pool back in active use) between it firing and this
+		// goroutine acquiring bp.mu — in that case this fire is stale.
+		if bp.idleTimer != timer || bp.activeUses > 0 {
+			return
+		}
+		bp.idleTimer = nil
+		slog.Info("browser pool idle timeout reached, closing", "idleTimeout", timeout)
+		bp.closeLocked()
+	})
+	bp.idleTimer = timer
+}
+
+// acquire marks the pool as actively in use, disarming the idle-close timer
+// so a long-running scrape can never have its browser closed out from under
+// it. Pairs with release(), which re-arms the timer once the last active use
+// ends. Returns the current *rod.Browser (nil if unavailable).
+func (bp *browserPool) acquire() *rod.Browser {
+	bp.mu.Lock()
+	defer bp.mu.Unlock()
+	bp.activeUses++
+	if bp.idleTimer != nil {
+		bp.idleTimer.Stop()
+		bp.idleTimer = nil
+	}
+	return bp.browser
+}
+
+// release ends one active use started by acquire(). Once the last active use
+// ends, the idle-close timer is (re)armed starting now.
+func (bp *browserPool) release() {
+	bp.mu.Lock()
+	defer bp.mu.Unlock()
+	if bp.activeUses > 0 {
+		bp.activeUses--
+	}
+	if bp.activeUses == 0 {
+		bp.touchLocked()
+	}
 }
 
 // livenessCheckTimeout bounds only the CDP round-trip used to detect a dead
@@ -140,6 +212,10 @@ func (bp *browserPool) close() {
 // browser without releasing and re-acquiring bp.mu (which would let another
 // caller race in between). Caller must hold bp.mu.
 func (bp *browserPool) closeLocked() {
+	if bp.idleTimer != nil {
+		bp.idleTimer.Stop()
+		bp.idleTimer = nil
+	}
 	if bp.browser != nil {
 		// Bound this CDP round-trip (issue #464): closeLocked() is now also
 		// reached when the browser is already known-dead (liveness check
@@ -174,10 +250,9 @@ func (p *Pipeline) scrapeBrowser(ctx context.Context, url string, maxLength int,
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	bp := getBrowserPool(p.config.ChromePath, p.config.MaxBrowserConcurrency)
-	bp.mu.Lock()
-	browser := bp.browser
-	bp.mu.Unlock()
+	bp := getBrowserPool(p.config.ChromePath, p.config.MaxBrowserConcurrency, p.config.BrowserIdleTimeout)
+	browser := bp.acquire()
+	defer bp.release()
 
 	if browser == nil {
 		msg := "browser not available (chrome not found)"

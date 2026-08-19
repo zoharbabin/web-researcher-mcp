@@ -437,9 +437,10 @@ func main() {
 		AllowPrivateIPs:         cfg.AllowPrivateIPs,
 		AllowedDomains:          cfg.AllowedDomains,
 		ChromePath:              cfg.ChromePath,
-		ExaAPIKey:               cfg.Search.ExaAPIKey,  // enables the paid Exa /contents fallback tier
-		JinaAPIKey:              cfg.Search.JinaAPIKey, // raises the keyless Jina Reader tier's rate limit
-		JinaDisabled:            cfg.JinaDisabled,      // JINA_READER_DISABLED: opt out of the Jina Reader tier entirely
+		BrowserIdleTimeout:      cfg.BrowserIdleTimeout, // auto-close idle Chromium process (#460)
+		ExaAPIKey:               cfg.Search.ExaAPIKey,   // enables the paid Exa /contents fallback tier
+		JinaAPIKey:              cfg.Search.JinaAPIKey,  // raises the keyless Jina Reader tier's rate limit
+		JinaDisabled:            cfg.JinaDisabled,       // JINA_READER_DISABLED: opt out of the Jina Reader tier entirely
 		MaxHTMLBytes:            cfg.MaxHTMLBytes,
 		MaxDocumentBytes:        cfg.MaxDocumentBytes,
 		GitHubToken:             cfg.Search.GitHubToken, // raises GitHub's unauth rate limit for native README/blob/gist routing (#395)
