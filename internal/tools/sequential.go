@@ -355,6 +355,15 @@ func registerSequentialSearch(srv *mcp.Server, deps Dependencies) {
 			return toolError(fmt.Sprintf("Could not record this research step: %v. Start a new session by setting stepNumber=1 without a sessionId.", err)), nil, nil
 		}
 
+		// Flag the session complete so stats://sessions' activeSessions gauge
+		// stops counting it (#622). Best-effort: AppendStep just succeeded above,
+		// so the session exists; a failure here would only mean the gauge stays
+		// one session high until TTL expiry — it must never fail this tool call.
+		if !input.NextStepNeeded {
+			_ = deps.Sessions.MarkComplete(tenantID, userID, sessionID)
+			idx.Completed = true
+		}
+
 		output := buildSequentialResponse(idx, input)
 
 		// Iterative-depth assist (#67). quick (default) is a no-op — byte-for-byte

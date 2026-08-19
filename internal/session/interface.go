@@ -30,6 +30,14 @@ type Manager interface {
 	// a missing/expired session is a silent no-op (returns nil) — outcome
 	// telemetry must never fail or alter a tool's own result.
 	RecordOutcome(tenantID, userID, sessionID string, ev OutcomeEvent) error
+	// MarkComplete flags a session as finished so ActiveCount excludes it from
+	// the live-session gauge (#622). The session itself is NOT deleted — it stays
+	// readable via GetFull/GetIndex until its TTL expires, since a completed
+	// session remains a valid format_bibliography/get_research_session source.
+	// Returns an error for a missing/expired session, same convention as
+	// SetResearchGoal; the caller (sequential_search, run right after a
+	// successful AppendStep) treats it as best-effort and ignores the error.
+	MarkComplete(tenantID, userID, sessionID string) error
 	// GetIndex returns the lightweight index for a session, or ok=false.
 	GetIndex(tenantID, userID, sessionID string) (*SessionIndex, bool)
 	// GetFull loads the full session payload.

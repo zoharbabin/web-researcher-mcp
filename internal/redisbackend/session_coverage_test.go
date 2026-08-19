@@ -195,6 +195,104 @@ func TestSessionManagerActiveCountAndDeleteAll(t *testing.T) {
 	}
 }
 
+// TestSessionManagerActiveCountExcludesCompleted proves the #622 fix on the
+// Redis backend: ActiveCount decrements when a session is marked complete,
+// across multiple tenants (guarding against a fix that only works for a
+// single tenant's index/completed-set pairing), while the session itself
+// stays readable via GetFull — completion is a flag, not a deletion.
+func TestSessionManagerActiveCountExcludesCompleted(t *testing.T) {
+	b := newTestBackend(t)
+	m := b.SessionManager()
+
+	idxA1, err := m.Create("tenant-A", "u1")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err := m.Create("tenant-A", "u1"); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	idxB1, err := m.Create("tenant-B", "u1")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	if got := m.ActiveCount(); got != 3 {
+		t.Fatalf("ActiveCount before completion = %d, want 3", got)
+	}
+
+	if err := m.MarkComplete("tenant-A", "u1", idxA1.ID); err != nil {
+		t.Fatalf("MarkComplete: %v", err)
+	}
+	if err := m.MarkComplete("tenant-B", "u1", idxB1.ID); err != nil {
+		t.Fatalf("MarkComplete: %v", err)
+	}
+
+	if got := m.ActiveCount(); got != 1 {
+		t.Errorf("ActiveCount after completing 2 of 3 = %d, want 1", got)
+	}
+
+	full, err := m.GetFull("tenant-A", "u1", idxA1.ID)
+	if err != nil {
+		t.Fatalf("completed session should still load via GetFull: %v", err)
+	}
+	if !full.Completed {
+		t.Error("Session.Completed should be true after MarkComplete")
+	}
+
+	idx, ok := m.GetIndex("tenant-A", "u1", idxA1.ID)
+	if !ok || !idx.Completed {
+		t.Errorf("GetIndex should report Completed=true, got ok=%v idx=%+v", ok, idx)
+	}
+}
+
+// TestSessionManagerMarkCompleteNotFound proves MarkComplete surfaces the
+// typed not-found error for an unknown session, same convention as
+// SetResearchGoal.
+func TestSessionManagerMarkCompleteNotFound(t *testing.T) {
+	b := newTestBackend(t)
+	m := b.SessionManager()
+
+	err := m.MarkComplete("tenant-1", "u1", "missing-id")
+	var nf *session.SessionNotFoundError
+	if !errors.As(err, &nf) {
+		t.Fatalf("expected typed SessionNotFoundError for unknown session, got %v", err)
+	}
+}
+
+// TestSessionManagerDeleteRemovesFromCompletedSet proves Delete cleans up the
+// completed-set membership too, so a deleted-then-recreated session in the
+// same tenant doesn't inherit a stale "completed" mark from an unrelated
+// former session that happened to reuse the set (#622 bookkeeping).
+func TestSessionManagerDeleteRemovesFromCompletedSet(t *testing.T) {
+	b := newTestBackend(t)
+	m := b.SessionManager()
+
+	idx, err := m.Create("tenant-1", "u1")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := m.MarkComplete("tenant-1", "u1", idx.ID); err != nil {
+		t.Fatalf("MarkComplete: %v", err)
+	}
+	if got := m.ActiveCount(); got != 0 {
+		t.Fatalf("ActiveCount after completing the only session = %d, want 0", got)
+	}
+
+	m.Delete("tenant-1", "u1", idx.ID)
+
+	idx2, err := m.Create("tenant-1", "u1")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if got := m.ActiveCount(); got != 1 {
+		t.Errorf("ActiveCount after deleting the completed session and creating a fresh one = %d, want 1", got)
+	}
+	got, ok := m.GetIndex("tenant-1", "u1", idx2.ID)
+	if !ok || got.Completed {
+		t.Errorf("fresh session must not inherit completed state, ok=%v idx=%+v", ok, got)
+	}
+}
+
 // TestSessionManagerClose verifies Close is a safe no-op on the Redis-backed
 // manager — the underlying client's lifecycle is owned by Backends.Close, not
 // by the SessionManager, so this must never close the shared client out from
