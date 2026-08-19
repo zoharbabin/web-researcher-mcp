@@ -1515,7 +1515,7 @@ var paperFulltextOutputSchema = map[string]any{
 		"trust":         trustUntrustedExternal,
 		"truncated":     map[string]any{"type": "boolean"},
 		"scrapeTier":    map[string]any{"type": "string", "description": "Which extraction tier produced the content (markdown, stealth, html, browser). Provenance only; omitted when unknown."},
-		"source":        map[string]any{"type": "string", "enum": []any{"semanticscholar", "direct-url"}, "description": "Where metadata came from: 'semanticscholar' when a DOI/paper-ID lookup succeeded, 'direct-url' when the identifier was a URL or no metadata could be resolved."},
+		"source":        map[string]any{"type": "string", "enum": []any{"semanticscholar", "unpaywall", "direct-url"}, "description": "Where metadata came from: 'semanticscholar' when a DOI/paper-ID lookup succeeded, 'unpaywall' when Semantic Scholar had no record for the DOI at all but Unpaywall resolved a PDF directly, 'direct-url' when the identifier was a URL or no metadata could be resolved."},
 		"authors":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 		"year":          map[string]any{"type": "integer"},
 		"doi":           map[string]any{"type": "string"},
