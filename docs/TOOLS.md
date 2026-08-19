@@ -1815,7 +1815,7 @@ Retrieve the full text of an academic paper from a single identifier — a DOI, 
 
 ## Tool 31: `company_recon`
 
-OSINT company reconnaissance with typed structured output: Certificate Transparency log SANs (crt.sh), a Wayback Machine CDX historical URL inventory (with inferred `login`/`api`/`admin`/`asset`/`doc` categories), a derived subdomain list, and a lightweight web-search company summary. This is the programmatic complement to the `company-recon` MCP Prompt: use that prompt for an AI-orchestrated deep-dive across many tools; use this tool when you need machine-readable OSINT data directly, without an agent parsing crt.sh's JSON or Wayback's array-of-arrays itself. Both crt.sh and the Wayback CDX API are keyless, so this tool is always registered.
+OSINT company reconnaissance with typed structured output: Certificate Transparency log SANs (crt.sh), a Wayback Machine CDX historical URL inventory (with inferred `login`/`api`/`admin`/`doc`/`asset`/`blog`/`docs`/`legal` categories), a derived subdomain list, and a lightweight web-search company summary. This is the programmatic complement to the `company-recon` MCP Prompt: use that prompt for an AI-orchestrated deep-dive across many tools; use this tool when you need machine-readable OSINT data directly, without an agent parsing crt.sh's JSON or Wayback's array-of-arrays itself. Both crt.sh and the Wayback CDX API are keyless, so this tool is always registered.
 
 ### When to use vs. other tools
 
@@ -1843,7 +1843,7 @@ OSINT company reconnaissance with typed structured output: Certificate Transpare
 | `domain` | string | Resolved canonical domain |
 | `profile` | object | `summary` — one-line company summary from the top `web_search` hit. Present only when the `profiling` or `web` phase ran and found a result (either phase alone triggers the same web-search summary) |
 | `cert_sans` | array | Certificate Transparency SANs from crt.sh, deduplicated: `domain`, `issuer`, `not_before`, `not_after`, `logged_at`. Present only when the `ct_logs` phase ran |
-| `archive_urls` | array | Wayback CDX historical URLs, filtered to 200/301/302 captures: `url`, `timestamp`, `status_code`, `mime_type`, `category` (`login`/`api`/`admin`/`asset`/`doc`/`other`). Present only when the `archives` phase ran |
+| `archive_urls` | array | Wayback CDX historical URLs, filtered to 200/301/302 captures: `url`, `timestamp`, `status_code`, `mime_type`, `category` (`login`/`api`/`admin`/`doc`/`asset`/`blog`/`docs`/`legal`/`other`). Present only when the `archives` phase ran |
 | `subdomains` | array | Deduplicated subdomains derived from `cert_sans` + `archive_urls`: `subdomain`, `source` (`ct_logs`/`archive`) |
 | `sources` | array | Which phases actually ran and contributed data: `phase`, `name`, `url` — check this to see what was skipped (resolver dependency absent, or an upstream error) |
 | `phase_errors` | array | `phase` (`ct_logs`/`archives`), `error` — populated when that phase's resolver returned an error (upstream 5xx/429, malformed response), distinguishing a genuine upstream failure from a resolver that simply found nothing |
