@@ -498,6 +498,9 @@ func TestVerifyCitation_ClaimFetchError_Surfaced(t *testing.T) {
 	if fetchErr == "" {
 		t.Error("expected claimFetchError to be populated when the fetch itself failed (connection refused)")
 	}
+	if out["claimSourceUrl"] != deadURL {
+		t.Errorf("claimSourceUrl = %v, want %q (the attempted URL, so the failure is attributable)", out["claimSourceUrl"], deadURL)
+	}
 }
 
 // mockOAURLProvider returns a record whose PDFUrl is a given OA URL and whose

@@ -35,7 +35,15 @@ func looksLikeHTML(contentType string, body []byte) bool {
 	if strings.Contains(strings.ToLower(contentType), "text/html") {
 		return true
 	}
-	trimmed := bytes.ToLower(bytes.TrimSpace(body))
+	// Sniff only a small head window (never the full body, which can be up to
+	// MaxDocumentBytes for a real PDF/DOCX/PPTX) — the doctype/html tag, if
+	// present, is always within the first few bytes after leading whitespace.
+	const sniffLen = 512
+	head := body
+	if len(head) > sniffLen {
+		head = head[:sniffLen]
+	}
+	trimmed := bytes.ToLower(bytes.TrimSpace(head))
 	return bytes.HasPrefix(trimmed, []byte("<!doctype html")) || bytes.HasPrefix(trimmed, []byte("<html"))
 }
 

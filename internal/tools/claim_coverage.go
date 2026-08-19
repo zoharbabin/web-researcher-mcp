@@ -57,7 +57,7 @@ func claimCoverageFor(ctx context.Context, deps Dependencies, fetchURL, claim st
 
 	res, err := deps.Scraper.Scrape(ctx, fetchURL, auditClaimScrapeMaxBytes)
 	if err != nil {
-		return claimCoverageResult{Support: claimSourceUnavailable, FetchError: sanitizeClaimFetchError(err)}
+		return claimCoverageResult{Support: claimSourceUnavailable, SourceURL: fetchURL, FetchError: sanitizeClaimFetchError(err)}
 	}
 	if res == nil || strings.TrimSpace(res.Content) == "" {
 		return claimCoverageResult{Support: claimSourceUnavailable}
@@ -81,12 +81,9 @@ func sanitizeClaimFetchError(err error) string {
 	if errors.As(err, &se) {
 		msg = string(mapScrapeErrorKind(se.Kind)) + ": " + audit.MaskSecrets(se.Message)
 	}
-	if len(msg) > maxLen {
-		runes := []rune(msg)
-		if len(runes) > maxLen {
-			runes = runes[:maxLen]
-		}
-		msg = string(runes) + "…"
+	runes := []rune(msg)
+	if len(runes) > maxLen {
+		msg = string(runes[:maxLen]) + "…"
 	}
 	return msg
 }
