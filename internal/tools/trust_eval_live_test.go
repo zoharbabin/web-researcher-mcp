@@ -468,6 +468,55 @@ func TestTrustSuiteAccuracy_TitleMatch(t *testing.T) {
 	mismatch.report(t, "titleMatch")
 }
 
+// TestTrustSuiteAccuracy_ClinicalSearchPhase is the regression test for #437
+// fix 3: a free-text query carrying an implied phase (the shape an LLM caller
+// that hasn't split it into structured fields would produce) must surface
+// majority phase-matching results against the live ClinicalTrials.gov v2 API
+// — proving the aggFilters=phase:N fix (verified against the live API,
+// 2026-08-18) actually changes result composition, not just that the request
+// doesn't error.
+func TestTrustSuiteAccuracy_ClinicalSearchPhase(t *testing.T) {
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	breakerCfg := circuit.Config{FailureThreshold: 10, ResetTimeout: 60}
+	trial := search.NewClinicalTrialsProvider(search.Deps{HTTPClient: httpClient, Breaker: circuit.New(breakerCfg)})
+	deps := Dependencies{
+		Cache:          cache.NewMemory(cache.MemoryConfig{MaxSizeMB: 16}),
+		Metrics:        metrics.NewCollector(),
+		Auditor:        audit.NewNoop(),
+		TrialProviders: map[string]search.TrialProvider{trial.Name(): trial},
+	}
+
+	// The exact repro from #437: before the fix, 1 of 5 results plausibly
+	// matched phase 3; the rest were off-phase or off-condition.
+	out, res := callTool(t, deps, "clinical_search", map[string]any{
+		"query":       "type 2 diabetes phase 3 trial",
+		"num_results": 10,
+	})
+	if res.IsError {
+		t.Fatalf("clinical_search returned a tool error: %v", res.Content)
+	}
+	trials, _ := out["trials"].([]any)
+	if len(trials) == 0 {
+		t.Fatal("expected at least one trial result")
+	}
+
+	matching := 0
+	for _, tr := range trials {
+		m, _ := tr.(map[string]any)
+		phases, _ := m["phases"].([]any)
+		for _, p := range phases {
+			if p == "PHASE3" {
+				matching++
+				break
+			}
+		}
+		t.Logf("nctId=%v phases=%v conditions=%v", m["nctId"], m["phases"], m["conditions"])
+	}
+	if matching*2 < len(trials) { // majority (>=50%) phase-3 matching
+		t.Errorf("phase-3-matching = %d/%d, want majority (>=50%%)", matching, len(trials))
+	}
+}
+
 // TestTrustSuiteAccuracy_CompanyRecon is the live regression case for #438:
 // company_recon's ct_logs (crt.sh) and archives (Wayback CDX) phases against
 // known real, high-traffic domains must return real signal — not a silent
