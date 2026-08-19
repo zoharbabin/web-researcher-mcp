@@ -32,6 +32,7 @@ type Config struct {
 	AllowedDomains                []string
 	ChromePath                    string
 	JinaDisabled                  bool
+	BrowserIdleTimeout            time.Duration
 	MaxScrapeConcurrency          int
 	MaxBrowserConcurrency         int
 	MaxScrapeConcurrencyPerTenant int
@@ -516,10 +517,16 @@ func Load() (*Config, error) {
 			Persist:        envBool("RATE_LIMIT_PERSIST", false),
 			MaxCallsPerDay: envInt("MAX_CALLS_PER_DAY", 0),
 		},
-		AllowPrivateIPs:       envBool("ALLOW_PRIVATE_IPS", false),
-		AllowedDomains:        splitCSV(os.Getenv("ALLOWED_DOMAINS")),
-		ChromePath:            os.Getenv("CHROME_PATH"),
-		JinaDisabled:          envBool("JINA_READER_DISABLED", false),
+		AllowPrivateIPs: envBool("ALLOW_PRIVATE_IPS", false),
+		AllowedDomains:  splitCSV(os.Getenv("ALLOWED_DOMAINS")),
+		ChromePath:      os.Getenv("CHROME_PATH"),
+		JinaDisabled:    envBool("JINA_READER_DISABLED", false),
+		// BrowserIdleTimeout closes the browser-tier Chromium process after this
+		// long with no scrapeBrowser/ExtractLinks call (#460) — without it, one
+		// browser-tier scrape pins a Chromium process (and its macOS Dock icon)
+		// for the full server lifetime. Explicit "0" disables the idle-close
+		// timer entirely (env unset ⇒ the 5-minute default; env="0" ⇒ disabled).
+		BrowserIdleTimeout:    envDuration("BROWSER_IDLE_TIMEOUT", 5*time.Minute),
 		MaxScrapeConcurrency:  envInt("MAX_SCRAPE_CONCURRENCY", 5),
 		MaxBrowserConcurrency: envInt("MAX_SCRAPE_CONCURRENCY_BROWSER", 2),
 		// MaxScrapeConcurrencyPerTenant defaults to the global MaxScrapeConcurrency

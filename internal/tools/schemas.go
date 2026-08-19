@@ -1290,6 +1290,17 @@ var companyReconOutputSchema = map[string]any{
 				},
 			},
 		},
+		"phase_errors": map[string]any{
+			"type":        "array",
+			"description": "Per-phase resolver errors for ct_logs/archives — distinguishes a genuine zero-result phase (absent from phase_errors, phase still listed in sources on success) from an upstream failure (resolver returned an error; the phase's field is absent from the result AND recorded here).",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"phase": map[string]any{"type": "string", "enum": []any{"ct_logs", "archives"}},
+					"error": map[string]any{"type": "string"},
+				},
+			},
+		},
 	},
 }
 

@@ -516,3 +516,61 @@ func TestTrustSuiteAccuracy_ClinicalSearchPhase(t *testing.T) {
 		t.Errorf("phase-3-matching = %d/%d, want majority (>=50%%)", matching, len(trials))
 	}
 }
+
+// TestTrustSuiteAccuracy_CompanyRecon is the live regression case for #438:
+// company_recon's ct_logs (crt.sh) and archives (Wayback CDX) phases against
+// known real, high-traffic domains must return real signal — not a silent
+// zero-result that (before this fix) was indistinguishable from a swallowed
+// upstream error. Named with the TestTrustSuiteAccuracy prefix so `make
+// test-eval`'s `-run TestTrustSuiteAccuracy` picks it up in the weekly
+// trust-eval CI job (.github/workflows/ci.yml) alongside the rest of the
+// suite, with no workflow change needed. Its own providers (crt.sh, Wayback
+// CDX) are keyless and need no newEvalDeps, but it still gates on
+// CROSSREF_EMAIL like every other case in this file — otherwise `make
+// test-eval` would make live network calls from this one test even in an
+// environment that unset CROSSREF_EMAIL specifically to skip the whole suite.
+func TestTrustSuiteAccuracy_CompanyRecon(t *testing.T) {
+	if os.Getenv("CROSSREF_EMAIL") == "" {
+		t.Skip("CROSSREF_EMAIL not set — skipping live trust-suite eval")
+	}
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	breakerCfg := circuit.Config{FailureThreshold: 10, ResetTimeout: 60}
+	deps := Dependencies{
+		Cache:           cache.NewMemory(cache.MemoryConfig{MaxSizeMB: 16}),
+		Metrics:         metrics.NewCollector(),
+		Auditor:         audit.NewNoop(),
+		CTLogResolver:   search.NewCrtShResolver(search.Deps{HTTPClient: httpClient, Breaker: circuit.New(breakerCfg)}),
+		ArchiveResolver: search.NewWaybackCDXResolver(search.Deps{HTTPClient: httpClient, Breaker: circuit.New(breakerCfg)}),
+	}
+
+	// Long-established, high-traffic domains with a large public certificate
+	// and web-archive history — a near-zero result here reliably indicates a
+	// resolver/parsing regression, not the domain genuinely lacking history.
+	targets := []string{"stripe.com", "github.com"}
+	const minSubdomains = 2
+	const minArchiveEntries = 5
+
+	for _, target := range targets {
+		t.Run(target, func(t *testing.T) {
+			out, res := callTool(t, deps, "company_recon", map[string]any{
+				"target": target,
+				"phases": []any{"ct_logs", "archives"},
+			})
+			if res.IsError {
+				t.Fatalf("company_recon(%s) returned a tool error: %v", target, res.Content)
+			}
+			if phaseErrors, ok := out["phase_errors"].([]any); ok && len(phaseErrors) > 0 {
+				t.Errorf("company_recon(%s) phase_errors: %v", target, phaseErrors)
+			}
+			subdomains, _ := out["subdomains"].([]any)
+			archiveURLs, _ := out["archive_urls"].([]any)
+			t.Logf("company_recon(%s): %d subdomains, %d archive entries", target, len(subdomains), len(archiveURLs))
+			if len(subdomains) < minSubdomains {
+				t.Errorf("company_recon(%s) subdomains = %d, want >= %d", target, len(subdomains), minSubdomains)
+			}
+			if len(archiveURLs) < minArchiveEntries {
+				t.Errorf("company_recon(%s) archive_urls = %d, want >= %d", target, len(archiveURLs), minArchiveEntries)
+			}
+		})
+	}
+}
