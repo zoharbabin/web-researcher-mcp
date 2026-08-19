@@ -102,6 +102,53 @@ func TestCompanyReconPhaseErrorDegradesSoft(t *testing.T) {
 	if _, ok := out["archive_urls"]; !ok {
 		t.Error("archives phase should still have run and populated archive_urls")
 	}
+	// Regression for #438: a genuine zero-result and a swallowed resolver error
+	// used to look identical (both just "cert_sans absent"). phase_errors makes
+	// them distinguishable.
+	phaseErrors, ok := out["phase_errors"].([]any)
+	if !ok || len(phaseErrors) != 1 {
+		t.Fatalf("phase_errors = %v, want exactly 1 entry for the errored ct_logs phase", out["phase_errors"])
+	}
+	pe := phaseErrors[0].(map[string]any)
+	if pe["phase"] != "ct_logs" {
+		t.Errorf("phase_errors[0].phase = %v, want ct_logs", pe["phase"])
+	}
+	if pe["error"] != "upstream unavailable" {
+		t.Errorf("phase_errors[0].error = %v, want %q", pe["error"], "upstream unavailable")
+	}
+}
+
+// mockErroringArchiveResolver mirrors mockErroringCTLogResolver for the
+// archives phase.
+type mockErroringArchiveResolver struct{}
+
+func (m *mockErroringArchiveResolver) Name() string { return "wayback-cdx" }
+func (m *mockErroringArchiveResolver) Lookup(_ context.Context, _ string, _ int) ([]search.ArchiveEntry, error) {
+	return nil, errors.New("wayback: server error 503")
+}
+
+func TestCompanyReconArchivesPhaseErrorDegradesSoft(t *testing.T) {
+	t.Parallel()
+	deps := setupTestDeps()
+	deps.ArchiveResolver = &mockErroringArchiveResolver{}
+	out, res := callTool(t, deps, "company_recon", map[string]any{"target": "acme.com"})
+	if res.IsError {
+		t.Fatalf("a single phase erroring must not fail the whole call: %v", res.Content)
+	}
+	if _, ok := out["archive_urls"]; ok {
+		t.Error("archive_urls should be absent when archives errored")
+	}
+	if _, ok := out["cert_sans"]; !ok {
+		t.Error("ct_logs phase should still have run and populated cert_sans")
+	}
+	phaseErrors, ok := out["phase_errors"].([]any)
+	if !ok || len(phaseErrors) != 1 {
+		t.Fatalf("phase_errors = %v, want exactly 1 entry for the errored archives phase", out["phase_errors"])
+	}
+	pe := phaseErrors[0].(map[string]any)
+	if pe["phase"] != "archives" {
+		t.Errorf("phase_errors[0].phase = %v, want archives", pe["phase"])
+	}
 }
 
 // recordingCTLogResolver captures the maxResults value it was called with, so

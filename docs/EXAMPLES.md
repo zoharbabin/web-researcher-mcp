@@ -248,7 +248,7 @@ In **observations mode** (`mode: "observations"`), `results` is an array of `{se
 
 ## Clinical Trial Search
 
-Search **ClinicalTrials.gov** (keyless) for clinical-trial registrations — discovery and primary-source retrieval for evidence-based medicine, not medical advice. Combine free text, `condition`, `intervention`, `sponsor`, and a recruitment `status` filter.
+Search **ClinicalTrials.gov** (keyless) for clinical-trial registrations — discovery and primary-source retrieval for evidence-based medicine, not medical advice. Combine free text, `condition`, `intervention`, `sponsor`, a recruitment `status` filter, and a `phase` filter (`PHASE1`-`PHASE4`, `EARLY_PHASE1`). A phase mentioned in free-text `query` (e.g. `"phase 3"`) is inferred automatically when `phase` is omitted.
 
 ```json
 {
@@ -257,6 +257,7 @@ Search **ClinicalTrials.gov** (keyless) for clinical-trial registrations — dis
     "condition": "covid-19",
     "intervention": "vaccine",
     "status": "COMPLETED",
+    "phase": "PHASE3",
     "num_results": 5
   }
 }

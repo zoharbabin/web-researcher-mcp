@@ -228,6 +228,41 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.CacheIsolation != "shared" {
 		t.Errorf("expected default CacheIsolation=shared, got %s", cfg.CacheIsolation)
 	}
+	if cfg.BrowserIdleTimeout != 5*time.Minute {
+		t.Errorf("expected default BrowserIdleTimeout=5m, got %s", cfg.BrowserIdleTimeout)
+	}
+}
+
+// TestLoadBrowserIdleTimeoutExplicitZeroDisables proves #460's env knob:
+// BROWSER_IDLE_TIMEOUT=0 must resolve to a real, explicit zero (disabling the
+// browser pool's idle-close timer), not silently fall back to the 5-minute
+// default the way an unset/empty env var would.
+func TestLoadBrowserIdleTimeoutExplicitZeroDisables(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("BROWSER_IDLE_TIMEOUT", "0")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.BrowserIdleTimeout != 0 {
+		t.Errorf("expected BrowserIdleTimeout=0 when explicitly disabled, got %s", cfg.BrowserIdleTimeout)
+	}
+}
+
+// TestLoadBrowserIdleTimeoutCustom proves the env knob threads a custom
+// duration through unchanged.
+func TestLoadBrowserIdleTimeoutCustom(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("BROWSER_IDLE_TIMEOUT", "90s")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.BrowserIdleTimeout != 90*time.Second {
+		t.Errorf("expected BrowserIdleTimeout=90s, got %s", cfg.BrowserIdleTimeout)
+	}
 }
 
 // TestLoadCacheIsolationRequiredWithOAuth proves #484's startup guard: once
