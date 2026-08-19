@@ -532,6 +532,39 @@ func TestTrustSuiteAccuracy_TitleMatch(t *testing.T) {
 	mismatch.report(t, "titleMatch")
 }
 
+// TestTrustSuiteAccuracy_AuthenticityCaveat (#599) is the live regression test
+// for the bare-DOI confirmed-with-zero-authenticity-check gap: against the real
+// Crossref/OpenAlex APIs, a bare DOI that resolves confirmed with titleMatch
+// not_checked must carry authenticityCaveat, while the same DOI supplied WITH
+// its correct title (titleMatch actually runs) must not.
+func TestTrustSuiteAccuracy_AuthenticityCaveat(t *testing.T) {
+	deps := newEvalDeps(t)
+	ctx := context.Background()
+
+	bareDOI := "10.1038/171737a0"
+	out := map[string]any{"inputType": "doi"}
+	var prov []string
+	verifyByDOI(ctx, deps, bareDOI, bareDOI, "", out, &prov)
+	setVerificationStatus(out)
+	setAuthenticityCaveat(out)
+	if out["verificationStatus"] != verificationConfirmed {
+		t.Fatalf("bare DOI %s: verificationStatus = %v, want confirmed (precondition)", bareDOI, out["verificationStatus"])
+	}
+	if _, present := out["authenticityCaveat"]; !present {
+		t.Errorf("[authenticityCaveat] FALSE NEGATIVE: bare DOI %s confirmed with titleMatch=%q but no authenticityCaveat surfaced", bareDOI, out["titleMatch"])
+	}
+
+	titled := bareDOI + " The Molecular Structure of Nucleic Acids"
+	out2 := map[string]any{"inputType": "doi"}
+	var prov2 []string
+	verifyByDOI(ctx, deps, bareDOI, titled, "", out2, &prov2)
+	setVerificationStatus(out2)
+	setAuthenticityCaveat(out2)
+	if _, present := out2["authenticityCaveat"]; present {
+		t.Errorf("[authenticityCaveat] FALSE POSITIVE: DOI %s with correct title (titleMatch=%q) still carries authenticityCaveat", bareDOI, out2["titleMatch"])
+	}
+}
+
 // TestTrustSuiteAccuracy_LegalSearchCaseName is the regression test for #436:
 // an exact case-name query must surface the landmark/highest-authority case
 // at rank 1 against the live CourtListener API, not an unrelated lower-court
