@@ -84,6 +84,60 @@ func TestFREDSeriesSearchDecodesPopularity(t *testing.T) {
 	}
 }
 
+// TestFREDSeriesSearchReranksByTermRelevance (#595): a purely
+// popularity-ordered response ranks a site-wide-popular but topically
+// unrelated series (CPIAUCSL) above the query-relevant one (UNRATE) for a
+// "US unemployment rate" query. seriesSearch must re-rank by query/title term
+// overlap so UNRATE comes first, while NOT regressing the original #434 case:
+// an acronym query like "GDP" that never appears as a literal word in any
+// candidate's spelled-out title must keep FRED's popularity order (GDP first).
+// Fixture data reflects the real FRED /series/search response shape for both
+// queries (order_by=popularity&sort_order=desc), verified live against the
+// FRED API during investigation.
+func TestFREDSeriesSearchReranksByTermRelevance(t *testing.T) {
+	t.Run("unemployment rate query favors the relevant series over the merely popular one", func(t *testing.T) {
+		p := newFREDTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(`{"seriess":[
+				{"id":"CPIAUCSL","title":"Consumer Price Index for All Urban Consumers: All Items in U.S. City Average","popularity":96},
+				{"id":"UNRATE","title":"Unemployment Rate","popularity":95},
+				{"id":"PAYEMS","title":"All Employees, Total Nonfarm","popularity":85}
+			]}`))
+		})
+		res, err := p.Econ(context.Background(), EconSearchParams{Query: "US unemployment rate", NumResults: 5})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(res) != 3 || res[0].SeriesID != "UNRATE" {
+			t.Fatalf("expected UNRATE first, got order: %v", seriesIDs(res))
+		}
+	})
+
+	t.Run("acronym query with no literal title match keeps popularity order (#434 regression guard)", func(t *testing.T) {
+		p := newFREDTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(`{"seriess":[
+				{"id":"GDP","title":"Gross Domestic Product","popularity":90},
+				{"id":"GDPC1","title":"Real Gross Domestic Product","popularity":90},
+				{"id":"GFDEGDQ188S","title":"Federal Debt: Total Public Debt as Percent of Gross Domestic Product","popularity":86}
+			]}`))
+		})
+		res, err := p.Econ(context.Background(), EconSearchParams{Query: "gdp", NumResults: 5})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(res) != 3 || res[0].SeriesID != "GDP" {
+			t.Fatalf("expected GDP first (no title spells out the acronym, so popularity order must hold), got order: %v", seriesIDs(res))
+		}
+	})
+}
+
+func seriesIDs(res []EconResult) []string {
+	ids := make([]string, len(res))
+	for i, r := range res {
+		ids[i] = r.SeriesID
+	}
+	return ids
+}
+
 func TestFREDObservations(t *testing.T) {
 	p := newFREDTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.URL.Path, "/series/observations") {

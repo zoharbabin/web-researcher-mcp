@@ -48,6 +48,23 @@ func (f *failingPaperFetcher) FetchPaper(_ context.Context, _ string) (*search.A
 	return nil, f.err
 }
 
+// notFoundPaperFetcher implements search.AcademicProvider + search.PaperFetcher,
+// with FetchPaper always returning (nil, nil) — mirroring Semantic Scholar's own
+// "no record for this ID" convention (internal/search/semanticscholar.go's
+// FetchPaper normalizes an upstream 404 to (nil, nil), never an error).
+type notFoundPaperFetcher struct{}
+
+func (f *notFoundPaperFetcher) Name() string { return "semanticscholar" }
+func (f *notFoundPaperFetcher) Metadata() search.ProviderMeta {
+	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "free", Description: "mock S2 with no record for any ID"}
+}
+func (f *notFoundPaperFetcher) Scholarly(_ context.Context, _ search.AcademicSearchParams) ([]search.AcademicResult, error) {
+	return nil, nil
+}
+func (f *notFoundPaperFetcher) FetchPaper(_ context.Context, _ string) (*search.AcademicResult, error) {
+	return nil, nil
+}
+
 // callPaperFulltext calls paper_fulltext through the in-memory MCP client and
 // returns the parsed result (or fails the test on a tool-level error).
 func callPaperFulltext(t *testing.T, deps Dependencies, args map[string]any) map[string]any {
@@ -248,6 +265,43 @@ func TestPaperFulltextUnpaywallFallback(t *testing.T) {
 	}
 	if out["source"] != "semanticscholar" {
 		t.Errorf("source = %v, want semanticscholar", out["source"])
+	}
+}
+
+// TestPaperFulltextUnpaywallFallbackWhenS2HasNoRecord proves the #601 fix: when
+// Semantic Scholar has NO record at all for the DOI (FetchPaper returns
+// (nil, nil), its documented "not found" convention — e.g. an arXiv-minted DOI
+// S2 never indexed), paper_fulltext must still attempt an Unpaywall lookup on
+// the extracted DOI directly, rather than skipping straight to the bare
+// doi.org redirect with no metadata. Before the #601 fix, the Unpaywall
+// fallback added for #533 was reachable only inside the `result != nil`
+// branch, so this case never consulted deps.OAResolver at all.
+func TestPaperFulltextUnpaywallFallbackWhenS2HasNoRecord(t *testing.T) {
+	pdf := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><head><title>OA Copy</title></head><body><article><p>` +
+			"Full text served from the Unpaywall-resolved open access location, found even though Semantic Scholar has no record of this DOI at all." +
+			`</p></article></body></html>`))
+	}))
+	defer pdf.Close()
+
+	deps := scrapeTestDeps()
+	deps.AcademicProviders = map[string]search.AcademicProvider{"semanticscholar": &notFoundPaperFetcher{}}
+	deps.OAResolver = &mockOAResolver{oa: true, pdfURL: pdf.URL, found: true}
+
+	out := callPaperFulltext(t, deps, map[string]any{"identifier": "10.48550/arXiv.1706.03762"})
+
+	if out["resolvedUrl"] != pdf.URL {
+		t.Errorf("resolvedUrl = %v, want the Unpaywall-resolved PDF URL %v (must not degrade straight to the doi.org redirect)", out["resolvedUrl"], pdf.URL)
+	}
+	if out["source"] == "direct-url" {
+		t.Errorf("source = %v, want something other than the bare direct-url fallback now that Unpaywall resolved a PDF", out["source"])
+	}
+	if out["doi"] != "10.48550/arxiv.1706.03762" {
+		t.Errorf("doi = %v, want the extracted (lowercased) DOI to be surfaced", out["doi"])
+	}
+	if out["openAccess"] != true {
+		t.Errorf("openAccess = %v, want true (Unpaywall found an OA copy)", out["openAccess"])
 	}
 }
 

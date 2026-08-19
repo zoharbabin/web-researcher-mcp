@@ -64,6 +64,56 @@ func TestExtractClaimEvidenceDocumentOrder(t *testing.T) {
 	}
 }
 
+// TestExtractClaimEvidenceSpellingVariantsAndNumericWeight is the harness for
+// #594: a claim written in American spelling (and/or naming a specific
+// number) must not lose Signal to an earlier, less-relevant sentence just
+// because the source text uses the British spelling variant and the current
+// scoring under-weights the claim's own number relative to repeated proper
+// nouns.
+func TestExtractClaimEvidenceSpellingVariantsAndNumericWeight(t *testing.T) {
+	tests := []struct {
+		name      string
+		text      string
+		claim     string
+		wantInSig string // substring the Signal must contain
+	}{
+		{
+			// Mirrors the #594 Eiffel Tower repro: the visitor-count sentence
+			// repeats "Eiffel Tower" (2 literal term matches) and appears
+			// earlier in the document; the height sentence refers back with
+			// "it" and uses the British spelling "metres", so pre-fix it only
+			// ties on term count and loses the document-order tie-break.
+			name: "meters/metres spelling variant plus numeric weight beats earlier proper-noun sentence",
+			text: "Millions of tourists visit the Eiffel Tower every year, making it one of the world's most-visited paid attractions. " +
+				"It was designed by Gustave Eiffel's company for the 1889 World's Fair. " +
+				"Excluding transmitters, it stands 330 metres (1,083 ft) tall.",
+			claim:     "The Eiffel Tower is 330 meters tall",
+			wantInSig: "330 metres",
+		},
+		{
+			// Pure spelling-variant case (no numeric term involved): the
+			// colour/color mismatch must not cost the sentence its match.
+			name: "color/colour spelling variant beats tied proper-noun-only sentences",
+			text: "Millions of tourists visit the Golden Gate Bridge every year. " +
+				"The Golden Gate Bridge was named after the Golden Gate strait it crosses. " +
+				"It is painted a distinctive colour known as International Orange.",
+			claim:     "the bridge is painted a bright color",
+			wantInSig: "colour",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ev := ExtractClaimEvidence(tt.text, tt.claim)
+			if ev.Signal == "" {
+				t.Fatal("expected a signal sentence")
+			}
+			if !strings.Contains(strings.ToLower(ev.Signal), strings.ToLower(tt.wantInSig)) {
+				t.Errorf("expected Signal to contain %q, got: %q", tt.wantInSig, ev.Signal)
+			}
+		})
+	}
+}
+
 func TestSplitSentences(t *testing.T) {
 	got := splitSentences("First sentence here. Second one follows! Is a third question here?\nLine break ends one too.")
 	if len(got) != 4 {
