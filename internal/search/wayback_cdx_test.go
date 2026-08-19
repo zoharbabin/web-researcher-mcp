@@ -128,6 +128,19 @@ func TestCategorizeArchiveURL(t *testing.T) {
 		"https://acme.com/whitepaper.pdf": "doc",
 		"https://acme.com/app.js":         "asset",
 		"https://acme.com/about":          "other",
+		// #596: content-site buckets, added because the original 5 (+ catch-all
+		// "other") gave near-zero triage signal on marketing/content-heavy
+		// domains where most archived paths are blog/docs/legal pages.
+		"https://acme.com/blog/2026-roadmap":    "blog",
+		"https://acme.com/news/press-release":   "blog",
+		"https://acme.com/press/announcement":   "blog",
+		"https://acme.com/docs/getting-started": "docs",
+		"https://acme.com/help/faq":             "docs",
+		"https://acme.com/support/ticket":       "docs",
+		"https://acme.com/kb/article-1":         "docs",
+		"https://acme.com/privacy":              "legal",
+		"https://acme.com/terms":                "legal",
+		"https://acme.com/legal/cookies":        "legal",
 	}
 	for url, want := range cases {
 		if got := categorizeArchiveURL(url); got != want {

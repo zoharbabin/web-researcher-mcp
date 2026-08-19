@@ -846,7 +846,9 @@ func TestExtractCitation_APA(t *testing.T) {
 			author:   "Jumper, J.; Hassabis, D.",
 			siteName: "Nature",
 			pubDate:  "2021",
-			contains: []string{"Jumper, J.; Hassabis, D.", "(2021)."},
+			// Already-inverted names ("Last, F.") are left as-is per name, but
+			// APA7 requires "&" (not ";") joining multiple authors (#602).
+			contains: []string{"Jumper, J., & Hassabis, D.", "(2021)."},
 			excludes: []string{".."},
 		},
 		{
