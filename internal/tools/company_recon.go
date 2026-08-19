@@ -42,8 +42,20 @@ type companyReconResult struct {
 	ArchiveURLs []search.ArchiveEntry `json:"archive_urls,omitempty"`
 	Subdomains  []companySubdomain    `json:"subdomains,omitempty"`
 	Sources     []companySourceRef    `json:"sources"`
+	PhaseErrors []companyPhaseError   `json:"phase_errors,omitempty"`
 	CacheAge    int                   `json:"cache_age"`
 	Trust       string                `json:"trust"`
+}
+
+// companyPhaseError records a ct_logs/archives resolver failure (upstream
+// 5xx, rate limit, malformed response) so callers can distinguish "the
+// resolver ran and genuinely found nothing" from "the resolver errored and
+// this phase's absence from the result doesn't mean the domain has no
+// data" (#438) — previously both cases looked identical (the phase's field
+// simply missing from the result).
+type companyPhaseError struct {
+	Phase string `json:"phase"` // ct_logs|archives
+	Error string `json:"error"`
 }
 
 type companyProfile struct {
@@ -131,6 +143,9 @@ func registerCompanyRecon(srv *mcp.Server, deps Dependencies) {
 				defer wg.Done()
 				entries, err := deps.CTLogResolver.Lookup(ctx, domain, companyReconClamp(numResults, 1, 25))
 				if err != nil {
+					mu.Lock()
+					result.PhaseErrors = append(result.PhaseErrors, companyPhaseError{Phase: "ct_logs", Error: err.Error()})
+					mu.Unlock()
 					return
 				}
 				mu.Lock()
@@ -146,6 +161,9 @@ func registerCompanyRecon(srv *mcp.Server, deps Dependencies) {
 				defer wg.Done()
 				entries, err := deps.ArchiveResolver.Lookup(ctx, domain, companyReconClamp(numResults, 1, 1000))
 				if err != nil {
+					mu.Lock()
+					result.PhaseErrors = append(result.PhaseErrors, companyPhaseError{Phase: "archives", Error: err.Error()})
+					mu.Unlock()
 					return
 				}
 				mu.Lock()
