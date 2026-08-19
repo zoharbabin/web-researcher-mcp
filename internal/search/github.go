@@ -83,8 +83,6 @@ func (p *GitHubProvider) doSearch(ctx context.Context, params WebSearchParams) (
 
 	qp := url.Values{}
 	qp.Set("q", q)
-	qp.Set("sort", "reactions")
-	qp.Set("order", "desc")
 	qp.Set("per_page", strconv.Itoa(n))
 
 	body, err := githubAPIRequest(ctx, p.deps.HTTPClient, p.baseURL, "/search/issues?"+qp.Encode(), p.token)
