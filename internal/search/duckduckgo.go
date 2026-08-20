@@ -183,9 +183,9 @@ func extractDisplayLink(rawURL string) string {
 // Spain is "es-es", Brazil is "br-pt", Russia is "ru-ru"; Israel, Thailand and
 // Vietnam have no "-en" variant at all), and a few DDG codes don't even match
 // the ISO country code (the UK is "uk", not "gb"; Saudi Arabia is "xa", not
-// "sa"). Countries with more than one regional language (Canada, Belgium,
-// Switzerland, Spain) map to their most widely spoken one since a single ISO
-// country code can't disambiguate further. Iceland and Pakistan have no DDG
+// "sa"). Countries with more than one regional-language DDG variant (Canada,
+// Belgium, Switzerland) map to their most widely spoken one since a single
+// ISO country code can't disambiguate further. Iceland and Pakistan have no DDG
 // region at all and are intentionally absent so they fall back to "wt-wt"
 // rather than guessing an invalid code. Sourced from DuckDuckGo's own live
 // region list at https://duckduckgo.com/duckduckgo-help-pages/settings/params/
