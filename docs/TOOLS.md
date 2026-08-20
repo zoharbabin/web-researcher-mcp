@@ -766,7 +766,7 @@ Each patent in the `patents` array contains:
 | `title` | string | yes | Patent title |
 | `number` | string | yes | Patent number (e.g., US10165245B2) |
 | `url` | string | yes | Link to patent detail page |
-| `abstract` | string | no | Patent abstract or snippet |
+| `abstract` | string | no | Patent abstract or snippet — **provider-dependent**: EPO/Lens/SearchAPI/web-discovery return it natively; USPTO's PEDS/ODP API never populates it — that endpoint's data is prosecution history (status, dates, parties, classification), not abstract text (#635) |
 | `assignee` | string | no | Patent owner/assignee |
 | `inventor` | string | no | Primary inventor name |
 | `filed` | string | no | Filing date (YYYY-MM-DD) |
