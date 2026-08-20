@@ -2,9 +2,12 @@ package tools
 
 import (
 	"context"
+	"errors"
 	"strings"
 
+	"github.com/zoharbabin/web-researcher-mcp/internal/audit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
+	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
 )
 
 // claimCoverageResult is the shared, caller-agnostic claim-coverage bundle used by
@@ -25,6 +28,16 @@ type claimCoverageResult struct {
 	// fetched content clears the sparse-word threshold.
 	ContentWords int
 	SparsityNote string
+	// FetchError (#631) is the sanitized scrape-error message when Support is
+	// claimSourceUnavailable because the fetch itself failed (network error,
+	// blocked/bot-wall, redirect-cap abort, parse error) — as opposed to no
+	// fetch being attempted at all (nil scraper, empty fetchURL) or a fetch
+	// that succeeded but returned empty content. Distinguishing these matters:
+	// without it, a true claim and a false claim against a source whose fetch
+	// merely failed both report the same uninformative
+	// claimSourceUnavailable, indistinguishable from "not attempted". Empty
+	// when no scrape error occurred.
+	FetchError string
 }
 
 // claimCoverageFor fetches fetchURL and runs the lexical, model-free claim-coverage
@@ -43,10 +56,36 @@ func claimCoverageFor(ctx context.Context, deps Dependencies, fetchURL, claim st
 	}
 
 	res, err := deps.Scraper.Scrape(ctx, fetchURL, auditClaimScrapeMaxBytes)
-	if err != nil || res == nil || strings.TrimSpace(res.Content) == "" {
+	if err != nil {
+		return claimCoverageResult{Support: claimSourceUnavailable, SourceURL: fetchURL, FetchError: sanitizeClaimFetchError(err)}
+	}
+	if res == nil || strings.TrimSpace(res.Content) == "" {
 		return claimCoverageResult{Support: claimSourceUnavailable}
 	}
 	return claimCoverageFromContent(res.Content, fetchURL, claim)
+}
+
+// sanitizeClaimFetchError renders a scrape error as a short, attributable
+// reason (#631) — "<kind>: <message>", capped so a tiered-fallback composite
+// error (which lists every tier's outcome) never balloons the tool response.
+// Falls back to err.Error() capped the same way when err isn't a
+// *scraper.ScrapeError (e.g. a bare context error). A ScrapeError's Message
+// frequently embeds the fetchURL verbatim (pipeline.go's composite
+// tiered-fallback error), so it is masked exactly like every other
+// scrape-error-to-LLM-facing-field path (errors.go's scrapeErrorToToolError /
+// failureFromScrapeError) before being returned.
+func sanitizeClaimFetchError(err error) string {
+	const maxLen = 200
+	msg := audit.MaskSecrets(err.Error())
+	var se *scraper.ScrapeError
+	if errors.As(err, &se) {
+		msg = string(mapScrapeErrorKind(se.Kind)) + ": " + audit.MaskSecrets(se.Message)
+	}
+	runes := []rune(msg)
+	if len(runes) > maxLen {
+		msg = string(runes[:maxLen]) + "…"
+	}
+	return msg
 }
 
 // sparseWordThreshold mirrors scraper's content-volume floor (#358): below this

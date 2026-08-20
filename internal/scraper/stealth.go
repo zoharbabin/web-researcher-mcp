@@ -155,7 +155,7 @@ func newStealthClient(allowPrivateIPs bool) *http.Client {
 		Transport: transport,
 		Timeout:   20 * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= 5 {
+			if len(via) >= maxRedirects {
 				return http.ErrUseLastResponse
 			}
 			applyBrowserHeaders(req)

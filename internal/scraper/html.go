@@ -84,6 +84,18 @@ func (p *Pipeline) scrapeHTML(ctx context.Context, url string, maxLength int, ra
 		return p.scrapeBodyAsPDF(url, body, maxLength, raw, ct)
 	}
 
+	return p.parseHTMLBody(ctx, url, body, ct, maxLength)
+}
+
+// parseHTMLBody parses already-fetched bytes as HTML, extracting the article
+// content, metadata, and structured data. Factored out of scrapeHTML (mirroring
+// scrapeBodyAsPDF's existing split for the same reason, #206) so scrapeDocument
+// can reuse it: a document-typed URL (.pdf/.docx/.pptx) can redirect through a
+// session/access-gate onto an HTML landing page instead of the claimed document
+// bytes (#631 — nature.com's open-access "download PDF" link 303s through an
+// auth handshake onto the full HTML article), and that HTML deserves real
+// extraction rather than a doomed document parse.
+func (p *Pipeline) parseHTMLBody(ctx context.Context, url string, body []byte, ct string, maxLength int) (*ScrapeResult, error) {
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
 	if err != nil {
 		return nil, err
