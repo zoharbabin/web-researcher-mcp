@@ -93,6 +93,59 @@ func TestSplitPanelSentences(t *testing.T) {
 	}
 }
 
+func TestSplitPanelSentences_DropsMarkdownHeadings(t *testing.T) {
+	text := "# Intermittent Fasting and Human Lifespan\nIntermittent fasting has not been proven to extend lifespan in humans.\n## Evidence\nMost evidence comes from animal studies, not human trials."
+	got := splitPanelSentences(text)
+	for _, s := range got {
+		if isMarkdownHeading(s) {
+			t.Errorf("markdown heading leaked into candidate sentences: %q", s)
+		}
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected the 2 non-heading sentences only, got %d: %v", len(got), got)
+	}
+}
+
+func TestIsMarkdownHeading(t *testing.T) {
+	cases := map[string]bool{
+		"# Title":                     true,
+		"## Subtitle":                 true,
+		"###### Deep heading":         true,
+		"####### Too many hashes":     false,
+		"#no-space-tag":               false,
+		"":                            false,
+		"Regular sentence about #ai.": false,
+	}
+	for in, want := range cases {
+		if got := isMarkdownHeading(in); got != want {
+			t.Errorf("isMarkdownHeading(%q) = %v, want %v", in, got, want)
+		}
+	}
+}
+
+// TestAnalyzeDivergence_HeadingNotMisreadAsConsensus is the #632 regression:
+// two models answering the same question both echo it as an identical
+// markdown heading (near-universal LLM behavior) while phrasing their actual
+// shared substantive claim differently. Before the fix, the heading's
+// near-1.0 lexical overlap won the consensus threshold and the real claim
+// (paraphrased, lower overlap) did not.
+func TestAnalyzeDivergence_HeadingNotMisreadAsConsensus(t *testing.T) {
+	responses := map[string]string{
+		"a/x": "# Intermittent Fasting and Human Lifespan\nIntermittent fasting has not been proven to extend lifespan in humans, and the supporting evidence is largely limited to animal studies.",
+		"b/y": "# Intermittent Fasting and Human Lifespan\nThere is no proof that intermittent fasting extends human lifespan; most of the supporting evidence comes from studies in animals.",
+	}
+	d := AnalyzeDivergence(responses)
+
+	for _, c := range d.ConsensusPoints {
+		if isMarkdownHeading(c) {
+			t.Errorf("markdown heading wrongly reported as a consensus point: %q", c)
+		}
+	}
+	if len(d.ConsensusPoints) == 0 {
+		t.Fatalf("expected the shared substantive claim to be reported as consensus, got none: %+v", d)
+	}
+}
+
 func TestAnalyzeDivergence_HighOverlapContradictionNotMisreadAsConsensus(t *testing.T) {
 	// Near-identical wording differing only by a negation cue: lexical overlap
 	// is very high (>= consensusOverlapThreshold), so a contradiction check
