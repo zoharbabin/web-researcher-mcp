@@ -3224,6 +3224,97 @@ func TestScrapeHTML_HTMLContent_NotRerouted(t *testing.T) {
 	}
 }
 
+// TestScrapeDocument_HTMLRedirect_Reroutes verifies the reverse of #206
+// (#631): a URL whose path ends in .pdf but whose response is actually HTML
+// (e.g. an OA publisher's auth-handshake redirect landing on the article
+// page instead of the file) is extracted as HTML instead of failing a
+// doomed PDF parse.
+func TestScrapeDocument_HTMLRedirect_Reroutes(t *testing.T) {
+	t.Parallel()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		io.WriteString(w, "<html><body><article><p>"+strings.Repeat("Open access full text. ", 20)+"</p></article></body></html>") //nolint:errcheck
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	res, err := p.scrapeDocument(context.Background(), ts.URL+"/articles/nature12373.pdf", 50_000)
+	if err != nil {
+		t.Fatalf("scrapeDocument unexpectedly errored on HTML response: %v", err)
+	}
+	if res == nil {
+		t.Fatal("scrapeDocument returned nil for HTML response")
+	}
+	if res.ContentType == "pdf" {
+		t.Error("ContentType should not be pdf when the .pdf-suffixed URL actually served HTML")
+	}
+	if !strings.Contains(res.Content, "Open access full text") {
+		t.Errorf("expected extracted HTML article text in Content, got %q", res.Content)
+	}
+}
+
+// TestScrapeDocument_RealPDF_StillParsed is a regression guard for
+// TestScrapeDocument_HTMLRedirect_Reroutes (#631): a genuine PDF served at a
+// .pdf-suffixed URL must still parse as a PDF, proving the new HTML-sniff
+// check doesn't swallow the real document case it sits in front of.
+func TestScrapeDocument_RealPDF_StillParsed(t *testing.T) {
+	t.Parallel()
+	pdf := minimalPDF(t)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/pdf")
+		w.WriteHeader(http.StatusOK)
+		w.Write(pdf) //nolint:errcheck
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	res, err := p.scrapeDocument(context.Background(), ts.URL+"/paper.pdf", 50_000)
+	if err != nil {
+		t.Fatalf("scrapeDocument unexpectedly errored on real PDF: %v", err)
+	}
+	if res == nil {
+		t.Fatal("scrapeDocument returned nil for real PDF")
+	}
+	if res.ContentType != "pdf" {
+		t.Errorf("ContentType = %q, want %q", res.ContentType, "pdf")
+	}
+	if !strings.Contains(res.Content, "Hello PDF test content") {
+		t.Errorf("expected extracted PDF text in Content, got %q", res.Content)
+	}
+}
+
+// TestScrapeDocument_FailureFallsBackToTieredPipeline verifies the
+// pipeline.go fallback (#631): when the document route itself fails (here,
+// a bot-wall that specifically blocks scrapeDocument's bare non-browser
+// User-Agent), the overall Scrape call retries through the ordinary tiered
+// HTML pipeline instead of surfacing the document-tier failure outright.
+func TestScrapeDocument_FailureFallsBackToTieredPipeline(t *testing.T) {
+	t.Parallel()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("User-Agent") == "web-researcher-mcp/1.0" {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		io.WriteString(w, "<html><body><article><p>"+strings.Repeat("Rescued by tiered fallback. ", 20)+"</p></article></body></html>") //nolint:errcheck
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	res, err := p.Scrape(context.Background(), ts.URL+"/report.pdf", 50_000)
+	if err != nil {
+		t.Fatalf("Scrape unexpectedly errored despite tiered fallback: %v", err)
+	}
+	if res == nil {
+		t.Fatal("Scrape returned nil result")
+	}
+	if !strings.Contains(res.Content, "Rescued by tiered fallback") {
+		t.Errorf("expected fallback tier's HTML content, got %q", res.Content)
+	}
+}
+
 // =============================================================================
 // SPA-shell detection + escalate-then-best-tier selection (deterministic
 // completeness heuristic). A server-rendered SPA ships a large static HTML

@@ -208,6 +208,40 @@ func TestDDGProvider_Name(t *testing.T) {
 	}
 }
 
+// TestMapDDGRegion proves the #641 fix: mapDDGRegion resolves ISO 3166-1
+// alpha-2 country codes to DuckDuckGo's own (frequently non-ISO) kl region
+// codes, instead of the old broken "<country>-en" guess that only happened to
+// work for 5 codes and produced an invalid kl value for everything else.
+func TestMapDDGRegion(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		"US": "us-en", // previously-correct mappings must not change
+		"GB": "uk-en", // DDG uses "uk", not the ISO "gb"
+		"UK": "uk-en", // pre-existing non-ISO alias, still accepted
+		"DE": "de-de",
+		"FR": "fr-fr",
+		"JP": "jp-jp",
+		"BR": "br-pt", // local-language suffix, not "-en"
+		"ES": "es-es",
+		"RU": "ru-ru",
+		"SA": "xa-ar", // DDG's code doesn't match the ISO country code at all
+		"IL": "il-he", // DDG has no "il-en" — Hebrew is the only Israel region
+		"TH": "th-th", // DDG has no "th-en" — Thai is the only Thailand region
+		"VN": "vn-vi", // DDG has no "vn-en" — Vietnamese is the only Vietnam region
+		"IS": "wt-wt", // DDG has no Iceland region at all — must fall back, not guess
+		"PK": "wt-wt", // DDG has no Pakistan region at all — must fall back, not guess
+		"ar": "ar-es", // lowercase input
+		"":   "wt-wt", // empty input has no region
+		"ZZ": "wt-wt", // unmapped ISO code falls back to worldwide, not a guess
+	}
+	for in, want := range cases {
+		if got := mapDDGRegion(in); got != want {
+			t.Errorf("mapDDGRegion(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func isRateLimitError(err error) bool {
 	if err == nil {
 		return false

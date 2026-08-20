@@ -172,7 +172,10 @@ func cslAuthors(author string) string {
 
 // splitAuthors splits a free-form author string into individual names on the
 // delimiters bibliographies commonly use (";" and " and "), trimming blanks.
-// A single "Smith, J." (one comma, no delimiter) stays one author.
+// A single "Smith, J." (one comma, no delimiter) stays one author. A bare
+// comma-separated list of full names ("First Last, First Last", common in
+// APA/MLA-style citations with no ";"/"and") is also detected and split
+// (#639) via splitBareCommaNames.
 func splitAuthors(author string) []string {
 	author = strings.TrimSpace(author)
 	if author == "" {
@@ -184,10 +187,33 @@ func splitAuthors(author string) []string {
 	out := make([]string, 0, len(parts))
 	for _, p := range parts {
 		if t := strings.TrimSpace(p); t != "" {
-			out = append(out, t)
+			out = append(out, splitBareCommaNames(t)...)
 		}
 	}
 	return out
+}
+
+// splitBareCommaNames detects a bare comma-separated list of "First Last"
+// names within a single ";"/" and "-delimited segment (#639) and splits it
+// into individual names. A comma instead separating a single pre-inverted
+// "Family, Given" name (e.g. "Smith, J.") must NOT be split, so the split
+// only fires when EVERY comma-delimited part itself looks like a full name
+// (2+ whitespace tokens) — a bare surname or a given-name initial never has
+// 2+ tokens, so "Smith, J." and "Bengio, Yoshua" are left as one author each.
+func splitBareCommaNames(s string) []string {
+	if !strings.Contains(s, ",") {
+		return []string{s}
+	}
+	segments := strings.Split(s, ",")
+	names := make([]string, 0, len(segments))
+	for _, seg := range segments {
+		t := strings.TrimSpace(seg)
+		if len(strings.Fields(t)) < 2 {
+			return []string{s}
+		}
+		names = append(names, t)
+	}
+	return names
 }
 
 // normalizeBibDOI strips a doi.org URL prefix so the DOI field carries the bare

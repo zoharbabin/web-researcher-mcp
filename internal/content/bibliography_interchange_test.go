@@ -297,15 +297,48 @@ func TestFormatCSLJSONCollisionKeys(t *testing.T) {
 
 func TestSplitAuthors(t *testing.T) {
 	cases := map[string]int{
-		"":                      0,
-		"Smith, J.":             1,
-		"Smith, J.; Doe, A.":    2,
-		"Smith, J. and Doe, A.": 2,
-		"A; B; C":               3,
+		"":                               0,
+		"Smith, J.":                      1,
+		"Smith, J.; Doe, A.":             2,
+		"Smith, J. and Doe, A.":          2,
+		"A; B; C":                        3,
+		"Yoshua Bengio, Aaron Courville": 2,
+		"Yoshua Bengio, Aaron Courville, Geoffrey Hinton": 3,
+		"Smith, John Michael and Doe, Jane Anne":          2,
 	}
 	for in, want := range cases {
 		if got := len(splitAuthors(in)); got != want {
 			t.Errorf("splitAuthors(%q) = %d names, want %d", in, got, want)
+		}
+	}
+}
+
+// TestSplitAuthorsBareCommaFullNames proves the #639 fix: a bare
+// comma-separated list of full "First Last" names (no ";"/" and") is split
+// into individual authors, not misparsed as one pre-inverted "Family, Given"
+// name.
+func TestSplitAuthorsBareCommaFullNames(t *testing.T) {
+	names := splitAuthors("Yoshua Bengio, Aaron Courville")
+	if len(names) != 2 || names[0] != "Yoshua Bengio" || names[1] != "Aaron Courville" {
+		t.Fatalf("splitAuthors(bare comma) = %v, want [Yoshua Bengio, Aaron Courville]", names)
+	}
+
+	family, given, isLiteral := splitPersonalName(names[0])
+	if isLiteral || family != "Bengio" || given != "Yoshua" {
+		t.Errorf("first author split = (%q, %q, %v), want (Bengio, Yoshua, false)", family, given, isLiteral)
+	}
+}
+
+// TestSplitAuthorsPreInvertedSingleAuthorNotSplit proves a genuine single
+// pre-inverted "Family, Given" author (both sides a single token, as in
+// "Bengio, Yoshua" or "Smith, J.") is never mistaken for a bare-comma
+// multi-author list.
+func TestSplitAuthorsPreInvertedSingleAuthorNotSplit(t *testing.T) {
+	cases := []string{"Bengio, Yoshua", "Smith, J.", "de la Cruz, Maria"}
+	for _, in := range cases {
+		names := splitAuthors(in)
+		if len(names) != 1 || names[0] != in {
+			t.Errorf("splitAuthors(%q) = %v, want single unsplit author %q", in, names, in)
 		}
 	}
 }

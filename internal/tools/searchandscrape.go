@@ -22,7 +22,7 @@ type searchAndScrapeInput struct {
 	Deduplicate        *bool  `json:"deduplicate,omitempty" jsonschema:"Remove duplicate paragraphs across sources (default: true). Disable only if exact repetition matters."`
 	MaxLengthPerSource int    `json:"max_length_per_source,omitempty" jsonschema:"Max content bytes extracted per source (default: 50000)."`
 	TotalMaxLength     int    `json:"total_max_length,omitempty" jsonschema:"Max total bytes for combined output (default: 300000). Reduce for faster, more concise results."`
-	FilterByQuery      bool   `json:"filter_by_query,omitempty" jsonschema:"Remove sources with low relevance to the query (default: false). Enable for precision over recall."`
+	FilterByQuery      *bool  `json:"filter_by_query,omitempty" jsonschema:"Remove sources with low relevance to the query. Default: false, EXCEPT when claim is set, where it defaults to true — a claim call is asking for evidence about one specific statement, not general search breadth, so an irrelevant source's spurious claimSignal is a false positive. Pass explicitly to override either default."`
 	Provider           string `json:"provider,omitempty" jsonschema:"Force a specific search provider. Omit to use configured default."`
 	SessionID          string `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. All scraped sources are automatically recorded for recovery after context loss."`
 	Claim              string `json:"claim,omitempty" jsonschema:"Optional claim to evaluate against each source. When set, each source gains keySentences (the most claim-relevant sentences) and a claimSignal (the single strongest). The server surfaces evidence only — it never decides supports/contradicts; you make that call."`
@@ -54,6 +54,14 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 		}
 		includeSources := input.IncludeSources == nil || *input.IncludeSources
 		deduplicate := input.Deduplicate == nil || *input.Deduplicate
+		// #640: filter_by_query defaults to true when a claim is supplied — a
+		// claim call wants evidence about one specific statement, not general
+		// search breadth, so an off-topic source's spurious claimSignal is a
+		// false positive rather than a useful extra source.
+		filterByQuery := input.Claim != ""
+		if input.FilterByQuery != nil {
+			filterByQuery = *input.FilterByQuery
+		}
 		maxLenPerSource := input.MaxLengthPerSource
 		if maxLenPerSource <= 0 {
 			maxLenPerSource = 50000
@@ -196,7 +204,7 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 		}
 
 		results := parallelScrape(ctx, deps, searchResults, maxLenPerSource)
-		sources, combinedParts, scraped, sparseSources, structuredFailures := buildSourcesStructured(results, input.Query, input.Claim, input.FilterByQuery)
+		sources, combinedParts, scraped, sparseSources, structuredFailures := buildSourcesStructured(results, input.Query, input.Claim, filterByQuery)
 		combined := assembleCombined(combinedParts, deduplicate, totalMaxLen)
 
 		// Phase 1B: top-level status field
