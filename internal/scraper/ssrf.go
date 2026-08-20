@@ -29,6 +29,15 @@ var blockedHostnames = []string{
 	"svc.cluster.local",
 }
 
+// maxRedirects bounds every scraper HTTP client's auto-followed redirect
+// chain — shared by the plain SSRF-safe client here and the stealth tier's
+// browser-header client (stealth.go), so the two never drift to different
+// caps. 10 (rather than the previous 5) accommodates multi-hop cookie/IDP
+// consent-handshake redirect chains some publishers use (e.g. nature.com's
+// "grover" cookie-authorization dance can take 6-7 hops before landing on the
+// real page, #631) while still bounding an actual redirect loop.
+const maxRedirects = 10
+
 func NewSSRFSafeClient(allowPrivate bool) *http.Client {
 	return NewSSRFSafeClientWithTimeout(allowPrivate, 30*time.Second)
 }
@@ -41,7 +50,7 @@ func NewSSRFSafeClientWithTimeout(allowPrivate bool, timeout time.Duration) *htt
 		Transport: newSSRFSafeTransport(allowPrivate),
 		Timeout:   timeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= 5 {
+			if len(via) >= maxRedirects {
 				return fmt.Errorf("too many redirects")
 			}
 			return nil
