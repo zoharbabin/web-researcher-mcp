@@ -47,7 +47,7 @@ Perform a web search and return structured result URLs with metadata.
 | `sites` | []string | no | — | Multi-domain restriction, OR-joined into `site:` operators (up to 10; cannot combine with `site`) |
 | `exact_terms` | string | no | — | Exact phrase match |
 | `exclude_terms` | string | no | — | Terms to exclude |
-| `country` | string | no | — | ISO 3166-1 alpha-2 |
+| `country` | string | no | — | ISO 3166-1 alpha-2. Biases ranking toward that country; strength is provider-dependent (#641) — it does not guarantee every result originates there |
 | `lens` | string | no | — | Domain lens (overrides `site`/`sites`). See `lenses/` directory for available lenses. For engineering/API questions use `docs` (official references) or `programming` (docs, tutorials, Q&A) — `tech` is technology news and industry journalism, not engineering documentation |
 | `provider` | string | no | — | Force search provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik. Returns error listing available providers if unknown |
 | `sessionId` | string | no | — | Link results to a `sequential_search` session |
