@@ -177,22 +177,40 @@ func extractDisplayLink(rawURL string) string {
 	return u.Host
 }
 
+// ddgRegionByCountry maps an ISO 3166-1 alpha-2 country code to DuckDuckGo's
+// own `kl` region code (#641). DDG's codes are NOT simply "<country>-en" —
+// most non-English-speaking regions use their local language suffix (e.g.
+// Spain is "es-es", Brazil is "br-pt", Russia is "ru-ru"), and a few DDG codes
+// don't even match the ISO country code (the UK is "uk", not "gb"; Saudi
+// Arabia is "xa", not "sa"). This table is DDG's full officially documented
+// region list; countries with more than one regional language (Canada,
+// Belgium, Switzerland, Spain) map to their most widely spoken one since a
+// single ISO country code can't disambiguate further. Sourced from
+// DuckDuckGo's own region list, cross-checked via SerpApi's DDG regions
+// reference (2026-08-19).
+var ddgRegionByCountry = map[string]string{
+	"AR": "ar-es", "AU": "au-en", "AT": "at-de", "BE": "be-nl", "BR": "br-pt",
+	"BG": "bg-bg", "CA": "ca-en", "CL": "cl-es", "CN": "cn-zh", "CO": "co-es",
+	"HR": "hr-hr", "CZ": "cz-cs", "DK": "dk-da", "EE": "ee-et", "FI": "fi-fi",
+	"FR": "fr-fr", "DE": "de-de", "GR": "gr-el", "HK": "hk-tzh", "HU": "hu-hu",
+	"IS": "is-is", "IN": "in-en", "ID": "id-en", "IE": "ie-en", "IL": "il-en",
+	"IT": "it-it", "JP": "jp-jp", "KR": "kr-kr", "LV": "lv-lv", "LT": "lt-lt",
+	"MY": "my-en", "MX": "mx-es", "NL": "nl-nl", "NZ": "nz-en", "NO": "no-no",
+	"PK": "pk-en", "PE": "pe-es", "PH": "ph-en", "PL": "pl-pl", "PT": "pt-pt",
+	"RO": "ro-ro", "RU": "ru-ru", "SA": "xa-ar", "SG": "sg-en", "SK": "sk-sk",
+	"SI": "sl-sl", "ZA": "za-en", "ES": "es-es", "SE": "se-sv", "CH": "ch-de",
+	"TW": "tw-tzh", "TH": "th-en", "TR": "tr-tr", "US": "us-en", "UA": "ua-uk",
+	"GB": "uk-en", "UK": "uk-en", "VN": "vn-en",
+}
+
+// mapDDGRegion resolves an ISO 3166-1 alpha-2 country code to DuckDuckGo's
+// `kl` region parameter. A code DDG has no region for falls back to "wt-wt"
+// (worldwide/no region bias) rather than guessing an invalid value.
 func mapDDGRegion(country string) string {
-	country = strings.ToLower(country)
-	switch country {
-	case "us":
-		return "us-en"
-	case "gb", "uk":
-		return "uk-en"
-	case "de":
-		return "de-de"
-	case "fr":
-		return "fr-fr"
-	case "jp":
-		return "jp-jp"
-	default:
-		return country + "-en"
+	if kl, ok := ddgRegionByCountry[strings.ToUpper(country)]; ok {
+		return kl
 	}
+	return "wt-wt"
 }
 
 func mapDDGTimeRange(tr string) string {
