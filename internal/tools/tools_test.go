@@ -1948,6 +1948,53 @@ func TestWebSearchClaimSignalUniform(t *testing.T) {
 	}
 }
 
+// TestWebSearchClaimSignalFromTitle (#633): a snippet that's too short to
+// literally contain the claim's distinguishing terms must not doom claimSignal
+// to empty when the result's title carries them instead — e.g. a headline
+// like "COVID-19 Vaccines Not Linked to Miscarriage" states the claim outright
+// while a truncated snippet below it might not repeat those exact words.
+func TestWebSearchClaimSignalFromTitle(t *testing.T) {
+	t.Parallel()
+	results := []search.SearchResult{
+		{
+			Title:   "COVID-19 Vaccines Not Linked to Miscarriage - Yale School of Medicine",
+			URL:     "https://example.org/a",
+			Snippet: "Read the latest health news and research updates from our team.",
+		},
+	}
+	enriched := enrichResultsWithReputation(results, "COVID-19 vaccines cause miscarriage")
+	if len(enriched) != 1 {
+		t.Fatalf("want 1 result, got %d", len(enriched))
+	}
+	got, _ := enriched[0]["claimSignal"].(string)
+	if got == "" {
+		t.Errorf("claimSignal is empty, want a match drawn from the title since the snippet has no overlapping terms")
+	}
+}
+
+// TestWebSearchClaimSignalFromExtraSnippets (#633): Brave's extraSnippets can
+// carry claim-relevant text that the primary snippet omits; claimSignal must
+// consider them too rather than only r.Snippet.
+func TestWebSearchClaimSignalFromExtraSnippets(t *testing.T) {
+	t.Parallel()
+	results := []search.SearchResult{
+		{
+			Title:         "Health News",
+			URL:           "https://example.org/a",
+			Snippet:       "Read the latest updates from our team.",
+			ExtraSnippets: []string{"Vaccine safety data shows no link between mRNA vaccines and infertility."},
+		},
+	}
+	enriched := enrichResultsWithReputation(results, "mRNA vaccines and infertility")
+	if len(enriched) != 1 {
+		t.Fatalf("want 1 result, got %d", len(enriched))
+	}
+	got, _ := enriched[0]["claimSignal"].(string)
+	if got == "" {
+		t.Errorf("claimSignal is empty, want a match drawn from extraSnippets since title/snippet have no overlapping terms")
+	}
+}
+
 // TestWebSearchEnrichPreservesPublishedAt (#356): enrichResultsWithReputation
 // rebuilds every web_search result as a fresh map — it must carry PublishedAt
 // through rather than silently dropping it, and must omit the key entirely

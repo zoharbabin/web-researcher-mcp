@@ -51,7 +51,7 @@ Perform a web search and return structured result URLs with metadata.
 | `lens` | string | no | — | Domain lens (overrides `site`/`sites`). See `lenses/` directory for available lenses. For engineering/API questions use `docs` (official references) or `programming` (docs, tutorials, Q&A) — `tech` is technology news and industry journalism, not engineering documentation |
 | `provider` | string | no | — | Force search provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik. Returns error listing available providers if unknown |
 | `sessionId` | string | no | — | Link results to a `sequential_search` session |
-| `claim` | string | no | — | Optional claim to evaluate against each result's snippet; when set, each result gains a `claimSignal` (#66). Evidence only — never a verdict |
+| `claim` | string | no | — | Optional claim to evaluate against each result's title, snippet, and extra snippets; when set, each result gains a `claimSignal` (#66, #633). Evidence only — never a verdict |
 
 ### Output Schema
 
@@ -73,7 +73,7 @@ type SearchResult struct {
     DisplayLink      string            `json:"displayLink"`
     PublishedAt      string            `json:"publishedAt,omitempty"`      // RFC3339 UTC; present only when the provider's response carried a date (#356)
     SourceReputation *DomainReputation `json:"sourceReputation,omitempty"` // present when host is in the reputation dataset (#198); omitted for unknown hosts
-    ClaimSignal      string            `json:"claimSignal"`                // most claim-relevant snippet sentence; present on EVERY result whenever `claim` is set (empty string when no snippet sentence matched) — uniform shape (#66, #235)
+    ClaimSignal      string            `json:"claimSignal"`                // most claim-relevant sentence across title/snippet/extraSnippets; present on EVERY result whenever `claim` is set (empty string when nothing matched) — uniform shape (#66, #235, #633)
     Engagement       *EngagementSignals `json:"engagement,omitempty"`      // provider-supplied engagement metrics (#281); omitted when the provider surfaces none
 }
 
@@ -88,7 +88,7 @@ type EngagementSignals struct {
 }
 ```
 
-`sourceReputation` is a descriptive signal (same shape as `scrape_page`/`search_and_scrape`) indicating the host's known reliability tier (`high`, `low`, `mixed`) with a `basis` note. It is omitted for hosts not in the dataset — absence means unknown, not bad. When `claim` is set, every result carries a `claimSignal` holding the most claim-relevant snippet sentence to help triage which links to read — it is the empty string (not absent) when no snippet sentence matched, so the field's shape is uniform across results and downstream null-checking stays simple (#235). For full-text claim evidence use `search_and_scrape` with `claim`. `claimSignal` is an English-keyword heuristic (#390): an empty string on non-English snippet text means the heuristic never matched, not that the snippet is confirmed unrelated — read the snippet yourself for non-English sources.
+`sourceReputation` is a descriptive signal (same shape as `scrape_page`/`search_and_scrape`) indicating the host's known reliability tier (`high`, `low`, `mixed`) with a `basis` note. It is omitted for hosts not in the dataset — absence means unknown, not bad. When `claim` is set, every result carries a `claimSignal` holding the most claim-relevant sentence found across the result's title, snippet, and any extra snippets to help triage which links to read — it is the empty string (not absent) when nothing matched, so the field's shape is uniform across results and downstream null-checking stays simple (#235). A search snippet alone is often too short to literally contain a claim's distinguishing terms even when the result is on-topic; the title and Brave's `extraSnippets` frequently carry them instead, so all three are scored together (#633). For full-text claim evidence use `search_and_scrape` with `claim`. `claimSignal` is an English-keyword heuristic (#390): an empty string on non-English source text means the heuristic never matched, not that the source is confirmed unrelated — read the title/snippet yourself for non-English sources.
 
 `publishedAt` (#356) is **optional and provider-dependent**, populated only by providers whose web response carries a date signal (Google via pagemap metadata, Tavily, Exa, SearXNG, HackerNews, Reddit, Bluesky) and omitted (never guessed from snippet/title text) for providers that don't (Brave, Serper, DuckDuckGo, SearchAPI). When present it is normalized to RFC3339 UTC regardless of the provider's raw format.
 
