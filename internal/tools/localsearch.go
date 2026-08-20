@@ -194,7 +194,7 @@ func localFilterMap(input localSearchInput, lat, lon *float64) map[string]string
 // real fix.
 func buildLocalHints(input localSearchInput, providerName string, lat, lon *float64) *ZeroResultHints {
 	hints := buildZeroResultHints(providerName, localFilterMap(input, lat, lon), nil)
-	if input.Near == "" && lat == nil {
+	if input.Near == "" && lat == nil && lon == nil {
 		hints.Reason = "missing_location_anchor"
 		hints.SuggestedActions = append([]HintAction{{
 			Action:    "add_parameter",
