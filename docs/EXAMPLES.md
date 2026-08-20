@@ -20,7 +20,7 @@ Search the web and get back a clean list of results — each with a title, link,
 
 **Response** contains: `urls` (array of result URLs), `query` (echoed back), `resultCount`, and `results` (array with `title`, `url`, `snippet`, `displayLink` for each result). Every response also carries a `_meta` block (`cached`, `ageSeconds`, `maxAgeSeconds`, `freshness`) telling you whether it came from cache. Results are saved temporarily — if you run the same search again, it responds instantly without using another API call.
 
-Pass an optional `claim` to get a triage signal: each result then also carries a `claimSignal` — the most claim-relevant sentence from that result's snippet — so you can tell at a glance which links are worth reading. This is snippet-level evidence only; for full-text claim evidence use `search_and_scrape` with `claim`. The server surfaces evidence, never a verdict.
+Pass an optional `claim` to get a triage signal: each result then also carries a `claimSignal` — the most claim-relevant sentence found across that result's title, snippet, and extra snippets — so you can tell at a glance which links are worth reading. For full-text claim evidence use `search_and_scrape` with `claim`. The server surfaces evidence, never a verdict.
 
 ---
 
