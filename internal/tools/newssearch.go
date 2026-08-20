@@ -30,6 +30,31 @@ type newsArticleOutput struct {
 	IsSocialMedia bool                      `json:"isSocialMedia,omitempty"`
 }
 
+// newsDateSortRelevanceWarning returns an advisory for issue #642: Google's
+// Custom Search JSON API `sort` param (docs: "sort by date. Example:
+// sort=date") is a literal chronological reorder with no relevance
+// weighting — sort_by="date" is honored only by Google (Brave ignores it),
+// so requesting it there trades relevance for strict recency. On a broad,
+// non-named-entity query this can surface recently-modified but topically
+// unrelated corporate/government pages ahead of real news coverage. This is
+// documented Google API behavior, not a bug this tool can code around, so the
+// fix is an honest warning rather than silently reordering or dropping
+// results (which risks hiding legitimate outlets absent from our small
+// known-news-domain list). Fires only when none of the returned articles
+// classified as a recognized news publication — the specific failure
+// signature reported in #642 — never on a mixed or all-news result set.
+func newsDateSortRelevanceWarning(sortBy, providerUsed string, articles []newsArticleOutput) string {
+	if sortBy != "date" || providerUsed != "google" || len(articles) == 0 {
+		return ""
+	}
+	for _, a := range articles {
+		if a.SourceType == content.SourceTypeNews {
+			return ""
+		}
+	}
+	return "sort_by=\"date\" tells Google to order results strictly by date, replacing its relevance ranking (Google's documented Custom Search API behavior, not a bug in this tool). For broad queries this can surface recently-modified but topically unrelated pages ahead of real news coverage. None of these results matched a recognized news domain — try a more specific query, or omit sort_by to use Google's default relevance ranking."
+}
+
 func classifyNewsResults(results []search.NewsResult) []newsArticleOutput {
 	out := make([]newsArticleOutput, 0, len(results))
 	for _, r := range results {
@@ -53,7 +78,7 @@ type newsSearchInput struct {
 	Query      string `json:"query" jsonschema:"Topic or event to find news about. Use specific terms for precision (e.g. 'OpenAI GPT-5 release' not 'AI news').,required"`
 	NumResults int    `json:"num_results,omitempty" jsonschema:"Number of articles to return (1-50, default: 5). Brave returns up to 50; Google up to 10."`
 	TimeRange  string `json:"time_range,omitempty" jsonschema:"Restrict to a time period. Default: week."`
-	SortBy     string `json:"sort_by,omitempty" jsonschema:"Sort order (date = newest first). Default: relevance. Google only — Brave news has no sort param and ignores it."`
+	SortBy     string `json:"sort_by,omitempty" jsonschema:"Sort order (date = newest first). Default: relevance. Google only — Brave news has no sort param and ignores it. Date sort discards Google's relevance ranking, so broad/generic queries can surface non-news pages; prefer default relevance unless strict recency ordering is required."`
 	NewsSource string `json:"news_source,omitempty" jsonschema:"Restrict to a specific news outlet domain (e.g. reuters.com, bbc.co.uk). Google only — Brave news has no source filter and ignores it."`
 	Country    string `json:"country,omitempty" jsonschema:"Country to localize results to, ISO 3166-1 alpha-2 (e.g. 'us', 'gb'). Honored by Brave news."`
 	Language   string `json:"language,omitempty" jsonschema:"Language to scope results to, BCP 47 / 2-letter code (e.g. 'en', 'de'). Honored by Brave news (search_lang)."`
@@ -135,7 +160,8 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 			auditToolCall(ctx, deps, "news_search", time.Since(start), err, errCode)
 			return upstreamErrorResponse("news search", err), nil, nil
 		}
-		rt := routingMeta(trace.Decision(), time.Since(start), false)
+		decision := trace.Decision()
+		rt := routingMeta(decision, time.Since(start), false)
 
 		articles := classifyNewsResults(results)
 		output := map[string]any{
@@ -150,6 +176,14 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 		if len(results) == 0 {
 			used := hintProviderName(provider)
 			output["hints"] = buildNewsHints(input, freshness, used, healthyAlternatives(deps, used))
+		} else {
+			effectiveProvider := decision.ProviderUsed
+			if effectiveProvider == "" {
+				effectiveProvider = provider.Name()
+			}
+			if warning := newsDateSortRelevanceWarning(sortBy, effectiveProvider, articles); warning != "" {
+				output["warning"] = warning
+			}
 		}
 
 		jsonBytes, _ := json.Marshal(output)

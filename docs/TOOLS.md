@@ -620,7 +620,7 @@ type ImageResult struct {
 | `query` | string | yes | — | 1-500 chars |
 | `num_results` | int | no | 5 | 1-50 (Brave up to 50; Google up to 10) |
 | `time_range` | string | no | `week` | hour, day, week, month, year |
-| `sort_by` | string | no | `relevance` | relevance, date. **Google only** — Brave news has no sort param and ignores it. |
+| `sort_by` | string | no | `relevance` | relevance, date. **Google only** — Brave news has no sort param and ignores it. Date sort discards Google's relevance ranking (#642); see Provider notes. |
 | `news_source` | string | no | — | Domain filter (e.g. `reuters.com`). **Google only** — Brave news has no source filter and ignores it. |
 | `country` | string | no | — | ISO 3166-1 alpha-2 (e.g. `us`, `gb`). Honored by Brave news. |
 | `language` | string | no | — | BCP 47 / 2-letter code (e.g. `en`, `de`). Honored by Brave news (`search_lang`). |
@@ -636,6 +636,7 @@ type NewsSearchOutput struct {
     Query       string        `json:"query"`
     ResultCount int           `json:"resultCount"`
     Hints       *ZeroResultHints `json:"hints,omitempty"` // present ONLY on zero-result responses (see below)
+    Warning     string        `json:"warning,omitempty"` // present ONLY when sort_by="date" was honored by Google and no returned article matched a recognized news domain (#642, see Provider notes)
     Trust       string        `json:"trust"`   // "untrusted-external-content"
 }
 
@@ -666,6 +667,7 @@ On a zero-result response, `hints` carries the same `ZeroResultHints` object as 
 - `sort_by` and `news_source` are **Google-only** controls — Brave's news API has no sort or single-source parameter, so the Brave adapter never sends them (the schema descriptions mark them provider-conditional rather than dropping the fields, since Google genuinely honors them). `country`, `language`, and `safe` are honored by Brave news.
 - `publishedAt` is **optional and provider-dependent**: populated when the provider exposes a publish timestamp (Google CSE via page metadata; Brave/Exa/Serper/SearchAPI/SearXNG/Tavily natively), omitted (not fabricated) when the provider supplies none — so treat it as best-effort. When present it is always normalized to **ISO-8601 (RFC3339 UTC)** regardless of the provider's raw format (RFC1123, relative ages like "3 days ago"/"2h", or bare dates), so values sort and compare consistently across providers; an unparseable timestamp is dropped rather than passed through.
 - `sort_by=date` maps to Google's date-sort control; exact ordering and `time_range=hour` granularity depend on the provider's index and may be approximate. News providers may also surface high-ranking forum/aggregator pages — `news_source` narrows to a trusted outlet when that matters (Google).
+- **`sort_by=date` discards Google's relevance ranking (#642)**: per Google's Custom Search JSON API docs, `sort=date` is a literal chronological reorder with no relevance weighting. On a broad, non-named-entity query (e.g. "global markets") this can rank recently-modified but topically unrelated corporate/government pages ahead of real news coverage; specific/named-entity queries are less affected since there's little room for an unrelated page to match at all. This is documented Google API behavior, not a bug — when none of the returned articles match a recognized news domain under `sort_by=date`, the response carries a top-level `warning` field explaining the tradeoff rather than silently reordering or dropping results (dropping risks hiding legitimate outlets absent from the small known-news-domain list). Prefer the default relevance sort for broad topics; reserve `sort_by=date` for narrow/breaking-news queries where strict recency matters more than topical precision.
 
 ### Cache
 - TTL: 15 minutes (news is time-sensitive)

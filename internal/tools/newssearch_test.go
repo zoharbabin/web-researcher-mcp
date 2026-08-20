@@ -60,6 +60,104 @@ func TestNewsResultsSourceTypeRegularOutlet(t *testing.T) {
 	}
 }
 
+// nonNewsGoogleProvider simulates Google returning results for a broad query
+// under sort_by="date" where none of the pages are recognized news outlets —
+// the exact failure signature reported in #642 (LSE ticker page, government
+// authority page, bank careers page).
+type nonNewsGoogleProvider struct{}
+
+func (p *nonNewsGoogleProvider) Web(_ context.Context, _ search.WebSearchParams) ([]search.SearchResult, error) {
+	return nil, nil
+}
+func (p *nonNewsGoogleProvider) Images(_ context.Context, _ search.ImageSearchParams) ([]search.ImageResult, error) {
+	return nil, nil
+}
+func (p *nonNewsGoogleProvider) News(_ context.Context, _ search.NewsSearchParams) ([]search.NewsResult, error) {
+	return []search.NewsResult{
+		{Title: "FTSE 100 constituent page", URL: "https://www.londonstockexchange.com/stock/LSE/london-stock-exchange-group-plc", Source: "London Stock Exchange"},
+		{Title: "GAFI Egypt investment authority", URL: "https://www.gafi.gov.eg/English/Pages/default.aspx", Source: "GAFI"},
+		{Title: "Careers at Bank of America", URL: "https://careers.bankofamerica.com/en-us/job-search", Source: "Bank of America"},
+	}, nil
+}
+func (p *nonNewsGoogleProvider) Name() string { return "google" }
+
+func TestNewsSearchDateSortRelevanceWarning(t *testing.T) {
+	ctx := context.Background()
+	deps := setupTestDeps()
+	deps.Search = &nonNewsGoogleProvider{}
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "news_search",
+		Arguments: map[string]any{"query": "global markets", "time_range": "day", "sort_by": "date"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+
+	text := res.Content[0].(*mcp.TextContent).Text
+	var output struct {
+		Warning string `json:"warning"`
+	}
+	if err := json.Unmarshal([]byte(text), &output); err != nil {
+		t.Fatalf("failed to parse output: %v", err)
+	}
+	if output.Warning == "" {
+		t.Fatal("expected a warning for sort_by=date with no recognized-news results, got none")
+	}
+}
+
+func TestNewsSearchNoWarningWhenRelevanceSort(t *testing.T) {
+	ctx := context.Background()
+	deps := setupTestDeps()
+	deps.Search = &nonNewsGoogleProvider{}
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	// Default sort_by (relevance) must never trigger the #642 date-sort warning,
+	// even with the same non-news result set.
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "news_search",
+		Arguments: map[string]any{"query": "global markets", "time_range": "day"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+
+	text := res.Content[0].(*mcp.TextContent).Text
+	var output struct {
+		Warning string `json:"warning"`
+	}
+	if err := json.Unmarshal([]byte(text), &output); err != nil {
+		t.Fatalf("failed to parse output: %v", err)
+	}
+	if output.Warning != "" {
+		t.Fatalf("expected no warning for default relevance sort, got %q", output.Warning)
+	}
+}
+
+func TestNewsSearchNoWarningWhenNewsOutletPresent(t *testing.T) {
+	articles := classifyNewsResults([]search.NewsResult{
+		{Title: "Fed holds rates", URL: "https://www.reuters.com/markets/fed-holds-rates", Source: "Reuters"},
+		{Title: "Unrelated corporate page", URL: "https://www.gafi.gov.eg/English/Pages/default.aspx", Source: "GAFI"},
+	})
+	if warning := newsDateSortRelevanceWarning("date", "google", articles); warning != "" {
+		t.Errorf("expected no warning when a recognized news outlet is present, got %q", warning)
+	}
+}
+
+func TestNewsSearchNoWarningWhenNotGoogle(t *testing.T) {
+	articles := classifyNewsResults([]search.NewsResult{
+		{Title: "Unrelated corporate page", URL: "https://www.gafi.gov.eg/English/Pages/default.aspx", Source: "GAFI"},
+	})
+	if warning := newsDateSortRelevanceWarning("date", "brave", articles); warning != "" {
+		t.Errorf("expected no warning for non-Google provider (sort_by is ignored there), got %q", warning)
+	}
+}
+
 func TestNewsSearchToolSourceType(t *testing.T) {
 	ctx := context.Background()
 	deps := setupTestDeps()
