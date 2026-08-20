@@ -439,10 +439,12 @@ Combined search + scrape pipeline with quality scoring, deduplication, and sourc
 | `deduplicate` | bool | no | true | — |
 | `max_length_per_source` | int | no | 50000 | Bytes |
 | `total_max_length` | int | no | 300000 | Bytes |
-| `filter_by_query` | bool | no | false | — |
+| `filter_by_query` | bool | no | false, except true when `claim` is set (#640) | — |
 | `provider` | string | no | — | Force search provider for the search phase: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik |
 | `sessionId` | string | no | — | Link results to a `sequential_search` session |
 | `claim` | string | no | — | Optional claim to evaluate against each source; when set, each source gains `keySentences` + `claimSignal` (#66). Evidence only — never a verdict |
+
+`filter_by_query`'s default depends on `claim` (#640): with no `claim`, it defaults to `false` (general search breadth — an off-topic source is still a source). With `claim` set, it defaults to `true` — a claim call wants evidence about one specific statement, so a source irrelevant to `query` is a false positive even if it happens to contain a spurious `claimSignal` match. Pass `filter_by_query` explicitly to override either default.
 
 ### Output Schema
 
