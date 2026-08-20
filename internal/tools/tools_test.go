@@ -1636,6 +1636,104 @@ func TestSearchAndScrapeSparseSourcesWithFilterByQuery(t *testing.T) {
 	}
 }
 
+// mockProviderWithURLs returns a fixed list of URLs as web search results —
+// mockProviderWithURL only supports one, but filter_by_query behavior needs
+// multiple sources with differing relevance to the query.
+type mockProviderWithURLs struct {
+	urls []string
+}
+
+func (m *mockProviderWithURLs) Web(_ context.Context, params search.WebSearchParams) ([]search.SearchResult, error) {
+	results := make([]search.SearchResult, 0, len(m.urls))
+	for i, u := range m.urls {
+		results = append(results, search.SearchResult{Title: fmt.Sprintf("Result %d", i), URL: u, Snippet: "snippet"})
+	}
+	return results, nil
+}
+
+func (m *mockProviderWithURLs) Images(_ context.Context, _ search.ImageSearchParams) ([]search.ImageResult, error) {
+	return []search.ImageResult{}, nil
+}
+
+func (m *mockProviderWithURLs) News(_ context.Context, _ search.NewsSearchParams) ([]search.NewsResult, error) {
+	return []search.NewsResult{}, nil
+}
+
+func (m *mockProviderWithURLs) Name() string { return "mock-with-urls" }
+
+// TestSearchAndScrapeFilterByQueryDefaultsTrueForClaim (#640): a claim call
+// wants evidence about one specific statement, not general search breadth, so
+// filter_by_query must default to true (dropping the off-topic source) when
+// claim is set — even though it still defaults to false for a plain query.
+func TestSearchAndScrapeFilterByQueryDefaultsTrueForClaim(t *testing.T) {
+	onTopic := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<!DOCTYPE html><html><head><title>Eiffel Tower</title></head><body><article>
+<p>The Eiffel Tower is a wrought-iron lattice tower in Paris, France. Construction of the Eiffel Tower began in 1887 and the Eiffel Tower was completed in 1889, in time for the World's Fair. The Eiffel Tower remains one of the most visited monuments in the world.</p>
+</article></body></html>`))
+	}))
+	defer onTopic.Close()
+
+	offTopic := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<!DOCTYPE html><html><head><title>My LEGO Weekend</title></head><body><article>
+<p>My seven year old spent the whole weekend building a LEGO model apartment for her school project. She picked out bright colors for the furniture and was very proud of the tiny kitchen she designed with her own bricks.</p>
+</article></body></html>`))
+	}))
+	defer offTopic.Close()
+
+	ctx := context.Background()
+	deps := setupTestDeps()
+	deps.Search = &mockProviderWithURLs{urls: []string{onTopic.URL, offTopic.URL}}
+	deps.Scraper = scraper.NewPipeline(scraper.PipelineConfig{
+		MaxConcurrency:  2,
+		AllowPrivateIPs: true,
+	})
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	callAndCountSources := func(args map[string]any) int {
+		res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "search_and_scrape", Arguments: args})
+		if err != nil {
+			t.Fatalf("CallTool failed: %v", err)
+		}
+		if res.IsError {
+			t.Fatalf("unexpected tool error: %s", res.Content[0].(*mcp.TextContent).Text)
+		}
+		var output map[string]any
+		if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &output); err != nil {
+			t.Fatalf("failed to parse output: %v", err)
+		}
+		sources, _ := output["sources"].([]any)
+		return len(sources)
+	}
+
+	// claim set, filter_by_query omitted: defaults to true, off-topic source dropped.
+	if n := callAndCountSources(map[string]any{
+		"query": "When was the Eiffel Tower completed",
+		"claim": "The Eiffel Tower was completed in 1889",
+	}); n != 1 {
+		t.Errorf("claim call with filter_by_query omitted: expected 1 source (off-topic filtered), got %d", n)
+	}
+
+	// claim set, filter_by_query explicitly false: default overridden, both sources kept.
+	if n := callAndCountSources(map[string]any{
+		"query":           "When was the Eiffel Tower completed",
+		"claim":           "The Eiffel Tower was completed in 1889",
+		"filter_by_query": false,
+	}); n != 2 {
+		t.Errorf("claim call with filter_by_query=false: expected 2 sources, got %d", n)
+	}
+
+	// no claim, filter_by_query omitted: still defaults to false (unchanged), both sources kept.
+	if n := callAndCountSources(map[string]any{
+		"query": "When was the Eiffel Tower completed",
+	}); n != 2 {
+		t.Errorf("plain query with filter_by_query omitted: expected 2 sources (default false unchanged), got %d", n)
+	}
+}
+
 // TestSearchAndScrapeZeroResults exercises the len(searchResults)==0 success
 // branch: it must still carry the contract fields (status, trust) and mirror
 // the normal success shape (summary + sizeMetadata).
@@ -1945,6 +2043,53 @@ func TestWebSearchClaimSignalUniform(t *testing.T) {
 	// The non-matching result must carry an empty signal, not be missing the key.
 	if got := enriched[1]["claimSignal"]; got != "" {
 		t.Errorf("non-matching result claimSignal = %q, want empty string", got)
+	}
+}
+
+// TestWebSearchClaimSignalFromTitle (#633): a snippet that's too short to
+// literally contain the claim's distinguishing terms must not doom claimSignal
+// to empty when the result's title carries them instead — e.g. a headline
+// like "COVID-19 Vaccines Not Linked to Miscarriage" states the claim outright
+// while a truncated snippet below it might not repeat those exact words.
+func TestWebSearchClaimSignalFromTitle(t *testing.T) {
+	t.Parallel()
+	results := []search.SearchResult{
+		{
+			Title:   "COVID-19 Vaccines Not Linked to Miscarriage - Yale School of Medicine",
+			URL:     "https://example.org/a",
+			Snippet: "Read the latest health news and research updates from our team.",
+		},
+	}
+	enriched := enrichResultsWithReputation(results, "COVID-19 vaccines cause miscarriage")
+	if len(enriched) != 1 {
+		t.Fatalf("want 1 result, got %d", len(enriched))
+	}
+	got, _ := enriched[0]["claimSignal"].(string)
+	if got == "" {
+		t.Errorf("claimSignal is empty, want a match drawn from the title since the snippet has no overlapping terms")
+	}
+}
+
+// TestWebSearchClaimSignalFromExtraSnippets (#633): Brave's extraSnippets can
+// carry claim-relevant text that the primary snippet omits; claimSignal must
+// consider them too rather than only r.Snippet.
+func TestWebSearchClaimSignalFromExtraSnippets(t *testing.T) {
+	t.Parallel()
+	results := []search.SearchResult{
+		{
+			Title:         "Health News",
+			URL:           "https://example.org/a",
+			Snippet:       "Read the latest updates from our team.",
+			ExtraSnippets: []string{"Vaccine safety data shows no link between mRNA vaccines and infertility."},
+		},
+	}
+	enriched := enrichResultsWithReputation(results, "mRNA vaccines and infertility")
+	if len(enriched) != 1 {
+		t.Fatalf("want 1 result, got %d", len(enriched))
+	}
+	got, _ := enriched[0]["claimSignal"].(string)
+	if got == "" {
+		t.Errorf("claimSignal is empty, want a match drawn from extraSnippets since title/snippet have no overlapping terms")
 	}
 }
 

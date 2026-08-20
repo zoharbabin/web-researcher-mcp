@@ -117,6 +117,13 @@ func TestEPOProvider_Patents(t *testing.T) {
 	if results[0].Granted != "2021-09-22" {
 		t.Errorf("unexpected granted date: %s", results[0].Granted)
 	}
+	// #636: URL is always a Google Patents viewer link, independent of which
+	// API (source) supplied the bibliographic data above — Espacenet's own
+	// pages 403 even to a full browser (verified live, 2026-08-19), so
+	// Google Patents is the only reliably viewable link across providers.
+	if results[0].URL != "https://patents.google.com/patent/EP3456789" {
+		t.Errorf("unexpected url: %s", results[0].URL)
+	}
 
 	if tokenCalled.Load() != 1 {
 		t.Errorf("expected 1 token call, got %d", tokenCalled.Load())

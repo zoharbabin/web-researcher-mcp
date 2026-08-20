@@ -284,8 +284,12 @@ type auditEntryResult struct {
 	// addressed/partially_addressed; this flags that as unreliable.
 	ClaimContentWords int
 	ClaimSparsityNote string
-	Flags             []string
-	Reason            string // human-readable why for not_found / unchecked
+	// ClaimFetchError (#631) mirrors claimCoverageResult.FetchError — the
+	// sanitized scrape-error reason when ClaimSupport is source_unavailable
+	// because the fetch itself failed, as opposed to no fetch being attempted.
+	ClaimFetchError string
+	Flags           []string
+	Reason          string // human-readable why for not_found / unchecked
 }
 
 func (r auditEntryResult) clean() bool { return len(r.Flags) == 0 }
@@ -329,6 +333,9 @@ func (r auditEntryResult) toMap() map[string]any {
 		if r.ClaimSparsityNote != "" {
 			m["claimContentWords"] = r.ClaimContentWords
 			m["claimSparsityNote"] = r.ClaimSparsityNote
+		}
+		if r.ClaimFetchError != "" {
+			m["claimFetchError"] = r.ClaimFetchError
 		}
 	}
 	if r.Reason != "" {
@@ -537,6 +544,7 @@ func auditClaimCoverage(ctx context.Context, deps Dependencies, r *auditEntryRes
 	r.ClaimContrast = cc.Contrast
 	r.ClaimContentWords = cc.ContentWords
 	r.ClaimSparsityNote = cc.SparsityNote
+	r.ClaimFetchError = cc.FetchError
 }
 
 // auditClaimScrapeMaxBytes bounds the per-source fetch for a claim check — large

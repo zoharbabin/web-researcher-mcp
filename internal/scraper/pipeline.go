@@ -443,6 +443,7 @@ func (p *Pipeline) Scrape(ctx context.Context, rawURL string, maxLength int) (*S
 	// native route below has no internal tier ladder, so it acquires one
 	// fast-tier slot up front for its single attempt, same as pre-#472.
 	var nativeRoute func() (*ScrapeResult, error)
+	isDocRoute := isDocumentURL(url)
 	switch {
 	case isYouTubeURL(url):
 		nativeRoute = func() (*ScrapeResult, error) { return p.scrapeYouTube(ctx, url, maxLength) }
@@ -454,7 +455,7 @@ func (p *Pipeline) Scrape(ctx context.Context, rawURL string, maxLength int) (*S
 		nativeRoute = func() (*ScrapeResult, error) { return p.scrapeBsky(ctx, url, maxLength) }
 	case isGitHubContentURL(url):
 		nativeRoute = func() (*ScrapeResult, error) { return p.scrapeGitHubContent(ctx, url, maxLength) }
-	case isDocumentURL(url):
+	case isDocRoute:
 		nativeRoute = func() (*ScrapeResult, error) { return p.scrapeDocument(ctx, url, maxLength) }
 	}
 
@@ -467,6 +468,19 @@ func (p *Pipeline) Scrape(ctx context.Context, rawURL string, maxLength int) (*S
 		}
 		result, err = nativeRoute()
 		release()
+		// A document-suffixed URL (.pdf/.docx/.pptx) is not always what it
+		// claims: some publishers 30x a legacy document link through a
+		// cookie/IDP consent handshake and land on the ordinary HTML article
+		// page instead of a real document (#631 — nature.com's OA "grover"
+		// redirect for 10.1038/nature12373.pdf ends on the HTML page, not a
+		// PDF). scrapeDocument has no anti-bot header spoofing and no tier
+		// ladder of its own, so on any failure (redirect-cap abort, non-2xx,
+		// or a document-parse error because the fetched bytes turned out to
+		// be HTML) retry through the same tiered HTML pipeline ordinary pages
+		// use, instead of giving up outright.
+		if isDocRoute && err != nil {
+			result, err = p.scrapeWithTieredFallback(ctx, url, maxLength)
+		}
 	} else {
 		result, err = p.scrapeWithTieredFallback(ctx, url, maxLength)
 	}
@@ -953,6 +967,7 @@ func (p *Pipeline) ScrapeRaw(ctx context.Context, rawURL string, maxLength int) 
 	}
 
 	var nativeRoute func() (*ScrapeResult, error)
+	isDocRoute := isDocumentURL(url)
 	switch {
 	case isYouTubeURL(url):
 		nativeRoute = func() (*ScrapeResult, error) { return p.scrapeYouTube(ctx, url, maxLength) }
@@ -964,7 +979,7 @@ func (p *Pipeline) ScrapeRaw(ctx context.Context, rawURL string, maxLength int) 
 		nativeRoute = func() (*ScrapeResult, error) { return p.scrapeBsky(ctx, url, maxLength) }
 	case isGitHubContentURL(url):
 		nativeRoute = func() (*ScrapeResult, error) { return p.scrapeGitHubContent(ctx, url, maxLength) }
-	case isDocumentURL(url):
+	case isDocRoute:
 		nativeRoute = func() (*ScrapeResult, error) { return p.scrapeDocument(ctx, url, maxLength) }
 	}
 
@@ -977,6 +992,10 @@ func (p *Pipeline) ScrapeRaw(ctx context.Context, rawURL string, maxLength int) 
 		}
 		result, err = nativeRoute()
 		release()
+		// Same document/HTML mismatch fallback as Scrape (#631).
+		if isDocRoute && err != nil {
+			result, err = p.tieredFallback(ctx, url, maxLength, 0, true)
+		}
 	} else {
 		// tieredFallback acquires per-tier-attempt internally (#472).
 		result, err = p.tieredFallback(ctx, url, maxLength, 0, true)

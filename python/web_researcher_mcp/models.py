@@ -151,6 +151,7 @@ class AuditBibliographyEntry:
     claim: Optional[str] = None
     claimContentWords: Optional[int] = None
     claimEvidence: list[str] = field(default_factory=list)
+    claimFetchError: Optional[str] = None
     claimSourceUrl: Optional[str] = None
     claimSparsityNote: Optional[str] = None
     claimSupport: Optional[str] = None
@@ -175,6 +176,7 @@ class AuditBibliographyEntry:
             claim=d.get('claim'),
             claimContentWords=d.get('claimContentWords'),
             claimEvidence=list(d.get('claimEvidence') or []),
+            claimFetchError=d.get('claimFetchError'),
             claimSourceUrl=d.get('claimSourceUrl'),
             claimSparsityNote=d.get('claimSparsityNote'),
             claimSupport=d.get('claimSupport'),
@@ -2429,6 +2431,7 @@ class VerifyCitationResponse:
     claimCheckSkipped: Optional[bool] = None
     claimCheckSkippedReason: Optional[str] = None
     claimEvidence: list[str] = field(default_factory=list)
+    claimFetchError: Optional[str] = None
     claimSourceUrl: Optional[str] = None
     claimSupport: Optional[str] = None
     conflictOfInterest: Optional[ConflictOfInterest] = None
@@ -2460,6 +2463,7 @@ class VerifyCitationResponse:
             claimCheckSkipped=d.get('claimCheckSkipped'),
             claimCheckSkippedReason=d.get('claimCheckSkippedReason'),
             claimEvidence=list(d.get('claimEvidence') or []),
+            claimFetchError=d.get('claimFetchError'),
             claimSourceUrl=d.get('claimSourceUrl'),
             claimSupport=d.get('claimSupport'),
             conflictOfInterest=ConflictOfInterest.from_dict(d.get('conflictOfInterest')) if d.get('conflictOfInterest') else None,
