@@ -160,6 +160,54 @@ func TestOpenAlexProvider_Scholarly(t *testing.T) {
 	}
 }
 
+// TestOpenAlexProvider_UnquotesExactPhraseQuery proves the #637 fix:
+// academic_search's prepareAcademicQuery wraps named-entity/acronym queries
+// in double quotes for exact-phrase intent, but OpenAlex's `search` param
+// reinterprets a quoted value as a strict `fulltext.search` phrase filter,
+// collapsing recall (verified live: quoted -> count 1, unquoted -> count
+// 67554, for the same query). The provider must strip the surrounding
+// quotes before sending the request.
+func TestOpenAlexProvider_UnquotesExactPhraseQuery(t *testing.T) {
+	t.Parallel()
+
+	var capturedSearch string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedSearch = r.URL.Query().Get("search")
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(testOpenAlexEmptyResponse))
+	}))
+	defer srv.Close()
+
+	provider := NewOpenAlexProvider("test@example.com", Deps{
+		HTTPClient: srv.Client(),
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+	})
+	provider.SetBaseURL(srv.URL)
+
+	_, err := provider.Scholarly(context.Background(), AcademicSearchParams{
+		Query:      `"CRISPR gene editing off-target effects"`,
+		NumResults: 5,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capturedSearch != "CRISPR gene editing off-target effects" {
+		t.Errorf("expected quotes stripped from search param, got: %q", capturedSearch)
+	}
+
+	// A query with no surrounding quotes must pass through unchanged.
+	_, err = provider.Scholarly(context.Background(), AcademicSearchParams{
+		Query:      "transformer attention mechanism",
+		NumResults: 5,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capturedSearch != "transformer attention mechanism" {
+		t.Errorf("expected unquoted query unchanged, got: %q", capturedSearch)
+	}
+}
+
 func TestOpenAlexProvider_Filters(t *testing.T) {
 	t.Parallel()
 

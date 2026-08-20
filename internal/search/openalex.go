@@ -27,6 +27,15 @@ type OpenAlexProvider struct {
 // HandleDOIRegistry, just a different (Accept-negotiated) representation.
 const doiOrgDefaultBaseURL = "https://doi.org"
 
+// unquotePhrase strips one layer of surrounding double quotes, if present.
+// Queries not wrapped in quotes are returned unchanged.
+func unquotePhrase(q string) string {
+	if len(q) >= 2 && strings.HasPrefix(q, `"`) && strings.HasSuffix(q, `"`) {
+		return q[1 : len(q)-1]
+	}
+	return q
+}
+
 // NewOpenAlexProvider creates an OpenAlex provider using the given email for polite pool access.
 func NewOpenAlexProvider(email string, deps Deps) *OpenAlexProvider {
 	return &OpenAlexProvider{
@@ -62,7 +71,16 @@ func (p *OpenAlexProvider) doSearch(ctx context.Context, params AcademicSearchPa
 	num := clamp(params.NumResults, 1, 25)
 
 	q := url.Values{}
-	q.Set("search", params.Query)
+	// #637: academic_search wraps named-entity/acronym queries in double
+	// quotes (prepareAcademicQuery) to request exact-phrase search on
+	// providers whose query translator supports it. OpenAlex's `search` param
+	// instead reinterprets a quoted value as a strict `fulltext.search`
+	// phrase filter across the entire document, collapsing recall (verified
+	// live: "CRISPR gene editing off-target effects" quoted -> count 1,
+	// unquoted -> count 67554, for the same otherwise-relevant query). Strip
+	// the surrounding quotes so OpenAlex gets its normal relevance-ranked
+	// search; other providers still receive the quoted variant unchanged.
+	q.Set("search", unquotePhrase(params.Query))
 	q.Set("per_page", fmt.Sprintf("%d", num))
 	q.Set("mailto", p.email)
 
