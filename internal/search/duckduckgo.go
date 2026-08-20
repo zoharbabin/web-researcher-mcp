@@ -180,27 +180,29 @@ func extractDisplayLink(rawURL string) string {
 // ddgRegionByCountry maps an ISO 3166-1 alpha-2 country code to DuckDuckGo's
 // own `kl` region code (#641). DDG's codes are NOT simply "<country>-en" —
 // most non-English-speaking regions use their local language suffix (e.g.
-// Spain is "es-es", Brazil is "br-pt", Russia is "ru-ru"), and a few DDG codes
-// don't even match the ISO country code (the UK is "uk", not "gb"; Saudi
-// Arabia is "xa", not "sa"). This table is DDG's full officially documented
-// region list; countries with more than one regional language (Canada,
-// Belgium, Switzerland, Spain) map to their most widely spoken one since a
-// single ISO country code can't disambiguate further. Sourced from
-// DuckDuckGo's own region list, cross-checked via SerpApi's DDG regions
-// reference (2026-08-19).
+// Spain is "es-es", Brazil is "br-pt", Russia is "ru-ru"; Israel, Thailand and
+// Vietnam have no "-en" variant at all), and a few DDG codes don't even match
+// the ISO country code (the UK is "uk", not "gb"; Saudi Arabia is "xa", not
+// "sa"). Countries with more than one regional language (Canada, Belgium,
+// Switzerland, Spain) map to their most widely spoken one since a single ISO
+// country code can't disambiguate further. Iceland and Pakistan have no DDG
+// region at all and are intentionally absent so they fall back to "wt-wt"
+// rather than guessing an invalid code. Sourced from DuckDuckGo's own live
+// region list at https://duckduckgo.com/duckduckgo-help-pages/settings/params/
+// (verified 2026-08-20).
 var ddgRegionByCountry = map[string]string{
 	"AR": "ar-es", "AU": "au-en", "AT": "at-de", "BE": "be-nl", "BR": "br-pt",
 	"BG": "bg-bg", "CA": "ca-en", "CL": "cl-es", "CN": "cn-zh", "CO": "co-es",
 	"HR": "hr-hr", "CZ": "cz-cs", "DK": "dk-da", "EE": "ee-et", "FI": "fi-fi",
 	"FR": "fr-fr", "DE": "de-de", "GR": "gr-el", "HK": "hk-tzh", "HU": "hu-hu",
-	"IS": "is-is", "IN": "in-en", "ID": "id-en", "IE": "ie-en", "IL": "il-en",
+	"IN": "in-en", "ID": "id-en", "IE": "ie-en", "IL": "il-he",
 	"IT": "it-it", "JP": "jp-jp", "KR": "kr-kr", "LV": "lv-lv", "LT": "lt-lt",
 	"MY": "my-en", "MX": "mx-es", "NL": "nl-nl", "NZ": "nz-en", "NO": "no-no",
-	"PK": "pk-en", "PE": "pe-es", "PH": "ph-en", "PL": "pl-pl", "PT": "pt-pt",
+	"PE": "pe-es", "PH": "ph-en", "PL": "pl-pl", "PT": "pt-pt",
 	"RO": "ro-ro", "RU": "ru-ru", "SA": "xa-ar", "SG": "sg-en", "SK": "sk-sk",
 	"SI": "sl-sl", "ZA": "za-en", "ES": "es-es", "SE": "se-sv", "CH": "ch-de",
-	"TW": "tw-tzh", "TH": "th-en", "TR": "tr-tr", "US": "us-en", "UA": "ua-uk",
-	"GB": "uk-en", "UK": "uk-en", "VN": "vn-en",
+	"TW": "tw-tzh", "TH": "th-th", "TR": "tr-tr", "US": "us-en", "UA": "ua-uk",
+	"GB": "uk-en", "UK": "uk-en", "VN": "vn-vi",
 }
 
 // mapDDGRegion resolves an ISO 3166-1 alpha-2 country code to DuckDuckGo's
