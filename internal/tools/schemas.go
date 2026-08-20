@@ -59,7 +59,7 @@ var webSearchOutputSchema = map[string]any{
 					"displayLink":   map[string]any{"type": "string"},
 					"publishedAt":   map[string]any{"type": "string", "description": "RFC3339 publish timestamp, present only when the provider's response carried a date (Google, Tavily, Exa, SearXNG, HackerNews). Never inferred from snippet/title text."},
 					"extraSnippets": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Additional text snippets beyond the primary snippet, present only for providers that surface them (Brave, with BRAVE_EXTRA_SNIPPETS=true)."},
-					"claimSignal":   map[string]any{"type": "string", "description": "Most claim-relevant snippet sentence (present per result only when the `claim` param was supplied and matched). Evidence, not a verdict." + languageHeuristicCaveat},
+					"claimSignal":   map[string]any{"type": "string", "description": "Most claim-relevant sentence found across the result's title, snippet, and extra snippets. Present on every result whenever the `claim` param was supplied, empty string when nothing matched — uniform shape. Evidence, not a verdict." + languageHeuristicCaveat},
 					"engagement":    engagementSignalsSchema,
 				},
 			},
