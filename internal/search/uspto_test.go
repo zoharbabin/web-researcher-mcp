@@ -97,6 +97,52 @@ func TestUSPTOProvider_Patents(t *testing.T) {
 	}
 }
 
+// TestUSPTOProvider_AbstractGenuinelyUnavailable documents the #635 contract:
+// USPTO's PEDS/ODP applications-search response (verified live against
+// api.uspto.gov, 2026-08-19) carries no abstract text anywhere — it's a
+// prosecution-history dataset, not a full-text one. Abstract stays "" rather
+// than fabricating a value from some other field; this locks that in against
+// a future edit accidentally back-filling it from e.g. the invention title.
+func TestUSPTOProvider_AbstractGenuinelyUnavailable(t *testing.T) {
+	t.Parallel()
+
+	response := usptoResponse{
+		Count: 1,
+		PatentFileWrapperDataBag: []usptoFileWrapperDataBag{
+			{
+				ApplicationNumberText: "16123456",
+				ApplicationMetaData: usptoApplicationMetaData{
+					InventionTitle: "Method for Video Processing",
+					PatentNumber:   "11234567",
+				},
+			},
+		},
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer srv.Close()
+
+	provider := NewUSPTOProvider("test-key", Deps{
+		HTTPClient: srv.Client(),
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+	})
+	provider.SetBaseURL(srv.URL)
+
+	results, err := provider.Patents(context.Background(), PatentSearchParams{Query: "video processing", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Abstract != "" {
+		t.Errorf("expected Abstract to stay empty (USPTO's API has no abstract field), got %q", results[0].Abstract)
+	}
+}
+
 // TestUSPTOProvider_CapsResults verifies the defensive result cap: when the API
 // returns more rows than requested (the `rows` param is not always honored), the
 // provider slices down to NumResults to match every other provider's contract.
