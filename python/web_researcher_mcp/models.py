@@ -1634,6 +1634,7 @@ class NewsSearchResponse:
     query: Optional[str] = None
     resultCount: Optional[int] = None
     trust: Optional[str] = None
+    warning: Optional[str] = None
 
     @classmethod
     def from_dict(cls, d: dict[str, Any] | None) -> "NewsSearchResponse | None":
@@ -1645,6 +1646,7 @@ class NewsSearchResponse:
             query=d.get('query'),
             resultCount=d.get('resultCount'),
             trust=d.get('trust'),
+            warning=d.get('warning'),
         )
 
 @dataclass

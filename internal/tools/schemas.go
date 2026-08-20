@@ -99,6 +99,7 @@ var newsSearchOutputSchema = map[string]any{
 		"query":       map[string]any{"type": "string"},
 		"resultCount": map[string]any{"type": "integer"},
 		"hints":       map[string]any{"type": "object"},
+		"warning":     map[string]any{"type": "string", "description": "Present only when sort_by=\"date\" was honored by Google and none of the returned articles matched a recognized news domain (#642) — Google's date sort discards relevance ranking, so broad queries can surface non-news pages."},
 		"trust":       trustUntrustedExternal,
 		"articles": map[string]any{
 			"type": "array",
