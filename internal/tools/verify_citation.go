@@ -179,6 +179,9 @@ func emitClaimCoverageResult(cc claimCoverageResult, claim string, out map[strin
 		out["contentWords"] = cc.ContentWords
 		out["sparsityNote"] = cc.SparsityNote
 	}
+	if cc.FetchError != "" {
+		out["claimFetchError"] = cc.FetchError
+	}
 }
 
 // verifyByDOI resolves existence + retraction via the Crossref works API (the

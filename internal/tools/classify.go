@@ -50,11 +50,18 @@ func classificationFields(c content.SourceClassification) map[string]any {
 // enrichResultsWithReputation returns web_search results as JSON objects,
 // always attaching a sourceReputation field when the host is in the reputation
 // dataset (#198). The field is omitted for unknown hosts (no false confidence).
-// When claim is non-empty, a claimSignal (the most claim-relevant snippet
-// sentence) is added to EVERY result (#66) — the empty string when no snippet
-// sentence is relevant — so the field's presence is uniform across results in a
-// claim query and downstream null-checking stays simple (#235): claimSignal is
-// always present when a claim was given, never sometimes-absent.
+// When claim is non-empty, a claimSignal (the most claim-relevant sentence
+// across the result's title, snippet, and any extra snippets) is added to
+// EVERY result (#66) — the empty string when nothing is relevant — so the
+// field's presence is uniform across results in a claim query and downstream
+// null-checking stays simple (#235): claimSignal is always present when a
+// claim was given, never sometimes-absent.
+//
+// #633: a search snippet is often too short to literally contain the claim's
+// distinguishing terms even when the result is squarely on-topic — the result
+// title (e.g. "COVID-19 Vaccines Not Linked to Miscarriage") and Brave's
+// ExtraSnippets frequently carry exactly those terms instead, so all three are
+// combined into one evidence pool rather than scoring the snippet alone.
 func enrichResultsWithReputation(results []search.SearchResult, claim string) []map[string]any {
 	out := make([]map[string]any, 0, len(results))
 	for _, r := range results {
@@ -77,14 +84,26 @@ func enrichResultsWithReputation(results []search.SearchResult, claim string) []
 			m["sourceReputation"] = rep
 		}
 		if claim != "" {
-			// Always emit the field (empty when no relevant sentence) for a uniform
-			// per-result shape — an empty claimSignal means "no snippet sentence
+			// Always emit the field (empty when nothing relevant) for a uniform
+			// per-result shape — an empty claimSignal means "no relevant sentence
 			// matched", never "field missing".
-			m["claimSignal"] = content.ExtractClaimEvidence(r.Snippet, claim).Signal
+			m["claimSignal"] = content.ExtractClaimEvidence(claimEvidenceText(r), claim).Signal
 		}
 		out = append(out, m)
 	}
 	return out
+}
+
+// claimEvidenceText joins a search result's title, snippet, and any extra
+// snippets on newlines so content.ExtractClaimEvidence scores every candidate
+// sentence across all three as one evidence pool (#633). Newline-joining
+// (rather than space-joining) matters: ExtractClaimEvidence's sentence
+// splitter treats a newline as a hard sentence boundary, so a title never
+// gets fused onto the snippet's first sentence into one run-on match.
+func claimEvidenceText(r search.SearchResult) string {
+	parts := []string{r.Title, r.Snippet}
+	parts = append(parts, r.ExtraSnippets...)
+	return strings.Join(parts, "\n")
 }
 
 // reputationForURL returns the domain reputation for a URL's host, or nil when

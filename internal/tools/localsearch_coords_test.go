@@ -238,6 +238,74 @@ func TestLocalSearch_ZeroResultHints(t *testing.T) {
 	})
 }
 
+// TestLocalSearch_MissingAnchorHint asserts the #634 fix: a query with no
+// near/latitude/longitude anchor set that returns zero results gets a
+// "missing_location_anchor" reason with a leading add_parameter/near hint,
+// instead of the generic no_match/filters_too_restrictive reason — the
+// location text embedded in the query (e.g. "coffee shop near Times Square
+// New York") is invisible to the provider, since local_search never appends
+// query text to the location index (see withLocation in brave.go).
+func TestLocalSearch_MissingAnchorHint(t *testing.T) {
+	ctx := context.Background()
+	deps := localDepsWithEmpty()
+	res := callLocal(ctx, t, deps, map[string]any{
+		"query": "coffee shop near Times Square New York",
+	})
+	if res.IsError {
+		t.Fatalf("unexpected tool error: %s", res.Content[0].(*mcp.TextContent).Text)
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &body); err != nil {
+		t.Fatalf("parse content: %v", err)
+	}
+	hints, ok := body["hints"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected hints object on zero results, got %v", body["hints"])
+	}
+	if hints["reason"] != "missing_location_anchor" {
+		t.Errorf("reason = %v want missing_location_anchor", hints["reason"])
+	}
+	actions, ok := hints["suggestedActions"].([]any)
+	if !ok || len(actions) == 0 {
+		t.Fatalf("expected at least one suggested action, got %v", hints["suggestedActions"])
+	}
+	first, ok := actions[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected first action to be an object, got %v", actions[0])
+	}
+	if first["action"] != "add_parameter" || first["parameter"] != "near" {
+		t.Errorf("first action = %v want add_parameter on near", first)
+	}
+}
+
+// TestLocalSearch_AnchoredZeroResultsKeepsGenericReason asserts that when the
+// caller DID set an anchor (near, or latitude+longitude) and still gets zero
+// results, the #634 fix does not fire — the hint falls back to
+// buildZeroResultHints' unmodified filters_too_restrictive/remove_filter
+// behavior, since a real anchor was supplied and simply found nothing.
+func TestLocalSearch_AnchoredZeroResultsKeepsGenericReason(t *testing.T) {
+	ctx := context.Background()
+	deps := localDepsWithEmpty()
+	res := callLocal(ctx, t, deps, map[string]any{
+		"query": "coffee shop",
+		"near":  "Times Square, New York, NY",
+	})
+	if res.IsError {
+		t.Fatalf("unexpected tool error: %s", res.Content[0].(*mcp.TextContent).Text)
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &body); err != nil {
+		t.Fatalf("parse content: %v", err)
+	}
+	hints, ok := body["hints"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected hints object on zero results, got %v", body["hints"])
+	}
+	if hints["reason"] != "filters_too_restrictive" {
+		t.Errorf("reason = %v want filters_too_restrictive", hints["reason"])
+	}
+}
+
 // TestLocalFilterMap asserts localFilterMap collects only the filters the
 // caller actually set (issue #357: zero-result hints must reflect the real
 // culprit, not a bare unactionable reason from nil,nil).

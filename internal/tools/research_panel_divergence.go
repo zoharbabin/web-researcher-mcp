@@ -176,12 +176,20 @@ func contradictionPairKey(a, b panelClaim) string {
 // sentences on ./!/? and newline boundaries. Mirrors content's internal
 // sentence splitter (unexported there, so re-implemented minimally here);
 // fragments shorter than minSentenceLen are dropped as noise.
+//
+// Markdown ATX headings (#632: e.g. "# Intermittent Fasting and Human
+// Lifespan") are dropped outright rather than treated as candidate claims.
+// Two models asked the same question near-universally echo it back as an
+// identical or near-identical heading, so a heading pair's lexical overlap
+// is often HIGHER than any real paraphrased claim — letting the formatting
+// artifact win the consensus threshold while the actual substantive
+// agreement, phrased differently by each model, falls short of it.
 func splitPanelSentences(text string) []string {
 	var sentences []string
 	var b strings.Builder
 	flush := func() {
 		s := strings.TrimSpace(b.String())
-		if len(s) >= minSentenceLen {
+		if len(s) >= minSentenceLen && !isMarkdownHeading(s) {
 			sentences = append(sentences, s)
 		}
 		b.Reset()
@@ -200,4 +208,16 @@ func splitPanelSentences(text string) []string {
 	}
 	flush()
 	return sentences
+}
+
+// isMarkdownHeading reports whether s is a markdown ATX heading line: 1-6
+// leading '#' characters followed by a space, e.g. "# Title" or "### Sub".
+// A bare run of '#' with no trailing space (e.g. a hashtag-like "#tag") is
+// not a heading and is left as a candidate sentence.
+func isMarkdownHeading(s string) bool {
+	i := 0
+	for i < len(s) && s[i] == '#' {
+		i++
+	}
+	return i > 0 && i <= 6 && i < len(s) && s[i] == ' '
 }

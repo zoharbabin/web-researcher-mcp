@@ -132,7 +132,7 @@ func registerLocal(srv *mcp.Server, deps Dependencies) {
 			"trust":       untrustedContentTrust,
 		}
 		if len(places) == 0 {
-			output["hints"] = buildZeroResultHints(providerName, localFilterMap(input, lat, lon), nil)
+			output["hints"] = buildLocalHints(input, providerName, lat, lon)
 		}
 
 		jsonBytes, _ := json.Marshal(output)
@@ -180,6 +180,29 @@ func localFilterMap(input localSearchInput, lat, lon *float64) map[string]string
 		m["radius"] = fmt.Sprintf("%g", input.Radius)
 	}
 	return m
+}
+
+// buildLocalHints (#634) extends buildZeroResultHints for local_search: a
+// location stated naturally in the query text (e.g. "coffee shop near Times
+// Square New York") is NOT anchored the way callers expect — Brave's
+// location detection runs on the query text alone and frequently finds
+// nothing, because the tool anchors location exclusively through the near/
+// latitude+longitude parameters via provider location headers, never by
+// appending location text to the query (see withLocation in brave.go). When
+// zero results come back and no anchor was set, the generic "no_match" hint
+// leaves that actionable cause invisible, so this prepends a hint naming the
+// real fix.
+func buildLocalHints(input localSearchInput, providerName string, lat, lon *float64) *ZeroResultHints {
+	hints := buildZeroResultHints(providerName, localFilterMap(input, lat, lon), nil)
+	if input.Near == "" && lat == nil && lon == nil {
+		hints.Reason = "missing_location_anchor"
+		hints.SuggestedActions = append([]HintAction{{
+			Action:    "add_parameter",
+			Parameter: "near",
+			Detail:    `Local search results are anchored via the "near" or "latitude"/"longitude" parameters, not by location text embedded in the query. Set near (e.g. "Times Square, New York, NY") or latitude+longitude to anchor the search.`,
+		}}, hints.SuggestedActions...)
+	}
+	return hints
 }
 
 func resolveLocalSearcher(deps Dependencies, providerName string) (search.LocalSearcher, string, *mcp.CallToolResult) {

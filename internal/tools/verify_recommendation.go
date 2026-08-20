@@ -368,9 +368,10 @@ func selectCorroborationLenses(title, claim string) []string {
 // caller's claim context. It counts how many results address the
 // recommendation positively (agree), negatively
 // (disagree), or neutrally/silently (silent). Each result's claimSignal is the
-// single most claim-relevant snippet sentence (content.ExtractClaimEvidence),
-// computed against the FULL "title + claim" text (not the bare title alone)
-// so the more discriminating claim terms take part in matching (#600).
+// single most claim-relevant sentence found across the result's title,
+// snippet, and extra snippets (content.ExtractClaimEvidence, #633), computed
+// against the FULL "title + claim" text (not the bare title alone) so the
+// more discriminating claim terms take part in matching (#600).
 //
 // A result only counts toward agreeCount when its snippet clears
 // content.ClaimTermCoverageWindowed's claimAddressedThreshold ratio against
@@ -380,15 +381,15 @@ func selectCorroborationLenses(title, claim string) []string {
 // to silentCount instead, matching the ratio-gated approach already shipped
 // for audit_bibliography/verify_citation in claim_coverage.go (#600).
 //
-// The disagree check also scans the result's title, not just claimSignal:
-// enrichResultsWithReputation only extracts claim evidence from the snippet
-// (#66, documented in docs/TOOLS.md), so refutation language that lands in a
-// headline rather than the snippet body — e.g. a title like "CDC website now
-// falsely links vaccines and autism" backed by an unrelated snippet — would
-// otherwise be missed and mistallied as silent/agree. This is scoped to the
-// corroboration tally only; it does not change claimSignal's public,
-// documented snippet-only contract used by web_search. Disagree takes
-// priority over the coverage gate: a title-only refutation counts as
+// The disagree check also scans the result's title directly, alongside
+// claimSignal: since #633, enrichResultsWithReputation's claimSignal already
+// draws on the result's title (and extraSnippets) in addition to the
+// snippet, so this re-check is now redundant in the common case — but it is
+// kept as a second, independent pass over the title so a disagree finding
+// never depends on ExtractClaimEvidence having picked the refuting sentence
+// as claimSignal's single strongest match out of several candidates (e.g. a
+// snippet sentence winning over a shorter but more decisive title). Disagree
+// takes priority over the coverage gate: a title-only refutation counts as
 // disagreement even when the snippet itself shows no claim-term coverage.
 //
 // The function is fail-open: a nil provider, missing lens, or network error

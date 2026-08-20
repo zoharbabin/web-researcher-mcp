@@ -414,6 +414,12 @@ func parseEPOResponse(data []byte) ([]PatentResult, error) {
 			result.Abstract = result.Abstract[:500] + "..."
 		}
 
+		// Google Patents is used as the universal viewer link across every
+		// patent-only provider (EPO/Lens/SearchAPI/USPTO), not just EPO — it's
+		// the only one that reliably resolves. Espacenet's own pages 403 even
+		// to a full browser (verified live, 2026-08-19), unlike Google Patents
+		// (200). This is independent of `source`, which already correctly
+		// names EPO OPS as the API that answered this query (#636).
 		result.URL = "https://patents.google.com/patent/" + result.Number
 		results = append(results, result)
 	}
