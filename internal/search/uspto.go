@@ -132,8 +132,16 @@ func (u *USPTOProvider) doSearch(ctx context.Context, params PatentSearchParams)
 		}
 
 		result := PatentResult{
-			Title:    meta.InventionTitle,
-			Number:   number,
+			Title:  meta.InventionTitle,
+			Number: number,
+			// Abstract stays empty: verified live against api.uspto.gov (2026-08-19)
+			// that this endpoint's applicationMetaData/pgpubDocumentMetaData carry
+			// no abstract text at all (#635) — it's a prosecution-history/file-
+			// wrapper dataset (status, dates, parties, classification), not a
+			// full-text one. pgpubDocumentMetaData only points at a bulk XML
+			// product file, not a per-document abstract. Unlike EPO/Lens/
+			// SearchAPI, which return abstract text natively from their own API,
+			// USPTO genuinely has none to give here.
 			Abstract: "",
 			Assignee: assignee,
 			Inventor: inventor,
