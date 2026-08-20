@@ -111,7 +111,7 @@ Signing unlocks the OS package managers — some validate/prefer signed binaries
 
 PATs cannot be minted by `gh`/the API (browser-only by design): GitHub → Settings → Developer settings → Fine-grained tokens.
 
-> **Chocolatey:** the first submission goes through manual moderation; README.md does not yet document a `choco install web-researcher-mcp` line. All other channels (WinGet, Scoop, Homebrew Cask) are already live.
+> **Chocolatey:** moderation cleared for v1.49.0 (`PackageStatus: Approved`) — all four channels (WinGet, Scoop, Chocolatey, Homebrew Cask) are live. README.md documents `choco install web-researcher-mcp`.
 
 ## Local secret convention (maintainer)
 

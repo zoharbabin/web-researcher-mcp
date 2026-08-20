@@ -281,6 +281,11 @@ scoop bucket add zoharbabin https://github.com/zoharbabin/scoop-bucket
 scoop install web-researcher-mcp
 ```
 
+**Chocolatey (Windows):**
+```powershell
+choco install web-researcher-mcp
+```
+
 **Homebrew Cask (macOS — Developer ID-signed + notarized binary):**
 ```bash
 brew install --cask zoharbabin/tap/web-researcher-mcp
