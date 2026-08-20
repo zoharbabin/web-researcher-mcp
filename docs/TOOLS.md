@@ -765,7 +765,7 @@ Each patent in the `patents` array contains:
 |-------|------|---------------|-------------|
 | `title` | string | yes | Patent title |
 | `number` | string | yes | Patent number (e.g., US10165245B2) |
-| `url` | string | yes | Link to patent detail page |
+| `url` | string | yes | Link to patent detail page — always a Google Patents URL, the only viewer that reliably resolves across every patent-only provider (EPO/Lens/SearchAPI/USPTO); this is independent of `source`, which names the API that actually supplied the bibliographic data above (#636) |
 | `abstract` | string | no | Patent abstract or snippet |
 | `assignee` | string | no | Patent owner/assignee |
 | `inventor` | string | no | Primary inventor name |
