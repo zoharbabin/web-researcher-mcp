@@ -51,3 +51,23 @@ func TestGetSessionUnknownIDStillReportsGenericMessage(t *testing.T) {
 		t.Errorf("expected the generic missing/expired message for a nonexistent session, got %q", msg)
 	}
 }
+
+// TestGetSessionResponseModeAlwaysSummary (#638): get_research_session's
+// no-stepId overview always reports responseMode "summary" — it has no
+// "full" variant and is not governed by any step-count threshold, unlike
+// sequential_search's own responseMode field (auto: full for 8 or fewer
+// steps, summary for more). A live audit conflated the two tools' identically
+// named but unrelated fields; this locks in that get_research_session's is
+// unconditional, well under sequential_search's 8-step threshold.
+func TestGetSessionResponseModeAlwaysSummary(t *testing.T) {
+	deps := setupTestDeps()
+	sid, _ := startSession(t, deps, "")
+	if sid == "" {
+		t.Fatal("no session created")
+	}
+
+	out := callToolJSON(t, deps, "get_research_session", map[string]any{"sessionId": sid})
+	if out["responseMode"] != "summary" {
+		t.Errorf("expected responseMode \"summary\" for a 1-step session, got %v", out["responseMode"])
+	}
+}
