@@ -12,7 +12,7 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/prometheus/client_golang v1.24.1
-	github.com/razvandimescu/gopdf v0.9.5
+	github.com/razvandimescu/gopdf v0.10.0
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/zendev-sh/goai v0.9.4
 	golang.org/x/sync v0.22.0
