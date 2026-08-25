@@ -366,6 +366,28 @@ func TestBlueskyProviderNumResultsClamp(t *testing.T) {
 	}
 }
 
+// TestBlueskyProviderWeb_SortsByTop is the #669 regression test: searchPosts'
+// sort param defaults to "latest" (pure reverse-chronological) when omitted,
+// which ranks any recent keyword match equally with substantive,
+// higher-engagement posts on broad/non-named-entity queries. Web() must
+// request sort=top (engagement-ranked) explicitly.
+func TestBlueskyProviderWeb_SortsByTop(t *testing.T) {
+	t.Parallel()
+	var gotSort string
+	p := newBlueskyTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		gotSort = r.URL.Query().Get("sort")
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"posts":[]}`))
+	})
+	_, err := p.Web(context.Background(), WebSearchParams{Query: "AI safety", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotSort != "top" {
+		t.Errorf("sort param = %q, want %q", gotSort, "top")
+	}
+}
+
 func TestBlueskyProviderInterface(t *testing.T) {
 	t.Parallel()
 	var _ Provider = (*BlueskyProvider)(nil)

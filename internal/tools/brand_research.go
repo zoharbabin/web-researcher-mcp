@@ -1494,7 +1494,7 @@ func searchBrandGuidelines(ctx context.Context, deps Dependencies, companyName, 
 		`"` + companyName + `" figma brand kit`,
 	}
 
-	fields := []string{}
+	foundQualifying := false
 	for _, q := range queries {
 		results, err := deps.Search.Web(ctx, search.WebSearchParams{Query: q, NumResults: 5})
 		if err != nil || len(results) == 0 {
@@ -1553,19 +1553,26 @@ func searchBrandGuidelines(ctx context.Context, deps Dependencies, companyName, 
 					continue
 				}
 			}
+			// A qualifying result always counts as a Tier 5 contribution
+			// (#663) — even when Tier 4 already set GuidelinesURL, Tier 5
+			// independently found the same/another qualifying link and
+			// should surface a visible web_search source. Only the
+			// canonical field assignment itself is gated on it being empty,
+			// so Tier 4's own finding is never overwritten.
 			mu.Lock()
 			if result.GuidelinesURL == "" {
 				result.GuidelinesURL = r.URL
-				fields = append(fields, "guidelines_url")
 			}
 			mu.Unlock()
+			foundQualifying = true
 			break
 		}
 	}
 
-	if len(fields) == 0 {
+	if !foundQualifying {
 		return nil
 	}
+	fields := []string{"guidelines_url"}
 	return &brandSource{Name: "web_search", Fields: fields}
 }
 

@@ -193,3 +193,59 @@ func TestDecodeArchiveURL(t *testing.T) {
 func TestWaybackCDX_Interface(t *testing.T) {
 	var _ ArchiveResolver = (*WaybackCDXResolver)(nil)
 }
+
+// TestWaybackRowsToEntriesRejectsControlCharsAndOffDomainURLs is the
+// regression test for issue #662: a CDX row whose decoded URL contains a
+// control character, or whose host doesn't belong to the queried domain,
+// must never reach the returned []ArchiveEntry.
+func TestWaybackRowsToEntriesRejectsControlCharsAndOffDomainURLs(t *testing.T) {
+	rows := [][]string{
+		{"original", "timestamp", "statuscode", "mimetype"},
+		{"https://example.com/page", "20260101000000", "200", "text/html"},       // (1) well-formed same-domain
+		{"http://example.com/%01foo", "20260101000000", "200", "text/html"},      // (2) decodes to a control character
+		{"http://unrelated-tracker.net/x", "20260101000000", "200", "text/html"}, // (3) unrelated host
+	}
+	entries := waybackRowsToEntries(rows, "example.com")
+	if len(entries) != 1 {
+		t.Fatalf("want exactly 1 entry (rows 2 and 3 rejected), got %d: %+v", len(entries), entries)
+	}
+	if entries[0].URL != "https://example.com/page" {
+		t.Errorf("URL = %q, want https://example.com/page", entries[0].URL)
+	}
+}
+
+// TestEntryHostMatchesDomain_MalformedPathEscapeStillMatches guards against a
+// regression where entryHostMatchesDomain parsed the entry's FULL URL (path
+// included) to read its host. url.Parse validates percent-escapes across the
+// whole URL, so a malformed escape anywhere in the path (common in raw CDX
+// "original" values) made url.Parse fail and the row get dropped, even
+// though the host itself was completely well-formed and on-domain.
+func TestEntryHostMatchesDomain_MalformedPathEscapeStillMatches(t *testing.T) {
+	cases := []struct {
+		name string
+		url  string
+		want bool
+	}{
+		{"malformed escape same domain", "https://example.com/foo%zzbar", true},
+		{"malformed escape subdomain", "https://sub.example.com/path%2", true},
+		{"malformed escape off domain", "https://unrelated.net/foo%GGbar", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := entryHostMatchesDomain(tc.url, "example.com"); got != tc.want {
+				t.Errorf("entryHostMatchesDomain(%q, %q) = %v, want %v", tc.url, "example.com", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestWaybackRowsToEntriesKeepsRowWithMalformedPathEscape(t *testing.T) {
+	rows := [][]string{
+		{"original", "timestamp", "statuscode", "mimetype"},
+		{"https://example.com/foo%zzbar", "20260101000000", "200", "text/html"},
+	}
+	entries := waybackRowsToEntries(rows, "example.com")
+	if len(entries) != 1 {
+		t.Fatalf("want exactly 1 entry, got %d: %+v", len(entries), entries)
+	}
+}
