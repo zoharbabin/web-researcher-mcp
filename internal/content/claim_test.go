@@ -498,6 +498,188 @@ func TestCountAny(t *testing.T) {
 	}
 }
 
+// TestIsTitleCaseToken checks the proper-noun-vs-acronym discriminator
+// (#675): a genuine Title Case named entity ("Alzheimer's") passes, while an
+// ALL-CAPS or internally mixed-case science-jargon token (an acronym or a
+// hyphenated compound like "CRISPR-Cas9"/"CAR-T") does not.
+func TestIsTitleCaseToken(t *testing.T) {
+	tests := []struct {
+		in   string
+		want bool
+	}{
+		{"Alzheimer's", true},
+		{"Alzheimer's.", true}, // trailing punctuation trimmed
+		{"Paris", true},
+		{"CRISPR-Cas9", false}, // CRISPR is ALL-CAPS
+		{"CAR-T", false},       // CAR and T are both uppercase
+		{"CRISPR", false},
+		{"study", false}, // not capitalized at all
+		{"THE", false},   // ALL-CAPS, not a proper noun shape
+		{"42", false},    // no letters at all
+		{"", false},
+	}
+	for _, tt := range tests {
+		if got := isTitleCaseToken(tt.in); got != tt.want {
+			t.Errorf("isTitleCaseToken(%q) = %v, want %v", tt.in, got, tt.want)
+		}
+	}
+}
+
+// TestClaimDistinguishingTerms checks extraction: the false CAR-T/Alzheimer's
+// claim from #675 yields "alzheimer" as its only distinguishing term (the
+// hyphenated CRISPR-Cas9/CAR-T domain-jargon tokens are excluded as
+// acronyms), a generic capitalized sentence-opener ("This") is never flagged
+// regardless of where it sits, and a fully generic claim yields none at all.
+func TestClaimDistinguishingTerms(t *testing.T) {
+	got := claimDistinguishingTerms("This study demonstrates CRISPR-Cas9 CAR-T cures Alzheimer's disease")
+	if len(got) != 1 || got[0] != "alzheimer" {
+		t.Errorf("expected exactly [\"alzheimer\"], got %v", got)
+	}
+
+	// A genuine named entity leading the sentence must still be flagged — an
+	// entity is not disqualified merely by sitting in sentence-initial
+	// position (that was the position-based bug fixed by an adversarial
+	// review of #675: rephrasing a claim to front its entity used to bypass
+	// the gate entirely).
+	if got := claimDistinguishingTerms("Alzheimer's disease progresses over time"); len(got) != 1 || got[0] != "alzheimer" {
+		t.Errorf("a leading genuine named entity must still be flagged as distinguishing, got %v", got)
+	}
+
+	// A generic capitalized sentence-opener must never be flagged, regardless
+	// of position — this is what actually guards against naive
+	// capitalization false positives now (genericCapitalizedOpeners), not
+	// sentence position.
+	if got := claimDistinguishingTerms("This disease progresses over time"); len(got) != 0 {
+		t.Errorf("a generic capitalized opener must not be treated as distinguishing, got %v", got)
+	}
+
+	// "This"/"that"/"there"/"some"/"most" (used above and elsewhere in this
+	// file) are ALSO members of claimStopWords, so an assertion using only
+	// those words would still pass even with genericCapitalizedOpeners
+	// disabled entirely — it wouldn't actually be exercising this mechanism
+	// (confirmed by mutation-testing during #675 adversarial review: deleting
+	// the genericCapitalizedOpeners check left every other assertion in this
+	// test green). "New"/"Recent"/"Scientists" are opener words with NO
+	// claimStopWords overlap, so they only stay excluded if
+	// genericCapitalizedOpeners itself is working.
+	if got := claimDistinguishingTerms("New research shows CRISPR-Cas9 CAR-T cures Alzheimer's disease"); len(got) != 1 || got[0] != "alzheimer" {
+		t.Errorf("a generic capitalized opener with no claimStopWords overlap ('New') must not be treated as distinguishing, got %v", got)
+	}
+	if got := claimDistinguishingTerms("Scientists confirm CRISPR-Cas9 CAR-T cures Alzheimer's disease"); len(got) != 1 || got[0] != "alzheimer" {
+		t.Errorf("a generic capitalized opener with no claimStopWords overlap ('Scientists') must not be treated as distinguishing, got %v", got)
+	}
+
+	// A fully generic claim has no distinguishing terms at all.
+	if got := claimDistinguishingTerms("the study found a significant increase in patient survival rates"); len(got) != 0 {
+		t.Errorf("expected no distinguishing terms in a fully generic claim, got %v", got)
+	}
+}
+
+// TestClaimDistinguishingTerms_SentenceInitialBypassClosed is the adversarial
+// regression for the #675 fix's own bypass: rephrasing the false claim so its
+// distinguishing entity leads the sentence ("Alzheimer's disease is cured by
+// this CRISPR-Cas9 CAR-T study" instead of "...cures Alzheimer's disease")
+// must not make the entity disappear from the distinguishing-term set.
+func TestClaimDistinguishingTerms_SentenceInitialBypassClosed(t *testing.T) {
+	got := claimDistinguishingTerms("Alzheimer's disease is cured by this CRISPR-Cas9 CAR-T study")
+	if len(got) != 1 || got[0] != "alzheimer" {
+		t.Errorf("expected exactly [\"alzheimer\"] even with the entity claim-initial, got %v", got)
+	}
+}
+
+// TestClaimHasMatchedDistinguishingTerm_Alzheimer is the #675 regression: a
+// false claim asserting CRISPR-Cas9 CAR-T therapy cures Alzheimer's disease,
+// checked against a source that is genuinely about CRISPR-Cas9 CAR-T therapy
+// (sharing enough generic/topical vocabulary to have previously cleared the
+// 0.6 ratio gate on its own — see TestClaimCoverageFromContent_FalseClaimNotAddressed
+// in internal/tools for the verdict-level assertion) but never mentions
+// Alzheimer's — the one term that would make the claim true. The
+// distinguishing term ("alzheimer") never matches, so this must return false.
+func TestClaimHasMatchedDistinguishingTerm_Alzheimer(t *testing.T) {
+	source := "This study demonstrates that a CRISPR-Cas9 engineered CAR-T cell therapy cures B-cell lymphoma in a clinical trial. " +
+		"The therapy uses CRISPR-Cas9 gene editing to modify CAR-T cells before they are infused into patients with lymphoma. " +
+		"Researchers demonstrated durable remission in most patients treated with this CAR-T approach."
+	claim := "This study demonstrates CRISPR-Cas9 CAR-T cures Alzheimer's disease"
+	if ClaimHasMatchedDistinguishingTerm(source, claim) {
+		t.Error("expected false: source never mentions the claim's distinguishing term 'Alzheimer's'")
+	}
+}
+
+// TestClaimHasMatchedDistinguishingTerm_SentenceInitialBypassClosed is the
+// end-to-end adversarial regression for the #675 fix's own bypass: the same
+// false claim as TestClaimHasMatchedDistinguishingTerm_Alzheimer, reworded so
+// its distinguishing entity leads the sentence instead of trailing it. The
+// source still never mentions Alzheimer's, so this must still return false —
+// before the fix, fronting the entity made claimDistinguishingTerms return
+// zero terms, which made this gate vacuously return true (len(dist)==0).
+func TestClaimHasMatchedDistinguishingTerm_SentenceInitialBypassClosed(t *testing.T) {
+	source := "This study demonstrates that a CRISPR-Cas9 engineered CAR-T cell therapy cures B-cell lymphoma in a clinical trial. " +
+		"The therapy uses CRISPR-Cas9 gene editing to modify CAR-T cells before they are infused into patients with lymphoma. " +
+		"Researchers demonstrated durable remission in most patients treated with this CAR-T approach."
+	claim := "Alzheimer's disease is cured by this CRISPR-Cas9 CAR-T study"
+	if ClaimHasMatchedDistinguishingTerm(source, claim) {
+		t.Error("expected false: fronting the distinguishing entity must not bypass the gate")
+	}
+}
+
+// TestClaimHasMatchedDistinguishingTerm_TruePositive is the no-regression
+// companion (#675): the claim's distinguishing entity ("Hodgkin") DOES
+// appear in the source, so the gate must not block a genuinely true claim.
+func TestClaimHasMatchedDistinguishingTerm_TruePositive(t *testing.T) {
+	source := "This study demonstrates that a CRISPR-Cas9 engineered CAR-T cell therapy cures Hodgkin lymphoma in a clinical trial. " +
+		"The therapy uses CRISPR-Cas9 gene editing to modify CAR-T cells before they are infused into patients with Hodgkin lymphoma. " +
+		"Researchers demonstrated durable remission in most patients treated with this CAR-T approach."
+	claim := "This study demonstrates CRISPR-Cas9 CAR-T cures Hodgkin lymphoma"
+	if !ClaimHasMatchedDistinguishingTerm(source, claim) {
+		t.Error("expected true: source mentions the claim's distinguishing term 'Hodgkin'")
+	}
+}
+
+// TestClaimHasMatchedDistinguishingTerm_NoDistinguishingTermsFallsBack
+// confirms a fully generic claim (no capitalized/rare terms at all) is never
+// gated by this check — it always returns true, deferring entirely to the
+// existing ratio-only ClaimTermCoverageWindowed behavior (#675).
+func TestClaimHasMatchedDistinguishingTerm_NoDistinguishingTermsFallsBack(t *testing.T) {
+	source := "Unrelated content that shares nothing with the claim below."
+	claim := "the study found a significant increase in patient survival rates"
+	if !ClaimHasMatchedDistinguishingTerm(source, claim) {
+		t.Error("a claim with no distinguishing terms must never be blocked by this gate")
+	}
+}
+
+// TestClaimDistinguishingTerms_DemonymExcluded is an adversarial follow-up
+// finding on top of #675: a nationality/demonym adjective ("American") is
+// Title Case and not a genericCapitalizedOpeners sentence-opener, so without
+// genericCapitalizedDemonyms it would be wrongly extracted as a
+// "distinguishing" term alongside the claim's genuinely rare entity
+// ("Alzheimer's"). A claim naming both must yield ONLY the genuine entity.
+func TestClaimDistinguishingTerms_DemonymExcluded(t *testing.T) {
+	got := claimDistinguishingTerms("American researchers demonstrate CRISPR-Cas9 CAR-T cures Alzheimer's disease")
+	if len(got) != 1 || got[0] != "alzheimer" {
+		t.Errorf("expected exactly [\"alzheimer\"] with the demonym excluded, got %v", got)
+	}
+}
+
+// TestClaimHasMatchedDistinguishingTerm_DemonymCannotSubstituteForEntity is
+// the end-to-end adversarial regression: a claim naming both a common
+// demonym ("American") and a genuinely rare entity ("Alzheimer's") checked
+// against a source that shares the demonym (any US-based study plausibly
+// does) but never mentions Alzheimer's — the one term that would make the
+// claim true. Before genericCapitalizedDemonyms, "American" was itself
+// extracted as a second "distinguishing" term, and the ANY-of-N match
+// semantics let it satisfy the gate on its own, reintroducing the exact
+// #675 false-positive class one level deeper (a weak, coincidentally-shared
+// capitalized word standing in for the term that actually matters).
+func TestClaimHasMatchedDistinguishingTerm_DemonymCannotSubstituteForEntity(t *testing.T) {
+	source := "This study demonstrates that a CRISPR-Cas9 engineered CAR-T cell therapy cures B-cell lymphoma in a clinical trial, conducted at an American cancer research hospital. " +
+		"The therapy uses CRISPR-Cas9 gene editing to modify CAR-T cells before they are infused into patients with lymphoma. " +
+		"Researchers demonstrated durable remission in most patients treated with this CAR-T approach."
+	claim := "American researchers demonstrate CRISPR-Cas9 CAR-T cures Alzheimer's disease"
+	if ClaimHasMatchedDistinguishingTerm(source, claim) {
+		t.Error("expected false: a shared demonym ('American') must not substitute for the claim's real distinguishing entity ('Alzheimer's')")
+	}
+}
+
 // BenchmarkClaimTermCoverageWindowedWithReferenceSection guards against the
 // #522 reference-section pre-pass introducing an order-of-magnitude
 // regression: it must stay a single linear scan over sentences, not a new

@@ -234,10 +234,23 @@ func ClaimTermCoverage(text, claim string) (matched, total int) {
 // A document with fewer sentences than the window is measured as one window (i.e.
 // degrades to whole-document coverage), so short sources are unaffected.
 func ClaimTermCoverageWindowed(text, claim string, windowSize int) (matched, total int) {
+	matched, total, _ = ClaimTermCoverageWindowedSpan(text, claim, windowSize)
+	return matched, total
+}
+
+// ClaimTermCoverageWindowedSpan behaves exactly like ClaimTermCoverageWindowed
+// but additionally returns the text of the peak-coverage window itself. A
+// caller that runs a further gate on top of the coverage ratio — e.g.
+// ClaimHasMatchedDistinguishingTerm — must run that gate against this SAME
+// local passage, not the whole document: checking the ratio locally but the
+// gate globally lets a distinguishing term matched anywhere else on a long
+// page satisfy a gate meant to confirm THIS passage is actually about the
+// claim's entity (#675 adversarial review finding).
+func ClaimTermCoverageWindowedSpan(text, claim string, windowSize int) (matched, total int, windowText string) {
 	terms := claimTerms(claim)
 	total = len(terms)
 	if total == 0 || strings.TrimSpace(text) == "" {
-		return 0, total
+		return 0, total, ""
 	}
 	if windowSize <= 0 {
 		windowSize = defaultClaimWindow
@@ -246,7 +259,8 @@ func ClaimTermCoverageWindowed(text, claim string, windowSize int) (matched, tot
 	sentences := splitSentences(stripReferencesSection(text))
 	if len(sentences) == 0 {
 		// No sentence boundaries (e.g. one long line) — fall back to whole-text.
-		return ClaimTermCoverage(text, claim)
+		matched, total = ClaimTermCoverage(text, claim)
+		return matched, total, text
 	}
 
 	// Per-sentence word sets over the claim terms, computed once.
@@ -277,10 +291,11 @@ func ClaimTermCoverageWindowed(text, claim string, windowSize int) (matched, tot
 				matched++
 			}
 		}
-		return matched, total
+		return matched, total, strings.Join(sentences, " ")
 	}
 
 	best := 0
+	bestStart, bestEnd := 0, len(sentences)
 	for start := 0; start < len(sentences); start++ {
 		end := start + windowSize
 		if end > len(sentences) {
@@ -298,6 +313,7 @@ func ClaimTermCoverageWindowed(text, claim string, windowSize int) (matched, tot
 		}
 		if seen > best {
 			best = seen
+			bestStart, bestEnd = start, end
 			if best == total {
 				break // can't do better than full coverage
 			}
@@ -307,7 +323,7 @@ func ClaimTermCoverageWindowed(text, claim string, windowSize int) (matched, tot
 			break
 		}
 	}
-	return best, total
+	return best, total, strings.Join(sentences[bestStart:bestEnd], " ")
 }
 
 // shortDocSentenceThreshold is the sentence count below which
@@ -387,6 +403,170 @@ func claimHasMatchedNumber(terms []string, words map[string]struct{}) bool {
 		}
 	}
 	return false
+}
+
+// ClaimHasMatchedDistinguishingTerm reports whether at least one of claim's
+// distinguishing (proper-noun-like) terms appears anywhere in text, or
+// whether the claim has NO distinguishing terms at all (in which case there
+// is nothing to gate on, so it returns true). Generalizes the "claim's own
+// number is often the single most claim-critical differentiator" principle
+// established for claimHasMatchedNumber (#594) to non-numeric named
+// entities: a claim's distinguishing entity ("Alzheimer's") is a far
+// stronger signal of whether a source addresses THIS claim — as opposed to
+// merely its general topic — than the raw matched/total term ratio alone
+// captures (#675). Used by claimCoverageFromContent as an ADDITIONAL gate on
+// top of that ratio, never a replacement: a claim made entirely of generic
+// vocabulary is unaffected.
+func ClaimHasMatchedDistinguishingTerm(text, claim string) bool {
+	dist := claimDistinguishingTerms(claim)
+	if len(dist) == 0 {
+		return true
+	}
+	if strings.TrimSpace(text) == "" {
+		return false
+	}
+	words := wordSet(strings.ToLower(stripReferencesSection(text)))
+	for _, t := range dist {
+		if termMatches(words, t) {
+			return true
+		}
+	}
+	return false
+}
+
+// genericCapitalizedOpeners are common, non-proper-noun words that are
+// frequently capitalized only because they open a sentence or claim, not
+// because they name an entity. claimDistinguishingTerms excludes these
+// regardless of position. Position alone ("skip each sentence's first
+// word") is NOT a safe proxy for "not a proper noun": a claim can trivially
+// front its actual distinguishing entity to bypass a position-only exclusion
+// — e.g. rephrasing "this study ... cures Alzheimer's disease" as
+// "Alzheimer's disease is cured by this study" made the old position-based
+// skip drop "Alzheimer's" entirely (#675 adversarial review finding). This
+// explicit list, not sentence position, is what now guards against naive
+// sentence-initial-capitalization false positives.
+var genericCapitalizedOpeners = map[string]bool{
+	"this": true, "that": true, "these": true, "those": true,
+	"the": true, "a": true, "an": true, "it": true, "here": true,
+	"there": true, "new": true, "recent": true, "recently": true,
+	"study": true, "studies": true, "research": true, "researchers": true,
+	"scientists": true, "according": true, "some": true, "many": true,
+	"most": true, "several": true, "one": true, "another": true,
+}
+
+// genericCapitalizedDemonyms are nationality/demonym adjectives and broad
+// geographic/organizational qualifiers — capitalized by English convention,
+// not because they name the claim's distinguishing entity. Excluded from
+// claimDistinguishingTerms alongside genericCapitalizedOpeners (#675
+// adversarial follow-up finding): a claim naming two Title Case terms — one
+// genuinely rare ("Alzheimer's") and one common demonym ("American
+// researchers demonstrate ... cures Alzheimer's disease") — let a source
+// that merely shares "American" (e.g. any US-based study) satisfy the
+// distinguishing-term gate without the source ever mentioning Alzheimer's,
+// the one term that actually makes the claim true or false. This list is
+// necessarily non-exhaustive (English has ~200 demonyms); it covers the
+// nationalities/regions most likely to appear in research and news claims,
+// same best-effort spirit as genericCapitalizedOpeners.
+var genericCapitalizedDemonyms = map[string]bool{
+	"american": true, "british": true, "english": true, "scottish": true,
+	"irish": true, "welsh": true, "european": true, "western": true,
+	"eastern": true, "northern": true, "southern": true, "chinese": true,
+	"japanese": true, "korean": true, "indian": true, "german": true,
+	"french": true, "russian": true, "italian": true, "spanish": true,
+	"canadian": true, "australian": true, "african": true, "asian": true,
+	"israeli": true, "iranian": true, "iraqi": true, "ukrainian": true,
+	"mexican": true, "brazilian": true, "swedish": true, "norwegian": true,
+	"danish": true, "dutch": true, "swiss": true, "austrian": true,
+	"polish": true, "turkish": true, "egyptian": true, "nigerian": true,
+	"pakistani": true, "vietnamese": true, "thai": true, "filipino": true,
+	"national": true, "international": true, "global": true, "federal": true,
+	"local": true, "regional": true, "state": true, "central": true,
+}
+
+// claimDistinguishingTerms returns the lowercased significant terms derived
+// from proper-noun-like tokens in the ORIGINAL (pre-lowercase) claim text —
+// tokens in Title Case (isTitleCaseToken) that aren't a generic capitalized
+// sentence-opener (genericCapitalizedOpeners, #675) or a common demonym/broad
+// qualifier (genericCapitalizedDemonyms, #675 adversarial follow-up). A claim
+// like "this study demonstrates CRISPR-Cas9 CAR-T cures Alzheimer's disease"
+// has generic domain jargon ("CRISPR-Cas9", "CAR-T" — ALL-CAPS/mixed-case
+// acronyms, excluded by isTitleCaseToken) alongside one genuine named entity
+// ("Alzheimer's" — Title Case, not a generic opener or demonym) that is the
+// actual differentiator of what the claim is about.
+func claimDistinguishingTerms(claim string) []string {
+	claim = strings.TrimSpace(claim)
+	if claim == "" {
+		return nil
+	}
+	sentences := splitSentences(claim)
+	if len(sentences) == 0 {
+		// splitSentences drops fragments under 12 chars (a short claim like
+		// "Alzheimer's" would otherwise vanish) — fall back to the whole claim.
+		sentences = []string{claim}
+	}
+	seen := make(map[string]struct{})
+	var out []string
+	for _, sent := range sentences {
+		fields := strings.Fields(sent)
+		for _, w := range fields {
+			if !isTitleCaseToken(w) {
+				continue
+			}
+			lower := strings.ToLower(trimTokenPunct(w))
+			if genericCapitalizedOpeners[lower] || genericCapitalizedDemonyms[lower] {
+				continue
+			}
+			for _, t := range claimTerms(w) {
+				if _, dup := seen[t]; dup {
+					continue
+				}
+				seen[t] = struct{}{}
+				out = append(out, t)
+			}
+		}
+	}
+	return out
+}
+
+// trimTokenPunct strips leading/trailing non-letter, non-number runes (quotes,
+// a trailing period, etc.) from a raw claim token, shared by isTitleCaseToken
+// and the genericCapitalizedOpeners lookup so both see the same token shape.
+func trimTokenPunct(w string) string {
+	return strings.TrimFunc(w, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+	})
+}
+
+// isTitleCaseToken reports whether w (a raw, un-lowercased claim token) has
+// the shape of a proper noun: its first letter is uppercase and every other
+// letter in the token is lowercase (#675). This is the discriminator between
+// a genuine named entity ("Alzheimer's", "Paris") and domain-jargon
+// acronyms/mixed-case terms ("CRISPR", "CAR-T", "mRNA", "COVID-19") that
+// happen to also be capitalized but carry uppercase letters beyond the
+// first — those are excluded as topic vocabulary, not distinguishing
+// entities. Leading/trailing punctuation (quotes, a trailing period) is
+// trimmed first so it never masks the letters that matter.
+func isTitleCaseToken(w string) bool {
+	runes := []rune(trimTokenPunct(w))
+	firstLetter := -1
+	for i, r := range runes {
+		if unicode.IsLetter(r) {
+			firstLetter = i
+			break
+		}
+	}
+	if firstLetter == -1 || !unicode.IsUpper(runes[firstLetter]) {
+		return false
+	}
+	for i, r := range runes {
+		if i == firstLetter || !unicode.IsLetter(r) {
+			continue
+		}
+		if unicode.IsUpper(r) {
+			return false
+		}
+	}
+	return true
 }
 
 // termSuffixes are inflectional endings stripped by stemTerm so a claim term
