@@ -223,9 +223,17 @@ func splitBareCommaNames(s string) []string {
 	for i, seg := range segments {
 		t := strings.TrimSpace(seg)
 		trimmed[i] = t
-		if len(strings.Fields(t)) < 2 {
+		switch len(strings.Fields(t)) {
+		case 0:
+			// An empty segment (stray/doubled comma) is neither a full name
+			// nor a single-token pre-inverted half — disqualify both shapes
+			// so this falls through to the safe unsplit fallback instead of
+			// silently pairing unrelated names around the gap.
 			allMultiToken = false
-		} else {
+			allSingleToken = false
+		case 1:
+			allMultiToken = false
+		default:
 			allSingleToken = false
 		}
 	}

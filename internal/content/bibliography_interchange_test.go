@@ -428,6 +428,18 @@ func TestSplitAuthorsBareCommaPreInvertedPairs(t *testing.T) {
 	}
 }
 
+// TestSplitAuthorsBareCommaEmptySegmentNotSplit proves a stray/doubled comma
+// (producing an empty segment) is neither a full name nor a single-token
+// pre-inverted half, so it must fall through to the safe unsplit fallback
+// instead of silently pairing unrelated names around the gap.
+func TestSplitAuthorsBareCommaEmptySegmentNotSplit(t *testing.T) {
+	in := "Smith,, John, Doe"
+	names := splitAuthors(in)
+	if len(names) != 1 || names[0] != in {
+		t.Errorf("splitAuthors(%q) = %v, want single unsplit author %q", in, names, in)
+	}
+}
+
 // TestSplitPersonalName proves the shared family/given parser (#621) matches
 // the last-token-is-surname convention invertNameAPA/invertNameMLA already
 // use, plus the pre-inverted-comma and unsplittable-single-token cases.
