@@ -1,6 +1,6 @@
 # CI/CD Guide
 
-One-stop reference for the four workflow files that govern every code change, release, and docs update in this repo. Read this when you're debugging a failed run, adding a new job, or preparing a release.
+One-stop reference for the six workflow files that govern every code change, release, docs update, and supply-chain check in this repo. Read this when you're debugging a failed run, adding a new job, or preparing a release.
 
 ---
 
@@ -34,7 +34,7 @@ Every push / PR                         v* tag push
                   🐍 pypi          📦 packaging      (all parallel)
 ```
 
-There is also a fourth file, `codeql.yml`, that runs GitHub's CodeQL deep static analysis separately on push-to-main and a weekly schedule.
+Two more files run outside this diagram: `codeql.yml` runs GitHub's CodeQL deep static analysis on push-to-main and a weekly schedule; `provenance.yml` and `scorecard.yml` (below) cover supply-chain security.
 
 ---
 
@@ -46,6 +46,8 @@ There is also a fourth file, `codeql.yml`, that runs GitHub's CodeQL deep static
 | `.github/workflows/release.yml` | push of a `v*` tag, `workflow_dispatch` (manual re-run) | Publish: builds, signs, and ships a release |
 | `.github/workflows/docs.yml` | push to `main` (docs paths only) | Deploy: builds the mkdocs site to GitHub Pages |
 | `.github/workflows/codeql.yml` | push to `main`, weekly | Security: deep static analysis via GitHub CodeQL |
+| `.github/workflows/provenance.yml` | called by `release.yml` (`workflow_call`) | Supply chain: generates SLSA Level 3 build provenance for release artifacts |
+| `.github/workflows/scorecard.yml` | push to `main`, weekly | Supply chain: runs OpenSSF Scorecard, feeds the README badge |
 
 ---
 

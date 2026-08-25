@@ -50,10 +50,16 @@ When you search, your query goes directly to whichever provider you configured. 
 | SearXNG | Your query (self-hosted — no third party) | N/A (you control the server) |
 | DuckDuckGo | Your query (zero-config default when no provider is configured) | [duckduckgo.com/privacy](https://duckduckgo.com/privacy) |
 | HackerNews | Your query, sent to the Algolia HN Search API (keyless) | [algolia.com/policies/privacy](https://www.algolia.com/policies/privacy/) |
+| Reddit | Your query, sent to Reddit's public Atom search feed (keyless) | [reddit.com/policies/privacy-policy](https://www.reddit.com/policies/privacy-policy) |
+| Bluesky | Your query, sent to the Bluesky AppView public search API (keyless) | [bsky.social/about/support/privacy-policy](https://bsky.social/about/support/privacy-policy) |
+| GitHub | Your query, sent to the GitHub REST Search API (optional `GITHUB_TOKEN` raises the rate limit) | [docs.github.com/privacy](https://docs.github.com/en/site-policy/privacy-policies/github-privacy-statement) |
+| Xquik | Your query, your API key (paid X/Twitter post search) | [xquik.com](https://xquik.com/) |
 | OpenAlex | Your academic query; your optional contact email if `OPENALEX_EMAIL` is set (improves rate limits) | [openalex.org/legal](https://openalex.org/legal/privacy-policy) |
 | CrossRef | Your academic query; your optional contact email if `CROSSREF_EMAIL` is set (sent as `mailto` param and in User-Agent; improves rate limits via the polite pool); also contacted for DOI retraction-status checks | [crossref.org/privacy](https://www.crossref.org/privacy/) |
 | Semantic Scholar | Your academic / citation query (optional API key) | [allenai.org/privacy-policy](https://allenai.org/privacy-policy) |
+| CORE | Your academic query (keyless at a lower rate; optional API key raises the limit) | [core.ac.uk/about/privacy-policy](https://core.ac.uk/about/privacy-policy) |
 | Unpaywall | A paper's DOI plus your contact email (open-access PDF lookup) | [unpaywall.org](https://unpaywall.org/) |
+| ScholarAPI | Your academic query, your API key (paid, full-text retrieval; only when explicitly requested) | [scholarapi.net](https://scholarapi.net/) |
 | SEC EDGAR | Your filing query / ticker, and a contact email in the request User-Agent (SEC requires it) | [sec.gov/privacy](https://www.sec.gov/privacy) |
 | CourtListener | Your legal query (optional API token) | [free.law/privacy-policy](https://free.law/privacy-policy/) |
 | FRED (St. Louis Fed) | Your economic query / series ID, your API key | [stlouisfed.org/legal](https://www.stlouisfed.org/legal) |
@@ -62,6 +68,12 @@ When you search, your query goes directly to whichever provider you configured. 
 | Eurostat | Your economic query / indicator code (keyless) | [ec.europa.eu/info/privacy-policy](https://ec.europa.eu/info/privacy-policy_en) |
 | PubMed (NCBI) | Your academic query; your optional contact email if `PUBMED_EMAIL` is set | [nlm.nih.gov/web_policies.html](https://www.nlm.nih.gov/web_policies.html) |
 | ClinicalTrials.gov | Your clinical-trial query (keyless) | [clinicaltrials.gov/about-site/privacy-policy](https://clinicaltrials.gov/about-site/privacy-policy) |
+| Monarch Initiative | Your biomedical query (keyless) | [monarchinitiative.org](https://monarchinitiative.org/) |
+| EPO (Open Patent Services) | Your patent query, your API key | [epo.org/en/privacy-and-legal](https://www.epo.org/en/privacy-and-legal) |
+| USPTO | Your patent query (keyless) | [uspto.gov/privacy-policy](https://www.uspto.gov/privacy-policy) |
+| The Lens | Your patent query, your API token | [lens.org/lens/privacy](https://www.lens.org/lens/privacy) |
+| ecosyste.ms | Your awesome-list query; your optional contact email or API key (raises rate limit) | [ecosyste.ms/privacy](https://ecosyste.ms/privacy) |
+| Internet Archive (Save Page Now) | The page URL being archived (only when `archive_source` is used) | [archive.org/about/terms.php](https://archive.org/about/terms.php) |
 | BrandFetch | Company name (only when `BRANDFETCH_CLIENT_ID` is set; used for `brand_research` domain resolution) and/or domain (only when `BRANDFETCH_API_KEY` is set; used for Brand + Context API enrichment) | [brandfetch.com/privacy](https://brandfetch.com/privacy) |
 
 These are public-data APIs queried only when you call the matching tool (`academic_search`/`citation_graph`, `filing_search`, `legal_search`, `econ_search`, `clinical_search`). Only the search term, identifier, and any configured key/contact email are sent — no personal data beyond what you put in the query. EDGAR's contact email is a deliberate disclosure the SEC requires for automated access.
