@@ -407,12 +407,87 @@ func selectCorroborationLenses(title, claim string) []string {
 // hold". A lens routed via cx/goggle instead of domains has no site:
 // restriction injected (BuildSiteQuery is a no-op for it), so there is
 // nothing to validate — every result passes for such a lens.
+//
+// dedupedFullClaim builds the "title + claim" text used for both the
+// corroboration search query and the coverage gate, without duplicating a
+// phrase the two already share (#679). Plain concatenation ("title + " " +
+// claim") produces an obviously repeated phrase whenever title and claim
+// overlap — a duplicated substring in the search query degrades search
+// quality, and it also inflates term counts on the coverage-gate side. When
+// one string fully contains the other, the shorter one adds nothing new, so
+// the longer/more-complete one is used alone. Otherwise, if a suffix of title
+// matches a (>=2-word) prefix of claim, that shared phrase is included once.
+func dedupedFullClaim(title, claim string) string {
+	t := strings.TrimSpace(title)
+	c := strings.TrimSpace(claim)
+	if t == "" {
+		return c
+	}
+	if c == "" {
+		return t
+	}
+	cWords := strings.Fields(c)
+	lowerTWords := strings.Fields(strings.ToLower(t))
+	lowerCWords := strings.Fields(strings.ToLower(c))
+	// Whole-word containment, not raw substring: a raw strings.Contains would
+	// call title "cat" "contained" in claim "...category growth..." on the
+	// "cat" substring inside "category" and drop the title entirely, even
+	// though "cat" never actually appears as its own word.
+	if containsWholeWords(lowerCWords, lowerTWords) {
+		return c
+	}
+	if containsWholeWords(lowerTWords, lowerCWords) {
+		return t
+	}
+
+	maxK := len(lowerTWords)
+	if len(lowerCWords) < maxK {
+		maxK = len(lowerCWords)
+	}
+	for k := maxK; k >= 2; k-- {
+		if wordsEqual(lowerTWords[len(lowerTWords)-k:], lowerCWords[:k]) {
+			rest := cWords[k:]
+			if len(rest) == 0 {
+				return t
+			}
+			return t + " " + strings.Join(rest, " ")
+		}
+	}
+	return t + " " + c
+}
+
+func wordsEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// containsWholeWords reports whether needle appears as a contiguous run of
+// whole words somewhere in haystack (both already lowercased/split).
+func containsWholeWords(haystack, needle []string) bool {
+	if len(needle) == 0 || len(needle) > len(haystack) {
+		return false
+	}
+	for i := 0; i+len(needle) <= len(haystack); i++ {
+		if wordsEqual(haystack[i:i+len(needle)], needle) {
+			return true
+		}
+	}
+	return false
+}
+
 func corroborateRecommendation(ctx context.Context, deps Dependencies, title, claim string, numResults int) []corroborationResult {
 	if deps.Search == nil {
 		return nil
 	}
 	registry := search.GetLensRegistry()
-	fullClaim := title + " " + claim
+	fullClaim := dedupedFullClaim(title, claim)
 	var corroborations []corroborationResult
 	for _, lensName := range selectCorroborationLenses(title, claim) {
 		lensData, ok := registry.Get(lensName)
@@ -450,11 +525,16 @@ func corroborateRecommendation(ctx context.Context, deps Dependencies, title, cl
 		if offAllowlistDropped > 0 {
 			cr.Flags = append(cr.Flags, "lens_restriction_unreliable")
 		}
-		for _, r := range enriched {
+		for i, r := range enriched {
 			signal, _ := r["claimSignal"].(string)
 			resultTitle, _ := r["title"].(string)
-			snippet, _ := r["snippet"].(string)
-			matched, total := content.ClaimTermCoverageWindowed(snippet, fullClaim, 0)
+			// #679: gate on the same pooled evidence text (title + snippet +
+			// extraSnippets) that produced claimSignal, not the bare snippet
+			// field alone — otherwise a match living in the title or an
+			// extraSnippet (common for listicle sources) under-counts a
+			// genuine endorsement into silentCount instead of agreeCount.
+			evidenceText := claimEvidenceText(onAllowlist[i])
+			matched, total := content.ClaimTermCoverageWindowed(evidenceText, fullClaim, 0)
 			addressed := total > 0 && float64(matched)/float64(total) >= claimAddressedThreshold
 			switch {
 			case content.HasContrastCue([]string{signal, resultTitle}):

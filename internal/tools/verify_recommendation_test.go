@@ -424,6 +424,176 @@ func TestVerifyRecommendationCorroborationIgnoresIncidentalTokenOverlap(t *testi
 	}
 }
 
+// extraSnippetAgreementProvider returns a result whose bare Snippet field
+// shares no claim terms, but whose ExtraSnippets entry is an unambiguous,
+// on-topic endorsement — the shape reported in #679 for real listicle sources
+// (ZDNet-style "best X of 2026... my pick is Y" copy landing in an extra
+// snippet or the title rather than the primary snippet).
+type extraSnippetAgreementProvider struct{}
+
+func (p *extraSnippetAgreementProvider) Web(_ context.Context, params search.WebSearchParams) ([]search.SearchResult, error) {
+	domain := firstSiteDomain(params.Query)
+	return []search.SearchResult{
+		{
+			Title:         "Review",
+			URL:           "https://" + domain + "/review",
+			Snippet:       "Prices vary depending on your subscription tier this quarter.",
+			ExtraSnippets: []string{"Notion is widely considered the best document management software of 2026 for small businesses."},
+			DisplayLink:   domain,
+		},
+	}, nil
+}
+func (p *extraSnippetAgreementProvider) Images(_ context.Context, _ search.ImageSearchParams) ([]search.ImageResult, error) {
+	return nil, nil
+}
+func (p *extraSnippetAgreementProvider) News(_ context.Context, _ search.NewsSearchParams) ([]search.NewsResult, error) {
+	return nil, nil
+}
+func (p *extraSnippetAgreementProvider) Name() string { return "extra-snippet-agreement-test" }
+
+// TestVerifyRecommendationCorroborationCountsAgreementFromExtraSnippet is the
+// #679 regression: the coverage gate must evaluate the same pooled evidence
+// text (title + snippet + extraSnippets) that claimSignal was extracted from,
+// not the bare snippet field alone. Before the fix, a result whose matching
+// terms lived only in ExtraSnippets/Title was under-counted into silentCount
+// even though claimSignal correctly surfaced a clear endorsement.
+func TestVerifyRecommendationCorroborationCountsAgreementFromExtraSnippet(t *testing.T) {
+	if err := search.GetLensRegistry().LoadEmbedded(); err != nil {
+		t.Fatalf("LoadEmbedded: %v", err)
+	}
+
+	deps := Dependencies{
+		Cache:   cache.NewNoop(),
+		Search:  &extraSnippetAgreementProvider{},
+		Metrics: metrics.NewCollector(),
+		Auditor: audit.NewNoop(),
+	}
+	srv := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1.0"}, nil)
+	registerVerifyRecommendation(srv, deps)
+
+	ctx := context.Background()
+	client := connectTestClient(ctx, t, srv)
+	defer client.Close()
+
+	res, err := client.CallTool(ctx, &mcp.CallToolParams{
+		Name: "verify_recommendation",
+		Arguments: map[string]any{
+			"recommendations": []any{
+				map[string]any{"title": "Notion"},
+			},
+			"claim": "best document management software of 2026 for small businesses",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("unexpected error: %s", res.Content[0].(*mcp.TextContent).Text)
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &out); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	recs, _ := out["recommendations"].([]any)
+	if len(recs) != 1 {
+		t.Fatalf("expected 1 recommendation, got %d", len(recs))
+	}
+	rec := recs[0].(map[string]any)
+	corrobSearches, ok := rec["corroborationSearches"].([]any)
+	if !ok || len(corrobSearches) == 0 {
+		t.Fatalf("expected corroborationSearches to be populated, got %v", rec["corroborationSearches"])
+	}
+	for _, cs := range corrobSearches {
+		csMap := cs.(map[string]any)
+		lensName, _ := csMap["lens"].(string)
+		agreeCount, _ := csMap["agreeCount"].(float64)
+		silentCount, _ := csMap["silentCount"].(float64)
+		if agreeCount != 1 {
+			t.Errorf("lens %q: expected the extraSnippet match to count as agreeCount, got agree=%v silent=%v", lensName, agreeCount, silentCount)
+		}
+		if silentCount != 0 {
+			t.Errorf("lens %q: expected silentCount to stay 0 when the pooled evidence text addresses the claim, got %v", lensName, silentCount)
+		}
+	}
+}
+
+// TestVerifyRecommendationCorroborationQueryDoesNotDuplicatePhrase is the
+// #679 regression for fullClaim construction: plain "title + " " + claim"
+// concatenation produced an obviously duplicated phrase whenever title and
+// claim shared trailing/leading text, degrading the resulting search query.
+// dedupedFullClaim must merge the two without repeating the shared phrase,
+// whether one fully contains the other or they only overlap at a
+// suffix/prefix boundary.
+func TestVerifyRecommendationCorroborationQueryDoesNotDuplicatePhrase(t *testing.T) {
+	cases := []struct {
+		name  string
+		title string
+		claim string
+	}{
+		{
+			name:  "suffix of title overlaps prefix of claim",
+			title: "Notion is the best tool for team wikis",
+			claim: "best tool for team wikis and internal documentation",
+		},
+		{
+			name:  "claim fully contains title",
+			title: "Notion",
+			claim: "Notion is the best tool for team wikis",
+		},
+		{
+			name:  "title fully contains claim",
+			title: "Notion is the best tool for team wikis",
+			claim: "best tool for team wikis",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := dedupedFullClaim(tc.title, tc.claim)
+			if hasRepeatedPhrase(got, 2) {
+				t.Errorf("dedupedFullClaim(%q, %q) = %q — contains an immediately-repeated multi-word phrase", tc.title, tc.claim, got)
+			}
+		})
+	}
+}
+
+// TestDedupedFullClaim_NoFalsePositiveOnSubstring is a regression: the
+// containment check used raw strings.Contains, which matches a title inside
+// any claim that happens to contain it as a mid-word substring (e.g. "cat"
+// inside "category") even though the title never appears as its own word.
+// That false-positive containment dropped the title's real content
+// entirely. It must now require whole-word containment.
+func TestDedupedFullClaim_NoFalsePositiveOnSubstring(t *testing.T) {
+	title := "Cat"
+	claim := "The category of enterprise wikis is growing fast"
+	got := dedupedFullClaim(title, claim)
+	found := false
+	for _, w := range strings.Fields(strings.ToLower(got)) {
+		if w == "cat" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("dedupedFullClaim(%q, %q) = %q — title's only word was dropped on a false-positive substring match (\"cat\" inside \"category\")", title, claim, got)
+	}
+}
+
+// hasRepeatedPhrase reports whether s contains two adjacent, identical
+// word sequences of at least minWords words (case-insensitive) — the
+// "duplicated phrase" failure mode #679 guards against.
+func hasRepeatedPhrase(s string, minWords int) bool {
+	words := strings.Fields(strings.ToLower(s))
+	n := len(words)
+	for length := minWords; length <= n/2; length++ {
+		for i := 0; i+2*length <= n; i++ {
+			if wordsEqual(words[i:i+length], words[i+length:i+2*length]) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // offDomainProvider simulates a provider that ignores (or mis-parses) the
 // site: OR-restriction and always returns a result outside every lens's
 // domain allowlist — the failure mode #619 guards against.
