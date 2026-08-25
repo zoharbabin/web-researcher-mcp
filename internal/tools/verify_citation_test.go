@@ -132,7 +132,7 @@ func TestVerifyCitation_ClaimContrastSignal(t *testing.T) {
 func TestVerifyCitationSparseClaim(t *testing.T) {
 	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		_, _ = w.Write([]byte(`<html><body><article><p>Please subscribe to continue reading this article about vaccine efficacy.</p></article></body></html>`))
+		_, _ = w.Write([]byte(`<html><body><article><p>This page contains only a short note about vaccine efficacy research, with no additional detail provided here.</p></article></body></html>`))
 	}))
 	defer page.Close()
 

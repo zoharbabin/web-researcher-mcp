@@ -1,6 +1,9 @@
 package tools
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestAnalyzeDivergence_Consensus(t *testing.T) {
 	responses := map[string]string{
@@ -65,6 +68,24 @@ func TestAnalyzeDivergence_SingleModel(t *testing.T) {
 	}
 	if len(d.Contradictions) != 0 {
 		t.Errorf("a single response cannot contradict itself, got %+v", d.Contradictions)
+	}
+}
+
+// TestAnalyzeDivergence_DegenerateResponseNotCountedAsContributing is the
+// #667 regression guard: a panelist whose response is empty or shorter than
+// minSentenceLen (e.g. a filtered/degenerate goai.GenerateText completion,
+// err==nil but no usable text) contributes no claims and must not be counted
+// toward the "N models compared" figure that panelConfidence uses — that
+// figure must reflect models with a comparable claim, not len(responses).
+func TestAnalyzeDivergence_DegenerateResponseNotCountedAsContributing(t *testing.T) {
+	responses := map[string]string{
+		"a/x": "This is a substantive claim long enough to be a candidate sentence.",
+		"b/y": "", // degenerate completion: no usable claim sentence
+	}
+	d := AnalyzeDivergence(responses)
+
+	if d.Confidence != "low" {
+		t.Errorf("only 1 model produced a comparable claim; expected low confidence, got %q (rationale: %q)", d.Confidence, d.ConfidenceRationale)
 	}
 }
 
@@ -143,6 +164,35 @@ func TestAnalyzeDivergence_HeadingNotMisreadAsConsensus(t *testing.T) {
 	}
 	if len(d.ConsensusPoints) == 0 {
 		t.Fatalf("expected the shared substantive claim to be reported as consensus, got none: %+v", d)
+	}
+}
+
+// TestAnalyzeDivergence_NoConsensusNoContradiction_RationaleHonest is the #677
+// regression: two models substantively agree (hybrid work stabilizing) but
+// phrase it differently enough that no sentence pair crosses the strict 0.8
+// consensus-overlap threshold, and neither uses a negation cue, so no
+// contradiction fires either. Before the fix, panelConfidence's
+// "contradictionCount == 0" branch fired regardless of consensusCount,
+// producing confidence:"high" and agreement language ("agreed on core
+// claims") that consensus_points:[] didn't back up.
+func TestAnalyzeDivergence_NoConsensusNoContradiction_RationaleHonest(t *testing.T) {
+	responses := map[string]string{
+		"a/x": "Hybrid work arrangements are likely to stabilize as the dominant model for most large employers over the next few years.",
+		"b/y": "Most big companies will probably settle into a steady hybrid pattern rather than shifting fully remote or fully back to offices.",
+	}
+	d := AnalyzeDivergence(responses)
+
+	if len(d.ConsensusPoints) != 0 {
+		t.Fatalf("expected no consensus points for paraphrased agreement below the overlap threshold, got %+v", d.ConsensusPoints)
+	}
+	if len(d.Contradictions) != 0 {
+		t.Fatalf("expected no contradictions, got %+v", d.Contradictions)
+	}
+	if d.Confidence != "medium" {
+		t.Errorf("expected medium confidence when neither consensus nor contradiction fires, got %q (%s)", d.Confidence, d.ConfidenceRationale)
+	}
+	if strings.Contains(d.ConfidenceRationale, "agreed") {
+		t.Errorf("confidence_rationale must not claim agreement when consensus_points is empty, got %q", d.ConfidenceRationale)
 	}
 }
 

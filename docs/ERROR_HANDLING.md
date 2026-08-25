@@ -78,14 +78,14 @@ type ScrapeError struct {
 
 | Kind | Constant | Triggers | Tier Examples |
 |------|----------|----------|---------------|
-| Network | `ErrNetwork` | DNS failure, timeout, connection refused, TLS error | Any tier's HTTP client |
+| Network | `ErrNetwork` | Transient fault: timeout, connection refused, TLS error (NOT a DNS NXDOMAIN — see Not Found) | Any tier's HTTP client |
 | Validation | `ErrValidation` | Unsupported scheme, empty host, SSRF / private-IP / blocked-hostname denial, domain allowlist | pipeline (validation chokepoint) |
-| Blocked | `ErrBlocked` | HTTP 403, remote bot detection (a real site refusing us) | stealth/html (403) |
+| Blocked | `ErrBlocked` | HTTP 403, remote bot detection (a real site refusing us) — hard interstitials (Cloudflare/CAPTCHA/Anubis PoW) and soft signup/login/subscribe gates (Crunchbase/SimilarWeb-style anti-bot pages) alike | stealth/html (403) |
 | Browser | `ErrBrowser` | Chrome not found, launch failed, connect failed | browser tier only |
 | Content | `ErrContent` | Page loaded but <100 bytes of useful text extracted | All tiers (composite failure) |
 | Auth | `ErrAuth` | HTTP 401, login redirect detected | stealth, html |
 | Rate Limit | `ErrRateLimit` | HTTP 429 | Any tier's HTTP client |
-| Not Found | `ErrNotFound` | HTTP 404/410 — dead link, resource gone | stealth/html/browser |
+| Not Found | `ErrNotFound` | HTTP 404/410 (dead link), or a DNS NXDOMAIN ("no such host" / `ERR_NAME_NOT_RESOLVED`) — the domain does not exist and never will on retry | stealth/html/browser, and `networkError()` for any tier's raw dial failure |
 
 `ErrValidation` is distinct from `ErrBlocked` on purpose: a validation/security rejection is a **permanent** client error (the URL itself is invalid or disallowed), so it is **never retryable** and must not be reported as transient bot-detection. `ErrBlocked` is reserved for a real remote site actively refusing the request (HTTP 403 / bot walls), which is retryable from a different source.
 
@@ -95,7 +95,7 @@ Each tier uses these to create appropriately-typed errors:
 
 | Function | Creates | Used By |
 |----------|---------|---------|
-| `networkError(url, tier, cause)` | `ErrNetwork` | All tiers on HTTP failures |
+| `networkError(url, tier, cause)` | `ErrNetwork`, or `ErrNotFound` when `cause` is a DNS NXDOMAIN (`isDNSNotFound`: "no such host" / `ERR_NAME_NOT_RESOLVED`) | All tiers on HTTP/dial failures |
 | `validationError(url, tier, cause, detail)` | `ErrValidation` | Pipeline chokepoint on bad scheme/host, SSRF denial, allowlist |
 | `blockedError(url, tier, cause, detail)` | `ErrBlocked` | stealth/html on remote HTTP 403 |
 | `browserError(url, cause, detail)` | `ErrBrowser` | browser tier on init/launch failure |
@@ -165,9 +165,9 @@ Rate limited (google). Wait 60 seconds and retry, or try a different provider.
 | `auth_required` | Provider HTTP 401 / invalid API key → `check_api_key`; scrape login wall (`ErrAuth`) → `inform_user` | false | `check_api_key` (provider) or `inform_user` (scrape) |
 | `blocked` | HTTP 403, remote bot detection | false | `inform_user` |
 | `validation` | Invalid input params, unsupported scheme, or SSRF / private-IP / blocked-host / allowlist denial | false | `inform_user` |
-| `network` | DNS failure, timeout, connection refused | true | `retry_after_delay` |
+| `network` | Transient fault: timeout, connection refused (NOT DNS NXDOMAIN — see `not_found`) | true | `retry_after_delay` |
 | `content_empty` | Page loaded but no text extracted | true | `report_bug` |
-| `not_found` | HTTP 404/410 — page does not exist (dead link) | false | `inform_user` |
+| `not_found` | HTTP 404/410 (page does not exist), or a DNS NXDOMAIN (domain does not exist) | false | `inform_user` |
 | `browser_unavailable` | Chrome not found/failed | false | `report_bug` |
 | `config` | Unknown/unconfigured provider | false | `try_different_provider` or `check_api_key` |
 | `upstream_unavailable` | General provider failure | true | `try_different_provider` |

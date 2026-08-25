@@ -418,8 +418,12 @@ func isRateLimitError(err error) bool {
 	if err == nil {
 		return false
 	}
-	// Typed sentinel check first (fast, no string alloc).
-	if errors.Is(err, circuit.ErrRateLimit) {
+	// Typed sentinel checks first (fast, no string alloc). A breaker-open error
+	// (#664) means the provider is already known-unavailable — usually because
+	// repeated rate-limiting already tripped its circuit — so callers that gate
+	// fallback/retry or errCode classification on "is this a rate limit" must
+	// treat it the same as an explicit 429, not fall through to upstream_error.
+	if errors.Is(err, circuit.ErrRateLimit) || errors.Is(err, circuit.ErrCircuitOpen) {
 		return true
 	}
 	// Legacy string fallback for any provider not yet wrapped.

@@ -205,7 +205,8 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 
 		results := parallelScrape(ctx, deps, searchResults, maxLenPerSource)
 		sources, combinedParts, scraped, sparseSources, structuredFailures := buildSourcesStructured(results, input.Query, input.Claim, filterByQuery)
-		combined := assembleCombined(combinedParts, deduplicate, totalMaxLen)
+		combined, includedLens := assembleCombined(combinedParts, deduplicate, totalMaxLen)
+		dominanceWarning := lowQualityDominanceWarning(sources, includedLens, 0.4)
 
 		// Phase 1B: top-level status field
 		status := "complete"
@@ -234,6 +235,9 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 				"estimatedTokens": content.EstimateTokens(combined),
 				"sizeCategory":    content.SizeCategory(len(combined)),
 			},
+		}
+		if dominanceWarning != "" {
+			output["qualityDominanceWarning"] = dominanceWarning
 		}
 
 		if len(structuredFailures) > 0 {
@@ -458,23 +462,71 @@ func buildSourcesStructured(results []scrapeResult, query, claim string, filterB
 	return sources, combinedParts, scraped, sparseSources, failures
 }
 
-func assembleCombined(parts []string, deduplicate bool, totalMaxLen int) string {
+// lowQualityDominanceWarning returns an advisory for issue #667:
+// assembleCombined concatenates each source's content up to totalMaxLen
+// purely by length, with no regard for the per-source quality score already
+// computed by buildSourcesStructured. A single low-scoring, verbose source can
+// therefore occupy most of the combined output while a higher-quality source
+// in the same call is truncated more aggressively to fit the shared budget,
+// with nothing surfacing that skew downstream. Pure function: sources and
+// includedLens are index-aligned — includedLens[i] is how many bytes of
+// source i actually made it into the combined output (post-dedup,
+// post-truncation), from assembleCombined, not each part's raw pre-truncation
+// length — a source truncated out of the budget must not be blamed for
+// dominating output it was cut from. Fires only when some source scoring
+// below threshold accounts for more than half of the actual combined content
+// length; returns "" otherwise.
+func lowQualityDominanceWarning(sources []sourceOutput, includedLens []int, threshold float64) string {
+	total := 0
+	for _, n := range includedLens {
+		total += n
+	}
+	if total == 0 {
+		return ""
+	}
+	for i, src := range sources {
+		if i >= len(includedLens) || src.Scores == nil {
+			continue
+		}
+		if src.Scores.Overall >= threshold {
+			continue
+		}
+		share := float64(includedLens[i]) / float64(total)
+		if share > 0.5 {
+			return fmt.Sprintf(
+				"%s scored low on quality (overall %.2f) but makes up %.0f%% of the combined content — weigh it with caution relative to the other sources.",
+				src.URL, src.Scores.Overall, share*100,
+			)
+		}
+	}
+	return ""
+}
+
+// assembleCombined returns the truncated combined content plus, index-aligned
+// with parts, how many bytes of each part actually made it into that output —
+// the ground truth lowQualityDominanceWarning needs, since a part cut short or
+// dropped entirely by the totalMaxLen budget contributed less (or nothing)
+// versus its raw length.
+func assembleCombined(parts []string, deduplicate bool, totalMaxLen int) (string, []int) {
 	if deduplicate {
 		for i, part := range parts {
 			parts[i] = content.DedupContent(part)
 		}
 	}
 
+	includedLens := make([]int, len(parts))
 	var combined string
-	for _, part := range parts {
+	for i, part := range parts {
 		if len(combined)+len(part) > totalMaxLen {
 			remaining := totalMaxLen - len(combined)
 			if remaining > 0 {
 				combined += part[:remaining]
+				includedLens[i] = remaining
 			}
 			break
 		}
 		combined += part + "\n\n---\n\n"
+		includedLens[i] = len(part)
 	}
-	return combined
+	return combined, includedLens
 }

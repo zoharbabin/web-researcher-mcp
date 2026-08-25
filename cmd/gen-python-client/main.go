@@ -160,6 +160,13 @@ func (m *mockAcademicProvider) Citations(_ context.Context, _ string, _ int) ([]
 func (m *mockAcademicProvider) References(_ context.Context, _ string, _ int) ([]search.AcademicResult, error) {
 	return nil, nil
 }
+
+// SupportsInfluenceSignal implements search.CitationSearcher, mirroring real
+// OpenAlex (this mock is named "openalex"): counts-only edges, no influence
+// signal (#655). Without this, the mock stops satisfying CitationSearcher at
+// runtime and citation_graph silently drops out of the generated schema.
+func (m *mockAcademicProvider) SupportsInfluenceSignal() bool { return false }
+
 func (m *mockAcademicProvider) ResolveByDOI(_ context.Context, doi string) (*search.AcademicResult, error) {
 	if doi == "10.1234/x" {
 		return &search.AcademicResult{Title: "t", DOI: doi, Year: 2024, Source: "openalex"}, nil
