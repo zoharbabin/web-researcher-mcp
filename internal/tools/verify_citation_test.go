@@ -506,6 +506,45 @@ func TestVerifyCitation_ClaimFetchError_Surfaced(t *testing.T) {
 	}
 }
 
+// TestEmitClaimCoverageCandidates_CapsAtMaxAttempts is the #681 regression
+// test for maxClaimURLCandidateAttempts: given more candidates than the cap,
+// emitClaimCoverageCandidates must stop after exactly
+// maxClaimURLCandidateAttempts (3) tries — never reaching a 4th candidate
+// even when it would have succeeded. The first 3 candidates are dead servers
+// (closed before use: connection refused, a genuine fetch error, not empty
+// content), the 4th is a live server serving real content; if the cap were
+// missing or off-by-one, the loop would reach the 4th candidate and the
+// result would flip to "addressed" with the 4th server's URL.
+func TestEmitClaimCoverageCandidates_CapsAtMaxAttempts(t *testing.T) {
+	var deadURLs []string
+	for i := 0; i < 3; i++ {
+		dead := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+		deadURLs = append(deadURLs, dead.URL)
+		dead.Close() // closed before use: connection refused
+	}
+	live := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`<html><body><article><p>The vaccine trial demonstrated significant efficacy in reducing infection rates across all age groups.</p></article></body></html>`))
+	}))
+	defer live.Close()
+	candidates := append(append([]string{}, deadURLs...), live.URL)
+	if len(candidates) != maxClaimURLCandidateAttempts+1 {
+		t.Fatalf("test setup: want %d candidates, got %d", maxClaimURLCandidateAttempts+1, len(candidates))
+	}
+
+	deps := verifyClaimDeps(t)
+	out := map[string]any{}
+	var prov []string
+	emitClaimCoverageCandidates(context.Background(), deps, candidates, "vaccine efficacy reduced infection", out, &prov)
+
+	if out["claimSupport"] != claimSourceUnavailable {
+		t.Errorf("claimSupport = %v, want %v (must NOT reach the 4th, live candidate past the cap)", out["claimSupport"], claimSourceUnavailable)
+	}
+	wantURL := deadURLs[maxClaimURLCandidateAttempts-1]
+	if out["claimSourceUrl"] != wantURL {
+		t.Errorf("claimSourceUrl = %v, want %q (the last candidate actually attempted before the cap)", out["claimSourceUrl"], wantURL)
+	}
+}
+
 // mockOAURLProvider returns a record whose PDFUrl is a given OA URL and whose
 // rec.URL is a doi.org redirect — used to verify bestClaimURL's OA preference.
 type mockOAURLProvider struct {
