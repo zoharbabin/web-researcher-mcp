@@ -113,6 +113,11 @@ func (p *BlueskyProvider) Web(ctx context.Context, params WebSearchParams) ([]Se
 	qp := url.Values{}
 	qp.Set("q", params.Query)
 	qp.Set("limit", strconv.Itoa(n))
+	// searchPosts' sort param defaults to "latest" (pure reverse-chronological)
+	// when omitted; request "top" (engagement-ranked) instead, since plain
+	// recency ranks any recent keyword match equally with substantive,
+	// higher-engagement posts on broad/non-named-entity queries (#669).
+	qp.Set("sort", "top")
 
 	body, err := p.searchPosts(ctx, p.baseURL, qp)
 	if err != nil && p.baseURL != bskyFallbackBaseURL && isBskyForbidden(err) {

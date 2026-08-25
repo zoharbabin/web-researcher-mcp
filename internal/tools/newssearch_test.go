@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -155,6 +156,69 @@ func TestNewsSearchNoWarningWhenNotGoogle(t *testing.T) {
 	})
 	if warning := newsDateSortRelevanceWarning("date", "brave", articles); warning != "" {
 		t.Errorf("expected no warning for non-Google provider (sort_by is ignored there), got %q", warning)
+	}
+}
+
+// TestNewsHourGranularityWarning is the #665 regression test: Google's
+// Custom Search API has no hour-level dateRestrict, so time_range="hour"
+// silently maps to the same 24h window as "day" — the caller should be told,
+// not left to notice the identical results on their own.
+func TestNewsHourGranularityWarning(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name         string
+		timeRange    string
+		providerUsed string
+		wantWarning  bool
+	}{
+		{"hour + google warns", "hour", "google", true},
+		{"day + google does not warn", "day", "google", false},
+		{"hour + brave does not warn", "hour", "brave", false},
+		{"empty time_range + google does not warn", "", "google", false},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := newsHourGranularityWarning(c.timeRange, c.providerUsed)
+			if c.wantWarning && got == "" {
+				t.Errorf("expected a non-empty warning, got empty")
+			}
+			if !c.wantWarning && got != "" {
+				t.Errorf("expected no warning, got %q", got)
+			}
+		})
+	}
+}
+
+func TestNewsSearchToolSurfacesHourGranularityWarning(t *testing.T) {
+	ctx := context.Background()
+	deps := setupTestDeps()
+	deps.Search = &nonNewsGoogleProvider{}
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "news_search",
+		Arguments: map[string]any{"query": "climate change", "time_range": "hour"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+
+	text := res.Content[0].(*mcp.TextContent).Text
+	var output struct {
+		Warning string `json:"warning"`
+	}
+	if err := json.Unmarshal([]byte(text), &output); err != nil {
+		t.Fatalf("failed to parse output: %v", err)
+	}
+	if output.Warning == "" {
+		t.Fatal("expected a warning for time_range=hour against google, got none")
+	}
+	if !strings.Contains(output.Warning, "hour") {
+		t.Errorf("expected warning to mention the hour-granularity limitation, got %q", output.Warning)
 	}
 }
 

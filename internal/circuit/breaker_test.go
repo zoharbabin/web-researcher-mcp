@@ -436,3 +436,91 @@ func TestBreakerJitterOnResetTimeout(t *testing.T) {
 		}
 	}
 }
+
+// TestRateLimitErrorExtendsResetTimeout is the #666 regression test: a
+// provider that wraps its error with RateLimitError{After: N} — because the
+// upstream 429 advertised its own retry-after window — must keep the breaker
+// Open for at least N, not just the breaker's configured ResetTimeout, even
+// when N is longer. Without this, a fixed retry cadence shorter than the
+// provider's advertised window retries into a still-rate-limited API and
+// never converges.
+func TestRateLimitErrorExtendsResetTimeout(t *testing.T) {
+	t.Parallel()
+
+	const configuredResetTimeout = 1 // second
+	const advertisedAfter = 3 * time.Second
+
+	b := New(Config{FailureThreshold: 1, ResetTimeout: configuredResetTimeout})
+	execErr := b.Execute(func() error {
+		return fmt.Errorf("rate limited: %w", &RateLimitError{After: advertisedAfter})
+	})
+	if !errors.Is(execErr, ErrRateLimit) {
+		t.Fatalf("expected returned error to match ErrRateLimit via Unwrap, got %v", execErr)
+	}
+	if b.State() != StateOpen {
+		t.Fatalf("expected Open immediately after a rate-limit failure, got %v", b.State())
+	}
+
+	// Past the configured 1s ResetTimeout but well before the 3s
+	// provider-advertised After, the breaker must still be Open — proving the
+	// advertised duration overrides the shorter configured default.
+	time.Sleep(1500 * time.Millisecond)
+	if b.Ready() {
+		t.Error("breaker became Ready before the provider's advertised retry-after elapsed — RateLimitError.After was not honored")
+	}
+
+	// Past the 3s After, the breaker must allow a probe again.
+	time.Sleep(2 * time.Second)
+	if !b.Ready() {
+		t.Error("breaker still not Ready well past the provider's advertised retry-after")
+	}
+}
+
+// TestRateLimitErrorAtOrBelowResetTimeoutUsesConfiguredTimeout proves the
+// additive nature of the fix: when a provider's advertised After is shorter
+// than (or equal to) the breaker's configured ResetTimeout, the configured
+// timeout still applies — RateLimitError never shortens the cooldown below
+// what operators configured.
+func TestRateLimitErrorAtOrBelowResetTimeoutUsesConfiguredTimeout(t *testing.T) {
+	t.Parallel()
+
+	const configuredResetTimeout = 2 // seconds
+
+	b := New(Config{FailureThreshold: 1, ResetTimeout: configuredResetTimeout})
+	execErr := b.Execute(func() error {
+		return fmt.Errorf("rate limited: %w", &RateLimitError{After: 500 * time.Millisecond})
+	})
+	if !errors.Is(execErr, ErrRateLimit) {
+		t.Fatalf("expected returned error to match ErrRateLimit via Unwrap, got %v", execErr)
+	}
+
+	// Well before the configured 2s ResetTimeout, must still be Open despite
+	// the shorter 500ms advertised After.
+	time.Sleep(700 * time.Millisecond)
+	if b.Ready() {
+		t.Error("breaker became Ready before the configured ResetTimeout elapsed")
+	}
+}
+
+// TestBareErrRateLimitUnaffectedByRateLimitAfter proves providers that keep
+// wrapping the bare ErrRateLimit sentinel (github, reddit, bluesky, xquik,
+// lens) are unaffected by the #666 fix — errors.Is still matches, and the
+// breaker falls back to the configured ResetTimeout exactly as before.
+func TestBareErrRateLimitUnaffectedByRateLimitAfter(t *testing.T) {
+	t.Parallel()
+
+	const configuredResetTimeout = 1 // second
+
+	b := New(Config{FailureThreshold: 1, ResetTimeout: configuredResetTimeout})
+	execErr := b.Execute(func() error {
+		return fmt.Errorf("rate limited: %w", ErrRateLimit)
+	})
+	if !errors.Is(execErr, ErrRateLimit) {
+		t.Fatalf("expected returned error to match ErrRateLimit, got %v", execErr)
+	}
+
+	time.Sleep(1500 * time.Millisecond)
+	if !b.Ready() {
+		t.Error("expected breaker to be Ready past the configured ResetTimeout when no RateLimitError was given")
+	}
+}
