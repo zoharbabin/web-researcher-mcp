@@ -111,6 +111,13 @@ func claimCoverageFromContent(body, fetchURL, claim string) claimCoverageResult 
 	// was actually read). Partial overlap → evidence shown, NOT flagged (the human
 	// judges). Strong overlap → addressed.
 	matched, total := content.ClaimTermCoverageWindowed(body, claim, 0)
+	// A claim's distinguishing entity (e.g. "Alzheimer's" in a claim that is
+	// otherwise all generic study/disease vocabulary) can be entirely absent
+	// from the source while enough incidental terms still clear the ratio
+	// threshold below (#675) — so it gates claimAddressed independently of
+	// the ratio, never loosening it (a claim with no distinguishing term at
+	// all is unaffected).
+	distinguishingCovered, hasDistinguishing := content.ClaimDistinguishingTermsCovered(body, claim)
 	ev := content.ExtractClaimEvidence(body, claim)
 	// content.WordCount, not strings.Fields: CJK/Thai/Lao/Khmer/Myanmar text has
 	// no inter-word spaces, so a complete non-Latin-script source would otherwise
@@ -135,7 +142,7 @@ func claimCoverageFromContent(body, fetchURL, claim string) claimCoverageResult 
 		out.Support = claimPartiallyAddressed
 	case matched == 0:
 		out.Support = claimNotAddressed
-	case float64(matched)/float64(total) >= claimAddressedThreshold:
+	case float64(matched)/float64(total) >= claimAddressedThreshold && (!hasDistinguishing || distinguishingCovered):
 		out.Support = claimAddressed
 	default:
 		out.Support = claimPartiallyAddressed

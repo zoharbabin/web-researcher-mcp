@@ -376,6 +376,53 @@ func TestClaimTermCoverageWindowedExcludesNumberedReferenceListWithoutHeader(t *
 // TestClaimTermsKeepsNumericTokens reproduces part of #523: a claim's
 // numeric-only tokens (e.g. a vote count) must survive tokenization even
 // though they're shorter than the 3-char minimum applied to words.
+// TestClaimDistinguishingTermsExcludesSentenceInitialWords is a regression
+// test for #675: sentence-initial capitalization ("This study...") is a
+// grammar artifact, not a signal of significance, and must not be flagged as
+// a distinguishing term.
+func TestClaimDistinguishingTermsExcludesSentenceInitialWords(t *testing.T) {
+	claim := "This study demonstrates CRISPR-Cas9 CAR-T cures Alzheimer's disease"
+	terms := claimTerms(claim)
+	distinguishing := claimDistinguishingTerms(claim, terms)
+	joined := strings.Join(distinguishing, ",")
+	for _, want := range []string{"crispr", "cas9", "car", "alzheimer"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("expected distinguishing term %q, got %v", want, distinguishing)
+		}
+	}
+	for _, notWant := range []string{"this", "study", "demonstrates", "cures", "disease"} {
+		if strings.Contains(joined, notWant) {
+			t.Errorf("generic/sentence-initial term %q must not be distinguishing, got %v", notWant, distinguishing)
+		}
+	}
+}
+
+// TestClaimDistinguishingTermsCoveredRequiresAllToMatch is the direct
+// regression test for #675's ratio-blind-spot fix: a real CAR-T/CRISPR-Cas9
+// source that matches most of a false claim's capitalized terms but not its
+// one actually-distinguishing entity (Alzheimer's) must report covered=false.
+func TestClaimDistinguishingTermsCoveredRequiresAllToMatch(t *testing.T) {
+	text := "This paper describes a CRISPR-Cas9 CAR-T therapy for lymphoma patients."
+	claim := "This study demonstrates CRISPR-Cas9 CAR-T cures Alzheimer's disease"
+	covered, hasDistinguishing := ClaimDistinguishingTermsCovered(text, claim)
+	if !hasDistinguishing {
+		t.Fatal("expected claim with capitalized proper nouns to have distinguishing terms")
+	}
+	if covered {
+		t.Error("expected covered=false: Alzheimer's never appears in the source")
+	}
+}
+
+// TestClaimDistinguishingTermsCoveredNoDistinguishingTerms guards the
+// fallback: a claim with no capitalized/distinguishing terms reports
+// hasDistinguishing=false so callers apply ratio-only behavior unchanged.
+func TestClaimDistinguishingTermsCoveredNoDistinguishingTerms(t *testing.T) {
+	_, hasDistinguishing := ClaimDistinguishingTermsCovered("some source text", "cell therapy cures cancer")
+	if hasDistinguishing {
+		t.Error("a claim with no capitalized terms must report hasDistinguishing=false")
+	}
+}
+
 func TestClaimTermsKeepsNumericTokens(t *testing.T) {
 	terms := claimTerms("The FOMC voted 9-3 with Hammack, Kashkari, and Logan dissenting")
 	joined := strings.Join(terms, ",")

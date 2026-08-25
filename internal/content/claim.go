@@ -389,6 +389,78 @@ func claimHasMatchedNumber(terms []string, words map[string]struct{}) bool {
 	return false
 }
 
+// claimSentenceSplitter is a lightweight sentence boundary for
+// claimDistinguishingTerms — deliberately not splitSentences, which drops
+// fragments under 12 chars (fine for evidence extraction over long body text,
+// wrong here since claims themselves are often short single sentences).
+var claimSentenceSplitter = regexp.MustCompile(`[.!?]+\s+`)
+
+// claimDistinguishingTerms returns the subset of terms whose token was
+// capitalized in the original claim text and was not the first word of a
+// sentence — i.e. proper-noun-like tokens the claim itself singles out as
+// specific, as opposed to generic/topic vocabulary (#675). A raw ratio of
+// matched/total claim terms weighs "study" and "Alzheimer's" equally; this
+// identifies the terms that actually make a claim specific (and, in a false
+// claim, wrong). Sentence-initial capitalization is a grammar artifact
+// ("This study...") and is excluded so ordinary claim-opening words are never
+// mistaken for a distinguishing entity.
+func claimDistinguishingTerms(claim string, terms []string) []string {
+	termSet := make(map[string]struct{}, len(terms))
+	for _, t := range terms {
+		termSet[t] = struct{}{}
+	}
+
+	var distinguishing []string
+	seen := make(map[string]struct{})
+	for _, sentence := range claimSentenceSplitter.Split(strings.TrimSpace(claim), -1) {
+		fields := strings.FieldsFunc(sentence, func(r rune) bool {
+			return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+		})
+		for i, f := range fields {
+			if i == 0 || !unicode.IsUpper([]rune(f)[0]) {
+				continue
+			}
+			lower := strings.ToLower(f)
+			if _, ok := termSet[lower]; !ok {
+				continue
+			}
+			if _, dup := seen[lower]; dup {
+				continue
+			}
+			seen[lower] = struct{}{}
+			distinguishing = append(distinguishing, lower)
+		}
+	}
+	return distinguishing
+}
+
+// ClaimDistinguishingTermsCovered reports whether every claim-critical
+// distinguishing term (#675, see claimDistinguishingTerms) appears in text.
+// hasDistinguishing reports whether the claim had any such term to check at
+// all — when false, the caller should fall back to ratio-only behavior
+// unchanged, since there is nothing distinguishing to gate on (e.g. a purely
+// quantitative or generic claim). This is a document-level presence check
+// (like ClaimTermCoverage, not the windowed peak) because a missing
+// distinguishing term is missing regardless of which window the raw ratio
+// peaks in.
+func ClaimDistinguishingTermsCovered(text, claim string) (covered, hasDistinguishing bool) {
+	terms := claimTerms(claim)
+	distinguishing := claimDistinguishingTerms(claim, terms)
+	if len(distinguishing) == 0 {
+		return true, false
+	}
+	if strings.TrimSpace(text) == "" {
+		return false, true
+	}
+	words := wordSet(strings.ToLower(stripReferencesSection(text)))
+	for _, t := range distinguishing {
+		if !termMatches(words, t) {
+			return false, true
+		}
+	}
+	return true, true
+}
+
 // termSuffixes are inflectional endings stripped by stemTerm so a claim term
 // and its inflected form in the source text (e.g. claim "voted" vs. source
 // "vote") are recognized as the same word (#523). Ordered longest first so
