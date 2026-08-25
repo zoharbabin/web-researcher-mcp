@@ -8,14 +8,14 @@ import (
 type ErrorKind int
 
 const (
-	ErrNetwork    ErrorKind = iota // DNS, timeout, connection refused, TLS
+	ErrNetwork    ErrorKind = iota // transient network fault: timeout, connection refused, TLS (NOT DNS NXDOMAIN — that's ErrNotFound, a permanent failure)
 	ErrBlocked                     // remote bot detection / HTTP 403 (a real site refusing us)
 	ErrBrowser                     // Chrome not found, launch failed, connect failed
 	ErrContent                     // Page loaded but no usable content extracted
 	ErrAuth                        // HTTP 401, login redirect
 	ErrRateLimit                   // HTTP 429
 	ErrValidation                  // permanent client/security rejection: bad scheme, empty host, SSRF / private-IP / blocked-hostname denial. NOT retryable.
-	ErrNotFound                    // HTTP 404/410 — the resource does not exist. Definite, NOT retryable (a dead link, not a transient fault).
+	ErrNotFound                    // HTTP 404/410, or a DNS NXDOMAIN ("no such host") — the resource/domain does not exist. Definite, NOT retryable (a dead link, not a transient fault).
 )
 
 // scrapeKindPriority ranks error kinds by how DEFINITIVE they are, so the
@@ -63,7 +63,28 @@ func newScrapeError(kind ErrorKind, url, tier string, cause error, msg string) *
 	return &ScrapeError{Kind: kind, Message: msg, Cause: cause, URL: url, Tier: tier}
 }
 
+// isDNSNotFound reports whether a raw dial/navigation error is a DNS NXDOMAIN
+// — Go's HTTP client says "no such host"; go-rod/Chrome's navigation error
+// says "ERR_NAME_NOT_RESOLVED". Both mean the domain does not exist and never
+// will on retry: a PERMANENT failure, distinct from a transient dial/timeout
+// fault.
+func isDNSNotFound(cause error) bool {
+	if cause == nil {
+		return false
+	}
+	return containsAny(cause.Error(), "no such host", "err_name_not_resolved")
+}
+
+// networkError classifies a raw dial/HTTP failure. Every scrape tier
+// (markdown, stealth, html, jina, browser, and every native-route scraper)
+// funnels its raw client error through this single call site, so a DNS
+// NXDOMAIN is caught once here — reported as ErrNotFound (permanent,
+// non-retryable) rather than the generic ErrNetwork bucket the tool layer
+// unconditionally marks retryable (issue #674).
 func networkError(url, tier string, cause error) *ScrapeError {
+	if isDNSNotFound(cause) {
+		return newScrapeError(ErrNotFound, url, tier, cause, fmt.Sprintf("DNS lookup failed: %v", cause))
+	}
 	return newScrapeError(ErrNetwork, url, tier, cause, fmt.Sprintf("network error: %v", cause))
 }
 
@@ -138,7 +159,18 @@ func classifyRawError(err error, url string) *ScrapeError {
 		// A definite not-found across tiers — a dead link, not transient. Checked
 		// before the generic network bucket so it isn't reported as retryable.
 		return newScrapeError(ErrNotFound, url, "", err, s)
-	case containsAny(s, "no such host", "connection refused", "timeout", "deadline exceeded", "network", "navigation failed"):
+	case containsAny(s, "no such host", "err_name_not_resolved"):
+		// A DNS NXDOMAIN is a PERMANENT failure — the domain does not exist and
+		// never will on retry. Checked before the generic network bucket (and
+		// before "no such host" would otherwise fall into it) so it is reported
+		// as ErrNotFound (non-retryable, inform_user) rather than the transient
+		// ErrNetwork bucket, which the tool layer unconditionally retries. (This
+		// mirrors networkError()'s isDNSNotFound check, which catches the same
+		// condition at each tier's raw-error call site; this branch is the
+		// composite-aggregation fallback for a raw error that reaches Scrape()
+		// without having passed through a tier's networkError() call.)
+		return newScrapeError(ErrNotFound, url, "", err, s)
+	case containsAny(s, "connection refused", "timeout", "deadline exceeded", "network", "navigation failed"):
 		return networkError(url, "", err)
 	case containsAny(s, "blocked", "403", "forbidden"):
 		return blockedError(url, "", err, s)
@@ -190,6 +222,20 @@ var botWallMarkers = []string{
 	// even on public portals; the pipeline must reject it and not cache it.
 	"please enter your viewer credentials",
 	"request access to the brand owner",
+	// Soft signup/login/subscribe gates — a well-formed HTTP 200 page whose real
+	// content is short and ends in a CTA instead of a hard CAPTCHA/JS challenge.
+	// This is the anti-bot pattern Crunchbase/SimilarWeb-style sites use for
+	// anonymous traffic (issue #661). These phrases are generic enough to appear
+	// legitimately gate-like, but — like every marker above — only fire when
+	// paired with the short-content gate (botWallMaxBytes) below, never when a
+	// phrase merely appears somewhere inside a long real article.
+	"sign up to continue",
+	"log in to continue",
+	"subscribe to continue",
+	"create a free account",
+	"view full profile",
+	"unlock full access",
+	"sign up for free to view",
 }
 
 // looksLikeBotWall reports whether short extracted content is a bot/JS-wall

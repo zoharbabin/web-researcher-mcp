@@ -166,8 +166,9 @@ func scrapeErrorToToolError(se *scraper.ScrapeError) ToolError {
 		te.Retryable = true
 		te.SuggestedAction = ActionReportBug
 	case scraper.ErrNotFound:
-		// A definite 404/410 — a dead link, not a transient fault. The user must
-		// fix the URL; never retry, never file a bug.
+		// A definite 404/410, or a DNS NXDOMAIN ("no such host") — a dead link or
+		// nonexistent domain, not a transient fault. The user must fix the URL;
+		// never retry, never file a bug.
 		te.Retryable = false
 		te.SuggestedAction = ActionInformUser
 	case scraper.ErrAuth:

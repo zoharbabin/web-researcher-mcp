@@ -1413,7 +1413,7 @@ func TestScrapePageSparsityWarning(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.Write([]byte(`<!DOCTYPE html><html><head><title>Thin</title></head><body><article>
-<p>Please subscribe to continue reading this article. Access is limited to subscribers only at this time.</p>
+<p>This page contains only a brief summary of the topic, with no further detail currently available here at this time.</p>
 </article></body></html>`))
 	}))
 	defer ts.Close()
@@ -1532,7 +1532,7 @@ func TestSearchAndScrapeSparseSources(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.Write([]byte(`<!DOCTYPE html><html><head><title>Thin</title></head><body><article>
-<p>Please subscribe to continue reading this article. Access is limited to subscribers only at this time.</p>
+<p>This page contains only a brief summary of the topic, with no further detail currently available here at this time.</p>
 </article></body></html>`))
 	}))
 	defer ts.Close()
@@ -1592,7 +1592,7 @@ func TestSearchAndScrapeSparseSourcesWithFilterByQuery(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.Write([]byte(`<!DOCTYPE html><html><head><title>Thin</title></head><body><article>
-<p>Please subscribe to continue reading this article. Access is limited to subscribers only at this time.</p>
+<p>This page contains only a brief summary of the topic, with no further detail currently available here at this time.</p>
 </article></body></html>`))
 	}))
 	defer ts.Close()

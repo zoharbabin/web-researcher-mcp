@@ -2,6 +2,7 @@ package scraper
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -94,6 +95,137 @@ on building better solutions to this problem.`
 		strings.Repeat("The methodology examines computational hardness assumptions and the trade-off between verifier cost and prover work in distributed systems. ", 20)
 	if looksLikeBotWall(longPoWArticle) {
 		t.Errorf("a long article about PoW (len=%d) must not be flagged as a bot-wall", len(longPoWArticle))
+	}
+}
+
+// TestClassifyRawError_DNSNotFound: a DNS NXDOMAIN ("no such host") is a
+// permanent failure and must map to ErrNotFound (non-retryable), not the
+// generic ErrNetwork bucket (which implies a retry will help). Regression
+// guard for GitHub issue #674.
+func TestClassifyRawError_DNSNotFound(t *testing.T) {
+	t.Parallel()
+	err := fmt.Errorf("Get \"https://this-domain-should-not-exist-zzz12345.com\": dial tcp: lookup this-domain-should-not-exist-zzz12345.com: no such host")
+	se := classifyRawError(err, "https://this-domain-should-not-exist-zzz12345.com")
+	if se.Kind != ErrNotFound {
+		t.Errorf("NXDOMAIN error → kind %v, want ErrNotFound", se.Kind)
+	}
+}
+
+// TestClassifyRawError_TransientNetworkStillRetryable is the regression guard
+// alongside TestClassifyRawError_DNSNotFound: a genuinely transient network
+// fault (connection refused, timeout, temporary DNS server failure — NOT "no
+// such host") must still classify as ErrNetwork so the NXDOMAIN fix doesn't
+// accidentally make ALL network errors non-retryable.
+func TestClassifyRawError_TransientNetworkStillRetryable(t *testing.T) {
+	t.Parallel()
+	cases := []string{
+		"dial tcp 127.0.0.1:1: connect: connection refused",
+		"context deadline exceeded",
+		"dial tcp: i/o timeout",
+	}
+	for _, msg := range cases {
+		se := classifyRawError(errors.New(msg), "https://example.com")
+		if se.Kind != ErrNetwork {
+			t.Errorf("%q → kind %v, want ErrNetwork", msg, se.Kind)
+		}
+	}
+}
+
+// TestLooksLikeBotWall_SoftGate: regression guard for GitHub issue #661.
+// Crunchbase/SimilarWeb-style anti-bot pages return HTTP 200 with a short,
+// well-formed page whose real content ends in a login/signup/subscribe CTA
+// instead of a hard CAPTCHA/JS-challenge interstitial. These must be detected
+// as a bot-wall when short, but a long real article that merely mentions one
+// of the same phrases in passing (e.g. a footer CTA) must NOT be flagged.
+func TestLooksLikeBotWall_SoftGate(t *testing.T) {
+	t.Parallel()
+
+	// Short, gate-dominated content — the entire extracted page IS the gate.
+	softGates := []string{
+		"Create a free account to see this company's full profile.",
+		"Sign up to continue reading this report.",
+		"Log in to continue viewing SimilarWeb traffic estimates.",
+		"Subscribe to continue reading this article.",
+		"View full profile: sign up for free to view detailed company data.",
+		"Unlock full access to this report by creating an account.",
+		"Sign up for free to view the complete traffic analysis.",
+	}
+	for _, c := range softGates {
+		if !looksLikeBotWall(c) {
+			t.Errorf("expected soft-gate bot-wall detection for %q", c)
+		}
+	}
+
+	// Negative: a long, real article that happens to contain one of the new
+	// soft-gate phrases once, in a footer-like trailing sentence, must NOT be
+	// flagged — the size gate (botWallMaxBytes) must hold exactly as it does
+	// for the pre-existing hard-challenge markers.
+	longArticleWithFooterCTA := strings.Repeat(
+		"This in-depth analysis covers the company's market position, funding history, and competitive landscape in detail. ", 30,
+	) + "Sign up to continue receiving our newsletter with more analysis like this."
+	if looksLikeBotWall(longArticleWithFooterCTA) {
+		t.Errorf("a long real article (len=%d) mentioning a soft-gate phrase in a footer must not be flagged as a bot-wall", len(longArticleWithFooterCTA))
+	}
+
+	// Ordinary short content that doesn't match any marker is not a bot-wall.
+	if looksLikeBotWall("Welcome to our company page. We build great products.") {
+		t.Error("ordinary short content must not be a soft-gate bot-wall")
+	}
+}
+
+// TestPipeline_SoftGateTreatedAsBlocked: end-to-end regression guard for issue
+// #661 — an HTTP 200 response whose entire body is a short Crunchbase/SimilarWeb-
+// style signup gate must surface as ErrBlocked, not a successful low-content scrape.
+func TestPipeline_SoftGateTreatedAsBlocked(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><head><title>Acme Corp - Company Profile</title></head><body>` +
+			`<h1>Acme Corp</h1><p>Create a free account to see this company's full profile, including funding rounds and key people.</p>` +
+			`</body></html>`))
+	}))
+	defer ts.Close()
+
+	orig := statFile
+	statFile = func(path string) (any, error) { return nil, fmt.Errorf("not found") }
+	defer func() { statFile = orig }()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, ChromePath: chromeDisabled})
+	_, err := p.Scrape(testCtx(), ts.URL, 50000)
+	if err == nil {
+		t.Fatal("expected an error for a soft signup-gate page, got success")
+	}
+	se, ok := err.(*ScrapeError)
+	if !ok || se.Kind != ErrBlocked {
+		t.Errorf("soft signup gate should be ErrBlocked, got %T kind=%v", err, err)
+	}
+}
+
+// TestPipeline_LongArticleWithFooterCTA_NotBlocked: negative counterpart to
+// TestPipeline_SoftGateTreatedAsBlocked — a long, real article that happens to
+// contain a soft-gate phrase in a trailing footer sentence must scrape
+// successfully, never be misclassified as blocked.
+func TestPipeline_LongArticleWithFooterCTA_NotBlocked(t *testing.T) {
+	body := strings.Repeat(
+		"This in-depth analysis covers the company's market position, funding history, and competitive landscape in substantial detail. ", 30,
+	) + "Sign up to continue receiving our newsletter with more analysis like this."
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, `<html><head><title>Deep Dive Article</title></head><body><article>%s</article></body></html>`, body)
+	}))
+	defer ts.Close()
+
+	orig := statFile
+	statFile = func(path string) (any, error) { return nil, fmt.Errorf("not found") }
+	defer func() { statFile = orig }()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true, ChromePath: chromeDisabled})
+	result, err := p.Scrape(testCtx(), ts.URL, 50000)
+	if err != nil {
+		t.Fatalf("expected a successful scrape for a long real article, got error: %v", err)
+	}
+	if !strings.Contains(result.Content, "in-depth analysis") {
+		t.Errorf("expected real article content in scrape result, got: %s", result.Content[:min(200, len(result.Content))])
 	}
 }
 
