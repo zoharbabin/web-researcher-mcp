@@ -136,7 +136,19 @@ func claimCoverageFromContent(body, fetchURL, claim string) claimCoverageResult 
 	case matched == 0:
 		out.Support = claimNotAddressed
 	case float64(matched)/float64(total) >= claimAddressedThreshold:
-		out.Support = claimAddressed
+		// The ratio alone treats every claim term as equally significant —
+		// generic vocabulary ("study", "demonstrates") and the claim's one
+		// truly distinguishing entity ("Alzheimer's") count the same, so a
+		// claim can clear the ratio on shared topic jargon alone while the
+		// one term that would make it TRUE or FALSE never matched (#675).
+		// Cap at partially_addressed unless either the claim has no such
+		// distinguishing term (ratio-only behavior, unchanged) or at least
+		// one of its distinguishing terms actually matched.
+		if content.ClaimHasMatchedDistinguishingTerm(body, claim) {
+			out.Support = claimAddressed
+		} else {
+			out.Support = claimPartiallyAddressed
+		}
 	default:
 		out.Support = claimPartiallyAddressed
 	}

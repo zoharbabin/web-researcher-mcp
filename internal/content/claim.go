@@ -389,6 +389,117 @@ func claimHasMatchedNumber(terms []string, words map[string]struct{}) bool {
 	return false
 }
 
+// ClaimHasMatchedDistinguishingTerm reports whether at least one of claim's
+// distinguishing (proper-noun-like) terms appears anywhere in text, or
+// whether the claim has NO distinguishing terms at all (in which case there
+// is nothing to gate on, so it returns true). Generalizes the "claim's own
+// number is often the single most claim-critical differentiator" principle
+// established for claimHasMatchedNumber (#594) to non-numeric named
+// entities: a claim's distinguishing entity ("Alzheimer's") is a far
+// stronger signal of whether a source addresses THIS claim — as opposed to
+// merely its general topic — than the raw matched/total term ratio alone
+// captures (#675). Used by claimCoverageFromContent as an ADDITIONAL gate on
+// top of that ratio, never a replacement: a claim made entirely of generic
+// vocabulary is unaffected.
+func ClaimHasMatchedDistinguishingTerm(text, claim string) bool {
+	dist := claimDistinguishingTerms(claim)
+	if len(dist) == 0 {
+		return true
+	}
+	if strings.TrimSpace(text) == "" {
+		return false
+	}
+	words := wordSet(strings.ToLower(stripReferencesSection(text)))
+	for _, t := range dist {
+		if termMatches(words, t) {
+			return true
+		}
+	}
+	return false
+}
+
+// claimDistinguishingTerms returns the lowercased significant terms derived
+// from proper-noun-like tokens in the ORIGINAL (pre-lowercase) claim text —
+// tokens in Title Case (isTitleCaseToken) that do not merely open a sentence
+// (#675). A claim like "this study demonstrates CRISPR-Cas9 CAR-T cures
+// Alzheimer's disease" has generic domain jargon ("CRISPR-Cas9", "CAR-T" —
+// ALL-CAPS/mixed-case acronyms, excluded by isTitleCaseToken) alongside one
+// genuine named entity ("Alzheimer's" — Title Case) that is the actual
+// differentiator of what the claim is about. Each claim sentence's first
+// word is skipped: it is capitalized only because it opens the sentence, not
+// because it is a proper noun (a known false-positive risk with naive
+// capitalization heuristics — see extractCompanyMentions in classify.go for
+// a similar simple capitalized-word heuristic elsewhere in this package,
+// which does not need this exclusion since it operates over full source
+// prose rather than a single short claim sentence).
+func claimDistinguishingTerms(claim string) []string {
+	claim = strings.TrimSpace(claim)
+	if claim == "" {
+		return nil
+	}
+	sentences := splitSentences(claim)
+	if len(sentences) == 0 {
+		// splitSentences drops fragments under 12 chars (a short claim like
+		// "Alzheimer's" would otherwise vanish) — fall back to the whole claim.
+		sentences = []string{claim}
+	}
+	seen := make(map[string]struct{})
+	var out []string
+	for _, sent := range sentences {
+		fields := strings.Fields(sent)
+		for i, w := range fields {
+			if i == 0 {
+				continue // sentence-initial capitalization proves nothing
+			}
+			if !isTitleCaseToken(w) {
+				continue
+			}
+			for _, t := range claimTerms(w) {
+				if _, dup := seen[t]; dup {
+					continue
+				}
+				seen[t] = struct{}{}
+				out = append(out, t)
+			}
+		}
+	}
+	return out
+}
+
+// isTitleCaseToken reports whether w (a raw, un-lowercased claim token) has
+// the shape of a proper noun: its first letter is uppercase and every other
+// letter in the token is lowercase (#675). This is the discriminator between
+// a genuine named entity ("Alzheimer's", "Paris") and domain-jargon
+// acronyms/mixed-case terms ("CRISPR", "CAR-T", "mRNA", "COVID-19") that
+// happen to also be capitalized but carry uppercase letters beyond the
+// first — those are excluded as topic vocabulary, not distinguishing
+// entities. Leading/trailing punctuation (quotes, a trailing period) is
+// trimmed first so it never masks the letters that matter.
+func isTitleCaseToken(w string) bool {
+	runes := []rune(strings.TrimFunc(w, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+	}))
+	firstLetter := -1
+	for i, r := range runes {
+		if unicode.IsLetter(r) {
+			firstLetter = i
+			break
+		}
+	}
+	if firstLetter == -1 || !unicode.IsUpper(runes[firstLetter]) {
+		return false
+	}
+	for i, r := range runes {
+		if i == firstLetter || !unicode.IsLetter(r) {
+			continue
+		}
+		if unicode.IsUpper(r) {
+			return false
+		}
+	}
+	return true
+}
+
 // termSuffixes are inflectional endings stripped by stemTerm so a claim term
 // and its inflected form in the source text (e.g. claim "voted" vs. source
 // "vote") are recognized as the same word (#523). Ordered longest first so

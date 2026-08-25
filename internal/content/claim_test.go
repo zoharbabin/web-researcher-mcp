@@ -498,6 +498,99 @@ func TestCountAny(t *testing.T) {
 	}
 }
 
+// TestIsTitleCaseToken checks the proper-noun-vs-acronym discriminator
+// (#675): a genuine Title Case named entity ("Alzheimer's") passes, while an
+// ALL-CAPS or internally mixed-case science-jargon token (an acronym or a
+// hyphenated compound like "CRISPR-Cas9"/"CAR-T") does not.
+func TestIsTitleCaseToken(t *testing.T) {
+	tests := []struct {
+		in   string
+		want bool
+	}{
+		{"Alzheimer's", true},
+		{"Alzheimer's.", true}, // trailing punctuation trimmed
+		{"Paris", true},
+		{"CRISPR-Cas9", false}, // CRISPR is ALL-CAPS
+		{"CAR-T", false},       // CAR and T are both uppercase
+		{"CRISPR", false},
+		{"study", false}, // not capitalized at all
+		{"THE", false},   // ALL-CAPS, not a proper noun shape
+		{"42", false},    // no letters at all
+		{"", false},
+	}
+	for _, tt := range tests {
+		if got := isTitleCaseToken(tt.in); got != tt.want {
+			t.Errorf("isTitleCaseToken(%q) = %v, want %v", tt.in, got, tt.want)
+		}
+	}
+}
+
+// TestClaimDistinguishingTerms checks extraction: the false CAR-T/Alzheimer's
+// claim from #675 yields "alzheimer" as its only distinguishing term (the
+// hyphenated CRISPR-Cas9/CAR-T domain-jargon tokens are excluded as
+// acronyms), the claim's first word is never flagged despite being
+// capitalized only because it opens the sentence, and a fully generic claim
+// yields none at all.
+func TestClaimDistinguishingTerms(t *testing.T) {
+	got := claimDistinguishingTerms("This study demonstrates CRISPR-Cas9 CAR-T cures Alzheimer's disease")
+	if len(got) != 1 || got[0] != "alzheimer" {
+		t.Errorf("expected exactly [\"alzheimer\"], got %v", got)
+	}
+
+	// Sentence-initial capitalization alone must not be flagged.
+	if got := claimDistinguishingTerms("Alzheimer's disease progresses over time"); len(got) != 0 {
+		t.Errorf("sentence-initial capitalized word must not be treated as distinguishing, got %v", got)
+	}
+
+	// A fully generic claim has no distinguishing terms at all.
+	if got := claimDistinguishingTerms("the study found a significant increase in patient survival rates"); len(got) != 0 {
+		t.Errorf("expected no distinguishing terms in a fully generic claim, got %v", got)
+	}
+}
+
+// TestClaimHasMatchedDistinguishingTerm_Alzheimer is the #675 regression: a
+// false claim asserting CRISPR-Cas9 CAR-T therapy cures Alzheimer's disease,
+// checked against a source that is genuinely about CRISPR-Cas9 CAR-T therapy
+// (sharing enough generic/topical vocabulary to have previously cleared the
+// 0.6 ratio gate on its own — see TestClaimCoverageFromContent_FalseClaimNotAddressed
+// in internal/tools for the verdict-level assertion) but never mentions
+// Alzheimer's — the one term that would make the claim true. The
+// distinguishing term ("alzheimer") never matches, so this must return false.
+func TestClaimHasMatchedDistinguishingTerm_Alzheimer(t *testing.T) {
+	source := "This study demonstrates that a CRISPR-Cas9 engineered CAR-T cell therapy cures B-cell lymphoma in a clinical trial. " +
+		"The therapy uses CRISPR-Cas9 gene editing to modify CAR-T cells before they are infused into patients with lymphoma. " +
+		"Researchers demonstrated durable remission in most patients treated with this CAR-T approach."
+	claim := "This study demonstrates CRISPR-Cas9 CAR-T cures Alzheimer's disease"
+	if ClaimHasMatchedDistinguishingTerm(source, claim) {
+		t.Error("expected false: source never mentions the claim's distinguishing term 'Alzheimer's'")
+	}
+}
+
+// TestClaimHasMatchedDistinguishingTerm_TruePositive is the no-regression
+// companion (#675): the claim's distinguishing entity ("Hodgkin") DOES
+// appear in the source, so the gate must not block a genuinely true claim.
+func TestClaimHasMatchedDistinguishingTerm_TruePositive(t *testing.T) {
+	source := "This study demonstrates that a CRISPR-Cas9 engineered CAR-T cell therapy cures Hodgkin lymphoma in a clinical trial. " +
+		"The therapy uses CRISPR-Cas9 gene editing to modify CAR-T cells before they are infused into patients with Hodgkin lymphoma. " +
+		"Researchers demonstrated durable remission in most patients treated with this CAR-T approach."
+	claim := "This study demonstrates CRISPR-Cas9 CAR-T cures Hodgkin lymphoma"
+	if !ClaimHasMatchedDistinguishingTerm(source, claim) {
+		t.Error("expected true: source mentions the claim's distinguishing term 'Hodgkin'")
+	}
+}
+
+// TestClaimHasMatchedDistinguishingTerm_NoDistinguishingTermsFallsBack
+// confirms a fully generic claim (no capitalized/rare terms at all) is never
+// gated by this check — it always returns true, deferring entirely to the
+// existing ratio-only ClaimTermCoverageWindowed behavior (#675).
+func TestClaimHasMatchedDistinguishingTerm_NoDistinguishingTermsFallsBack(t *testing.T) {
+	source := "Unrelated content that shares nothing with the claim below."
+	claim := "the study found a significant increase in patient survival rates"
+	if !ClaimHasMatchedDistinguishingTerm(source, claim) {
+		t.Error("a claim with no distinguishing terms must never be blocked by this gate")
+	}
+}
+
 // BenchmarkClaimTermCoverageWindowedWithReferenceSection guards against the
 // #522 reference-section pre-pass introducing an order-of-magnitude
 // regression: it must stay a single linear scan over sentences, not a new
