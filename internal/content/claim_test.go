@@ -553,6 +553,22 @@ func TestClaimDistinguishingTerms(t *testing.T) {
 		t.Errorf("a generic capitalized opener must not be treated as distinguishing, got %v", got)
 	}
 
+	// "This"/"that"/"there"/"some"/"most" (used above and elsewhere in this
+	// file) are ALSO members of claimStopWords, so an assertion using only
+	// those words would still pass even with genericCapitalizedOpeners
+	// disabled entirely — it wouldn't actually be exercising this mechanism
+	// (confirmed by mutation-testing during #675 adversarial review: deleting
+	// the genericCapitalizedOpeners check left every other assertion in this
+	// test green). "New"/"Recent"/"Scientists" are opener words with NO
+	// claimStopWords overlap, so they only stay excluded if
+	// genericCapitalizedOpeners itself is working.
+	if got := claimDistinguishingTerms("New research shows CRISPR-Cas9 CAR-T cures Alzheimer's disease"); len(got) != 1 || got[0] != "alzheimer" {
+		t.Errorf("a generic capitalized opener with no claimStopWords overlap ('New') must not be treated as distinguishing, got %v", got)
+	}
+	if got := claimDistinguishingTerms("Scientists confirm CRISPR-Cas9 CAR-T cures Alzheimer's disease"); len(got) != 1 || got[0] != "alzheimer" {
+		t.Errorf("a generic capitalized opener with no claimStopWords overlap ('Scientists') must not be treated as distinguishing, got %v", got)
+	}
+
 	// A fully generic claim has no distinguishing terms at all.
 	if got := claimDistinguishingTerms("the study found a significant increase in patient survival rates"); len(got) != 0 {
 		t.Errorf("expected no distinguishing terms in a fully generic claim, got %v", got)
@@ -628,6 +644,39 @@ func TestClaimHasMatchedDistinguishingTerm_NoDistinguishingTermsFallsBack(t *tes
 	claim := "the study found a significant increase in patient survival rates"
 	if !ClaimHasMatchedDistinguishingTerm(source, claim) {
 		t.Error("a claim with no distinguishing terms must never be blocked by this gate")
+	}
+}
+
+// TestClaimDistinguishingTerms_DemonymExcluded is an adversarial follow-up
+// finding on top of #675: a nationality/demonym adjective ("American") is
+// Title Case and not a genericCapitalizedOpeners sentence-opener, so without
+// genericCapitalizedDemonyms it would be wrongly extracted as a
+// "distinguishing" term alongside the claim's genuinely rare entity
+// ("Alzheimer's"). A claim naming both must yield ONLY the genuine entity.
+func TestClaimDistinguishingTerms_DemonymExcluded(t *testing.T) {
+	got := claimDistinguishingTerms("American researchers demonstrate CRISPR-Cas9 CAR-T cures Alzheimer's disease")
+	if len(got) != 1 || got[0] != "alzheimer" {
+		t.Errorf("expected exactly [\"alzheimer\"] with the demonym excluded, got %v", got)
+	}
+}
+
+// TestClaimHasMatchedDistinguishingTerm_DemonymCannotSubstituteForEntity is
+// the end-to-end adversarial regression: a claim naming both a common
+// demonym ("American") and a genuinely rare entity ("Alzheimer's") checked
+// against a source that shares the demonym (any US-based study plausibly
+// does) but never mentions Alzheimer's — the one term that would make the
+// claim true. Before genericCapitalizedDemonyms, "American" was itself
+// extracted as a second "distinguishing" term, and the ANY-of-N match
+// semantics let it satisfy the gate on its own, reintroducing the exact
+// #675 false-positive class one level deeper (a weak, coincidentally-shared
+// capitalized word standing in for the term that actually matters).
+func TestClaimHasMatchedDistinguishingTerm_DemonymCannotSubstituteForEntity(t *testing.T) {
+	source := "This study demonstrates that a CRISPR-Cas9 engineered CAR-T cell therapy cures B-cell lymphoma in a clinical trial, conducted at an American cancer research hospital. " +
+		"The therapy uses CRISPR-Cas9 gene editing to modify CAR-T cells before they are infused into patients with lymphoma. " +
+		"Researchers demonstrated durable remission in most patients treated with this CAR-T approach."
+	claim := "American researchers demonstrate CRISPR-Cas9 CAR-T cures Alzheimer's disease"
+	if ClaimHasMatchedDistinguishingTerm(source, claim) {
+		t.Error("expected false: a shared demonym ('American') must not substitute for the claim's real distinguishing entity ('Alzheimer's')")
 	}
 }
 
