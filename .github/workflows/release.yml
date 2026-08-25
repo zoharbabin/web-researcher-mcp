@@ -503,10 +503,15 @@ jobs:
           # the CLI's own exit code AND grep its output for "Deployment
           # failed" — smithery-cli has been observed to print that string on
           # a rejected publish, so either signal alone must fail the job loudly.
+          # `set +e` around the pipeline is required: PIPESTATUS must be read
+          # immediately after the pipeline runs, before any other command
+          # (including a trailing `|| true`) executes and overwrites it.
+          set +e
           smithery mcp publish "dist/mcpb/web-researcher-mcp_${VERSION}_linux_amd64.mcpb" \
             -n web-researcher-mcp/web-researcher-mcp \
-            2>&1 | tee smithery-publish.log || true
+            2>&1 | tee smithery-publish.log
           publish_exit="${PIPESTATUS[0]}"
+          set -e
 
           if [ "$publish_exit" -ne 0 ] || grep -q "Deployment failed" smithery-publish.log; then
             echo "::error::Smithery publish failed (exit code ${publish_exit}) — see log above. This used to be silently swallowed as a warning; see issue #673."
