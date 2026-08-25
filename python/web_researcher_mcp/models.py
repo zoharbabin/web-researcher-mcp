@@ -1683,6 +1683,7 @@ class PaperFulltextResponse:
     doi: Optional[str] = None
     identifier: Optional[str] = None
     journal: Optional[str] = None
+    metadataIncomplete: Optional[bool] = None
     openAccess: Optional[bool] = None
     pdfUrl: Optional[str] = None
     resolvedUrl: Optional[str] = None
@@ -1707,6 +1708,7 @@ class PaperFulltextResponse:
             doi=d.get('doi'),
             identifier=d.get('identifier'),
             journal=d.get('journal'),
+            metadataIncomplete=d.get('metadataIncomplete'),
             openAccess=d.get('openAccess'),
             pdfUrl=d.get('pdfUrl'),
             resolvedUrl=d.get('resolvedUrl'),

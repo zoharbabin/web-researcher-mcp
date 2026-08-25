@@ -259,6 +259,11 @@ func verifyByDOI(ctx context.Context, deps Dependencies, doi, citation, claim st
 		out["matchedRecord"] = rec
 		out["matchConfidence"] = "high" // exact-DOI match confirmed
 		candidates = bestClaimURLCandidates(rec, doi)
+		// #657: also consult Unpaywall's live best_oa_location — rec.PDFUrl here
+		// is whichever provider's own CACHED pick (e.g. OpenAlex's open_access.oa_url),
+		// which can independently go stale; a second, freshly-queried OA signal
+		// gives the retry loop below another live option to fall through to.
+		candidates = prependCandidate(candidates, unpaywallPDFCandidate(ctx, deps, doi))
 		*prov = append(*prov, "academic record matched by exact DOI")
 		if _, ok := out["exists"]; !ok {
 			out["exists"] = true
@@ -515,7 +520,10 @@ func verifyByReference(ctx context.Context, deps Dependencies, ref, claim string
 			out["retractionStatus"] = status
 		}
 	}
-	emitClaimCoverageCandidates(ctx, deps, bestClaimURLCandidates(rec, rec.DOI), claim, out, prov)
+	// #657: same Unpaywall widening as verifyByDOI — rec's own PDFUrl here is a
+	// single provider's cached pick, which can independently go stale.
+	refCandidates := prependCandidate(bestClaimURLCandidates(rec, rec.DOI), unpaywallPDFCandidate(ctx, deps, rec.DOI))
+	emitClaimCoverageCandidates(ctx, deps, refCandidates, claim, out, prov)
 }
 
 // lookupAcademicRecord resolves a query (DOI or free text) to the single best

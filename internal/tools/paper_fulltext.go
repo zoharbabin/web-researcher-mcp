@@ -120,6 +120,12 @@ func registerPaperFulltext(srv *mcp.Server, deps Dependencies) {
 			"truncated":   result.Truncated,
 			"citation":    citation,
 		}
+		// #658: title/author/date all empty means citation is a bare
+		// "(n.d.)."-style placeholder — flag it explicitly rather than let it
+		// pass for a real, complete citation.
+		if title == "" && result.Author == "" && result.PublishDate == "" {
+			output["metadataIncomplete"] = true
+		}
 		if result.Tier != "" {
 			output["scrapeTier"] = result.Tier
 		}
@@ -190,57 +196,68 @@ func resolvePaperURL(ctx context.Context, deps Dependencies, identifier string) 
 	doi := detectDOI(identifier)
 	fetcher := resolvePaperFetcher(deps)
 	var fetchErr error
-	oaAttempted := false
+	var result *search.AcademicResult
 	if fetcher != nil {
 		lookupID := identifier
 		if doi != "" {
 			lookupID = doi
 		}
-		result, err := fetcher.FetchPaper(ctx, lookupID)
+		r, err := fetcher.FetchPaper(ctx, lookupID)
 		if err != nil {
 			fetchErr = err
-		} else if result != nil {
-			// Unpaywall fallback (#533): FetchPaper's PDF URL comes solely from
-			// the fetcher's own metadata (e.g. Semantic Scholar's), which may lack
-			// one even for a paper Unpaywall would resolve. Mirrors the same
-			// enrichment academic_search performs via search.EnrichOpenAccess —
-			// never overwrites a fetcher-supplied PDFUrl, best-effort only.
-			if result.PDFUrl == "" && result.DOI != "" && deps.OAResolver != nil {
-				oaAttempted = true
-				if oa, pdf, found, oaErr := deps.OAResolver.Resolve(ctx, result.DOI); oaErr == nil && found {
-					if pdf != "" {
-						result.PDFUrl = pdf
-					}
-					if oa {
-						result.OpenAccess = true
-					}
-				}
-			}
-			switch {
-			case result.PDFUrl != "":
-				return result.PDFUrl, result, nil, nil
-			case result.URL != "":
-				return result.URL, result, nil, nil
-			}
-		}
-	}
-
-	// Unpaywall fallback (#601): every path above (no PaperFetcher configured,
-	// FetchPaper's "not found" (nil, nil) convention, or a genuine upstream
-	// error) leaves the in-result Unpaywall check unreached, since it lives
-	// inside the `result != nil` branch. Unpaywall resolves directly from the
-	// DOI with no dependency on Semantic Scholar's own coverage, so it's still
-	// worth trying here before degrading to the bare doi.org redirect.
-	// oaAttempted guards against a redundant second lookup in the case that
-	// already tried Unpaywall above (result found, but no PDF from either).
-	if doi != "" && !oaAttempted && deps.OAResolver != nil {
-		if oa, pdf, found, oaErr := deps.OAResolver.Resolve(ctx, doi); oaErr == nil && found && pdf != "" {
-			return pdf, &search.AcademicResult{DOI: doi, PDFUrl: pdf, OpenAccess: oa, Source: "unpaywall"}, nil, fetchErr
+		} else {
+			result = r
 		}
 	}
 
 	if doi != "" {
+		// Fast path: the fetcher already has a usable PDF and there's no
+		// liveness signal to act on (no LinkVerifier configured) — further
+		// candidate gathering could never change the outcome, so skip the
+		// extra Unpaywall/OpenAlex calls entirely.
+		if result != nil && result.PDFUrl != "" && deps.LinkVerifier == nil {
+			return result.PDFUrl, result, nil, fetchErr
+		}
+		// #658: when the fetcher has no record at all for this DOI (nil
+		// PaperFetcher, FetchPaper's "not found" (nil, nil) convention, or a
+		// genuine upstream error), fall back to an exact-DOI OpenAlex entity
+		// lookup for METADATA (title/authors/year) — not just a PDF URL. The
+		// bare Unpaywall response carries no bibliographic fields at all, so
+		// without this a resolvable DOI degraded to a titleless, authorless
+		// citation ((n.d.)/@misc{anon}).
+		var openAlexRec *search.AcademicResult
+		if result == nil {
+			openAlexRec = lookupRecordByDOI(ctx, deps, doi)
+		}
+		// #657: gather every OA-location signal (the fetcher's own cached
+		// PDFUrl, Unpaywall's live lookup, OpenAlex's cached oa_url) in one
+		// shared priority order — instead of trusting a single cached pick —
+		// and verify liveness before committing to one, falling through a
+		// dead/403 candidate rather than surfacing it.
+		candidates := gatherOACandidates(ctx, deps, doi, result, openAlexRec)
+		meta := result
+		if meta == nil {
+			meta = openAlexRec
+		}
+		if pdf := firstLiveOACandidate(ctx, deps, candidates); pdf != "" {
+			return pdf, mergeOAResultMeta(meta, doi, pdf), nil, fetchErr
+		}
+		if result != nil && result.URL != "" {
+			return result.URL, result, nil, fetchErr
+		}
+		if meta != nil {
+			return "https://doi.org/" + doi, meta, nil, fetchErr
+		}
 		return "https://doi.org/" + doi, nil, nil, fetchErr
+	}
+
+	if result != nil {
+		switch {
+		case result.PDFUrl != "":
+			return result.PDFUrl, result, nil, nil
+		case result.URL != "":
+			return result.URL, result, nil, nil
+		}
 	}
 
 	if fetchErr != nil {
