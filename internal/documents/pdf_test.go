@@ -241,23 +241,56 @@ func TestDetectColumnBands_SingleColumn_ReturnsNil(t *testing.T) {
 	}
 }
 
-// TestDetectColumnBands_SparseSecondBand_FallsBack guards against a stray
-// isolated span (e.g. a lone page number) being mistaken for a second
-// column.
+// TestDetectColumnBands_SparseSecondBand_FallsBack guards the final
+// per-band population check: a gutter can accumulate columnMinLineCount+
+// supporting rows (and so get trusted as a real column boundary) via rows
+// that are each kept intact — because they only support that one gutter,
+// not every established gutter — while genuinely-split, fully-partitioned
+// rows contributing actual content to the resulting band stay under
+// columnMinLineCount. This constructs exactly that shape with two trusted
+// gutters (g1≈200, g2≈400) fed mostly by "kept intact" rows, plus only 2
+// rows that are split across all three bands: band 1 and band 2 each end
+// up with only 2 real spans, well under columnMinLineCount, so the split
+// must be rejected even though both gutters were independently trusted.
+//
+// This is deliberately not just a small/degenerate page (that would only
+// exercise the earlier len(rows) < columnMinLineCount*2 bailout, before
+// this check is ever reached) — there are 14 rows here, comfortably past
+// that gate, and both gutters clear columnMinLineCount on their own.
 func TestDetectColumnBands_SparseSecondBand_FallsBack(t *testing.T) {
-	spans := []pdf.TextSpan{
-		{X: 72, EndX: 300, Y: 750, FontSize: 12, Text: "line one of a single column page"},
-		{X: 72, EndX: 250, Y: 734, FontSize: 12, Text: "line two, shorter"},
-		{X: 72, EndX: 400, Y: 718, FontSize: 12, Text: "line three, considerably longer than the others"},
-		{X: 72, EndX: 200, Y: 702, FontSize: 12, Text: "line four"},
-		{X: 72, EndX: 350, Y: 686, FontSize: 12, Text: "line five, medium length text here"},
-		{X: 72, EndX: 280, Y: 670, FontSize: 12, Text: "line six of the page"},
-		{X: 72, EndX: 320, Y: 654, FontSize: 12, Text: "line seven of the page"},
-		{X: 72, EndX: 260, Y: 638, FontSize: 12, Text: "line eight of the page"},
-		{X: 550, EndX: 570, Y: 40, FontSize: 10, Text: "12"}, // lone page number, far right
+	var spans []pdf.TextSpan
+	y := 750.0
+	// 6 rows supporting only g1≈200 (colA + colBC merged, no gap near 400):
+	// kept intact, but their gap still trusts g1.
+	for i := 0; i < 6; i++ {
+		spans = append(spans,
+			pdf.TextSpan{X: 0, EndX: 150, Y: y, FontSize: 10, Text: "colA"},
+			pdf.TextSpan{X: 250, EndX: 500, Y: y, FontSize: 10, Text: "colBC"},
+		)
+		y -= 14
 	}
+	// 6 rows supporting only g2≈400 (colAB merged + colC, no gap near 200):
+	// kept intact, but their gap still trusts g2.
+	for i := 0; i < 6; i++ {
+		spans = append(spans,
+			pdf.TextSpan{X: 0, EndX: 350, Y: y, FontSize: 10, Text: "colAB"},
+			pdf.TextSpan{X: 450, EndX: 500, Y: y, FontSize: 10, Text: "colC"},
+		)
+		y -= 14
+	}
+	// Only 2 rows that genuinely support both gutters and get split into
+	// all three bands — too few to populate bands 1 and 2 above threshold.
+	for i := 0; i < 2; i++ {
+		spans = append(spans,
+			pdf.TextSpan{X: 0, EndX: 150, Y: y, FontSize: 10, Text: "colA"},
+			pdf.TextSpan{X: 250, EndX: 350, Y: y, FontSize: 10, Text: "colB"},
+			pdf.TextSpan{X: 450, EndX: 500, Y: y, FontSize: 10, Text: "colC"},
+		)
+		y -= 14
+	}
+
 	if bands := detectColumnBands(spans); bands != nil {
-		t.Errorf("expected nil (fall back) when a candidate band is too sparse to trust, got %d bands", len(bands))
+		t.Errorf("expected nil (fall back) when a trusted gutter's resulting band is too sparse, got %d bands", len(bands))
 	}
 }
 
