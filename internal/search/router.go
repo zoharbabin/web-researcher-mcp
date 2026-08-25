@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/zoharbabin/web-researcher-mcp/internal/audit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
@@ -241,7 +242,7 @@ func (r *Router) Web(ctx context.Context, params WebSearchParams) ([]SearchResul
 		lastErr = err
 		r.recordFailure(name, err)
 		r.logger.Warn("provider failed, trying next",
-			"provider", name, "operation", "web", "error", err)
+			"provider", name, "operation", "web", "error", audit.MaskSecrets(err.Error()))
 		trace.fellBack(FallbackReasonPrimaryUnavailable)
 
 		if i+1 < len(priority) {
@@ -282,7 +283,7 @@ func (r *Router) Images(ctx context.Context, params ImageSearchParams) ([]ImageR
 		lastErr = err
 		r.recordFailure(name, err)
 		r.logger.Warn("provider failed, trying next",
-			"provider", name, "operation", "images", "error", err)
+			"provider", name, "operation", "images", "error", audit.MaskSecrets(err.Error()))
 		trace.fellBack(FallbackReasonPrimaryUnavailable)
 
 		if i+1 < len(priority) {
@@ -323,7 +324,7 @@ func (r *Router) News(ctx context.Context, params NewsSearchParams) ([]NewsResul
 		lastErr = err
 		r.recordFailure(name, err)
 		r.logger.Warn("provider failed, trying next",
-			"provider", name, "operation", "news", "error", err)
+			"provider", name, "operation", "news", "error", audit.MaskSecrets(err.Error()))
 		trace.fellBack(FallbackReasonPrimaryUnavailable)
 
 		if i+1 < len(priority) {
@@ -370,7 +371,7 @@ func (r *Router) Patents(ctx context.Context, params PatentSearchParams) ([]Pate
 			lastErr = err
 			r.recordFailure(name, err)
 			r.logger.Warn("patent provider failed, trying next",
-				"provider", name, "operation", "patents", "error", err)
+				"provider", name, "operation", "patents", "error", audit.MaskSecrets(err.Error()))
 			trace.fellBack(FallbackReasonPrimaryUnavailable)
 			if i+1 < len(priority) {
 				r.notifyFallback(OpPatents, name, priority[i+1], err.Error())
@@ -410,7 +411,7 @@ func (r *Router) Patents(ctx context.Context, params PatentSearchParams) ([]Pate
 			_ = breaker.Execute(func() error { return err })
 		}
 		r.logger.Warn("patent provider failed, trying next",
-			"provider", name, "operation", "patents", "error", err)
+			"provider", name, "operation", "patents", "error", audit.MaskSecrets(err.Error()))
 		trace.fellBack(FallbackReasonPrimaryUnavailable)
 		if i+1 < len(priority) {
 			r.notifyFallback(OpPatents, name, priority[i+1], err.Error())
@@ -507,7 +508,7 @@ func (r *Router) Scholarly(ctx context.Context, params AcademicSearchParams) ([]
 			_ = breaker.Execute(func() error { return err })
 		}
 		r.logger.Warn("academic provider failed, trying next",
-			"provider", name, "operation", "academic", "error", err)
+			"provider", name, "operation", "academic", "error", audit.MaskSecrets(err.Error()))
 		trace.fellBack(FallbackReasonPrimaryUnavailable)
 		if i+1 < len(priority) {
 			r.notifyFallback(OpAcademic, name, priority[i+1], err.Error())
