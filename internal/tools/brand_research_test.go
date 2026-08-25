@@ -1132,6 +1132,49 @@ func TestBrandGuidelinesURLFilter(t *testing.T) {
 	}
 }
 
+// TestBrandResearchDepthFullAddsSourceWhenPortalAlreadyFound is the
+// regression test for issue #663: Tier 5 (searchBrandGuidelines) must
+// produce a visible "web_search" source whenever it independently finds a
+// qualifying guideline/design-system link, even when Tier 4
+// (probeBrandPage) already set result.GuidelinesURL. Tier 4's own finding
+// must never be overwritten.
+func TestBrandResearchDepthFullAddsSourceWhenPortalAlreadyFound(t *testing.T) {
+	t.Parallel()
+
+	const tier4URL = "https://press.acme.com/"
+	result := &brandResearchResult{
+		GuidelinesURL: tier4URL, // simulates Tier 4 (probeBrandPage) already finding a portal
+	}
+	var mu sync.Mutex
+
+	// mockProviderWithURL returns the same result for every Web() call
+	// (once per Tier 5 query); a github.com/<org>/design-system URL matches
+	// the existing githubOK acceptance rule for the "site:github.com" query.
+	deps := setupTestDeps()
+	deps.Search = &mockProviderWithURL{url: "https://github.com/acme/design-system"}
+
+	src := searchBrandGuidelines(context.Background(), deps, "Acme", "acme.com", result, &mu)
+
+	if src == nil {
+		t.Fatal("searchBrandGuidelines() = nil, want a non-nil source when a qualifying link is found even though Tier 4 already succeeded")
+	}
+	if src.Name != "web_search" {
+		t.Errorf("source Name = %q, want web_search", src.Name)
+	}
+	found := false
+	for _, f := range src.Fields {
+		if f == "guidelines_url" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("source Fields = %v, want it to contain guidelines_url", src.Fields)
+	}
+	if result.GuidelinesURL != tier4URL {
+		t.Errorf("GuidelinesURL = %q, want Tier 4's original value %q preserved (never overwritten)", result.GuidelinesURL, tier4URL)
+	}
+}
+
 // ─── 30. deduplicateFields preserves order and removes duplicates ─────────────
 
 // TestDeduplicateFields verifies that deduplicateFields removes duplicate
