@@ -454,15 +454,45 @@ var genericCapitalizedOpeners = map[string]bool{
 	"most": true, "several": true, "one": true, "another": true,
 }
 
+// genericCapitalizedDemonyms are nationality/demonym adjectives and broad
+// geographic/organizational qualifiers — capitalized by English convention,
+// not because they name the claim's distinguishing entity. Excluded from
+// claimDistinguishingTerms alongside genericCapitalizedOpeners (#675
+// adversarial follow-up finding): a claim naming two Title Case terms — one
+// genuinely rare ("Alzheimer's") and one common demonym ("American
+// researchers demonstrate ... cures Alzheimer's disease") — let a source
+// that merely shares "American" (e.g. any US-based study) satisfy the
+// distinguishing-term gate without the source ever mentioning Alzheimer's,
+// the one term that actually makes the claim true or false. This list is
+// necessarily non-exhaustive (English has ~200 demonyms); it covers the
+// nationalities/regions most likely to appear in research and news claims,
+// same best-effort spirit as genericCapitalizedOpeners.
+var genericCapitalizedDemonyms = map[string]bool{
+	"american": true, "british": true, "english": true, "scottish": true,
+	"irish": true, "welsh": true, "european": true, "western": true,
+	"eastern": true, "northern": true, "southern": true, "chinese": true,
+	"japanese": true, "korean": true, "indian": true, "german": true,
+	"french": true, "russian": true, "italian": true, "spanish": true,
+	"canadian": true, "australian": true, "african": true, "asian": true,
+	"israeli": true, "iranian": true, "iraqi": true, "ukrainian": true,
+	"mexican": true, "brazilian": true, "swedish": true, "norwegian": true,
+	"danish": true, "dutch": true, "swiss": true, "austrian": true,
+	"polish": true, "turkish": true, "egyptian": true, "nigerian": true,
+	"pakistani": true, "vietnamese": true, "thai": true, "filipino": true,
+	"national": true, "international": true, "global": true, "federal": true,
+	"local": true, "regional": true, "state": true, "central": true,
+}
+
 // claimDistinguishingTerms returns the lowercased significant terms derived
 // from proper-noun-like tokens in the ORIGINAL (pre-lowercase) claim text —
 // tokens in Title Case (isTitleCaseToken) that aren't a generic capitalized
-// sentence-opener (genericCapitalizedOpeners, #675). A claim like "this study
-// demonstrates CRISPR-Cas9 CAR-T cures Alzheimer's disease" has generic
-// domain jargon ("CRISPR-Cas9", "CAR-T" — ALL-CAPS/mixed-case acronyms,
-// excluded by isTitleCaseToken) alongside one genuine named entity
-// ("Alzheimer's" — Title Case, not a generic opener) that is the actual
-// differentiator of what the claim is about.
+// sentence-opener (genericCapitalizedOpeners, #675) or a common demonym/broad
+// qualifier (genericCapitalizedDemonyms, #675 adversarial follow-up). A claim
+// like "this study demonstrates CRISPR-Cas9 CAR-T cures Alzheimer's disease"
+// has generic domain jargon ("CRISPR-Cas9", "CAR-T" — ALL-CAPS/mixed-case
+// acronyms, excluded by isTitleCaseToken) alongside one genuine named entity
+// ("Alzheimer's" — Title Case, not a generic opener or demonym) that is the
+// actual differentiator of what the claim is about.
 func claimDistinguishingTerms(claim string) []string {
 	claim = strings.TrimSpace(claim)
 	if claim == "" {
@@ -482,7 +512,8 @@ func claimDistinguishingTerms(claim string) []string {
 			if !isTitleCaseToken(w) {
 				continue
 			}
-			if genericCapitalizedOpeners[strings.ToLower(trimTokenPunct(w))] {
+			lower := strings.ToLower(trimTokenPunct(w))
+			if genericCapitalizedOpeners[lower] || genericCapitalizedDemonyms[lower] {
 				continue
 			}
 			for _, t := range claimTerms(w) {
