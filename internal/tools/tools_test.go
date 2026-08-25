@@ -153,6 +153,14 @@ func (m *mockAcademicProvider) References(_ context.Context, _ string, _ int) ([
 	return []search.AcademicResult{{Title: "Foundational", URL: "https://doi.org/10.0/z", DOI: "10.0/z", Year: 2017, Source: "openalex"}}, nil
 }
 
+// SupportsInfluenceSignal implements CitationSearcher, mirroring real OpenAlex
+// (this mock is named "openalex"): counts-only edges, no influence signal
+// (#655). The IsInfluential:true set on the Citations mock result above is
+// deliberately unused signal noise a real OpenAlex response could carry
+// (always false in production) — this method, not that field, is what gates
+// citation_graph's influential_only filter.
+func (m *mockAcademicProvider) SupportsInfluenceSignal() bool { return false }
+
 // ResolveByDOI implements the DOIResolver capability: it returns the exact record
 // ONLY for the DOI it knows (10.1234/x, a valid-shaped DOI the doiPattern accepts),
 // and nil for anything else — modeling a real entity lookup that has no record for

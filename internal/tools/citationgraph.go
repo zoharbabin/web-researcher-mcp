@@ -81,10 +81,10 @@ func registerCitationGraph(srv *mcp.Server, deps Dependencies) {
 			// resolves it. When the caller did NOT pin a provider, retry the whole
 			// traversal on OpenAlex before surfacing an error. An EXPLICIT provider is
 			// honored exclusively (Design Rule 7) — no silent substitution.
-			if input.Provider == "" && providerName == "semanticscholar" && isPaperNotFoundErr(err) {
+			if input.Provider == "" && providerName == "semanticscholar" && (isPaperNotFoundErr(err) || isRateLimitError(err)) {
 				if fb, fbName, ok := fallbackCitationSearcher(deps, providerName); ok {
 					if cb, rf, ferr := traverseCitations(ctx, fb, input.Paper, direction, num); ferr == nil {
-						citedBy, references, providerName, err = cb, rf, fbName, nil
+						citedBy, references, searcher, providerName, err = cb, rf, fb, fbName, nil
 					} else {
 						// Both providers failed (#434): name both providers and both
 						// underlying errors — never silently drop the fallback's own
@@ -98,7 +98,13 @@ func registerCitationGraph(srv *mcp.Server, deps Dependencies) {
 			}
 		}
 
-		if input.InfluentialOnly {
+		// #655: influential_only is a documented no-op for providers that don't
+		// supply the influence signal (OpenAlex) - filtering unconditionally on
+		// IsInfluential would discard every result, since the zero value is
+		// indistinguishable from "not influential." Only filter when the searcher
+		// that actually produced these results (the fallback, if one fired) reports
+		// it supplies the signal.
+		if input.InfluentialOnly && searcher.SupportsInfluenceSignal() {
 			citedBy = filterInfluential(citedBy)
 			references = filterInfluential(references)
 		}

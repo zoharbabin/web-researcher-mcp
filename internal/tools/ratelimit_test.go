@@ -9,6 +9,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/cache"
+	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
@@ -67,6 +68,11 @@ func TestIsRateLimitError(t *testing.T) {
 		{"dns error", fmt.Errorf("no such host"), false},
 		{"empty error", fmt.Errorf(""), false},
 		{"wrapped rate limit", fmt.Errorf("search for query: %w", fmt.Errorf("google API rate limited")), true},
+		// #664: a breaker-open sentinel must classify as a rate-limit condition too —
+		// it's the downstream consequence of the provider already having been
+		// rate-limited enough times to trip its circuit.
+		{"circuit breaker open (bare sentinel)", circuit.ErrCircuitOpen, true},
+		{"circuit breaker open (wrapped)", fmt.Errorf("citations lookup: %w", circuit.ErrCircuitOpen), true},
 	}
 
 	for _, tc := range cases {
@@ -94,6 +100,11 @@ func TestExtractProviderName(t *testing.T) {
 		{"ecosystems api error", fmt.Errorf("ecosystems: API error 429: too many requests"), "ecosystems"},
 		{"google prefix", fmt.Errorf("google: quota exceeded"), "google"},
 		{"unknown provider", fmt.Errorf("connection timeout"), ""},
+		// #656: semanticscholar was missing from the allowlist, so its 429s
+		// surfaced an empty ToolError.Provider. Mirrors the existing searchapi
+		// case, which was already correct.
+		{"semanticscholar rate limited", fmt.Errorf("semanticscholar: rate limited: %w", circuit.ErrRateLimit), "semanticscholar"},
+		{"searchapi rate limited (already correct, no regression)", fmt.Errorf("searchapi: rate limited: %w", circuit.ErrRateLimit), "searchapi"},
 	}
 
 	for _, tc := range cases {

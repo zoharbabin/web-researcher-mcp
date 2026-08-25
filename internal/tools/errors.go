@@ -186,9 +186,24 @@ func scrapeErrorToToolError(se *scraper.ScrapeError) ToolError {
 }
 
 // extractProviderName attempts to extract the provider name from an error string.
+//
+// #656: the prefix list must cover every "providername: ..." error prefix any
+// internal/search/*.go provider actually wraps its errors with (verified by
+// grepping fmt.Errorf("<name>: ...") across that package), not just the
+// providers a given tool call site happens to exercise most often — a gap here
+// silently drops ToolError.Provider for whichever provider was missed
+// (semanticscholar was the reported case; the rest were audited in the same
+// pass so this doesn't reoccur one entry at a time).
+var providerErrorPrefixes = []string{
+	"google:", "brave:", "serper:", "searxng:", "searchapi:", "lens:", "uspto:", "epo:", "openalex:", "crossref:", "ecosystems:",
+	"semanticscholar:", "scholarapi:", "pubmed:", "core:", "exa:", "duckduckgo:", "tavily:", "hackernews:", "reddit:", "bluesky:", "github:", "xquik:",
+	"courtlistener:", "edgar:", "fred:", "eurostat:", "oecd:", "worldbank:", "monarch:",
+	"clinicaltrials:", "unpaywall:", "wikidata:", "wayback:", "crt.sh:", "doi-handle:", "doi.org:",
+}
+
 func extractProviderName(err error) string {
 	s := err.Error()
-	for _, prefix := range []string{"google:", "brave:", "serper:", "searxng:", "searchapi:", "lens:", "uspto:", "epo:", "openalex:", "crossref:", "ecosystems:"} {
+	for _, prefix := range providerErrorPrefixes {
 		if strings.HasPrefix(s, prefix[:len(prefix)-1]) || strings.Contains(s, prefix) {
 			return prefix[:len(prefix)-1]
 		}

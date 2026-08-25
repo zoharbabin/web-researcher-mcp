@@ -154,6 +154,10 @@ func (s *SemanticScholarProvider) References(ctx context.Context, seedID string,
 	return s.edges(ctx, s2PaperPath(seedID)+"/references", numResults, false)
 }
 
+// SupportsInfluenceSignal implements CitationSearcher: Semantic Scholar
+// annotates every citation edge with isInfluential (#655).
+func (s *SemanticScholarProvider) SupportsInfluenceSignal() bool { return true }
+
 func (s *SemanticScholarProvider) edges(ctx context.Context, path string, numResults int, forward bool) ([]AcademicResult, error) {
 	var out []AcademicResult
 	err := s.deps.Breaker.Execute(func() error {
