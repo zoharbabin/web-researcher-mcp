@@ -49,6 +49,22 @@ const (
 	// scattered around a single-column page — at inconsistent X
 	// positions — must not be able to manufacture a false column split.
 	columnMinLineCount = 5
+	// columnMaxClusters caps the number of distinct gap-position clusters
+	// tracked while scanning a page. Real documents never need more than a
+	// handful — even a busy multi-column layout rarely exceeds a few real
+	// gutters — so this only ever engages on adversarial input crafted to
+	// maximize the number of mutually non-clustering gaps (e.g. a page of
+	// manufactured text spans, each placed to avoid matching any prior
+	// cluster). Without it, the per-gap cluster scan below is unbounded:
+	// each non-matching gap grows the cluster list, so a page with N such
+	// gaps costs O(N^2). documents.Parse runs on untrusted, remotely
+	// fetched PDF bytes (up to MaxDocumentBytes, default 50MB) with no
+	// timeout wrapping the parse itself, so unbounded CPU cost here is a
+	// real resource-exhaustion risk, not just a theoretical one. Capping
+	// cluster count bounds total cost to O(N * columnMaxClusters) —
+	// linear in the input — while still giving any real column layout
+	// far more headroom than it could ever use.
+	columnMaxClusters = 64
 )
 
 func parsePDF(_ io.ReaderAt, size int64, data []byte) (string, Metadata, error) {
@@ -210,9 +226,11 @@ func detectColumnBands(spans []pdf.TextSpan) [][]pdf.TextSpan {
 					break
 				}
 			}
-			if !matched {
+			if !matched && len(clusters) < columnMaxClusters {
 				clusters = append(clusters, gutterCluster{anchor: mid, x: mid, count: 1})
 			}
+			// else: cap reached (or matched above) — either way this gap
+			// cannot manufacture a new, unbounded-cost cluster.
 		}
 	}
 

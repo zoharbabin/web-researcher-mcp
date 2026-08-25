@@ -3,6 +3,7 @@ package documents
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/razvandimescu/gopdf/pdf"
 )
@@ -381,5 +382,44 @@ func TestDetectColumnBands_BoundedDrift_RejectsUnrelatedGutter(t *testing.T) {
 		if got := len(bands[i]); got != want {
 			t.Errorf("band %d: got %d spans, want %d", i, got, want)
 		}
+	}
+}
+
+// TestDetectColumnBands_AdversarialGaps_BoundedCost guards against
+// unbounded CPU cost on adversarial input. documents.Parse runs on
+// untrusted, remotely fetched PDF bytes (up to MaxDocumentBytes, default
+// 50MB) with no timeout wrapping the parse itself, so an unbounded
+// algorithmic-complexity blowup inside detectColumnBands is a real
+// resource-exhaustion risk. Without columnMaxClusters, every gap that
+// doesn't match an existing cluster grows the cluster list, and each new
+// gap is matched against every existing cluster — a page of spans placed
+// so no two gaps ever cluster (as constructed here) makes that scan
+// O(rows^2). This builds exactly that adversarial shape at a scale where
+// the uncapped version measurably exceeds the budget below (confirmed by
+// reverting the cap and rerunning: it times out), and asserts the capped
+// version finishes well within it.
+func TestDetectColumnBands_AdversarialGaps_BoundedCost(t *testing.T) {
+	const n = 150000
+	spans := make([]pdf.TextSpan, 0, n*2)
+	y := 750000.0
+	for i := 0; i < n; i++ {
+		mid := float64(i) * 1000.0 // every gap far from every other -> never clusters
+		spans = append(spans,
+			pdf.TextSpan{X: mid - 500, EndX: mid - 100, Y: y, FontSize: 10, Text: "L"},
+			pdf.TextSpan{X: mid + 100, EndX: mid + 500, Y: y, FontSize: 10, Text: "R"},
+		)
+		y -= 12
+	}
+
+	done := make(chan struct{})
+	go func() {
+		detectColumnBands(spans)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("detectColumnBands took longer than 3s on adversarial non-clustering gaps — columnMaxClusters cap not bounding cost")
 	}
 }
