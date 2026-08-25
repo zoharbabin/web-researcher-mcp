@@ -213,3 +213,39 @@ func TestWaybackRowsToEntriesRejectsControlCharsAndOffDomainURLs(t *testing.T) {
 		t.Errorf("URL = %q, want https://example.com/page", entries[0].URL)
 	}
 }
+
+// TestEntryHostMatchesDomain_MalformedPathEscapeStillMatches guards against a
+// regression where entryHostMatchesDomain parsed the entry's FULL URL (path
+// included) to read its host. url.Parse validates percent-escapes across the
+// whole URL, so a malformed escape anywhere in the path (common in raw CDX
+// "original" values) made url.Parse fail and the row get dropped, even
+// though the host itself was completely well-formed and on-domain.
+func TestEntryHostMatchesDomain_MalformedPathEscapeStillMatches(t *testing.T) {
+	cases := []struct {
+		name string
+		url  string
+		want bool
+	}{
+		{"malformed escape same domain", "https://example.com/foo%zzbar", true},
+		{"malformed escape subdomain", "https://sub.example.com/path%2", true},
+		{"malformed escape off domain", "https://unrelated.net/foo%GGbar", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := entryHostMatchesDomain(tc.url, "example.com"); got != tc.want {
+				t.Errorf("entryHostMatchesDomain(%q, %q) = %v, want %v", tc.url, "example.com", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestWaybackRowsToEntriesKeepsRowWithMalformedPathEscape(t *testing.T) {
+	rows := [][]string{
+		{"original", "timestamp", "statuscode", "mimetype"},
+		{"https://example.com/foo%zzbar", "20260101000000", "200", "text/html"},
+	}
+	entries := waybackRowsToEntries(rows, "example.com")
+	if len(entries) != 1 {
+		t.Fatalf("want exactly 1 entry, got %d: %+v", len(entries), entries)
+	}
+}

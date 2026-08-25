@@ -275,16 +275,34 @@ func hasControlRune(s string) bool {
 // is the queried domain — captures sharing a canonical urlkey (redirect
 // chains, CDN/tracking domains) can surface an unrelated host verbatim.
 func entryHostMatchesDomain(rawURL, domain string) bool {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return false
-	}
-	host := strings.ToLower(u.Hostname())
+	host := extractURLHost(rawURL)
 	domain = strings.ToLower(domain)
 	if host == "" || domain == "" {
 		return false
 	}
 	return host == domain || strings.HasSuffix(host, "."+domain)
+}
+
+// extractURLHost returns the lowercased hostname from rawURL's authority
+// component. It parses only the scheme+authority prefix (up to the first
+// "/", "?", or "#"), not the full URL — a malformed percent-escape later in
+// the path (common in Wayback CDX's raw "original" column) must not make an
+// otherwise well-formed host unreadable, since url.Parse validates escapes
+// across the whole URL and would reject the entire row for it.
+func extractURLHost(rawURL string) string {
+	i := strings.Index(rawURL, "://")
+	if i < 0 {
+		return ""
+	}
+	rest := rawURL[i+3:]
+	if j := strings.IndexAny(rest, "/?#"); j >= 0 {
+		rest = rest[:j]
+	}
+	u, err := url.Parse(rawURL[:i+3] + rest)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(u.Hostname())
 }
 
 // categorizeArchiveURL infers a coarse category from URL path patterns so
