@@ -230,6 +230,8 @@ Depends on `release` directly (not `docker-sign`) — the registry only needs th
 
 Downloads the `.mcpb` bundle that was already built and uploaded by the `release` job (no re-build from source). Publishes to [Smithery](https://smithery.ai). Gated on `vars.SMITHERY_ENABLED == 'true'`.
 
+The publish step captures `smithery mcp publish`'s exit code and greps its own output for `Deployment failed`; either signal fails the job with `::error::` (not a warning). Before #673, a soft `|| echo "::warning::..."` fallback let this job report green across multiple releases while every publish actually failed with a 400 from the Smithery API — the `.mcpb` manifest's `tools` field (`mcpb/manifest.json`) only carries `name`/`description` per the [mcpb spec](https://github.com/anthropics/mcpb) (no `inputSchema`), but smithery-cli forwards it as-is into `serverCard.tools`, which the Smithery publish API appears to require full `inputSchema` objects for. The manifest template no longer ships a static `tools`/`tools_generated` list, so Smithery introspects tool schemas from the live server instead of a stub that can never satisfy its schema. If this job fails again, check the log for the exact error before assuming it's just an expired `SMITHERY_API_KEY`.
+
 ### 🐍 [publish-pypi] — PyPI platform wheels
 
 Downloads the cross-compiled binaries from the `release` job artifact, wraps them into platform wheels, smoke-tests the manylinux wheel (import check), then publishes via Trusted Publishing (OIDC — no token secret). Gated on `vars.PYPI_PUBLISH_ENABLED == 'true'`.
@@ -326,7 +328,7 @@ Runs GitHub's CodeQL engine with `security-extended,security-and-quality` query 
 
 1. Add a new job to `release.yml` with `needs: release`.
 2. Gate it on a repo var (e.g., `vars.MY_CHANNEL_ENABLED == 'true'`) so an unconfigured fork is a clean no-op.
-3. Use `|| echo "::warning::..."` for non-fatal publish failures so a channel hiccup doesn't block the overall release.
+3. Don't swallow the actual failure signal. A bare `|| echo "::warning::..."` reports the job green even when the publish never happened — this hid a real 400 from Smithery across multiple releases (#673). If a failure is expected to be benign (e.g. "already published"), still capture the command's exit code and its output, and only downgrade to a warning after confirming the specific known-benign case (grep the output for the expected message); anything else must fail the job loudly. See `publish-smithery`'s "Publish to Smithery" step for the pattern.
 4. Document the required secret/var in the table above.
 
 ### Cutting a release
@@ -369,7 +371,7 @@ git push origin v1.38.0
 | PyPI publish failure | Check `pypi` environment is configured with Trusted Publishing OIDC |
 | Docker sign failure | Check GHCR image exists; check cosign OIDC token permissions |
 | MCP Registry warning | Non-fatal; check `mcp-publisher` OIDC credentials, may already be published |
-| Smithery warning | Non-fatal; check `SMITHERY_API_KEY` secret, may already be published |
+| Smithery publish fails | Fatal (fails the job, see #673) — check the step log for the actual `smithery mcp publish` error; check `SMITHERY_API_KEY` secret validity before assuming a schema issue |
 | Release workflow didn't fire on tag push | GitHub infrastructure glitch — use `Actions → 🚀 Release → Run workflow` and supply the tag (e.g. `v1.37.5`) to retrigger manually |
 
 ---
