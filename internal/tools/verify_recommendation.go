@@ -407,12 +407,71 @@ func selectCorroborationLenses(title, claim string) []string {
 // hold". A lens routed via cx/goggle instead of domains has no site:
 // restriction injected (BuildSiteQuery is a no-op for it), so there is
 // nothing to validate — every result passes for such a lens.
+//
+// dedupedFullClaim builds the "title + claim" text used for both the
+// corroboration search query and the coverage gate, without duplicating a
+// phrase the two already share (#679). Plain concatenation ("title + " " +
+// claim") produces an obviously repeated phrase whenever title and claim
+// overlap — a duplicated substring in the search query degrades search
+// quality, and it also inflates term counts on the coverage-gate side. When
+// one string fully contains the other, the shorter one adds nothing new, so
+// the longer/more-complete one is used alone. Otherwise, if a suffix of title
+// matches a (>=2-word) prefix of claim, that shared phrase is included once.
+func dedupedFullClaim(title, claim string) string {
+	t := strings.TrimSpace(title)
+	c := strings.TrimSpace(claim)
+	if t == "" {
+		return c
+	}
+	if c == "" {
+		return t
+	}
+	lowerT := strings.ToLower(t)
+	lowerC := strings.ToLower(c)
+	if strings.Contains(lowerC, lowerT) {
+		return c
+	}
+	if strings.Contains(lowerT, lowerC) {
+		return t
+	}
+
+	cWords := strings.Fields(c)
+	lowerTWords := strings.Fields(lowerT)
+	lowerCWords := strings.Fields(lowerC)
+	maxK := len(lowerTWords)
+	if len(lowerCWords) < maxK {
+		maxK = len(lowerCWords)
+	}
+	for k := maxK; k >= 2; k-- {
+		if wordsEqual(lowerTWords[len(lowerTWords)-k:], lowerCWords[:k]) {
+			rest := cWords[k:]
+			if len(rest) == 0 {
+				return t
+			}
+			return t + " " + strings.Join(rest, " ")
+		}
+	}
+	return t + " " + c
+}
+
+func wordsEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func corroborateRecommendation(ctx context.Context, deps Dependencies, title, claim string, numResults int) []corroborationResult {
 	if deps.Search == nil {
 		return nil
 	}
 	registry := search.GetLensRegistry()
-	fullClaim := title + " " + claim
+	fullClaim := dedupedFullClaim(title, claim)
 	var corroborations []corroborationResult
 	for _, lensName := range selectCorroborationLenses(title, claim) {
 		lensData, ok := registry.Get(lensName)
@@ -450,11 +509,16 @@ func corroborateRecommendation(ctx context.Context, deps Dependencies, title, cl
 		if offAllowlistDropped > 0 {
 			cr.Flags = append(cr.Flags, "lens_restriction_unreliable")
 		}
-		for _, r := range enriched {
+		for i, r := range enriched {
 			signal, _ := r["claimSignal"].(string)
 			resultTitle, _ := r["title"].(string)
-			snippet, _ := r["snippet"].(string)
-			matched, total := content.ClaimTermCoverageWindowed(snippet, fullClaim, 0)
+			// #679: gate on the same pooled evidence text (title + snippet +
+			// extraSnippets) that produced claimSignal, not the bare snippet
+			// field alone — otherwise a match living in the title or an
+			// extraSnippet (common for listicle sources) under-counts a
+			// genuine endorsement into silentCount instead of agreeCount.
+			evidenceText := claimEvidenceText(onAllowlist[i])
+			matched, total := content.ClaimTermCoverageWindowed(evidenceText, fullClaim, 0)
 			addressed := total > 0 && float64(matched)/float64(total) >= claimAddressedThreshold
 			switch {
 			case content.HasContrastCue([]string{signal, resultTitle}):

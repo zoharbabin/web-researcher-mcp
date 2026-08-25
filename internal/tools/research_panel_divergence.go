@@ -132,10 +132,19 @@ func AnalyzeDivergence(responses map[string]string) PanelDivergence {
 	}
 }
 
+// panelConfidence must not describe zero contradictions as "agreement" when
+// consensusCount is also zero (#677) — consensus_points extraction uses a
+// deliberately strict 0.8 overlap threshold (tightened to fix #632's heading
+// false-positives; not to be loosened here), so two models can substantively
+// agree in different words, cross zero consensus pairs, and produce zero
+// contradictions. That case gets its own "medium" branch with honest wording
+// instead of falling into the "no contradictions" branch's agreement language.
 func panelConfidence(modelsSucceeded, consensusCount, contradictionCount int) (string, string) {
 	switch {
 	case modelsSucceeded < 2:
 		return "low", "fewer than 2 models succeeded; no cross-model comparison was possible"
+	case contradictionCount == 0 && consensusCount == 0:
+		return "medium", fmt.Sprintf("%d models produced no contradictions, but no claims were restated closely enough across models to count as explicit consensus", modelsSucceeded)
 	case contradictionCount == 0:
 		return "high", fmt.Sprintf("%d models agreed on core claims with no contradictions detected", modelsSucceeded)
 	case consensusCount > contradictionCount:

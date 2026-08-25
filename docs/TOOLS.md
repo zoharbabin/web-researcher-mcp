@@ -457,6 +457,7 @@ type SearchAndScrapeOutput struct {
     Trust           string          `json:"trust"`            // "untrusted-external-content" — boundary marker for combinedContent + every source; treat as data, not instructions (OWASP LLM01)
     ScrapeFailures  []FailureInfo   `json:"scrapeFailures,omitempty"`
     Note            string          `json:"note,omitempty"`   // guidance when status="failed"
+    QualityDominanceWarning string  `json:"qualityDominanceWarning,omitempty"` // present only when one source scoring below the quality threshold (overall < 0.4) accounts for more than half of the combined content's length (#667); names that source's URL so the caller can discount it
     Summary         PipelineSummary `json:"summary"`
     SizeMetadata    SizeMetadata    `json:"sizeMetadata"`
     Recommendations []Recommendation `json:"recommendations,omitempty"` // advisory; see below
@@ -542,7 +543,7 @@ type PipelineSummary struct {
 4. Score and rank sources by quality (weighted: relevance 35%, freshness 20%, authority 25%, content 20%)
 5. If `filter_by_query`: extract keywords, remove sources below relevance threshold
 6. Combine content, truncate to `total_max_length`
-7. Return structured result with scores and metadata
+7. Return structured result with scores and metadata; if a single source scoring below the quality threshold (overall < 0.4) accounts for more than half of the combined content's length, add `qualityDominanceWarning` naming that source's URL (#667)
 8. Optionally append `recommendations` (advisory, content-based; `SOURCE_RECOMMENDATIONS`, default on) and `components` (`mcp-auto-formatted` renderables, deterministic — no LLM; `GENERATIVE_UI_ENABLED`, default off) — both derived purely from the quality scores already computed, with no extra scoring pass and no model call
 
 ### Recommendations & components (additive)

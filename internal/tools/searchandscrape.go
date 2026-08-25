@@ -206,6 +206,7 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 		results := parallelScrape(ctx, deps, searchResults, maxLenPerSource)
 		sources, combinedParts, scraped, sparseSources, structuredFailures := buildSourcesStructured(results, input.Query, input.Claim, filterByQuery)
 		combined := assembleCombined(combinedParts, deduplicate, totalMaxLen)
+		dominanceWarning := lowQualityDominanceWarning(sources, combinedParts, 0.4)
 
 		// Phase 1B: top-level status field
 		status := "complete"
@@ -234,6 +235,9 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 				"estimatedTokens": content.EstimateTokens(combined),
 				"sizeCategory":    content.SizeCategory(len(combined)),
 			},
+		}
+		if dominanceWarning != "" {
+			output["qualityDominanceWarning"] = dominanceWarning
 		}
 
 		if len(structuredFailures) > 0 {
@@ -456,6 +460,43 @@ func buildSourcesStructured(results []scrapeResult, query, claim string, filterB
 	}
 
 	return sources, combinedParts, scraped, sparseSources, failures
+}
+
+// lowQualityDominanceWarning returns an advisory for issue #667:
+// assembleCombined concatenates each source's content up to totalMaxLen
+// purely by length, with no regard for the per-source quality score already
+// computed by buildSourcesStructured. A single low-scoring, verbose source can
+// therefore occupy most of the combined output while a higher-quality source
+// in the same call is truncated more aggressively to fit the shared budget,
+// with nothing surfacing that skew downstream. Pure function: sources and
+// combinedParts are index-aligned (both built in the same loop in
+// buildSourcesStructured). Fires only when some source scoring below
+// threshold accounts for more than half of the total combined content
+// length; returns "" otherwise.
+func lowQualityDominanceWarning(sources []sourceOutput, combinedParts []string, threshold float64) string {
+	total := 0
+	for _, p := range combinedParts {
+		total += len(p)
+	}
+	if total == 0 {
+		return ""
+	}
+	for i, src := range sources {
+		if i >= len(combinedParts) || src.Scores == nil {
+			continue
+		}
+		if src.Scores.Overall >= threshold {
+			continue
+		}
+		share := float64(len(combinedParts[i])) / float64(total)
+		if share > 0.5 {
+			return fmt.Sprintf(
+				"%s scored low on quality (overall %.2f) but makes up %.0f%% of the combined content — weigh it with caution relative to the other sources.",
+				src.URL, src.Scores.Overall, share*100,
+			)
+		}
+	}
+	return ""
 }
 
 func assembleCombined(parts []string, deduplicate bool, totalMaxLen int) string {

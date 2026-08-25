@@ -1,6 +1,9 @@
 package tools
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestAnalyzeDivergence_Consensus(t *testing.T) {
 	responses := map[string]string{
@@ -143,6 +146,35 @@ func TestAnalyzeDivergence_HeadingNotMisreadAsConsensus(t *testing.T) {
 	}
 	if len(d.ConsensusPoints) == 0 {
 		t.Fatalf("expected the shared substantive claim to be reported as consensus, got none: %+v", d)
+	}
+}
+
+// TestAnalyzeDivergence_NoConsensusNoContradiction_RationaleHonest is the #677
+// regression: two models substantively agree (hybrid work stabilizing) but
+// phrase it differently enough that no sentence pair crosses the strict 0.8
+// consensus-overlap threshold, and neither uses a negation cue, so no
+// contradiction fires either. Before the fix, panelConfidence's
+// "contradictionCount == 0" branch fired regardless of consensusCount,
+// producing confidence:"high" and agreement language ("agreed on core
+// claims") that consensus_points:[] didn't back up.
+func TestAnalyzeDivergence_NoConsensusNoContradiction_RationaleHonest(t *testing.T) {
+	responses := map[string]string{
+		"a/x": "Hybrid work arrangements are likely to stabilize as the dominant model for most large employers over the next few years.",
+		"b/y": "Most big companies will probably settle into a steady hybrid pattern rather than shifting fully remote or fully back to offices.",
+	}
+	d := AnalyzeDivergence(responses)
+
+	if len(d.ConsensusPoints) != 0 {
+		t.Fatalf("expected no consensus points for paraphrased agreement below the overlap threshold, got %+v", d.ConsensusPoints)
+	}
+	if len(d.Contradictions) != 0 {
+		t.Fatalf("expected no contradictions, got %+v", d.Contradictions)
+	}
+	if d.Confidence != "medium" {
+		t.Errorf("expected medium confidence when neither consensus nor contradiction fires, got %q (%s)", d.Confidence, d.ConfidenceRationale)
+	}
+	if strings.Contains(d.ConfidenceRationale, "agreed") {
+		t.Errorf("confidence_rationale must not claim agreement when consensus_points is empty, got %q", d.ConfidenceRationale)
 	}
 }
 

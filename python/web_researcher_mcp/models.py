@@ -2115,6 +2115,7 @@ class SearchAndScrapeResponse:
     components: list[SearchAndScrapeComponent] = field(default_factory=list)
     hints: dict[str, Any] = field(default_factory=dict)
     note: Optional[str] = None
+    qualityDominanceWarning: Optional[str] = None
     query: Optional[str] = None
     recommendations: list[SearchAndScrapeRecommendation] = field(default_factory=list)
     scrapeFailures: list[SearchAndScrapeScrapefailure] = field(default_factory=list)
@@ -2134,6 +2135,7 @@ class SearchAndScrapeResponse:
             components=[SearchAndScrapeComponent.from_dict(i) for i in (d.get('components') or [])],
             hints=dict(d.get('hints') or {}),
             note=d.get('note'),
+            qualityDominanceWarning=d.get('qualityDominanceWarning'),
             query=d.get('query'),
             recommendations=[SearchAndScrapeRecommendation.from_dict(i) for i in (d.get('recommendations') or [])],
             scrapeFailures=[SearchAndScrapeScrapefailure.from_dict(i) for i in (d.get('scrapeFailures') or [])],
