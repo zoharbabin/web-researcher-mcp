@@ -506,42 +506,42 @@ func TestVerifyCitation_ClaimFetchError_Surfaced(t *testing.T) {
 	}
 }
 
-// TestEmitClaimCoverageCandidates_CapsAtMaxAttempts is the #681 regression
-// test for maxClaimURLCandidateAttempts: given more candidates than the cap,
-// emitClaimCoverageCandidates must stop after exactly
-// maxClaimURLCandidateAttempts (3) tries — never reaching a 4th candidate
-// even when it would have succeeded. The first 3 candidates are dead servers
-// (closed before use: connection refused, a genuine fetch error, not empty
-// content), the 4th is a live server serving real content; if the cap were
-// missing or off-by-one, the loop would reach the 4th candidate and the
-// result would flip to "addressed" with the 4th server's URL.
-func TestEmitClaimCoverageCandidates_CapsAtMaxAttempts(t *testing.T) {
-	var deadURLs []string
-	for i := 0; i < 3; i++ {
-		dead := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
-		deadURLs = append(deadURLs, dead.URL)
-		dead.Close() // closed before use: connection refused
-	}
-	live := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+// TestVerifyCitation_ClaimCandidateCapCoversUnpaywallPrepend is the fix for a
+// gap #657 opened: prependCandidate puts the Unpaywall candidate in front of
+// bestClaimURLCandidates' own 3 (PDFUrl, landing URL, doi.org fallback),
+// producing up to 4 unique candidates — but maxClaimURLCandidateAttempts was
+// still 3, so the doi.org fallback (the last, most-likely-to-work candidate)
+// was silently truncated away whenever the first 3 all failed. Drives
+// emitClaimCoverageCandidates directly with 4 candidates, the first 3 dead,
+// to confirm the 4th is still attempted.
+func TestVerifyCitation_ClaimCandidateCapCoversUnpaywallPrepend(t *testing.T) {
+	dead1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	dead1URL := dead1.URL
+	dead1.Close()
+	dead2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	dead2URL := dead2.URL
+	dead2.Close()
+	dead3 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	dead3URL := dead3.URL
+	dead3.Close()
+
+	landing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
 		_, _ = w.Write([]byte(`<html><body><article><p>The vaccine trial demonstrated significant efficacy in reducing infection rates across all age groups.</p></article></body></html>`))
 	}))
-	defer live.Close()
-	candidates := append(append([]string{}, deadURLs...), live.URL)
-	if len(candidates) != maxClaimURLCandidateAttempts+1 {
-		t.Fatalf("test setup: want %d candidates, got %d", maxClaimURLCandidateAttempts+1, len(candidates))
-	}
+	defer landing.Close()
 
 	deps := verifyClaimDeps(t)
 	out := map[string]any{}
 	var prov []string
+	candidates := []string{dead1URL, dead2URL, dead3URL, landing.URL}
 	emitClaimCoverageCandidates(context.Background(), deps, candidates, "vaccine efficacy reduced infection", out, &prov)
 
-	if out["claimSupport"] != claimSourceUnavailable {
-		t.Errorf("claimSupport = %v, want %v (must NOT reach the 4th, live candidate past the cap)", out["claimSupport"], claimSourceUnavailable)
+	if out["claimSupport"] != "addressed" {
+		t.Errorf("claimSupport = %v, want addressed (the cap must not truncate away the 4th candidate)", out["claimSupport"])
 	}
-	wantURL := deadURLs[maxClaimURLCandidateAttempts-1]
-	if out["claimSourceUrl"] != wantURL {
-		t.Errorf("claimSourceUrl = %v, want %q (the last candidate actually attempted before the cap)", out["claimSourceUrl"], wantURL)
+	if out["claimSourceUrl"] != landing.URL {
+		t.Errorf("claimSourceUrl = %v, want %s (the 4th candidate, only reachable if the cap is >= 4)", out["claimSourceUrl"], landing.URL)
 	}
 }
 
