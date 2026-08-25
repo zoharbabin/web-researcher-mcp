@@ -429,8 +429,11 @@ func TestScrapeTool_Success_NotAffected(t *testing.T) {
 	}
 }
 
-// Regression test: DNS failure returns network error
-func TestScrapeTool_DNSFailure_ReturnsNetworkError(t *testing.T) {
+// Regression test for issue #674: a DNS NXDOMAIN ("no such host") is a
+// PERMANENT failure (the domain does not exist and never will on retry), so
+// it must classify as not_found/non-retryable — NOT the generic transient
+// network/retryable bucket.
+func TestScrapeTool_DNSFailure_ReturnsNotFoundError(t *testing.T) {
 	ctx := context.Background()
 	deps := Dependencies{
 		Cache:    cache.NewNoop(),
@@ -458,7 +461,57 @@ func TestScrapeTool_DNSFailure_ReturnsNetworkError(t *testing.T) {
 	}
 	text := res.Content[0].(*mcp.TextContent).Text
 	if strings.Contains(text, issueURL) {
-		t.Errorf("network errors should NOT suggest filing an issue, got: %s", text)
+		t.Errorf("NXDOMAIN errors should NOT suggest filing an issue, got: %s", text)
+	}
+	if !strings.Contains(text, `"kind":"not_found"`) {
+		t.Errorf("expected kind=not_found for NXDOMAIN, got: %s", text)
+	}
+	if !strings.Contains(text, `"retryable":false`) {
+		t.Errorf("expected retryable=false for NXDOMAIN, got: %s", text)
+	}
+	if !strings.Contains(text, `"suggestedAction":"inform_user"`) {
+		t.Errorf("expected inform_user action for NXDOMAIN, got: %s", text)
+	}
+}
+
+// TestScrapeTool_ConnectionRefused_ReturnsRetryableNetworkError is a
+// regression guard alongside the NXDOMAIN test above: a genuinely transient
+// fault (connection refused) must remain ErrNetwork/retryable — the NXDOMAIN
+// fix must not make ALL network errors non-retryable.
+func TestScrapeTool_ConnectionRefused_ReturnsRetryableNetworkError(t *testing.T) {
+	ctx := context.Background()
+	deps := Dependencies{
+		Cache:    cache.NewNoop(),
+		Search:   &mockProvider{},
+		Scraper:  scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true}),
+		Content:  content.NewProcessor(),
+		Sessions: func() session.Manager { m, _ := session.NewManager(session.Config{MaxSessions: 100}); return m }(),
+		Metrics:  metrics.NewCollector(),
+		Auditor:  audit.NewNoop(),
+		Logger:   slog.Default(),
+	}
+	srv := createTestServer(deps)
+	client := connectTestClient(ctx, t, srv)
+	defer client.Close()
+
+	// A closed local port: the connection is refused, which is transient (a
+	// server could start listening later) — distinct from a nonexistent domain.
+	res, err := client.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "scrape_page",
+		Arguments: map[string]any{"url": "http://127.0.0.1:1/page"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool error: %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected error response for a closed port")
+	}
+	text := res.Content[0].(*mcp.TextContent).Text
+	if !strings.Contains(text, `"kind":"network"`) {
+		t.Errorf("expected kind=network for connection refused, got: %s", text)
+	}
+	if !strings.Contains(text, `"retryable":true`) {
+		t.Errorf("expected retryable=true for connection refused (regression: NXDOMAIN fix must not affect transient network errors), got: %s", text)
 	}
 }
 

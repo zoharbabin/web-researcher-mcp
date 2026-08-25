@@ -506,7 +506,7 @@ func scrapeErrorResponse(err error, url string) *mcp.CallToolResult {
 	case scraper.ErrContent:
 		msg = fmt.Sprintf("No content extracted from %s. May need browser rendering. Report at %s", url, issueURL)
 	case scraper.ErrNotFound:
-		msg = fmt.Sprintf("Not found: %s returned 404/410 — the page does not exist. Check the URL.", url)
+		msg = fmt.Sprintf("Not found: %s does not exist (404/410, or the domain could not be resolved). Check the URL.", url)
 	case scraper.ErrAuth:
 		msg = fmt.Sprintf("Auth required: %s is behind a login wall.", url)
 	case scraper.ErrRateLimit:
