@@ -180,7 +180,13 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 			}
 		}
 
-		// Strategy 3: Try academic providers directly (non-router mode, deterministic order)
+		// Strategy 3: Try academic providers directly (non-router mode,
+		// deterministic order). A rate-limited (or otherwise failing)
+		// provider is skipped, not treated as exhausting the whole ladder
+		// (#503, #697) — isRateLimitError now also matches
+		// circuit.ErrCircuitOpen (#664), so a mid-ladder provider with an
+		// open breaker must not abort the search for every healthy provider
+		// listed after it.
 		if len(results) == 0 && input.Provider == "" {
 			for _, name := range search.SupportedAcademicProviders {
 				ap, ok := deps.AcademicProviders[name]
@@ -191,8 +197,6 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 				if err == nil && len(apiResults) > 0 {
 					results = apiResults
 					providerSource = name
-					break
-				} else if err != nil && isRateLimitError(err) {
 					break
 				}
 			}

@@ -206,6 +206,12 @@ func (p *OpenAlexProvider) References(ctx context.Context, seedID string, numRes
 	return out, err
 }
 
+// SupportsInfluenceSignal implements CitationSearcher: OpenAlex's edges are
+// counts-only (see the Citations/References doc comments above) and never
+// populate IsInfluential (#655). citation_graph's influential_only filter
+// must no-op for this provider rather than discard every result.
+func (p *OpenAlexProvider) SupportsInfluenceSignal() bool { return false }
+
 // resolveWorkID resolves a DOI or OpenAlex URL/ID to a short OpenAlex work ID
 // (e.g. "W2741809807"). Returns "" if the seed can't be resolved.
 func (p *OpenAlexProvider) resolveWorkID(ctx context.Context, seedID string) (string, error) {

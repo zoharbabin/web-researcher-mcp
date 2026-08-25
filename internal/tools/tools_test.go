@@ -153,6 +153,14 @@ func (m *mockAcademicProvider) References(_ context.Context, _ string, _ int) ([
 	return []search.AcademicResult{{Title: "Foundational", URL: "https://doi.org/10.0/z", DOI: "10.0/z", Year: 2017, Source: "openalex"}}, nil
 }
 
+// SupportsInfluenceSignal implements CitationSearcher, mirroring real OpenAlex
+// (this mock is named "openalex"): counts-only edges, no influence signal
+// (#655). The IsInfluential:true set on the Citations mock result above is
+// deliberately unused signal noise a real OpenAlex response could carry
+// (always false in production) — this method, not that field, is what gates
+// citation_graph's influential_only filter.
+func (m *mockAcademicProvider) SupportsInfluenceSignal() bool { return false }
+
 // ResolveByDOI implements the DOIResolver capability: it returns the exact record
 // ONLY for the DOI it knows (10.1234/x, a valid-shaped DOI the doiPattern accepts),
 // and nil for anything else — modeling a real entity lookup that has no record for
@@ -1413,7 +1421,7 @@ func TestScrapePageSparsityWarning(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.Write([]byte(`<!DOCTYPE html><html><head><title>Thin</title></head><body><article>
-<p>Please subscribe to continue reading this article. Access is limited to subscribers only at this time.</p>
+<p>This page contains only a brief summary of the topic, with no further detail currently available here at this time.</p>
 </article></body></html>`))
 	}))
 	defer ts.Close()
@@ -1532,7 +1540,7 @@ func TestSearchAndScrapeSparseSources(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.Write([]byte(`<!DOCTYPE html><html><head><title>Thin</title></head><body><article>
-<p>Please subscribe to continue reading this article. Access is limited to subscribers only at this time.</p>
+<p>This page contains only a brief summary of the topic, with no further detail currently available here at this time.</p>
 </article></body></html>`))
 	}))
 	defer ts.Close()
@@ -1592,7 +1600,7 @@ func TestSearchAndScrapeSparseSourcesWithFilterByQuery(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.Write([]byte(`<!DOCTYPE html><html><head><title>Thin</title></head><body><article>
-<p>Please subscribe to continue reading this article. Access is limited to subscribers only at this time.</p>
+<p>This page contains only a brief summary of the topic, with no further detail currently available here at this time.</p>
 </article></body></html>`))
 	}))
 	defer ts.Close()

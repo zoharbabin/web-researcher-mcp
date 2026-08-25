@@ -184,3 +184,63 @@ func TestFormatBibliographySkipsNoURL(t *testing.T) {
 		t.Errorf("entry without URL should be skipped:\n%s", out)
 	}
 }
+
+// TestFormatBibliographyDecodesHTMLEntitiesInTitle guards #668: a source title
+// that arrives already HTML-entity-encoded (e.g. from a raw-regex title
+// extraction that skipped html.UnescapeString) must render with the entity
+// decoded — a real ampersand in APA/MLA, and a single backslash-escaped
+// ampersand (not a doubled/compounded escape) in BibTeX.
+func TestFormatBibliographyDecodesHTMLEntitiesInTitle(t *testing.T) {
+	entries := []BibEntry{{
+		URL:    "https://example.com/a",
+		Title:  "Cookies &amp; Cream Recipe",
+		Author: "Doe, J.",
+		Date:   "2020",
+	}}
+
+	apaOut, _ := FormatBibliography(entries, "apa")
+	if !strings.Contains(apaOut, "Cookies & Cream Recipe") {
+		t.Errorf("APA should decode the entity to a real ampersand:\n%s", apaOut)
+	}
+	if strings.Contains(apaOut, "&amp;") {
+		t.Errorf("APA must not surface the raw entity:\n%s", apaOut)
+	}
+
+	mlaOut, _ := FormatBibliography(entries, "mla")
+	if !strings.Contains(mlaOut, "Cookies & Cream Recipe") {
+		t.Errorf("MLA should decode the entity to a real ampersand:\n%s", mlaOut)
+	}
+	if strings.Contains(mlaOut, "&amp;") {
+		t.Errorf("MLA must not surface the raw entity:\n%s", mlaOut)
+	}
+
+	bibtexOut, _ := FormatBibliography(entries, "bibtex")
+	if !strings.Contains(bibtexOut, `title = {Cookies \& Cream Recipe}`) {
+		t.Errorf("BibTeX should render a single backslash-escaped ampersand, not a compounded escape:\n%s", bibtexOut)
+	}
+	if strings.Contains(bibtexOut, `\&amp;`) {
+		t.Errorf("BibTeX must not double-escape an un-decoded entity:\n%s", bibtexOut)
+	}
+}
+
+// TestFormatBibliographyRealAmpersandStillRoundTrips is the no-regression
+// counterpart to TestFormatBibliographyDecodesHTMLEntitiesInTitle: a title
+// with a real, never-entity-encoded ampersand must keep rendering correctly.
+func TestFormatBibliographyRealAmpersandStillRoundTrips(t *testing.T) {
+	entries := []BibEntry{{
+		URL:    "https://example.com/a",
+		Title:  "Cookies & Cream Recipe",
+		Author: "Doe, J.",
+		Date:   "2020",
+	}}
+
+	apaOut, _ := FormatBibliography(entries, "apa")
+	if !strings.Contains(apaOut, "Cookies & Cream Recipe") {
+		t.Errorf("APA should keep the real ampersand:\n%s", apaOut)
+	}
+
+	bibtexOut, _ := FormatBibliography(entries, "bibtex")
+	if !strings.Contains(bibtexOut, `title = {Cookies \& Cream Recipe}`) {
+		t.Errorf("BibTeX should escape the real ampersand exactly once:\n%s", bibtexOut)
+	}
+}

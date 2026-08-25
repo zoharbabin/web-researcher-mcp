@@ -193,27 +193,64 @@ func splitAuthors(author string) []string {
 	return out
 }
 
-// splitBareCommaNames detects a bare comma-separated list of "First Last"
-// names within a single ";"/" and "-delimited segment (#639) and splits it
-// into individual names. A comma instead separating a single pre-inverted
-// "Family, Given" name (e.g. "Smith, J.") must NOT be split, so the split
-// only fires when EVERY comma-delimited part itself looks like a full name
-// (2+ whitespace tokens) — a bare surname or a given-name initial never has
-// 2+ tokens, so "Smith, J." and "Bengio, Yoshua" are left as one author each.
+// splitBareCommaNames detects a bare comma-separated list of names within a
+// single ";"/" and "-delimited segment and splits it into individual names.
+// Two input shapes are handled:
+//
+//  1. Full names (#639): every comma-delimited segment itself looks like a
+//     full name (2+ whitespace tokens) — e.g. "Yoshua Bengio, Aaron
+//     Courville". Split on every comma.
+//  2. Pre-inverted pairs (#680): every segment is a SINGLE token and the
+//     segment count is even — e.g. "Smith, John, Doe, Jane" (segments
+//     "Smith"|"John"|"Doe"|"Jane"). Adjacent segments are paired back into
+//     "Family, Given" form: "Smith, John" and "Doe, Jane". This subsumes the
+//     single-pre-inverted-author case ("Smith, J." -> 2 single-token
+//     segments -> 1 pair -> 1 author), so no separate single-pair branch is
+//     needed.
+//
+// Anything else — odd segment counts, or a mix of single- and multi-token
+// segments (e.g. "de la Cruz, Maria") — is genuinely ambiguous and is
+// returned unsplit, as a single pre-inverted "Family, Given" name.
 func splitBareCommaNames(s string) []string {
 	if !strings.Contains(s, ",") {
 		return []string{s}
 	}
 	segments := strings.Split(s, ",")
-	names := make([]string, 0, len(segments))
-	for _, seg := range segments {
+
+	allMultiToken := true
+	allSingleToken := true
+	trimmed := make([]string, len(segments))
+	for i, seg := range segments {
 		t := strings.TrimSpace(seg)
-		if len(strings.Fields(t)) < 2 {
-			return []string{s}
+		trimmed[i] = t
+		switch len(strings.Fields(t)) {
+		case 0:
+			// An empty segment (stray/doubled comma) is neither a full name
+			// nor a single-token pre-inverted half — disqualify both shapes
+			// so this falls through to the safe unsplit fallback instead of
+			// silently pairing unrelated names around the gap.
+			allMultiToken = false
+			allSingleToken = false
+		case 1:
+			allMultiToken = false
+		default:
+			allSingleToken = false
 		}
-		names = append(names, t)
 	}
-	return names
+
+	if allMultiToken {
+		return trimmed
+	}
+
+	if allSingleToken && len(trimmed)%2 == 0 {
+		pairs := make([]string, 0, len(trimmed)/2)
+		for i := 0; i < len(trimmed); i += 2 {
+			pairs = append(pairs, trimmed[i]+", "+trimmed[i+1])
+		}
+		return pairs
+	}
+
+	return []string{s}
 }
 
 // normalizeBibDOI strips a doi.org URL prefix so the DOI field carries the bare

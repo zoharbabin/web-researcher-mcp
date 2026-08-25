@@ -325,17 +325,15 @@ func allDigits(s string) bool {
 	return len(s) > 0
 }
 
-// normalizeBibTeXAuthor converts semicolon-separated author lists to the
-// BibTeX " and "-separated form. BibTeX requires " and " as the author
-// separator (e.g. "Smith, J. and Doe, A."); semicolons are accepted at the
-// input boundary (bibliography tool, format_bibliography) but are invalid
-// BibTeX syntax.
+// normalizeBibTeXAuthor converts a free-form author string to the BibTeX
+// " and "-separated form. BibTeX requires " and " as the author separator
+// (e.g. "Smith, J. and Doe, A."); ";"/" and "-delimited input (accepted at
+// the input boundary — bibliography tool, format_bibliography) and a bare
+// comma-separated list (full names or pre-inverted "Family, Given" pairs,
+// #639/#680) are both split via splitAuthors so multiple authors never
+// collapse into one BibTeX author field.
 func normalizeBibTeXAuthor(author string) string {
-	parts := strings.Split(author, ";")
-	for i, p := range parts {
-		parts[i] = strings.TrimSpace(p)
-	}
-	return strings.Join(parts, " and ")
+	return strings.Join(splitAuthors(author), " and ")
 }
 
 // bibtexEscape escapes the BibTeX-significant characters so a value can't break

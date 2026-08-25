@@ -338,8 +338,8 @@ func TestTrustSuiteAccuracy_VerifyCitationClaim(t *testing.T) {
 // TestTrustSuiteAccuracy_CorroborationCoverageGate (#600) is the live-eval
 // regression guard for verify_recommendation's corroboration over-counting bug:
 // a result must never count toward agreeCount unless its snippet clears the
-// ClaimTermCoverageWindowed/claimAddressedThreshold ratio against "title +
-// claim". Drives the real corroborateRecommendation path — live news/tech
+// ClaimTermCoverageWindowed/claimAddressedThreshold ratio against
+// dedupedFullClaim(title, claim). Drives the real corroborateRecommendation path — live news/tech
 // search results — against a claim shape known to collide with incidental
 // single-token mentions ("reacted" stems to "react", "COVID-19" contains the
 // numeric token "19"): exactly the class of bug #600 fixed. The assertion is
@@ -374,7 +374,7 @@ func TestTrustSuiteAccuracy_CorroborationCoverageGate(t *testing.T) {
 		t.Skip("no live corroboration results returned — search unavailable in this environment")
 	}
 
-	fullClaim := title + " " + claim
+	fullClaim := dedupedFullClaim(title, claim)
 	for _, cr := range corroborations {
 		expectedAgree := 0
 		for _, r := range cr.TopResults {

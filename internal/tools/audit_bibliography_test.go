@@ -653,7 +653,7 @@ func TestAuditBibliographyThinContentCount(t *testing.T) {
 	// 3 of 5 entries fetch thin (<150 word) pages; the other 2 fetch a full article.
 	thin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		_, _ = w.Write([]byte(`<html><body><article><p>Please subscribe to continue reading this article.</p></article></body></html>`))
+		_, _ = w.Write([]byte(`<html><body><article><p>This page contains only a brief summary of the topic, with no further detail available here.</p></article></body></html>`))
 	}))
 	defer thin.Close()
 	full := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
