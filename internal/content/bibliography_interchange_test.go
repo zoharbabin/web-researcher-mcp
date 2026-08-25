@@ -105,6 +105,61 @@ func TestFormatCSLJSONValidAndComplete(t *testing.T) {
 	}
 }
 
+// TestFormatBibliographyBareCommaPreInvertedPairsAcrossFormats proves #680's
+// success criteria end-to-end: a bare comma-separated pre-inverted author
+// list ("Smith, John, Doe, Jane") renders as two distinct authors in every
+// bibliography format, not one mangled author.
+func TestFormatBibliographyBareCommaPreInvertedPairsAcrossFormats(t *testing.T) {
+	entries := []BibEntry{{
+		URL:    "https://example.com/a",
+		Title:  "Widgets at Scale",
+		Author: "Smith, John, Doe, Jane",
+		Date:   "2020",
+	}}
+
+	bibtexOut, _ := FormatBibliography(entries, "bibtex")
+	if !strings.Contains(bibtexOut, "author = {Smith, John and Doe, Jane}") {
+		t.Errorf("BibTeX should render 2 authors joined by \" and \", not 1 merged author:\n%s", bibtexOut)
+	}
+
+	risOut, _ := FormatBibliography(entries, "ris")
+	auCount := strings.Count(risOut, "AU  - ")
+	if auCount != 2 {
+		t.Errorf("RIS should have 2 AU lines, got %d:\n%s", auCount, risOut)
+	}
+	if !strings.Contains(risOut, "AU  - Smith, John") || !strings.Contains(risOut, "AU  - Doe, Jane") {
+		t.Errorf("RIS AU lines should be Smith, John and Doe, Jane:\n%s", risOut)
+	}
+
+	cslOut, _ := FormatBibliography(entries, "csl-json")
+	var items []map[string]any
+	if err := json.Unmarshal([]byte(cslOut), &items); err != nil {
+		t.Fatalf("CSL-JSON is not valid JSON: %v\n%s", err, cslOut)
+	}
+	authors, ok := items[0]["author"].([]any)
+	if !ok || len(authors) != 2 {
+		t.Fatalf("expected 2 CSL-JSON authors, got %v", items[0]["author"])
+	}
+	first, _ := authors[0].(map[string]any)
+	second, _ := authors[1].(map[string]any)
+	if first["family"] != "Smith" || first["given"] != "John" {
+		t.Errorf("first author family/given = %v/%v, want Smith/John", first["family"], first["given"])
+	}
+	if second["family"] != "Doe" || second["given"] != "Jane" {
+		t.Errorf("second author family/given = %v/%v, want Doe/Jane", second["family"], second["given"])
+	}
+
+	apaOut, _ := FormatBibliography(entries, "apa")
+	if !strings.Contains(apaOut, "Smith, John, & Doe, Jane") {
+		t.Errorf("APA should render 2 authors, not 1 merged author:\n%s", apaOut)
+	}
+
+	mlaOut, _ := FormatBibliography(entries, "mla")
+	if !strings.Contains(mlaOut, "Smith, John, and Doe, Jane") {
+		t.Errorf("MLA should render 2 authors, not 1 merged author:\n%s", mlaOut)
+	}
+}
+
 func TestFormatCSLJSONEmptyIsValidArray(t *testing.T) {
 	out, n := FormatBibliography(nil, "csl-json")
 	if n != 0 || out != "[]" {
@@ -305,6 +360,8 @@ func TestSplitAuthors(t *testing.T) {
 		"Yoshua Bengio, Aaron Courville": 2,
 		"Yoshua Bengio, Aaron Courville, Geoffrey Hinton": 3,
 		"Smith, John Michael and Doe, Jane Anne":          2,
+		"Smith, John, Doe, Jane":                          2,
+		"Smith, John, Doe, Jane, Lee, Kim":                3,
 	}
 	for in, want := range cases {
 		if got := len(splitAuthors(in)); got != want {
@@ -339,6 +396,34 @@ func TestSplitAuthorsPreInvertedSingleAuthorNotSplit(t *testing.T) {
 		names := splitAuthors(in)
 		if len(names) != 1 || names[0] != in {
 			t.Errorf("splitAuthors(%q) = %v, want single unsplit author %q", in, names, in)
+		}
+	}
+}
+
+// TestSplitAuthorsBareCommaPreInvertedPairs proves the #680 fix: a bare
+// comma-separated list of pre-inverted "Family, Given" pairs (all
+// single-token comma segments, even count) is paired back up into individual
+// "Family, Given" authors, not merged into one mangled author.
+func TestSplitAuthorsBareCommaPreInvertedPairs(t *testing.T) {
+	names := splitAuthors("Smith, John, Doe, Jane")
+	want := []string{"Smith, John", "Doe, Jane"}
+	if len(names) != len(want) {
+		t.Fatalf("splitAuthors(bare comma pre-inverted pairs) = %v, want %v", names, want)
+	}
+	for i := range want {
+		if names[i] != want[i] {
+			t.Errorf("splitAuthors(bare comma pre-inverted pairs)[%d] = %q, want %q", i, names[i], want[i])
+		}
+	}
+
+	names3 := splitAuthors("Smith, John, Doe, Jane, Lee, Kim")
+	want3 := []string{"Smith, John", "Doe, Jane", "Lee, Kim"}
+	if len(names3) != len(want3) {
+		t.Fatalf("splitAuthors(3 pre-inverted pairs) = %v, want %v", names3, want3)
+	}
+	for i := range want3 {
+		if names3[i] != want3[i] {
+			t.Errorf("splitAuthors(3 pre-inverted pairs)[%d] = %q, want %q", i, names3[i], want3[i])
 		}
 	}
 }
