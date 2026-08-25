@@ -234,10 +234,23 @@ func ClaimTermCoverage(text, claim string) (matched, total int) {
 // A document with fewer sentences than the window is measured as one window (i.e.
 // degrades to whole-document coverage), so short sources are unaffected.
 func ClaimTermCoverageWindowed(text, claim string, windowSize int) (matched, total int) {
+	matched, total, _ = ClaimTermCoverageWindowedSpan(text, claim, windowSize)
+	return matched, total
+}
+
+// ClaimTermCoverageWindowedSpan behaves exactly like ClaimTermCoverageWindowed
+// but additionally returns the text of the peak-coverage window itself. A
+// caller that runs a further gate on top of the coverage ratio — e.g.
+// ClaimHasMatchedDistinguishingTerm — must run that gate against this SAME
+// local passage, not the whole document: checking the ratio locally but the
+// gate globally lets a distinguishing term matched anywhere else on a long
+// page satisfy a gate meant to confirm THIS passage is actually about the
+// claim's entity (#675 adversarial review finding).
+func ClaimTermCoverageWindowedSpan(text, claim string, windowSize int) (matched, total int, windowText string) {
 	terms := claimTerms(claim)
 	total = len(terms)
 	if total == 0 || strings.TrimSpace(text) == "" {
-		return 0, total
+		return 0, total, ""
 	}
 	if windowSize <= 0 {
 		windowSize = defaultClaimWindow
@@ -246,7 +259,8 @@ func ClaimTermCoverageWindowed(text, claim string, windowSize int) (matched, tot
 	sentences := splitSentences(stripReferencesSection(text))
 	if len(sentences) == 0 {
 		// No sentence boundaries (e.g. one long line) — fall back to whole-text.
-		return ClaimTermCoverage(text, claim)
+		matched, total = ClaimTermCoverage(text, claim)
+		return matched, total, text
 	}
 
 	// Per-sentence word sets over the claim terms, computed once.
@@ -277,10 +291,11 @@ func ClaimTermCoverageWindowed(text, claim string, windowSize int) (matched, tot
 				matched++
 			}
 		}
-		return matched, total
+		return matched, total, strings.Join(sentences, " ")
 	}
 
 	best := 0
+	bestStart, bestEnd := 0, len(sentences)
 	for start := 0; start < len(sentences); start++ {
 		end := start + windowSize
 		if end > len(sentences) {
@@ -298,6 +313,7 @@ func ClaimTermCoverageWindowed(text, claim string, windowSize int) (matched, tot
 		}
 		if seen > best {
 			best = seen
+			bestStart, bestEnd = start, end
 			if best == total {
 				break // can't do better than full coverage
 			}
@@ -307,7 +323,7 @@ func ClaimTermCoverageWindowed(text, claim string, windowSize int) (matched, tot
 			break
 		}
 	}
-	return best, total
+	return best, total, strings.Join(sentences[bestStart:bestEnd], " ")
 }
 
 // shortDocSentenceThreshold is the sentence count below which
@@ -418,20 +434,35 @@ func ClaimHasMatchedDistinguishingTerm(text, claim string) bool {
 	return false
 }
 
+// genericCapitalizedOpeners are common, non-proper-noun words that are
+// frequently capitalized only because they open a sentence or claim, not
+// because they name an entity. claimDistinguishingTerms excludes these
+// regardless of position. Position alone ("skip each sentence's first
+// word") is NOT a safe proxy for "not a proper noun": a claim can trivially
+// front its actual distinguishing entity to bypass a position-only exclusion
+// — e.g. rephrasing "this study ... cures Alzheimer's disease" as
+// "Alzheimer's disease is cured by this study" made the old position-based
+// skip drop "Alzheimer's" entirely (#675 adversarial review finding). This
+// explicit list, not sentence position, is what now guards against naive
+// sentence-initial-capitalization false positives.
+var genericCapitalizedOpeners = map[string]bool{
+	"this": true, "that": true, "these": true, "those": true,
+	"the": true, "a": true, "an": true, "it": true, "here": true,
+	"there": true, "new": true, "recent": true, "recently": true,
+	"study": true, "studies": true, "research": true, "researchers": true,
+	"scientists": true, "according": true, "some": true, "many": true,
+	"most": true, "several": true, "one": true, "another": true,
+}
+
 // claimDistinguishingTerms returns the lowercased significant terms derived
 // from proper-noun-like tokens in the ORIGINAL (pre-lowercase) claim text —
-// tokens in Title Case (isTitleCaseToken) that do not merely open a sentence
-// (#675). A claim like "this study demonstrates CRISPR-Cas9 CAR-T cures
-// Alzheimer's disease" has generic domain jargon ("CRISPR-Cas9", "CAR-T" —
-// ALL-CAPS/mixed-case acronyms, excluded by isTitleCaseToken) alongside one
-// genuine named entity ("Alzheimer's" — Title Case) that is the actual
-// differentiator of what the claim is about. Each claim sentence's first
-// word is skipped: it is capitalized only because it opens the sentence, not
-// because it is a proper noun (a known false-positive risk with naive
-// capitalization heuristics — see extractCompanyMentions in classify.go for
-// a similar simple capitalized-word heuristic elsewhere in this package,
-// which does not need this exclusion since it operates over full source
-// prose rather than a single short claim sentence).
+// tokens in Title Case (isTitleCaseToken) that aren't a generic capitalized
+// sentence-opener (genericCapitalizedOpeners, #675). A claim like "this study
+// demonstrates CRISPR-Cas9 CAR-T cures Alzheimer's disease" has generic
+// domain jargon ("CRISPR-Cas9", "CAR-T" — ALL-CAPS/mixed-case acronyms,
+// excluded by isTitleCaseToken) alongside one genuine named entity
+// ("Alzheimer's" — Title Case, not a generic opener) that is the actual
+// differentiator of what the claim is about.
 func claimDistinguishingTerms(claim string) []string {
 	claim = strings.TrimSpace(claim)
 	if claim == "" {
@@ -447,11 +478,11 @@ func claimDistinguishingTerms(claim string) []string {
 	var out []string
 	for _, sent := range sentences {
 		fields := strings.Fields(sent)
-		for i, w := range fields {
-			if i == 0 {
-				continue // sentence-initial capitalization proves nothing
-			}
+		for _, w := range fields {
 			if !isTitleCaseToken(w) {
+				continue
+			}
+			if genericCapitalizedOpeners[strings.ToLower(trimTokenPunct(w))] {
 				continue
 			}
 			for _, t := range claimTerms(w) {
@@ -466,6 +497,15 @@ func claimDistinguishingTerms(claim string) []string {
 	return out
 }
 
+// trimTokenPunct strips leading/trailing non-letter, non-number runes (quotes,
+// a trailing period, etc.) from a raw claim token, shared by isTitleCaseToken
+// and the genericCapitalizedOpeners lookup so both see the same token shape.
+func trimTokenPunct(w string) string {
+	return strings.TrimFunc(w, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+	})
+}
+
 // isTitleCaseToken reports whether w (a raw, un-lowercased claim token) has
 // the shape of a proper noun: its first letter is uppercase and every other
 // letter in the token is lowercase (#675). This is the discriminator between
@@ -476,9 +516,7 @@ func claimDistinguishingTerms(claim string) []string {
 // entities. Leading/trailing punctuation (quotes, a trailing period) is
 // trimmed first so it never masks the letters that matter.
 func isTitleCaseToken(w string) bool {
-	runes := []rune(strings.TrimFunc(w, func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
-	}))
+	runes := []rune(trimTokenPunct(w))
 	firstLetter := -1
 	for i, r := range runes {
 		if unicode.IsLetter(r) {

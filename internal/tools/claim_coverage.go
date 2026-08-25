@@ -110,7 +110,7 @@ func claimCoverageFromContent(body, fetchURL, claim string) claimCoverageResult 
 	// local overlap → not_addressed (the only flagged end, and only when the source
 	// was actually read). Partial overlap → evidence shown, NOT flagged (the human
 	// judges). Strong overlap → addressed.
-	matched, total := content.ClaimTermCoverageWindowed(body, claim, 0)
+	matched, total, coverageWindow := content.ClaimTermCoverageWindowedSpan(body, claim, 0)
 	ev := content.ExtractClaimEvidence(body, claim)
 	// content.WordCount, not strings.Fields: CJK/Thai/Lao/Khmer/Myanmar text has
 	// no inter-word spaces, so a complete non-Latin-script source would otherwise
@@ -144,7 +144,7 @@ func claimCoverageFromContent(body, fetchURL, claim string) claimCoverageResult 
 		// Cap at partially_addressed unless either the claim has no such
 		// distinguishing term (ratio-only behavior, unchanged) or at least
 		// one of its distinguishing terms actually matched.
-		if content.ClaimHasMatchedDistinguishingTerm(body, claim) {
+		if content.ClaimHasMatchedDistinguishingTerm(coverageWindow, claim) {
 			out.Support = claimAddressed
 		} else {
 			out.Support = claimPartiallyAddressed
