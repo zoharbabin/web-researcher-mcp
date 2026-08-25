@@ -72,7 +72,8 @@ func (l *LensProvider) doSearch(ctx context.Context, params PatentSearchParams) 
 		return nil, fmt.Errorf("lens: rate limited: %w", circuit.ErrRateLimit)
 	}
 	if resp.StatusCode == 401 {
-		return nil, fmt.Errorf("lens: authentication failed (check LENS_API_TOKEN)")
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return nil, fmt.Errorf("lens: authentication failed (HTTP 401, check LENS_API_TOKEN): %s", string(respBody))
 	}
 	if resp.StatusCode == 404 {
 		return nil, nil
