@@ -204,11 +204,27 @@ var providerErrorPrefixes = []string{
 func extractProviderName(err error) string {
 	s := err.Error()
 	for _, prefix := range providerErrorPrefixes {
-		if strings.HasPrefix(s, prefix[:len(prefix)-1]) || strings.Contains(s, prefix) {
+		idx := strings.Index(s, prefix)
+		if idx < 0 {
+			continue
+		}
+		// A bare substring match lets a short prefix like "core:" match inside
+		// an unrelated word (e.g. "score: too low: ..."). Require the match to
+		// start at a word boundary: either the very start of the string, or
+		// preceded by a non-alphanumeric byte (space, ';', ':', etc.) — the
+		// separators every real provider-error wrapping in this codebase uses
+		// (fmt.Errorf("%s: %w", name, err), or "%s: %w; %s: %w" for two).
+		if idx == 0 || !isWordByte(s[idx-1]) {
 			return prefix[:len(prefix)-1]
 		}
 	}
 	return ""
+}
+
+// isWordByte reports whether b is an ASCII letter or digit — used by
+// extractProviderName to require a word boundary before a provider prefix.
+func isWordByte(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
 }
 
 // FailureInfo is returned in partial-success compound tool results.

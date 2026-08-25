@@ -105,6 +105,13 @@ func TestExtractProviderName(t *testing.T) {
 		// case, which was already correct.
 		{"semanticscholar rate limited", fmt.Errorf("semanticscholar: rate limited: %w", circuit.ErrRateLimit), "semanticscholar"},
 		{"searchapi rate limited (already correct, no regression)", fmt.Errorf("searchapi: rate limited: %w", circuit.ErrRateLimit), "searchapi"},
+		// #697 review LOW finding: a bare substring match on "core:" wrongly
+		// matched inside "score:" (s-CORE:), misattributing an unrelated error
+		// to the "core" academic provider. Requires a word boundary before the
+		// prefix match.
+		{"score is not core (word-boundary false-positive guard)", fmt.Errorf("score: too low, discarding result"), ""},
+		{"core prefix still matches at start", fmt.Errorf("core: rate limited"), "core"},
+		{"core prefix still matches after a separator", fmt.Errorf("unexpected failure; core: rate limited"), "core"},
 	}
 
 	for _, tc := range cases {
