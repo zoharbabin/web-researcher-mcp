@@ -227,6 +227,7 @@ func TestLensProvider_AuthFailure(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(401)
+		_, _ = w.Write([]byte(`{"message":"Token is expired"}`))
 	}))
 	defer srv.Close()
 
@@ -242,6 +243,9 @@ func TestLensProvider_AuthFailure(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "authentication") {
 		t.Errorf("expected auth error, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "Token is expired") {
+		t.Errorf("expected error to include Lens response body, got: %v", err)
 	}
 }
 
