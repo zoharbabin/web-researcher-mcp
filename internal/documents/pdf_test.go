@@ -259,3 +259,127 @@ func TestDetectColumnBands_SparseSecondBand_FallsBack(t *testing.T) {
 		t.Errorf("expected nil (fall back) when a candidate band is too sparse to trust, got %d bands", len(bands))
 	}
 }
+
+// TestDetectColumnBands_FullWidthRow_KeptIntact guards against tearing a
+// title/header row apart at a column gutter established by the rows around
+// it. The title's own internal gaps are all well under
+// columnRowGapMinAbs, so it has no supporting gap near the gutter — it
+// must be kept in a single band, even though the gutter position (285)
+// falls inside one of its words' own span.
+func TestDetectColumnBands_FullWidthRow_KeptIntact(t *testing.T) {
+	var spans []pdf.TextSpan
+	y := 750.0
+	for i := 0; i < 9; i++ {
+		spans = append(spans,
+			pdf.TextSpan{X: 72, EndX: 250, Y: y, FontSize: 10, Text: "left column body text"},
+			pdf.TextSpan{X: 320, EndX: 500, Y: y, FontSize: 10, Text: "right column body text"},
+		)
+		y -= 14
+	}
+	spans = append(spans,
+		pdf.TextSpan{X: 72, EndX: 110, Y: y, FontSize: 10, Text: "Experimental"},
+		pdf.TextSpan{X: 115, EndX: 170, Y: y, FontSize: 10, Text: "Results"},
+		pdf.TextSpan{X: 175, EndX: 230, Y: y, FontSize: 10, Text: "and"},
+		pdf.TextSpan{X: 235, EndX: 310, Y: y, FontSize: 10, Text: "Discussion"},
+		pdf.TextSpan{X: 315, EndX: 390, Y: y, FontSize: 10, Text: "Section"},
+	)
+
+	bands := detectColumnBands(spans)
+	if len(bands) != 2 {
+		t.Fatalf("expected 2 bands, got %d", len(bands))
+	}
+
+	titleWords := []string{"Experimental", "Results", "and", "Discussion", "Section"}
+	bandOfWord := map[string]int{}
+	for bi, band := range bands {
+		for _, s := range band {
+			for _, w := range titleWords {
+				if s.Text == w {
+					bandOfWord[w] = bi
+				}
+			}
+		}
+	}
+	if len(bandOfWord) != len(titleWords) {
+		t.Fatalf("expected all %d title words present in output bands, found %d: %v", len(titleWords), len(bandOfWord), bandOfWord)
+	}
+	first := bandOfWord[titleWords[0]]
+	for _, w := range titleWords {
+		if b := bandOfWord[w]; b != first {
+			t.Errorf("title row torn across bands: %q landed in band %d, %q landed in band %d", titleWords[0], first, w, b)
+		}
+	}
+}
+
+// TestDetectColumnBands_ThreeColumns_Detected guards the multi-gap-per-row
+// capture: a 3-column row has two real gutters, and both must accumulate
+// independent cluster evidence for a 3+-column page to be split correctly.
+func TestDetectColumnBands_ThreeColumns_Detected(t *testing.T) {
+	var spans []pdf.TextSpan
+	y := 750.0
+	for i := 0; i < 10; i++ {
+		spans = append(spans,
+			pdf.TextSpan{X: 72, EndX: 150, Y: y, FontSize: 10, Text: "col1 text"},
+			pdf.TextSpan{X: 200, EndX: 280, Y: y, FontSize: 10, Text: "col2 text"},
+			pdf.TextSpan{X: 330, EndX: 420, Y: y, FontSize: 10, Text: "col3 text"},
+		)
+		y -= 14
+	}
+
+	bands := detectColumnBands(spans)
+	if len(bands) != 3 {
+		t.Fatalf("expected 3 bands for a 3-column page, got %d", len(bands))
+	}
+	wantText := []string{"col1 text", "col2 text", "col3 text"}
+	for bi, band := range bands {
+		if len(band) != 10 {
+			t.Errorf("band %d: got %d spans, want 10", bi, len(band))
+		}
+		for _, s := range band {
+			if s.Text != wantText[bi] {
+				t.Errorf("band %d contains %q, want only %q", bi, s.Text, wantText[bi])
+			}
+		}
+	}
+}
+
+// TestDetectColumnBands_BoundedDrift_RejectsUnrelatedGutter constructs a
+// page where each row's gap midpoint sits just inside columnGutterClusterTol
+// of the previous rows' running mean, always in the same direction — the
+// chained-small-steps drift a running mean is vulnerable to. By row 33 the
+// mean has walked far enough that the next candidate is still within
+// tolerance of the (already drifted) mean but more than
+// columnGutterClusterMaxDrift from the anchor that started the cluster, so
+// it must be rejected into a second, independently-trusted gutter rather
+// than folded into the first. Without that bound, all 36 rows merge into
+// one over-averaged gutter and the page reports one column split instead
+// of two.
+func TestDetectColumnBands_BoundedDrift_RejectsUnrelatedGutter(t *testing.T) {
+	mids := []float64{
+		100.0, 111.99, 117.985, 121.982, 124.979, 127.377, 129.375, 131.088, 132.587,
+		133.919, 135.118, 136.208, 137.207, 138.13, 138.986, 139.786, 140.535, 141.24,
+		141.906, 142.537, 143.137, 143.708, 144.253, 144.774, 145.274, 145.753, 146.214,
+		146.659, 147.087, 147.5, 147.9, 148.287, 160.277, 166.272, 170.268, 173.266,
+	}
+
+	var spans []pdf.TextSpan
+	y := 750.0
+	for _, mid := range mids {
+		spans = append(spans,
+			pdf.TextSpan{X: mid - 120, EndX: mid - 20, Y: y, FontSize: 10, Text: "L"},
+			pdf.TextSpan{X: mid + 20, EndX: mid + 120, Y: y, FontSize: 10, Text: "R"},
+		)
+		y -= 12
+	}
+
+	bands := detectColumnBands(spans)
+	if len(bands) != 3 {
+		t.Fatalf("expected the drifted sequence to split into 2 gutters (3 bands), got %d bands — bounded drift not enforced", len(bands))
+	}
+	wantCounts := []int{38, 19, 15}
+	for i, want := range wantCounts {
+		if got := len(bands[i]); got != want {
+			t.Errorf("band %d: got %d spans, want %d", i, got, want)
+		}
+	}
+}
