@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"log/slog"
 	"net/http"
@@ -302,11 +303,11 @@ func extractVideoID(rawURL string) string {
 	return ""
 }
 
-func extractYouTubeTitle(html string) string {
+func extractYouTubeTitle(pageHTML string) string {
 	titleRegex := regexp.MustCompile(`<title>(.+?)</title>`)
-	matches := titleRegex.FindStringSubmatch(html)
+	matches := titleRegex.FindStringSubmatch(pageHTML)
 	if len(matches) >= 2 {
-		title := matches[1]
+		title := html.UnescapeString(matches[1])
 		title = strings.TrimSuffix(title, " - YouTube")
 		return strings.TrimSpace(title)
 	}
