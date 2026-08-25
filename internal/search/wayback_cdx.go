@@ -164,7 +164,7 @@ func (w *WaybackCDXResolver) Lookup(ctx context.Context, domain string, maxResul
 		if er := json.Unmarshal(data, &rows); er != nil {
 			return fmt.Errorf("wayback: parse: %w", er)
 		}
-		entries = waybackRowsToEntries(rows)
+		entries = waybackRowsToEntries(rows, domain)
 		return nil
 	})
 	if err != nil {
@@ -179,7 +179,14 @@ func (w *WaybackCDXResolver) Lookup(ctx context.Context, domain string, maxResul
 // acceptance criterion). The header's column order is honored rather than
 // assumed positional, since the caller controls fl= but a future edit to the
 // query params shouldn't silently misalign fields.
-func waybackRowsToEntries(rows [][]string) []ArchiveEntry {
+//
+// domain is the queried domain (already validated by Lookup's caller); rows
+// whose decoded URL contains a control character, or whose parsed host is
+// neither equal to nor a subdomain of domain, are rejected (#662) — CDX's
+// collapse=urlkey canonicalization can otherwise surface an unrelated host
+// (redirect chains, CDN/tracking domains) or a malformed/control-character
+// path verbatim.
+func waybackRowsToEntries(rows [][]string, domain string) []ArchiveEntry {
 	if len(rows) < 2 {
 		return nil
 	}
@@ -213,6 +220,9 @@ func waybackRowsToEntries(rows [][]string) []ArchiveEntry {
 			mime = row[mimeIdx]
 		}
 		entryURL := decodeArchiveURL(row[urlIdx])
+		if hasControlRune(entryURL) || !entryHostMatchesDomain(entryURL, domain) {
+			continue
+		}
 		out = append(out, ArchiveEntry{
 			URL:        entryURL,
 			Timestamp:  row[tsIdx],
@@ -245,6 +255,54 @@ func decodeArchiveURL(raw string) string {
 		return decoded + rest
 	}
 	return raw
+}
+
+// hasControlRune reports whether s contains any rune below 0x20 (#662) — a
+// legitimate captured URL can never contain a raw control character; its
+// presence means decodeArchiveURL decoded a %00-%1F escape sequence.
+func hasControlRune(s string) bool {
+	for _, r := range s {
+		if r < 0x20 {
+			return true
+		}
+	}
+	return false
+}
+
+// entryHostMatchesDomain reports whether rawURL parses successfully and its
+// host equals domain or is a subdomain of it (#662). CDX's collapse=urlkey
+// canonicalization does not guarantee every returned "original" field's host
+// is the queried domain — captures sharing a canonical urlkey (redirect
+// chains, CDN/tracking domains) can surface an unrelated host verbatim.
+func entryHostMatchesDomain(rawURL, domain string) bool {
+	host := extractURLHost(rawURL)
+	domain = strings.ToLower(domain)
+	if host == "" || domain == "" {
+		return false
+	}
+	return host == domain || strings.HasSuffix(host, "."+domain)
+}
+
+// extractURLHost returns the lowercased hostname from rawURL's authority
+// component. It parses only the scheme+authority prefix (up to the first
+// "/", "?", or "#"), not the full URL — a malformed percent-escape later in
+// the path (common in Wayback CDX's raw "original" column) must not make an
+// otherwise well-formed host unreadable, since url.Parse validates escapes
+// across the whole URL and would reject the entire row for it.
+func extractURLHost(rawURL string) string {
+	i := strings.Index(rawURL, "://")
+	if i < 0 {
+		return ""
+	}
+	rest := rawURL[i+3:]
+	if j := strings.IndexAny(rest, "/?#"); j >= 0 {
+		rest = rest[:j]
+	}
+	u, err := url.Parse(rawURL[:i+3] + rest)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(u.Hostname())
 }
 
 // categorizeArchiveURL infers a coarse category from URL path patterns so

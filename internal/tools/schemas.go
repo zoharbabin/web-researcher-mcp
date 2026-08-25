@@ -73,6 +73,7 @@ var imageSearchOutputSchema = map[string]any{
 		"query":       map[string]any{"type": "string"},
 		"resultCount": map[string]any{"type": "integer"},
 		"hints":       map[string]any{"type": "object"},
+		"warning":     map[string]any{"type": "string", "description": "Present only when provider=google and 3 or more of size/type/color_type/dominant_color/file_type were combined (#659) — Google's Custom Search API may silently relax combined image filters and return broader results than requested, with no field in the response indicating this happened."},
 		"trust":       trustUntrustedExternal,
 		"images": map[string]any{
 			"type": "array",
@@ -99,7 +100,7 @@ var newsSearchOutputSchema = map[string]any{
 		"query":       map[string]any{"type": "string"},
 		"resultCount": map[string]any{"type": "integer"},
 		"hints":       map[string]any{"type": "object"},
-		"warning":     map[string]any{"type": "string", "description": "Present only when sort_by=\"date\" was honored by Google and none of the returned articles matched a recognized news domain (#642) — Google's date sort discards relevance ranking, so broad queries can surface non-news pages."},
+		"warning":     map[string]any{"type": "string", "description": "Present when either: sort_by=\"date\" was honored by Google and none of the returned articles matched a recognized news domain (#642) — Google's date sort discards relevance ranking, so broad queries can surface non-news pages; or time_range=\"hour\" was requested against Google, which has no hour-level date restriction and silently falls back to day granularity (#665). Both messages are joined with a space when they co-occur."},
 		"trust":       trustUntrustedExternal,
 		"articles": map[string]any{
 			"type": "array",

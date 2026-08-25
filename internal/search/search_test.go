@@ -133,6 +133,81 @@ func TestGoogleProvider_WebSearch(t *testing.T) {
 	}
 }
 
+// TestGoogleProvider_WebSearch_CountrySetsGlAndCr is the #676 regression
+// test: setting cr (country-restrict) alone filters against Google's
+// imperfect country-of-origin page tagging but never applies the ranking/
+// relevance bias that actually localizes results — gl (geolocation bias)
+// must be set alongside it for every non-empty Country value.
+func TestGoogleProvider_WebSearch_CountrySetsGlAndCr(t *testing.T) {
+	var gotCr, gotGl string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		gotCr = q.Get("cr")
+		gotGl = q.Get("gl")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(googleResponse{})
+	}))
+	defer ts.Close()
+
+	client := &http.Client{
+		Transport: &rewriteTransport{baseURL: ts.URL, inner: http.DefaultTransport},
+	}
+	deps := Deps{
+		HTTPClient: client,
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5}),
+	}
+
+	g := NewGoogleProvider("test-key", "test-cx", deps)
+	_, err := g.Web(context.Background(), WebSearchParams{
+		Query:   "best local restaurants",
+		Country: "DE",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotCr != "countryDE" {
+		t.Errorf("cr = %q, want %q", gotCr, "countryDE")
+	}
+	if gotGl != "de" {
+		t.Errorf("gl = %q, want %q", gotGl, "de")
+	}
+}
+
+// TestGoogleProvider_WebSearch_NoCountryOmitsGlAndCr proves gl/cr are only
+// sent when the caller actually asked for a country — no default region bias
+// is injected.
+func TestGoogleProvider_WebSearch_NoCountryOmitsGlAndCr(t *testing.T) {
+	var sawCr, sawGl bool
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		sawCr = q.Has("cr")
+		sawGl = q.Has("gl")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(googleResponse{})
+	}))
+	defer ts.Close()
+
+	client := &http.Client{
+		Transport: &rewriteTransport{baseURL: ts.URL, inner: http.DefaultTransport},
+	}
+	deps := Deps{
+		HTTPClient: client,
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5}),
+	}
+
+	g := NewGoogleProvider("test-key", "test-cx", deps)
+	_, err := g.Web(context.Background(), WebSearchParams{Query: "golang testing"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sawCr {
+		t.Error("expected no cr param when Country is empty")
+	}
+	if sawGl {
+		t.Error("expected no gl param when Country is empty")
+	}
+}
+
 func TestGoogleProvider_WebSearch_WithSiteAndTimeRange(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()

@@ -305,6 +305,10 @@ func (s *SearchAPIProvider) doRequest(ctx context.Context, params url.Values) ([
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 429 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		if after := parseSearchAPIRetryAfter(body, resp.Header); after > 0 {
+			return nil, fmt.Errorf("searchapi: rate limited, retry after %ds: %w", int(after.Seconds()), &circuit.RateLimitError{After: after})
+		}
 		return nil, fmt.Errorf("searchapi: rate limited: %w", circuit.ErrRateLimit)
 	}
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
@@ -316,6 +320,26 @@ func (s *SearchAPIProvider) doRequest(ctx context.Context, params url.Values) ([
 	}
 
 	return io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
+}
+
+// parseSearchAPIRetryAfter extracts the provider's advertised rate-limit
+// cooldown from a 429 response, preferring the documented `retryAfterSeconds`
+// JSON body field and falling back to the standard `Retry-After` HTTP header
+// (#666). Returns 0 when neither is present or parseable, signaling the
+// caller to fall back to the breaker's configured default cooldown.
+func parseSearchAPIRetryAfter(body []byte, header http.Header) time.Duration {
+	var payload struct {
+		RetryAfterSeconds float64 `json:"retryAfterSeconds"`
+	}
+	if err := json.Unmarshal(body, &payload); err == nil && payload.RetryAfterSeconds > 0 {
+		return time.Duration(payload.RetryAfterSeconds * float64(time.Second))
+	}
+	if ra := strings.TrimSpace(header.Get("Retry-After")); ra != "" {
+		if secs, err := strconv.Atoi(ra); err == nil && secs > 0 {
+			return time.Duration(secs) * time.Second
+		}
+	}
+	return 0
 }
 
 func mapSearchAPITimePeriod(tr string) string {
