@@ -434,3 +434,55 @@ func TestAcademicSearchPlaceholderTriggersHints(t *testing.T) {
 		t.Errorf("papers must be empty, got %d", len(papers))
 	}
 }
+
+// laddderStepAcademicProvider is a mock academic provider that returns a
+// fixed name, a fixed error (nil for a healthy provider), and results.
+type ladderStepAcademicProvider struct {
+	name    string
+	err     error
+	results []search.AcademicResult
+}
+
+func (p *ladderStepAcademicProvider) Name() string { return p.name }
+func (p *ladderStepAcademicProvider) Metadata() search.ProviderMeta {
+	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "free", Description: "mock (ladder step)"}
+}
+func (p *ladderStepAcademicProvider) Scholarly(_ context.Context, _ search.AcademicSearchParams) ([]search.AcademicResult, error) {
+	return p.results, p.err
+}
+func (p *ladderStepAcademicProvider) Citations(_ context.Context, _ string, _ int) ([]search.AcademicResult, error) {
+	return nil, nil
+}
+func (p *ladderStepAcademicProvider) References(_ context.Context, _ string, _ int) ([]search.AcademicResult, error) {
+	return nil, nil
+}
+
+// TestAcademicSearchSkipsCircuitOpenProviderInLadder is the #697 regression
+// guard for the #503 anti-pattern reintroduced via isRateLimitError's #664
+// widening to match circuit.ErrCircuitOpen: Strategy 3's provider ladder
+// (search.SupportedAcademicProviders order: openalex, crossref, pubmed,
+// semanticscholar, core, exa) must skip a mid-ladder provider whose circuit
+// breaker is open rather than aborting the whole ladder — a healthy provider
+// listed later (core) must still be reached.
+func TestAcademicSearchSkipsCircuitOpenProviderInLadder(t *testing.T) {
+	deps := setupTestDeps()
+	deps.AcademicProviders = map[string]search.AcademicProvider{
+		"openalex":        &ladderStepAcademicProvider{name: "openalex"}, // no results, no error
+		"semanticscholar": &ladderStepAcademicProvider{name: "semanticscholar", err: circuit.ErrCircuitOpen},
+		"core": &ladderStepAcademicProvider{name: "core", results: []search.AcademicResult{
+			{Title: "Healthy Result", DOI: "10.1/healthy", Source: "core"},
+		}},
+	}
+
+	out, res := callTool(t, deps, "academic_search", map[string]any{"query": "gene editing"})
+	if res.IsError {
+		t.Fatalf("unexpected error result")
+	}
+	if out["source"] != "core" {
+		t.Fatalf("source = %v, want %q (a circuit-open provider must not abort the ladder for healthy providers after it)", out["source"], "core")
+	}
+	papers, _ := out["papers"].([]any)
+	if len(papers) != 1 {
+		t.Fatalf("expected 1 paper from core, got %d", len(papers))
+	}
+}
