@@ -2,6 +2,7 @@ package circuit
 
 import (
 	"errors"
+	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -13,6 +14,25 @@ var ErrCircuitOpen = errors.New("circuit breaker open")
 // circuit breaker opens immediately on the first rate-limit, without waiting
 // for FailureThreshold generic failures to accumulate.
 var ErrRateLimit = errors.New("rate limited")
+
+// RateLimitError wraps ErrRateLimit with the provider's own advertised
+// retry-after duration (parsed from a 429 response's body/headers). A
+// provider that knows how long the upstream asked it to wait wraps its error
+// with this instead of the bare ErrRateLimit sentinel, so onFailure can open
+// the breaker for at least that long rather than always falling back to the
+// configured ResetTimeout — a fixed cadence shorter than the provider's own
+// window retries into a still-rate-limited API and never recovers (#666).
+// errors.Is still matches ErrRateLimit through Unwrap, so providers that keep
+// wrapping the bare sentinel are unaffected.
+type RateLimitError struct {
+	After time.Duration
+}
+
+func (e *RateLimitError) Error() string {
+	return fmt.Sprintf("rate limited, retry after %s", e.After)
+}
+
+func (e *RateLimitError) Unwrap() error { return ErrRateLimit }
 
 // ErrNonTripping is the sentinel a provider wraps an error with when it must
 // never count toward the breaker's failure threshold at all — e.g. a 402
@@ -41,6 +61,7 @@ type Breaker struct {
 	failures         int
 	lastFailure      time.Time
 	resetJitter      time.Duration
+	rateLimitAfter   time.Duration // provider-advertised cooldown from a RateLimitError; 0 when none was given
 	halfOpenAttempts int
 	config           Config
 }
@@ -99,9 +120,14 @@ func (b *Breaker) allowRequest() bool {
 	case StateClosed:
 		return true
 	case StateOpen:
-		if time.Since(b.lastFailure) > time.Duration(b.config.ResetTimeout)*time.Second+b.resetJitter {
+		timeout := time.Duration(b.config.ResetTimeout) * time.Second
+		if b.rateLimitAfter > timeout {
+			timeout = b.rateLimitAfter
+		}
+		if time.Since(b.lastFailure) > timeout+b.resetJitter {
 			b.state = StateHalfOpen
 			b.halfOpenAttempts = 0
+			b.rateLimitAfter = 0
 			return true
 		}
 		return false
@@ -116,6 +142,7 @@ func (b *Breaker) onSuccess() {
 	b.failures = 0
 	b.halfOpenAttempts = 0
 	b.resetJitter = 0
+	b.rateLimitAfter = 0
 }
 
 // onFailure records a failure and updates the circuit state. A wrapped
@@ -133,6 +160,12 @@ func (b *Breaker) onFailure(err error) {
 	if errors.Is(err, ErrRateLimit) {
 		b.state = StateOpen
 		b.resetJitter = b.newResetJitter()
+		var rle *RateLimitError
+		if errors.As(err, &rle) {
+			b.rateLimitAfter = rle.After
+		} else {
+			b.rateLimitAfter = 0
+		}
 		return
 	}
 
@@ -175,4 +208,5 @@ func (b *Breaker) Reset() {
 	b.state = StateClosed
 	b.failures = 0
 	b.resetJitter = 0
+	b.rateLimitAfter = 0
 }
