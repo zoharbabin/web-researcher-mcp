@@ -178,7 +178,7 @@ Beyond the general `Provider`, the system layers **opt-in capability interfaces*
 
 Separate from the capability interfaces, three **enrichment** interfaces operate post-search on DOI-bearing results — not search providers:
 
-- **`OAResolver`** (`internal/search/unpaywall.go`, implemented by Unpaywall) — fills the open-access PDF link after `academic_search` via `EnrichOpenAccess`. Best-effort, nil-safe, never overwrites a provider-supplied PDF.
+- **`OAResolver`** (`internal/search/unpaywall.go`, implemented by Unpaywall) — fills the open-access PDF link after `academic_search` via `EnrichOpenAccess`. Best-effort, nil-safe, never overwrites a provider-supplied PDF. `paper_fulltext` and `verify_citation` also share a tool-layer resolution step (`internal/tools/oa_resolve.go`) that merges three OA signals in priority order — the provider's own cached PDF, Unpaywall's live `best_oa_location`, and OpenAlex's cached `open_access.oa_url` — and verifies liveness before trusting the top candidate, so a stale or dead cached pick from one provider falls through to the next instead of being served as-is.
 - **`RetractionResolver`** (`internal/search/retraction.go`, implemented by `CrossrefRetractionResolver`) — flags retracted or corrected works via `EnrichRetraction`. Used by `academic_search`, `citation_graph`, `scrape_page`, `audit_bibliography`, and `verify_citation`.
 - **`DOIResolver`** (`internal/search/domain.go`, optional capability on academic providers) — performs an exact entity lookup for a DOI (e.g. OpenAlex `/works/doi:{doi}`) so `verify_citation` always retrieves the cited work directly rather than relying on a relevance-ranked search whose top hit could be a different paper.
 

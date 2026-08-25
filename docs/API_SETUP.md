@@ -500,6 +500,20 @@ export PUBMED_EMAIL=you@example.com     # NCBI contact param; falls back to OPEN
 
 **Notes**: Keyless use works out of the box. A key is recommended for sustained or high-volume use. `PUBMED_EMAIL` falls back to `OPENALEX_EMAIL` — setting the OpenAlex email is sufficient to cover both. Also selectable as an `academic_search` provider via `provider: pubmed`.
 
+### CORE (Worldwide — 300M+ Open-Access Works with Full Text)
+
+Aggregates open-access repositories and journals worldwide. Works **keyless** at a lower shared rate; a free API key raises the limit.
+
+**Step 1**: (Optional) Register at [core.ac.uk](https://core.ac.uk/) to get a free API key.
+
+**Step 2**: Configure (optional)
+
+```bash
+export CORE_API_KEY=your-core-key   # raises the rate limit
+```
+
+**Notes**: Keyless use works out of the box. Also selectable as an `academic_search` provider via `provider: core`.
+
 ### ScholarAPI (Full-Text Retrieval — Paid, Explicit Only)
 
 A paid, metered academic search API (10 credits/search call) whose differentiator is full-text access: results carry `hasText`/`hasPdf` availability signals, and full text can be fetched separately. Because it costs credits on every call, it is **excluded from automatic routing and fallback** — it is only ever used when a caller passes `provider: scholarapi` explicitly.
@@ -596,6 +610,12 @@ export FRED_API_KEY=your-fred-key
 Backs `clinical_search`. Works **keyless** — `clinical_search` is always available. No registration or API key.
 
 **Notes**: Queries the ClinicalTrials.gov v2 API (NIH registry of 400K+ studies). Returns trial registrations as typed data (status, phase, sponsor, conditions, interventions, results availability); read the full record via `scrape_page` on the returned `url`. Discovery + primary-source retrieval only — not medical advice.
+
+### Monarch Initiative (Biomedical Knowledge Graph)
+
+Backs `monarch_search`. Works **keyless** — the tool is always available. No registration or API key.
+
+**Notes**: Queries the Monarch Initiative API (`api.monarchinitiative.org`), an open biomedical knowledge graph linking genes, diseases, and phenotypes (HPO/MONDO/OMIM/HGNC). Supports entity resolution, causal-association lookup, and phenotype-similarity ranking. Discovery + primary-source retrieval only — not medical advice, and never accepts identifiable patient data.
 
 ### ecosyste.ms (Awesome-List Discovery)
 
