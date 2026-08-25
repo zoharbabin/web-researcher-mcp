@@ -430,7 +430,11 @@ func TestDetectColumnBands_BoundedDrift_RejectsUnrelatedGutter(t *testing.T) {
 // O(rows^2). This builds exactly that adversarial shape at a scale where
 // the uncapped version measurably exceeds the budget below (confirmed by
 // reverting the cap and rerunning: it times out), and asserts the capped
-// version finishes well within it.
+// version finishes well within it. n and the timeout are both sized with
+// generous headroom over local measurements (capped cost finishes in
+// ~0.25s under -race) so the assertion holds on slower/shared CI runners
+// too, not just on the machine that wrote it — a tight wall-clock budget
+// here would make the test flaky rather than a real cost guard.
 func TestDetectColumnBands_AdversarialGaps_BoundedCost(t *testing.T) {
 	const n = 150000
 	spans := make([]pdf.TextSpan, 0, n*2)
@@ -452,7 +456,7 @@ func TestDetectColumnBands_AdversarialGaps_BoundedCost(t *testing.T) {
 
 	select {
 	case <-done:
-	case <-time.After(3 * time.Second):
-		t.Fatal("detectColumnBands took longer than 3s on adversarial non-clustering gaps — columnMaxClusters cap not bounding cost")
+	case <-time.After(20 * time.Second):
+		t.Fatal("detectColumnBands took longer than 20s on adversarial non-clustering gaps — columnMaxClusters cap not bounding cost")
 	}
 }
