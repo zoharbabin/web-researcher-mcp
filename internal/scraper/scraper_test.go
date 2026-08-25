@@ -921,6 +921,19 @@ func TestExtractYouTubeTitle(t *testing.T) {
 	}
 }
 
+// TestExtractYouTubeTitleDecodesEntities guards against #668: a YouTube page's
+// raw <title> tag carries HTML-entity-encoded text (ampersand, apostrophe,
+// quote), which extractYouTubeTitle must decode rather than pass through
+// verbatim — mirroring stripHNHTML's html.UnescapeString behavior.
+func TestExtractYouTubeTitleDecodesEntities(t *testing.T) {
+	pageHTML := `<html><head><title>Cookies &amp; Cream &#39;Recipe&#39; &quot;Deluxe&quot; - YouTube</title></head></html>`
+	title := extractYouTubeTitle(pageHTML)
+	want := `Cookies & Cream 'Recipe' "Deluxe"`
+	if title != want {
+		t.Errorf("expected %q, got %q", want, title)
+	}
+}
+
 func TestDetectDocType(t *testing.T) {
 	tests := []struct {
 		url         string

@@ -1,6 +1,7 @@
 package content
 
 import (
+	"html"
 	"sort"
 	"strconv"
 	"strings"
@@ -54,6 +55,14 @@ func FormatBibliography(entries []BibEntry, style string) (string, int) {
 			continue
 		}
 		seen[url] = true
+		// Defense in depth (#668): decode any HTML entity that reached this far
+		// un-decoded from extraction (e.g. a title carrying a literal "&amp;")
+		// once here, at the shared formatting boundary, so no downstream
+		// formatter — including formatBibTeX's own "&" -> "\&" escaping — ever
+		// double-escapes an already-un-decoded entity.
+		e.Title = html.UnescapeString(e.Title)
+		e.Author = html.UnescapeString(e.Author)
+		e.Site = html.UnescapeString(e.Site)
 		deduped = append(deduped, e)
 	}
 
