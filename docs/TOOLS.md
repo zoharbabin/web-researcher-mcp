@@ -586,6 +586,7 @@ type ImageSearchOutput struct {
     Query       string           `json:"query"`
     ResultCount int              `json:"resultCount"`
     Hints       *ZeroResultHints `json:"hints,omitempty"` // present ONLY on zero-result responses (#357); same shape as web_search, including epistemicWarning
+    Warning     string           `json:"warning,omitempty"` // present ONLY when provider=google and 3+ of size/type/color_type/dominant_color/file_type were combined (#659, see Provider notes)
     Trust       string           `json:"trust"`   // "untrusted-external-content"
 }
 
@@ -604,6 +605,7 @@ type ImageResult struct {
 ### Provider notes
 - `size`, `type`, `color_type`, `dominant_color`, and `file_type` are **Google/SearchAPI-only** filters — they are not documented Brave image params, so the Brave adapter never sends them (Brave would silently drop them). `country`, `language`, and `safe` are honored across providers. The `size` bucket is a hint the provider applies loosely — returned dimensions may not strictly match the requested bucket; use `width`/`height` to filter precisely when exact sizing matters.
 - `fileSize`, `contextLink`, `width`, and `height` are **optional and provider-dependent** — each is emitted only when the configured provider reports it and is omitted (never fabricated) otherwise. No currently-configured provider populates `fileSize`, so treat it as reserved/best-effort.
+- **Combining 3+ filters against Google may silently relax them (#659)**: Google's Custom Search API can narrow `size`/`type`/`color_type`/`dominant_color`/`file_type` into an intersection too small to satisfy, and falls back to broader/default ranking with no field in the response indicating this happened — results can come back identical to an unfiltered query. This is documented behavior of Google's search backend, not a request-construction bug. When `provider=google` and 3 or more of these filters are set at once, the response carries a top-level `warning` field explaining this; try fewer simultaneous filters or a different provider if results look unfiltered.
 
 ### Cache
 - Key: SHA-256 of (query + all filter params)
@@ -636,7 +638,7 @@ type NewsSearchOutput struct {
     Query       string        `json:"query"`
     ResultCount int           `json:"resultCount"`
     Hints       *ZeroResultHints `json:"hints,omitempty"` // present ONLY on zero-result responses (see below)
-    Warning     string        `json:"warning,omitempty"` // present ONLY when sort_by="date" was honored by Google and no returned article matched a recognized news domain (#642, see Provider notes)
+    Warning     string        `json:"warning,omitempty"` // present when sort_by="date" was honored by Google with no recognized news domain in results (#642), and/or time_range="hour" was requested against Google (#665, no hour granularity — falls back to 24h); see Provider notes
     Trust       string        `json:"trust"`   // "untrusted-external-content"
 }
 
@@ -666,8 +668,9 @@ On a zero-result response, `hints` carries the same `ZeroResultHints` object as 
 ### Provider notes
 - `sort_by` and `news_source` are **Google-only** controls — Brave's news API has no sort or single-source parameter, so the Brave adapter never sends them (the schema descriptions mark them provider-conditional rather than dropping the fields, since Google genuinely honors them). `country`, `language`, and `safe` are honored by Brave news.
 - `publishedAt` is **optional and provider-dependent**: populated when the provider exposes a publish timestamp (Google CSE via page metadata; Brave/Exa/Serper/SearchAPI/SearXNG/Tavily natively), omitted (not fabricated) when the provider supplies none — so treat it as best-effort. When present it is always normalized to **ISO-8601 (RFC3339 UTC)** regardless of the provider's raw format (RFC1123, relative ages like "3 days ago"/"2h", or bare dates), so values sort and compare consistently across providers; an unparseable timestamp is dropped rather than passed through.
-- `sort_by=date` maps to Google's date-sort control; exact ordering and `time_range=hour` granularity depend on the provider's index and may be approximate. News providers may also surface high-ranking forum/aggregator pages — `news_source` narrows to a trusted outlet when that matters (Google).
+- `sort_by=date` maps to Google's date-sort control. News providers may also surface high-ranking forum/aggregator pages — `news_source` narrows to a trusted outlet when that matters (Google).
 - **`sort_by=date` discards Google's relevance ranking (#642)**: per Google's Custom Search JSON API docs, `sort=date` is a literal chronological reorder with no relevance weighting. On a broad, non-named-entity query (e.g. "global markets") this can rank recently-modified but topically unrelated corporate/government pages ahead of real news coverage; specific/named-entity queries are less affected since there's little room for an unrelated page to match at all. This is documented Google API behavior, not a bug — when none of the returned articles match a recognized news domain under `sort_by=date`, the response carries a top-level `warning` field explaining the tradeoff rather than silently reordering or dropping results (dropping risks hiding legitimate outlets absent from the small known-news-domain list). Prefer the default relevance sort for broad topics; reserve `sort_by=date` for narrow/breaking-news queries where strict recency matters more than topical precision.
+- **`time_range="hour"` has no true hour granularity on Google (#665)**: Google's Custom Search API's `dateRestrict` parameter supports only day-or-coarser windows — there is no hour-level value. `time_range="hour"` against the `google` provider falls back to a 24-hour window, byte-for-byte identical to `time_range="day"`, every time — not an approximation, a hard limitation. The response carries a top-level `warning` field stating this. Other providers (e.g. Brave) support true hour-level freshness.
 
 ### Cache
 - TTL: 15 minutes (news is time-sensitive)
@@ -2152,7 +2155,7 @@ These are upstream behaviors we cannot control — they reflect how the underlyi
 | Provider | Behavior | Impact |
 |----------|----------|--------|
 | SearchAPI | May return fewer results than `num_results` requested | Query has limited coverage in their index; not an error |
-| Google (news) | `freshness=hour` may return articles 5-10 hours old | Google's "last hour" filter is approximate, not strict |
+| Google (news) | `time_range=hour` silently falls back to a 24h window | Google's `dateRestrict` has no hour-level granularity; a `warning` field is returned (#665) |
 | Google (images) | `size=large` may return images as small as 600x600 | Google's size thresholds differ from typical expectations |
 | USPTO | Full-text search only (no field-qualified queries) | API rejects field syntax; results rely on relevance ranking |
 | OpenAlex | `pdf_only` may return 0 results for common topics | Not all papers have PDF URLs indexed in their metadata |
