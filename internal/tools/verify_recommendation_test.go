@@ -556,6 +556,28 @@ func TestVerifyRecommendationCorroborationQueryDoesNotDuplicatePhrase(t *testing
 	}
 }
 
+// TestDedupedFullClaim_NoFalsePositiveOnSubstring is a regression: the
+// containment check used raw strings.Contains, which matches a title inside
+// any claim that happens to contain it as a mid-word substring (e.g. "cat"
+// inside "category") even though the title never appears as its own word.
+// That false-positive containment dropped the title's real content
+// entirely. It must now require whole-word containment.
+func TestDedupedFullClaim_NoFalsePositiveOnSubstring(t *testing.T) {
+	title := "Cat"
+	claim := "The category of enterprise wikis is growing fast"
+	got := dedupedFullClaim(title, claim)
+	found := false
+	for _, w := range strings.Fields(strings.ToLower(got)) {
+		if w == "cat" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("dedupedFullClaim(%q, %q) = %q — title's only word was dropped on a false-positive substring match (\"cat\" inside \"category\")", title, claim, got)
+	}
+}
+
 // hasRepeatedPhrase reports whether s contains two adjacent, identical
 // word sequences of at least minWords words (case-insensitive) — the
 // "duplicated phrase" failure mode #679 guards against.

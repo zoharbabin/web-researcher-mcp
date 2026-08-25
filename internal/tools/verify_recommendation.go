@@ -426,18 +426,20 @@ func dedupedFullClaim(title, claim string) string {
 	if c == "" {
 		return t
 	}
-	lowerT := strings.ToLower(t)
-	lowerC := strings.ToLower(c)
-	if strings.Contains(lowerC, lowerT) {
+	cWords := strings.Fields(c)
+	lowerTWords := strings.Fields(strings.ToLower(t))
+	lowerCWords := strings.Fields(strings.ToLower(c))
+	// Whole-word containment, not raw substring: a raw strings.Contains would
+	// call title "cat" "contained" in claim "...category growth..." on the
+	// "cat" substring inside "category" and drop the title entirely, even
+	// though "cat" never actually appears as its own word.
+	if containsWholeWords(lowerCWords, lowerTWords) {
 		return c
 	}
-	if strings.Contains(lowerT, lowerC) {
+	if containsWholeWords(lowerTWords, lowerCWords) {
 		return t
 	}
 
-	cWords := strings.Fields(c)
-	lowerTWords := strings.Fields(lowerT)
-	lowerCWords := strings.Fields(lowerC)
 	maxK := len(lowerTWords)
 	if len(lowerCWords) < maxK {
 		maxK = len(lowerCWords)
@@ -464,6 +466,20 @@ func wordsEqual(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// containsWholeWords reports whether needle appears as a contiguous run of
+// whole words somewhere in haystack (both already lowercased/split).
+func containsWholeWords(haystack, needle []string) bool {
+	if len(needle) == 0 || len(needle) > len(haystack) {
+		return false
+	}
+	for i := 0; i+len(needle) <= len(haystack); i++ {
+		if wordsEqual(haystack[i:i+len(needle)], needle) {
+			return true
+		}
+	}
+	return false
 }
 
 func corroborateRecommendation(ctx context.Context, deps Dependencies, title, claim string, numResults int) []corroborationResult {
