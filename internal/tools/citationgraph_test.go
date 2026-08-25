@@ -235,6 +235,62 @@ func TestCitationGraphAutoFallbackToOpenAlex(t *testing.T) {
 	}
 }
 
+// flatFallbackOpenAlexProvider implements AcademicProvider + CitationSearcher,
+// named "openalex", SupportsInfluenceSignal()==false — matching real OpenAlex
+// (counts only). Unlike mockAcademicProvider (whose Citations mock carries a
+// deliberately-unused IsInfluential:true noise field), every result here has
+// IsInfluential left at its false zero value, so a wrongly-applied
+// influential_only filter would actually zero out the results rather than
+// passing by coincidence.
+type flatFallbackOpenAlexProvider struct{}
+
+func (f *flatFallbackOpenAlexProvider) Name() string { return "openalex" }
+func (f *flatFallbackOpenAlexProvider) Metadata() search.ProviderMeta {
+	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "free", Description: "mock OpenAlex (flat, no influence signal)"}
+}
+func (f *flatFallbackOpenAlexProvider) Scholarly(_ context.Context, _ search.AcademicSearchParams) ([]search.AcademicResult, error) {
+	return nil, nil
+}
+func (f *flatFallbackOpenAlexProvider) Citations(_ context.Context, _ string, _ int) ([]search.AcademicResult, error) {
+	return []search.AcademicResult{{Title: "Cites It", URL: "https://doi.org/10.2/y", DOI: "10.2/y", Year: 2025, Source: "openalex"}}, nil
+}
+func (f *flatFallbackOpenAlexProvider) References(_ context.Context, _ string, _ int) ([]search.AcademicResult, error) {
+	return []search.AcademicResult{{Title: "Foundational", URL: "https://doi.org/10.0/z", DOI: "10.0/z", Year: 2017, Source: "openalex"}}, nil
+}
+func (f *flatFallbackOpenAlexProvider) SupportsInfluenceSignal() bool { return false }
+
+// TestCitationGraphAutoFallbackToOpenAlexHonorsFallbackInfluenceSignal is the
+// #697 regression guard for citationgraph.go's `searcher` reassignment on
+// fallback (line ~87): the influential_only capability check at line ~107
+// must run against the searcher that actually PRODUCED the results (the
+// OpenAlex fallback), not the originally-attempted (failed) Semantic Scholar.
+// Semantic Scholar claims SupportsInfluenceSignal()==true; OpenAlex does not.
+// If the check were still keyed on the stale primary searcher/provider,
+// influential_only would wrongly filter OpenAlex's un-flagged (IsInfluential
+// left false) results down to zero instead of passing them through.
+func TestCitationGraphAutoFallbackToOpenAlexHonorsFallbackInfluenceSignal(t *testing.T) {
+	deps := setupTestDeps()
+	deps.AcademicProviders = map[string]search.AcademicProvider{
+		"semanticscholar": &failingS2Provider{},
+		"openalex":        &flatFallbackOpenAlexProvider{},
+	}
+	out, res := callTool(t, deps, "citation_graph", map[string]any{
+		"paper": "10.1038/nature14539", "influential_only": true,
+	})
+	if res.IsError {
+		t.Fatalf("auto-select should fall back to OpenAlex, got error result")
+	}
+	if out["provider"] != "openalex" {
+		t.Fatalf("provider=%v, want openalex (fallback must have fired)", out["provider"])
+	}
+	if cb, _ := out["citedByCount"].(float64); cb != 1 {
+		t.Errorf("citedByCount=%v, want 1 (OpenAlex result must pass through unfiltered: it doesn't supply the influence signal, so influential_only must be a no-op for it)", out["citedByCount"])
+	}
+	if rc, _ := out["referencesCount"].(float64); rc != 1 {
+		t.Errorf("referencesCount=%v, want 1 (unfiltered — no influence signal, no-op)", out["referencesCount"])
+	}
+}
+
 // TestCitationGraphAutoFallbackOnCircuitOpen is the #664 regression guard: when
 // no provider is pinned and Semantic Scholar's circuit breaker is already OPEN
 // (returning the bare circuit.ErrCircuitOpen sentinel, not a "paper not found"
