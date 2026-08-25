@@ -298,7 +298,7 @@ type googleImage struct {
 
 // buildQuery is the single chokepoint that turns Site/Sites into query-text
 // site: operators for every provider that funnels its query through it
-// (google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa).
+// (google, brave, serper, searxng, searchapi, youcom, duckduckgo, tavily, exa).
 // Site and Sites are mutually exclusive by the time params reaches here (the
 // tool layer enforces it), so at most one branch ever fires.
 func buildQuery(params WebSearchParams) string {

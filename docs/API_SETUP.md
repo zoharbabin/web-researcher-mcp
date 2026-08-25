@@ -345,6 +345,36 @@ export SEARCHAPI_API_KEY=your-searchapi-key
 
 ---
 
+## You.com Search API
+
+**Paid with free credits**: You.com requires an API key. The Search API returns web and news results in one response, with query-aware snippets and optional freshness filtering.
+
+### Step 1: Get an API Key
+
+1. Sign up at [You.com](https://you.com/platform).
+2. Create an API key in the dashboard.
+
+### Step 2: Configure
+
+```bash
+export YDC_API_KEY=your-you.com-api-key
+```
+
+To use You.com as your primary provider:
+
+```bash
+export SEARCH_PROVIDER=youcom
+export YDC_API_KEY=your-you.com-api-key
+```
+
+### Good to know
+
+- **Web and news only.** This integration uses You.com for `web_search` and `news_search`. It does not expose image search.
+- **Query-aware snippets.** The provider returns snippets that are already shaped for LLM grounding, which keeps the tool output compact.
+- **Keep a fallback.** If you need image results, keep an image-capable provider in `SEARCH_ROUTING`.
+
+---
+
 ## Multi-Provider Routing
 
 For maximum reliability, configure multiple providers and let the server route automatically with fallback:

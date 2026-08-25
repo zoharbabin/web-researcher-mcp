@@ -1515,6 +1515,14 @@ func TestNewProvider_SearchAPI(t *testing.T) {
 	}
 }
 
+func TestNewProvider_YouCom(t *testing.T) {
+	cfg := config.SearchConfig{Provider: "youcom", YDCAPIKey: "key"}
+	p := NewProvider(cfg, newTestDeps(http.DefaultClient))
+	if p.Name() != "youcom" {
+		t.Errorf("expected provider name 'youcom', got %q", p.Name())
+	}
+}
+
 func TestSearchAPIProvider_PatentSearch(t *testing.T) {
 	t.Parallel()
 
@@ -2478,6 +2486,7 @@ func TestAvailableProviders(t *testing.T) {
 		GoogleCX:     "gcx",
 		BraveAPIKey:  "bkey",
 		SearchAPIKey: "skey",
+		YDCAPIKey:    "ydc",
 		TavilyAPIKey: "tkey",
 	}
 	deps := newTestDeps(http.DefaultClient)
@@ -2491,6 +2500,9 @@ func TestAvailableProviders(t *testing.T) {
 	}
 	if _, ok := providers["searchapi"]; !ok {
 		t.Error("expected searchapi provider")
+	}
+	if _, ok := providers["youcom"]; !ok {
+		t.Error("expected youcom provider")
 	}
 	if _, ok := providers["tavily"]; !ok {
 		t.Error("expected tavily provider")
@@ -2566,6 +2578,21 @@ func TestProviderSupportedListContainsBluesky(t *testing.T) {
 	}
 }
 
+// TestProviderSupportedListContainsYouCom ensures the provider name is valid
+// for config validation and router wiring.
+func TestProviderSupportedListContainsYouCom(t *testing.T) {
+	found := false
+	for _, name := range SupportedProviders {
+		if name == "youcom" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected \"youcom\" in SupportedProviders")
+	}
+}
+
 // TestNewProviderByName_Bluesky (#279): bluesky is zero-config — always
 // returns a non-nil provider regardless of config contents.
 func TestNewProviderByName_Bluesky(t *testing.T) {
@@ -2584,6 +2611,22 @@ func TestNewProvider_Bluesky(t *testing.T) {
 	p := NewProvider(config.SearchConfig{Provider: "bluesky"}, newTestDeps(http.DefaultClient))
 	if p.Name() != "bluesky" {
 		t.Errorf("expected provider name 'bluesky', got %q", p.Name())
+	}
+}
+
+// TestNewProviderByName_YouCom checks the keyed provider is only constructed
+// when the You.com API key is present.
+func TestNewProviderByName_YouCom(t *testing.T) {
+	deps := newTestDeps(http.DefaultClient)
+	if p := NewProviderByName("youcom", config.SearchConfig{}, deps); p != nil {
+		t.Fatal("expected nil youcom provider without key")
+	}
+	p := NewProviderByName("youcom", config.SearchConfig{YDCAPIKey: "key"}, deps)
+	if p == nil {
+		t.Fatal("expected non-nil youcom provider with key")
+	}
+	if _, ok := p.(*YouComProvider); !ok {
+		t.Errorf("expected *YouComProvider, got %T", p)
 	}
 }
 
@@ -2629,6 +2672,9 @@ func TestNewProviderByName_MissingCredentials(t *testing.T) {
 	if p := NewProviderByName("searchapi", cfg, deps); p != nil {
 		t.Error("expected nil for searchapi without key")
 	}
+	if p := NewProviderByName("youcom", cfg, deps); p != nil {
+		t.Error("expected nil for youcom without key")
+	}
 	if p := NewProviderByName("searxng", cfg, deps); p != nil {
 		t.Error("expected nil for searxng without URL")
 	}
@@ -2640,6 +2686,9 @@ func TestNewProviderByName_MissingCredentials(t *testing.T) {
 	}
 	if p := NewProviderByName("tavily", config.SearchConfig{TavilyAPIKey: "k"}, deps); p == nil || p.Name() != "tavily" {
 		t.Error("expected tavily provider when key is set")
+	}
+	if p := NewProviderByName("youcom", config.SearchConfig{YDCAPIKey: "k"}, deps); p == nil || p.Name() != "youcom" {
+		t.Error("expected youcom provider when key is set")
 	}
 	if p := NewProviderByName("github", cfg, deps); p == nil || p.Name() != "github" {
 		t.Error("expected github provider even without token (zero-config)")

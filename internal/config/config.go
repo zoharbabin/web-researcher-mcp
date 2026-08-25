@@ -150,6 +150,7 @@ type SearchConfig struct {
 	BraveExtraSnippets bool
 	SerperAPIKey       string
 	SearchAPIKey       string
+	YDCAPIKey          string
 	TavilyAPIKey       string
 	ExaAPIKey          string
 	XQuikAPIKey        string
@@ -347,6 +348,11 @@ func Load() (*Config, error) {
 		errs = append(errs, "SEARCHAPI_API_KEY is required when SEARCH_PROVIDER=searchapi")
 	}
 
+	ydcKey := os.Getenv("YDC_API_KEY")
+	if provider == "youcom" && ydcKey == "" {
+		errs = append(errs, "YDC_API_KEY is required when SEARCH_PROVIDER=youcom")
+	}
+
 	tavilyKey := os.Getenv("TAVILY_API_KEY")
 	if provider == "tavily" && tavilyKey == "" {
 		errs = append(errs, "TAVILY_API_KEY is required when SEARCH_PROVIDER=tavily")
@@ -465,6 +471,7 @@ func Load() (*Config, error) {
 			BraveExtraSnippets:    braveExtraSnippets,
 			SerperAPIKey:          serperKey,
 			SearchAPIKey:          searchAPIKey,
+			YDCAPIKey:             ydcKey,
 			TavilyAPIKey:          tavilyKey,
 			ExaAPIKey:             exaKey,
 			XQuikAPIKey:           xquikKey,

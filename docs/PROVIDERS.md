@@ -36,6 +36,7 @@ Understanding what backs each provider helps you reason about result overlap and
 | **[Google PSE](https://programmablesearchengine.google.com/)** | Own index | Google's web index |
 | **[Serper](https://serper.dev/)** | Google-backed | Google's web index via API |
 | **[SearchAPI.io](https://www.searchapi.io/)** | Google-backed | Google's web index via API |
+| **[You.com](https://you.com/docs/api-reference/search/v1-search)** | API-backed | You.com search backend for web and news results |
 | **[Brave](https://brave.com/search/api/)** | Own independent | Brave's own web crawler and index |
 | **[Exa](https://exa.ai/)** | Own independent | Neural/embedding-based web index |
 | **[Tavily](https://app.tavily.com/)** | Aggregator | Queries multiple existing engines at runtime; scrapes top results; applies AI re-ranking — no proprietary crawled index |
@@ -60,6 +61,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 | **[Google PSE](https://programmablesearchengine.google.com/)** | ✓ | ✓ | ✓ | — | — |
 | **[Serper](https://serper.dev/)** | ✓ | ✓ | ✓ | — | — |
 | **[SearchAPI.io](https://www.searchapi.io/)** | ✓ | ✓ | ✓ | — | — |
+| **[You.com](https://you.com/docs/api-reference/search/v1-search)** | ✓ | — | ✓ | — | — |
 | **[Brave](https://brave.com/search/api/)** | ✓ | ✓ | ✓ | ✓ | — |
 | **[Exa](https://exa.ai/)** | ✓ | — | ✓ | — | ✓ (paid, last-resort) |
 | **[Tavily](https://app.tavily.com/)** | ✓ | — | ✓ | — | — |
@@ -92,6 +94,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 | **[Brave](https://brave.com/search/api/)** | 2,000 queries/month | Paid plans |
 | **[Serper](https://serper.dev/)** | 2,500 queries (one-time) | Paid plans |
 | **[SearchAPI.io](https://www.searchapi.io/)** | 100 searches/month | Paid plans |
+| **[You.com](https://you.com/docs/api-reference/search/v1-search)** | API key with free credits | $5 / 1,000 calls |
 | **[Exa](https://exa.ai/)** | 1,000 requests/month | Per call beyond free tier |
 | **[Tavily](https://app.tavily.com/)** | Monthly dev credits | Paid plans |
 | **[Xquik](https://xquik.com/#pricing)** | No free tier documented | Metered credits; current rates appear on the pricing and checkout pages |
@@ -108,6 +111,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 | Independent results alongside Google | [Brave](https://brave.com/search/api/) or [Exa](https://exa.ai/) (different indices, no overlap) |
 | Semantic / conceptual search | [Exa](https://exa.ai/) |
 | LLM-ready extracted content | [Tavily](https://app.tavily.com/) |
+| Web + news search with query-aware snippets | [You.com](https://you.com/docs/api-reference/search/v1-search) |
 | Air-gapped or no vendor lock-in | [SearXNG](https://docs.searxng.org/) (self-hosted) |
 | Tech/developer community signal | [HackerNews](https://hn.algolia.com/) |
 | Reddit / community discussion signal | [Reddit](https://www.reddit.com/) |
@@ -125,6 +129,8 @@ Which tools each web search provider enables. `—` means the provider returns e
 **[Google PSE](https://programmablesearchengine.google.com/)** — The largest index. Best for broadest coverage, image search, and exact-phrase queries. Requires both an API key (via [Google Cloud Console](https://console.cloud.google.com/)) and a Programmable Search Engine ID. Free tier of 100/day is low for sustained use.
 
 **[Serper](https://serper.dev/) and [SearchAPI.io](https://www.searchapi.io/)** — Google results without the PSE setup overhead. Serper is the simpler option; SearchAPI.io supports multiple engine backends beyond Google. Both draw from Google — no coverage difference between them or vs. Google PSE.
+
+**[You.com](https://you.com/docs/api-reference/search/v1-search)** — Search API with web and news results in one response. Good when you want a single optional provider that returns LLM-friendly snippets and can surface query-relevant highlights. Requires `YDC_API_KEY`. Image search is not exposed in this integration, so keep an image-capable provider in `SEARCH_ROUTING` if you need image results.
 
 **[Brave](https://brave.com/search/api/)** — Own crawler, own index, privacy-first. Best all-purpose choice when you want index independence from Google/Bing and a generous free tier. Supports web, image, news, and Goggles-based custom result weighting. Also exposes local/map results via `local_search` (the only provider that does) and a LLM context endpoint used by `search_and_scrape` for faster grounding when you're on Brave's Data for AI plan.
 
