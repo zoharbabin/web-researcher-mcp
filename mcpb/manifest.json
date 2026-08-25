@@ -84,48 +84,5 @@
       "required": false,
       "sensitive": true
     }
-  },
-  "tools": [
-    {
-      "name": "web_search",
-      "description": "Search the web and get results from only the sites you trust, using search lenses"
-    },
-    {
-      "name": "scrape_page",
-      "description": "Read the full text from any URL — web pages, PDFs, Word docs, YouTube transcripts, Hacker News threads"
-    },
-    {
-      "name": "search_and_scrape",
-      "description": "Search the web and read the top results in one step, ranked by quality"
-    },
-    {
-      "name": "image_search",
-      "description": "Search for images with size and type filters"
-    },
-    {
-      "name": "news_search",
-      "description": "Search news articles with freshness controls"
-    },
-    {
-      "name": "academic_search",
-      "description": "Search academic papers via Scholar, arXiv, and PubMed"
-    },
-    {
-      "name": "patent_search",
-      "description": "Search patents with multi-office filtering (US, EP, WO, CN, JP, KR)"
-    },
-    {
-      "name": "verify_citation",
-      "description": "Verify a citation exists, matches a real record, and hasn't been retracted before you rely on it"
-    },
-    {
-      "name": "sequential_search",
-      "description": "Track multi-step research projects, noting what you found and what's still unanswered. Sessions persist for 4 hours and survive restarts."
-    },
-    {
-      "name": "get_research_session",
-      "description": "Recover a sequential_search session after context loss. Returns summary and recent steps."
-    }
-  ],
-  "tools_generated": true
+  }
 }
