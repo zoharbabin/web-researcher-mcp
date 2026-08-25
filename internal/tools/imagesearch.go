@@ -11,6 +11,37 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
+// manyImageFiltersWarning returns an advisory for issue #659: Google's
+// Custom Search JSON API's own request construction here is correct — each
+// of imgSize/imgType/imgColorType/imgDominantColor/fileType is set
+// independently under its documented param name (see doImageSearch in
+// internal/search/google.go), so there is no mismapping or overwrite in this
+// codebase's query. The actual root cause is upstream: when 3+ of these
+// filters combine into an intersection narrow enough that too few images
+// satisfy every constraint, Google's server silently relaxes the combined
+// filter set and falls back toward broader/default ranking — the response
+// carries no field indicating anything was relaxed, so results can come back
+// byte-identical to an unfiltered query with no error and no signal. This
+// cannot be detected or corrected client-side, so the fix is an honest
+// warning rather than a request-construction change. Fires only for the
+// google provider, only once 3 or more filters are combined — the threshold
+// at which live testing showed the relaxation kick in.
+func manyImageFiltersWarning(params search.ImageSearchParams, providerUsed string) string {
+	if providerUsed != "google" {
+		return ""
+	}
+	set := 0
+	for _, v := range []string{params.Size, params.Type, params.ColorType, params.DominantColor, params.FileType} {
+		if v != "" {
+			set++
+		}
+	}
+	if set < 3 {
+		return ""
+	}
+	return "3 or more image filters were combined (size/type/color_type/dominant_color/file_type). Google's Custom Search API may silently relax combined filters when too few images satisfy every constraint at once, returning broader results than requested with no field in the response indicating this happened. If results look unfiltered, try fewer simultaneous filters or a different provider."
+}
+
 type imageSearchInput struct {
 	Query         string `json:"query" jsonschema:"Descriptive search query for images (e.g. 'golden retriever puppy playing fetch'). More descriptive = better results.,required"`
 	NumResults    int    `json:"num_results,omitempty" jsonschema:"Number of image results (1-200, default: 5). Brave returns up to 200; Google up to 10."`
@@ -71,20 +102,22 @@ func registerImageSearch(srv *mcp.Server, deps Dependencies) {
 			return errResult, nil, nil
 		}
 
+		imgParams := search.ImageSearchParams{
+			Query:         input.Query,
+			NumResults:    numResults,
+			Size:          input.Size,
+			Type:          input.Type,
+			ColorType:     input.ColorType,
+			DominantColor: input.DominantColor,
+			FileType:      input.FileType,
+			Safe:          input.Safe,
+			Country:       input.Country,
+			Language:      input.Language,
+		}
+
 		traceCtx, trace := search.NewRoutingTrace(ctx)
 		results, err := coalescedFetch(ctx, deps, cacheKey, func() ([]search.ImageResult, error) {
-			return provider.Images(traceCtx, search.ImageSearchParams{
-				Query:         input.Query,
-				NumResults:    numResults,
-				Size:          input.Size,
-				Type:          input.Type,
-				ColorType:     input.ColorType,
-				DominantColor: input.DominantColor,
-				FileType:      input.FileType,
-				Safe:          input.Safe,
-				Country:       input.Country,
-				Language:      input.Language,
-			})
+			return provider.Images(traceCtx, imgParams)
 		})
 		if err != nil {
 			errCode := "upstream_error"
@@ -95,7 +128,8 @@ func registerImageSearch(srv *mcp.Server, deps Dependencies) {
 			auditToolCall(ctx, deps, "image_search", time.Since(start), err, errCode)
 			return upstreamErrorResponse("image search", err), nil, nil
 		}
-		rt := routingMeta(trace.Decision(), time.Since(start), false)
+		decision := trace.Decision()
+		rt := routingMeta(decision, time.Since(start), false)
 
 		output := map[string]any{
 			"images":      results,
@@ -106,6 +140,14 @@ func registerImageSearch(srv *mcp.Server, deps Dependencies) {
 
 		if len(results) == 0 {
 			output["hints"] = buildZeroResultHints(hintProviderName(provider), nil, nil)
+		}
+
+		effectiveProvider := decision.ProviderUsed
+		if effectiveProvider == "" {
+			effectiveProvider = provider.Name()
+		}
+		if warning := manyImageFiltersWarning(imgParams, effectiveProvider); warning != "" {
+			output["warning"] = warning
 		}
 
 		jsonBytes, _ := json.Marshal(output)
