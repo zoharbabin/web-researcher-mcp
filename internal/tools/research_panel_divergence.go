@@ -121,7 +121,21 @@ func AnalyzeDivergence(responses map[string]string) PanelDivergence {
 		}
 	}
 
-	confidence, rationale := panelConfidence(len(responses), len(consensus), len(contradictions))
+	// Count models that actually produced at least one usable claim sentence,
+	// not len(responses) (models that merely didn't error). A panelist whose
+	// answer is empty or shorter than minSentenceLen — a real goai.GenerateText
+	// outcome: err==nil with an empty/near-empty Text, e.g. a filtered or
+	// degenerate completion — contributes nothing for the others to be
+	// compared against, so it can never produce a real consensus point or
+	// contradiction. Scoring that as a genuine "N models compared, no
+	// disagreement" medium-confidence result would overstate confidence for
+	// what is actually a single-model answer wearing a two-model panel's
+	// confidence label.
+	contributingModels := make(map[string]bool, len(responses))
+	for _, c := range claims {
+		contributingModels[c.modelID] = true
+	}
+	confidence, rationale := panelConfidence(len(contributingModels), len(consensus), len(contradictions))
 
 	return PanelDivergence{
 		ConsensusPoints:     consensus,
@@ -142,7 +156,7 @@ func AnalyzeDivergence(responses map[string]string) PanelDivergence {
 func panelConfidence(modelsSucceeded, consensusCount, contradictionCount int) (string, string) {
 	switch {
 	case modelsSucceeded < 2:
-		return "low", "fewer than 2 models succeeded; no cross-model comparison was possible"
+		return "low", "fewer than 2 models produced comparable claims; no cross-model comparison was possible"
 	case contradictionCount == 0 && consensusCount == 0:
 		return "medium", fmt.Sprintf("%d models produced no contradictions, but no claims were restated closely enough across models to count as explicit consensus", modelsSucceeded)
 	case contradictionCount == 0:

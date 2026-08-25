@@ -71,6 +71,24 @@ func TestAnalyzeDivergence_SingleModel(t *testing.T) {
 	}
 }
 
+// TestAnalyzeDivergence_DegenerateResponseNotCountedAsContributing is the
+// #667 regression guard: a panelist whose response is empty or shorter than
+// minSentenceLen (e.g. a filtered/degenerate goai.GenerateText completion,
+// err==nil but no usable text) contributes no claims and must not be counted
+// toward the "N models compared" figure that panelConfidence uses — that
+// figure must reflect models with a comparable claim, not len(responses).
+func TestAnalyzeDivergence_DegenerateResponseNotCountedAsContributing(t *testing.T) {
+	responses := map[string]string{
+		"a/x": "This is a substantive claim long enough to be a candidate sentence.",
+		"b/y": "", // degenerate completion: no usable claim sentence
+	}
+	d := AnalyzeDivergence(responses)
+
+	if d.Confidence != "low" {
+		t.Errorf("only 1 model produced a comparable claim; expected low confidence, got %q (rationale: %q)", d.Confidence, d.ConfidenceRationale)
+	}
+}
+
 func TestAnalyzeDivergence_EmptyResponses(t *testing.T) {
 	d := AnalyzeDivergence(map[string]string{})
 
