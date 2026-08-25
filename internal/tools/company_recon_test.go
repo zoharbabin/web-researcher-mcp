@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/auth"
@@ -368,5 +369,30 @@ func TestCompanyReconCompanyNameFallsBackToWebSearch(t *testing.T) {
 	}
 	if out["domain"] != "example.com" { // mockProvider.Web always returns example.com
 		t.Errorf("domain = %v, want example.com (resolved via web search)", out["domain"])
+	}
+}
+
+// TestCompanyReconDescriptionDocumentsPhaseAliases is the regression test for
+// issue #670: the registered tool's description must explicitly document
+// that "profiling" and "web" are aliases for the same phase, so a future
+// edit can't silently reintroduce the "4 independent phases" claim without a
+// test failure.
+func TestCompanyReconDescriptionDocumentsPhaseAliases(t *testing.T) {
+	t.Parallel()
+	var desc string
+	for _, tool := range listTools(t) {
+		if tool.Name == "company_recon" {
+			desc = tool.Description
+			break
+		}
+	}
+	if desc == "" {
+		t.Fatal("company_recon tool not found in registry")
+	}
+	if !strings.Contains(desc, "alias") {
+		t.Errorf("description should document the profiling/web alias relationship, got: %q", desc)
+	}
+	if !strings.Contains(desc, "profiling") || !strings.Contains(desc, "web") {
+		t.Errorf("description should mention both 'profiling' and 'web' alongside the alias note, got: %q", desc)
 	}
 }

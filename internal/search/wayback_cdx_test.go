@@ -193,3 +193,23 @@ func TestDecodeArchiveURL(t *testing.T) {
 func TestWaybackCDX_Interface(t *testing.T) {
 	var _ ArchiveResolver = (*WaybackCDXResolver)(nil)
 }
+
+// TestWaybackRowsToEntriesRejectsControlCharsAndOffDomainURLs is the
+// regression test for issue #662: a CDX row whose decoded URL contains a
+// control character, or whose host doesn't belong to the queried domain,
+// must never reach the returned []ArchiveEntry.
+func TestWaybackRowsToEntriesRejectsControlCharsAndOffDomainURLs(t *testing.T) {
+	rows := [][]string{
+		{"original", "timestamp", "statuscode", "mimetype"},
+		{"https://example.com/page", "20260101000000", "200", "text/html"},       // (1) well-formed same-domain
+		{"http://example.com/%01foo", "20260101000000", "200", "text/html"},      // (2) decodes to a control character
+		{"http://unrelated-tracker.net/x", "20260101000000", "200", "text/html"}, // (3) unrelated host
+	}
+	entries := waybackRowsToEntries(rows, "example.com")
+	if len(entries) != 1 {
+		t.Fatalf("want exactly 1 entry (rows 2 and 3 rejected), got %d: %+v", len(entries), entries)
+	}
+	if entries[0].URL != "https://example.com/page" {
+		t.Errorf("URL = %q, want https://example.com/page", entries[0].URL)
+	}
+}
