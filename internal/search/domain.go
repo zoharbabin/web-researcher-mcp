@@ -135,6 +135,13 @@ type DOIResolver interface {
 type CitationSearcher interface {
 	Citations(ctx context.Context, seedID string, numResults int) ([]AcademicResult, error)
 	References(ctx context.Context, seedID string, numResults int) ([]AcademicResult, error)
+	// SupportsInfluenceSignal reports whether this provider populates
+	// AcademicResult.IsInfluential on the edges it returns (Semantic Scholar
+	// does; OpenAlex — counts-only edges — does not, #655). citation_graph's
+	// influential_only filter must no-op (pass results through unfiltered)
+	// when this is false, rather than discard every result on the mistaken
+	// assumption that an unset IsInfluential means "not influential."
+	SupportsInfluenceSignal() bool
 }
 
 // PaperFetcher fetches full paper metadata by DOI or Semantic Scholar paper ID.

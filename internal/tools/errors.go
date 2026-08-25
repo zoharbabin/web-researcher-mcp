@@ -187,14 +187,45 @@ func scrapeErrorToToolError(se *scraper.ScrapeError) ToolError {
 }
 
 // extractProviderName attempts to extract the provider name from an error string.
+//
+// #656: the prefix list must cover every "providername: ..." error prefix any
+// internal/search/*.go provider actually wraps its errors with (verified by
+// grepping fmt.Errorf("<name>: ...") across that package), not just the
+// providers a given tool call site happens to exercise most often — a gap here
+// silently drops ToolError.Provider for whichever provider was missed
+// (semanticscholar was the reported case; the rest were audited in the same
+// pass so this doesn't reoccur one entry at a time).
+var providerErrorPrefixes = []string{
+	"google:", "brave:", "serper:", "searxng:", "searchapi:", "lens:", "uspto:", "epo:", "openalex:", "crossref:", "ecosystems:",
+	"semanticscholar:", "scholarapi:", "pubmed:", "core:", "exa:", "duckduckgo:", "tavily:", "hackernews:", "reddit:", "bluesky:", "github:", "xquik:",
+	"courtlistener:", "edgar:", "fred:", "eurostat:", "oecd:", "worldbank:", "monarch:",
+	"clinicaltrials:", "unpaywall:", "wikidata:", "wayback:", "crt.sh:", "doi-handle:", "doi.org:",
+}
+
 func extractProviderName(err error) string {
 	s := err.Error()
-	for _, prefix := range []string{"google:", "brave:", "serper:", "searxng:", "searchapi:", "lens:", "uspto:", "epo:", "openalex:", "crossref:", "ecosystems:"} {
-		if strings.HasPrefix(s, prefix[:len(prefix)-1]) || strings.Contains(s, prefix) {
+	for _, prefix := range providerErrorPrefixes {
+		idx := strings.Index(s, prefix)
+		if idx < 0 {
+			continue
+		}
+		// A bare substring match lets a short prefix like "core:" match inside
+		// an unrelated word (e.g. "score: too low: ..."). Require the match to
+		// start at a word boundary: either the very start of the string, or
+		// preceded by a non-alphanumeric byte (space, ';', ':', etc.) — the
+		// separators every real provider-error wrapping in this codebase uses
+		// (fmt.Errorf("%s: %w", name, err), or "%s: %w; %s: %w" for two).
+		if idx == 0 || !isWordByte(s[idx-1]) {
 			return prefix[:len(prefix)-1]
 		}
 	}
 	return ""
+}
+
+// isWordByte reports whether b is an ASCII letter or digit — used by
+// extractProviderName to require a word boundary before a provider prefix.
+func isWordByte(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
 }
 
 // FailureInfo is returned in partial-success compound tool results.
