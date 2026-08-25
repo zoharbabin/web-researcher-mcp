@@ -475,24 +475,27 @@ func TestVerifyCitation_PDFUrlServingHTML_StillAddressed(t *testing.T) {
 
 // TestVerifyCitation_ClaimFetchError_Surfaced verifies the #631
 // claimFetchError field: when the claim-check fetch genuinely fails, the
-// caller sees why instead of an unattributed source_unavailable. Uses the
-// DOI path (mockOAURLProvider's PDFUrl points at a closed server) because
-// verifyByURL's own link-liveness pre-check short-circuits fetchURL to ""
-// for a dead URL — a distinct, already-correct "no fetch attempted" case
-// that must NOT populate claimFetchError.
+// caller sees why instead of an unattributed source_unavailable. Drives
+// emitClaimCoverageCandidates directly with a single candidate (rather than
+// through the DOI path) so the test isn't at the mercy of
+// bestClaimURLCandidates' doi.org fallback (#681) — going through a real DOI
+// here would make the retry loop hit the real doi.org over the network after
+// the closed server fails. verifyByURL's own link-liveness pre-check
+// short-circuits fetchURL to "" for a dead URL — a distinct, already-correct
+// "no fetch attempted" case that must NOT populate claimFetchError — which is
+// why this exercises the candidates path directly instead.
 func TestVerifyCitation_ClaimFetchError_Surfaced(t *testing.T) {
 	dead := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
 	deadURL := dead.URL
 	dead.Close() // closed before use: connection refused, not a 404
 
 	deps := verifyClaimDeps(t)
-	deps.AcademicProviders = map[string]search.AcademicProvider{
-		"openalex": &mockOAURLProvider{oaURL: deadURL},
-	}
+	out := map[string]any{}
+	var prov []string
+	emitClaimCoverageCandidates(context.Background(), deps, []string{deadURL}, "vaccine efficacy reduced infection", out, &prov)
 
-	out := callVerifyClaim(t, deps, "10.1234/oa-test", "vaccine efficacy reduced infection")
-	if out["claimSupport"] != "source_unavailable" {
-		t.Fatalf("claimSupport = %v, want source_unavailable", out["claimSupport"])
+	if out["claimSupport"] != claimSourceUnavailable {
+		t.Fatalf("claimSupport = %v, want %v", out["claimSupport"], claimSourceUnavailable)
 	}
 	fetchErr, _ := out["claimFetchError"].(string)
 	if fetchErr == "" {
@@ -500,6 +503,45 @@ func TestVerifyCitation_ClaimFetchError_Surfaced(t *testing.T) {
 	}
 	if out["claimSourceUrl"] != deadURL {
 		t.Errorf("claimSourceUrl = %v, want %q (the attempted URL, so the failure is attributable)", out["claimSourceUrl"], deadURL)
+	}
+}
+
+// TestVerifyCitation_ClaimCandidateCapCoversUnpaywallPrepend is the fix for a
+// gap #657 opened: prependCandidate puts the Unpaywall candidate in front of
+// bestClaimURLCandidates' own 3 (PDFUrl, landing URL, doi.org fallback),
+// producing up to 4 unique candidates — but maxClaimURLCandidateAttempts was
+// still 3, so the doi.org fallback (the last, most-likely-to-work candidate)
+// was silently truncated away whenever the first 3 all failed. Drives
+// emitClaimCoverageCandidates directly with 4 candidates, the first 3 dead,
+// to confirm the 4th is still attempted.
+func TestVerifyCitation_ClaimCandidateCapCoversUnpaywallPrepend(t *testing.T) {
+	dead1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	dead1URL := dead1.URL
+	dead1.Close()
+	dead2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	dead2URL := dead2.URL
+	dead2.Close()
+	dead3 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	dead3URL := dead3.URL
+	dead3.Close()
+
+	landing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><article><p>The vaccine trial demonstrated significant efficacy in reducing infection rates across all age groups.</p></article></body></html>`))
+	}))
+	defer landing.Close()
+
+	deps := verifyClaimDeps(t)
+	out := map[string]any{}
+	var prov []string
+	candidates := []string{dead1URL, dead2URL, dead3URL, landing.URL}
+	emitClaimCoverageCandidates(context.Background(), deps, candidates, "vaccine efficacy reduced infection", out, &prov)
+
+	if out["claimSupport"] != "addressed" {
+		t.Errorf("claimSupport = %v, want addressed (the cap must not truncate away the 4th candidate)", out["claimSupport"])
+	}
+	if out["claimSourceUrl"] != landing.URL {
+		t.Errorf("claimSourceUrl = %v, want %s (the 4th candidate, only reachable if the cap is >= 4)", out["claimSourceUrl"], landing.URL)
 	}
 }
 
@@ -519,6 +561,67 @@ func (m *mockOAURLProvider) Scholarly(_ context.Context, _ search.AcademicSearch
 func (m *mockOAURLProvider) ResolveByDOI(_ context.Context, doi string) (*search.AcademicResult, error) {
 	if doi == "10.1234/oa-test" {
 		return &search.AcademicResult{Title: "OA Paper", URL: "https://doi.org/10.1234/oa-test", DOI: "10.1234/oa-test", PDFUrl: m.oaURL, Year: 2024, Source: "openalex"}, nil
+	}
+	return nil, nil
+}
+
+// TestVerifyCitation_ClaimRetriesNextCandidateOnEmptyBody is the #681
+// regression test: a DOI record's PDFUrl (tried first) is a live server that
+// returns 200 with no usable body — a bot-wall/challenge page, exactly what a
+// publisher's ".pdf" endpoint can serve while the plain landing page (rec.URL,
+// a direct non-redirect URL) serves the real article. The claim check must
+// retry the landing-page candidate instead of committing to
+// source_unavailable on the first empty fetch.
+func TestVerifyCitation_ClaimRetriesNextCandidateOnEmptyBody(t *testing.T) {
+	botWall := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		// 200 OK, empty body — simulates a bot-wall/challenge page.
+	}))
+	defer botWall.Close()
+
+	landing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><article><p>The vaccine trial demonstrated significant efficacy in reducing infection rates across all age groups.</p></article></body></html>`))
+	}))
+	defer landing.Close()
+
+	deps := verifyClaimDeps(t)
+	deps.AcademicProviders = map[string]search.AcademicProvider{
+		"openalex": &mockOACandidatesProvider{pdfURL: botWall.URL, landingURL: landing.URL},
+	}
+
+	out := callVerifyClaim(t, deps, "10.1234/oa-test", "vaccine efficacy reduced infection")
+	if out["claimSupport"] != "addressed" {
+		t.Errorf("claimSupport = %v, want addressed (must retry past the empty-body PDF candidate to the landing page)", out["claimSupport"])
+	}
+	if out["claimSourceUrl"] != landing.URL {
+		t.Errorf("claimSourceUrl = %v, want %s (the candidate that actually succeeded)", out["claimSourceUrl"], landing.URL)
+	}
+}
+
+// mockOACandidatesProvider returns a record with caller-supplied, distinct
+// PDFUrl and URL — both non-doi.org — so bestClaimURLCandidates yields more
+// than one candidate to retry across (#681), unlike mockOAURLProvider whose
+// rec.URL is fixed to a doi.org redirect.
+type mockOACandidatesProvider struct {
+	pdfURL     string
+	landingURL string
+}
+
+func (m *mockOACandidatesProvider) Name() string { return "openalex" }
+func (m *mockOACandidatesProvider) Metadata() search.ProviderMeta {
+	return search.ProviderMeta{Regions: []string{"*"}, RateClass: "free", Description: "mock oa candidates"}
+}
+func (m *mockOACandidatesProvider) record() search.AcademicResult {
+	return search.AcademicResult{Title: "OA Paper", URL: m.landingURL, DOI: "10.1234/oa-test", PDFUrl: m.pdfURL, Year: 2024, Source: "openalex"}
+}
+func (m *mockOACandidatesProvider) Scholarly(_ context.Context, _ search.AcademicSearchParams) ([]search.AcademicResult, error) {
+	return []search.AcademicResult{m.record()}, nil
+}
+func (m *mockOACandidatesProvider) ResolveByDOI(_ context.Context, doi string) (*search.AcademicResult, error) {
+	if doi == "10.1234/oa-test" {
+		rec := m.record()
+		return &rec, nil
 	}
 	return nil, nil
 }

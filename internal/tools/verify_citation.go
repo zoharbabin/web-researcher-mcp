@@ -150,6 +150,45 @@ func emitClaimCoverage(ctx context.Context, deps Dependencies, fetchURL, claim s
 	emitClaimCoverageResult(claimCoverageFor(ctx, deps, fetchURL, claim), claim, out, prov)
 }
 
+// maxClaimURLCandidateAttempts caps emitClaimCoverageCandidates' retry loop —
+// no unbounded fetching (#681). Must be >= the max unique candidates either
+// call site can produce: bestClaimURLCandidates' own 3 (PDFUrl, URL, doi.org
+// fallback) plus the Unpaywall candidate prependCandidate adds on top (#657)
+// — a cap of 3 silently dropped the doi.org fallback whenever Unpaywall
+// contributed a 4th candidate.
+const maxClaimURLCandidateAttempts = 4
+
+// emitClaimCoverageCandidates is emitClaimCoverage over an ORDERED list of
+// candidate URLs (see bestClaimURLCandidates): it tries each in turn and keeps
+// going while a candidate reports source_unavailable — whether from a fetch
+// error or from a fetch that succeeded but returned no usable content (a
+// bot-wall/empty-body 200, e.g. a publisher's ".pdf" endpoint serving a
+// challenge page while the plain landing page serves the real article, #681).
+// Only once every candidate has failed does the last attempt's
+// source_unavailable result (with its SourceURL/FetchError) get emitted — a
+// candidate list exhausted by genuine failures is reported the same as today,
+// just after trying every reasonable URL instead of committing to the first.
+func emitClaimCoverageCandidates(ctx context.Context, deps Dependencies, candidates []string, claim string, out map[string]any, prov *[]string) {
+	if claim == "" {
+		return
+	}
+	if len(candidates) == 0 {
+		emitClaimCoverageResult(claimCoverageFor(ctx, deps, "", claim), claim, out, prov)
+		return
+	}
+	if len(candidates) > maxClaimURLCandidateAttempts {
+		candidates = candidates[:maxClaimURLCandidateAttempts]
+	}
+	var cc claimCoverageResult
+	for _, url := range candidates {
+		cc = claimCoverageFor(ctx, deps, url, claim)
+		if cc.Support != claimSourceUnavailable {
+			break
+		}
+	}
+	emitClaimCoverageResult(cc, claim, out, prov)
+}
+
 // emitClaimCoverageFromContent is emitClaimCoverage over an already-fetched page
 // body, reusing the single fetch verify_citation's URL path already performed for
 // scholarly-DOI detection instead of scraping the same URL twice (#232).
@@ -219,11 +258,16 @@ func verifyByDOI(ctx context.Context, deps Dependencies, doi, citation, claim st
 	// DOI's record, since that would be a fabrication of exactly the kind this tool
 	// exists to catch. Always attempted: even when Crossref returned found=false,
 	// OpenAlex may legitimately resolve the work (so exists can still become true).
-	recURL := ""
+	var candidates []string
 	if rec := lookupRecordByDOI(ctx, deps, doi); rec != nil {
 		out["matchedRecord"] = rec
 		out["matchConfidence"] = "high" // exact-DOI match confirmed
-		recURL = bestClaimURL(rec, doi)
+		candidates = bestClaimURLCandidates(rec, doi)
+		// #657: also consult Unpaywall's live best_oa_location — rec.PDFUrl here
+		// is whichever provider's own CACHED pick (e.g. OpenAlex's open_access.oa_url),
+		// which can independently go stale; a second, freshly-queried OA signal
+		// gives the retry loop below another live option to fall through to.
+		candidates = prependCandidate(candidates, unpaywallPDFCandidate(ctx, deps, doi))
 		*prov = append(*prov, "academic record matched by exact DOI")
 		if _, ok := out["exists"]; !ok {
 			out["exists"] = true
@@ -258,13 +302,11 @@ func verifyByDOI(ctx context.Context, deps Dependencies, doi, citation, claim st
 		out["exists"] = false
 		*prov = append(*prov, "no academic/retraction resolver could confirm this DOI")
 	}
-	// Optional claim check: prefer an open-access URL (rec.PDFUrl) over a doi.org
-	// redirect when available — OA URLs resolve to scrapeable HTML/PDF, while
-	// doi.org redirects typically land on publisher paywalls. Fall back to a
-	// doi.org URL when both rec.URL and rec.PDFUrl are doi.org redirects or empty,
-	// so the scraper at least gets something to try. Empty recURL →
-	// source_unavailable.
-	emitClaimCoverage(ctx, deps, recURL, claim, out, prov)
+	// Optional claim check: try each candidate URL in priority order (OA/PDF
+	// first, then a non-redirect landing page, then doi.org), retrying past a
+	// bot-wall/empty-content candidate instead of committing to the first
+	// (#681). Empty candidates → source_unavailable.
+	emitClaimCoverageCandidates(ctx, deps, candidates, claim, out, prov)
 }
 
 // computeTitleMatch compares a caller-supplied title string (the text remaining
@@ -482,7 +524,10 @@ func verifyByReference(ctx context.Context, deps Dependencies, ref, claim string
 			out["retractionStatus"] = status
 		}
 	}
-	emitClaimCoverage(ctx, deps, bestClaimURL(rec, rec.DOI), claim, out, prov)
+	// #657: same Unpaywall widening as verifyByDOI — rec's own PDFUrl here is a
+	// single provider's cached pick, which can independently go stale.
+	refCandidates := prependCandidate(bestClaimURLCandidates(rec, rec.DOI), unpaywallPDFCandidate(ctx, deps, rec.DOI))
+	emitClaimCoverageCandidates(ctx, deps, refCandidates, claim, out, prov)
 }
 
 // lookupAcademicRecord resolves a query (DOI or free text) to the single best
@@ -713,8 +758,8 @@ func looksLikeURL(s string) bool {
 	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
 }
 
-// bestClaimURL returns the most scrapeable URL for an academic record when doing
-// claim-coverage checks. Priority:
+// bestClaimURLCandidates returns URLs to try for claim-coverage fetching, in
+// priority order — most-likely-scrapeable first:
 //  1. rec.PDFUrl — an open-access URL (arXiv, PMC, institutional repo) that
 //     resolves to scrapeable HTML or PDF rather than a publisher paywall.
 //  2. rec.URL — when it is NOT a doi.org redirect (i.e. a direct publisher or
@@ -722,25 +767,48 @@ func looksLikeURL(s string) bool {
 //  3. A doi.org fallback constructed from doi — ensures the scraper has
 //     something to follow even when the record only carries a bare DOI URL;
 //     the scraper handles HTTP redirects and may reach an OA version this way.
+//  4. rec.URL unconditionally (may be a doi.org redirect) — last resort.
 //
-// doi.org and dx.doi.org URLs are treated as redirects-to-paywall and
-// de-prioritised so that a direct OA URL is always tried first.
-func bestClaimURL(rec *search.AcademicResult, doi string) string {
-	// Prefer an explicit OA/PDF URL (arXiv, PMC, etc.) — most likely scrapeable.
+// Deduplicated, empty entries dropped. rec.PDFUrl is NOT always the most
+// scrapeable candidate despite being tried first — a publisher's ".pdf"
+// endpoint can serve a bot-challenge interstitial while the plain landing
+// page serves the real article (#681) — so callers doing a claim-coverage
+// check should try every candidate in order, not commit to the first.
+func bestClaimURLCandidates(rec *search.AcademicResult, doi string) []string {
+	var candidates []string
+	seen := make(map[string]struct{}, 4)
+	add := func(u string) {
+		if u == "" {
+			return
+		}
+		if _, dup := seen[u]; dup {
+			return
+		}
+		seen[u] = struct{}{}
+		candidates = append(candidates, u)
+	}
 	if rec.PDFUrl != "" && !isDOIRedirect(rec.PDFUrl) {
-		return rec.PDFUrl
+		add(rec.PDFUrl)
 	}
-	// Use rec.URL when it is not a doi.org redirect (some providers return a
-	// direct landing page URL that is scrapeable without redirect).
 	if rec.URL != "" && !isDOIRedirect(rec.URL) {
-		return rec.URL
+		add(rec.URL)
 	}
-	// Fall back to doi.org; the scraper follows redirects and may reach content.
 	if doi != "" {
-		return "https://doi.org/" + doi
+		add("https://doi.org/" + doi)
 	}
-	// Last resort: whatever URL the record carries (may be a doi.org redirect).
-	return rec.URL
+	add(rec.URL)
+	return candidates
+}
+
+// bestClaimURL returns bestClaimURLCandidates' top choice, for callers that
+// only need a single scrapeable URL (no claim-coverage retry) — e.g. display
+// or non-claim provenance.
+func bestClaimURL(rec *search.AcademicResult, doi string) string {
+	candidates := bestClaimURLCandidates(rec, doi)
+	if len(candidates) == 0 {
+		return ""
+	}
+	return candidates[0]
 }
 
 // isDOIRedirect reports whether u is a doi.org or dx.doi.org redirect URL.

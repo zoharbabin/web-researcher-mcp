@@ -60,7 +60,11 @@ func claimCoverageFor(ctx context.Context, deps Dependencies, fetchURL, claim st
 		return claimCoverageResult{Support: claimSourceUnavailable, SourceURL: fetchURL, FetchError: sanitizeClaimFetchError(err)}
 	}
 	if res == nil || strings.TrimSpace(res.Content) == "" {
-		return claimCoverageResult{Support: claimSourceUnavailable}
+		// A fetch that succeeded but returned no usable content (e.g. a
+		// bot-wall/challenge page served as a plain 200) is attributable —
+		// SourceURL records that a fetch was actually attempted here, so this
+		// is distinguishable from fetchURL=="" (never attempted) (#681).
+		return claimCoverageResult{Support: claimSourceUnavailable, SourceURL: fetchURL}
 	}
 	return claimCoverageFromContent(res.Content, fetchURL, claim)
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
+	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
@@ -398,6 +399,115 @@ func TestPaperFulltextDOIUpstreamErrorStillDegradesButErrIsNotLost(t *testing.T)
 	}
 	if fetchErr == nil {
 		t.Fatal("expected fetchErr to be surfaced instead of silently dropped")
+	}
+}
+
+// TestPaperFulltextOpenAlexMetadataFallback proves the #658 fix: when
+// Semantic Scholar has no record at all for a DOI, resolvePaperURL must
+// consult an exact-DOI OpenAlex lookup (via the DOIResolver capability) for
+// bibliographic metadata, instead of degrading to a bare doi.org redirect with
+// no title/authors at all — which previously produced a placeholder
+// "(n.d.)."-style citation despite a resolvable record existing elsewhere.
+func TestPaperFulltextOpenAlexMetadataFallback(t *testing.T) {
+	deps := setupTestDeps()
+	deps.AcademicProviders = map[string]search.AcademicProvider{
+		"semanticscholar": &notFoundPaperFetcher{},
+		"openalex":        &mockAcademicProvider{},
+	}
+
+	url, meta, errResult, fetchErr := resolvePaperURL(context.Background(), deps, "10.1234/x")
+	if errResult != nil {
+		t.Fatalf("unexpected error result: %+v", errResult)
+	}
+	if fetchErr != nil {
+		t.Fatalf("unexpected fetch error: %v", fetchErr)
+	}
+	if url != "https://doi.org/10.1234/x" {
+		t.Errorf("url = %q, want the doi.org redirect (OpenAlex record has no PDFUrl)", url)
+	}
+	if meta == nil {
+		t.Fatal("meta = nil, want the OpenAlex record (before the #658 fix, S2 having no record meant no metadata at all)")
+	}
+	if meta.Title != "Mock Paper" {
+		t.Errorf("meta.Title = %q, want the OpenAlex-resolved title", meta.Title)
+	}
+	if meta.Source != "openalex" {
+		t.Errorf("meta.Source = %q, want openalex", meta.Source)
+	}
+}
+
+// TestPaperFulltextOALivenessFallthrough proves the #657 fix: when the
+// fetcher's own cached PDFUrl candidate is dead, resolvePaperURL must fall
+// through to the next OA candidate (here, Unpaywall's live pick) rather than
+// returning the dead URL unconditionally.
+func TestPaperFulltextOALivenessFallthrough(t *testing.T) {
+	dead := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer dead.Close()
+	live := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer live.Close()
+	wb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"archived_snapshots":{"closest":{"available":false}}}`))
+	}))
+	defer wb.Close()
+
+	s2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"paperId":"abc","externalIds":{"DOI":"10.1038/nature12373"},"title":"A Study","year":2013,"isOpenAccess":true,"openAccessPdf":{"url":"` + dead.URL + `"}}`))
+	}))
+	defer s2.Close()
+
+	s2Provider := search.NewSemanticScholarProvider("", search.Deps{
+		HTTPClient: http.DefaultClient,
+		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),
+	})
+	s2Provider.SetBaseURL(s2.URL)
+
+	deps := scrapeTestDeps()
+	deps.AcademicProviders = map[string]search.AcademicProvider{"semanticscholar": s2Provider}
+	deps.OAResolver = &mockOAResolver{oa: true, pdfURL: live.URL, found: true}
+	lv := scraper.NewLinkVerifier(scraper.LinkVerifierConfig{AllowPrivateIPs: true})
+	lv.SetWaybackBase(wb.URL)
+	deps.LinkVerifier = lv
+
+	url, meta, errResult, fetchErr := resolvePaperURL(context.Background(), deps, "10.1038/nature12373")
+	if errResult != nil {
+		t.Fatalf("unexpected error result: %+v", errResult)
+	}
+	if fetchErr != nil {
+		t.Fatalf("unexpected fetch error: %v", fetchErr)
+	}
+	if url != live.URL {
+		t.Errorf("url = %q, want the live Unpaywall candidate %q (must fall through the dead S2 PDF)", url, live.URL)
+	}
+	if meta == nil || meta.PDFUrl != live.URL {
+		t.Errorf("meta.PDFUrl = %v, want %q (output must agree with resolvedUrl)", meta, live.URL)
+	}
+}
+
+// TestPaperFulltextMetadataIncomplete proves the #658 fix's flag half: when
+// title, author, and publish date are all empty (no metadata source had
+// anything at all), the tool must surface metadataIncomplete:true rather than
+// letting a placeholder "(n.d.)."-style citation pass as a complete one.
+func TestPaperFulltextMetadataIncomplete(t *testing.T) {
+	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><article><p>` +
+			"Content with no title tag, no author meta, and no publish-date meta at all." +
+			`</p></article></body></html>`))
+	}))
+	defer page.Close()
+
+	deps := scrapeTestDeps()
+	out := callPaperFulltext(t, deps, map[string]any{"identifier": page.URL})
+
+	if out["title"] != "" {
+		t.Fatalf("precondition: title = %v, want empty (page has no <title>)", out["title"])
+	}
+	if out["metadataIncomplete"] != true {
+		t.Errorf("metadataIncomplete = %v, want true", out["metadataIncomplete"])
 	}
 }
 
