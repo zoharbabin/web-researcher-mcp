@@ -506,6 +506,45 @@ func TestVerifyCitation_ClaimFetchError_Surfaced(t *testing.T) {
 	}
 }
 
+// TestVerifyCitation_ClaimCandidateCapCoversUnpaywallPrepend is the fix for a
+// gap #657 opened: prependCandidate puts the Unpaywall candidate in front of
+// bestClaimURLCandidates' own 3 (PDFUrl, landing URL, doi.org fallback),
+// producing up to 4 unique candidates — but maxClaimURLCandidateAttempts was
+// still 3, so the doi.org fallback (the last, most-likely-to-work candidate)
+// was silently truncated away whenever the first 3 all failed. Drives
+// emitClaimCoverageCandidates directly with 4 candidates, the first 3 dead,
+// to confirm the 4th is still attempted.
+func TestVerifyCitation_ClaimCandidateCapCoversUnpaywallPrepend(t *testing.T) {
+	dead1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	dead1URL := dead1.URL
+	dead1.Close()
+	dead2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	dead2URL := dead2.URL
+	dead2.Close()
+	dead3 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	dead3URL := dead3.URL
+	dead3.Close()
+
+	landing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><article><p>The vaccine trial demonstrated significant efficacy in reducing infection rates across all age groups.</p></article></body></html>`))
+	}))
+	defer landing.Close()
+
+	deps := verifyClaimDeps(t)
+	out := map[string]any{}
+	var prov []string
+	candidates := []string{dead1URL, dead2URL, dead3URL, landing.URL}
+	emitClaimCoverageCandidates(context.Background(), deps, candidates, "vaccine efficacy reduced infection", out, &prov)
+
+	if out["claimSupport"] != "addressed" {
+		t.Errorf("claimSupport = %v, want addressed (the cap must not truncate away the 4th candidate)", out["claimSupport"])
+	}
+	if out["claimSourceUrl"] != landing.URL {
+		t.Errorf("claimSourceUrl = %v, want %s (the 4th candidate, only reachable if the cap is >= 4)", out["claimSourceUrl"], landing.URL)
+	}
+}
+
 // mockOAURLProvider returns a record whose PDFUrl is a given OA URL and whose
 // rec.URL is a doi.org redirect — used to verify bestClaimURL's OA preference.
 type mockOAURLProvider struct {

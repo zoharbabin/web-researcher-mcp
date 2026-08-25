@@ -151,8 +151,12 @@ func emitClaimCoverage(ctx context.Context, deps Dependencies, fetchURL, claim s
 }
 
 // maxClaimURLCandidateAttempts caps emitClaimCoverageCandidates' retry loop —
-// no unbounded fetching (#681).
-const maxClaimURLCandidateAttempts = 3
+// no unbounded fetching (#681). Must be >= the max unique candidates either
+// call site can produce: bestClaimURLCandidates' own 3 (PDFUrl, URL, doi.org
+// fallback) plus the Unpaywall candidate prependCandidate adds on top (#657)
+// — a cap of 3 silently dropped the doi.org fallback whenever Unpaywall
+// contributed a 4th candidate.
+const maxClaimURLCandidateAttempts = 4
 
 // emitClaimCoverageCandidates is emitClaimCoverage over an ORDERED list of
 // candidate URLs (see bestClaimURLCandidates): it tries each in turn and keeps
