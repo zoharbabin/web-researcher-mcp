@@ -70,7 +70,16 @@ func (g *GoogleProvider) doWebSearch(ctx context.Context, params WebSearchParams
 		q.Set("lr", "lang_"+params.Language)
 	}
 	if params.Country != "" {
+		// cr (country-restrict) narrows the candidate set to pages Google's
+		// crawler inferred originate from that country — an approximate,
+		// purely-filtering signal per Google's own docs. gl (geolocation
+		// bias) is the actual ranking/relevance mechanism: it re-ranks
+		// results as if the search originated from that country. Setting cr
+		// alone filters against imperfect origin tagging but never boosts
+		// region-appropriate content, producing weak/inconsistent
+		// localization (#676) — both must be set together.
 		q.Set("cr", "country"+strings.ToUpper(params.Country))
+		q.Set("gl", strings.ToLower(params.Country))
 	}
 	if params.ExactTerms != "" {
 		q.Set("exactTerms", params.ExactTerms)
