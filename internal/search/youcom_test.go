@@ -34,8 +34,8 @@ func TestYouComProvider_WebSearch(t *testing.T) {
 		if got := r.Header.Get("X-API-Key"); got != "test-key" {
 			t.Fatalf("X-API-Key = %q, want test-key", got)
 		}
-		if got := r.Header.Get("User-Agent"); got != youComUserAgent {
-			t.Fatalf("User-Agent = %q, want %q", got, youComUserAgent)
+		if ua := r.Header.Get("User-Agent"); !strings.HasPrefix(ua, "web-researcher-mcp/") {
+			t.Fatalf("User-Agent = %q, want project User-Agent", ua)
 		}
 
 		var body map[string]any

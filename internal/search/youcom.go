@@ -15,7 +15,6 @@ import (
 
 const (
 	youComSearchURL = "https://ydc-index.io/v1/search"
-	youComUserAgent = "youdotcom-integration/zoharbabin-web-researcher-mcp"
 )
 
 // YouComProvider uses You.com's Search API as an optional web and news source.
@@ -160,7 +159,7 @@ func (y *YouComProvider) doRequest(ctx context.Context, payload map[string]any, 
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", youComUserAgent)
+	req.Header.Set("User-Agent", "web-researcher-mcp/1.0 (search provider)")
 	req.Header.Set("X-API-Key", y.apiKey)
 
 	resp, err := y.deps.HTTPClient.Do(req)
