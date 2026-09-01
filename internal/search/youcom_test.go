@@ -156,6 +156,33 @@ func TestYouComProvider_NewsSearch(t *testing.T) {
 	}
 }
 
+// TestMapYouComSafeSearch is a regression test: the web_search tool's `safe`
+// enum is off/medium/high (internal/tools/enums.go webSafeEnum), never
+// "moderate" or "strict" — those were the mapper's original vocabulary and
+// left "medium" (the tool's actual middle-tier value) unmatched, silently
+// dropping the safesearch param instead of sending "moderate".
+func TestMapYouComSafeSearch(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"off", "off"},
+		{"medium", "moderate"},
+		{"moderate", "moderate"},
+		{"high", "strict"},
+		{"strict", "strict"},
+		{"", ""},
+		{"unknown", ""},
+	}
+	for _, c := range cases {
+		if got := mapYouComSafeSearch(c.in); got != c.want {
+			t.Errorf("mapYouComSafeSearch(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
 func TestYouComProvider_ImagesNoop(t *testing.T) {
 	t.Parallel()
 

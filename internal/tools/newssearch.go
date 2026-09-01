@@ -55,19 +55,27 @@ func newsDateSortRelevanceWarning(sortBy, providerUsed string, articles []newsAr
 	return "sort_by=\"date\" tells Google to order results strictly by date, replacing its relevance ranking (Google's documented Custom Search API behavior, not a bug in this tool). For broad queries this can surface recently-modified but topically unrelated pages ahead of real news coverage. None of these results matched a recognized news domain — try a more specific query, or omit sort_by to use Google's default relevance ranking."
 }
 
-// newsHourGranularityWarning returns an advisory for issue #665: Google's
-// Custom Search JSON API `dateRestrict` param has no hour-level granularity
-// (see mapTimeRange in internal/search/google.go) — time_range="hour" maps to
-// "d1" (24h), byte-for-byte identical to time_range="day", 100% of the time.
-// This is a genuine upstream API constraint the mapping already handles
-// correctly, not a bug; the gap is that nothing told the caller their
-// "hour" request silently became a 24h window. Fires only when the caller
-// explicitly asked for "hour" granularity against the google provider.
+// newsHourGranularityWarning returns an advisory for issue #665: some
+// provider APIs have no hour-level date restriction and collapse
+// time_range="hour" to a 24h day window, byte-for-byte identical to
+// time_range="day" (see mapTimeRange in internal/search/google.go and
+// mapYouComFreshness in internal/search/youcom.go). This is a genuine
+// upstream API constraint the mapping already handles correctly, not a bug;
+// the gap is that nothing told the caller their "hour" request silently
+// became a 24h window. Fires only when the caller explicitly asked for
+// "hour" granularity against a provider known to collapse it.
 func newsHourGranularityWarning(timeRange, providerUsed string) string {
-	if timeRange != "hour" || providerUsed != "google" {
+	if timeRange != "hour" {
 		return ""
 	}
-	return "time_range=\"hour\" was requested, but Google's Custom Search API has no hour-level date restriction — it fell back to day granularity (results from the last 24 hours), identical to time_range=\"day\". This is a hard limitation of Google's API, not an approximation. Use a different provider (e.g. brave) if strict last-hour freshness matters."
+	switch providerUsed {
+	case "google":
+		return "time_range=\"hour\" was requested, but Google's Custom Search API has no hour-level date restriction — it fell back to day granularity (results from the last 24 hours), identical to time_range=\"day\". This is a hard limitation of Google's API, not an approximation. Use a different provider (e.g. brave) if strict last-hour freshness matters."
+	case "youcom":
+		return "time_range=\"hour\" was requested, but You.com's Search API has no hour-level freshness value — it fell back to day granularity (results from the last 24 hours), identical to time_range=\"day\". This is a hard limitation of You.com's API, not an approximation."
+	default:
+		return ""
+	}
 }
 
 func classifyNewsResults(results []search.NewsResult) []newsArticleOutput {

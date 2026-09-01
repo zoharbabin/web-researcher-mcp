@@ -639,7 +639,7 @@ type NewsSearchOutput struct {
     Query       string        `json:"query"`
     ResultCount int           `json:"resultCount"`
     Hints       *ZeroResultHints `json:"hints,omitempty"` // present ONLY on zero-result responses (see below)
-    Warning     string        `json:"warning,omitempty"` // present when sort_by="date" was honored by Google with no recognized news domain in results (#642), and/or time_range="hour" was requested against Google (#665, no hour granularity — falls back to 24h); see Provider notes
+    Warning     string        `json:"warning,omitempty"` // present when sort_by="date" was honored by Google with no recognized news domain in results (#642), and/or time_range="hour" was requested against Google or You.com (#665, no hour granularity — falls back to 24h); see Provider notes
     Trust       string        `json:"trust"`   // "untrusted-external-content"
 }
 
@@ -671,7 +671,7 @@ On a zero-result response, `hints` carries the same `ZeroResultHints` object as 
 - `publishedAt` is **optional and provider-dependent**: populated when the provider exposes a publish timestamp (Google CSE via page metadata; Brave/Exa/Serper/SearchAPI/SearXNG/Tavily natively), omitted (not fabricated) when the provider supplies none — so treat it as best-effort. When present it is always normalized to **ISO-8601 (RFC3339 UTC)** regardless of the provider's raw format (RFC1123, relative ages like "3 days ago"/"2h", or bare dates), so values sort and compare consistently across providers; an unparseable timestamp is dropped rather than passed through.
 - `sort_by=date` maps to Google's date-sort control. News providers may also surface high-ranking forum/aggregator pages — `news_source` narrows to a trusted outlet when that matters (Google).
 - **`sort_by=date` discards Google's relevance ranking (#642)**: per Google's Custom Search JSON API docs, `sort=date` is a literal chronological reorder with no relevance weighting. On a broad, non-named-entity query (e.g. "global markets") this can rank recently-modified but topically unrelated corporate/government pages ahead of real news coverage; specific/named-entity queries are less affected since there's little room for an unrelated page to match at all. This is documented Google API behavior, not a bug — when none of the returned articles match a recognized news domain under `sort_by=date`, the response carries a top-level `warning` field explaining the tradeoff rather than silently reordering or dropping results (dropping risks hiding legitimate outlets absent from the small known-news-domain list). Prefer the default relevance sort for broad topics; reserve `sort_by=date` for narrow/breaking-news queries where strict recency matters more than topical precision.
-- **`time_range="hour"` has no true hour granularity on Google (#665)**: Google's Custom Search API's `dateRestrict` parameter supports only day-or-coarser windows — there is no hour-level value. `time_range="hour"` against the `google` provider falls back to a 24-hour window, byte-for-byte identical to `time_range="day"`, every time — not an approximation, a hard limitation. The response carries a top-level `warning` field stating this. Other providers (e.g. Brave) support true hour-level freshness.
+- **`time_range="hour"` has no true hour granularity on Google or You.com (#665)**: neither Google's Custom Search API `dateRestrict` parameter nor You.com's `freshness` parameter has an hour-level value — both fall back to a 24-hour window, byte-for-byte identical to `time_range="day"`, every time — not an approximation, a hard limitation of both APIs. The response carries a top-level `warning` field stating this for these two providers. Some other providers (e.g. Brave) also collapse `hour` to the same day-level window internally but don't yet emit this warning; SearchAPI and HackerNews are the only providers with a genuine hour-level cutoff.
 
 ### Cache
 - TTL: 15 minutes (news is time-sensitive)
@@ -2160,6 +2160,7 @@ These are upstream behaviors we cannot control — they reflect how the underlyi
 |----------|----------|--------|
 | SearchAPI | May return fewer results than `num_results` requested | Query has limited coverage in their index; not an error |
 | Google (news) | `time_range=hour` silently falls back to a 24h window | Google's `dateRestrict` has no hour-level granularity; a `warning` field is returned (#665) |
+| You.com (news) | `time_range=hour` silently falls back to a 24h window | You.com's `freshness` param has no hour-level granularity; a `warning` field is returned (#665) |
 | Google (images) | `size=large` may return images as small as 600x600 | Google's size thresholds differ from typical expectations |
 | USPTO | Full-text search only (no field-qualified queries) | API rejects field syntax; results rely on relevance ranking |
 | OpenAlex | `pdf_only` may return 0 results for common topics | Not all papers have PDF URLs indexed in their metadata |

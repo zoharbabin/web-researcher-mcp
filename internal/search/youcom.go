@@ -202,7 +202,7 @@ func mapYouComSafeSearch(value string) string {
 		return "off"
 	case "high", "strict":
 		return "strict"
-	case "moderate":
+	case "medium", "moderate":
 		return "moderate"
 	default:
 		return ""

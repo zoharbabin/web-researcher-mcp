@@ -175,6 +175,8 @@ func TestNewsHourGranularityWarning(t *testing.T) {
 		{"hour + google warns", "hour", "google", true},
 		{"day + google does not warn", "day", "google", false},
 		{"hour + brave does not warn", "hour", "brave", false},
+		{"hour + youcom warns", "hour", "youcom", true},
+		{"day + youcom does not warn", "day", "youcom", false},
 		{"empty time_range + google does not warn", "", "google", false},
 	}
 
