@@ -43,6 +43,20 @@ func TestYouComLiveIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("web search honors safe=medium (moderate safesearch)", func(t *testing.T) {
+		results, err := provider.Web(context.Background(), WebSearchParams{
+			Query:      "family friendly content filtering",
+			NumResults: 3,
+			Safe:       "medium",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error (You.com API may have rejected safesearch=moderate): %v", err)
+		}
+		if len(results) == 0 {
+			t.Fatal("expected at least one result")
+		}
+	})
+
 	t.Run("news search returns dated results", func(t *testing.T) {
 		results, err := provider.News(context.Background(), NewsSearchParams{
 			Query:      "latest news today artificial intelligence regulation",
