@@ -371,6 +371,7 @@ Set `SEARCH_PROVIDER=<name>` and supply that provider's key. Every provider work
 | Brave | `brave` | `BRAVE_API_KEY` | [brave.com/search/api](https://brave.com/search/api/) |
 | Serper | `serper` | `SERPER_API_KEY` | [serper.dev](https://serper.dev/) |
 | SearchAPI.io | `searchapi` | `SEARCHAPI_API_KEY` | [searchapi.io](https://www.searchapi.io/) |
+| You.com | `youcom` | `YOUDOTCOM_API_KEY` | [you.com/docs/api-reference/search/v1-search](https://you.com/docs/api-reference/search/v1-search) |
 | SearXNG | `searxng` | `SEARXNG_URL` | [self-hosted](https://docs.searxng.org/) |
 | Tavily | `tavily` | `TAVILY_API_KEY` | [app.tavily.com](https://app.tavily.com/) |
 | Exa | `exa` | `EXA_API_KEY` | [dashboard.exa.ai](https://dashboard.exa.ai/) |

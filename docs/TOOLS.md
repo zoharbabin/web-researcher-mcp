@@ -49,7 +49,7 @@ Perform a web search and return structured result URLs with metadata.
 | `exclude_terms` | string | no | — | Terms to exclude |
 | `country` | string | no | — | ISO 3166-1 alpha-2. Biases ranking toward that country; strength is provider-dependent (#641) — it does not guarantee every result originates there |
 | `lens` | string | no | — | Domain lens (overrides `site`/`sites`). See `lenses/` directory for available lenses. For engineering/API questions use `docs` (official references) or `programming` (docs, tutorials, Q&A) — `tech` is technology news and industry journalism, not engineering documentation |
-| `provider` | string | no | — | Force search provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik. Returns error listing available providers if unknown |
+| `provider` | string | no | — | Force search provider: google, brave, serper, searxng, searchapi, youcom, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik. Returns error listing available providers if unknown |
 | `sessionId` | string | no | — | Link results to a `sequential_search` session |
 | `claim` | string | no | — | Optional claim to evaluate against each result's title, snippet, and extra snippets; when set, each result gains a `claimSignal` (#66, #633). Evidence only — never a verdict |
 
@@ -440,7 +440,7 @@ Combined search + scrape pipeline with quality scoring, deduplication, and sourc
 | `max_length_per_source` | int | no | 50000 | Bytes |
 | `total_max_length` | int | no | 300000 | Bytes |
 | `filter_by_query` | bool | no | false, except true when `claim` is set (#640) | — |
-| `provider` | string | no | — | Force search provider for the search phase: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik |
+| `provider` | string | no | — | Force search provider for the search phase: google, brave, serper, searxng, searchapi, youcom, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik |
 | `sessionId` | string | no | — | Link results to a `sequential_search` session |
 | `claim` | string | no | — | Optional claim to evaluate against each source; when set, each source gains `keySentences` + `claimSignal` (#66). Evidence only — never a verdict |
 
@@ -577,7 +577,7 @@ When a result is large enough to cross the [Large-Payload Linking](#large-payloa
 | `safe` | string | no | `medium` | off, medium, high. On **Brave images** only `off` and `strict` apply (any non-`off` maps to `strict`). |
 | `country` | string | no | — | ISO 3166-1 alpha-2 (e.g. `us`, `gb`). Honored by Brave and Google. |
 | `language` | string | no | — | BCP 47 / 2-letter code (e.g. `en`, `de`). Honored by Brave (`search_lang`) and Google (`lr`). |
-| `provider` | string | no | — | Force search provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik |
+| `provider` | string | no | — | Force search provider: google, brave, serper, searxng, searchapi, youcom, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik |
 
 ### Output Schema
 
@@ -628,7 +628,7 @@ type ImageResult struct {
 | `country` | string | no | — | ISO 3166-1 alpha-2 (e.g. `us`, `gb`). Honored by Brave news. |
 | `language` | string | no | — | BCP 47 / 2-letter code (e.g. `en`, `de`). Honored by Brave news (`search_lang`). |
 | `safe` | string | no | — | SafeSearch level: off, moderate, strict. Honored by Brave news. |
-| `provider` | string | no | — | Force search provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik |
+| `provider` | string | no | — | Force search provider: google, brave, serper, searxng, searchapi, youcom, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik |
 | `sessionId` | string | no | — | Link results to a `sequential_search` session |
 
 ### Output Schema
@@ -639,7 +639,7 @@ type NewsSearchOutput struct {
     Query       string        `json:"query"`
     ResultCount int           `json:"resultCount"`
     Hints       *ZeroResultHints `json:"hints,omitempty"` // present ONLY on zero-result responses (see below)
-    Warning     string        `json:"warning,omitempty"` // present when sort_by="date" was honored by Google with no recognized news domain in results (#642), and/or time_range="hour" was requested against Google (#665, no hour granularity — falls back to 24h); see Provider notes
+    Warning     string        `json:"warning,omitempty"` // present when sort_by="date" was honored by Google with no recognized news domain in results (#642), and/or time_range="hour" was requested against Google or You.com (#665, no hour granularity — falls back to 24h); see Provider notes
     Trust       string        `json:"trust"`   // "untrusted-external-content"
 }
 
@@ -671,7 +671,7 @@ On a zero-result response, `hints` carries the same `ZeroResultHints` object as 
 - `publishedAt` is **optional and provider-dependent**: populated when the provider exposes a publish timestamp (Google CSE via page metadata; Brave/Exa/Serper/SearchAPI/SearXNG/Tavily natively), omitted (not fabricated) when the provider supplies none — so treat it as best-effort. When present it is always normalized to **ISO-8601 (RFC3339 UTC)** regardless of the provider's raw format (RFC1123, relative ages like "3 days ago"/"2h", or bare dates), so values sort and compare consistently across providers; an unparseable timestamp is dropped rather than passed through.
 - `sort_by=date` maps to Google's date-sort control. News providers may also surface high-ranking forum/aggregator pages — `news_source` narrows to a trusted outlet when that matters (Google).
 - **`sort_by=date` discards Google's relevance ranking (#642)**: per Google's Custom Search JSON API docs, `sort=date` is a literal chronological reorder with no relevance weighting. On a broad, non-named-entity query (e.g. "global markets") this can rank recently-modified but topically unrelated corporate/government pages ahead of real news coverage; specific/named-entity queries are less affected since there's little room for an unrelated page to match at all. This is documented Google API behavior, not a bug — when none of the returned articles match a recognized news domain under `sort_by=date`, the response carries a top-level `warning` field explaining the tradeoff rather than silently reordering or dropping results (dropping risks hiding legitimate outlets absent from the small known-news-domain list). Prefer the default relevance sort for broad topics; reserve `sort_by=date` for narrow/breaking-news queries where strict recency matters more than topical precision.
-- **`time_range="hour"` has no true hour granularity on Google (#665)**: Google's Custom Search API's `dateRestrict` parameter supports only day-or-coarser windows — there is no hour-level value. `time_range="hour"` against the `google` provider falls back to a 24-hour window, byte-for-byte identical to `time_range="day"`, every time — not an approximation, a hard limitation. The response carries a top-level `warning` field stating this. Other providers (e.g. Brave) support true hour-level freshness.
+- **`time_range="hour"` has no true hour granularity on Google or You.com (#665)**: neither Google's Custom Search API `dateRestrict` parameter nor You.com's `freshness` parameter has an hour-level value — both fall back to a 24-hour window, byte-for-byte identical to `time_range="day"`, every time — not an approximation, a hard limitation of both APIs. The response carries a top-level `warning` field stating this for these two providers. Some other providers (e.g. Brave) also collapse `hour` to the same day-level window internally but don't yet emit this warning; SearchAPI and HackerNews are the only providers with a genuine hour-level cutoff.
 
 ### Cache
 - TTL: 15 minutes (news is time-sensitive)
@@ -693,7 +693,7 @@ On a zero-result response, `hints` carries the same `ZeroResultHints` object as 
 | `sort_by` | string | no | `relevance` | relevance, date |
 | `open_access` | bool | no | false | Only return open-access papers |
 | `full_text` | bool | no | false | Fetch PMC full text for open-access biomedical articles with a PubMed Central ID. Only effective when the `pubmed` provider is active. Substantially increases response time |
-| `provider` | string | no | — | Force provider: openalex, crossref, pubmed, semanticscholar, core, exa, scholarapi (academic APIs), or google, brave, serper, searxng, searchapi, duckduckgo, tavily, hackernews, reddit, bluesky, github, xquik (web fallback) |
+| `provider` | string | no | — | Force provider: openalex, crossref, pubmed, semanticscholar, core, exa, scholarapi (academic APIs), or google, brave, serper, searxng, searchapi, youcom, duckduckgo, tavily, hackernews, reddit, bluesky, github, xquik (web fallback) |
 | `sessionId` | string | no | — | Link results to a `sequential_search` session; sources are auto-recorded for recovery after context loss |
 
 ### Output Fields
@@ -762,7 +762,7 @@ arxiv.org, pubmed.ncbi.nlm.nih.gov, scholar.google.com, ieeexplore.ieee.org, dl.
 | `cpc_code` | string | no | — | CPC classification (e.g., G06F) — enforced as a structured filter by every dedicated provider, not appended as free text (#530) |
 | `year_from` | int | no | — | Only patents filed in or after this year |
 | `year_to` | int | no | — | Only patents filed in or before this year |
-| `provider` | string | no | — | Force provider: searchapi, epo, lens, uspto (patent-only APIs), or google, brave, serper, searxng, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik (web search fallback) |
+| `provider` | string | no | — | Force provider: searchapi, epo, lens, uspto (patent-only APIs), or google, brave, serper, searxng, youcom, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik (web search fallback) |
 | `sessionId` | string | no | — | Link results to a `sequential_search` session; sources are auto-recorded for recovery after context loss |
 
 ### Output Fields
@@ -1930,7 +1930,7 @@ Save a search query to monitor for new results over time. Runs the query once no
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `query` | string | yes | The search query to monitor (1-500 chars) |
-| `provider` | string | no | Search provider to use: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik. Must match what's passed to `monitor_query_check` for the same monitor. Empty uses the configured default |
+| `provider` | string | no | Search provider to use: google, brave, serper, searxng, searchapi, youcom, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik. Must match what's passed to `monitor_query_check` for the same monitor. Empty uses the configured default |
 | `ttl_days` | int | no | Retention in days (1-90, default 30). After expiry the monitor is silently dropped |
 
 ### Output Schema
@@ -1970,7 +1970,7 @@ Check a query saved with `monitor_query_save` for new results since the last che
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `query` | string | yes | Must match the query passed to `monitor_query_save` |
-| `provider` | string | no | google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik. Must match the provider used in `monitor_query_save` (or both empty for the default) |
+| `provider` | string | no | google, brave, serper, searxng, searchapi, youcom, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik. Must match the provider used in `monitor_query_save` (or both empty for the default) |
 
 ### Output Schema
 
@@ -2160,6 +2160,7 @@ These are upstream behaviors we cannot control — they reflect how the underlyi
 |----------|----------|--------|
 | SearchAPI | May return fewer results than `num_results` requested | Query has limited coverage in their index; not an error |
 | Google (news) | `time_range=hour` silently falls back to a 24h window | Google's `dateRestrict` has no hour-level granularity; a `warning` field is returned (#665) |
+| You.com (news) | `time_range=hour` silently falls back to a 24h window | You.com's `freshness` param has no hour-level granularity; a `warning` field is returned (#665) |
 | Google (images) | `size=large` may return images as small as 600x600 | Google's size thresholds differ from typical expectations |
 | USPTO | Full-text search only (no field-qualified queries) | API rejects field syntax; results rely on relevance ranking |
 | OpenAlex | `pdf_only` may return 0 results for common topics | Not all papers have PDF URLs indexed in their metadata |

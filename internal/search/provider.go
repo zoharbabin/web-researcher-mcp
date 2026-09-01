@@ -164,7 +164,7 @@ type Deps struct {
 }
 
 // SupportedProviders lists all provider names that can be configured.
-var SupportedProviders = []string{"google", "brave", "serper", "searxng", "searchapi", "duckduckgo", "tavily", "exa", "hackernews", "reddit", "bluesky", "github", "xquik"}
+var SupportedProviders = []string{"google", "brave", "serper", "searxng", "searchapi", "youcom", "duckduckgo", "tavily", "exa", "hackernews", "reddit", "bluesky", "github", "xquik"}
 
 func NewProvider(cfg config.SearchConfig, deps Deps) Provider {
 	switch cfg.Provider {
@@ -176,6 +176,8 @@ func NewProvider(cfg config.SearchConfig, deps Deps) Provider {
 		return NewSearXNGProvider(cfg.SearXNGURL, cfg.SearXNGBasicAuth, cfg.SearXNGHeaders, deps)
 	case "searchapi":
 		return NewSearchAPIProvider(cfg.SearchAPIKey, deps)
+	case "youcom":
+		return NewYouComProvider(cfg.YouDotComAPIKey, deps)
 	case "tavily":
 		return NewTavilyProvider(cfg.TavilyAPIKey, deps)
 	case "exa":
@@ -223,6 +225,10 @@ func NewProviderByName(name string, cfg config.SearchConfig, deps Deps) Provider
 	case "searchapi":
 		if cfg.SearchAPIKey != "" {
 			return NewSearchAPIProvider(cfg.SearchAPIKey, deps)
+		}
+	case "youcom":
+		if cfg.YouDotComAPIKey != "" {
+			return NewYouComProvider(cfg.YouDotComAPIKey, deps)
 		}
 	case "tavily":
 		if cfg.TavilyAPIKey != "" {
