@@ -3,7 +3,9 @@ name: 🔍 CodeQL Security Analysis
 on:
   push:
     branches: [main]
-    paths-ignore: &docs_paths
+  pull_request:
+    branches: [main]
+    paths-ignore:
       - "**/*.md"
       - "docs/**"
       - "assets/**"
@@ -13,9 +15,6 @@ on:
       - "overrides/**"
       - ".github/**_TEMPLATE**"
       - ".github/ISSUE_TEMPLATE/**"
-  pull_request:
-    branches: [main]
-    paths-ignore: *docs_paths
   schedule:
     - cron: "0 6 * * 1" # Every Monday at 06:00 UTC
 
