@@ -130,7 +130,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 
 **[Serper](https://serper.dev/) and [SearchAPI.io](https://www.searchapi.io/)** — Google results without the PSE setup overhead. Serper is the simpler option; SearchAPI.io supports multiple engine backends beyond Google. Both draw from Google — no coverage difference between them or vs. Google PSE.
 
-**[You.com](https://you.com/docs/api-reference/search/v1-search)** — Search API with web and news results in one response. Good when you want a single optional provider that returns LLM-friendly snippets and can surface query-relevant highlights. Requires `YDC_API_KEY`. Image search is not exposed in this integration, so keep an image-capable provider in `SEARCH_ROUTING` if you need image results.
+**[You.com](https://you.com/docs/api-reference/search/v1-search)** — Search API with web and news results in one response. Good when you want a single optional provider that returns LLM-friendly snippets and can surface query-relevant highlights. Requires `YOUDOTCOM_API_KEY`. Image search is not exposed in this integration, so keep an image-capable provider in `SEARCH_ROUTING` if you need image results.
 
 **[Brave](https://brave.com/search/api/)** — Own crawler, own index, privacy-first. Best all-purpose choice when you want index independence from Google/Bing and a generous free tier. Supports web, image, news, and Goggles-based custom result weighting. Also exposes local/map results via `local_search` (the only provider that does) and a LLM context endpoint used by `search_and_scrape` for faster grounding when you're on Brave's Data for AI plan.
 

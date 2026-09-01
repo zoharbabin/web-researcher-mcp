@@ -357,14 +357,14 @@ export SEARCHAPI_API_KEY=your-searchapi-key
 ### Step 2: Configure
 
 ```bash
-export YDC_API_KEY=your-you.com-api-key
+export YOUDOTCOM_API_KEY=your-you.com-api-key
 ```
 
 To use You.com as your primary provider:
 
 ```bash
 export SEARCH_PROVIDER=youcom
-export YDC_API_KEY=your-you.com-api-key
+export YOUDOTCOM_API_KEY=your-you.com-api-key
 ```
 
 ### Good to know

@@ -177,7 +177,7 @@ func NewProvider(cfg config.SearchConfig, deps Deps) Provider {
 	case "searchapi":
 		return NewSearchAPIProvider(cfg.SearchAPIKey, deps)
 	case "youcom":
-		return NewYouComProvider(cfg.YDCAPIKey, deps)
+		return NewYouComProvider(cfg.YouDotComAPIKey, deps)
 	case "tavily":
 		return NewTavilyProvider(cfg.TavilyAPIKey, deps)
 	case "exa":
@@ -227,8 +227,8 @@ func NewProviderByName(name string, cfg config.SearchConfig, deps Deps) Provider
 			return NewSearchAPIProvider(cfg.SearchAPIKey, deps)
 		}
 	case "youcom":
-		if cfg.YDCAPIKey != "" {
-			return NewYouComProvider(cfg.YDCAPIKey, deps)
+		if cfg.YouDotComAPIKey != "" {
+			return NewYouComProvider(cfg.YouDotComAPIKey, deps)
 		}
 	case "tavily":
 		if cfg.TavilyAPIKey != "" {

@@ -15,9 +15,9 @@ import (
 )
 
 func TestYouComLiveIntegration(t *testing.T) {
-	key := os.Getenv("YDC_API_KEY")
+	key := os.Getenv("YOUDOTCOM_API_KEY")
 	if key == "" {
-		t.Skip("YDC_API_KEY not set, skipping live integration test")
+		t.Skip("YOUDOTCOM_API_KEY not set, skipping live integration test")
 	}
 
 	provider := NewYouComProvider(key, Deps{
@@ -45,9 +45,9 @@ func TestYouComLiveIntegration(t *testing.T) {
 
 	t.Run("news search returns dated results", func(t *testing.T) {
 		results, err := provider.News(context.Background(), NewsSearchParams{
-			Query:     "artificial intelligence regulation",
+			Query:      "latest news today artificial intelligence regulation",
 			NumResults: 3,
-			Freshness: "week",
+			Freshness:  "week",
 		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)

@@ -1516,7 +1516,7 @@ func TestNewProvider_SearchAPI(t *testing.T) {
 }
 
 func TestNewProvider_YouCom(t *testing.T) {
-	cfg := config.SearchConfig{Provider: "youcom", YDCAPIKey: "key"}
+	cfg := config.SearchConfig{Provider: "youcom", YouDotComAPIKey: "key"}
 	p := NewProvider(cfg, newTestDeps(http.DefaultClient))
 	if p.Name() != "youcom" {
 		t.Errorf("expected provider name 'youcom', got %q", p.Name())
@@ -2482,12 +2482,12 @@ func TestParseRoutingConfig_SpacesHandled(t *testing.T) {
 
 func TestAvailableProviders(t *testing.T) {
 	cfg := config.SearchConfig{
-		GoogleAPIKey: "gkey",
-		GoogleCX:     "gcx",
-		BraveAPIKey:  "bkey",
-		SearchAPIKey: "skey",
-		YDCAPIKey:    "ydc",
-		TavilyAPIKey: "tkey",
+		GoogleAPIKey:    "gkey",
+		GoogleCX:        "gcx",
+		BraveAPIKey:     "bkey",
+		SearchAPIKey:    "skey",
+		YouDotComAPIKey: "ydc",
+		TavilyAPIKey:    "tkey",
 	}
 	deps := newTestDeps(http.DefaultClient)
 	providers := AvailableProviders(cfg, deps)
@@ -2621,7 +2621,7 @@ func TestNewProviderByName_YouCom(t *testing.T) {
 	if p := NewProviderByName("youcom", config.SearchConfig{}, deps); p != nil {
 		t.Fatal("expected nil youcom provider without key")
 	}
-	p := NewProviderByName("youcom", config.SearchConfig{YDCAPIKey: "key"}, deps)
+	p := NewProviderByName("youcom", config.SearchConfig{YouDotComAPIKey: "key"}, deps)
 	if p == nil {
 		t.Fatal("expected non-nil youcom provider with key")
 	}
@@ -2687,7 +2687,7 @@ func TestNewProviderByName_MissingCredentials(t *testing.T) {
 	if p := NewProviderByName("tavily", config.SearchConfig{TavilyAPIKey: "k"}, deps); p == nil || p.Name() != "tavily" {
 		t.Error("expected tavily provider when key is set")
 	}
-	if p := NewProviderByName("youcom", config.SearchConfig{YDCAPIKey: "k"}, deps); p == nil || p.Name() != "youcom" {
+	if p := NewProviderByName("youcom", config.SearchConfig{YouDotComAPIKey: "k"}, deps); p == nil || p.Name() != "youcom" {
 		t.Error("expected youcom provider when key is set")
 	}
 	if p := NewProviderByName("github", cfg, deps); p == nil || p.Name() != "github" {

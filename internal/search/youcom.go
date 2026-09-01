@@ -26,6 +26,8 @@ type YouComProvider struct {
 	deps    Deps
 }
 
+var _ Provider = (*YouComProvider)(nil)
+
 func NewYouComProvider(apiKey string, deps Deps) *YouComProvider {
 	return &YouComProvider{
 		apiKey:  apiKey,
