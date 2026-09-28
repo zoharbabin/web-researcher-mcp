@@ -88,7 +88,7 @@ func AvailableFilingProviders(cfg FilingProviderConfig, deps Deps) map[string]Fi
 	for _, name := range SupportedFilingProviders {
 		provDeps := Deps{
 			HTTPClient: deps.HTTPClient,
-			Breaker:    circuit.New(deps.Circuit),
+			Breaker:    circuit.New(deps.Circuit.WithName(name)),
 		}
 		if p := NewFilingProviderByName(name, cfg, provDeps); p != nil {
 			providers[name] = p
@@ -159,7 +159,7 @@ func AvailableCaseProviders(cfg CaseProviderConfig, deps Deps) map[string]CasePr
 	for _, name := range SupportedCaseProviders {
 		provDeps := Deps{
 			HTTPClient: deps.HTTPClient,
-			Breaker:    circuit.New(deps.Circuit),
+			Breaker:    circuit.New(deps.Circuit.WithName(name)),
 		}
 		if p := NewCaseProviderByName(name, cfg, provDeps); p != nil {
 			providers[name] = p
@@ -262,7 +262,7 @@ func AvailableEconProviders(cfg EconProviderConfig, deps Deps) map[string]EconPr
 	for _, name := range SupportedEconProviders {
 		provDeps := Deps{
 			HTTPClient: deps.HTTPClient,
-			Breaker:    circuit.New(deps.Circuit),
+			Breaker:    circuit.New(deps.Circuit.WithName(name)),
 		}
 		if p := NewEconProviderByName(name, cfg, provDeps); p != nil {
 			providers[name] = p
@@ -336,7 +336,7 @@ func AvailableTrialProviders(deps Deps) map[string]TrialProvider {
 	for _, name := range SupportedTrialProviders {
 		provDeps := Deps{
 			HTTPClient: deps.HTTPClient,
-			Breaker:    circuit.New(deps.Circuit),
+			Breaker:    circuit.New(deps.Circuit.WithName(name)),
 		}
 		if p := NewTrialProviderByName(name, provDeps); p != nil {
 			providers[name] = p
@@ -424,7 +424,7 @@ func AvailableMonarchProviders(deps Deps) map[string]MonarchProvider {
 	for _, name := range SupportedMonarchProviders {
 		provDeps := Deps{
 			HTTPClient: deps.HTTPClient,
-			Breaker:    circuit.New(circuit.Config{FailureThreshold: 3, ResetTimeout: 120}),
+			Breaker:    circuit.New(circuit.Config{FailureThreshold: 3, ResetTimeout: 120, Name: name}),
 		}
 		if p := NewMonarchProviderByName(name, provDeps); p != nil {
 			providers[name] = p

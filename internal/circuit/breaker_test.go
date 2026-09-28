@@ -84,6 +84,44 @@ func TestOpensAfterThresholdFailures(t *testing.T) {
 	}
 }
 
+func TestOpenCircuitWithoutNameReturnsBareSentinel(t *testing.T) {
+	b := New(Config{FailureThreshold: 1, ResetTimeout: 60})
+	_ = b.Execute(func() error { return errTest })
+
+	err := b.Execute(func() error { return nil })
+	if err == nil || err.Error() != "circuit breaker open" {
+		t.Errorf("expected bare %q, got %v", ErrCircuitOpen, err)
+	}
+	if !errors.Is(err, ErrCircuitOpen) {
+		t.Errorf("expected errors.Is match on ErrCircuitOpen, got %v", err)
+	}
+}
+
+func TestOpenCircuitWithNameWrapsProviderName(t *testing.T) {
+	b := New(Config{FailureThreshold: 1, ResetTimeout: 60, Name: "searchapi"})
+	_ = b.Execute(func() error { return errTest })
+
+	err := b.Execute(func() error { return nil })
+	if err == nil || err.Error() != "searchapi: circuit breaker open" {
+		t.Errorf(`expected "searchapi: circuit breaker open", got %v`, err)
+	}
+	if !errors.Is(err, ErrCircuitOpen) {
+		t.Errorf("expected errors.Is match on ErrCircuitOpen through the wrap, got %v", err)
+	}
+}
+
+func TestConfigWithNameDoesNotMutateOriginal(t *testing.T) {
+	base := Config{FailureThreshold: 3, ResetTimeout: 60}
+	named := base.WithName("brave")
+
+	if base.Name != "" {
+		t.Errorf("expected base Config.Name to remain empty, got %q", base.Name)
+	}
+	if named.Name != "brave" {
+		t.Errorf("expected named Config.Name = brave, got %q", named.Name)
+	}
+}
+
 func TestHalfOpenAfterTimeout(t *testing.T) {
 	b := New(Config{FailureThreshold: 2, ResetTimeout: 1, HalfOpenAttempts: 1})
 

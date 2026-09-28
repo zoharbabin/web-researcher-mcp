@@ -90,7 +90,7 @@ func AvailableLocalProviders(braveKey string, deps Deps) map[string]LocalProvide
 	for _, name := range SupportedLocalProviders {
 		provDeps := Deps{
 			HTTPClient: deps.HTTPClient,
-			Breaker:    circuit.New(deps.Circuit),
+			Breaker:    circuit.New(deps.Circuit.WithName(name)),
 		}
 		if p := NewLocalProviderByName(name, braveKey, provDeps); p != nil {
 			providers[name] = p

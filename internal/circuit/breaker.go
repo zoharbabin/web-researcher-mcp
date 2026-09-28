@@ -53,6 +53,13 @@ type Config struct {
 	FailureThreshold int
 	ResetTimeout     int // seconds
 	HalfOpenAttempts int
+	// Name identifies the provider this breaker guards (e.g. "searchapi"). When
+	// set, Execute wraps ErrCircuitOpen with it so callers can still recover the
+	// provider via extractProviderName() on the open-circuit path, not just on a
+	// live request failure (#742 E2E finding: an open breaker otherwise surfaces
+	// as "Rate limited (). Wait 60 seconds..." with the provider name silently
+	// dropped from both the message and the structured JSON error).
+	Name string
 }
 
 type Breaker struct {
@@ -64,6 +71,15 @@ type Breaker struct {
 	rateLimitAfter   time.Duration // provider-advertised cooldown from a RateLimitError; 0 when none was given
 	halfOpenAttempts int
 	config           Config
+	name             string
+}
+
+// WithName returns a copy of cfg with Name set — used at each provider's
+// construction site (e.g. circuit.New(deps.Circuit.WithName(name))) so a
+// single shared base Config can still produce a per-provider-named breaker.
+func (c Config) WithName(name string) Config {
+	c.Name = name
+	return c
 }
 
 func New(cfg Config) *Breaker {
@@ -76,11 +92,14 @@ func New(cfg Config) *Breaker {
 	if cfg.HalfOpenAttempts <= 0 {
 		cfg.HalfOpenAttempts = 1
 	}
-	return &Breaker{config: cfg}
+	return &Breaker{config: cfg, name: cfg.Name}
 }
 
 func (b *Breaker) Execute(fn func() error) error {
 	if !b.allowRequest() {
+		if b.name != "" {
+			return fmt.Errorf("%s: %w", b.name, ErrCircuitOpen)
+		}
 		return ErrCircuitOpen
 	}
 

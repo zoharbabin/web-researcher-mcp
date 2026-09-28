@@ -87,7 +87,7 @@ func AvailableAwesomeListProviders(cfg AwesomeListProviderConfig, deps Deps) map
 	for _, name := range SupportedAwesomeListProviders {
 		provDeps := Deps{
 			HTTPClient: deps.HTTPClient,
-			Breaker:    circuit.New(deps.Circuit),
+			Breaker:    circuit.New(deps.Circuit.WithName(name)),
 		}
 		if p := NewAwesomeListProviderByName(name, cfg, provDeps); p != nil {
 			providers[name] = p
