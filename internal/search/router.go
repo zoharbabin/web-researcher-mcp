@@ -146,7 +146,7 @@ var depthNumResults = map[string]int{
 func NewRouter(providers map[string]Provider, cfg RouterConfig) *Router {
 	breakers := make(map[string]*circuit.Breaker, len(providers))
 	for name := range providers {
-		breakers[name] = circuit.New(routerBreakerConfig)
+		breakers[name] = circuit.New(routerBreakerConfig.WithName(name))
 	}
 
 	patentProviders := cfg.PatentProviders
@@ -155,7 +155,7 @@ func NewRouter(providers map[string]Provider, cfg RouterConfig) *Router {
 	}
 	patentBreakers := make(map[string]*circuit.Breaker, len(patentProviders))
 	for name := range patentProviders {
-		patentBreakers[name] = circuit.New(routerBreakerConfig)
+		patentBreakers[name] = circuit.New(routerBreakerConfig.WithName(name))
 	}
 
 	academicProviders := cfg.AcademicProviders
@@ -164,7 +164,7 @@ func NewRouter(providers map[string]Provider, cfg RouterConfig) *Router {
 	}
 	academicBreakers := make(map[string]*circuit.Breaker, len(academicProviders))
 	for name := range academicProviders {
-		academicBreakers[name] = circuit.New(routerBreakerConfig)
+		academicBreakers[name] = circuit.New(routerBreakerConfig.WithName(name))
 	}
 
 	logger := cfg.Logger
@@ -431,7 +431,7 @@ func (r *Router) RegisterPatentProviders(providers map[string]PatentProvider) {
 	for name, p := range providers {
 		r.patentProviders[name] = p
 		if _, exists := r.patentBreakers[name]; !exists {
-			r.patentBreakers[name] = circuit.New(routerBreakerConfig)
+			r.patentBreakers[name] = circuit.New(routerBreakerConfig.WithName(name))
 		}
 	}
 }
@@ -528,7 +528,7 @@ func (r *Router) RegisterAcademicProviders(providers map[string]AcademicProvider
 	for name, p := range providers {
 		r.academicProviders[name] = p
 		if _, exists := r.academicBreakers[name]; !exists {
-			r.academicBreakers[name] = circuit.New(routerBreakerConfig)
+			r.academicBreakers[name] = circuit.New(routerBreakerConfig.WithName(name))
 		}
 	}
 }

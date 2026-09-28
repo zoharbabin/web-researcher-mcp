@@ -15,6 +15,15 @@ const (
 	consensusModelFraction    = 0.8 // fraction of OTHER models that must restate it
 	contradictionOverlapFloor = 0.6 // same topic, lower bar than consensus since polarity differs
 	minSentenceLen            = 12
+	// minSignificantTerms guards against a short transition phrase or a
+	// bold-emphasis pseudo-heading (e.g. "Specifically:", "**The Update**")
+	// passing minSentenceLen's raw character count while carrying only one
+	// real content word. Two models answering the same prompt often echo
+	// such boilerplate near-verbatim, so its lexical overlap trivially maxes
+	// out and it wins the consensus threshold ahead of the actual, differently-
+	// phrased substantive claim — the same formatting-artifact failure mode
+	// #632 fixed for ATX headings, just via short/low-content lines instead.
+	minSignificantTerms = 3
 )
 
 // PanelDivergence is the structured agreement/disagreement summary across a
@@ -207,12 +216,18 @@ func contradictionPairKey(a, b panelClaim) string {
 // is often HIGHER than any real paraphrased claim — letting the formatting
 // artifact win the consensus threshold while the actual substantive
 // agreement, phrased differently by each model, falls short of it.
+//
+// A fragment with fewer than minSignificantTerms significant terms is
+// dropped the same way, whether or not it's long enough to clear
+// minSentenceLen — a short transition phrase ("Specifically:") or a
+// bold-emphasis pseudo-heading ("**The Update**") is boilerplate two models
+// echo near-verbatim, so it wins consensus on trivial overlap alone.
 func splitPanelSentences(text string) []string {
 	var sentences []string
 	var b strings.Builder
 	flush := func() {
 		s := strings.TrimSpace(b.String())
-		if len(s) >= minSentenceLen && !isMarkdownHeading(s) {
+		if len(s) >= minSentenceLen && !isMarkdownHeading(s) && len(content.SignificantTerms(s)) >= minSignificantTerms {
 			sentences = append(sentences, s)
 		}
 		b.Reset()

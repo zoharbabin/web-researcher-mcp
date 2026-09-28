@@ -264,7 +264,7 @@ func AvailableProviders(cfg config.SearchConfig, deps Deps) map[string]Provider 
 	for _, name := range SupportedProviders {
 		providerDeps := Deps{
 			HTTPClient: deps.HTTPClient,
-			Breaker:    circuit.New(deps.Circuit),
+			Breaker:    circuit.New(deps.Circuit.WithName(name)),
 		}
 		if p := NewProviderByName(name, cfg, providerDeps); p != nil {
 			providers[name] = p

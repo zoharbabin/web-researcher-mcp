@@ -112,6 +112,12 @@ func TestExtractProviderName(t *testing.T) {
 		{"score is not core (word-boundary false-positive guard)", fmt.Errorf("score: too low, discarding result"), ""},
 		{"core prefix still matches at start", fmt.Errorf("core: rate limited"), "core"},
 		{"core prefix still matches after a separator", fmt.Errorf("unexpected failure; core: rate limited"), "core"},
+		// A real open circuit breaker (Breaker.Execute rejecting before the
+		// provider's request even runs) wraps circuit.ErrCircuitOpen with the
+		// breaker's own Name, same "%s: %w" convention as a live request
+		// failure — an E2E run against searchapi surfaced "Rate limited ()."
+		// before circuit.Config gained a Name field to close this gap.
+		{"named open circuit breaker", fmt.Errorf("searchapi: %w", circuit.ErrCircuitOpen), "searchapi"},
 	}
 
 	for _, tc := range cases {

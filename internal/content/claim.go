@@ -71,6 +71,16 @@ var contrastCues = []string{
 	"discredited", "misinformation", "fabricated", "no causal link",
 	"no link between", "not true", "untrue", "lacks evidence",
 	"unsupported by evidence",
+	// research_panel's contradiction detector (#302) reuses this same list to
+	// tell two panelists' opposite-polarity answers apart (e.g. "Yes, rates
+	// will rise" vs "No, rates will not rise"). "does not"/"did not"/"do not"
+	// above only cover present/past-simple negation; a modal negation ("will
+	// not", "cannot", "should not"...) carried the same unambiguous, low
+	// false-positive-risk opposition but was missing, so two directly
+	// contradicting panel answers were both landing in consensus_points
+	// instead of contradictions.
+	"will not", "would not", "should not", "cannot", "can not", "is not",
+	"are not", "was not", "were not",
 }
 
 // ContainsAny reports whether lowerText (already lowercased by the caller)

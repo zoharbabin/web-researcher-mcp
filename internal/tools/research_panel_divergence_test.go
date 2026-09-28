@@ -127,6 +127,43 @@ func TestSplitPanelSentences_DropsMarkdownHeadings(t *testing.T) {
 	}
 }
 
+// TestSplitPanelSentences_DropsLowSignificantTermFragments reproduces the
+// exact E2E-observed leak: a short transition phrase ("Specifically:") and a
+// bold-emphasis pseudo-heading ("**The Update**") both clear minSentenceLen's
+// raw character count but carry only one real content word each, so they
+// must still be dropped as candidate sentences.
+func TestSplitPanelSentences_DropsLowSignificantTermFragments(t *testing.T) {
+	text := "Specifically:\n**The Update**\nThe central bank raised interest rates by half a percentage point."
+	got := splitPanelSentences(text)
+	for _, s := range got {
+		if s == "Specifically:" || s == "**The Update**" {
+			t.Errorf("low-content fragment leaked into candidate sentences: %q", s)
+		}
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected only the one substantive sentence, got %d: %v", len(got), got)
+	}
+}
+
+// TestAnalyzeDivergence_TransitionPhraseNotMisreadAsConsensus is the direct
+// consensus_points-level regression for the same bug: two models both echo
+// "Specifically:" and "**The Update**" near-verbatim (boilerplate), which
+// trivially maxes out lexical overlap and used to win the consensus
+// threshold ahead of the actual, differently-phrased substantive claim.
+func TestAnalyzeDivergence_TransitionPhraseNotMisreadAsConsensus(t *testing.T) {
+	responses := map[string]string{
+		"a/x": "Specifically:\n**The Update**\nThe central bank raised interest rates by half a percentage point this quarter.",
+		"b/y": "Specifically:\n**The Update**\nPolicymakers increased the benchmark interest rate by fifty basis points this quarter.",
+	}
+	d := AnalyzeDivergence(responses)
+
+	for _, c := range d.ConsensusPoints {
+		if c == "Specifically:" || c == "**The Update**" {
+			t.Errorf("boilerplate transition phrase wrongly reported as a consensus point: %q", c)
+		}
+	}
+}
+
 func TestIsMarkdownHeading(t *testing.T) {
 	cases := map[string]bool{
 		"# Title":                     true,
@@ -193,6 +230,27 @@ func TestAnalyzeDivergence_NoConsensusNoContradiction_RationaleHonest(t *testing
 	}
 	if strings.Contains(d.ConfidenceRationale, "agreed") {
 		t.Errorf("confidence_rationale must not claim agreement when consensus_points is empty, got %q", d.ConfidenceRationale)
+	}
+}
+
+// TestAnalyzeDivergence_YesNoFramingNotMisreadAsConsensus reproduces a
+// real E2E finding: two panelists answer a yes/no question with directly
+// opposing positions phrased with a modal negation ("will not") rather than
+// "does not"/"did not"/"do not". Before contrastCues covered modal negation
+// forms, HasContrastCue saw no cue on either sentence, polarityDiffers was
+// false, and the two opposite answers were reported as a consensus point.
+func TestAnalyzeDivergence_YesNoFramingNotMisreadAsConsensus(t *testing.T) {
+	responses := map[string]string{
+		"a/x": "Yes, the Federal Reserve will cut interest rates in December this year.",
+		"b/y": "No, the Federal Reserve will not cut interest rates in December this year.",
+	}
+	d := AnalyzeDivergence(responses)
+
+	if len(d.ConsensusPoints) != 0 {
+		t.Fatalf("expected no consensus for opposite-polarity Yes/No answers, got %+v", d.ConsensusPoints)
+	}
+	if len(d.Contradictions) == 0 {
+		t.Fatalf("expected the Yes/No disagreement to be reported as a contradiction, got none: %+v", d)
 	}
 }
 
