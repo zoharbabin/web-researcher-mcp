@@ -335,14 +335,19 @@ jobs:
             echo "::error::dist/checksums.txt not found — GoReleaser may have failed"
             exit 1
           fi
-          # --new-bundle-format defaults to true as of cosign v3: with it on,
-          # --output-signature/--output-certificate are ignored and cosign
-          # only writes the combined bundle, which we don't request here —
-          # so it fails with "create bundle file: open : no such file or
-          # directory". Force the classic split sig+cert output so this
-          # keeps producing checksums.txt.sig/.pem, per docs/SECURITY_AND_COMPLIANCE.md's
+          # cosign v3 defaults --use-signing-config=true, which itself requires
+          # --bundle (the new combined-output format) — so --new-bundle-format=false
+          # alone isn't enough; it now also needs --use-signing-config=false to
+          # fall back to the classic split sig+cert output this step relies on.
+          # Without both, --output-signature/--output-certificate are ignored
+          # and cosign either writes to an unset bundle path ("create bundle
+          # file: open : no such file or directory") or refuses outright
+          # ("must provide --new-bundle-format or --bundle ... with
+          # --signing-config or --use-signing-config"). Keeps producing
+          # checksums.txt.sig/.pem, per docs/SECURITY_AND_COMPLIANCE.md's
           # documented `cosign verify-blob --signature ... --certificate ...`.
           cosign sign-blob --yes "$CHECKSUM_FILE" \
+            --use-signing-config=false \
             --new-bundle-format=false \
             --output-signature "${CHECKSUM_FILE}.sig" \
             --output-certificate "${CHECKSUM_FILE}.pem"
