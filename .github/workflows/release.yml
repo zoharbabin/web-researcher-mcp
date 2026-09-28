@@ -736,10 +736,19 @@ jobs:
           fi
 
       # ── Install nix (only needed for hash computation) ────────────────────────
+      # kvm: false — this job only runs `nix-build` to compute src/vendor hashes,
+      # it never runs NixOS VM tests, so the installer's default KVM-backed
+      # runner setup (for NixOS test support) is pure unneeded surface area.
+      # It started crashing "Compute vendorHash" silently and near-instantly
+      # (v1.49.4 release run) after the nix-installer-action v22→v23 bump
+      # (#739) pulled newer underlying nix-installer/determinate-nixd binaries
+      # — those aren't SHA-pinned by the action itself, so this can drift even
+      # without another action-version bump. v1.49.3 succeeded before this.
       - name: Install nix
         if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true'
         uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
         with:
+          kvm: false
           extra-conf: |
             experimental-features = nix-command flakes
 
