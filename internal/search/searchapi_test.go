@@ -3,6 +3,7 @@ package search
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -23,6 +24,72 @@ func newSearchAPITestProvider(t *testing.T, handler http.HandlerFunc) *SearchAPI
 	p := NewSearchAPIProvider("test-key", deps)
 	p.SetBaseURL(srv.URL)
 	return p
+}
+
+func TestSearchAPIProvider_LimitsResults(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		requested int
+		available int
+		want      int
+	}{
+		{"excess results", 5, 100, 5},
+		{"fewer results", 5, 3, 3},
+		{"exact count", 5, 5, 5},
+		{"empty results", 5, 0, 0},
+		{"single result", 1, 3, 1},
+		{"zero count uses minimum", 0, 100, 1},
+		{"negative count uses minimum", -1, 100, 1},
+		{"zero count and empty results", 0, 0, 0},
+		{"negative count and empty results", -1, 0, 0},
+		{"above former ceiling", 50, 100, 50},
+		{"all available results", 150, 100, 100},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			items := make([]string, tc.available)
+			for i := range items {
+				items[i] = fmt.Sprintf(`{"title":"Result %d"}`, i)
+			}
+			p := newSearchAPITestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Query().Has("num") {
+					t.Error("unexpected num parameter")
+				}
+				field := "organic_results"
+				if r.URL.Query().Get("engine") == "google_images" {
+					field = "images"
+				}
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprintf(w, `{"%s":[%s]}`, field, strings.Join(items, ","))
+			})
+
+			web, err := p.Web(context.Background(), WebSearchParams{Query: "cats", NumResults: tc.requested})
+			if err != nil {
+				t.Fatal(err)
+			}
+			images, err := p.Images(context.Background(), ImageSearchParams{Query: "cats", NumResults: tc.requested})
+			if err != nil {
+				t.Fatal(err)
+			}
+			news, err := p.News(context.Background(), NewsSearchParams{Query: "cats", NumResults: tc.requested})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(web) != tc.want || len(images) != tc.want || len(news) != tc.want {
+				t.Fatalf("result counts: web=%d, images=%d, news=%d; want %d", len(web), len(images), len(news), tc.want)
+			}
+			for i := 0; i < tc.want; i++ {
+				want := fmt.Sprintf("Result %d", i)
+				if web[i].Title != want || images[i].Title != want || news[i].Title != want {
+					t.Errorf("unexpected result at position %d: web=%q, images=%q, news=%q", i, web[i].Title, images[i].Title, news[i].Title)
+				}
+			}
+		})
+	}
 }
 
 // TestSearchAPIProvider_429SurfacesRetryAfter is the #666 regression test:

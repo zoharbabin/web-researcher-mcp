@@ -67,7 +67,6 @@ func (s *SearchAPIProvider) doWebSearch(ctx context.Context, params WebSearchPar
 	q := url.Values{}
 	q.Set("engine", "google")
 	q.Set("q", buildQuery(params))
-	q.Set("num", strconv.Itoa(clamp(params.NumResults, 1, 10)))
 
 	if params.Country != "" {
 		q.Set("gl", params.Country)
@@ -92,6 +91,10 @@ func (s *SearchAPIProvider) doWebSearch(ctx context.Context, params WebSearchPar
 		return nil, fmt.Errorf("searchapi: failed to parse response: %w", err)
 	}
 
+	// Google's num is fixed at 10; limit the returned results locally.
+	if limit := max(params.NumResults, 1); limit < len(resp.OrganicResults) {
+		resp.OrganicResults = resp.OrganicResults[:limit]
+	}
 	results := make([]SearchResult, 0, len(resp.OrganicResults))
 	for _, r := range resp.OrganicResults {
 		results = append(results, SearchResult{
@@ -108,7 +111,6 @@ func (s *SearchAPIProvider) doImageSearch(ctx context.Context, params ImageSearc
 	q := url.Values{}
 	q.Set("engine", "google_images")
 	q.Set("q", params.Query)
-	q.Set("num", strconv.Itoa(clamp(params.NumResults, 1, 10)))
 
 	if params.Safe != "" && params.Safe != "off" {
 		q.Set("safe", "active")
@@ -151,15 +153,20 @@ func (s *SearchAPIProvider) doImageSearch(ctx context.Context, params ImageSearc
 		return nil, fmt.Errorf("searchapi: failed to parse image response: %w", err)
 	}
 
+	// Google Images does not document num; enforce the requested limit locally.
+	if limit := max(params.NumResults, 1); limit < len(resp.Images) {
+		resp.Images = resp.Images[:limit]
+	}
 	results := make([]ImageResult, 0, len(resp.Images))
 	for _, r := range resp.Images {
 		results = append(results, ImageResult{
 			Title:         r.Title,
-			Link:          r.Original,
+			Link:          r.Original.Link,
 			ThumbnailLink: r.Thumbnail,
-			DisplayLink:   r.Source,
-			Width:         r.OriginalWidth,
-			Height:        r.OriginalHeight,
+			ContextLink:   r.Source.Link,
+			DisplayLink:   r.Source.Name,
+			Width:         r.Original.Width,
+			Height:        r.Original.Height,
 		})
 	}
 	return results, nil
@@ -169,7 +176,6 @@ func (s *SearchAPIProvider) doNewsSearch(ctx context.Context, params NewsSearchP
 	q := url.Values{}
 	q.Set("engine", "google_news")
 	q.Set("q", params.Query)
-	q.Set("num", strconv.Itoa(clamp(params.NumResults, 1, 10)))
 
 	if params.Freshness != "" {
 		q.Set("time_period", mapSearchAPITimePeriod(params.Freshness))
@@ -188,8 +194,12 @@ func (s *SearchAPIProvider) doNewsSearch(ctx context.Context, params NewsSearchP
 		return nil, fmt.Errorf("searchapi: failed to parse news response: %w", err)
 	}
 
-	results := make([]NewsResult, 0, len(resp.NewsResults))
-	for _, r := range resp.NewsResults {
+	// This engine does not document num; limit the returned results locally.
+	if limit := max(params.NumResults, 1); limit < len(resp.OrganicResults) {
+		resp.OrganicResults = resp.OrganicResults[:limit]
+	}
+	results := make([]NewsResult, 0, len(resp.OrganicResults))
+	for _, r := range resp.OrganicResults {
 		results = append(results, NewsResult{
 			Title:       r.Title,
 			URL:         r.Link,
@@ -443,20 +453,25 @@ type searchAPIOrganicResult struct {
 }
 
 type searchAPIImageResponse struct {
-	Images []searchAPIImageResult `json:"images_results"`
+	Images []searchAPIImageResult `json:"images"`
 }
 
 type searchAPIImageResult struct {
-	Title          string `json:"title"`
-	Original       string `json:"original"`
-	Thumbnail      string `json:"thumbnail"`
-	Source         string `json:"source"`
-	OriginalWidth  int    `json:"original_width"`
-	OriginalHeight int    `json:"original_height"`
+	Title    string `json:"title"`
+	Original struct {
+		Link   string `json:"link"`
+		Width  int    `json:"width"`
+		Height int    `json:"height"`
+	} `json:"original"`
+	Thumbnail string `json:"thumbnail"`
+	Source    struct {
+		Name string `json:"name"`
+		Link string `json:"link"`
+	} `json:"source"`
 }
 
 type searchAPINewsResponse struct {
-	NewsResults []searchAPINewsResult `json:"news_results"`
+	OrganicResults []searchAPINewsResult `json:"organic_results"`
 }
 
 type searchAPINewsResult struct {

@@ -1321,17 +1321,20 @@ func TestSearchAPIProvider_WebSearch(t *testing.T) {
 		if !strings.Contains(q.Get("q"), "test query") {
 			t.Errorf("expected query to contain 'test query', got %q", q.Get("q"))
 		}
-		if q.Get("num") != "5" {
-			t.Errorf("expected num '5', got %q", q.Get("num"))
+		if q.Has("num") {
+			t.Error("unexpected num parameter for google")
 		}
 
-		resp := searchAPIWebResponse{
-			OrganicResults: []searchAPIOrganicResult{
-				{Position: 1, Title: "SearchAPI Result", Link: "https://example.com/searchapi", Snippet: "Found via SearchAPI", DisplayedLink: "example.com"},
-			},
-		}
+		// Keep the JSON independent of the response structs to catch schema drift.
+		// Shape: https://www.searchapi.io/docs/google
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		io.WriteString(w, `{"organic_results":[{
+			"position":1,
+			"title":"SearchAPI Result",
+			"link":"https://example.com/searchapi",
+			"snippet":"Found via SearchAPI",
+			"displayed_link":"example.com"
+		}]}`)
 	}))
 	defer ts.Close()
 
@@ -1351,6 +1354,9 @@ func TestSearchAPIProvider_WebSearch(t *testing.T) {
 	}
 	if results[0].URL != "https://example.com/searchapi" {
 		t.Errorf("expected URL 'https://example.com/searchapi', got %q", results[0].URL)
+	}
+	if results[0].Snippet != "Found via SearchAPI" || results[0].DisplayLink != "example.com" {
+		t.Errorf("unexpected snippet or display link: %+v", results[0])
 	}
 	// #356: SearchAPI provider does not populate PublishedAt
 	if results[0].PublishedAt != "" {
@@ -1404,13 +1410,15 @@ func TestSearchAPIProvider_ImageSearch(t *testing.T) {
 			t.Errorf("expected engine 'google_images', got %q", q.Get("engine"))
 		}
 
-		resp := searchAPIImageResponse{
-			Images: []searchAPIImageResult{
-				{Title: "Cat Image", Original: "https://img.example.com/cat.jpg", Thumbnail: "https://thumb.example.com/cat.jpg", Source: "example.com", OriginalWidth: 1920, OriginalHeight: 1080},
-			},
-		}
+		// Keep the JSON independent of the response structs to catch schema drift.
+		// Shape: https://www.searchapi.io/docs/google-images
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		io.WriteString(w, `{"images":[{
+			"title":"Cat Image",
+			"original":{"link":"https://img.example.com/cat.jpg","width":1920,"height":1080},
+			"thumbnail":"https://thumb.example.com/cat.jpg",
+			"source":{"name":"Example Images","link":"https://example.com/cats"}
+		}]}`)
 	}))
 	defer ts.Close()
 
@@ -1431,6 +1439,15 @@ func TestSearchAPIProvider_ImageSearch(t *testing.T) {
 	if results[0].Width != 1920 || results[0].Height != 1080 {
 		t.Errorf("unexpected dimensions: %dx%d", results[0].Width, results[0].Height)
 	}
+	if results[0].Title != "Cat Image" || results[0].ThumbnailLink != "https://thumb.example.com/cat.jpg" {
+		t.Errorf("unexpected image title or thumbnail: %+v", results[0])
+	}
+	if results[0].DisplayLink != "Example Images" {
+		t.Errorf("unexpected image source: %q", results[0].DisplayLink)
+	}
+	if results[0].ContextLink != "https://example.com/cats" {
+		t.Errorf("unexpected image context link: %q", results[0].ContextLink)
+	}
 }
 
 func TestSearchAPIProvider_NewsSearch(t *testing.T) {
@@ -1443,13 +1460,16 @@ func TestSearchAPIProvider_NewsSearch(t *testing.T) {
 			t.Errorf("expected time_period 'last_day', got %q", q.Get("time_period"))
 		}
 
-		resp := searchAPINewsResponse{
-			NewsResults: []searchAPINewsResult{
-				{Title: "Breaking News", Link: "https://news.example.com/1", Source: "Example News", Date: "2 hours ago", Snippet: "Something happened"},
-			},
-		}
+		// Keep the JSON independent of the response structs to catch schema drift.
+		// Shape: https://www.searchapi.io/docs/google-news
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		io.WriteString(w, `{"organic_results":[{
+			"title":"Breaking News",
+			"link":"https://news.example.com/1",
+			"source":"Example News",
+			"date":"2 hours ago",
+			"snippet":"Something happened"
+		}]}`)
 	}))
 	defer ts.Close()
 
@@ -1466,6 +1486,12 @@ func TestSearchAPIProvider_NewsSearch(t *testing.T) {
 	}
 	if results[0].Source != "Example News" {
 		t.Errorf("expected source 'Example News', got %q", results[0].Source)
+	}
+	if results[0].Title != "Breaking News" || results[0].URL != "https://news.example.com/1" || results[0].Snippet != "Something happened" {
+		t.Errorf("unexpected news fields: %+v", results[0])
+	}
+	if results[0].PublishedAt == "" {
+		t.Error("expected a normalized publication date")
 	}
 }
 
