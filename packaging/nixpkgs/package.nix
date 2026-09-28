@@ -4,9 +4,12 @@
   fetchFromGitHub,
   installShellFiles,
   nix-update-script,
+  go_1_27,
 }:
 
-buildGoModule (finalAttrs: {
+# go.mod requires go >= 1.27.1; nixpkgs' default `go` hasn't caught up yet.
+# Drop this override once nixpkgs' default go is >= 1.27.1.
+(buildGoModule.override { go = go_1_27; }) (finalAttrs: {
   __structuredAttrs = true;
 
   pname = "web-researcher-mcp";
