@@ -1,6 +1,6 @@
 module github.com/zoharbabin/web-researcher-mcp
 
-go 1.25.13
+go 1.27.1
 
 require (
 	github.com/PuerkitoBio/goquery v1.13.0
@@ -15,8 +15,8 @@ require (
 	github.com/razvandimescu/gopdf v0.11.2
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/zendev-sh/goai v0.10.4
-	golang.org/x/sync v0.22.0
-	golang.org/x/time v0.15.0
+	golang.org/x/sync v0.23.0
+	golang.org/x/time v0.16.0
 )
 
 require (
