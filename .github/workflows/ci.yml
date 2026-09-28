@@ -127,10 +127,7 @@ jobs:
           fi
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
-        with:
-          version: v2.12
-          args: --timeout=5m
+        run: go tool golangci-lint run --timeout=5m
 
   # 📄 Docs drift — docs/TOOLS.md + docs/PROVIDERS.md ↔ registry drift. Runs on
   # every PR except packaging-only ones: a machine-generated packaging bump
