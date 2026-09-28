@@ -736,19 +736,10 @@ jobs:
           fi
 
       # ── Install nix (only needed for hash computation) ────────────────────────
-      # kvm: false — this job only runs `nix-build` to compute src/vendor hashes,
-      # it never runs NixOS VM tests, so the installer's default KVM-backed
-      # runner setup (for NixOS test support) is pure unneeded surface area.
-      # It started crashing "Compute vendorHash" silently and near-instantly
-      # (v1.49.4 release run) after the nix-installer-action v22→v23 bump
-      # (#739) pulled newer underlying nix-installer/determinate-nixd binaries
-      # — those aren't SHA-pinned by the action itself, so this can drift even
-      # without another action-version bump. v1.49.3 succeeded before this.
       - name: Install nix
         if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true'
         uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
         with:
-          kvm: false
           extra-conf: |
             experimental-features = nix-command flakes
 
@@ -785,6 +776,13 @@ jobs:
           echo "Computed src hash: ${REAL_HASH}"
 
       # ── Compute vendorHash ────────────────────────────────────────────────────
+      # go = pkgs.go_1_27 — nixpkgs-unstable's default `go` (1.26.7 as of
+      # 2026-09-28) is older than go.mod's `go >= 1.27.1` requirement (#744).
+      # With GOTOOLCHAIN=local in the Nix sandbox, the go-modules build fails
+      # outright rather than auto-fetching a newer toolchain, which nix-build
+      # then reports as a generic misleading "hash mismatch" — nothing to do
+      # with SRC_HASH itself. Pin the override to nixpkgs' own go_1_27 alias
+      # until nixpkgs bumps its default; drop this once it does.
       - name: Compute vendorHash
         if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true'
         id: vendor_hash
@@ -796,7 +794,7 @@ jobs:
           VERSION="${RELEASE_TAG#v}"
           cat > /tmp/vendor-hash.nix <<NIX
           let pkgs = import (builtins.fetchTarball "channel:nixpkgs-unstable") {};
-          in pkgs.buildGoModule {
+          in (pkgs.buildGoModule.override { go = pkgs.go_1_27; }) {
             pname = "web-researcher-mcp";
             version = "${VERSION}";
             src = pkgs.fetchFromGitHub {
