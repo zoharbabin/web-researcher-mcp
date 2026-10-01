@@ -3,9 +3,12 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"html"
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -81,6 +84,51 @@ func setAuthenticityCaveat(out map[string]any) {
 	}
 }
 
+// retractionCheck values. retractionStatus alone cannot tell "checked and clean"
+// from "could not check" (both leave it absent), so retractionCheck states which
+// one happened. "unchecked" means NO integrity information: never read it as clear.
+const (
+	retractionClear     = "clear"     // Crossref answered; no retraction/correction/concern notice
+	retractionRetracted = "retracted" // Crossref reports a retraction
+	retractionFlagged   = "flagged"   // a correction or expression of concern (see retractionStatus.kind)
+	retractionUnchecked = "unchecked" // no answer; see retractionCheckReason
+)
+
+// resolveRetraction runs the retraction lookup for doi and records the outcome
+// in out (retractionCheck, retractionCheckReason, retractionStatus). It returns
+// the resolver's found flag and whether the lookup answered (no error, resolver
+// present) so verifyByDOI can keep using found as an existence signal.
+func resolveRetraction(ctx context.Context, deps Dependencies, doi string, out map[string]any) (found, answered bool) {
+	if deps.RetractionResolver == nil {
+		setRetractionUnchecked(out, "resolver_unavailable")
+		return false, false
+	}
+	status, found, err := deps.RetractionResolver.Resolve(ctx, doi)
+	switch {
+	case err != nil:
+		setRetractionUnchecked(out, "lookup_error")
+		return false, false
+	case status != nil:
+		out["retractionStatus"] = status
+		if status.Retracted {
+			out["retractionCheck"] = retractionRetracted
+		} else {
+			out["retractionCheck"] = retractionFlagged
+		}
+	case !found:
+		// Crossref has no record (e.g. arXiv/DataCite DOIs): nothing was checked.
+		setRetractionUnchecked(out, "not_in_crossref")
+	default:
+		out["retractionCheck"] = retractionClear
+	}
+	return found, true
+}
+
+func setRetractionUnchecked(out map[string]any, reason string) {
+	out["retractionCheck"] = retractionUnchecked
+	out["retractionCheckReason"] = reason
+}
+
 func registerVerifyCitation(srv *mcp.Server, deps Dependencies) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:         "verify_citation",
@@ -124,6 +172,11 @@ func registerVerifyCitation(srv *mcp.Server, deps Dependencies) {
 			verifyByReference(ctx, deps, citation, claim, out, &provenance)
 		}
 
+		// Paths with no DOI to look up (plain URLs, unmatched references) never set
+		// retractionCheck; say so explicitly instead of leaving it absent.
+		if _, ok := out["retractionCheck"]; !ok {
+			setRetractionUnchecked(out, "not_a_doi")
+		}
 		setVerificationStatus(out)
 		setAuthenticityCaveat(out)
 
@@ -229,25 +282,19 @@ func emitClaimCoverageResult(cc claimCoverageResult, claim string, out map[strin
 // citation is the full original input string; it may carry a title alongside the
 // DOI so we can run titleMatch comparison against the matched record (#221).
 func verifyByDOI(ctx context.Context, deps Dependencies, doi, citation, claim string, out map[string]any, prov *[]string) {
-	if deps.RetractionResolver != nil {
-		status, found, err := deps.RetractionResolver.Resolve(ctx, doi)
-		if err == nil {
-			// Crossref found=true is authoritative existence — record it. But
-			// found=false is NOT authoritative absence: Crossref does not index every
-			// registrant (notably arXiv DOIs, 10.48550/*, return 404 there while the
-			// work is real and indexed by OpenAlex). So a found=false must NOT short-
-			// circuit exists, or the OpenAlex ResolveByDOI lookup below never runs and
-			// a real arXiv preprint is mislabeled nonexistent (#226). Leave exists
-			// unset on found=false; the academic resolver (or the final fallback) sets
-			// it honestly.
-			if found {
-				out["exists"] = true
-			}
-			*prov = append(*prov, "crossref: works/"+doi)
-			if status != nil {
-				out["retractionStatus"] = status
-			}
+	if found, answered := resolveRetraction(ctx, deps, doi, out); answered {
+		// Crossref found=true is authoritative existence — record it. But
+		// found=false is NOT authoritative absence: Crossref does not index every
+		// registrant (notably arXiv DOIs, 10.48550/*, return 404 there while the
+		// work is real and indexed by OpenAlex). So a found=false must NOT short-
+		// circuit exists, or the OpenAlex ResolveByDOI lookup below never runs and
+		// a real arXiv preprint is mislabeled nonexistent (#226). Leave exists
+		// unset on found=false; the academic resolver (or the final fallback) sets
+		// it honestly.
+		if found {
+			out["exists"] = true
 		}
+		*prov = append(*prov, "crossref: works/"+doi)
 	}
 	// Best-effort matched record (title/authors/year) via an EXACT-DOI lookup.
 	// lookupRecordByDOI prefers the DOIResolver entity endpoint (OpenAlex
@@ -277,6 +324,14 @@ func verifyByDOI(ctx context.Context, deps Dependencies, doi, citation, claim st
 		titleText := strings.TrimSpace(doiPattern.ReplaceAllString(citation, ""))
 		out["titleMatch"] = computeTitleMatch(titleText, rec)
 		*prov = append(*prov, "title compared against matched record ("+out["titleMatch"].(string)+")")
+		// The DOI exists but the caller cited it under a different title: a
+		// misattributed or fabricated citation around a real DOI. Keep exists and
+		// the record (the DOI is real) but do not call the citation confirmed.
+		// matchConfidence stays "high": it describes the DOI-to-record identity.
+		if out["titleMatch"] == "mismatch" {
+			out["verificationStatus"] = verificationUncertain
+			out["verificationReason"] = "title_mismatch"
+		}
 	}
 	// Authoritative cross-registrar existence (#226): neither Crossref nor the
 	// academic resolvers index every DOI — arXiv preprint DOIs (10.48550/*) are
@@ -309,50 +364,85 @@ func verifyByDOI(ctx context.Context, deps Dependencies, doi, citation, claim st
 	emitClaimCoverageCandidates(ctx, deps, candidates, claim, out, prov)
 }
 
+// titleFold maps common Latin diacritics to their base letters so an accented
+// record title still matches an unaccented citation (and the reverse). It is a
+// small stdlib-only table, not full Unicode normalization.
+var titleFold = strings.NewReplacer(
+	"à", "a", "á", "a", "â", "a", "ã", "a", "ä", "a", "å", "a", "ā", "a", "ă", "a", "ą", "a",
+	"ç", "c", "ć", "c", "č", "c", "ď", "d", "đ", "d",
+	"è", "e", "é", "e", "ê", "e", "ë", "e", "ē", "e", "ę", "e", "ě", "e",
+	"ì", "i", "í", "i", "î", "i", "ï", "i", "ī", "i", "ı", "i",
+	"ł", "l", "ñ", "n", "ń", "n", "ň", "n",
+	"ò", "o", "ó", "o", "ô", "o", "õ", "o", "ö", "o", "ø", "o", "ō", "o", "ő", "o",
+	"ř", "r", "ś", "s", "š", "s", "ş", "s", "ť", "t",
+	"ù", "u", "ú", "u", "û", "u", "ü", "u", "ū", "u", "ů", "u", "ű", "u",
+	"ý", "y", "ÿ", "y", "ź", "z", "ż", "z", "ž", "z",
+	"ß", "ss", "æ", "ae", "œ", "oe",
+)
+
+// normalizeTitleText lowercases, unescapes HTML entities, folds diacritics and
+// turns every non-letter/digit run into a single space, so titles that differ
+// only by case, punctuation, accents or markup compare equal.
+func normalizeTitleText(s string) string {
+	s = titleFold.Replace(strings.ToLower(html.UnescapeString(s)))
+	return strings.Join(strings.FieldsFunc(s, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	}), " ")
+}
+
+// substantiveTokens returns the tokens longer than 3 runes of a normalized title.
+func substantiveTokens(norm string) []string {
+	var out []string
+	for _, tok := range strings.Fields(norm) {
+		if utf8.RuneCountInString(tok) > 3 {
+			out = append(out, tok)
+		}
+	}
+	return out
+}
+
 // computeTitleMatch compares a caller-supplied title string (the text remaining
 // after any DOI has been stripped, or a page's own title) against a matched
 // record's title (#221). Returns "match" | "mismatch" | "not_checked".
 // "not_checked" when there's no title text to compare (bare DOI / no title).
-// Zero false positives: a single-token overlap is "low" confidence and maps to
-// "not_checked" (ambiguous); "mismatch" fires only when ≥2 substantive tokens
-// (>3 chars) in the supplied title are clearly ABSENT from the record title.
+// Both sides are normalized first (case, punctuation, diacritics, HTML entities),
+// so formatting differences never count as a mismatch. "match" also covers a
+// citation that drops a subtitle. "mismatch" fires only when at least two
+// substantive tokens (>3 chars) of the supplied title are absent from the record
+// title and they are the majority of the supplied tokens. A translated title has
+// no lexical overlap and so reads as "mismatch": that is evidence to check, not a
+// verdict that the citation is wrong.
 func computeTitleMatch(titleText string, rec *search.AcademicResult) string {
-	titleText = strings.TrimSpace(titleText)
-	if titleText == "" || rec == nil {
+	suppliedNorm := normalizeTitleText(titleText)
+	if suppliedNorm == "" || rec == nil {
 		return "not_checked"
 	}
-	conf := referenceMatchConfidence(titleText, rec)
-	var result string
-	switch conf {
-	case "high", "medium":
-		result = "match"
-	case "low":
-		// low = single coincidental token — treat as not_checked (ambiguous).
-		result = "not_checked"
-	default:
-		result = "mismatch"
+	recNorm := normalizeTitleText(rec.Title)
+	if suppliedNorm == recNorm {
+		return "match" // covers short titles that have under two substantive tokens
 	}
-	// Detect genuine mismatch: low/none confidence when there are substantive
-	// tokens that do NOT match at all. Require ≥2 substantive tokens in the
-	// supplied title text that are clearly NOT in the record title.
-	if conf == "low" || conf == "none" {
-		suppliedLower := strings.ToLower(titleText)
-		recTitleLower := strings.ToLower(rec.Title)
-		var miss, totalSub int
-		for _, tok := range strings.Fields(suppliedLower) {
-			if len(tok) <= 3 {
-				continue
-			}
-			totalSub++
-			if !strings.Contains(recTitleLower, tok) {
-				miss++
-			}
-		}
-		if totalSub >= 2 && miss >= 2 {
-			result = "mismatch"
+	conf := referenceMatchConfidence(suppliedNorm, &search.AcademicResult{Title: recNorm})
+	if conf == "high" || conf == "medium" {
+		return "match"
+	}
+	// The supplied text is a truncation of the record title (subtitle dropped):
+	// nearly all of its substantive tokens appear in the record.
+	supplied := substantiveTokens(suppliedNorm)
+	var miss int
+	for _, tok := range supplied {
+		if !strings.Contains(recNorm, tok) {
+			miss++
 		}
 	}
-	return result
+	if hit := len(supplied) - miss; hit >= 4 && hit*100/len(supplied) >= 80 {
+		return "match"
+	}
+	// Low confidence is normally a single coincidental token: ambiguous, not a
+	// verdict. Call it a mismatch only when the supplied title clearly diverges.
+	if len(supplied) >= 2 && miss >= 2 && miss*2 > len(supplied) {
+		return "mismatch"
+	}
+	return "not_checked"
 }
 
 // verifyByURL checks link liveness + Wayback fallback, and — when the URL
@@ -440,11 +530,8 @@ func enrichURLWithScholarlyDOI(ctx context.Context, deps Dependencies, fetchURL,
 	}
 
 	// Retraction status for the detected DOI.
-	if deps.RetractionResolver != nil {
-		if status, _, err := deps.RetractionResolver.Resolve(ctx, doi); err == nil && status != nil {
-			out["retractionStatus"] = status
-			*prov = append(*prov, "crossref retraction: works/"+doi)
-		}
+	if _, answered := resolveRetraction(ctx, deps, doi, out); answered {
+		*prov = append(*prov, "crossref retraction: works/"+doi)
 	}
 	// Matched record by exact DOI — the same trustworthy entity lookup verifyByDOI
 	// uses (the cited work or nothing, never a near-neighbour).
@@ -519,10 +606,8 @@ func verifyByReference(ctx context.Context, deps Dependencies, ref, claim string
 	// If the matched record has a DOI, check retraction too — informative even
 	// for an uncertain match (a retracted UNRELATED paper is still worth flagging
 	// as evidence), and does not change verificationStatus/exists either way.
-	if rec.DOI != "" && deps.RetractionResolver != nil {
-		if status, _, err := deps.RetractionResolver.Resolve(ctx, rec.DOI); err == nil && status != nil {
-			out["retractionStatus"] = status
-		}
+	if rec.DOI != "" {
+		resolveRetraction(ctx, deps, rec.DOI, out)
 	}
 	// #657: same Unpaywall widening as verifyByDOI — rec's own PDFUrl here is a
 	// single provider's cached pick, which can independently go stale.
