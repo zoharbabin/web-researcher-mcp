@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -78,9 +79,9 @@ func TestLinkVerifier_LiveAndDead(t *testing.T) {
 	}
 }
 
-// TestLinkVerifier_BotWallIsLiveNotDead: 403/429/503 must set Live=true and
-// Blocked=true and must NOT trigger a Wayback lookup (the resource exists).
-func TestLinkVerifier_BotWallIsLiveNotDead(t *testing.T) {
+// TestLinkVerifier_BotWallIsBlockedNotLive: 403/429/503 are "blocked": neither
+// live (a refusal is not evidence the page exists) nor dead. No Wayback lookup.
+func TestLinkVerifier_BotWallIsBlockedNotLive(t *testing.T) {
 	t.Parallel()
 	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -96,10 +97,10 @@ func TestLinkVerifier_BotWallIsLiveNotDead(t *testing.T) {
 	}))
 	defer origin.Close()
 
-	// waybackCalled tracks whether the Wayback stub was ever hit — it must NOT be.
-	waybackCalled := false
+	// waybackCalled tracks whether the Wayback stub was ever hit, it must NOT be.
+	var waybackCalled atomic.Bool
 	wb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		waybackCalled = true
+		waybackCalled.Store(true)
 		_, _ = w.Write([]byte(`{"archived_snapshots":{"closest":{"available":true,"url":"http://web.archive.org/snap/blocked","status":"200"}}}`))
 	}))
 	defer wb.Close()
@@ -111,9 +112,6 @@ func TestLinkVerifier_BotWallIsLiveNotDead(t *testing.T) {
 		origin.URL + "/unavailable",
 	})
 
-	if len(got) != 3 {
-		t.Fatalf("want 3 statuses, got %d", len(got))
-	}
 	cases := []struct {
 		name   string
 		status int
@@ -125,11 +123,14 @@ func TestLinkVerifier_BotWallIsLiveNotDead(t *testing.T) {
 	}
 	for _, c := range cases {
 		st := got[c.idx]
-		if !st.Live {
-			t.Errorf("%s: want Live=true, got false (%+v)", c.name, st)
+		if st.Live {
+			t.Errorf("%s: a blocked URL must not be Live (%+v)", c.name, st)
 		}
-		if !st.Blocked {
-			t.Errorf("%s: want Blocked=true, got false (%+v)", c.name, st)
+		if st.Dead() {
+			t.Errorf("%s: a blocked URL must not be Dead (%+v)", c.name, st)
+		}
+		if !st.Blocked || st.Outcome != LinkOutcomeBlocked {
+			t.Errorf("%s: want Blocked outcome, got %+v", c.name, st)
 		}
 		if st.HTTPStatus != c.status {
 			t.Errorf("%s: want HTTPStatus=%d, got %d", c.name, c.status, st.HTTPStatus)
@@ -138,8 +139,162 @@ func TestLinkVerifier_BotWallIsLiveNotDead(t *testing.T) {
 			t.Errorf("%s: ArchivedURL must be empty for bot-wall, got %q", c.name, st.ArchivedURL)
 		}
 	}
-	if waybackCalled {
-		t.Error("Wayback must NOT be queried for bot-walled URLs (Live=true skips the lookup)")
+	if waybackCalled.Load() {
+		t.Error("Wayback must NOT be queried for blocked URLs")
+	}
+}
+
+// TestLinkVerifier_FailureCauses: status 0 is split into distinct causes so a
+// caller can tell a dead host (dns_failure) from a flaky one.
+func TestLinkVerifier_FailureCauses(t *testing.T) {
+	t.Parallel()
+	wb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"archived_snapshots":{}}`))
+	}))
+	t.Cleanup(wb.Close)
+
+	// Server that accepts a connection and drops it without answering.
+	reset := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hj, _ := w.(http.Hijacker)
+		conn, _, _ := hj.Hijack()
+		_ = conn.Close()
+	}))
+	t.Cleanup(reset.Close)
+
+	// Server that never answers within the verifier's timeout.
+	release := make(chan struct{})
+	slow := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		<-release
+	}))
+	t.Cleanup(slow.Close)
+	t.Cleanup(func() { close(release) })
+
+	// Closed port: connection refused.
+	closed := httptest.NewServer(http.NotFoundHandler())
+	closedURL := closed.URL
+	closed.Close()
+
+	cases := []struct {
+		name     string
+		url      string
+		wantFail string
+		wantDead bool
+		wantOut  LinkOutcome
+		verifier func() *LinkVerifier
+	}{
+		{"dns failure", "http://nonexistent-host-zz9.invalid/x", LinkFailureDNS, true, LinkOutcomeDead, nil},
+		{"connection reset", reset.URL + "/x", LinkFailureConnectionReset, false, LinkOutcomeUnreachable, nil},
+		{"connection refused", closedURL + "/x", LinkFailureConnectionRefused, false, LinkOutcomeUnreachable, nil},
+		{"timeout", slow.URL + "/x", LinkFailureTimeout, false, LinkOutcomeUnreachable, func() *LinkVerifier {
+			v := NewLinkVerifier(LinkVerifierConfig{AllowPrivateIPs: true, PerURLTimeout: 300 * time.Millisecond})
+			v.SetWaybackBase(wb.URL)
+			return v
+		}},
+		{"ssrf policy", "http://127.0.0.1:1/x", LinkFailureSSRFBlocked, false, LinkOutcomeUnreachable, func() *LinkVerifier {
+			v := NewLinkVerifier(LinkVerifierConfig{AllowPrivateIPs: false, PerURLTimeout: time.Second})
+			v.SetWaybackBase(wb.URL)
+			return v
+		}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			v := newTestVerifier(t, wb.URL)
+			if c.verifier != nil {
+				v = c.verifier()
+			}
+			st := v.VerifyAll(context.Background(), []string{c.url})[0]
+			if st.HTTPStatus != 0 || st.Live {
+				t.Fatalf("want status 0 and not live, got %+v", st)
+			}
+			if st.FailureCause != c.wantFail {
+				t.Errorf("FailureCause = %q, want %q (%+v)", st.FailureCause, c.wantFail, st)
+			}
+			if st.Dead() != c.wantDead {
+				t.Errorf("Dead() = %v, want %v", st.Dead(), c.wantDead)
+			}
+			if st.Outcome != c.wantOut {
+				t.Errorf("Outcome = %q, want %q", st.Outcome, c.wantOut)
+			}
+		})
+	}
+}
+
+// TestLinkVerifier_RedirectToRoot: a deep URL that ends at a host root (or a
+// generic landing page) is not "live"; a redirect between two deep pages is.
+func TestLinkVerifier_RedirectToRoot(t *testing.T) {
+	t.Parallel()
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(200) }))
+	t.Cleanup(other.Close)
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			w.WriteHeader(200)
+		case "/old/article":
+			http.Redirect(w, r, "/", http.StatusFound)
+		case "/old/other":
+			http.Redirect(w, r, "/index.html", http.StatusMovedPermanently)
+		case "/index.html":
+			w.WriteHeader(200)
+		case "/moved":
+			http.Redirect(w, r, "/new/article", http.StatusMovedPermanently)
+		case "/new/article":
+			w.WriteHeader(200)
+		case "/to-other-host-root":
+			http.Redirect(w, r, other.URL+"/", http.StatusFound)
+		case "/plain-root-redirect-is-fine":
+			w.WriteHeader(200)
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	t.Cleanup(origin.Close)
+
+	wb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"archived_snapshots":{"closest":{"available":true,"url":"http://web.archive.org/snap/x","status":"200"}}}`))
+	}))
+	t.Cleanup(wb.Close)
+	v := newTestVerifier(t, wb.URL)
+
+	cases := []struct {
+		name      string
+		url       string
+		wantLive  bool
+		wantRoot  bool
+		wantFinal string
+	}{
+		{"deep to root", origin.URL + "/old/article", false, true, origin.URL + "/"},
+		{"deep to index.html", origin.URL + "/old/other", false, true, origin.URL + "/index.html"},
+		{"deep to deep", origin.URL + "/moved", true, false, origin.URL + "/new/article"},
+		{"root itself", origin.URL + "/", true, false, origin.URL + "/"},
+		{"no redirect", origin.URL + "/plain-root-redirect-is-fine", true, false, origin.URL + "/plain-root-redirect-is-fine"},
+		{"to other host root", origin.URL + "/to-other-host-root", false, true, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			st := v.VerifyAll(context.Background(), []string{c.url})[0]
+			if st.Live != c.wantLive {
+				t.Errorf("Live = %v, want %v (%+v)", st.Live, c.wantLive, st)
+			}
+			if st.RedirectedToRoot != c.wantRoot {
+				t.Errorf("RedirectedToRoot = %v, want %v (%+v)", st.RedirectedToRoot, c.wantRoot, st)
+			}
+			if c.wantFinal != "" && st.FinalURL != c.wantFinal {
+				t.Errorf("FinalURL = %q, want %q", st.FinalURL, c.wantFinal)
+			}
+			if c.wantRoot {
+				if st.Outcome != LinkOutcomeRedirectedToRoot || st.Dead() {
+					t.Errorf("want redirected_to_root outcome, not dead: %+v", st)
+				}
+				if st.HTTPStatus != 200 {
+					t.Errorf("HTTPStatus should keep the final status 200, got %d", st.HTTPStatus)
+				}
+				if st.ArchivedURL == "" {
+					t.Error("a root-redirected URL should still get its Wayback snapshot attached")
+				}
+			}
+		})
 	}
 }
 

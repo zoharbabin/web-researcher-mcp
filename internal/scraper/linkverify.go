@@ -2,12 +2,17 @@ package scraper
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -21,15 +26,53 @@ import (
 // by design (operates on plain LinkStatus values) so the tool layer and
 // verify_citation can both use it without an import cycle.
 
+// LinkOutcome classifies one link check. Only LinkOutcomeLive is evidence that
+// the cited page exists; blocked, redirected_to_root and unreachable are
+// "unverified" (not evidence either way) and only dead is evidence of absence.
+type LinkOutcome string
+
+const (
+	LinkOutcomeLive             LinkOutcome = "live"               // final 2xx/3xx on the requested page
+	LinkOutcomeDead             LinkOutcome = "dead"               // HTTP error (e.g. 404/410/5xx) or DNS failure
+	LinkOutcomeBlocked          LinkOutcome = "blocked"            // 403/429/503: the server refused the verifier; existence unknown
+	LinkOutcomeRedirectedToRoot LinkOutcome = "redirected_to_root" // deep URL ended at a site root/generic landing page
+	LinkOutcomeUnreachable      LinkOutcome = "unreachable"        // no HTTP response (timeout/reset/refused/TLS/policy); may be flaky
+)
+
+// Transport-failure causes reported in LinkStatus.FailureCause when no HTTP
+// response was received (HTTPStatus 0).
+const (
+	LinkFailureDNS               = "dns_failure"
+	LinkFailureTimeout           = "timeout"
+	LinkFailureConnectionReset   = "connection_reset"
+	LinkFailureConnectionRefused = "connection_refused"
+	LinkFailureTLS               = "tls_error"
+	LinkFailureSSRFBlocked       = "ssrf_blocked"
+	LinkFailureOther             = "other"
+)
+
 // LinkStatus is the liveness result for one URL. Zero HTTPStatus means the
-// request never completed (DNS/network failure / SSRF rejection).
+// request never completed (see FailureCause).
 type LinkStatus struct {
 	URL         string
 	HTTPStatus  int
-	Live        bool   // resolved to 2xx/3xx, or a bot-wall (403/429/503) — the resource EXISTS
-	Blocked     bool   // true when the URL exists but refused the verifier (403/429/503)
-	ArchivedURL string // Wayback snapshot, set only when Live is false and one exists
+	Outcome     LinkOutcome
+	Live        bool   // true only for LinkOutcomeLive: resolved 2xx/3xx and did not end at a site root
+	Blocked     bool   // true when the server refused the verifier (403/429/503); existence is unknown, not confirmed
+	ArchivedURL string // Wayback snapshot, set only when the URL is neither live nor blocked and one exists
+	// FinalURL is the URL after redirects ("" when no response was received).
+	FinalURL string
+	// RedirectedToRoot is true when a non-root URL ended at the host root or a
+	// generic landing page (e.g. a removed article redirecting to the homepage).
+	RedirectedToRoot bool
+	// FailureCause names why no HTTP response arrived (Link Failure* consts); ""
+	// whenever HTTPStatus != 0.
+	FailureCause string
 }
+
+// Dead reports evidence of absence: an HTTP error response or a DNS failure.
+// Blocked, redirected-to-root and flaky-transport outcomes are NOT dead.
+func (s LinkStatus) Dead() bool { return s.Outcome == LinkOutcomeDead }
 
 // LinkVerifier checks URL liveness with bounded concurrency and a short per-URL
 // timeout, falling back to the Wayback availability API for dead links. It can
@@ -150,27 +193,52 @@ func (v *LinkVerifier) VerifyAll(ctx context.Context, urls []string) []LinkStatu
 }
 
 // verifyOne checks a single URL: HEAD first (cheap), falling back to a ranged GET
-// when HEAD is unsupported (405/501), then a Wayback lookup if still not live.
+// when HEAD is unsupported (405/501) or failed at the transport level, then a
+// Wayback lookup if the URL is neither live nor blocked.
 func (v *LinkVerifier) verifyOne(ctx context.Context, rawURL string) LinkStatus {
 	st := LinkStatus{URL: rawURL}
 	if rawURL == "" {
 		return st
 	}
 
-	status := v.probe(ctx, http.MethodHead, rawURL)
-	// Some servers reject HEAD — retry with GET before declaring the link dead.
-	if status == 405 || status == 501 || status == 0 {
-		if g := v.probe(ctx, http.MethodGet, rawURL); g != 0 {
-			status = g
+	p := v.probe(ctx, http.MethodHead, rawURL)
+	// Some servers reject HEAD, retry with GET before declaring the link dead.
+	if p.status == 405 || p.status == 501 || p.status == 0 {
+		if g := v.probe(ctx, http.MethodGet, rawURL); g.status != 0 || p.status == 0 {
+			p = g
 		}
 	}
-	st.HTTPStatus = status
-	// 403/429/503 mean the resource EXISTS but refuses robots — treat as live/blocked,
-	// not dead. A bot-wall is not a missing page; wayback lookup would only mislead.
-	st.Blocked = status == 403 || status == 429 || status == 503
-	st.Live = (status >= 200 && status < 400) || st.Blocked
+	st.HTTPStatus = p.status
+	st.FinalURL = p.finalURL
+	st.FailureCause = p.failure
 
-	if !st.Live {
+	switch {
+	case p.status == 0:
+		// A DNS "no such host" is evidence the host is gone; every other
+		// transport failure (timeout, reset, refused, TLS, policy) may be flaky.
+		if p.failure == LinkFailureDNS {
+			st.Outcome = LinkOutcomeDead
+		} else {
+			st.Outcome = LinkOutcomeUnreachable
+		}
+	case p.status == 403 || p.status == 429 || p.status == 503:
+		// The server refused the verifier. That is not evidence the page exists
+		// (a WAF answers 403 for invented paths too) and not evidence it is gone.
+		st.Outcome = LinkOutcomeBlocked
+		st.Blocked = true
+	case p.status >= 200 && p.status < 400:
+		if redirectedToRoot(rawURL, p.finalURL) {
+			st.Outcome = LinkOutcomeRedirectedToRoot
+			st.RedirectedToRoot = true
+		} else {
+			st.Outcome = LinkOutcomeLive
+			st.Live = true
+		}
+	default:
+		st.Outcome = LinkOutcomeDead
+	}
+
+	if !st.Live && !st.Blocked {
 		if snap := v.wayback(ctx, rawURL); snap != "" {
 			st.ArchivedURL = snap
 		}
@@ -178,19 +246,90 @@ func (v *LinkVerifier) verifyOne(ctx context.Context, rawURL string) LinkStatus 
 	return st
 }
 
-// probe issues one request and returns the status code (0 on transport error).
-func (v *LinkVerifier) probe(ctx context.Context, method, rawURL string) int {
+// probeResult is one request's outcome: an HTTP status plus the post-redirect
+// URL, or (status 0) the classified transport failure.
+type probeResult struct {
+	status   int
+	finalURL string
+	failure  string
+}
+
+// probe issues one request.
+func (v *LinkVerifier) probe(ctx context.Context, method, rawURL string) probeResult {
 	req, err := http.NewRequestWithContext(ctx, method, rawURL, nil)
 	if err != nil {
-		return 0
+		return probeResult{failure: LinkFailureOther}
 	}
 	req.Header.Set("User-Agent", "web-researcher-mcp link-verifier")
 	resp, err := v.client.Do(req)
 	if err != nil {
-		return 0
+		return probeResult{failure: classifyLinkError(err)}
 	}
 	_ = resp.Body.Close()
-	return resp.StatusCode
+	return probeResult{status: resp.StatusCode, finalURL: resp.Request.URL.String()}
+}
+
+// classifyLinkError maps a transport error to one of the LinkFailure* causes.
+func classifyLinkError(err error) string {
+	var dnsErr *net.DNSError
+	var certErr x509.UnknownAuthorityError
+	var hostErr x509.HostnameError
+	var tlsRecErr tls.RecordHeaderError
+	switch {
+	case errors.Is(err, ErrSSRFBlocked):
+		return LinkFailureSSRFBlocked
+	case errors.As(err, &dnsErr):
+		if dnsErr.IsNotFound {
+			return LinkFailureDNS
+		}
+		if dnsErr.IsTimeout {
+			return LinkFailureTimeout
+		}
+		return LinkFailureOther
+	case errors.Is(err, context.DeadlineExceeded), isTimeout(err):
+		return LinkFailureTimeout
+	case errors.Is(err, syscall.ECONNREFUSED):
+		return LinkFailureConnectionRefused
+	case errors.Is(err, syscall.ECONNRESET), errors.Is(err, syscall.EPIPE),
+		errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
+		return LinkFailureConnectionReset
+	case errors.As(err, &certErr), errors.As(err, &hostErr), errors.As(err, &tlsRecErr):
+		return LinkFailureTLS
+	}
+	return LinkFailureOther
+}
+
+func isTimeout(err error) bool {
+	var ne net.Error
+	return errors.As(err, &ne) && ne.Timeout()
+}
+
+// genericLandingPaths are post-redirect paths that mean "the site's front door",
+// not the cited page, in addition to the bare root.
+var genericLandingPaths = map[string]bool{
+	"": true, "/": true,
+	"/index.html": true, "/index.htm": true, "/index.php": true,
+	"/home": true, "/404": true, "/not-found": true, "/error": true,
+}
+
+// redirectedToRoot reports whether a non-root requested URL ended at a site
+// root or generic landing page. A request that was already for a landing page
+// is never flagged, and neither is a URL that did not move.
+func redirectedToRoot(requested, final string) bool {
+	if final == "" {
+		return false
+	}
+	req, err1 := url.Parse(requested)
+	fin, err2 := url.Parse(final)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	reqPath := strings.ToLower(strings.TrimRight(req.Path, "/"))
+	finPath := strings.ToLower(strings.TrimRight(fin.Path, "/"))
+	if genericLandingPaths[reqPath] || genericLandingPaths[reqPath+"/"] {
+		return false
+	}
+	return genericLandingPaths[finPath] || genericLandingPaths[finPath+"/"]
 }
 
 // wayback queries the Internet Archive availability API for a snapshot of url.
