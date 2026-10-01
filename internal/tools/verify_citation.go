@@ -368,12 +368,14 @@ func verifyByURL(ctx context.Context, deps Dependencies, rawURL, claim string, o
 		st := statuses[0]
 		out["exists"] = st.Live
 		out["httpStatus"] = st.HTTPStatus
+		setLinkOutcomeFields(out, st)
 		if st.ArchivedURL != "" {
 			out["archivedUrl"] = st.ArchivedURL
 		}
-		*prov = append(*prov, "link liveness check"+waybackNote(st.ArchivedURL))
-		// Claim check against the live URL, or its Wayback snapshot when dead.
-		if st.Live {
+		*prov = append(*prov, "link liveness check ("+string(st.Outcome)+")"+waybackNote(st.ArchivedURL))
+		// Claim check against the live URL (or a blocked one, which the scraper's
+		// own tiers may still read), else its Wayback snapshot.
+		if st.Live || st.Blocked {
 			fetchURL = rawURL
 		} else if st.ArchivedURL != "" {
 			fetchURL = st.ArchivedURL

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/auth"
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
+	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
@@ -271,8 +273,14 @@ type auditEntryResult struct {
 	ExistChecked bool                     // true if an authoritative existence lookup ran (DOI→Crossref or title→academic)
 	Retraction   *search.RetractionStatus // nil = clean/unknown
 	HTTPStatus   int                      // 0 = not a URL / unreachable
-	LinkLive     *bool                    // nil = no URL checked
+	LinkLive     *bool                    // nil = no URL checked; true only for a confirmed-live link
 	ArchivedURL  string
+	// Additive link-check detail. LinkLive=false alone is ambiguous: LinkOutcome
+	// separates a dead link (evidence of absence) from blocked / redirected_to_root
+	// / unreachable (unverified, no evidence either way).
+	LinkOutcome string // scraper.LinkOutcome value; "" = no URL checked
+	FinalURL    string // URL after redirects, set only when it differs from URL
+	LinkFailure string // why no HTTP response arrived (dns_failure, timeout, …)
 	// Claim-coverage (#174), populated only when the entry carried a claim.
 	Claim          string   // the claim that was checked ("" = no claim given)
 	ClaimSupport   string   // one of the claim* signals above ("" = not checked)
@@ -314,6 +322,15 @@ func (r auditEntryResult) toMap() map[string]any {
 	if r.LinkLive != nil {
 		m["linkLive"] = *r.LinkLive
 		m["httpStatus"] = r.HTTPStatus
+	}
+	if r.LinkOutcome != "" {
+		m["linkOutcome"] = r.LinkOutcome
+	}
+	if r.FinalURL != "" {
+		m["finalUrl"] = r.FinalURL
+	}
+	if r.LinkFailure != "" {
+		m["linkFailure"] = r.LinkFailure
 	}
 	if r.ArchivedURL != "" {
 		m["archivedUrl"] = r.ArchivedURL
@@ -381,6 +398,11 @@ func auditEntries(ctx context.Context, deps Dependencies, auditItems []auditItem
 			live := st.Live
 			r.LinkLive = &live
 			r.HTTPStatus = st.HTTPStatus
+			r.LinkOutcome = string(st.Outcome)
+			r.LinkFailure = st.FailureCause
+			if st.FinalURL != st.URL {
+				r.FinalURL = st.FinalURL
+			}
 			if !st.Live && st.ArchivedURL != "" {
 				r.ArchivedURL = st.ArchivedURL
 			}
@@ -530,6 +552,11 @@ func auditClaimCoverage(ctx context.Context, deps Dependencies, r *auditEntryRes
 	fetchURL := ""
 	if r.LinkLive != nil && *r.LinkLive && r.URL != "" {
 		fetchURL = r.URL
+	} else if r.LinkOutcome == string(scraper.LinkOutcomeBlocked) && r.URL != "" {
+		// Blocked = the server refused the verifier; the scraper's own tiers may
+		// still read it. Try the URL directly (behavior unchanged from when a
+		// bot-wall counted as live).
+		fetchURL = r.URL
 	} else if r.ArchivedURL != "" {
 		fetchURL = r.ArchivedURL
 	} else if r.URL != "" && r.LinkLive == nil {
@@ -568,7 +595,12 @@ func auditFlags(r auditEntryResult) ([]string, string) {
 	if r.Retraction != nil && r.Retraction.Retracted {
 		flags = append(flags, auditFlagRetracted)
 	}
-	if r.LinkLive != nil && !*r.LinkLive {
+	// dead_link only on evidence of absence (HTTP error / DNS failure). A blocked,
+	// root-redirected or unreachable link is unverified: it falls to "unchecked"
+	// below, with the outcome named in the reason.
+	linkDead := r.LinkLive != nil && !*r.LinkLive &&
+		(r.LinkOutcome == "" || r.LinkOutcome == string(scraper.LinkOutcomeDead))
+	if linkDead {
 		flags = append(flags, auditFlagDeadLink)
 	}
 	// Mischaracterization (#174): the source was fetched and does NOT address the
@@ -600,6 +632,14 @@ func auditFlags(r auditEntryResult) ([]string, string) {
 	// here (auditOneEntry only sets exists=true on a confident title match), so an
 	// uncheckable citation reads as unchecked, never as verified (#225).
 	flags = append(flags, auditFlagUnchecked)
+	switch scraper.LinkOutcome(r.LinkOutcome) {
+	case scraper.LinkOutcomeBlocked:
+		return flags, "link is blocked (HTTP " + strconv.Itoa(r.HTTPStatus) + "): the server refused the check, so existence is unverified (not evidence it is dead)."
+	case scraper.LinkOutcomeRedirectedToRoot:
+		return flags, "link redirected to a site root or generic landing page (" + r.FinalURL + "): the cited page may have been removed, so existence is unverified."
+	case scraper.LinkOutcomeUnreachable:
+		return flags, "link is unreachable (" + r.LinkFailure + "): no HTTP response, which may be a temporary failure, so existence is unverified."
+	}
 	if r.LinkLive != nil && !*r.LinkLive {
 		return flags, "link did not resolve and no identifier confirmed existence."
 	}

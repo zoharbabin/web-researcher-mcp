@@ -75,6 +75,9 @@ type recommendationResult struct {
 	DomainReputation         *content.DomainReputation         `json:"domainReputation,omitempty"`
 	LinkLive                 *bool                             `json:"linkLive,omitempty"`
 	HTTPStatus               int                               `json:"httpStatus,omitempty"`
+	LinkOutcome              string                            `json:"linkOutcome,omitempty"`
+	FinalURL                 string                            `json:"finalUrl,omitempty"`
+	LinkFailure              string                            `json:"linkFailure,omitempty"`
 	CorroborationSearches    []corroborationResult             `json:"corroborationSearches,omitempty"`
 	Flags                    []string                          `json:"flags"`
 	Reasons                  []string                          `json:"reasons"`
@@ -172,7 +175,20 @@ func verifyOneRecommendation(ctx context.Context, deps Dependencies, rec recomme
 			st := statuses[0]
 			result.LinkLive = &st.Live
 			result.HTTPStatus = st.HTTPStatus
-			if !st.Live {
+			result.LinkOutcome = string(st.Outcome)
+			result.LinkFailure = st.FailureCause
+			if st.FinalURL != st.URL {
+				result.FinalURL = st.FinalURL
+			}
+			switch {
+			case st.Live:
+			case st.Blocked:
+				result.Reasons = append(result.Reasons, "Link check was blocked (HTTP "+strconv.Itoa(st.HTTPStatus)+"): existence is unverified, not evidence the link is dead")
+			case st.RedirectedToRoot:
+				result.Reasons = append(result.Reasons, "Link redirected to a site root or generic landing page ("+st.FinalURL+"): the page may have been removed")
+			case !st.Dead():
+				result.Reasons = append(result.Reasons, "Link was unreachable ("+st.FailureCause+"): no HTTP response, may be temporary")
+			default:
 				result.Flags = append(result.Flags, "dead_link")
 				result.Reasons = append(result.Reasons, "Link does not resolve (HTTP "+strconv.Itoa(st.HTTPStatus)+")")
 			}
@@ -616,8 +632,11 @@ var verifyRecommendationOutputSchema = map[string]any{
 						"type":        "object",
 						"description": "Domain reputation when the URL host is in the known sources dataset. Omitted for unlisted hosts.",
 					},
-					"linkLive":   map[string]any{"type": "boolean", "description": "True when the URL resolves (2xx/3xx HTTP); false when dead."},
-					"httpStatus": map[string]any{"type": "integer", "description": "Live HTTP status for the URL (0 = unreachable/timeout)."},
+					"linkLive":    map[string]any{"type": "boolean", "description": "True only when the URL resolves (2xx/3xx HTTP) on the requested page. False does not mean dead: check linkOutcome."},
+					"httpStatus":  map[string]any{"type": "integer", "description": "Live HTTP status for the URL (0 = no HTTP response; see linkFailure)."},
+					"linkOutcome": map[string]any{"type": "string", "enum": []any{"live", "dead", "blocked", "redirected_to_root", "unreachable"}, "description": "Link-check result. live = resolved on the requested page (the only outcome that confirms existence); dead = HTTP error or DNS failure (evidence of absence); blocked = 403/429/503, the server refused the check so existence is unknown; redirected_to_root = a deep URL ended at a site root or generic landing page (page likely removed); unreachable = no HTTP response (timeout, reset, refused, TLS), which may be temporary. Only dead gets the dead_link flag."},
+					"finalUrl":    map[string]any{"type": "string", "description": "URL the link ended at after redirects. Present only when it differs from the input URL."},
+					"linkFailure": map[string]any{"type": "string", "enum": []any{"dns_failure", "timeout", "connection_reset", "connection_refused", "tls_error", "ssrf_blocked", "other"}, "description": "Why no HTTP response arrived (httpStatus 0)."},
 					"corroborationSearches": map[string]any{
 						"type":        "array",
 						"description": "Present when the `claim` field was supplied. One entry per corroboration lens, selected by classifying the claim/title text: generic/tech/product claims search {news, tech}; claims about corporate/government/legal/financial matters additionally search {investigative_records} (gov/public-record/filing sources — sec.gov, courtlistener.com, data.gov, ...). Shows whether independent sources agree, disagree, or are silent about this recommendation in the context of the claim.",

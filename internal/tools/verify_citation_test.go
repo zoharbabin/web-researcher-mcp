@@ -1146,3 +1146,73 @@ func TestVerifyCitation_EmptyInput(t *testing.T) {
 		t.Error("empty citation should return a tool error")
 	}
 }
+
+// TestVerifyCitation_URLUnverifiedOutcomes: a blocked, root-redirected or
+// unreachable URL must never read as confirmed, and must not read as not_found
+// (that would call a live-but-refusing page fabricated).
+func TestVerifyCitation_URLUnverifiedOutcomes(t *testing.T) {
+	t.Parallel()
+	blocked := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(403) }))
+	t.Cleanup(blocked.Close)
+	root := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+		w.WriteHeader(200)
+	}))
+	t.Cleanup(root.Close)
+	closed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	closedURL := closed.URL
+	closed.Close()
+
+	cases := []struct {
+		name        string
+		url         string
+		wantOutcome string
+		wantStatus  string
+		wantFinal   bool
+		wantFailure string
+	}{
+		{"blocked", blocked.URL + "/paper", "blocked", "uncertain", false, ""},
+		{"redirected_to_root", root.URL + "/articles/2021/old", "redirected_to_root", "uncertain", true, ""},
+		{"unreachable", closedURL + "/x", "unreachable", "uncertain", false, "connection_refused"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			deps := setupTestDeps()
+			deps.LinkVerifier = scraper.NewLinkVerifier(scraper.LinkVerifierConfig{AllowPrivateIPs: true})
+			out := callVerify(t, deps, tc.url)
+			if out["exists"] != false {
+				t.Errorf("exists = %v, want false", out["exists"])
+			}
+			if out["verificationStatus"] != tc.wantStatus {
+				t.Errorf("verificationStatus = %v, want %s", out["verificationStatus"], tc.wantStatus)
+			}
+			if out["linkOutcome"] != tc.wantOutcome {
+				t.Errorf("linkOutcome = %v, want %s", out["linkOutcome"], tc.wantOutcome)
+			}
+			if _, ok := out["finalUrl"]; ok != tc.wantFinal {
+				t.Errorf("finalUrl present = %v, want %v (%v)", ok, tc.wantFinal, out)
+			}
+			if tc.wantFailure != "" && out["linkFailure"] != tc.wantFailure {
+				t.Errorf("linkFailure = %v, want %s", out["linkFailure"], tc.wantFailure)
+			}
+		})
+	}
+}
+
+// TestVerifyCitation_URLDeadStaysNotFound: a 404 is evidence of absence and
+// keeps verificationStatus not_found, with linkOutcome "dead".
+func TestVerifyCitation_URLDeadStaysNotFound(t *testing.T) {
+	t.Parallel()
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(404) }))
+	t.Cleanup(origin.Close)
+	deps := setupTestDeps()
+	deps.LinkVerifier = scraper.NewLinkVerifier(scraper.LinkVerifierConfig{AllowPrivateIPs: true})
+	out := callVerify(t, deps, origin.URL+"/gone")
+	if out["verificationStatus"] != "not_found" || out["linkOutcome"] != "dead" {
+		t.Errorf("want not_found/dead, got %v / %v", out["verificationStatus"], out["linkOutcome"])
+	}
+}
