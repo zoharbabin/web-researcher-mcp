@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -938,5 +939,58 @@ func TestAuditBibliography_ClaimNilScraper(t *testing.T) {
 		if f == "mischaracterized" {
 			t.Error("source_unavailable must NOT be flagged mischaracterized")
 		}
+	}
+}
+
+// TestAuditBibliography_UnverifiedLinks: blocked, root-redirected and
+// unreachable links are not dead_link (no evidence of absence) and not live.
+// They fall to "unchecked" with the link outcome exposed.
+func TestAuditBibliography_UnverifiedLinks(t *testing.T) {
+	t.Parallel()
+	blocked := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(429) }))
+	t.Cleanup(blocked.Close)
+	root := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+		w.WriteHeader(200)
+	}))
+	t.Cleanup(root.Close)
+	closed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	closedURL := closed.URL
+	closed.Close()
+
+	cases := []struct{ name, url, outcome string }{
+		{"blocked", blocked.URL + "/a", "blocked"},
+		{"redirected_to_root", root.URL + "/news/old-story", "redirected_to_root"},
+		{"unreachable", closedURL + "/a", "unreachable"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			deps := setupTestDeps()
+			deps.LinkVerifier = scraper.NewLinkVerifier(scraper.LinkVerifierConfig{AllowPrivateIPs: true})
+			out, isErr := callAudit(t, deps, map[string]any{
+				"entries": []any{map[string]any{"url": tc.url, "title": "Some Source"}},
+			})
+			if isErr {
+				t.Fatal("unexpected tool error")
+			}
+			e0 := out["entries"].([]any)[0].(map[string]any)
+			if e0["linkLive"] != false {
+				t.Errorf("linkLive = %v, want false", e0["linkLive"])
+			}
+			if e0["linkOutcome"] != tc.outcome {
+				t.Errorf("linkOutcome = %v, want %s", e0["linkOutcome"], tc.outcome)
+			}
+			flags := fmt.Sprint(e0["flags"])
+			if strings.Contains(flags, "dead_link") || !strings.Contains(flags, "unchecked") {
+				t.Errorf("flags = %s, want unchecked and no dead_link", flags)
+			}
+			if r, _ := e0["reason"].(string); !strings.Contains(r, "unverified") {
+				t.Errorf("reason %q should say the link is unverified (%s)", r, tc.outcome)
+			}
+		})
 	}
 }

@@ -158,10 +158,13 @@ class AuditBibliographyEntry:
     contrastSignal: Optional[bool] = None
     doi: Optional[str] = None
     exists: Optional[bool] = None
+    finalUrl: Optional[str] = None
     flags: list[str] = field(default_factory=list)
     httpStatus: Optional[int] = None
     index: Optional[int] = None
+    linkFailure: Optional[str] = None
     linkLive: Optional[bool] = None
+    linkOutcome: Optional[str] = None
     reason: Optional[str] = None
     retractionStatus: dict[str, Any] = field(default_factory=dict)
     title: Optional[str] = None
@@ -183,10 +186,13 @@ class AuditBibliographyEntry:
             contrastSignal=d.get('contrastSignal'),
             doi=d.get('doi'),
             exists=d.get('exists'),
+            finalUrl=d.get('finalUrl'),
             flags=list(d.get('flags') or []),
             httpStatus=d.get('httpStatus'),
             index=d.get('index'),
+            linkFailure=d.get('linkFailure'),
             linkLive=d.get('linkLive'),
+            linkOutcome=d.get('linkOutcome'),
             reason=d.get('reason'),
             retractionStatus=dict(d.get('retractionStatus') or {}),
             title=d.get('title'),
@@ -2447,9 +2453,12 @@ class VerifyCitationResponse:
     contrastSignal: Optional[bool] = None
     detectedDoi: Optional[str] = None
     exists: Optional[bool] = None
+    finalUrl: Optional[str] = None
     httpStatus: Optional[int] = None
     input: Optional[str] = None
     inputType: Optional[str] = None
+    linkFailure: Optional[str] = None
+    linkOutcome: Optional[str] = None
     matchConfidence: Optional[str] = None
     matchedRecord: Optional[Any] = None
     possibleMatch: dict[str, Any] = field(default_factory=dict)
@@ -2479,9 +2488,12 @@ class VerifyCitationResponse:
             contrastSignal=d.get('contrastSignal'),
             detectedDoi=d.get('detectedDoi'),
             exists=d.get('exists'),
+            finalUrl=d.get('finalUrl'),
             httpStatus=d.get('httpStatus'),
             input=d.get('input'),
             inputType=d.get('inputType'),
+            linkFailure=d.get('linkFailure'),
+            linkOutcome=d.get('linkOutcome'),
             matchConfidence=d.get('matchConfidence'),
             matchedRecord=d.get('matchedRecord') or None,
             possibleMatch=dict(d.get('possibleMatch') or {}),
@@ -2548,9 +2560,12 @@ class VerifyRecommendationRecommendation:
     corporateOwnershipSignal: dict[str, Any] = field(default_factory=dict)
     corroborationSearches: list[VerifyRecommendationCorroborationsearch] = field(default_factory=list)
     domainReputation: dict[str, Any] = field(default_factory=dict)
+    finalUrl: Optional[str] = None
     flags: list[str] = field(default_factory=list)
     httpStatus: Optional[int] = None
+    linkFailure: Optional[str] = None
     linkLive: Optional[bool] = None
+    linkOutcome: Optional[str] = None
     reasons: list[str] = field(default_factory=list)
     selfPromotionSignal: dict[str, Any] = field(default_factory=dict)
     title: Optional[str] = None
@@ -2566,9 +2581,12 @@ class VerifyRecommendationRecommendation:
             corporateOwnershipSignal=dict(d.get('corporateOwnershipSignal') or {}),
             corroborationSearches=[VerifyRecommendationCorroborationsearch.from_dict(i) for i in (d.get('corroborationSearches') or [])],
             domainReputation=dict(d.get('domainReputation') or {}),
+            finalUrl=d.get('finalUrl'),
             flags=list(d.get('flags') or []),
             httpStatus=d.get('httpStatus'),
+            linkFailure=d.get('linkFailure'),
             linkLive=d.get('linkLive'),
+            linkOutcome=d.get('linkOutcome'),
             reasons=list(d.get('reasons') or []),
             selfPromotionSignal=dict(d.get('selfPromotionSignal') or {}),
             title=d.get('title'),

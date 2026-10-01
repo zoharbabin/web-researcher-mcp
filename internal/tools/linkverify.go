@@ -20,6 +20,27 @@ func verifyLinkStatuses(ctx context.Context, deps Dependencies, urls []string) [
 	return deps.LinkVerifier.VerifyAll(ctx, urls)
 }
 
+// setLinkOutcomeFields adds the additive link-check fields and keeps a URL that
+// could not be verified honest: a blocked, root-redirected or unreachable link is
+// neither confirmed nor not_found, so it reports verificationStatus "uncertain"
+// (setVerificationStatus never overwrites it). Only a live link confirms, and only
+// a dead link (HTTP error or DNS failure) stays not_found.
+func setLinkOutcomeFields(out map[string]any, st scraper.LinkStatus) {
+	if st.Outcome != "" {
+		out["linkOutcome"] = string(st.Outcome)
+	}
+	if st.FinalURL != "" && st.FinalURL != st.URL {
+		out["finalUrl"] = st.FinalURL
+	}
+	if st.FailureCause != "" {
+		out["linkFailure"] = st.FailureCause
+	}
+	switch st.Outcome {
+	case scraper.LinkOutcomeBlocked, scraper.LinkOutcomeRedirectedToRoot, scraper.LinkOutcomeUnreachable:
+		out["verificationStatus"] = verificationUncertain
+	}
+}
+
 // archiveURL triggers a fresh Internet Archive (Save Page Now) capture of rawURL
 // via the SSRF-safe verifier (#196). nil-safe: returns a zero ArchiveResult and
 // ok=false when no verifier is configured, so the archive_source tool can report

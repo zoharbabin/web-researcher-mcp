@@ -3,6 +3,8 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/zoharbabin/web-researcher-mcp/internal/cache"
 	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 	"github.com/zoharbabin/web-researcher-mcp/internal/metrics"
+	"github.com/zoharbabin/web-researcher-mcp/internal/scraper"
 	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
@@ -832,4 +835,83 @@ func containsString(list []string, target string) bool {
 		}
 	}
 	return false
+}
+
+// TestVerifyRecommendationLinkOutcomes: only a dead link gets dead_link. A
+// blocked or root-redirected link is unverified, so it is reported with a reason
+// but not flagged as dead.
+func TestVerifyRecommendationLinkOutcomes(t *testing.T) {
+	t.Parallel()
+	mk := func(h http.HandlerFunc) string {
+		srv := httptest.NewServer(h)
+		t.Cleanup(srv.Close)
+		return srv.URL
+	}
+	dead := mk(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(404) })
+	blocked := mk(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(403) })
+	root := mk(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+		w.WriteHeader(200)
+	})
+	cases := []struct {
+		name, url, outcome string
+		wantDead           bool
+	}{
+		{"dead", dead + "/x", "dead", true},
+		{"blocked", blocked + "/x", "blocked", false},
+		{"redirected_to_root", root + "/old/story", "redirected_to_root", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			deps := Dependencies{
+				Cache:        cache.NewNoop(),
+				Search:       &mockProvider{},
+				Metrics:      metrics.NewCollector(),
+				Auditor:      audit.NewNoop(),
+				LinkVerifier: scraper.NewLinkVerifier(scraper.LinkVerifierConfig{AllowPrivateIPs: true}),
+			}
+			srv := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1.0"}, nil)
+			registerVerifyRecommendation(srv, deps)
+			ctx := context.Background()
+			client := connectTestClient(ctx, t, srv)
+			defer client.Close()
+			res, err := client.CallTool(ctx, &mcp.CallToolParams{
+				Name:      "verify_recommendation",
+				Arguments: map[string]any{"recommendations": []any{map[string]any{"title": "Thing", "url": tc.url}}},
+			})
+			if err != nil || res.IsError {
+				t.Fatalf("call failed: %v", err)
+			}
+			var out map[string]any
+			if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &out); err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			rec := out["recommendations"].([]any)[0].(map[string]any)
+			if rec["linkOutcome"] != tc.outcome || rec["linkLive"] != false {
+				t.Errorf("linkOutcome/linkLive = %v/%v, want %s/false", rec["linkOutcome"], rec["linkLive"], tc.outcome)
+			}
+			hasDead := strings.Contains(strings.Join(anyStrings(rec["flags"]), ","), "dead_link")
+			if hasDead != tc.wantDead {
+				t.Errorf("dead_link flagged = %v, want %v (flags %v)", hasDead, tc.wantDead, rec["flags"])
+			}
+			if len(anyStrings(rec["reasons"])) == 0 {
+				t.Errorf("want a reason explaining the link outcome")
+			}
+		})
+	}
+}
+
+func anyStrings(v any) []string {
+	var out []string
+	arr, _ := v.([]any)
+	for _, e := range arr {
+		if s, ok := e.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
 }
