@@ -170,6 +170,23 @@ func TestResearchExportJSON(t *testing.T) {
 	}
 }
 
+// A session with no gaps or sources must export them as empty arrays, not null.
+func TestResearchExportJSONEmptyArraysAreNotNull(t *testing.T) {
+	deps := setupTestDeps()
+	sid := makeSessionWithRevision(t, deps)
+
+	out, res := callTool(t, deps, "research_export", map[string]any{"sessionId": sid, "format": "json"})
+	if res.IsError {
+		t.Fatalf("research_export json failed")
+	}
+	doc, _ := out["document"].(map[string]any)
+	for _, key := range []string{"steps", "sources", "gaps"} {
+		if _, ok := doc[key].([]any); !ok {
+			t.Errorf("document.%s = %v (%T), want an array", key, doc[key], doc[key])
+		}
+	}
+}
+
 func TestResearchExportInvalidFormat(t *testing.T) {
 	deps := setupTestDeps()
 	sid := makeSessionWithSources(t, deps)

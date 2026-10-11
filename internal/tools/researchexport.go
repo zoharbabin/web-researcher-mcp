@@ -88,6 +88,16 @@ func registerResearchExport(srv *mcp.Server, deps Dependencies) {
 			"trust":        untrustedContentTrust,
 		}
 		if format == "json" {
+			// A session with no gaps/sources/steps would marshal them as null.
+			if sess.Steps == nil {
+				sess.Steps = []session.ResearchStep{}
+			}
+			if sess.Sources == nil {
+				sess.Sources = []session.ResearchSource{}
+			}
+			if sess.Gaps == nil {
+				sess.Gaps = []session.KnowledgeGap{}
+			}
 			output["document"] = sess
 		} else {
 			output["document"] = renderSessionMarkdown(sess, tenantID, exportedAt)
