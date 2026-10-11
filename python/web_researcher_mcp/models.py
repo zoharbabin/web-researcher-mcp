@@ -2454,10 +2454,13 @@ class VerifyCitationResponse:
     matchedRecord: Optional[Any] = None
     possibleMatch: dict[str, Any] = field(default_factory=dict)
     provenance: list[str] = field(default_factory=list)
+    retractionCheck: Optional[str] = None
+    retractionCheckReason: Optional[str] = None
     retractionStatus: Optional[RetractionStatus] = None
     sparsityNote: Optional[str] = None
     titleMatch: Optional[str] = None
     trust: Optional[str] = None
+    verificationReason: Optional[str] = None
     verificationStatus: Optional[str] = None
 
     @classmethod
@@ -2486,10 +2489,13 @@ class VerifyCitationResponse:
             matchedRecord=d.get('matchedRecord') or None,
             possibleMatch=dict(d.get('possibleMatch') or {}),
             provenance=list(d.get('provenance') or []),
+            retractionCheck=d.get('retractionCheck'),
+            retractionCheckReason=d.get('retractionCheckReason'),
             retractionStatus=RetractionStatus.from_dict(d.get('retractionStatus')) if d.get('retractionStatus') else None,
             sparsityNote=d.get('sparsityNote'),
             titleMatch=d.get('titleMatch'),
             trust=d.get('trust'),
+            verificationReason=d.get('verificationReason'),
             verificationStatus=d.get('verificationStatus'),
         )
 
