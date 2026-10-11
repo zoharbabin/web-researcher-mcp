@@ -338,7 +338,7 @@ type myToolInput struct {
 }
 
 func registerMyTool(srv *mcp.Server, deps Dependencies) {
-    mcp.AddTool(srv, &mcp.Tool{
+    addTool(srv, &mcp.Tool{
         Name:         "my_tool",
         Description:  "One-line description for the AI assistant",
         Annotations:  readOnlyAnnotations(true, true),

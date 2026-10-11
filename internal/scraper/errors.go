@@ -205,7 +205,8 @@ var botWallMarkers = []string{
 	"complete the security check",
 	"ddos protection by",
 	"attention required",
-	"just a moment", // Cloudflare interstitial title
+	"just a moment",       // Cloudflare interstitial title
+	"prove your humanity", // Reddit challenge page, served with HTTP 200
 	"cf-browser-verification",
 	"please turn javascript on",
 	"javascript is disabled", // bot/JS-wall shell that renders no real content

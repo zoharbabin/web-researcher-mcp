@@ -36,7 +36,7 @@ func registerLocal(srv *mcp.Server, deps Dependencies) {
 	inputSchema := mustSchemaFor[localSearchInput]()
 	inputSchema.Properties["units"].Enum = localUnitsEnum()
 	inputSchema.Properties["provider"].Enum = localProviderEnum()
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name: "local_search",
 		Description: "Search for physical places (restaurants, shops, services, points of interest) by local intent query. " +
 			"Returns structured POI data: name, address, coordinates, phone, website, categories, rating, opening hours, and a short description for each result. " +

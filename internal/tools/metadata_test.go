@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -281,7 +282,7 @@ func TestOutputSchemaMatchesResponse(t *testing.T) {
 		"news_search":         {"query": "test"},
 		"academic_search":     {"query": "test"},
 		"patent_search":       {"query": "test"},
-		"sequential_search":   {"searchStep": "initial research", "stepNumber": 1, "nextStepNeeded": false},
+		"sequential_search":   {"searchStep": "initial research", "stepNumber": 1, "nextStepNeeded": true},
 		"citation_graph":      {"paper": "10.1/x"},
 		"format_bibliography": {"sources": []any{map[string]any{"url": "https://example.com/a", "title": "A", "author": "Smith, J.", "date": "2024"}}},
 		"audit_bibliography":  {"entries": []any{map[string]any{"url": "https://example.com/a", "title": "A", "doi": "10.1/x"}}},
@@ -326,6 +327,7 @@ func TestOutputSchemaMatchesResponse(t *testing.T) {
 				t.Fatalf("CallTool failed: %v", err)
 			}
 			if res.IsError {
+				t.Logf("SKIPPED (IsError): %s", res.Content[0].(*mcp.TextContent).Text)
 				return
 			}
 			text := res.Content[0].(*mcp.TextContent).Text
@@ -344,7 +346,32 @@ func TestOutputSchemaMatchesResponse(t *testing.T) {
 					t.Errorf("response field %q not declared in OutputSchema", key)
 				}
 			}
+			assertValidAgainstSchema(t, schema, output)
 		})
+	}
+}
+
+// assertValidAgainstSchema validates a decoded tool response against its
+// published OutputSchema, types included. The MCP client does this on every
+// call, so a nil Go slice marshaled as `null` where the schema says
+// `array` makes the whole tool call fail for real users even though
+// the key-presence check above passes.
+func assertValidAgainstSchema(t *testing.T, schema map[string]any, output map[string]any) {
+	t.Helper()
+	raw, err := json.Marshal(schema)
+	if err != nil {
+		t.Fatalf("marshal schema: %v", err)
+	}
+	var s jsonschema.Schema
+	if err := json.Unmarshal(raw, &s); err != nil {
+		t.Fatalf("unmarshal schema: %v", err)
+	}
+	resolved, err := s.Resolve(nil)
+	if err != nil {
+		t.Fatalf("resolve schema: %v", err)
+	}
+	if err := resolved.Validate(output); err != nil {
+		t.Errorf("response does not match OutputSchema: %v", err)
 	}
 }
 
@@ -401,7 +428,7 @@ func TestExternalContentToolsCarryTrustMarker(t *testing.T) {
 		"patent_search":       {"query": "test"},
 		"scrape_page":         {"url": "https://example.com"},
 		"search_and_scrape":   {"query": "test"},
-		"sequential_search":   {"searchStep": "initial research", "stepNumber": 1, "nextStepNeeded": false},
+		"sequential_search":   {"searchStep": "initial research", "stepNumber": 1, "nextStepNeeded": true},
 		"citation_graph":      {"paper": "10.1/x"},
 		"verify_citation":     {"citation": "https://example.com/paper"},
 		"audit_bibliography":  {"entries": []any{map[string]any{"url": "https://example.com/paper", "title": "A"}}},

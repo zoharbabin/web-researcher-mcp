@@ -60,7 +60,7 @@ func registerAcademicSearch(srv *mcp.Server, deps Dependencies) {
 	inputSchema.Properties["source"].Enum = academicSourceEnum()
 	inputSchema.Properties["sort_by"].Enum = sortByRelevanceDateEnum()
 	inputSchema.Properties["provider"].Enum = academicProviderEnum()
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:         "academic_search",
 		Description:  "Search peer-reviewed papers and scholarly literature using plain natural language — no special syntax needed. Each result includes the paper's title, authors, journal, year, abstract, citation count, and a PDF link when one is available (pair with scrape_page to read the full text). Reach for this for literature reviews, prior-art research, and finding citations; use web_search for non-academic content or news_search for current events. Results can be narrowed by year, source, or access type. Returns structured JSON, with recovery hints when nothing matches. Results stay fresh for 1 hour.",
 		Annotations:  readOnlyAnnotations(true, true),

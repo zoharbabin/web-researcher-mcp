@@ -95,7 +95,7 @@ func loadMonitorIndex(ctx context.Context, store interface {
 func registerMonitorQuerySave(srv *mcp.Server, deps Dependencies) {
 	inputSchema := mustSchemaFor[monitorQuerySaveInput]()
 	inputSchema.Properties["provider"].Enum = webProviderEnum()
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:         "monitor_query_save",
 		Description:  "Save a search query to monitor for new results over time. Runs the query once now and records the results as the baseline — nothing is reported as \"new\" until you call monitor_query_check later. Opt-in and consent-gated: persists only if query monitoring is enabled and you have consented to the 'monitoring' purpose. Bounded to 100 monitors per user and a max 90-day retention. There are no background jobs — you must call monitor_query_check yourself to see what changed.",
 		Annotations:  writeAnnotations(false),
@@ -193,7 +193,7 @@ func registerMonitorQuerySave(srv *mcp.Server, deps Dependencies) {
 func registerMonitorQueryCheck(srv *mcp.Server, deps Dependencies) {
 	inputSchema := mustSchemaFor[monitorQueryCheckInput]()
 	inputSchema.Properties["provider"].Enum = webProviderEnum()
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:         "monitor_query_check",
 		Description:  "Check a query saved with monitor_query_save for new results since the last check (or since it was saved, on the first check). Re-runs the query live and returns only results whose URL hasn't been seen before, then updates the baseline — calling this twice in a row with no upstream change returns zero new results the second time. Opt-in and consent-gated: requires 'monitoring' purpose consent. Returns status \"not_found\" if the query/provider pair was never saved.",
 		Annotations:  readOnlyAnnotations(false, true),

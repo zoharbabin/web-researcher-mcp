@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -270,5 +271,21 @@ func TestAnalyzeDivergence_HighOverlapContradictionNotMisreadAsConsensus(t *test
 		if c == responses["a/x"] || c == responses["b/y"] {
 			t.Errorf("opposite-polarity claim wrongly counted as consensus: %q", c)
 		}
+	}
+}
+
+// With no shared claims there is no consensus. ConsensusPoints must still
+// marshal as `[]`, not `null`, or the research_panel output schema rejects it.
+func TestAnalyzeDivergence_NoConsensusMarshalsEmptyArray(t *testing.T) {
+	d := AnalyzeDivergence(map[string]string{
+		"a/x": "The Eiffel Tower is located in Paris, France.",
+		"b/y": "Photosynthesis converts sunlight into chemical energy in plants.",
+	})
+	b, err := json.Marshal(d)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(b), `"consensus_points":[]`) {
+		t.Errorf("consensus_points must be an empty array, got %s", b)
 	}
 }

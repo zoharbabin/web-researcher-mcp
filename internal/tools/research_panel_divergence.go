@@ -69,7 +69,7 @@ func AnalyzeDivergence(responses map[string]string) PanelDivergence {
 		modelIDs = append(modelIDs, id)
 	}
 
-	var consensus []string
+	consensus := []string{}
 	contradictions := []PanelContradiction{}
 	unique := make(map[string][]string, len(responses))
 	consensusSeen := make(map[string]bool)

@@ -567,8 +567,9 @@ func buildIndexFromSession(sess *Session) *SessionIndex {
 		LastUsed:           sess.LastUsed,
 		Completed:          sess.Completed,
 		StepCount:          len(sess.Steps),
-		ActiveGaps:         sess.Gaps,
-		Sources:            sess.Sources,
+		StepIndex:          []StepIndexEntry{},
+		ActiveGaps:         append([]KnowledgeGap{}, sess.Gaps...),
+		Sources:            append([]ResearchSource{}, sess.Sources...),
 	}
 
 	// SupersededBy (#512) is derived at read time from the isRevision/revisesStep
@@ -599,7 +600,7 @@ func buildIndexFromSession(sess *Session) *SessionIndex {
 	} else {
 		lastSteps = sess.Steps
 	}
-	idx.LastSteps = applySupersededBy(lastSteps, supersededBy)
+	idx.LastSteps = applySupersededBy(append([]ResearchStep{}, lastSteps...), supersededBy)
 
 	// Auto-generate summary if not externally provided
 	if sess.ResearchGoal != "" && len(sess.Steps) > 0 {

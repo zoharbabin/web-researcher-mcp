@@ -87,7 +87,7 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 	inputSchema.Properties["search_type"].Enum = patentSearchTypeEnum()
 	inputSchema.Properties["patent_office"].Enum = patentOfficeEnum()
 	inputSchema.Properties["provider"].Enum = patentProviderEnum()
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:         "patent_search",
 		Description:  "Search patents for prior art, competitive landscape mapping, or to look up a specific patent. Query by patent number (e.g. 'US11234567'), an invention description, a company, or an inventor — company name variations are matched automatically. Each result carries the patent's bibliographic details (title, number, abstract, assignee, inventor, dates, status). Reach for this when the question is about inventions or IP; use academic_search for research papers or web_search for general technical content. Zero-result and error responses come back as structured JSON with recovery hints. Results stay fresh for 24 hours.",
 		Annotations:  readOnlyAnnotations(true, true),
@@ -360,7 +360,7 @@ func registerPatentSearch(srv *mcp.Server, deps Dependencies) {
 		}
 
 		output := map[string]any{
-			"patents":     patents,
+			"patents":     nonNil(patents),
 			"query":       input.Query,
 			"searchType":  searchType,
 			"resultCount": len(patents),

@@ -1,6 +1,7 @@
 package session
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -780,5 +781,35 @@ func TestRebuildIndexRemovesHashMismatch(t *testing.T) {
 	}
 	if _, err := os.Stat(mismatchFP); !os.IsNotExist(err) {
 		t.Errorf("hash-mismatched file should be removed by rebuild, stat err=%v", err)
+	}
+}
+
+// A fresh session has no gaps, sources or steps. Every slice on the index must
+// marshal as `[]`, never `null`: tool OutputSchemas declare them as arrays and
+// MCP clients reject the call otherwise.
+func TestSessionIndexEmptySlicesAreNotNil(t *testing.T) {
+	m := newTestManager(5*time.Minute, 10)
+	defer m.Close()
+
+	created, err := m.Create("tenant-A", "u1")
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	idx, ok := m.GetIndex("tenant-A", "u1", created.ID)
+	if !ok {
+		t.Fatal("expected session index")
+	}
+	b, err := json.Marshal(idx)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	for _, key := range []string{"stepIndex", "lastSteps", "activeGaps", "sources"} {
+		if arr, isArr := got[key].([]any); !isArr || len(arr) != 0 {
+			t.Errorf("%s = %v, want empty array", key, got[key])
+		}
 	}
 }

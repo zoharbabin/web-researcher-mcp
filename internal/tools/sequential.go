@@ -259,7 +259,7 @@ func registerSequentialSearch(srv *mcp.Server, deps Dependencies) {
 	inputSchema.Properties["confidence"].Enum = sequentialConfidenceEnum()
 	inputSchema.Properties["responseMode"].Enum = sequentialResponseModeEnum()
 	inputSchema.Properties["depth"].Enum = sequentialDepthEnum()
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:         "sequential_search",
 		Description:  "Keep track of a multi-step research project. Use this alongside web_search or search_and_scrape to record what you've found at each step, note unanswered questions, and explore alternative angles (branching). Start a new session with stepNumber=1, then pass the returned sessionId for each follow-up step. Mark the session complete by setting nextStepNeeded=false. Sessions stay active for 4 hours between steps and persist across restarts. Use get_research_session to recover a session after context loss.",
 		Annotations:  readOnlyAnnotations(false, false),

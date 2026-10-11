@@ -58,7 +58,7 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 	inputSchema.Properties["time_range"].Enum = webTimeRangeEnum()
 	inputSchema.Properties["safe"].Enum = webSafeEnum()
 	inputSchema.Properties["provider"].Enum = webProviderEnum()
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:         "web_search",
 		Description:  "Search the web and get a list of relevant pages with titles and snippets — without reading the full page content. Narrow results to one domain with the site parameter, or apply a search lens to restrict to trusted sites in a field (see the lens parameter for the full list). Use search_and_scrape if you need full page text, news_search for current events, or academic_search for research papers. Results stay fresh for 30 minutes; use time_range to get more recent results. Snippets are not the full source — use scrape_page before asserting a claim. Zero results do not confirm a fact is false.",
 		Annotations:  readOnlyAnnotations(true, true),

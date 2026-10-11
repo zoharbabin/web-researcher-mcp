@@ -1216,3 +1216,67 @@ func TestVerifyCitation_URLDeadStaysNotFound(t *testing.T) {
 		t.Errorf("want not_found/dead, got %v / %v", out["verificationStatus"], out["linkOutcome"])
 	}
 }
+
+// A review/comment record embeds the cited title, so token overlap alone rates
+// it "high". Live case: the Faculty Opinions "recommendation of" AlphaFold
+// (by a different author) was returned as the confirmed match for the Nature
+// paper. Such a record must rate "low" unless the reference itself names it.
+func TestReferenceMatchConfidence_DerivativeWorkIsLow(t *testing.T) {
+	t.Parallel()
+	ref := "Jumper, J. et al. (2021). Highly accurate protein structure prediction with AlphaFold. Nature."
+	cases := []struct {
+		name, ref, title, want string
+	}{
+		{"faculty opinions wrapper", ref, "Faculty Opinions recommendation of Highly accurate protein structure prediction with AlphaFold.", "low"},
+		{"comment on", ref, "Comment on Highly accurate protein structure prediction with AlphaFold", "low"},
+		{"the original paper", ref, "Highly accurate protein structure prediction with AlphaFold", "high"},
+		{"ref names the review", "Review of Particle Physics, Phys. Rev. D", "Review of Particle Physics", "high"},
+		{"ref asks for the recommendation", "Faculty Opinions recommendation of Highly accurate protein structure prediction with AlphaFold", "Faculty Opinions recommendation of Highly accurate protein structure prediction with AlphaFold.", "high"},
+	}
+	for _, c := range cases {
+		if got := referenceMatchConfidence(c.ref, &search.AcademicResult{Title: c.title}); got != c.want {
+			t.Errorf("%s: confidence = %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+// wrapperFirstAcademic returns a review of the paper ahead of the paper itself,
+// the order Crossref gave for the AlphaFold citation.
+type wrapperFirstAcademic struct{ mockAcademicProvider }
+
+func (w *wrapperFirstAcademic) Scholarly(_ context.Context, _ search.AcademicSearchParams) ([]search.AcademicResult, error) {
+	return []search.AcademicResult{
+		{Title: "Faculty Opinions recommendation of Highly accurate protein structure prediction with AlphaFold.", DOI: "10.3410/f.740477161.793588825", Authors: []string{"Toni Gabaldón"}, Year: 2021, Source: "openalex"},
+		{Title: "Highly accurate protein structure prediction with AlphaFold", DOI: "10.1038/s41586-021-03819-2", Authors: []string{"John Jumper"}, Year: 2021, Source: "openalex"},
+	}, nil
+}
+
+func TestVerifyCitation_ReferencePrefersOriginalOverReview(t *testing.T) {
+	deps := setupTestDeps()
+	deps.AcademicProviders = map[string]search.AcademicProvider{"openalex": &wrapperFirstAcademic{}}
+	out := callVerify(t, deps, "Jumper, J. et al. (2021). Highly accurate protein structure prediction with AlphaFold. Nature.")
+	rec, _ := out["matchedRecord"].(map[string]any)
+	if rec == nil || rec["doi"] != "10.1038/s41586-021-03819-2" {
+		t.Fatalf("matchedRecord = %v, want the original paper's DOI", out["matchedRecord"])
+	}
+}
+
+func TestVerifyCitation_ReferenceReviewOnlyIsNotConfirmed(t *testing.T) {
+	deps := setupTestDeps()
+	deps.AcademicProviders = map[string]search.AcademicProvider{"openalex": &onlyWrapperAcademic{}}
+	out := callVerify(t, deps, "Jumper, J. et al. (2021). Highly accurate protein structure prediction with AlphaFold. Nature.")
+	if out["exists"] != false || out["verificationStatus"] != "uncertain" {
+		t.Errorf("exists=%v status=%v, want false/uncertain when only a review matches", out["exists"], out["verificationStatus"])
+	}
+	if out["matchedRecord"] != nil {
+		t.Errorf("a review must not become matchedRecord: %v", out["matchedRecord"])
+	}
+}
+
+type onlyWrapperAcademic struct{ mockAcademicProvider }
+
+func (w *onlyWrapperAcademic) Scholarly(_ context.Context, _ search.AcademicSearchParams) ([]search.AcademicResult, error) {
+	return []search.AcademicResult{
+		{Title: "Faculty Opinions recommendation of Highly accurate protein structure prediction with AlphaFold.", DOI: "10.3410/f.740477161.793588825", Source: "openalex"},
+	}, nil
+}

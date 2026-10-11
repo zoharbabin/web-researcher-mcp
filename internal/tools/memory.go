@@ -34,7 +34,7 @@ type memoryRecallInput struct {
 // memory (#88). It is consent-gated on the "memory" purpose and requires an
 // authenticated user; without either it refuses (no silent persistence).
 func registerMemorySave(srv *mcp.Server, deps Dependencies) {
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:         "memory_save",
 		Description:  "Save a research finding to YOUR long-term memory so it can be recalled in future sessions (unlike sequential_search sessions, which expire after 4 hours). Opt-in and consent-gated: persists only if long-term memory is enabled and you have consented to the 'memory' purpose. Stored per-user, encrypted, retention-bounded, and erasable via the data-subject endpoint. Recall with memory_recall.",
 		Annotations:  writeAnnotations(false),
@@ -75,7 +75,7 @@ func registerMemorySave(srv *mcp.Server, deps Dependencies) {
 // registerMemoryRecall registers the read-only tool that returns the caller's
 // own remembered entries (#88). Consent-gated like memory_save.
 func registerMemoryRecall(srv *mcp.Server, deps Dependencies) {
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:         "memory_recall",
 		Description:  "Recall findings YOU previously saved with memory_save, across sessions (optionally filtered by topic). Opt-in and consent-gated: returns data only if long-term memory is enabled and you have consented to the 'memory' purpose. Shows only your own memories — never another user's. Use sequential_search for within-session research tracking.",
 		Annotations:  readOnlyAnnotations(true, false),

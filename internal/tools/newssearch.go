@@ -116,7 +116,7 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 	inputSchema.Properties["sort_by"].Enum = sortByRelevanceDateEnum()
 	inputSchema.Properties["safe"].Enum = newsSafeEnum()
 	inputSchema.Properties["provider"].Enum = webProviderEnum()
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:         "news_search",
 		Description:  "Find recent news articles on any topic, returning each article's headline, source, publish time, and snippet. Defaults to the past week, but the freshness window is tunable for breaking news or for looking further back, and results can be limited to a single outlet. Reach for this when recency matters; use web_search for general content, academic_search for research papers, or search_and_scrape when you need the full article text. Errors come back as structured JSON. Results refresh every 15 minutes.",
 		Annotations:  readOnlyAnnotations(true, true),

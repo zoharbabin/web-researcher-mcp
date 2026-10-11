@@ -84,7 +84,7 @@ type recommendationResult struct {
 }
 
 func registerVerifyRecommendation(srv *mcp.Server, deps Dependencies) {
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:         "verify_recommendation",
 		Description:  "Audit an AI recommendation list against anti-sloptimization signals. Given a list of recommended items (products, services, articles), returns per-item evidence: self-promotion patterns (a brand ranking itself first), conflicts of interest (author employed by the recommended company), domain reputation (is this a known trustworthy source), link liveness, and — when a claim is provided — corroboration searches across independent journalism and tech sources that show how widely each recommendation is independently endorsed or contested. Flags suspect recommendations so you can decide whether the list is gaming you or genuinely helpful. Built for catching GEO (Generative Engine Optimization) and brand-favoring listicles. Use alongside web_search + verify_citation to audit sources and claims.",
 		Annotations:  readOnlyAnnotations(true, true),

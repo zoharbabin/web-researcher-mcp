@@ -89,7 +89,7 @@ Registry/manifest files (root, each read by a different external tool): `server.
 
 1. Create `internal/tools/<name>.go`:
    - Define a typed input struct with `json` + `jsonschema` tags
-   - Write a `register<Name>(srv *mcp.Server, deps Dependencies)` function
+   - Write a `register<Name>(srv *mcp.Server, deps Dependencies)` function that registers with `addTool(...)` (same signature as `mcp.AddTool`; it also turns a nil slice `null` into `[]` where the output schema says `array`, so outputs never fail client schema validation). Still return empty slices (`[]T{}`) from handlers.
    - Use `deps.Cache` for caching, `deps.Metrics` for telemetry, `deps.Auditor` for audit
    - Return validation errors via `toolError(msg)`, upstream errors via `upstreamErrorResponse(toolName, err)`, success via `structuredResult(jsonBytes)`
    - Add `Annotations: readOnlyAnnotations(idempotent, openWorld)` to the tool definition. **Write tools** (mutate state or create an external artifact, e.g. `memory_save` or `archive_source`) use `writeAnnotations(idempotent)` instead — `ReadOnlyHint:false`, `DestructiveHint:false`; add a `case` for the tool in `TestAllToolsHaveAnnotations`.

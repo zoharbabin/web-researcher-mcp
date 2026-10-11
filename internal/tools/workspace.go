@@ -35,7 +35,7 @@ func callerMember(ctx context.Context) workspace.Member {
 // into a shared workspace with provenance (#96). Consent-gated on the
 // "workspace" purpose; membership is enforced by the store (non-member → error).
 func registerWorkspaceContribute(srv *mcp.Server, deps Dependencies) {
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:         "workspace_contribute",
 		Description:  "Share a research finding into a shared team workspace (a COPY is stored with your attribution — never a live link to your private data). Opt-in and consent-gated: requires the 'workspace' purpose consent and workspace membership (managed by your host app). Read shared findings back with workspace_read. Use memory_save for your own private cross-session memory instead.",
 		Annotations:  writeAnnotations(false),
@@ -77,7 +77,7 @@ func registerWorkspaceContribute(srv *mcp.Server, deps Dependencies) {
 // registerWorkspaceRead registers the read tool that returns a workspace's
 // shared contributions — only for members (non-member → zero bytes).
 func registerWorkspaceRead(srv *mcp.Server, deps Dependencies) {
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:         "workspace_read",
 		Description:  "Read the shared findings in a team workspace you belong to (contributed by members via workspace_contribute, each with attribution). Opt-in and consent-gated: requires 'workspace' consent and membership. Non-members receive nothing. Use web_search or search_and_scrape to gather new findings to contribute.",
 		Annotations:  readOnlyAnnotations(true, false),

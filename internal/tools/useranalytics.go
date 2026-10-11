@@ -22,7 +22,7 @@ type getMyAnalyticsInput struct {
 // Registered only when a non-Noop recorder is present (USER_ANALYTICS_ENABLED).
 // Returns the caller's own usage summary, and only when they have consented.
 func registerGetMyAnalytics(srv *mcp.Server, deps Dependencies) {
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:         "get_my_analytics",
 		Description:  "Return YOUR OWN usage analytics (which tools you used such as web_search or sequential_search, counts, first/last seen) for this tenant. Opt-in and consent-gated: returns data only if user-level analytics is enabled and you have consented to the 'analytics' purpose; otherwise returns a disabled/no-consent status. Shows only your own data — never another user's.",
 		Annotations:  readOnlyAnnotations(true, false),

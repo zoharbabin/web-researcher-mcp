@@ -50,7 +50,7 @@ const userAssertedContentTrust = "user-asserted-content"
 func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 	inputSchema := mustSchemaFor[scrapePageInput]()
 	inputSchema.Properties["mode"].Enum = scrapeModeEnum()
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:         "scrape_page",
 		Description:  "Read a single URL and get back its content — web pages (including JavaScript-heavy sites), PDFs, Word/PowerPoint files, YouTube transcripts, Hacker News item/user/list pages (read natively via the HN API), GitHub README/file/gist pages (read natively via the GitHub API), and Bluesky posts and profiles (bsky.app, read natively via the AT Protocol API) — picking the best extraction method automatically. Returns readable text plus a ready-to-use citation. Reach for this when you already have a URL and want what's on the page; use search_and_scrape to find and read in one step, or web_search when you only need links. Modes: full (default, cleaned text), preview (a fast first look), and raw (verbatim page bytes with no sanitization — only for inspecting source like JSON or HTML, and the bytes are untrusted, so never execute or render them). If the page is a peer-reviewed article that declares a DOI, that DOI is surfaced with its retraction/integrity status (evidence to check, not a verdict — you confirm the document's identity). Blocked pages, bot/JS-walls, dead links (404/410), and other failures return structured JSON (kind, retryable, suggestedAction) — a 404 is reported as a non-retryable not_found, a bot-wall as blocked. Results stay fresh for 1 hour.",
 		Annotations:  readOnlyAnnotations(true, true),

@@ -6,7 +6,7 @@ These tools let your AI assistant search the web, read pages, find academic pape
 
 ## Tool Registration Pattern
 
-Each tool follows the pattern in `internal/tools/registry.go`: a typed input struct with `jsonschema` tags (the SDK auto-generates JSON Schema from these) and a `register*` function that calls `mcp.AddTool`. See `internal/tools/search.go` for a representative example.
+Each tool follows the pattern in `internal/tools/registry.go`: a typed input struct with `jsonschema` tags (the SDK auto-generates JSON Schema from these) and a `register*` function that calls `addTool` (`internal/tools/output_normalize.go`), a thin wrapper over `mcp.AddTool` that turns a `null` into `[]` wherever the output schema says `array`. See `internal/tools/search.go` for a representative example.
 
 ## Cache-Key Contract
 

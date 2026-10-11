@@ -65,7 +65,7 @@ func registerImageSearch(srv *mcp.Server, deps Dependencies) {
 	inputSchema.Properties["file_type"].Enum = imageFileTypeEnum()
 	inputSchema.Properties["safe"].Enum = webSafeEnum()
 	inputSchema.Properties["provider"].Enum = webProviderEnum()
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:         "image_search",
 		Description:  "Find images on the web matching your description. Filter by size, type (photo, clipart, line art, etc.), dominant color, or file format (Google/SearchAPI), and localize by country/language. Returns up to 200 image links per search on Brave (up to 10 on Google). Best for finding visual references or assets — use web_search if you need text content from pages that contain images. Results stay fresh for 30 minutes.",
 		Annotations:  readOnlyAnnotations(true, true),
