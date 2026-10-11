@@ -1,6 +1,6 @@
 module github.com/zoharbabin/web-researcher-mcp
 
-go 1.27.1
+go 1.27.2
 
 require (
 	github.com/PuerkitoBio/goquery v1.13.0
@@ -260,7 +260,7 @@ require (
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20260811152304-ee035b5b010f // indirect
 	golang.org/x/mod v0.41.0 // indirect
-	golang.org/x/net v0.59.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/telemetry v0.0.0-20260908163034-4bcc4b2ee518 // indirect
