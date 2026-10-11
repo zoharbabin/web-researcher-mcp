@@ -264,6 +264,7 @@ Gated on `vars.PACKAGING_UPDATE_ENABLED == 'true'`. The AUR push step is additio
 This is what gets `nix profile install nixpkgs#web-researcher-mcp` working for users — no flake, no pinning to this repo. Two modes, chosen automatically per run:
 
 - **Package not yet in nixpkgs** → installs nix, computes `src` hash and `vendorHash` (using `lib.fakeHash` trick — build with empty hash, extract real hash from the error, repeat for vendor), forks `NixOS/nixpkgs`, pushes the derivation to a stable branch, opens or updates the one PR against `NixOS/nixpkgs` master.
+- **nixpkgs' `go_1_27` older than `go.mod`'s `go` directive** → skipped with a workflow warning (the build runs with `GOTOOLCHAIN=local` and cannot succeed). Re-run the job once nixpkgs bumps Go.
 - **Package already merged** → no-op; the `passthru.updateScript = nix-update-script {}` in the derivation signals the `nixpkgs-update` bot to open version-bump PRs automatically on every new release tag — zero maintenance.
 
 The branch name (`nixpkgs-web-researcher-mcp-init`) is version-independent by design: every pre-merge release pushes to the same branch and reuses the same open PR (checked via `gh pr list --head`) instead of opening a new PR per release. The bot-authored commit carries an `Assisted-by: Claude Code (claude-sonnet-5)` trailer and the PR body ticks the automation/AI policy checklist item, per `CONTRIBUTING.md#automationai-policy` in nixpkgs.

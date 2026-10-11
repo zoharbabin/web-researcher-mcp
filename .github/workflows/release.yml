@@ -735,9 +735,28 @@ jobs:
             echo "Package not yet in nixpkgs — will open initial PR."
           fi
 
+      # ── Skip when nixpkgs' Go is older than go.mod requires ──────────────────
+      # nix-build runs with GOTOOLCHAIN=local, so a go.mod `go` directive newer
+      # than nixpkgs-unstable's go_1_27 fails the build and yields no hash. Skip
+      # the submission with a warning instead of failing a finished release.
+      - name: Check nixpkgs Go satisfies go.mod
+        id: go_check
+        if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true'
+        run: |
+          set -euo pipefail
+          NEED="$(awk '/^go /{print $2; exit}' go.mod)"
+          HAVE="$(curl -fsSL https://raw.githubusercontent.com/NixOS/nixpkgs/nixpkgs-unstable/pkgs/development/compilers/go/1.27.nix \
+            | sed -nE 's/^ *version = "([^"]+)".*/\1/p' | head -1 || true)"
+          if [ -n "${HAVE}" ] && [ "$(printf '%s\n%s\n' "${NEED}" "${HAVE}" | sort -V | head -1)" != "${NEED}" ]; then
+            echo "go_ok=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Skipping nixpkgs submission: nixpkgs-unstable go_1_27 is ${HAVE}, go.mod needs ${NEED}. Re-run this job once nixpkgs bumps Go."
+          else
+            echo "go_ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
       # ── Install nix (only needed for hash computation) ────────────────────────
       - name: Install nix
-        if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true'
+        if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true' && steps.go_check.outputs.go_ok != 'false'
         uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
         with:
           extra-conf: |
@@ -747,7 +766,7 @@ jobs:
       # Strategy: build fetchFromGitHub with an empty hash → nix errors with the
       # real hash in the message → parse it out. Deterministic and cache-friendly.
       - name: Compute src hash
-        if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true'
+        if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true' && steps.go_check.outputs.go_ok != 'false'
         id: src_hash
         env:
           RELEASE_TAG: ${{ env.RELEASE_TAG }}
@@ -766,7 +785,7 @@ jobs:
           NIX
           # Capture the error — it contains the real hash.
           HASH_OUT="$(nix-build /tmp/fetch-src.nix --no-out-link 2>&1 || true)"
-          REAL_HASH="$(echo "${HASH_OUT}" | grep -oE 'sha256-[A-Za-z0-9+/=]+' | tail -1)"
+          REAL_HASH="$(echo "${HASH_OUT}" | grep -oE 'sha256-[A-Za-z0-9+/=]+' | tail -1 || true)"
           if [ -z "${REAL_HASH}" ]; then
             echo "::error::Failed to extract src hash from nix output. Output:"
             echo "${HASH_OUT}"
@@ -784,7 +803,7 @@ jobs:
       # with SRC_HASH itself. Pin the override to nixpkgs' own go_1_27 alias
       # until nixpkgs bumps its default; drop this once it does.
       - name: Compute vendorHash
-        if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true'
+        if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true' && steps.go_check.outputs.go_ok != 'false'
         id: vendor_hash
         env:
           RELEASE_TAG: ${{ env.RELEASE_TAG }}
@@ -808,7 +827,7 @@ jobs:
           }
           NIX
           HASH_OUT="$(nix-build /tmp/vendor-hash.nix --no-out-link 2>&1 || true)"
-          REAL_HASH="$(echo "${HASH_OUT}" | grep -oE 'sha256-[A-Za-z0-9+/=]+' | tail -1)"
+          REAL_HASH="$(echo "${HASH_OUT}" | grep -oE 'sha256-[A-Za-z0-9+/=]+' | tail -1 || true)"
           if [ -z "${REAL_HASH}" ]; then
             echo "::error::Failed to extract vendorHash from nix output. Output:"
             echo "${HASH_OUT}"
@@ -819,7 +838,7 @@ jobs:
 
       # ── Update package.nix with real hashes ───────────────────────────────────
       - name: Patch package.nix with computed hashes
-        if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true'
+        if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true' && steps.go_check.outputs.go_ok != 'false'
         env:
           RELEASE_TAG: ${{ env.RELEASE_TAG }}
           SRC_HASH: ${{ steps.src_hash.outputs.src_hash }}
@@ -843,7 +862,7 @@ jobs:
 
       # ── Fork, branch, PR ─────────────────────────────────────────────────────
       - name: Fork NixOS/nixpkgs (idempotent)
-        if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true'
+        if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true' && steps.go_check.outputs.go_ok != 'false'
         env:
           GH_TOKEN: ${{ secrets.NIXPKGS_FORK_GITHUB_TOKEN }}
         run: |
@@ -853,7 +872,7 @@ jobs:
           sleep 10
 
       - name: Clone fork, create branch, push
-        if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true'
+        if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true' && steps.go_check.outputs.go_ok != 'false'
         env:
           GH_TOKEN: ${{ secrets.NIXPKGS_FORK_GITHUB_TOKEN }}
           RELEASE_TAG: ${{ env.RELEASE_TAG }}
@@ -907,7 +926,7 @@ jobs:
           echo "pkg_version=${VERSION}" >> "$GITHUB_ENV"
 
       - name: Open or update PR against NixOS/nixpkgs
-        if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true'
+        if: steps.nixpkgs_check.outputs.already_in_nixpkgs != 'true' && steps.go_check.outputs.go_ok != 'false'
         env:
           GH_TOKEN: ${{ secrets.NIXPKGS_FORK_GITHUB_TOKEN }}
         run: |
