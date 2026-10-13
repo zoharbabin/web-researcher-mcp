@@ -978,7 +978,7 @@ class WebResearcherClient:
         url: str,
         use_login_window: bool = False,
     ) -> SiteLoginResponse:
-        """Sign in to a website so scrape_page can read pages that need a login"""
+        """Create or renew a saved login so scrape_page can read pages that need one"""
         d = await self._call_tool(
             "site_login",
             {

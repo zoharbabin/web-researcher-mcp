@@ -118,7 +118,7 @@ func recordSiteSession(deps Dependencies, event, kind, status string) {
 func registerSiteLogin(srv *mcp.Server, deps Dependencies) {
 	addTool(srv, &mcp.Tool{
 		Name: "site_login",
-		Description: "Sign in to a website so scrape_page can read pages that need a login. " +
+		Description: "Create or renew a saved login so scrape_page can read pages that need one. Do NOT call this to check for or use a login: a login saved earlier, even in a past session, is applied automatically. To read a signed-in page (LinkedIn, etc.), call scrape_page on the page URL first. Call site_login only when scrape_page returns loginRequired=true, or the user asks to sign in or sign in again. " +
 			"Two ways. Default (STDIO only): reads the site's cookies from your own running, already signed-in Chrome, Edge or Brave. Turn on remote debugging once (chrome://inspect/#remote-debugging), call this tool, and click Allow. It reads only that one site's cookies, disconnects, and never closes your browser. " +
 			"With use_login_window=true (always used over HTTP, where the window opens on the machine running the server): a separate visible browser opens on the URL; you sign in by hand (including 2FA or CAPTCHA) and close the window. The sign-in is saved as an encrypted private browser profile that scrape_page reopens headless. Use this for LinkedIn and other sites that reject copied cookies. " +
 			"If the browser is not reachable or you are not signed in there, the result is a status (browser_unavailable or not_signed_in) with the steps to fix it; no window is opened. If the site did not keep the sign-in (for example you did not tick 'remember me'), the result is profile_not_saved and nothing is stored. " +
@@ -208,7 +208,7 @@ func siteLoginFailure(ctx context.Context, deps Dependencies, start time.Time, k
 	case errors.Is(err, cookievault.ErrInvalidLoginURL):
 		status, msg = "invalid_url", "the login URL must be an http(s) URL on a site with a registrable domain, without credentials"
 	case errors.Is(err, cookievault.ErrAttachUnavailable):
-		status, msg = "browser_unavailable", "could not reach your browser. In Chrome, Edge or Brave open chrome://inspect/#remote-debugging, turn it on, keep the browser running, call site_login again and click Allow. If you use another browser or cannot enable it, call site_login again with use_login_window=true"
+		status, msg = "browser_unavailable", "could not reach your browser. Call site_login again with use_login_window=true to sign in in a separate window (works with any browser, and is required for LinkedIn). Or, in Chrome, Edge or Brave, open chrome://inspect/#remote-debugging, turn it on, keep the browser running, call site_login again and click Allow. If a login was saved earlier, scrape_page already uses it"
 	case errors.Is(err, cookievault.ErrNotSignedIn):
 		status, msg = "not_signed_in", "your browser has no cookies for that site. Sign in to the site in that browser, then call site_login again. To sign in in a separate window instead, call site_login with use_login_window=true"
 	case errors.Is(err, cookievault.ErrNoSignInSeen):
