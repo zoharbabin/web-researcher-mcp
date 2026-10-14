@@ -527,7 +527,7 @@ var getMyAnalyticsOutputSchema = map[string]any{
 var memorySaveOutputSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{
-		"status":    map[string]any{"type": "string"}, // ok | no_consent | unavailable
+		"status":    map[string]any{"type": "string"}, // ok | already_signed_in | no_consent | unavailable
 		"reason":    map[string]any{"type": "string"},
 		"id":        map[string]any{"type": "string"},
 		"createdAt": map[string]any{"type": "string"},

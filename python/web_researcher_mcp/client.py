@@ -976,6 +976,7 @@ class WebResearcherClient:
     async def site_login(
         self,
         url: str,
+        replace: bool = False,
         use_login_window: bool = False,
     ) -> SiteLoginResponse:
         """Create or renew a saved login so scrape_page can read pages that need one"""
@@ -983,6 +984,7 @@ class WebResearcherClient:
             "site_login",
             {
                 "url": url,
+                "replace": replace,
                 "use_login_window": use_login_window,
             },
         )
@@ -1854,11 +1856,13 @@ class SyncWebResearcherClient:
     def site_login(
         self,
         url: str,
+        replace: bool = False,
         use_login_window: bool = False,
     ) -> SiteLoginResponse:
         return self._run(
             self._async_client.site_login(
             url=url,
+            replace=replace,
             use_login_window=use_login_window,
             )
         )

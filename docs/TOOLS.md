@@ -1040,7 +1040,7 @@ Persist a research finding to the calling user's long-term memory so it can be r
 
 ```go
 type MemorySaveOutput struct {
-    Status    string `json:"status"`    // "ok" | "no_consent" | "unavailable"
+    Status    string `json:"status"`    // "ok" | "already_signed_in" | "no_consent" | "unavailable"
     Reason    string `json:"reason,omitempty"`
     ID        string `json:"id,omitempty"`
     CreatedAt string `json:"createdAt,omitempty"`
@@ -2023,6 +2023,7 @@ Create or renew a saved login so `scrape_page` can read pages behind it. Call `s
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `url` | string | yes | http(s) login page. Must have a registrable domain (no IP addresses, `localhost` or bare public suffixes) and no embedded credentials. Private and internal hosts are refused unless `ALLOW_PRIVATE_IPS=true` |
+| `replace` | boolean | no | Default `false`. When a valid saved login for the site exists, `site_login` returns `already_signed_in` (with `kind`, `domain`, `expiresAt`) and saves nothing. Set `true` to sign in again, for example when `scrape_page` returns `loginRequired: true` |
 | `use_login_window` | boolean | no | Default `false`. Set `true` to open a separate visible window and save the sign-in as a private browser profile. Use it for LinkedIn and other sites that reject copied cookies, if you do not use Chrome, Edge or Brave, or cannot turn on remote debugging. Always used over HTTP. The window has none of your existing sessions, so you sign in by hand |
 
 ### Output Schema
@@ -2042,7 +2043,7 @@ type SiteLoginOutput struct {
 
 ### Behavior
 
-Requires an identified user and recorded consent for the `session_capture` purpose, which is never granted by default (HTTP: host asserts it via `POST /admin/consent`; STDIO: the operator sets `COOKIE_VAULT_STDIO_CONSENT=true`); otherwise returns `unavailable` / `no_consent` and opens no browser. The host is checked for SSRF before any browser is touched.
+Requires an identified user and recorded consent for the `session_capture` purpose, which is never granted by default (HTTP: host asserts it via `POST /admin/consent`; STDIO: the operator sets `COOKIE_VAULT_STDIO_CONSENT=true`); otherwise returns `unavailable` / `no_consent` and opens no browser. When a valid saved login for the site's registrable domain exists and `replace` is not set, it returns `already_signed_in` and opens no browser. The host is checked for SSRF before any browser is touched.
 
 **Browser attach (STDIO, default, `kind: cookies`).** If a Chromium-family browser has remote debugging on (`chrome://inspect/#remote-debugging`, Chrome 144+), the server connects to its local debugging port, which makes the browser show an Allow prompt. After you click Allow it reads cookies, keeps only those of the site's registrable domain, and disconnects. It never launches or closes your browser. It waits up to one minute for the click. If the browser is closed, debugging is off or you decline, it returns `browser_unavailable`. If you hold no cookies for the site, it returns `not_signed_in`. Neither opens a window; the reason names the steps and the `use_login_window` option. HTTP mode never attaches to a browser: it always uses the login window.
 

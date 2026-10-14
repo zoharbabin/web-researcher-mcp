@@ -469,7 +469,7 @@ func TestCanaryCookieNeverLeaks(t *testing.T) {
 	}
 
 	// The login window saves a profile; its cookies are the canary too.
-	_, text = callVaultTool(t, sess, "site_login", map[string]any{"url": "http://" + vaultTestHost + "/login", "use_login_window": true})
+	_, text = callVaultTool(t, sess, "site_login", map[string]any{"url": "http://" + vaultTestHost + "/login", "use_login_window": true, "replace": true})
 	surfaces = append(surfaces, text)
 
 	// Data-subject exports and every audit event and log line.
@@ -924,7 +924,7 @@ func TestLoginReplacesOtherKind(t *testing.T) {
 	url := "http://" + vaultTestHost + "/login"
 
 	e.seed(t, "default", "alice")
-	if out, text := callVaultTool(t, alice, "site_login", map[string]any{"url": url, "use_login_window": true}); out["status"] != "ok" {
+	if out, text := callVaultTool(t, alice, "site_login", map[string]any{"url": url, "use_login_window": true, "replace": true}); out["status"] != "ok" {
 		t.Fatal(text)
 	}
 	if n := len(e.deps.CookieVault.List(context.Background(), subj)); n != 0 {
@@ -935,7 +935,7 @@ func TestLoginReplacesOtherKind(t *testing.T) {
 	}
 
 	e.deps.CookieCapturer.WithAttacher(cookieAttacher{canaryCookies()})
-	if out, text := callVaultTool(t, alice, "site_login", map[string]any{"url": url}); out["status"] != "ok" || out["kind"] != "cookies" {
+	if out, text := callVaultTool(t, alice, "site_login", map[string]any{"url": url, "replace": true}); out["status"] != "ok" || out["kind"] != "cookies" {
 		t.Fatal(text)
 	}
 	if n := len(e.profiles("default", "alice")); n != 0 {
@@ -1056,5 +1056,51 @@ func TestSiteLoginFailureProfileLimits(t *testing.T) {
 	text := res.Content[0].(*mcp.TextContent).Text
 	if !strings.Contains(text, `"profile_store_full"`) || !strings.Contains(text, "COOKIE_VAULT_PROFILE_MAX_TOTAL_MB") {
 		t.Errorf("store-full result = %s", text)
+	}
+}
+
+// A valid saved login makes site_login answer already_signed_in and save
+// nothing, until replace=true asks to sign in again.
+func TestSiteLoginReportsAlreadySignedIn(t *testing.T) {
+	e := newVaultEnv(t)
+	e.grant(t, "default", "alice")
+	e.grant(t, "default", "bob")
+	alice := e.client(t, "default", "alice")
+	url := "http://" + vaultTestHost + "/login"
+
+	e.deps.CookieCapturer.WithAttacher(cookieAttacher{canaryCookies()})
+	if out, text := callVaultTool(t, alice, "site_login", map[string]any{"url": url}); out["status"] != "ok" || out["kind"] != "cookies" {
+		t.Fatal(text)
+	}
+	out, text := callVaultTool(t, alice, "site_login", map[string]any{"url": url})
+	if out["status"] != "already_signed_in" || out["kind"] != "cookies" || out["expiresAt"] == "" || out["domain"] == "" {
+		t.Fatalf("second call = %s", text)
+	}
+	if !strings.Contains(text, "scrape_page") || !strings.Contains(text, "replace=true") {
+		t.Errorf("reason does not say what to do: %s", text)
+	}
+	if out, text := callVaultTool(t, alice, "site_login", map[string]any{"url": url, "replace": true}); out["status"] != "ok" {
+		t.Fatalf("replace=true = %s", text)
+	}
+	// Another user has no saved login, so the check does not report alice's.
+	bob := e.client(t, "default", "bob")
+	if out, text := callVaultTool(t, bob, "site_login", map[string]any{"url": url}); out["status"] != "ok" {
+		t.Fatalf("bob = %s", text)
+	}
+}
+
+// A saved browser profile also counts as signed in.
+func TestSiteLoginReportsAlreadySignedInForProfile(t *testing.T) {
+	e := newVaultEnv(t)
+	e.grant(t, "default", "alice")
+	alice := e.client(t, "default", "alice")
+	url := "http://" + vaultTestHost + "/login"
+
+	e.seed(t, "default", "alice")
+	if out, text := callVaultTool(t, alice, "site_login", map[string]any{"url": url, "use_login_window": true, "replace": true}); out["status"] != "ok" {
+		t.Fatal(text)
+	}
+	if out, text := callVaultTool(t, alice, "site_login", map[string]any{"url": url, "use_login_window": true}); out["status"] != "already_signed_in" || out["kind"] != "profile" {
+		t.Fatalf("second call = %s", text)
 	}
 }

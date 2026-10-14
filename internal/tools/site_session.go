@@ -17,6 +17,7 @@ import (
 type siteLoginInput struct {
 	URL            string `json:"url" jsonschema:"The login page URL (http or https) of the site you want scrape_page to read while signed in.,required"`
 	UseLoginWindow bool   `json:"use_login_window,omitempty" jsonschema:"Opens a separate visible browser window where you sign in by hand, then close the window. The sign-in is saved in a private browser profile that scrape_page reuses. Use it for LinkedIn and other sites that reject copied cookies, if you do not use Chrome, Edge or Brave, or cannot turn on remote debugging. Always used over HTTP. Default false: read the existing signed-in session from your own browser (STDIO only)."`
+	Replace        bool   `json:"replace,omitempty" jsonschema:"Set true to sign in again when a valid saved login for the site already exists (for example when scrape_page returns loginRequired=true). Default false: site_login returns already_signed_in with the expiry and saves nothing."`
 }
 
 type siteLogoutInput struct {
@@ -118,7 +119,7 @@ func recordSiteSession(deps Dependencies, event, kind, status string) {
 func registerSiteLogin(srv *mcp.Server, deps Dependencies) {
 	addTool(srv, &mcp.Tool{
 		Name: "site_login",
-		Description: "Create or renew a saved login so scrape_page can read pages that need one. Call it when scrape_page returns loginRequired=true, or when the user asks to sign in or sign in again. To read a signed-in page (LinkedIn, etc.), call scrape_page on the page URL first: a login saved earlier, even in a past session, is applied automatically. " +
+		Description: "Create or renew a saved login so scrape_page can read pages that need one. Call it when scrape_page returns loginRequired=true, or when the user asks to sign in or sign in again. If a valid login is already saved it returns already_signed_in with the expiry and saves nothing; add replace=true to sign in again. To read a signed-in page (LinkedIn, etc.), call scrape_page on the page URL first: a login saved earlier, even in a past session, is applied automatically. " +
 			"Two ways. Default (STDIO only): reads the site's cookies from your own running, already signed-in Chrome, Edge or Brave. Turn on remote debugging once (chrome://inspect/#remote-debugging), call this tool, and click Allow. It reads only that one site's cookies, disconnects, and never closes your browser. " +
 			"With use_login_window=true (always used over HTTP, where the window opens on the machine running the server): a separate visible browser opens on the URL; you sign in by hand (including 2FA or CAPTCHA) and close the window. The sign-in is saved as an encrypted private browser profile that scrape_page reopens headless. Use this for LinkedIn and other sites that reject copied cookies. " +
 			"If the browser is not reachable or you are not signed in there, the result is a status (browser_unavailable or not_signed_in) with the steps to fix it; no window is opened. If the site did not keep the sign-in (for example you did not tick 'remember me'), the result is profile_not_saved and nothing is stored. " +
@@ -143,6 +144,17 @@ func registerSiteLogin(srv *mcp.Server, deps Dependencies) {
 		if deps.Consent == nil || !deps.Consent.HasConsent(ctx, consent.PurposeSessionCapture) {
 			auditToolDenial(ctx, deps, "site_login", time.Since(start), "no_consent")
 			return structuredResult(mustJSON(map[string]any{"status": "no_consent", "reason": "no recorded consent for the 'session_capture' purpose; nothing is captured. In STDIO the operator grants it by setting COOKIE_VAULT_STDIO_CONSENT=true"})), nil, nil
+		}
+
+		if !input.Replace {
+			if kind, domain, expires, found := savedLoginFor(ctx, deps, subj, input.URL); found {
+				recordToolCall(deps, "site_login", time.Since(start), nil, "", false)
+				auditToolCall(ctx, deps, "site_login", time.Since(start), nil, "")
+				return structuredResult(mustJSON(map[string]any{
+					"status": "already_signed_in", "kind": kind, "domain": domain, "expiresAt": expires,
+					"reason": "a valid login for " + domain + " is already saved. Call scrape_page on the page to use it. If scrape_page returns loginRequired=true, call site_login again with replace=true.",
+				})), nil, nil
+			}
 		}
 
 		// Over HTTP there is no browser to attach to, so the window is the only path.
@@ -184,6 +196,35 @@ func registerSiteLogin(srv *mcp.Server, deps Dependencies) {
 			"capturedAt": sum.CapturedAt, "expiresAt": sum.ExpiresAt, "source": string(cookievault.SourceBrowser),
 		})), nil, nil
 	})
+}
+
+// savedLoginFor reports the caller's live saved login (browser profile first, as
+// scrape_page prefers it, else cookies) for rawURL's registrable domain, with its
+// kind and expiry. It reads only redacted summaries, never cookie or profile content.
+func savedLoginFor(ctx context.Context, deps Dependencies, subj cookievault.Subject, rawURL string) (kind, domain, expiresAt string, found bool) {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Hostname() == "" {
+		return "", "", "", false
+	}
+	domain = cookievault.RegistrableDomain(u.Hostname())
+	if domain == "" {
+		return "", "", "", false
+	}
+	if deps.ProfileStore != nil {
+		for _, p := range deps.ProfileStore.List(ctx, subj) {
+			if p.Domain == domain {
+				return "profile", domain, p.ExpiresAt, true
+			}
+		}
+	}
+	if deps.CookieVault != nil {
+		for _, c := range deps.CookieVault.List(ctx, subj) {
+			if c.Domain == domain {
+				return "cookies", domain, c.ExpiresAt, true
+			}
+		}
+	}
+	return "", "", "", false
 }
 
 // siteLoginDone records a saved login in metrics and the audit trail. The audit
