@@ -149,7 +149,7 @@ type ScrapeOutput struct {
     Raw             bool      `json:"raw,omitempty"`  // true only in raw mode; omitted otherwise
     Authenticated   bool      `json:"authenticated,omitempty"` // true only when a saved site_login (cookies or browser profile) was used (#241, #775), which does not prove the session is still signed in; such results are never cached
     LoginRequired   bool      `json:"loginRequired,omitempty"` // true when the page looks like a sign-in page, not the content asked for (heuristic, #241); present only when site_login is available
-    LoginHint       string    `json:"loginHint,omitempty"`     // next step when loginRequired: call site_login with use_login_window=true (works in any browser; needed for LinkedIn).
+    LoginHint       string    `json:"loginHint,omitempty"`     // next step when loginRequired: call site_login (replace=true when a saved login was sent); the text says when to add use_login_window=true.
     ExtractedBy     string    `json:"extractedBy,omitempty"` // extraction tier: markdown|stealth|jina|html|browser|exa:cached|exa:crawled; omitted when unknown
     ExtractionQuality string  `json:"extractionQuality,omitempty"` // complete when the pipeline returned a confident extraction; partial when every tier was exhausted and the best-quality candidate was returned instead. Never an error. Omitted in raw mode.
     WordCount         int     `json:"wordCount,omitempty"`         // words in the extracted content (#358); orthogonal to ExtractionQuality — a "complete" extraction can still be a thin paywall/bot-wall stub. Omitted in raw mode.
@@ -282,7 +282,7 @@ In `raw` mode the output additionally carries `"raw": true`, and `contentType` i
 
 **Profile scrapes (#775).** Scrapes of one profile run one at a time and at least 5 seconds apart. A scrape that waits more than 30 seconds for the profile returns a retryable `profile_busy` error. A login window holds the profile for as long as it is open, so wait for it to close. `mode: "raw"` is refused when a saved profile exists for the site: use `mode: "full"` or `"preview"`, or set `anonymous: true`. After a successful scrape the profile is saved again so refreshed cookies carry over. After a failed scrape or a login wall it is discarded, so the stored profile is not changed. A profile expires `COOKIE_VAULT_PROFILE_TTL` after `site_login` and is not extended by use. A profile scrape stays on the saved site: if the page goes to another site, the scrape stops with a non-retryable `validation` error that names the host (re-run `site_login` if it was a sign-in page, or scrape the other site with `anonymous: true`). Requests the page makes to private or internal addresses are blocked.
 
-**Sites that block replayed sessions.** Some sites with strong bot detection, LinkedIn in live tests, accept copied cookies for only one or two scrapes. Use `site_login` with `use_login_window=true` for them: the saved browser profile stayed signed in for hours in live tests. Session life beyond that is not proven. When a saved login stops working, `loginRequired` is how you notice.
+**Sites that block replayed sessions.** Some sites with strong bot detection, LinkedIn in live tests, accept copied cookies for only one or two scrapes. Use `site_login` with `use_login_window=true` and `replace=true` for them: the saved browser profile stayed signed in for hours in live tests. Session life beyond that is not proven. When a saved login stops working, `loginRequired` is how you notice.
 
 **Login-wall signal (#241).** When `site_login` is available, a full-mode scrape that returns a thin page (under 150 words) that looks like a sign-in page sets `loginRequired: true` and a `loginHint`. The check is a heuristic: the title names sign-in, or the text asks for a password next to a sign-in prompt. A request for a login URL is never flagged. With a saved login the hint says it looks expired and to call `site_login` again (with `use_login_window=true` for a profile); without, it says to call `site_login` with `use_login_window=true`. A login-required error (`kind: auth_required`) carries the same hint. It can miss walls that render with scripts and can flag a thin page that mentions sign-in, so treat it as a prompt to check, not proof. Raw mode does not run the check.
 
@@ -2022,7 +2022,7 @@ Create or renew a saved login so `scrape_page` can read pages behind it. Call `s
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `url` | string | yes | http(s) login page. Must have a registrable domain (no IP addresses, `localhost` or bare public suffixes) and no embedded credentials. Private and internal hosts are refused unless `ALLOW_PRIVATE_IPS=true` |
+| `url` | string | yes | http(s) page on the site you want to read, such as its login page or home page. Use the site itself, not a third-party sign-in page (for YouTube pass `https://www.youtube.com/`, not `accounts.google.com`): the login is saved for this URL's registrable domain only. Must have a registrable domain (no IP addresses, `localhost` or bare public suffixes) and no embedded credentials. Private and internal hosts are refused unless `ALLOW_PRIVATE_IPS=true` |
 | `replace` | boolean | no | Default `false`. When a valid saved login for the site exists, `site_login` returns `already_signed_in` (with `kind`, `domain`, `expiresAt`) and saves nothing. Set `true` to sign in again, for example when `scrape_page` returns `loginRequired: true` |
 | `use_login_window` | boolean | no | Default `false`. Set `true` to open a separate visible window and save the sign-in as a private browser profile. Use it for LinkedIn and other sites that reject copied cookies, if you do not use Chrome, Edge or Brave, or cannot turn on remote debugging. Always used over HTTP. The window has none of your existing sessions, so you sign in by hand |
 
@@ -2044,6 +2044,14 @@ type SiteLoginOutput struct {
 ### Behavior
 
 Requires an identified user and recorded consent for the `session_capture` purpose, which is never granted by default (HTTP: host asserts it via `POST /admin/consent`; STDIO: the operator sets `COOKIE_VAULT_STDIO_CONSENT=true`); otherwise returns `unavailable` / `no_consent` and opens no browser. When a valid saved login for the site's registrable domain exists and `replace` is not set, it returns `already_signed_in` and opens no browser. The host is checked for SSRF before any browser is touched.
+
+**Which way, by site.**
+
+| Site | Way | Status |
+|------|-----|--------|
+| Facebook, X, Instagram, YouTube | Cookie mode (default) | Tested |
+| LinkedIn | Login window (`use_login_window=true`) | Tested |
+| Any other site | Start with cookie mode. When `scrape_page` still returns `loginRequired: true`, or the browser is unreachable, call `site_login` again with `use_login_window=true` and `replace=true` | Not tested |
 
 **Browser attach (STDIO, default, `kind: cookies`).** If a Chromium-family browser has remote debugging on (`chrome://inspect/#remote-debugging`, Chrome 144+), the server connects to its local debugging port, which makes the browser show an Allow prompt. After you click Allow it reads cookies, keeps only those of the site's registrable domain, and disconnects. It never launches or closes your browser. It waits up to one minute for the click. If the browser is closed, debugging is off or you decline, it returns `browser_unavailable`. If you hold no cookies for the site, it returns `not_signed_in`. Neither opens a window; the reason names the steps and the `use_login_window` option. Cookie mode suits most sites (Facebook, X, Instagram, YouTube); the login window is for LinkedIn and sites that reject copied cookies. HTTP mode never attaches to a browser: it always uses the login window.
 

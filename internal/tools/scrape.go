@@ -629,7 +629,7 @@ func scrapeErrorResponseHint(err error, url, loginHint string) *mcp.CallToolResu
 		// private-IP / blocked-hostname denial. Report the precise reason and
 		// do NOT suggest a retry or a bug report — the URL itself must change.
 		if errors.Is(se, scraper.ErrProfileOffSite) {
-			msg = fmt.Sprintf("Stopped: %s was opened with a saved sign-in, which only works on its own site, and %s. If it sent you to a sign-in page, the sign-in expired: call site_login with use_login_window=true, then retry. To read the other site, scrape it with anonymous=true.", url, se.Message)
+			msg = fmt.Sprintf("Stopped: %s was opened with a saved sign-in, which only works on its own site, and %s. If it sent you to a sign-in page, the sign-in expired: call site_login with replace=true, then retry. When the site is LinkedIn, or it still asks for a login, add use_login_window=true. To read the other site, scrape it with anonymous=true.", url, se.Message)
 			break
 		}
 		msg = fmt.Sprintf("URL rejected for %s: %s. Provide a valid public http(s) URL.", url, se.Message)

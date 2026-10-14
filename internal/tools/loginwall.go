@@ -60,9 +60,9 @@ func loginHintForKind(deps Dependencies, authKind, rawURL string) string {
 	}
 	switch authKind {
 	case "profile":
-		return "The saved sign-in for " + site + " looks expired or was rejected. Call site_login with use_login_window=true and the site's login URL to sign in again, then retry."
+		return "The saved sign-in for " + site + " looks expired or was rejected. Call site_login with use_login_window=true, replace=true and the site's login URL to sign in again, then retry."
 	case "cookies":
-		return "The saved login for " + site + " looks expired or was rejected. Call site_login with the site's login URL to sign in again, then retry."
+		return "The saved login for " + site + " looks expired or was rejected. Call site_login with replace=true and the site's login URL to sign in again, then retry. When it is still rejected, add use_login_window=true."
 	}
-	return "This page needs a login and none is saved for " + site + ". Call site_login with " + site + "'s login URL, then retry. The default reads your signed-in Chrome, Edge or Brave and suits most sites. For LinkedIn and sites that reject copied cookies, add use_login_window=true."
+	return "This page needs a login and none is saved for " + site + ". Call site_login with " + site + "'s login URL, then retry. The default reads your signed-in Chrome, Edge or Brave and suits Facebook, X, Instagram, YouTube and most untested sites. For LinkedIn, or when a site still asks for a login after the default, call site_login again with use_login_window=true and replace=true."
 }

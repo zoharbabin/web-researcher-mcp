@@ -1014,8 +1014,12 @@ func TestLoginHintForProfileNeedsWindow(t *testing.T) {
 	if !strings.Contains(h, "use_login_window=true") || !strings.Contains(h, "linkedin.com") {
 		t.Errorf("profile hint %q must name the login window and the site", h)
 	}
-	if h := loginHintForKind(deps, "cookies", "https://www.linkedin.com/feed/"); strings.Contains(h, "use_login_window") {
-		t.Errorf("cookie hint %q should not force the window", h)
+	if !strings.Contains(h, "replace=true") {
+		t.Errorf("profile hint %q must say replace=true, or site_login returns already_signed_in", h)
+	}
+	h = loginHintForKind(deps, "cookies", "https://www.linkedin.com/feed/")
+	if !strings.Contains(h, "replace=true") || !strings.Contains(h, "still rejected, add use_login_window=true") {
+		t.Errorf("cookie hint %q must say replace=true and offer the window only as a fallback", h)
 	}
 }
 
