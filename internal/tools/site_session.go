@@ -120,7 +120,7 @@ func registerSiteLogin(srv *mcp.Server, deps Dependencies) {
 	addTool(srv, &mcp.Tool{
 		Name: "site_login",
 		Description: "Create or renew a saved login so scrape_page can read pages that need one. Call it when scrape_page returns loginRequired=true, or when the user asks to sign in or sign in again. If a valid login is already saved it returns already_signed_in with the expiry and saves nothing; add replace=true to sign in again. To read a signed-in page (LinkedIn, etc.), call scrape_page on the page URL first: a login saved earlier, even in a past session, is applied automatically. " +
-			"Two ways. Default (STDIO only): reads the site's cookies from your own running, already signed-in Chrome, Edge or Brave. Turn on remote debugging once (chrome://inspect/#remote-debugging), call this tool, and click Allow. It reads only that one site's cookies, disconnects, and never closes your browser. " +
+			"Two ways. Default (STDIO only), best for most sites such as Facebook, X, Instagram and YouTube: reads the site's cookies from your own running, already signed-in Chrome, Edge or Brave. Turn on remote debugging once (chrome://inspect/#remote-debugging), call this tool, and click Allow. It reads only that one site's cookies, disconnects, and never closes your browser. " +
 			"With use_login_window=true (always used over HTTP, where the window opens on the machine running the server): a separate visible browser opens on the URL; you sign in by hand (including 2FA or CAPTCHA) and close the window. The sign-in is saved as an encrypted private browser profile that scrape_page reopens headless. Use this for LinkedIn and other sites that reject copied cookies. " +
 			"If the browser is not reachable or you are not signed in there, the result is a status (browser_unavailable or not_signed_in) with the steps to fix it; no window is opened. If the site did not keep the sign-in (for example you did not tick 'remember me'), the result is profile_not_saved and nothing is stored. " +
 			"The result's kind says what was saved (cookies or profile) and source says which path was used (browser or login_window). A new login replaces an older one for the same site. Only cookies and the browser profile are saved, never your password. Everything is stored encrypted, scoped to that site's registrable domain, " +
@@ -249,7 +249,7 @@ func siteLoginFailure(ctx context.Context, deps Dependencies, start time.Time, k
 	case errors.Is(err, cookievault.ErrInvalidLoginURL):
 		status, msg = "invalid_url", "the login URL must be an http(s) URL on a site with a registrable domain, without credentials"
 	case errors.Is(err, cookievault.ErrAttachUnavailable):
-		status, msg = "browser_unavailable", "could not reach your browser. Call site_login again with use_login_window=true to sign in in a separate window (works with any browser, and is required for LinkedIn). Or, in Chrome, Edge or Brave, open chrome://inspect/#remote-debugging, turn it on, keep the browser running, call site_login again and click Allow. If a login was saved earlier, scrape_page already uses it"
+		status, msg = "browser_unavailable", "could not reach your browser. For most sites (Facebook, X, Instagram, YouTube): in Chrome, Edge or Brave open chrome://inspect/#remote-debugging, turn it on, keep the browser running, call site_login again and click Allow. For LinkedIn, or if you cannot turn that on: call site_login again with use_login_window=true to sign in in a separate window. If a login was saved earlier, scrape_page already uses it"
 	case errors.Is(err, cookievault.ErrNotSignedIn):
 		status, msg = "not_signed_in", "your browser has no cookies for that site. Sign in to the site in that browser, then call site_login again. To sign in in a separate window instead, call site_login with use_login_window=true"
 	case errors.Is(err, cookievault.ErrNoSignInSeen):
@@ -266,6 +266,10 @@ func siteLoginFailure(ctx context.Context, deps Dependencies, start time.Time, k
 		status, msg = "profile_store_full", "the server's storage for saved sign-ins is full; call site_logout for a site you no longer need, or ask the operator to raise COOKIE_VAULT_PROFILE_MAX_TOTAL_MB"
 	case errors.Is(err, cookievault.ErrProfileTooLarge):
 		status, msg = "profile_too_large", "the browser profile is too large to store; nothing was saved"
+		var tooLarge *cookievault.TooLargeError
+		if errors.As(err, &tooLarge) && tooLarge.Detail != "" {
+			msg += " (largest: " + tooLarge.Detail + ")"
+		}
 	case errors.Is(err, cookievault.ErrProfilesUnavailable):
 		status, msg = "profiles_unavailable", "saved browser profiles are not available on this server"
 	case errors.Is(err, cookievault.ErrLoginURLRejected):

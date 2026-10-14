@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -39,6 +40,67 @@ var (
 	errProfileUnsafeEntry = errors.New("cookievault: unsafe entry in profile archive")
 )
 
+// TooLargeError is ErrProfileTooLarge plus a size breakdown of the profile, so
+// the operator can see what filled it. It matches ErrProfileTooLarge with errors.Is.
+type TooLargeError struct {
+	// Detail names the largest directories, for example "IndexedDB 180 MB".
+	Detail string
+}
+
+func (e *TooLargeError) Error() string {
+	return ErrProfileTooLarge.Error() + " (largest: " + e.Detail + ")"
+}
+
+func (e *TooLargeError) Is(target error) bool { return target == ErrProfileTooLarge }
+
+// profileSizeDetail lists the five largest directories (two levels deep) that
+// would be archived from root. Only directory names and sizes are returned.
+func profileSizeDetail(root string) string {
+	sizes := map[string]int64{}
+	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		rel, rerr := filepath.Rel(root, path)
+		if rerr != nil || rel == "." {
+			return nil
+		}
+		if d.IsDir() {
+			if excludedProfileDirs[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		info, ierr := d.Info()
+		if ierr != nil || !d.Type().IsRegular() {
+			return nil
+		}
+		parts := strings.Split(filepath.ToSlash(rel), "/")
+		if dirs := parts[:len(parts)-1]; len(dirs) > 0 {
+			parts = dirs[:min(len(dirs), 2)]
+		}
+		sizes["/"+strings.Join(parts, "/")] += info.Size()
+		return nil
+	})
+	type kv struct {
+		name string
+		size int64
+	}
+	list := make([]kv, 0, len(sizes))
+	for k, v := range sizes {
+		list = append(list, kv{k, v})
+	}
+	sort.Slice(list, func(i, j int) bool { return list[i].size > list[j].size })
+	if len(list) > 5 {
+		list = list[:5]
+	}
+	parts := make([]string, 0, len(list))
+	for _, e := range list {
+		parts = append(parts, fmt.Sprintf("%s %d MB", e.name, (e.size+(1<<20)-1)>>20))
+	}
+	return strings.Join(parts, ", ")
+}
+
 // excludedProfileDirs are cache directories (any depth) left out of the archive.
 // They are large, rebuilt by the browser, and hold no login state.
 var excludedProfileDirs = map[string]bool{
@@ -48,12 +110,21 @@ var excludedProfileDirs = map[string]bool{
 	"extensions_crx_cache": true, "optimization_guide_model_store": true,
 	"BrowserMetrics": true, "Safe Browsing": true, "CacheStorage": true,
 	"ScriptCache": true,
+	// Chrome component-updater downloads (translation, speech and suggestion
+	// models, safety lists). Tens of MB of incompressible data, no login state,
+	// fetched again by the browser. TranslateKit alone was 78 MB and broke the
+	// archive cap on Facebook sign-ins (issue #775).
+	"TranslateKit": true, "WasmTtsEngine": true, "OnDeviceHeadSuggestModel": true,
+	"OptGuideOnDeviceModel": true, "screen_ai": true, "WidevineCdm": true,
+	"hyphen-data": true, "ActorSafetyLists": true, "ZxcvbnData": true,
+	"CertificateRevocation": true, "OptimizationHints": true, "Subresource Filter": true,
+	"PKIMetadata": true, "MEIPreload": true, "Media Cache": true,
 }
 
 // excludedProfileFiles are runtime lock and port files that must not be restored.
 var excludedProfileFiles = map[string]bool{
 	"SingletonLock": true, "SingletonSocket": true, "SingletonCookie": true,
-	"lockfile": true, "DevToolsActivePort": true,
+	"lockfile": true, "DevToolsActivePort": true, "BrowserMetrics-spare.pma": true,
 }
 
 // chromiumTempPrefix marks Chrome's atomic-write temp files, which come and go
@@ -160,15 +231,23 @@ func writeProfileArchive(dst io.Writer, gcm cipher.AEAD, aad []byte, root string
 		return err
 	})
 	if walkErr != nil {
-		return walkErr
+		return tooLargeWithDetail(walkErr, root)
 	}
 	if err := tw.Close(); err != nil {
 		return err
 	}
 	if err := gz.Close(); err != nil {
-		return err
+		return tooLargeWithDetail(err, root)
 	}
-	return enc.Close()
+	return tooLargeWithDetail(enc.Close(), root)
+}
+
+// tooLargeWithDetail turns a bare ErrProfileTooLarge into a TooLargeError for root.
+func tooLargeWithDetail(err error, root string) error {
+	if errors.Is(err, ErrProfileTooLarge) {
+		return &TooLargeError{Detail: profileSizeDetail(root)}
+	}
+	return err
 }
 
 // openProfileArchive returns a tar reader positioned after the meta entry, the

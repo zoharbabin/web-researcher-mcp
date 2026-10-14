@@ -604,6 +604,10 @@ func (s *ProfileStore) commit(ctx context.Context, l *ProfileLease) (ProfileSumm
 	}
 	if err := errors.Join(werr, tmp.Close()); err != nil {
 		cleanup()
+		var tooLarge *TooLargeError
+		if errors.As(err, &tooLarge) {
+			return ProfileSummary{}, tooLarge
+		}
 		if errors.Is(err, ErrProfileTooLarge) {
 			return ProfileSummary{}, ErrProfileTooLarge
 		}

@@ -64,5 +64,5 @@ func loginHintForKind(deps Dependencies, authKind, rawURL string) string {
 	case "cookies":
 		return "The saved login for " + site + " looks expired or was rejected. Call site_login with the site's login URL to sign in again, then retry."
 	}
-	return "This page needs a login and none is saved for " + site + ". Call site_login with " + site + "'s login URL and use_login_window=true (works in any browser and is needed for sites that reject copied cookies, such as LinkedIn), then retry."
+	return "This page needs a login and none is saved for " + site + ". Call site_login with " + site + "'s login URL, then retry. The default reads your signed-in Chrome, Edge or Brave and suits most sites. For LinkedIn and sites that reject copied cookies, add use_login_window=true."
 }

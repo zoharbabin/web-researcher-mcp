@@ -398,6 +398,9 @@ func TestProfileArchiveExcludesCaches(t *testing.T) {
 	mk("Default/Service Worker/CacheStorage/x", "drop")
 	mk("Default/Local Storage/leveldb/x", "keep")
 	mk("SingletonLock", "drop")
+	mk("TranslateKit/models/m.bin", "drop")
+	mk("WasmTtsEngine/1/x", "drop")
+	mk("BrowserMetrics-spare.pma", "drop")
 	mk("Default/.org.chromium.Chromium.AbC123", "drop")
 	if err := os.Symlink("/etc/passwd", filepath.Join(l.Dir, "Default", "link")); err != nil {
 		t.Fatal(err)
@@ -415,6 +418,7 @@ func TestProfileArchiveExcludesCaches(t *testing.T) {
 		"Default/Cache/data_0": false, "Default/Code Cache/js/x": false, "Default/GPUCache/x": false,
 		"Default/Service Worker/CacheStorage/x": false, "SingletonLock": false, "Default/link": false,
 		"Default/.org.chromium.Chromium.AbC123": false,
+		"TranslateKit/models/m.bin":             false, "WasmTtsEngine/1/x": false, "BrowserMetrics-spare.pma": false,
 	} {
 		_, err := os.Lstat(filepath.Join(got.Dir, rel))
 		if (err == nil) != want {
@@ -432,8 +436,13 @@ func TestProfileArchiveSizeCap(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(l.Dir, "blob"), big, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := l.Commit(context.Background()); !errors.Is(err, ErrProfileTooLarge) {
+	_, err := l.Commit(context.Background())
+	if !errors.Is(err, ErrProfileTooLarge) {
 		t.Fatalf("got %v, want ErrProfileTooLarge", err)
+	}
+	var tooLarge *TooLargeError
+	if !errors.As(err, &tooLarge) || !strings.Contains(tooLarge.Detail, "blob") {
+		t.Errorf("error %v does not name the large entry", err)
 	}
 	if entries, _ := os.ReadDir(s.dir); len(entries) != 1 { // only work/
 		t.Fatalf("oversize attempt left files behind: %v", entries)
