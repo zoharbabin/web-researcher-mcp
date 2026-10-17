@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -71,5 +72,55 @@ func TestParallelWebSearchTool(t *testing.T) {
 	}
 	if len(output.Results) != 1 || output.Results[0].URL != "https://go.dev/doc/" || output.Results[0].Snippet == "" {
 		t.Fatalf("provider output not consumed by web_search: %+v", output)
+	}
+}
+
+// Fail every legacy web attempt so accidental inclusion of Parallel is visible
+// regardless of the router's map iteration order.
+type parallelLegacyFailure struct{}
+
+func (parallelLegacyFailure) Name() string { return "legacy" }
+func (parallelLegacyFailure) Web(context.Context, search.WebSearchParams) ([]search.SearchResult, error) {
+	return nil, fmt.Errorf("legacy provider unavailable")
+}
+func (parallelLegacyFailure) Images(context.Context, search.ImageSearchParams) ([]search.ImageResult, error) {
+	return nil, nil
+}
+func (parallelLegacyFailure) News(context.Context, search.NewsSearchParams) ([]search.NewsResult, error) {
+	return nil, nil
+}
+
+func TestParallelPartialRoutingRemainsOptIn(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, routing, provider string
+		wantError               bool
+	}{
+		{"implicit web fallback", `{"news":"legacy"}`, "", true},
+		{"explicit per-query selection", `{"news":"legacy"}`, "parallel", false},
+		{"explicit web route", `{"web":"parallel","news":"legacy"}`, "", false},
+		{"explicit default route", "parallel,legacy", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			routing, err := search.ParseRoutingConfig(tc.routing)
+			if err != nil {
+				t.Fatal(err)
+			}
+			deps := setupTestDeps()
+			parallel := search.AvailableProviders(config.SearchConfig{}, search.Deps{HTTPClient: &http.Client{Transport: parallelToolTransport{t: t}}})["parallel"]
+			providers := map[string]search.Provider{"parallel": parallel, "legacy": parallelLegacyFailure{}}
+			deps.SearchProviders = providers
+			deps.Search = search.NewRouter(providers, search.RouterConfig{Routing: routing})
+			client := connectTestClient(context.Background(), t, createTestServer(deps))
+			defer client.Close()
+			res, err := client.CallTool(context.Background(), &mcp.CallToolParams{Name: "web_search", Arguments: map[string]any{"provider": tc.provider, "query": "Go documentation", "site": "go.dev"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res.IsError != tc.wantError {
+				t.Fatalf("unexpected routing outcome: %+v", res)
+			}
+		})
 	}
 }
