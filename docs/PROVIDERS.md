@@ -45,6 +45,7 @@ Understanding what backs each provider helps you reason about result overlap and
 | **[Reddit](https://www.reddit.com/)** | Niche | Reddit Atom RSS — Reddit posts and community discussions only |
 | **[Bluesky](https://bsky.app/)** | Niche | AT Protocol AppView (`public.api.bsky.app`) — Bluesky posts only |
 | **[GitHub](https://docs.github.com/en/rest/search/search)** | Niche | GitHub REST Search API — issues and pull requests only |
+| **[Parallel](https://docs.parallel.ai/integrations/mcp/search-mcp)** | API-backed | Parallel Search MCP, anonymous Fast mode |
 | **[Xquik](https://xquik.com/)** | Niche | Xquik REST API — public X/Twitter posts with engagement counts only |
 
 **Practical implication**: Google PSE, Serper, and SearchAPI.io draw from the same index — using more than one adds no coverage, only redundancy. Brave and Exa bring genuinely independent results. Tavily and SearXNG aggregate results from others rather than crawling themselves.
@@ -70,6 +71,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 | **[Reddit](https://www.reddit.com/)** | ✓ | — | ✓ | — | — |
 | **[Bluesky](https://bsky.app/)** | ✓ | — | — | — | — |
 | **[GitHub](https://docs.github.com/en/rest/search/search)** | ✓ | — | ✓ | — | — |
+| **[Parallel](https://docs.parallel.ai/integrations/mcp/search-mcp)** | ✓ | — | — | — | — |
 | **[Xquik](https://xquik.com/)** | ✓ | — | ✓ | — | — |
 
 **Notes:**
@@ -97,6 +99,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 | **[You.com](https://you.com/docs/api-reference/search/v1-search)** | API key with free credits | $5 / 1,000 calls |
 | **[Exa](https://exa.ai/)** | 1,000 requests/month | Per call beyond free tier |
 | **[Tavily](https://app.tavily.com/)** | Monthly dev credits | Paid plans |
+| **[Parallel](https://docs.parallel.ai/integrations/mcp/search-mcp)** | Keyless anonymous access for light use, rate limited | This adapter uses anonymous access only |
 | **[Xquik](https://xquik.com/#pricing)** | No free tier documented | Metered credits; current rates appear on the pricing and checkout pages |
 
 ---
@@ -110,6 +113,7 @@ Which tools each web search provider enables. `—` means the provider returns e
 | High-volume + own index | [Brave](https://brave.com/search/api/) (2,000/month free, privacy-first) |
 | Independent results alongside Google | [Brave](https://brave.com/search/api/) or [Exa](https://exa.ai/) (different indices, no overlap) |
 | Semantic / conceptual search | [Exa](https://exa.ai/) |
+| Keyless web search with excerpts | [Parallel](https://docs.parallel.ai/integrations/mcp/search-mcp) (`SEARCH_PROVIDER=parallel`) |
 | LLM-ready extracted content | [Tavily](https://app.tavily.com/) |
 | Web + news search with query-aware snippets | [You.com](https://you.com/docs/api-reference/search/v1-search) |
 | Air-gapped or no vendor lock-in | [SearXNG](https://docs.searxng.org/) (self-hosted) |
@@ -123,6 +127,8 @@ Which tools each web search provider enables. `—` means the provider returns e
 ---
 
 ### Provider Notes
+
+**[Parallel](https://docs.parallel.ai/integrations/mcp/search-mcp)** — Opt-in keyless web search through Streamable HTTP MCP. Anonymous search uses Fast mode and returns source excerpts. No image/news search or scrape fallback tier is added. See [setup and supported options](API_SETUP.md#parallel-keyless-web-search).
 
 **[DuckDuckGo](https://duckduckgo.com/)** — The zero-config default. No API key, no registration, no rate limit to configure. Result depth is lower than keyed providers; image and news results are present but less comprehensive. Use as a fallback, not a primary.
 

@@ -47,6 +47,25 @@ Keys set in the MCP client config are passed directly to the server process — 
 
 ---
 
+## Parallel (Keyless Web Search)
+
+[Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp) provides free web search with excerpts, powered by Fast mode, without an account or API key. Select it explicitly:
+
+```bash
+export SEARCH_PROVIDER=parallel
+web-researcher-mcp
+```
+
+Or use `web_search` with `provider: "parallel"` for one query while keeping your configured default. To use Parallel first with another provider as fallback, set `SEARCH_ROUTING=parallel,duckduckgo`. Current defaults are unchanged.
+
+The adapter connects to `https://search.parallel.ai/mcp` using Streamable HTTP and the bundled MCP SDK. It sends no Parallel credentials. Anonymous access is intended for exploration and light use and is subject to service rate limits. Authenticated access is not exposed by this adapter.
+
+- Supports `web_search` and the search phase of `search_and_scrape`, returning titles, source URLs, excerpts, and publication dates when available. `scrape_page` continues to use the existing scraper pipeline.
+- Returns up to `num_results` (at most 10), bounded by the results the service supplies. Site/lens, exact-phrase, and excluded-term constraints are sent as search operators. `time_range` is a freshness preference in the objective, not a hard date filter.
+- Does not expose dedicated image/news search, SafeSearch, language/country filters, or pagination. Use another provider when those controls are required. In a routing list, image/news requests can fall through to a capable provider; an explicit `provider: "parallel"` request returns no image/news results.
+
+---
+
 ## DuckDuckGo (Zero-Config Default)
 
 **Free**: No API key, no registration, no query limits to configure.

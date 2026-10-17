@@ -360,7 +360,7 @@ Note: Google keys are validated as required only when you explicitly select `SEA
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SEARCH_PROVIDER` | Primary provider: google, brave, serper, searxng, searchapi, youcom, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik | `google` (variable default); at runtime, when `google` is selected but no Google key is set, the server falls back to the zero-config `duckduckgo` provider |
+| `SEARCH_PROVIDER` | Primary provider: google, brave, serper, searxng, searchapi, youcom, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik, parallel | `google` (variable default); at runtime, when `google` is selected but no Google key is set, the server falls back to the zero-config `duckduckgo` provider |
 | `SEARCH_ROUTING` | Multi-provider routing (see below) | — |
 | `BRAVE_API_KEY` | Brave Search API key | — |
 | `BRAVE_EXTRA_SNIPPETS` | Return up to 5 extra snippets per Brave result | `false` |
@@ -374,6 +374,8 @@ Note: Google keys are validated as required only when you explicitly select `SEA
 | `SEARXNG_BASIC_AUTH` | HTTP Basic credential `user:password` for a SearXNG behind Basic auth (malformed value fails startup; never logged) | — |
 | `SEARXNG_HEADERS` | Static request headers for SearXNG as comma-separated `Name: Value` pairs (no commas/newlines in a value; a custom `Authorization` overrides `SEARXNG_BASIC_AUTH`) | — |
 | `CUSTOM_LENSES_PATH` | Directory of custom lens JSON files, loaded after (and able to override) the bundled lenses; schema-validated at startup. See `lenses/README.md` | — |
+
+For keyless Parallel web search, set `SEARCH_PROVIDER=parallel` or include `parallel` in `SEARCH_ROUTING`. See [Parallel setup and supported options](API_SETUP.md#parallel-keyless-web-search). Existing defaults are unchanged.
 
 ### Patent Providers (Optional)
 
