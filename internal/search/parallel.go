@@ -48,7 +48,7 @@ func (p *ParallelProvider) Web(ctx context.Context, params WebSearchParams) ([]S
 }
 
 // Images and News return the unsupported-capability sentinel without making
-// requests or tripping the breaker. Router fallback can use other providers.
+// requests or tripping the breaker.
 func (p *ParallelProvider) Images(context.Context, ImageSearchParams) ([]ImageResult, error) {
 	return nil, nil
 }

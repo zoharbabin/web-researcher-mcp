@@ -114,12 +114,16 @@ func TestParallelPartialRoutingRemainsOptIn(t *testing.T) {
 			deps.Search = search.NewRouter(providers, search.RouterConfig{Routing: routing})
 			client := connectTestClient(context.Background(), t, createTestServer(deps))
 			defer client.Close()
-			res, err := client.CallTool(context.Background(), &mcp.CallToolParams{Name: "web_search", Arguments: map[string]any{"provider": tc.provider, "query": "Go documentation", "site": "go.dev"}})
+			args := map[string]any{"query": "Go documentation", "site": "go.dev"}
+			if tc.provider != "" {
+				args["provider"] = tc.provider
+			}
+			res, err := client.CallTool(context.Background(), &mcp.CallToolParams{Name: "web_search", Arguments: args})
 			if err != nil {
 				t.Fatal(err)
 			}
 			if res.IsError != tc.wantError {
-				t.Fatalf("unexpected routing outcome: %+v", res)
+				t.Fatalf("unexpected routing outcome: %+v", res.Content)
 			}
 		})
 	}
