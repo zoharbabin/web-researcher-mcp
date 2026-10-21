@@ -7,8 +7,8 @@
   go_1_27,
 }:
 
-# go.mod requires go >= 1.27.2; nixpkgs' default `go` hasn't caught up yet.
-# Drop this override once nixpkgs' default go is >= 1.27.2.
+# go.mod requires go >= 1.27.3; nixpkgs' default `go` hasn't caught up yet.
+# Drop this override once nixpkgs' default go is >= 1.27.3.
 (buildGoModule.override { go = go_1_27; }) (finalAttrs: {
   __structuredAttrs = true;
 
