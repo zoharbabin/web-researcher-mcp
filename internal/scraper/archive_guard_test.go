@@ -22,6 +22,14 @@ func TestCheckArchiveTarget(t *testing.T) {
 		"http://nas.lan/x",
 		"http://metadata.google.internal/computeMetadata/v1/",
 		"not a url",
+		"http://127.0.0.1./x",
+		"http://wiki./x",
+		"http://app.internal./x",
+		"http://127.0.0.1。/x",
+		"http://0177.0.0.1/x",
+		"http://0x7f.0.0.1/x",
+		"http://127.1/x",
+		"http://2130706433/x",
 	}
 	for _, u := range refused {
 		if err := checkArchiveTarget(context.Background(), u); err == nil {

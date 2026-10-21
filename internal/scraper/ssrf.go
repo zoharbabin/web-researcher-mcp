@@ -260,9 +260,16 @@ func checkArchiveTarget(ctx context.Context, pageURL string) error {
 		return contentError(pageURL, "not sent to the Internet Archive: invalid URL")
 	}
 	host := strings.ToLower(strings.Trim(u.Hostname(), "[]"))
+	// Browsers and the archive read these as ".", and a trailing dot is the
+	// same host: "127.0.0.1." and "wiki." must not dodge the checks below.
+	host = strings.NewReplacer("。", ".", "．", ".", "｡", ".").Replace(host)
+	host = strings.TrimSuffix(host, ".")
 	notPublic := contentError(pageURL, "not sent to the Internet Archive: target is not a public host")
 	if host == "localhost" || (net.ParseIP(host) == nil && !strings.Contains(host, ".")) {
 		return notPublic // a single-label name such as "wiki" is never a public host
+	}
+	if net.ParseIP(host) == nil && numericLastLabel(host) {
+		return notPublic // "0177.0.0.1", "0x7f.0.0.1": non-canonical IPv4 forms that parsers disagree on
 	}
 	for _, suffix := range nonPublicNameSuffixes {
 		if strings.HasSuffix(host, suffix) {
@@ -279,4 +286,28 @@ func checkArchiveTarget(ctx context.Context, pageURL string) error {
 		return networkError(pageURL, "", err)
 	}
 	return nil
+}
+
+// numericLastLabel reports whether the last DNS label is all digits or a hex
+// number. No public TLD looks like that, so such a host is an IPv4 literal in a
+// non-canonical form.
+func numericLastLabel(host string) bool {
+	label := host[strings.LastIndex(host, ".")+1:]
+	if label == "" {
+		return false
+	}
+	digits := label
+	if strings.HasPrefix(label, "0x") {
+		digits = label[2:]
+		if digits == "" {
+			return true
+		}
+	}
+	for _, r := range digits {
+		isHex := strings.HasPrefix(label, "0x") && (r >= 'a' && r <= 'f')
+		if (r < '0' || r > '9') && !isHex {
+			return false
+		}
+	}
+	return true
 }
