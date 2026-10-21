@@ -44,11 +44,18 @@ import (
 // r.jina.ai. The stub returns empty content, so it behaves like Jina having
 // nothing to add — the remaining tiers decide the result exactly as they did
 // before this tier existed.
+// realArchiveGuard is the unstubbed scraper.GuardArchiveTarget, saved by TestMain.
+var realArchiveGuard func(context.Context, string) error
+
 func TestMain(m *testing.M) {
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"code":200,"status":20000,"data":{"content":""}}`))
 	}))
 	scraper.JinaReaderURL = stub.URL + "/"
+	// Link-verifier tests use loopback targets, which the real Internet Archive
+	// guard refuses by design. archive_source_test.go re-enables it where tested.
+	realArchiveGuard = scraper.GuardArchiveTarget
+	scraper.GuardArchiveTarget = func(context.Context, string) error { return nil }
 	stopDNS := installFakeDNS()
 	code := m.Run()
 	stopDNS()

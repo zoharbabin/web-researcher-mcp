@@ -335,6 +335,9 @@ func redirectedToRoot(requested, final string) bool {
 // wayback queries the Internet Archive availability API for a snapshot of url.
 // Returns "" when none exists or the lookup fails (best-effort).
 func (v *LinkVerifier) wayback(ctx context.Context, rawURL string) string {
+	if GuardArchiveTarget(ctx, rawURL) != nil {
+		return ""
+	}
 	reqURL := v.waybackBase + "?url=" + url.QueryEscape(rawURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
@@ -383,11 +386,15 @@ const snapshotPrefix = "https://web.archive.org/web/"
 // neither is available. It never returns an error — the caller maps the result to
 // a status. The outbound connection is to the fixed web.archive.org host through
 // the SSRF-safe client (every redirect hop IP-revalidated); the user URL is the
-// path suffix, not a separately-fetched target.
+// path suffix, not a separately-fetched target. Because that client never sees
+// the target host, GuardArchiveTarget refuses internal URLs first (empty result).
 func (v *LinkVerifier) Archive(ctx context.Context, rawURL string) ArchiveResult {
 	res := ArchiveResult{RequestedURL: rawURL}
 	if rawURL == "" {
 		return res
+	}
+	if GuardArchiveTarget(ctx, rawURL) != nil {
+		return res // internal URLs are never sent to the archive
 	}
 
 	// Total budget for all SPN attempts + the Wayback fallback. The retry loop

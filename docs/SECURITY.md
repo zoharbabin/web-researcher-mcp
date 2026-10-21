@@ -20,6 +20,8 @@ Server-Side Request Forgery is the highest-severity risk for a scraping server.
 
 **Cloud-proxy tiers:** The Jina and Exa tiers never dial the target themselves, so the dial-time guard cannot see it. Both call `guardCloudProxy` first and skip any non-public host, even when `ALLOW_PRIVATE_IPS=true`. The URL is never sent to the third party.
 
+**Internet Archive requests:** Save Page Now (`archive_source`) and the Wayback availability lookup (link verification) dial `web.archive.org`, so the dial-time guard cannot see the target either. Both call `scraper.GuardArchiveTarget` first and refuse internal targets (private addresses, single-label and internal names, hosts that resolve privately), even when `ALLOW_PRIVATE_IPS=true`. A host that does not resolve is allowed, so dead public sites still get archive lookups.
+
 The approach:
 1. Check hostname against blocklist (cloud metadata endpoints)
 2. Resolve DNS

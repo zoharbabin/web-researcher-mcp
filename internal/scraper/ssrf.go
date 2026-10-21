@@ -237,3 +237,46 @@ func checkCloudProxyTarget(ctx context.Context, pageURL string) error {
 	}
 	return nil
 }
+
+// GuardArchiveTarget decides whether a URL may be handed to the Internet Archive
+// (Save Page Now and the Wayback availability lookup). Tests that target
+// loopback httptest servers replace it, as they do JinaReaderURL; production
+// always runs checkArchiveTarget.
+var GuardArchiveTarget = checkArchiveTarget
+
+// nonPublicNameSuffixes are DNS suffixes reserved for local or internal use.
+var nonPublicNameSuffixes = []string{".localhost", ".internal", ".local", ".localdomain", ".lan", ".home.arpa"}
+
+// checkArchiveTarget refuses to send pageURL to the Internet Archive unless its
+// host could be a public one. The archive requests dial web.archive.org, not
+// the target, so the SSRF-safe client never sees the target host and cannot
+// protect it; without this check an internal URL would be handed to a third
+// party. It ignores ALLOW_PRIVATE_IPS for the same reason as
+// checkCloudProxyTarget. A host that does not resolve at all is allowed: a
+// dead public site is exactly what a Wayback lookup is for.
+func checkArchiveTarget(ctx context.Context, pageURL string) error {
+	u, err := url.Parse(strings.TrimSpace(pageURL))
+	if err != nil || u.Hostname() == "" {
+		return contentError(pageURL, "not sent to the Internet Archive: invalid URL")
+	}
+	host := strings.ToLower(strings.Trim(u.Hostname(), "[]"))
+	notPublic := contentError(pageURL, "not sent to the Internet Archive: target is not a public host")
+	if host == "localhost" || (net.ParseIP(host) == nil && !strings.Contains(host, ".")) {
+		return notPublic // a single-label name such as "wiki" is never a public host
+	}
+	for _, suffix := range nonPublicNameSuffixes {
+		if strings.HasSuffix(host, suffix) {
+			return notPublic
+		}
+	}
+	if err := ValidateHost(ctx, host, false); err != nil {
+		switch {
+		case errors.Is(err, ErrSSRFBlocked):
+			return notPublic
+		case isDNSNotFound(err):
+			return nil
+		}
+		return networkError(pageURL, "", err)
+	}
+	return nil
+}

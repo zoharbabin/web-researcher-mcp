@@ -65,6 +65,12 @@ func registerArchiveSource(srv *mcp.Server, deps Dependencies) {
 			auditToolDenial(ctx, deps, "archive_source", time.Since(start), "private_host")
 			return toolError("refusing to archive a private/loopback host"), nil, nil
 		}
+		// The archive requests dial web.archive.org, so the SSRF-safe client never
+		// sees the target. Resolve it here: an internal name must not be sent out.
+		if err := scraper.GuardArchiveTarget(ctx, rawURL); err != nil {
+			auditToolDenial(ctx, deps, "archive_source", time.Since(start), "private_host")
+			return toolError("refusing to archive a host that is not publicly reachable"), nil, nil
+		}
 
 		out := map[string]any{
 			"requestedUrl": rawURL,

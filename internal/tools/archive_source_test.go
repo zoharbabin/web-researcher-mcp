@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -161,5 +162,35 @@ func TestArchiveSource_NoKeyLeak(t *testing.T) {
 		if strings.Contains(string(blob), secret) {
 			t.Errorf("IA key %q leaked into the result payload: %s", secret, blob)
 		}
+	}
+}
+
+// TestArchiveSource_RefusesHostsThatResolvePrivately: the archive request is
+// made by web.archive.org, so a name that resolves to a private address must be
+// refused before anything is sent. A public literal passes the same guard.
+func TestArchiveSource_RefusesHostsThatResolvePrivately(t *testing.T) {
+	var hits int32
+	spn := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.Header().Set("Content-Location", "/web/20260101000000/x")
+		w.WriteHeader(200)
+	}))
+	defer spn.Close()
+
+	prev := scraper.GuardArchiveTarget
+	t.Cleanup(func() { scraper.GuardArchiveTarget = prev })
+	scraper.GuardArchiveTarget = realArchiveGuard
+
+	useFakeDNS(t, "intranet.example.test") // resolves to 127.0.0.1
+	if _, isErr := callArchive(t, archiveDeps(t, spn.URL+"/save/", ""), "https://intranet.example.test/secret"); !isErr {
+		t.Error("host resolving to a private address should be refused")
+	}
+	if n := atomic.LoadInt32(&hits); n != 0 {
+		t.Errorf("archive received %d requests for a private target, want 0", n)
+	}
+
+	out, isErr := callArchive(t, archiveDeps(t, spn.URL+"/save/", ""), "http://93.184.216.34/x")
+	if isErr || out["status"] != "archived" {
+		t.Errorf("public literal: isErr=%v out=%v, want archived", isErr, out)
 	}
 }

@@ -26,6 +26,9 @@ func TestMain(m *testing.M) {
 	// Pipeline tests target loopback httptest servers, which the real cloud-proxy
 	// guard (checkCloudProxyTarget) refuses by design. The guard has its own test.
 	guardCloudProxy = func(context.Context, string) error { return nil }
+	// Same for the Internet Archive guard: link-verifier tests point at loopback
+	// servers. archive_guard_test.go re-enables it where it is under test.
+	GuardArchiveTarget = func(context.Context, string) error { return nil }
 	code := m.Run()
 	stub.Close()
 	os.Exit(code)
