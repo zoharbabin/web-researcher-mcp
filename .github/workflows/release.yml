@@ -40,7 +40,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: "1.27.2"
+          go-version: "1.27.3"
           cache: true
 
       # ── Fast-fail gates (before any slow or authenticated steps) ──────────────
@@ -796,7 +796,7 @@ jobs:
 
       # ── Compute vendorHash ────────────────────────────────────────────────────
       # go = pkgs.go_1_27 — nixpkgs-unstable's default `go` (1.26.7 as of
-      # 2026-09-28) is older than go.mod's `go >= 1.27.2` requirement (#744).
+      # 2026-09-28) is older than go.mod's `go >= 1.27.3` requirement (#744).
       # With GOTOOLCHAIN=local in the Nix sandbox, the go-modules build fails
       # outright rather than auto-fetching a newer toolchain, which nix-build
       # then reports as a generic misleading "hash mismatch" — nothing to do
