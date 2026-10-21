@@ -74,20 +74,25 @@ func storeArtifact(ctx context.Context, deps Dependencies, payload []byte) (uri,
 // linkSummary is the small inline body returned alongside a resource_link. It
 // carries enough provenance for the model to decide whether to fetch the full
 // artifact: what it is, how big, where to get it, and when it expires.
+//
+// It is the StructuredContent of every linked response, so MCP clients
+// validate it against the calling tool's OutputSchema. A JSON key here must
+// not reuse a top-level property of the scrape_page, search_and_scrape, or
+// research_export schema with a different type (#795).
 type linkSummary struct {
-	Resource  string `json:"resource"`          // the research://artifact/{id} URI to fetch
-	Bytes     int    `json:"bytes"`             // size of the linked payload
-	MIMEType  string `json:"mimeType"`          // always application/json
-	Summary   string `json:"summary,omitempty"` // human-facing one-liner about the contents
-	ExpiresAt string `json:"expiresAt"`         // RFC 3339 — when the link stops resolving
-	Linked    bool   `json:"linked"`            // always true on this path (provenance marker)
+	Resource  string `json:"resource"`                  // the research://artifact/{id} URI to fetch
+	Bytes     int    `json:"bytes"`                     // size of the linked payload
+	MIMEType  string `json:"mimeType"`                  // always application/json
+	Summary   string `json:"artifactSummary,omitempty"` // human-facing one-liner about the contents
+	ExpiresAt string `json:"expiresAt"`                 // RFC 3339 — when the link stops resolving
+	Linked    bool   `json:"linked"`                    // always true on this path (provenance marker)
 }
 
 // largeResultOrInline returns the right CallToolResult for a payload:
 //   - below linkThresholdBytes (or when artifacts are unavailable): the payload
 //     inlined exactly as structuredResult would (no behavior change).
 //   - at/above the threshold: a resource_link to the stored artifact plus a small
-//     inline summary (the `summary` one-liner + size + URI + expiry), so the heavy
+//     inline summary (the `artifactSummary` one-liner + size + URI + expiry), so the heavy
 //     body stays out of context until the client fetches it.
 //
 // summary is a short human-facing description of the linked contents (e.g.
@@ -105,7 +110,7 @@ func largeResultOrInline(ctx context.Context, deps Dependencies, payload []byte,
 // artifact is worth a follow-up read WITHOUT one (#508). extra is ignored (and
 // must be nil/empty) on the inline path — a small payload already carries its
 // own fields undisturbed. Keys in extra must not collide with linkSummary's own
-// field names (resource, bytes, mimeType, summary, expiresAt, linked).
+// field names (resource, bytes, mimeType, artifactSummary, expiresAt, linked).
 func largeResultOrInlineWithFields(ctx context.Context, deps Dependencies, payload []byte, summary string, extra map[string]any) *mcp.CallToolResult {
 	if len(payload) < linkThresholdBytes {
 		return structuredResult(payload)

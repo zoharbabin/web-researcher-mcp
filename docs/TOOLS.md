@@ -20,7 +20,7 @@ Each tool follows the pattern in `internal/tools/registry.go`: a typed input str
 
 ## Large-Payload Linking (resource_link)
 
-The heaviest tools — `scrape_page` (`mode: raw`), `search_and_scrape`, and `research_export` — can return tens to hundreds of KB. When a result is **at or above the link threshold**, the tool returns an MCP `resource_link` (2025-06-18 content type) instead of inlining the full body: a small inline summary (`{resource, bytes, mimeType, summary, expiresAt, linked:true}`) plus a `resource_link` the client fetches on demand. Below the threshold, results inline exactly as before (no behavior change).
+The heaviest tools — `scrape_page` (`mode: raw`), `search_and_scrape`, and `research_export` — can return tens to hundreds of KB. When a result is **at or above the link threshold**, the tool returns an MCP `resource_link` (2025-06-18 content type) instead of inlining the full body: a small inline summary (`{resource, bytes, mimeType, artifactSummary, expiresAt, linked:true}`) plus a `resource_link` the client fetches on demand. Below the threshold, results inline exactly as before (no behavior change).
 
 - The linked body is stored in the shared `cache.Cache` (memory + AES-encrypted disk, or Redis in HTTP mode) under a **content-addressed** key and served read-only via the `research://artifact/{id}` resource template. The id is the SHA-256 of the body, so identical payloads de-dupe and the URI is stable/idempotent.
 - Artifacts are **short-lived** (bounded TTL); a fetch after expiry returns a not-found error, never another caller's data. With no cache configured, large payloads inline (correctness over size).

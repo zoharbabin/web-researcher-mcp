@@ -195,6 +195,42 @@ func TestLargeResultOrInlineWithFields_MergesExtra(t *testing.T) {
 	}
 }
 
+// TestLargeResultOrInline_LinkSummaryValidatesAgainstCallerSchemas (#795): the
+// link summary is the StructuredContent of every linked response, and MCP
+// clients validate it against the calling tool's OutputSchema. A linkSummary
+// key that reuses a schema property with a different type makes every large
+// result of that tool fail. Each caller is checked with the extra fields it
+// passes in production.
+func TestLargeResultOrInline_LinkSummaryValidatesAgainstCallerSchemas(t *testing.T) {
+	big := []byte(`{"content":"` + strings.Repeat("x", linkThresholdBytes) + `"}`)
+	cases := []struct {
+		tool   string
+		schema map[string]any
+		extra  map[string]any
+	}{
+		{"search_and_scrape", searchAndScrapeOutputSchema, map[string]any{"sourceCount": 3, "status": "complete"}},
+		{"scrape_page", scrapePageOutputSchema, map[string]any{"contentSizeBytes": 12345}},
+		{"research_export", researchExportOutputSchema, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.tool, func(t *testing.T) {
+			res := largeResultOrInlineWithFields(context.Background(), artifactTestDeps(), big, tc.tool+" results", tc.extra)
+			if len(res.Content) != 2 {
+				t.Fatalf("large payload should be summary + link (2 items), got %d", len(res.Content))
+			}
+			scBytes, ok := res.StructuredContent.(json.RawMessage)
+			if !ok {
+				t.Fatalf("StructuredContent should be json.RawMessage, got %T", res.StructuredContent)
+			}
+			var sc map[string]any
+			if err := json.Unmarshal(scBytes, &sc); err != nil {
+				t.Fatalf("StructuredContent should be valid JSON: %v", err)
+			}
+			assertValidAgainstSchema(t, tc.schema, sc)
+		})
+	}
+}
+
 // TestLargeResultOrInlineWithFields_SmallPayloadIgnoresExtra: below the link
 // threshold, largeResultOrInlineWithFields must behave exactly like
 // largeResultOrInline/structuredResult — extra fields are never injected into a
