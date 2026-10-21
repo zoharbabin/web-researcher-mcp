@@ -355,7 +355,7 @@ jobs:
 
       - name: Upload coverage artifact
         if: matrix.go-version == '1.27.3'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: coverage
           path: coverage.out
@@ -503,7 +503,7 @@ jobs:
             ./cmd/web-researcher-mcp
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: binary-${{ matrix.goos }}-${{ matrix.goarch }}
           path: web-researcher-mcp-*
