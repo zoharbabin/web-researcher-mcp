@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"sync"
 
@@ -116,6 +117,7 @@ var (
 	_ Provider         = (*Router)(nil)
 	_ PatentSearcher   = (*Router)(nil)
 	_ AcademicSearcher = (*Router)(nil)
+	_ OperationSupport = (*Router)(nil)
 )
 
 // RouterConfig configures the Router.
@@ -172,7 +174,7 @@ func NewRouter(providers map[string]Provider, cfg RouterConfig) *Router {
 		logger = slog.Default()
 	}
 
-	return &Router{
+	r := &Router{
 		providers:           providers,
 		breakers:            breakers,
 		patentProviders:     patentProviders,
@@ -185,6 +187,8 @@ func NewRouter(providers map[string]Provider, cfg RouterConfig) *Router {
 		thinThreshold:       cfg.ThinThreshold,
 		maxFetchPerProvider: cfg.MaxFetchPerProvider,
 	}
+	r.warnUnsupportedRouting()
+	return r
 }
 
 func (r *Router) Name() string { return "router" }
@@ -257,7 +261,10 @@ func (r *Router) Web(ctx context.Context, params WebSearchParams) ([]SearchResul
 
 func (r *Router) Images(ctx context.Context, params ImageSearchParams) ([]ImageResult, error) {
 	trace := routingTraceFromContext(ctx)
-	priority := r.priorityFor(OpImages)
+	priority := r.capable(r.priorityFor(OpImages), OpImages)
+	if len(priority) == 0 {
+		return nil, &UnsupportedOperationError{Op: OpImages}
+	}
 	var lastErr error
 	for i, name := range priority {
 		p, ok := r.provider(name)
@@ -298,7 +305,10 @@ func (r *Router) Images(ctx context.Context, params ImageSearchParams) ([]ImageR
 
 func (r *Router) News(ctx context.Context, params NewsSearchParams) ([]NewsResult, error) {
 	trace := routingTraceFromContext(ctx)
-	priority := r.priorityFor(OpNews)
+	priority := r.capable(r.priorityFor(OpNews), OpNews)
+	if len(priority) == 0 {
+		return nil, &UnsupportedOperationError{Op: OpNews}
+	}
 	var lastErr error
 	for i, name := range priority {
 		p, ok := r.provider(name)
@@ -711,12 +721,66 @@ func (r *Router) filterAvailable(names []string) []string {
 	return available
 }
 
+// allProviderNames returns every registered provider in a stable order, so
+// the default ladder does not depend on map iteration.
 func (r *Router) allProviderNames() []string {
 	names := make([]string, 0, len(r.providers))
 	for name := range r.providers {
 		names = append(names, name)
 	}
+	sort.Strings(names)
 	return names
+}
+
+// capable keeps only the providers in names that serve op. Unlike a missing
+// or unhealthy provider, an incapable one is never attempted: its stub reply
+// is empty, and the first non-error reply ends the ladder.
+func (r *Router) capable(names []string, op Operation) []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		if p, ok := r.providers[name]; ok && Supports(p, op) {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+// SupportedOperations implements OperationSupport: Web always, plus every
+// operation at least one registered provider serves. Whether the routing
+// config lets a request reach that provider is decided per call.
+func (r *Router) SupportedOperations() []Operation {
+	ops := []Operation{OpWeb}
+	for _, op := range []Operation{OpImages, OpNews} {
+		if len(r.capable(r.allProviderNames(), op)) > 0 {
+			ops = append(ops, op)
+		}
+	}
+	return ops
+}
+
+// warnUnsupportedRouting logs routing entries that cannot serve their
+// operation. They are skipped at request time, so a list with no capable
+// entry makes that operation fail until SEARCH_ROUTING is fixed.
+func (r *Router) warnUnsupportedRouting() {
+	for _, e := range []struct {
+		op    Operation
+		names []string
+	}{{OpImages, r.routing.Images}, {OpNews, r.routing.News}} {
+		var skipped []string
+		for _, name := range e.names {
+			if p, ok := r.providers[name]; ok && !Supports(p, e.op) {
+				skipped = append(skipped, name)
+			}
+		}
+		if len(skipped) == 0 {
+			continue
+		}
+		r.logger.Warn("SEARCH_ROUTING lists providers that do not support the operation; they will be skipped",
+			"operation", string(e.op), "providers", strings.Join(skipped, ","),
+			"has_capable", len(r.capable(e.names, e.op)) > 0)
+	}
 }
 
 // ParseRoutingConfig parses the SEARCH_ROUTING env var value.

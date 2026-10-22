@@ -163,6 +163,8 @@ func (p *BlueskyProvider) Web(ctx context.Context, params WebSearchParams) ([]Se
 	return results, nil
 }
 
+func (p *BlueskyProvider) SupportedOperations() []Operation { return opsWeb }
+
 func (p *BlueskyProvider) Images(_ context.Context, _ ImageSearchParams) ([]ImageResult, error) {
 	return nil, nil
 }

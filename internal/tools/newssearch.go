@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 
@@ -156,7 +157,7 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 			return withRoutingMeta(cachedResultWithMeta(cached, meta), rt), nil, nil
 		}
 
-		provider, errResult := resolveProvider(deps, input.Provider)
+		provider, substituted, errResult := resolveProviderFor(deps, input.Provider, search.OpNews)
 		if errResult != nil {
 			return errResult, nil, nil
 		}
@@ -175,6 +176,12 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 			})
 		})
 		if err != nil {
+			var unsupported *search.UnsupportedOperationError
+			if errors.As(err, &unsupported) {
+				deps.Metrics.RecordToolCall("news_search", time.Since(start), err, "unsupported_operation", false)
+				auditToolCall(ctx, deps, "news_search", time.Since(start), err, "unsupported_operation")
+				return unsupportedOperationResponse(deps, unsupported.Op, unsupported.Provider), nil, nil
+			}
 			errCode := "upstream_error"
 			if isRateLimitError(err) {
 				errCode = "rate_limited"
@@ -203,10 +210,13 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 		// web/academic/patent. Only configured + healthy alternatives suggested.
 		if len(results) == 0 {
 			used := hintProviderName(provider)
-			output["hints"] = buildNewsHints(input, freshness, used, healthyAlternatives(deps, used, true))
+			output["hints"] = buildNewsHints(input, freshness, used, healthyAlternatives(deps, used, search.OpNews))
 		}
 
 		var warnings []string
+		if substituted != "" {
+			warnings = append(warnings, substitutedProviderWarning(substituted, effectiveProvider, "news"))
+		}
 		if w := newsDateSortRelevanceWarning(sortBy, effectiveProvider, articles); w != "" {
 			warnings = append(warnings, w)
 		}

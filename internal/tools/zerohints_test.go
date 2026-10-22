@@ -176,7 +176,7 @@ func TestHealthyAlternativesExcludesUsed(t *testing.T) {
 			"duckduckgo": &mockProvider{},
 		},
 	}
-	alts := healthyAlternatives(deps, "brave", false)
+	alts := healthyAlternatives(deps, "brave", search.OpWeb)
 	if len(alts) != 2 {
 		t.Fatalf("expected 2 alternatives (brave excluded), got %v", alts)
 	}
@@ -394,33 +394,31 @@ func TestEconFilterMap(t *testing.T) {
 // TestHealthyAlternativesEmpty returns nil when no other provider is configured.
 func TestHealthyAlternativesEmpty(t *testing.T) {
 	deps := Dependencies{SearchProviders: map[string]search.Provider{"brave": &mockProvider{}}}
-	if alts := healthyAlternatives(deps, "brave", false); alts != nil {
+	if alts := healthyAlternatives(deps, "brave", search.OpWeb); alts != nil {
 		t.Errorf("expected nil when only the used provider is configured, got %v", alts)
 	}
-	if alts := healthyAlternatives(Dependencies{}, "brave", false); alts != nil {
+	if alts := healthyAlternatives(Dependencies{}, "brave", search.OpWeb); alts != nil {
 		t.Errorf("expected nil when no providers configured, got %v", alts)
 	}
 }
 
-// newsProvider is a mockProvider that declares news support.
-type newsProvider struct{ mockProvider }
-
-func (*newsProvider) SupportsNews() bool { return true }
-
-// TestHealthyAlternativesOnlyNewsCapableForNews checks news hints suggest only
-// providers that declare news support, while web hints suggest any.
-func TestHealthyAlternativesOnlyNewsCapableForNews(t *testing.T) {
+// TestHealthyAlternativesOnlyCapableForOperation checks news and image hints
+// suggest only providers that serve the operation, while web hints suggest any.
+func TestHealthyAlternativesOnlyCapableForOperation(t *testing.T) {
 	deps := Dependencies{
 		SearchProviders: map[string]search.Provider{
-			"brave":      &newsProvider{},
-			"serper":     &newsProvider{},
-			"duckduckgo": &mockProvider{},
+			"brave":      &opsMock{name: "brave", ops: allOps},
+			"serper":     &opsMock{name: "serper", ops: []search.Operation{search.OpWeb, search.OpNews}},
+			"duckduckgo": &opsMock{name: "duckduckgo", ops: webOnlyOps},
 		},
 	}
-	if got := healthyAlternatives(deps, "brave", true); len(got) != 1 || got[0] != "serper" {
+	if got := healthyAlternatives(deps, "brave", search.OpNews); len(got) != 1 || got[0] != "serper" {
 		t.Errorf("news alternatives = %v, want [serper]", got)
 	}
-	if got := healthyAlternatives(deps, "brave", false); len(got) != 2 {
+	if got := healthyAlternatives(deps, "serper", search.OpImages); len(got) != 1 || got[0] != "brave" {
+		t.Errorf("image alternatives = %v, want [brave]", got)
+	}
+	if got := healthyAlternatives(deps, "brave", search.OpWeb); len(got) != 2 {
 		t.Errorf("web alternatives = %v, want duckduckgo and serper", got)
 	}
 }

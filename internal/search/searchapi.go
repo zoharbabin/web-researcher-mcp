@@ -53,7 +53,7 @@ func (s *SearchAPIProvider) Images(ctx context.Context, params ImageSearchParams
 	return results, err
 }
 
-func (s *SearchAPIProvider) SupportsNews() bool { return true }
+func (s *SearchAPIProvider) SupportedOperations() []Operation { return opsWebImagesNews }
 
 func (s *SearchAPIProvider) News(ctx context.Context, params NewsSearchParams) ([]NewsResult, error) {
 	var results []NewsResult

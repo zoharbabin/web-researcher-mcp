@@ -576,6 +576,8 @@ When a result is large enough to cross the [Large-Payload Linking](#large-payloa
 
 ## Tool 4: `image_search`
 
+**Provider support.** Only some providers serve this operation (see the capability matrix in `docs/PROVIDERS.md`). An explicit `provider` that cannot returns a `config` error with `alternatives` (configured providers that can). With no `provider` and a default that cannot, a configured capable provider is used and `warning` says which. Under `SEARCH_ROUTING`, providers that cannot serve it are skipped.
+
 ### Input Schema
 
 | Field | Type | Required | Default | Constraints |
@@ -628,6 +630,8 @@ type ImageResult struct {
 ---
 
 ## Tool 5: `news_search`
+
+**Provider support.** Only some providers serve this operation (see the capability matrix in `docs/PROVIDERS.md`). An explicit `provider` that cannot returns a `config` error with `alternatives` (configured providers that can). With no `provider` and a default that cannot, a configured capable provider is used and `warning` says which. Under `SEARCH_ROUTING`, providers that cannot serve it are skipped.
 
 ### Input Schema
 

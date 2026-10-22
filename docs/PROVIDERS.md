@@ -53,11 +53,11 @@ Understanding what backs each provider helps you reason about result overlap and
 
 ### Capability Matrix
 
-Which tools each web search provider enables. `—` means the provider returns empty (no error) for that capability — image-capable providers in `SEARCH_ROUTING` will handle the fallback automatically.
+Which tools each web search provider enables. `—` means the provider does not serve that capability. Each provider declares this in code (`SupportedOperations()`), and a test keeps this table in step with it. The Router skips such providers for that operation and uses the next capable one. A request that names one (`provider: "tavily"` on `image_search`) returns a `config` error that lists configured providers that can serve it. With no `provider` set and a default that cannot serve the operation, a configured capable provider is used and the response says so in `warning`.
 
 | Provider | `web_search` | `image_search` | `news_search` | `local_search` | Scrape fallback tier |
 |---|:---:|:---:|:---:|:---:|:---:|
-| **[DuckDuckGo](https://duckduckgo.com/)** | ✓ | ✓ | ✓ | — | — |
+| **[DuckDuckGo](https://duckduckgo.com/)** | ✓ | — | — | — | — |
 | **[Google PSE](https://programmablesearchengine.google.com/)** | ✓ | ✓ | ✓ | — | — |
 | **[Serper](https://serper.dev/)** | ✓ | ✓ | ✓ | — | — |
 | **[SearchAPI.io](https://www.searchapi.io/)** | ✓ | ✓ | ✓ | — | — |

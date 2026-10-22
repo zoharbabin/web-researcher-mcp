@@ -46,7 +46,7 @@ func (t *TavilyProvider) Images(_ context.Context, _ ImageSearchParams) ([]Image
 	return nil, nil
 }
 
-func (t *TavilyProvider) SupportsNews() bool { return true }
+func (t *TavilyProvider) SupportedOperations() []Operation { return opsWebNews }
 
 func (t *TavilyProvider) News(ctx context.Context, params NewsSearchParams) ([]NewsResult, error) {
 	var results []NewsResult

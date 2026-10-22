@@ -40,6 +40,8 @@ func (d *DuckDuckGoProvider) Web(ctx context.Context, params WebSearchParams) ([
 	return results, err
 }
 
+func (d *DuckDuckGoProvider) SupportedOperations() []Operation { return opsWeb }
+
 func (d *DuckDuckGoProvider) Images(_ context.Context, _ ImageSearchParams) ([]ImageResult, error) {
 	return nil, nil
 }

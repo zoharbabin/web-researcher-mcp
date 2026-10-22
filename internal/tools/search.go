@@ -205,7 +205,7 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 		// Only configured + healthy alternative providers are suggested.
 		if len(results) == 0 {
 			used := hintProviderName(provider)
-			output["hints"] = buildWebHints(input, used, healthyAlternatives(deps, used, false))
+			output["hints"] = buildWebHints(input, used, healthyAlternatives(deps, used, search.OpWeb))
 		}
 
 		const webSearchTTL = 30 * time.Minute
@@ -487,6 +487,73 @@ func structuredResult(jsonBytes []byte) *mcp.CallToolResult {
 		},
 		StructuredContent: json.RawMessage(jsonBytes),
 	}
+}
+
+// resolveProviderFor is resolveProvider for operations only some providers
+// serve (images, news). An explicit provider that cannot serve op is an error,
+// never a silent empty result. When no provider is named and the default
+// cannot serve op, the first configured, healthy provider that can (in
+// search.SupportedProviders order) is used instead; substituted names the
+// default that was replaced, or is empty.
+func resolveProviderFor(deps Dependencies, providerName string, op search.Operation) (p search.Provider, substituted string, errResult *mcp.CallToolResult) {
+	p, errResult = resolveProvider(deps, providerName)
+	if errResult != nil {
+		return nil, "", errResult
+	}
+	if search.Supports(p, op) {
+		return p, "", nil
+	}
+	if providerName != "" {
+		return nil, "", unsupportedOperationResponse(deps, op, hintProviderName(p))
+	}
+	alts := healthyAlternatives(deps, p.Name(), op)
+	if len(alts) == 0 {
+		return nil, "", unsupportedOperationResponse(deps, op, hintProviderName(p))
+	}
+	best := alts[0]
+	rank := func(name string) int {
+		for i, n := range search.SupportedProviders {
+			if n == name {
+				return i
+			}
+		}
+		return len(search.SupportedProviders)
+	}
+	for _, name := range alts[1:] {
+		if rank(name) < rank(best) {
+			best = name
+		}
+	}
+	return deps.SearchProviders[best], p.Name(), nil
+}
+
+// substitutedProviderWarning tells the caller the default provider was swapped
+// because it cannot serve the operation.
+func substitutedProviderWarning(defaultName, used, what string) string {
+	return fmt.Sprintf("The default provider %q does not support %s search; results come from %q.", defaultName, what, used)
+}
+
+// unsupportedOperationResponse is the structured error for an operation the
+// asked provider cannot serve. provider is empty when the Router found no
+// capable provider in its routing list.
+func unsupportedOperationResponse(deps Dependencies, op search.Operation, provider string) *mcp.CallToolResult {
+	err := &search.UnsupportedOperationError{Op: op, Provider: provider}
+	alts := healthyAlternatives(deps, provider, op)
+	te := ToolError{
+		Kind:            ErrKindConfig,
+		Retryable:       false,
+		SuggestedAction: ActionTryDifferentProvider,
+		Provider:        provider,
+		Alternatives:    alts,
+	}
+	msg := err.Error() + "."
+	if len(alts) > 0 {
+		msg += " Configured providers that do: " + strings.Join(alts, ", ") + "."
+	} else {
+		te.SuggestedAction = ActionCheckAPIKey
+		msg += " Configure one that does (see docs/PROVIDERS.md capability matrix), or check SEARCH_ROUTING."
+	}
+	return structuredError(msg, te)
 }
 
 // resolveProvider returns the search provider to use for a request.

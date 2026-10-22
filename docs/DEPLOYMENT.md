@@ -451,7 +451,9 @@ SEARCH_ROUTING='{"web":"brave,google","news":"brave,serper","images":"google,bra
 
 **Operation types:** `web`, `images`, `news`, `academic`, `patents`, `default`. The `academic` and `patents` lists are filtered to providers that implement the academic/patent interface — `academic` accepts `openalex`, `crossref`, `pubmed`, `semanticscholar`, `exa`; `patents` accepts `searchapi`, `epo`, `lens`, `uspto`. Names that don't implement the interface are silently dropped, so use the example values above.
 
-When no explicit routing is configured for an operation, the `default` list is used. When `SEARCH_ROUTING` is not set at all, the server uses `SEARCH_PROVIDER` as a single provider (backward compatible).
+For `images` and `news`, the Router skips providers that do not serve the operation (see the capability matrix in `docs/PROVIDERS.md`). The list is exclusive: if it names no capable provider, the call fails with a `config` error, and startup logs a warning naming the skipped entries.
+
+When no explicit routing is configured for an operation, the `default` list is used. With neither, all configured providers are tried in alphabetical order. When `SEARCH_ROUTING` is not set at all, the server uses `SEARCH_PROVIDER` as a single provider (backward compatible).
 
 ### HTTP Transport
 

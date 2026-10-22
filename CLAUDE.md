@@ -101,7 +101,7 @@ Registry/manifest files (root, each read by a different external tool): `server.
 
 ## How to Add a Search Provider
 
-1. Create `internal/search/<name>.go` implementing `search.Provider` (Web, Images, News, Name methods); add `var _ Provider = (*XProvider)(nil)`. Return `(nil, nil)` from unsupported sub-capabilities (e.g. Images) — never an error (that would trip the breaker).
+1. Create `internal/search/<name>.go` implementing `search.Provider` (Web, Images, News, Name methods); add `var _ Provider = (*XProvider)(nil)`. Return `(nil, nil)` from unsupported sub-capabilities (e.g. Images) — never an error (that would trip the breaker) — and declare what you serve via `SupportedOperations()` (Web always; add `OpImages`/`OpNews` only if implemented). `TestEveryProviderDeclaresOperations` and `TestProvidersDocCapabilityMatrix` (docs/PROVIDERS.md matrix) enforce this.
 2. Add the name to `search.SupportedProviders` and a case to `NewProvider()`/`NewProviderByName()` in `internal/search/provider.go`. `AvailableProviders()` ranges over `SupportedProviders` — no edit there.
 3. Add the env var to `internal/config/config.go` (field + required-when-selected check) and `.env.example`.
 4. For specialized capabilities (academic / citation / filing / case / econ / trial): implement the matching `…Provider` interface and register in its `Supported…Providers` list + `New…ProviderByName` switch + `Available…Providers` constructor — `internal/search/domain.go` (academic + citation), `structured_domains.go` (filing/case/econ/trial). The matching tool picks it up with no tool-layer change. Every provider gets its own `circuit.New(...)` breaker via the `Available…Providers` constructor.

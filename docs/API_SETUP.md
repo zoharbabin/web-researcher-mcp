@@ -75,7 +75,7 @@ web-researcher-mcp
 
 ### Good to know
 
-- **`web_search` and `news_search` only.** `image_search` with Hacker News returns empty (no error). Keep an image-capable provider (Google, Brave, SearchAPI) in `SEARCH_ROUTING` if you need images.
+- **`web_search` and `news_search` only.** `image_search` with Hacker News returns a `config` error. Keep an image-capable provider (Google, Brave, SearchAPI) configured if you need images.
 - **Date filtering works.** `dateRange` is honored via the Algolia `numericFilters` (`created_at_i`); `num_results` accepts 1–100 (values outside that range reset to the default of 10).
 - **Reading threads.** `scrape_page` on a `news.ycombinator.com` item, user, or list URL is read natively through the HN Firebase API (story + top comments) — independent of which `SEARCH_PROVIDER` is set.
 
@@ -218,7 +218,7 @@ The key is sent as an `Authorization: Bearer` header (never in the request body)
 
 ### Good to know
 
-- **No image search.** `image_search` with Tavily returns empty (no error). Keep an image-capable provider (Google, Brave, SearchAPI) in `SEARCH_ROUTING` if you need images — the Router falls through automatically. Best used as a routing member rather than the sole provider: `SEARCH_ROUTING=tavily,brave,google`.
+- **No image search.** `image_search` with Tavily returns a `config` error. Keep an image-capable provider (Google, Brave, SearchAPI) in `SEARCH_ROUTING` if you need images. The Router skips Tavily for images and uses the next capable one. Best used as a routing member rather than the sole provider: `SEARCH_ROUTING=tavily,brave,google`.
 - **Web `time_range` is strict.** Tavily's web recency filter is aggressive — a `time_range=week` web search may return nothing for terms that have older results. For recent *news* use `news_search` (its `freshness` window works well); for recent *web* content, widen `time_range` or omit it.
 - **Some filters don't apply.** Tavily honors `site`, `lens`, `num_results`, `time_range`/`freshness`, but ignores `country`, `language`, `safe`, and exact/exclude-term filters (it has no API field for them). Use Google if you need hard country/language/exact-phrase control.
 
@@ -251,7 +251,7 @@ The key is sent as the `x-api-key` header (never in the request body or logs).
 ### Good to know
 
 - **Paid per call.** Exa charges per request (free tier: 1,000/month).
-- **No image search.** `image_search` with Exa returns empty (no error) — keep an image-capable provider (Google, Brave, SearchAPI) in `SEARCH_ROUTING` if you need images.
+- **No image search.** `image_search` with Exa returns a `config` error. Keep an image-capable provider (Google, Brave, SearchAPI) configured if you need images.
 - **Search type is fixed to `auto`.** The expensive deep/deep-reasoning tiers are deliberately not exposed; `auto` is the balanced, predictable-cost default.
 - **The scrape fallback is opt-in by cost.** The Exa `/contents` tier runs only when the free scrape tiers (markdown → stealth → HTML → browser, when Chrome is configured) all fail to extract content — the common path never spends an Exa credit on scraping.
 - **Best used as a routing member** when you also want a free default: `SEARCH_ROUTING=brave,exa`.

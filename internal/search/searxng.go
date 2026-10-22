@@ -100,7 +100,7 @@ func (s *SearXNGProvider) Images(ctx context.Context, params ImageSearchParams) 
 	return results, nil
 }
 
-func (s *SearXNGProvider) SupportsNews() bool { return true }
+func (s *SearXNGProvider) SupportedOperations() []Operation { return opsWebImagesNews }
 
 func (s *SearXNGProvider) News(ctx context.Context, params NewsSearchParams) ([]NewsResult, error) {
 	q := url.Values{}

@@ -2,6 +2,7 @@ package search
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
@@ -121,16 +122,66 @@ type Provider interface {
 	Name() string
 }
 
-// NewsCapable is implemented by providers whose News method returns real
-// results. Providers that stub News (return nil, nil) leave it out.
-type NewsCapable interface {
-	SupportsNews() bool
+// OperationSupport is implemented by providers to declare which operations
+// they serve beyond Web (always supported). A provider that stubs Images or
+// News (returns nil, nil) leaves that operation out. The Router and the tool
+// layer use the declaration to skip providers that cannot serve a request
+// instead of treating the stub's empty reply as a real answer.
+//
+// Every provider in SupportedProviders must implement it
+// (TestEveryProviderDeclaresOperations). A provider that does not, such as a
+// test double, is assumed to support every operation.
+type OperationSupport interface {
+	SupportedOperations() []Operation
 }
 
-// SupportsNews reports whether p declares news support.
-func SupportsNews(p Provider) bool {
-	c, ok := p.(NewsCapable)
-	return ok && c.SupportsNews()
+// Operation sets declared by providers.
+var (
+	opsWeb           = []Operation{OpWeb}
+	opsWebNews       = []Operation{OpWeb, OpNews}
+	opsWebImagesNews = []Operation{OpWeb, OpImages, OpNews}
+)
+
+// Supports reports whether p serves op. Web is always supported. Providers
+// that do not implement OperationSupport are assumed to support everything.
+func Supports(p Provider, op Operation) bool {
+	if op == OpWeb {
+		return true
+	}
+	s, ok := p.(OperationSupport)
+	if !ok {
+		return true
+	}
+	for _, o := range s.SupportedOperations() {
+		if o == op {
+			return true
+		}
+	}
+	return false
+}
+
+// UnsupportedOperationError means no provider that was asked can serve the
+// operation. It is a configuration problem, not an upstream failure, so it
+// never trips a circuit breaker.
+type UnsupportedOperationError struct {
+	Op Operation
+	// Provider is the provider that was asked. Empty when the Router found no
+	// capable provider in its routing list.
+	Provider string
+}
+
+func (e *UnsupportedOperationError) Error() string {
+	label := string(e.Op)
+	switch e.Op {
+	case OpImages:
+		label = "image"
+	case OpNews:
+		label = "news"
+	}
+	if e.Provider != "" {
+		return fmt.Sprintf("provider %q does not support %s search", e.Provider, label)
+	}
+	return fmt.Sprintf("no configured provider supports %s search", label)
 }
 
 // PatentSearcher is an optional interface that providers can implement to

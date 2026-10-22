@@ -382,7 +382,7 @@ Most tools are read-only. For the rare tool that mutates server-side state (e.g.
 
 Web search providers implement the `search.Provider` interface (`Web`, `Images`, `News`, `Name`) — the core extension path.
 
-1. **Implement** `search.Provider` in `internal/search/<name>.go` (add a `var _ Provider = (*XProvider)(nil)` assertion; return `(nil, nil)` from any unsupported sub-capability such as `Images` — never an error, which would trip the breaker).
+1. **Implement** `search.Provider` in `internal/search/<name>.go` (add a `var _ Provider = (*XProvider)(nil)` assertion; return `(nil, nil)` from any unsupported sub-capability such as `Images` — never an error, which would trip the breaker — and declare what you do serve with `SupportedOperations() []Operation`, listing `OpImages`/`OpNews` only if implemented; `TestEveryProviderDeclaresOperations` and `TestProvidersDocCapabilityMatrix` fail otherwise).
 2. **Wire the factory** — add a `case` to both `NewProvider()` and `NewProviderByName()` in `internal/search/provider.go`. These are separate switch statements, so both need a new case. The credential check lives in the `NewProviderByName()` case (return the provider only when its key is set).
 3. **Add the credential/config** env var to `internal/config/config.go` and document it in `.env.example`.
 4. **Make it discoverable** — add the name to `search.SupportedProviders`. `AvailableProviders()` ranges over that list (constructing each via `NewProviderByName()`), so no edit there — the Router picks it up automatically.

@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 
@@ -97,7 +98,7 @@ func registerImageSearch(srv *mcp.Server, deps Dependencies) {
 			return withRoutingMeta(cachedResultWithMeta(cached, meta), rt), nil, nil
 		}
 
-		provider, errResult := resolveProvider(deps, input.Provider)
+		provider, substituted, errResult := resolveProviderFor(deps, input.Provider, search.OpImages)
 		if errResult != nil {
 			return errResult, nil, nil
 		}
@@ -120,6 +121,12 @@ func registerImageSearch(srv *mcp.Server, deps Dependencies) {
 			return provider.Images(traceCtx, imgParams)
 		})
 		if err != nil {
+			var unsupported *search.UnsupportedOperationError
+			if errors.As(err, &unsupported) {
+				deps.Metrics.RecordToolCall("image_search", time.Since(start), err, "unsupported_operation", false)
+				auditToolCall(ctx, deps, "image_search", time.Since(start), err, "unsupported_operation")
+				return unsupportedOperationResponse(deps, unsupported.Op, unsupported.Provider), nil, nil
+			}
 			errCode := "upstream_error"
 			if isRateLimitError(err) {
 				errCode = "rate_limited"
@@ -139,15 +146,23 @@ func registerImageSearch(srv *mcp.Server, deps Dependencies) {
 		}
 
 		if len(results) == 0 {
-			output["hints"] = buildZeroResultHints(hintProviderName(provider), nil, nil)
+			used := hintProviderName(provider)
+			output["hints"] = buildZeroResultHints(used, nil, healthyAlternatives(deps, used, search.OpImages))
 		}
 
 		effectiveProvider := decision.ProviderUsed
 		if effectiveProvider == "" {
 			effectiveProvider = provider.Name()
 		}
+		var warnings []string
+		if substituted != "" {
+			warnings = append(warnings, substitutedProviderWarning(substituted, effectiveProvider, "image"))
+		}
 		if warning := manyImageFiltersWarning(imgParams, effectiveProvider); warning != "" {
-			output["warning"] = warning
+			warnings = append(warnings, warning)
+		}
+		if len(warnings) > 0 {
+			output["warning"] = strings.Join(warnings, " ")
 		}
 
 		jsonBytes, _ := json.Marshal(output)

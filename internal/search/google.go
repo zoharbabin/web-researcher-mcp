@@ -46,7 +46,7 @@ func (g *GoogleProvider) Images(ctx context.Context, params ImageSearchParams) (
 	return results, err
 }
 
-func (g *GoogleProvider) SupportsNews() bool { return true }
+func (g *GoogleProvider) SupportedOperations() []Operation { return opsWebImagesNews }
 
 func (g *GoogleProvider) News(ctx context.Context, params NewsSearchParams) ([]NewsResult, error) {
 	var results []NewsResult

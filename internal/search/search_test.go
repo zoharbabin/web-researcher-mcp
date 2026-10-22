@@ -3532,17 +3532,3 @@ func (t *rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	newReq.Header = req.Header
 	return t.inner.RoundTrip(newReq)
 }
-
-func TestSupportsNews(t *testing.T) {
-	t.Parallel()
-	for _, p := range []Provider{&DuckDuckGoProvider{}, &BlueskyProvider{}} {
-		if SupportsNews(p) {
-			t.Errorf("%s stubs News and must not declare support", p.Name())
-		}
-	}
-	for _, p := range []Provider{&BraveProvider{}, &GoogleProvider{}, &ExaProvider{}, &TavilyProvider{}} {
-		if !SupportsNews(p) {
-			t.Errorf("%s serves news and must declare support", p.Name())
-		}
-	}
-}
