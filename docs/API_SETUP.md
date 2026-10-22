@@ -47,6 +47,37 @@ Keys set in the MCP client config are passed directly to the server process — 
 
 ---
 
+## Parallel (Keyless Web Search)
+
+[Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp) provides free web search with excerpts, powered by Fast mode, without an account or API key.
+
+Because it needs no credential, an explicit opt-in, not a key, authorizes egress to it. Until `PARALLEL_ENABLED=true` the provider is never constructed: `SEARCH_PROVIDER=parallel` refuses to start, a `parallel` entry in `SEARCH_ROUTING` is ignored, and `provider: "parallel"` is rejected as unconfigured. Queries sent through it leave your deployment for a third party you have no account or signed DPA with. Review [Parallel's terms](https://parallel.ai/customer-terms) and [privacy policy](https://parallel.ai/privacy-policy) before enabling, and see [Security & Compliance](SECURITY_AND_COMPLIANCE.md#optional-third-party-search-egress-parallel).
+
+```bash
+export PARALLEL_ENABLED=true
+export SEARCH_PROVIDER=parallel
+web-researcher-mcp
+```
+
+Once enabled, you can also use `web_search` with `provider: "parallel"` for one query while keeping your configured default. To use Parallel first for web searches while keeping DuckDuckGo for images and news:
+
+```bash
+export PARALLEL_ENABLED=true
+export SEARCH_ROUTING='{"web":"parallel,duckduckgo","images":"duckduckgo","news":"duckduckgo"}'
+```
+
+Current defaults are unchanged.
+
+The adapter connects to `https://search.parallel.ai/mcp` using Streamable HTTP and the bundled MCP SDK. By default it sends no Parallel credentials; anonymous access is intended for exploration and light use and is subject to service rate limits. Set `PARALLEL_API_KEY` (from [platform.parallel.ai](https://platform.parallel.ai)) to send it as a Bearer token and raise that limit. The key is read only when `PARALLEL_ENABLED=true`. It is sent only to the scheme and host of that endpoint, never to a host a redirect names.
+
+Every call carries a `session_id`: a random 32-character hex value generated once per server process and reused for the life of that process. Every user and tenant on that instance shares it. Parallel keys free-tier rate limiting and log correlation on it and documents reusing one stable value rather than minting one per call, which would split the accounting. It is derived from `crypto/rand` and carries no user, tenant, or query data.
+
+- Supports `web_search` and the search phase of `search_and_scrape`, returning titles, source URLs, excerpts, and publication dates when available. `scrape_page` continues to use the existing scraper pipeline.
+- Returns up to `num_results` (at most 10), bounded by the results the service supplies. Site/lens, exact-phrase, and excluded-term constraints are sent as search operators. `time_range` is a freshness preference in the objective, not a hard date filter.
+- Does not expose dedicated image/news search, SafeSearch, language/country filters, or pagination. Use another provider when those controls are required. Route image/news operations directly to a capable provider as shown above, or select one per query. The router treats an empty successful response as final, so `SEARCH_ROUTING=parallel,duckduckgo` also returns no image/news results when Parallel is first; an explicit `provider: "parallel"` request returns no image/news results.
+
+---
+
 ## DuckDuckGo (Zero-Config Default)
 
 **Free**: No API key, no registration, no query limits to configure.

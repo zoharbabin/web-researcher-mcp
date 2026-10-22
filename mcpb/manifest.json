@@ -45,7 +45,9 @@
         "GOOGLE_CUSTOM_SEARCH_ID": "${user_config.GOOGLE_CUSTOM_SEARCH_ID}",
         "SEARCH_PROVIDER": "${user_config.SEARCH_PROVIDER}",
         "BRAVE_API_KEY": "${user_config.BRAVE_API_KEY}",
-        "XQUIK_API_KEY": "${user_config.XQUIK_API_KEY}"
+        "XQUIK_API_KEY": "${user_config.XQUIK_API_KEY}",
+        "PARALLEL_ENABLED": "${user_config.PARALLEL_ENABLED}",
+        "PARALLEL_API_KEY": "${user_config.PARALLEL_API_KEY}"
       }
     }
   },
@@ -66,7 +68,7 @@
     "SEARCH_PROVIDER": {
       "type": "string",
       "title": "Search Provider",
-      "description": "Search provider (google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik). Leave unset to use Google when its keys are provided, or DuckDuckGo (no key needed) otherwise.",
+      "description": "Search provider (google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik, parallel). Parallel additionally requires Enable Parallel Search. Leave unset to use Google when its keys are provided, or DuckDuckGo (no key needed) otherwise.",
       "required": false,
       "default": "google"
     },
@@ -81,6 +83,20 @@
       "type": "string",
       "title": "Xquik API Key",
       "description": "Xquik API key (required when Search Provider is set to xquik)",
+      "required": false,
+      "sensitive": true
+    },
+    "PARALLEL_ENABLED": {
+      "type": "boolean",
+      "title": "Enable Parallel Search",
+      "description": "Allow the keyless Parallel Search MCP provider. Off by default: queries go to a third party with no account or signed DPA. Review https://parallel.ai/customer-terms first",
+      "required": false,
+      "default": false
+    },
+    "PARALLEL_API_KEY": {
+      "type": "string",
+      "title": "Parallel API Key",
+      "description": "Optional Parallel API key, used only when Enable Parallel Search is on; raises the anonymous rate limit",
       "required": false,
       "sensitive": true
     }

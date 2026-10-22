@@ -118,6 +118,8 @@ func TestExtractProviderName(t *testing.T) {
 		// failure — an E2E run against searchapi surfaced "Rate limited ()."
 		// before circuit.Config gained a Name field to close this gap.
 		{"named open circuit breaker", fmt.Errorf("searchapi: %w", circuit.ErrCircuitOpen), "searchapi"},
+		{"parallel rate limited", fmt.Errorf("parallel: rate limited: %w", circuit.ErrRateLimit), "parallel"},
+		{"parallel tool error", fmt.Errorf("parallel: search tool error: upstream failure"), "parallel"},
 	}
 
 	for _, tc := range cases {

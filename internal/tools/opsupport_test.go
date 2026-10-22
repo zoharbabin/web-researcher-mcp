@@ -156,3 +156,11 @@ type emptyImageMock struct{ opsMock }
 func (*emptyImageMock) Images(context.Context, search.ImageSearchParams) ([]search.ImageResult, error) {
 	return []search.ImageResult{}, nil
 }
+
+func TestDisabledOptInProviderNamesItsFlag(t *testing.T) {
+	deps := opsDeps(&opsMock{name: "brave", ops: allOps})
+	text, isErr := callOps(t, deps, "web_search", map[string]any{"query": "cat", "provider": "parallel"})
+	if !isErr || !strings.Contains(text, "PARALLEL_ENABLED=true") || strings.Contains(text, "API key") {
+		t.Errorf("want a PARALLEL_ENABLED message, got isErr=%v %s", isErr, text)
+	}
+}

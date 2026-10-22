@@ -227,7 +227,7 @@ type Deps struct {
 }
 
 // SupportedProviders lists all provider names that can be configured.
-var SupportedProviders = []string{"google", "brave", "serper", "searxng", "searchapi", "youcom", "duckduckgo", "tavily", "exa", "hackernews", "reddit", "bluesky", "github", "xquik"}
+var SupportedProviders = []string{"google", "brave", "serper", "searxng", "searchapi", "youcom", "duckduckgo", "tavily", "exa", "hackernews", "reddit", "bluesky", "github", "xquik", "parallel"}
 
 func NewProvider(cfg config.SearchConfig, deps Deps) Provider {
 	switch cfg.Provider {
@@ -245,6 +245,12 @@ func NewProvider(cfg config.SearchConfig, deps Deps) Provider {
 		return NewTavilyProvider(cfg.TavilyAPIKey, deps)
 	case "exa":
 		return NewExaProvider(cfg.ExaAPIKey, deps)
+	case "parallel":
+		// Keyless, so the PARALLEL_ENABLED opt-in is the only thing that
+		// authorizes egress to it; without it fall through to the default.
+		if cfg.ParallelEnabled {
+			return NewParallelProvider(cfg.ParallelAPIKey, deps)
+		}
 	case "duckduckgo":
 		return NewDuckDuckGoProvider(deps)
 	case "hackernews":
@@ -257,12 +263,11 @@ func NewProvider(cfg config.SearchConfig, deps Deps) Provider {
 		return NewGitHubProvider(cfg.GitHubToken, deps)
 	case "xquik":
 		return NewXQuikProvider(cfg.XQuikAPIKey, deps)
-	default:
-		if cfg.GoogleAPIKey != "" && cfg.GoogleCX != "" {
-			return NewGoogleProvider(cfg.GoogleAPIKey, cfg.GoogleCX, deps)
-		}
-		return NewDuckDuckGoProvider(deps)
 	}
+	if cfg.GoogleAPIKey != "" && cfg.GoogleCX != "" {
+		return NewGoogleProvider(cfg.GoogleAPIKey, cfg.GoogleCX, deps)
+	}
+	return NewDuckDuckGoProvider(deps)
 }
 
 // NewProviderByName creates a single provider by name using the given config.
@@ -300,6 +305,10 @@ func NewProviderByName(name string, cfg config.SearchConfig, deps Deps) Provider
 	case "exa":
 		if cfg.ExaAPIKey != "" {
 			return NewExaProvider(cfg.ExaAPIKey, deps)
+		}
+	case "parallel":
+		if cfg.ParallelEnabled {
+			return NewParallelProvider(cfg.ParallelAPIKey, deps)
 		}
 	case "duckduckgo":
 		return NewDuckDuckGoProvider(deps)

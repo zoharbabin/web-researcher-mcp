@@ -489,6 +489,10 @@ func structuredResult(jsonBytes []byte) *mcp.CallToolResult {
 	}
 }
 
+// providerOptInFlags names the env var that enables a keyless provider. Such a
+// provider has no API key to point the caller at.
+var providerOptInFlags = map[string]string{"parallel": "PARALLEL_ENABLED"}
+
 // resolveProviderFor is resolveProvider for operations only some providers
 // serve (images, news). An explicit provider that cannot serve op is an error,
 // never a silent empty result. When no provider is named and the default
@@ -603,9 +607,12 @@ func resolveProvider(deps Dependencies, providerName string) (search.Provider, *
 		}
 	}
 
+	msg := fmt.Sprintf("Search provider %q is not configured. Set its API key, or its opt-in flag if it has one. See .env.example.", providerName)
+	if flag, ok := providerOptInFlags[providerName]; ok {
+		msg = fmt.Sprintf("Search provider %q is not enabled. Set %s=true. See .env.example.", providerName, flag)
+	}
 	return nil, structuredError(
-		fmt.Sprintf("Search provider %q is not configured. Set its API key, or its opt-in flag if it has one. See .env.example.",
-			providerName),
+		msg,
 		ToolError{
 			Kind:            ErrKindConfig,
 			Retryable:       false,

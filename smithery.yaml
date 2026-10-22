@@ -13,7 +13,7 @@ startCommand:
         description: "Google Custom Search engine ID"
       search_provider:
         type: string
-        description: "Search provider (google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik)"
+        description: "Search provider (google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik, parallel; parallel also needs parallel_enabled)"
         default: "google"
       search_routing:
         type: string
@@ -39,6 +39,13 @@ startCommand:
       xquik_api_key:
         type: string
         description: "Xquik API key (required if using xquik provider)"
+      parallel_enabled:
+        type: boolean
+        description: "Allow the keyless Parallel provider. Off by default: queries go to a third party with no account or signed DPA. Review https://parallel.ai/customer-terms first"
+        default: false
+      parallel_api_key:
+        type: string
+        description: "Optional Parallel API key, used only when parallel_enabled is true; raises the anonymous rate limit"
       edgar_contact_email:
         type: string
         description: "Contact email for SEC EDGAR (enables filing_search); falls back to OPENALEX_EMAIL"
@@ -63,6 +70,8 @@ startCommand:
     TAVILY_API_KEY: "{{config.tavily_api_key}}"
     EXA_API_KEY: "{{config.exa_api_key}}"
     XQUIK_API_KEY: "{{config.xquik_api_key}}"
+    PARALLEL_ENABLED: "{{config.parallel_enabled}}"
+    PARALLEL_API_KEY: "{{config.parallel_api_key}}"
     EDGAR_CONTACT_EMAIL: "{{config.edgar_contact_email}}"
     COURTLISTENER_API_TOKEN: "{{config.courtlistener_api_token}}"
     FRED_API_KEY: "{{config.fred_api_key}}"

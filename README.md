@@ -380,6 +380,7 @@ Set `SEARCH_PROVIDER=<name>` and supply that provider's key. Every provider work
 | Bluesky | `bluesky` | none | Built in — zero config (public AT Protocol API) |
 | GitHub | `github` | none (`GITHUB_TOKEN` optional, raises rate limit) | Built in — zero config (public REST Search API) |
 | Xquik | `xquik` | `XQUIK_API_KEY` | [dashboard.xquik.com](https://dashboard.xquik.com/) |
+| Parallel | `parallel` | `PARALLEL_ENABLED=true` (opt-in; `PARALLEL_API_KEY` optional) | No key needed. [Opt in first](docs/API_SETUP.md#parallel-keyless-web-search) |
 
 > Each provider has its own free tier, signup flow, and capability mix (images, news, freshness). See **[docs/PROVIDERS.md](docs/PROVIDERS.md)** for a full comparison (index classification, capability matrix, quick-pick guide) and **[docs/API_SETUP.md](docs/API_SETUP.md)** for step-by-step key setup. Set up more than one and the server fails over automatically — see [Search Providers](#search-providers).
 

@@ -197,7 +197,7 @@ func scrapeErrorToToolError(se *scraper.ScrapeError) ToolError {
 // pass so this doesn't reoccur one entry at a time).
 var providerErrorPrefixes = []string{
 	"google:", "brave:", "serper:", "searxng:", "searchapi:", "lens:", "uspto:", "epo:", "openalex:", "crossref:", "ecosystems:",
-	"semanticscholar:", "scholarapi:", "pubmed:", "core:", "exa:", "duckduckgo:", "tavily:", "hackernews:", "reddit:", "bluesky:", "github:", "xquik:",
+	"semanticscholar:", "scholarapi:", "pubmed:", "core:", "exa:", "duckduckgo:", "tavily:", "hackernews:", "reddit:", "bluesky:", "github:", "xquik:", "parallel:",
 	"courtlistener:", "edgar:", "fred:", "eurostat:", "oecd:", "worldbank:", "monarch:",
 	"clinicaltrials:", "unpaywall:", "wikidata:", "wayback:", "crt.sh:", "doi-handle:", "doi.org:",
 }

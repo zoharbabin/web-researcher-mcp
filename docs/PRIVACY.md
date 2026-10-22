@@ -1,7 +1,7 @@
 # Privacy Policy
 
 **Effective Date:** May 26, 2026  
-**Last Updated:** June 28, 2026
+**Last Updated:** October 21, 2026
 
 ## Overview
 
@@ -54,6 +54,7 @@ When you search, your query goes directly to whichever provider you configured. 
 | Bluesky | Your query, sent to the Bluesky AppView public search API (keyless) | [bsky.social/about/support/privacy-policy](https://bsky.social/about/support/privacy-policy) |
 | GitHub | Your query, sent to the GitHub REST Search API (optional `GITHUB_TOKEN` raises the rate limit) | [docs.github.com/privacy](https://docs.github.com/en/site-policy/privacy-policies/github-privacy-statement) |
 | Xquik | Your query, your API key (paid X/Twitter post search) | [xquik.com](https://xquik.com/) |
+| Parallel | Your query (also sent as the search objective, with any `time_range` hint), sent to Parallel Web Systems via its Search MCP endpoint (`search.parallel.ai`), with this project's User-Agent and your IP address. It also carries a random session identifier, generated once per process and shared by every user and tenant on that instance. Parallel uses it for free-tier rate limiting and log correlation. Off unless the operator sets `PARALLEL_ENABLED=true`; no account is required, and the optional `PARALLEL_API_KEY` is sent only when you set one | [parallel.ai/privacy-policy](https://parallel.ai/privacy-policy) · [terms](https://parallel.ai/customer-terms) |
 | OpenAlex | Your academic query; your optional contact email if `OPENALEX_EMAIL` is set (improves rate limits) | [openalex.org/legal](https://openalex.org/legal/privacy-policy) |
 | CrossRef | Your academic query; your optional contact email if `CROSSREF_EMAIL` is set (sent as `mailto` param and in User-Agent; improves rate limits via the polite pool); also contacted for DOI retraction-status checks | [crossref.org/privacy](https://www.crossref.org/privacy/) |
 | Semantic Scholar | Your academic / citation query (optional API key) | [allenai.org/privacy-policy](https://allenai.org/privacy-policy) |
