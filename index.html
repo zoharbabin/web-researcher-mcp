@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Web Researcher MCP — Your AI Research Assistant That Cites Real Sources</title>
+<meta name="description" content="Give Claude, Cursor, or any AI assistant real web search, real citations, and a paper trail you can verify. Free, open source, runs on your machine. No made-up sources.">
+<link rel="canonical" href="https://zoharbabin.com/web-researcher-mcp/">
+<link rel="icon" href="assets/favicon.ico">
+<link rel="preload" as="image" href="hero-poster.jpg">
+<link rel="stylesheet" href="styles.css">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="Web Researcher MCP — Your AI Research Assistant That Cites Real Sources">
+<meta property="og:description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust. Free, private, open source.">
+<meta property="og:image" content="assets/social-preview.png">
+<meta property="og:url" content="https://zoharbabin.com/web-researcher-mcp/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Web Researcher MCP — Your AI Research Assistant That Cites Real Sources">
+<meta name="twitter:description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust. Free, private, open source.">
+<meta name="twitter:image" content="assets/social-preview.png">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Web Researcher MCP",
+  "alternateName": "web-researcher-mcp",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "macOS, Linux, Windows",
+  "url": "https://zoharbabin.com/web-researcher-mcp/",
+  "downloadUrl": "https://github.com/zoharbabin/web-researcher-mcp",
+  "codeRepository": "https://github.com/zoharbabin/web-researcher-mcp",
+  "license": "https://opensource.org/licenses/MIT",
+  "description": "An MCP (Model Context Protocol) server that gives AI assistants web search, content extraction, and multi-source research with real, verifiable citations. Runs locally; nothing is tracked, no accounts, no server in the middle.",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "What is web-researcher-mcp?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "It's a free, open-source add-on that gives your AI assistant (Claude, Cursor, or any similar tool) real web search, full-page reading, and multi-source research — academic papers, patents, company financial filings, court cases, economic data, and more. Every result comes from a real, live search, not the AI's memory, so every source it gives you is real and checkable."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How is this different from Perplexity or ChatGPT search?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Perplexity and ChatGPT, like every AI chat or agent's built-in search, hand back whatever a fixed ranking algorithm turns up and hope it's right, with no way to choose the sources or verify the citation afterward. This isn't particular to those two: in a Columbia Journalism Review test of eight AI search tools, more than 60% of citation-related queries came back wrong (Perplexity 37%, ChatGPT Search 67%, Grok 3 94%); a 2026 New York Times-reported study found only 39% of Google AI Overviews were both correct and fully backed by their cited sources. The pattern holds across vendors. web‑researcher‑mcp lets you restrict search to sources you trust (medical research databases, government and court record sites, academic paper archives) using \"search lenses,\" and it ships tools that check whether a source actually exists, whether it's been retracted, and whether its link still works, before you rely on it."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Do I need to sign up for anything to use it?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. It works right away using DuckDuckGo, which needs no account or setup. But DuckDuckGo is just the zero-config default, not a ceiling: it supports a dozen search providers (Google, Brave, Tavily, Exa, SearXNG, and more), can be configured to fall back across several automatically, and can be restricted to curated \"search lenses\" for a field or routed to structured sources like SEC EDGAR, CourtListener, or patent offices instead of general web search. Connecting any of that just means signing up for a free or paid account with the provider and pasting in the access code they give you — nothing is required to get started, and everything past DuckDuckGo is optional."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is my research data private?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. The server runs on your own computer. Your search queries go directly from your computer to whichever search service you've chosen — there's no middleman server collecting or seeing what you research. Nothing is tracked, no account is created, and no usage data is collected unless you explicitly turn that on yourself."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What is a search lens?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "A search lens is a curated list of trusted sites for a field — medical journals, court databases, government filings, academic repositories. When you use a lens, your AI's search is restricted to only those sites, so results come from sources you already trust instead of the open web."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Does it work with Claude, Cursor, and other AI tools?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. It's built on the Model Context Protocol (MCP), so it works with Claude Code, Claude Desktop, Cursor, VS Code, LM Studio, Cline, and any other assistant that supports MCP tool use."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is it really free?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes, it's free and open source under the MIT license, forever. There's no paid tier, no usage limits imposed by the project itself — the only cost you might incur is if you choose to sign up for a paid search service for better results, which is entirely optional."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How many tools does it have, and what can it search?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "37 tools covering web, image, and news search; academic papers with real, checkable source links; patents; company financial filings; court cases; economic data; clinical trials; full-page and document reading; citation checking and bibliography auditing; and multi-step research sessions you can export."
+      }
+    }
+  ]
+}
+</script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="wrap topnav">
+  <a class="brand" href="#top">
+    <img src="assets/logo-final-transparent.svg" alt="" width="32" height="32">
+    web-researcher-mcp
+  </a>
+  <nav aria-label="Primary">
+    <a href="#faq">FAQ</a>
+    <a href="#compare">Compare</a>
+    <a href="docs/">Docs</a>
+    <a class="cta" href="https://github.com/zoharbabin/web-researcher-mcp">GitHub</a>
+  </nav>
+</header>
+
+<main id="main">
+
+<section class="hero wrap" id="top">
+  <h1>Your AI research assistant that cites real sources and stays honest</h1>
+  <p class="sub">Search the entire web, or narrow it down to just the sites you trust — medical journals, court databases, news outlets, academic papers. Every citation comes from a real search, not a guess.</p>
+
+  <div class="badges" aria-hidden="true">
+    <a href="https://github.com/zoharbabin/web-researcher-mcp/actions/workflows/ci.yml"><img src="https://github.com/zoharbabin/web-researcher-mcp/actions/workflows/ci.yml/badge.svg" alt="" loading="lazy"></a>
+    <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="" loading="lazy"></a>
+    <a href="https://github.com/zoharbabin/web-researcher-mcp/releases"><img src="https://img.shields.io/github/v/release/zoharbabin/web-researcher-mcp" alt="" loading="lazy"></a>
+    <a href="https://pypi.org/project/web-researcher-mcp/"><img src="https://img.shields.io/pypi/v/web-researcher-mcp?label=PyPI" alt="" loading="lazy"></a>
+    <a href="https://github.com/zoharbabin/web-researcher-mcp/stargazers"><img src="https://img.shields.io/github/stars/zoharbabin/web-researcher-mcp?style=social" alt="" loading="lazy"></a>
+  </div>
+
+  <div class="video-frame">
+    <video controls preload="none" poster="hero-poster.jpg" aria-label="Demo: web-researcher-mcp catching a fabricated citation">
+      <source src="https://github.com/user-attachments/assets/cbf46fe1-f629-4540-b2bf-1282c69729a3" type="video/mp4">
+      Your browser doesn't support embedded video.
+      <a href="https://github.com/zoharbabin/web-researcher-mcp#readme">Watch the demo on GitHub</a> instead.
+    </video>
+  </div>
+  <p class="video-caption">60 seconds: a made-up source link slips past a typical AI search answer — until this catches it.</p>
+</section>
+
+<section class="tint">
+  <div class="wrap problem-grid">
+    <div>
+      <h2 class="section-title" style="text-align:left">AI search tools make things up. That's a problem when your name is on the work.</h2>
+      <p>Independent studies keep finding the same problem, no matter who tests it or how. <a href="https://www.cjr.org/tow_center/we-compared-eight-ai-search-engines-theyre-all-bad-at-citing-news.php" target="_blank" rel="nofollow noopener">Columbia Journalism Review</a> tested eight AI search tools on real citations and found <span class="stat">more than 60% wrong</span>. A <a href="https://www.bbc.co.uk/mediacentre/2025/new-ebu-research-ai-assistants-news-content" target="_blank" rel="nofollow noopener">BBC/EBU study</a> across 22 public broadcasters in 18 countries found 45% of AI news answers had a significant issue, most often bad sourcing. A 2026 study of Google's AI Overviews, <a href="https://www.nytimes.com/2026/04/07/technology/google-ai-overviews-accuracy.html" target="_blank" rel="nofollow noopener">reported by The New York Times</a>, found only 39% were both correct and fully backed by the sources they cited. They link to papers that don't exist, invent source records, and present low-quality content with the same confidence as expert-reviewed research.</p>
+      <p>If your work gets cited, published, submitted to a court, or shown to a client, "probably real" isn't good enough.</p>
+      <ul class="who-list">
+        <li><strong>Lawyers:</strong> "If I cite a case that doesn't exist, I get fined $50,000"</li>
+        <li><strong>Medical researchers:</strong> "Clinical decisions based on a health blog could hurt someone"</li>
+        <li><strong>Journalists:</strong> "I need to cross-check court filings, not AI summaries"</li>
+        <li><strong>Graduate students:</strong> "I spent 3 hours tracking down a citation my AI invented"</li>
+      </ul>
+    </div>
+    <div class="proof-demo">
+      <p class="proof-demo-label">Same question. Two different answers.</p>
+      <p class="proof-query">"Find me the 2023 study on remote work and productivity, with a source I can check."</p>
+      <div class="proof-cards">
+        <div class="proof-card bad">
+          <div class="proof-card-head">
+            <span class="proof-who">Typical AI search answer</span>
+            <span class="proof-badge bad">✗ Made up</span>
+          </div>
+          <p class="proof-cite">Chen, L. et al. (2023). <em>Remote Work and Productivity Outcomes</em>. Journal of Applied Psychology.</p>
+          <p class="proof-note">This paper doesn't exist. No such study, issue, or author is on record anywhere — the AI invented it to sound plausible.</p>
+        </div>
+        <div class="proof-card good">
+          <div class="proof-card-head">
+            <span class="proof-who">web-researcher-mcp</span>
+            <span class="proof-badge good">✓ Checked and real</span>
+          </div>
+          <p class="proof-cite">Bloom, N. et al. (2023). <em>Hybrid Working from Home</em>. American Economic Review.</p>
+          <p class="proof-note">Confirmed against the publisher's own record — the title, authors, and journal all match — before the answer reached you.</p>
+        </div>
+      </div>
+      <div class="pill-row proof-pills">
+        <span class="pill"><span class="dot" style="background:var(--red)"></span>Only 39% of Google AI Overviews are correct and fully sourced</span>
+        <span class="pill"><span class="dot" style="background:var(--green)"></span>Real sources, checked every time</span>
+      </div>
+      <p class="proof-source">Sources: <a href="https://www.cjr.org/tow_center/we-compared-eight-ai-search-engines-theyre-all-bad-at-citing-news.php" target="_blank" rel="nofollow noopener">Columbia Journalism Review, 2025</a>; <a href="https://www.bbc.co.uk/mediacentre/2025/new-ebu-research-ai-assistants-news-content" target="_blank" rel="nofollow noopener">BBC/EBU, 2025</a>; <a href="https://www.nytimes.com/2026/04/07/technology/google-ai-overviews-accuracy.html" target="_blank" rel="nofollow noopener">The New York Times, 2026</a>. The example answers above are for illustration.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2 class="section-title">Fixes the root cause</h2>
+    <p class="section-lede">Search the entire web by default, or narrow it to sources you trust with <strong>search lenses</strong> — curated lists of trusted sites for a field, yours to use or ignore. Either way, every answer traces back to a real, checkable source instead of a guess.</p>
+    <div class="fix-grid">
+      <div class="fix-card">
+        <span class="fix-num">1</span>
+        <h3>Source authority</h3>
+        <p>When it matters, you choose the sources — search engines, trusted sites, academic libraries, or structured APIs like SEC EDGAR and CourtListener — not a hidden ranking algorithm.</p>
+      </div>
+      <div class="fix-card">
+        <span class="fix-num">2</span>
+        <h3>Transparency</h3>
+        <p>Every answer is backed by a real, live search and checked before it reaches you — never pulled from the AI's memory or guessed.</p>
+      </div>
+      <div class="fix-card">
+        <span class="fix-num">3</span>
+        <h3>Control</h3>
+        <p>Open source and runs on your machine — you decide what's kept and for how long, and can audit or self-host the code that's searching for you.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="tint">
+  <div class="wrap">
+    <h2 class="section-title">Get started in 30 seconds</h2>
+    <div class="install-box">
+      <div class="terminal">
+        <div class="terminal-line"><span class="comment"># macOS/Linux — installs uv, then the server</span></div>
+        <div class="terminal-line"><span class="prompt">$</span> curl -LsSf https://astral.sh/uv/install.sh | sh</div>
+        <div class="terminal-line"><span class="prompt">$</span> claude mcp add --scope user web-researcher -- uvx web-researcher-mcp</div>
+      </div>
+      <p class="install-note">No sign-up required — works right away using DuckDuckGo. You can connect a search service like Google or Brave later for richer results, if you want.</p>
+      <p class="install-more">Windows, Homebrew, Docker, Go install, or a different AI client? See <a href="docs/">the full documentation</a> for every install path and client config.</p>
+    </div>
+  </div>
+</section>
+
+<section id="compare">
+  <div class="wrap">
+    <h2 class="section-title">How it compares</h2>
+    <p class="section-lede">Every AI chat or agent — Perplexity, ChatGPT, Gemini, Grok, whatever you use — ships with some form of built-in web search. <span class="nowrap">web-researcher-mcp</span> isn't a rival chatbot; it's a toolset you attach to whichever one you already use, including as an MCP connector inside ChatGPT and Gemini. So this isn't a vendor-vs-vendor comparison — it's what you get by attaching it versus relying on whatever search is already built in.</p>
+    <div class="compare-wrap">
+      <table class="compare">
+        <caption class="visually-hidden">Comparison of web-researcher-mcp against a typical AI chat or agent's built-in search</caption>
+        <thead>
+          <tr>
+            <th scope="col">&nbsp;</th>
+            <th scope="col" class="brand-col">web-researcher-mcp</th>
+            <th scope="col">Your AI's built-in search</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">You choose which search engines, sites, libraries and APIs get searched</th>
+            <td class="brand">Yes — built-in providers + custom lenses for trusted sites, academic libraries, and structured APIs</td>
+            <td>No — fixed to whatever index the vendor built in</td>
+          </tr>
+          <tr>
+            <th scope="row">Wrong citations, in independent testing</th>
+            <td class="brand">Every link comes from a live search, then dedicated tools check it exists, hasn't been retracted, and still resolves — before it ever reaches you</td>
+            <td>
+              <a href="https://www.nytimes.com/2026/04/07/technology/google-ai-overviews-accuracy.html" target="_blank" rel="nofollow noopener">Google AI Overviews — only 39% correct and fully sourced</a><br>
+              <a href="https://www.cjr.org/tow_center/we-compared-eight-ai-search-engines-theyre-all-bad-at-citing-news.php" target="_blank" rel="nofollow noopener">Perplexity — 37% wrong</a><br>
+              <a href="https://www.cjr.org/tow_center/we-compared-eight-ai-search-engines-theyre-all-bad-at-citing-news.php" target="_blank" rel="nofollow noopener">ChatGPT Search — 67% wrong</a><br>
+              <a href="https://www.cjr.org/tow_center/we-compared-eight-ai-search-engines-theyre-all-bad-at-citing-news.php" target="_blank" rel="nofollow noopener">Gemini — 50%+ broken or fake links</a><br>
+              <a href="https://www.cjr.org/tow_center/we-compared-eight-ai-search-engines-theyre-all-bad-at-citing-news.php" target="_blank" rel="nofollow noopener">Grok 3 — 94% wrong</a><br>
+              <a href="https://www.bbc.co.uk/mediacentre/2025/new-ebu-research-ai-assistants-news-content" target="_blank" rel="nofollow noopener">BBC/EBU study — 45% had a significant issue</a>
+            </td>
+          </tr>
+          <tr>
+            <th scope="row">Purpose-built tools for filings, case law, patents, clinical trials, and economic data</th>
+            <td class="brand">Yes — dedicated tools reading SEC EDGAR, CourtListener, patent offices, ClinicalTrials.gov, and statistical agencies directly</td>
+            <td>General web search only</td>
+          </tr>
+          <tr>
+            <th scope="row">Multi-step research you can audit and export</th>
+            <td class="brand">Yes — session history, bibliography checks, exportable citation trail</td>
+            <td>A chat transcript, not a research record</td>
+          </tr>
+          <tr>
+            <th scope="row">Same toolset across every AI you use</th>
+            <td class="brand">Yes — identical tools and behavior in Claude, Cursor, VS Code, or as a connector in ChatGPT/Gemini</td>
+            <td>Locked to whichever app you're using</td>
+          </tr>
+          <tr>
+            <th scope="row">Who controls your search cache and history</th>
+            <td class="brand">You do — open source, runs on your machine, you set what's kept and for how long</td>
+            <td>The vendor does, on its own servers</td>
+          </tr>
+          <tr>
+            <th scope="row">You can inspect or self-host the code that's searching for you</th>
+            <td class="brand">Yes — MIT-licensed and open source, audit it or run your own instance</td>
+            <td>No — closed source</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="proof-source">Citation-accuracy figures: <a href="https://www.nytimes.com/2026/04/07/technology/google-ai-overviews-accuracy.html" target="_blank" rel="nofollow noopener">The New York Times, 2026</a>; <a href="https://www.cjr.org/tow_center/we-compared-eight-ai-search-engines-theyre-all-bad-at-citing-news.php" target="_blank" rel="nofollow noopener">Columbia Journalism Review, 2025</a>; <a href="https://www.bbc.co.uk/mediacentre/2025/new-ebu-research-ai-assistants-news-content" target="_blank" rel="nofollow noopener">BBC/EBU, 2025</a> — each testing a product's own search independently. Every other row reflects each product's own publicly documented features — the pattern holds across vendors, not just the ones named above. Your underlying AI model and search provider still see your queries either way — this table is about who gives you a way to check, control, and keep a record of what came back, not about who "sees" your data.</p>
+  </div>
+</section>
+
+<section class="tint">
+  <div class="wrap">
+    <h2 class="section-title">Building search into a product instead?</h2>
+    <p class="section-lede">Calling Tavily, Exa, or another search API directly gets you results. It doesn't get you what a team needs to run that in production — this is what you get by going through <span class="nowrap">web-researcher-mcp</span> instead.</p>
+    <div class="fix-grid">
+      <div class="fix-card">
+        <span class="fix-num">1</span>
+        <h3>No single point of failure</h3>
+        <p>Wire in one provider directly and its outage or rate limit is your outage. <span class="nowrap">web-researcher-mcp</span> routes across every provider you configure, with per-provider circuit breakers and automatic fallback, so one provider going down doesn't take your product's search down with it.</p>
+      </div>
+      <div class="fix-card">
+        <span class="fix-num">2</span>
+        <h3>One integration for every domain</h3>
+        <p>Web search is one API. SEC filings, court records, patents, clinical trials, and economic data are each their own, with their own quirks. Integrate once through a consistent tool contract instead of building and maintaining a separate integration for every domain you need to cover.</p>
+      </div>
+      <div class="fix-card">
+        <span class="fix-num">3</span>
+        <h3>Multi-tenant governance, not bolted on after</h3>
+        <p>Per-tenant rate limits, audit logging, and consent-gating for personal data are things you'd otherwise build yourself on top of a raw search API. <span class="nowrap">web-researcher-mcp</span> ships them, so your team isn't re-building infrastructure a shared research tool should already have.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2 class="section-title">37 tools, organized by outcome</h2>
+    <p class="section-lede">Not a search box — a full research toolkit your AI can call on directly.</p>
+    <div class="outcomes">
+      <div class="outcome-card">
+        <h3>Catch fake citations</h3>
+        <code>verify_citation</code><code>audit_bibliography</code><code>verify_recommendation</code><code>archive_source</code>
+      </div>
+      <div class="outcome-card">
+        <h3>Search everything</h3>
+        <code>web_search</code><code>image_search</code><code>news_search</code><code>scrape_page</code><code>search_and_scrape</code>
+      </div>
+      <div class="outcome-card">
+        <h3>Academic &amp; scientific</h3>
+        <code>academic_search</code><code>paper_fulltext</code><code>citation_graph</code><code>clinical_search</code><code>monarch_search</code>
+      </div>
+      <div class="outcome-card">
+        <h3>Legal, filings &amp; markets</h3>
+        <code>legal_search</code><code>filing_search</code><code>patent_search</code><code>econ_search</code>
+      </div>
+      <div class="outcome-card">
+        <h3>Deep, multi-step research</h3>
+        <code>sequential_search</code><code>get_research_session</code><code>research_export</code><code>research_panel</code>
+      </div>
+      <div class="outcome-card">
+        <h3>Formatting &amp; recon</h3>
+        <code>format_bibliography</code><code>brand_research</code><code>company_recon</code><code>awesome_list_search</code>
+      </div>
+    </div>
+    <p class="tool-count">Every tool below is tested automatically before each release. Full details: <a href="docs/tools/">Tools reference</a>.</p>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <h2 class="section-title">Frequently asked questions</h2>
+    <div class="faq-list">
+      <details class="faq-item" open>
+        <summary>What is web-researcher-mcp?</summary>
+        <p>A free, open-source add-on that gives your AI assistant real web search, full-page reading, and multi-source research — academic papers, patents, company financial filings, court cases, economic data, and more. Every result comes from a real, live search, not the AI's memory, so every source it gives you is real and checkable.</p>
+      </details>
+      <details class="faq-item">
+        <summary>How is this different from Perplexity or ChatGPT search?</summary>
+        <p>Perplexity and ChatGPT, like every AI chat or agent's built-in search, hand back whatever a fixed ranking algorithm turns up and hope it's right — with no way for you to choose the sources or verify the citation afterward. It's not particular to those two: in the independent tests cited above, Perplexity got 37% of citations wrong, ChatGPT Search got 67% wrong, Grok 3 got 94% wrong, and only 39% of Google AI Overviews were both correct and fully backed by their cited sources. The pattern holds across vendors. <span class="nowrap">web-researcher-mcp</span> lets you restrict search to sources you trust using search lenses, and ships tools that check a citation's existence, retraction status, and link liveness before you rely on it.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Do I need to sign up for anything to use it?</summary>
+        <p>No. It works right away using DuckDuckGo, which needs no account. But DuckDuckGo is just the zero-config default, not a ceiling — under the hood it supports a dozen search providers (Google, Brave, Tavily, Exa, SearXNG, and more), and you can configure several at once so it automatically falls back to another if one is down or rate-limited. You can also point it at self-hosted or free-tier providers, restrict it to curated "search lenses" for a field like law or medicine, or route straight to structured sources like SEC EDGAR, CourtListener, or patent offices instead of general web search. Connecting any of that just means signing up with the provider and pasting in the key they give you — nothing is required to get started, and everything past DuckDuckGo is optional.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Is my research data private?</summary>
+        <p>Yes. The server runs on your own computer. Your search queries go directly from your computer to whichever search service you've chosen — there's no middleman server collecting or seeing what you research. Nothing is tracked, no account is created, and no usage data is collected unless you explicitly turn that on yourself.</p>
+      </details>
+      <details class="faq-item">
+        <summary>What is a search lens?</summary>
+        <p>A curated list of trusted sites for a field — medical journals, court databases, government filings, academic repositories. Using a lens restricts your AI's search to only those sites, so results come from sources you already trust instead of the open web.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Does it work with Claude, Cursor, and other AI tools?</summary>
+        <p>Yes. It's built on the Model Context Protocol (MCP), so it works with Claude Code, Claude Desktop, Cursor, VS Code, LM Studio, Cline, and any other assistant that supports MCP tool use.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Is it really free?</summary>
+        <p>Yes — free and open source under the MIT license, forever. There's no paid tier and no usage limits from the project itself. The only cost you might incur is if you choose to sign up for a paid search service for better results, which is entirely optional.</p>
+      </details>
+      <details class="faq-item">
+        <summary>How many tools does it have, and what can it search?</summary>
+        <p>37 tools covering web, image, and news search; academic papers with real, checkable source links; patents; company financial filings; court cases; economic data; clinical trials; full-page and document reading; citation checking and bibliography auditing; and multi-step research sessions you can export.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section class="final-cta tint">
+  <div class="wrap">
+    <h2>Give your AI a research assistant that doesn't lie to you</h2>
+    <div class="terminal" style="margin:0 auto;">
+      <div class="terminal-line"><span class="prompt">$</span> claude mcp add --scope user web-researcher -- uvx web-researcher-mcp</div>
+    </div>
+    <p><a class="docs-link-big" href="docs/">Read the full documentation →</a></p>
+  </div>
+</section>
+
+</main>
+
+<footer class="wrap">
+  <p>
+    <a href="https://github.com/zoharbabin/web-researcher-mcp">GitHub</a>
+    <a href="docs/">Documentation</a>
+    <a href="docs/privacy/">Privacy Policy</a>
+    <a href="https://opensource.org/licenses/MIT">MIT License</a>
+  </p>
+  <p>Free, private, open source. Runs on your machine.</p>
+</footer>
+
+</body>
+</html>
