@@ -121,6 +121,18 @@ type Provider interface {
 	Name() string
 }
 
+// NewsUnsupported marks a provider whose News method is a no-op stub. Providers
+// without the marker are assumed to serve news. Use SupportsNews to check.
+type NewsUnsupported interface {
+	NewsUnsupported()
+}
+
+// SupportsNews reports whether p can return news results.
+func SupportsNews(p Provider) bool {
+	_, stub := p.(NewsUnsupported)
+	return !stub
+}
+
 // PatentSearcher is an optional interface that providers can implement to
 // support structured patent search (e.g. SerpAPI's Google Patents engine).
 type PatentSearcher interface {

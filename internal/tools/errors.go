@@ -348,15 +348,16 @@ func hintProviderName(p search.Provider) string {
 // used. It honors the roadmap rule "do NOT suggest providers that aren't
 // configured or healthy": only providers present in deps.SearchProviders are
 // considered, and when the default provider is the Router its open-circuit
-// providers are filtered out. Returns nil when there is no better alternative.
-func healthyAlternatives(deps Dependencies, used string) []string {
+// providers are filtered out. With news set, providers that cannot serve news
+// are skipped too. Returns nil when there is no better alternative.
+func healthyAlternatives(deps Dependencies, used string, news bool) []string {
 	if len(deps.SearchProviders) == 0 {
 		return nil
 	}
 	router, hasRouter := deps.Search.(*search.Router)
 	alts := make([]string, 0, len(deps.SearchProviders))
-	for name := range deps.SearchProviders {
-		if name == used {
+	for name, p := range deps.SearchProviders {
+		if name == used || (news && !search.SupportsNews(p)) {
 			continue
 		}
 		if hasRouter && !router.IsHealthy(name) {

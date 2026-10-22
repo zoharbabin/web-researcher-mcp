@@ -205,7 +205,7 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 		// Only configured + healthy alternative providers are suggested.
 		if len(results) == 0 {
 			used := hintProviderName(provider)
-			output["hints"] = buildWebHints(input, used, healthyAlternatives(deps, used))
+			output["hints"] = buildWebHints(input, used, healthyAlternatives(deps, used, false))
 		}
 
 		const webSearchTTL = 30 * time.Minute
@@ -537,7 +537,7 @@ func resolveProvider(deps Dependencies, providerName string) (search.Provider, *
 	}
 
 	return nil, structuredError(
-		fmt.Sprintf("Search provider %q is not configured. Set the appropriate API key. See .env.example.",
+		fmt.Sprintf("Search provider %q is not configured. Set its API key, or its opt-in flag if it has one. See .env.example.",
 			providerName),
 		ToolError{
 			Kind:            ErrKindConfig,

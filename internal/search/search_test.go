@@ -3532,3 +3532,13 @@ func (t *rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	newReq.Header = req.Header
 	return t.inner.RoundTrip(newReq)
 }
+
+func TestSupportsNews(t *testing.T) {
+	t.Parallel()
+	if SupportsNews(&DuckDuckGoProvider{}) || SupportsNews(&BlueskyProvider{}) {
+		t.Error("DuckDuckGo and Bluesky News methods are stubs and must be marked")
+	}
+	if !SupportsNews(&BraveProvider{}) {
+		t.Error("providers without the marker are assumed to support news")
+	}
+}

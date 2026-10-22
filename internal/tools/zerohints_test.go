@@ -176,7 +176,7 @@ func TestHealthyAlternativesExcludesUsed(t *testing.T) {
 			"duckduckgo": &mockProvider{},
 		},
 	}
-	alts := healthyAlternatives(deps, "brave")
+	alts := healthyAlternatives(deps, "brave", false)
 	if len(alts) != 2 {
 		t.Fatalf("expected 2 alternatives (brave excluded), got %v", alts)
 	}
@@ -394,10 +394,33 @@ func TestEconFilterMap(t *testing.T) {
 // TestHealthyAlternativesEmpty returns nil when no other provider is configured.
 func TestHealthyAlternativesEmpty(t *testing.T) {
 	deps := Dependencies{SearchProviders: map[string]search.Provider{"brave": &mockProvider{}}}
-	if alts := healthyAlternatives(deps, "brave"); alts != nil {
+	if alts := healthyAlternatives(deps, "brave", false); alts != nil {
 		t.Errorf("expected nil when only the used provider is configured, got %v", alts)
 	}
-	if alts := healthyAlternatives(Dependencies{}, "brave"); alts != nil {
+	if alts := healthyAlternatives(Dependencies{}, "brave", false); alts != nil {
 		t.Errorf("expected nil when no providers configured, got %v", alts)
+	}
+}
+
+// newsStubProvider is a mockProvider that declares its News method a stub.
+type newsStubProvider struct{ mockProvider }
+
+func (*newsStubProvider) NewsUnsupported() {}
+
+// TestHealthyAlternativesSkipsNewsStubsForNews checks news hints never suggest
+// a provider whose News method returns nothing, while web hints still do.
+func TestHealthyAlternativesSkipsNewsStubsForNews(t *testing.T) {
+	deps := Dependencies{
+		SearchProviders: map[string]search.Provider{
+			"brave":      &mockProvider{},
+			"serper":     &mockProvider{},
+			"duckduckgo": &newsStubProvider{},
+		},
+	}
+	if got := healthyAlternatives(deps, "brave", true); len(got) != 1 || got[0] != "serper" {
+		t.Errorf("news alternatives = %v, want [serper]", got)
+	}
+	if got := healthyAlternatives(deps, "brave", false); len(got) != 2 {
+		t.Errorf("web alternatives = %v, want duckduckgo and serper", got)
 	}
 }

@@ -169,10 +169,14 @@ func TestLinkVerifier_FailureCauses(t *testing.T) {
 	t.Cleanup(slow.Close)
 	t.Cleanup(func() { close(release) })
 
-	// Closed port: connection refused.
-	closed := httptest.NewServer(http.NotFoundHandler())
-	closedURL := closed.URL
-	closed.Close()
+	// Closed port: connection refused. The OS can hand a freed port to another
+	// parallel test's server before we dial it, so the refused case retries
+	// with a fresh port when something answers.
+	closedPortURL := func() string {
+		closed := httptest.NewServer(http.NotFoundHandler())
+		defer closed.Close()
+		return closed.URL
+	}
 
 	cases := []struct {
 		name     string
@@ -184,7 +188,7 @@ func TestLinkVerifier_FailureCauses(t *testing.T) {
 	}{
 		{"dns failure", "http://nonexistent-host-zz9.invalid/x", LinkFailureDNS, true, LinkOutcomeDead, nil},
 		{"connection reset", reset.URL + "/x", LinkFailureConnectionReset, false, LinkOutcomeUnreachable, nil},
-		{"connection refused", closedURL + "/x", LinkFailureConnectionRefused, false, LinkOutcomeUnreachable, nil},
+		{"connection refused", closedPortURL() + "/x", LinkFailureConnectionRefused, false, LinkOutcomeUnreachable, nil},
 		{"timeout", slow.URL + "/x", LinkFailureTimeout, false, LinkOutcomeUnreachable, func() *LinkVerifier {
 			v := NewLinkVerifier(LinkVerifierConfig{AllowPrivateIPs: true, PerURLTimeout: 300 * time.Millisecond})
 			v.SetWaybackBase(wb.URL)
@@ -204,6 +208,9 @@ func TestLinkVerifier_FailureCauses(t *testing.T) {
 				v = c.verifier()
 			}
 			st := v.VerifyAll(context.Background(), []string{c.url})[0]
+			for i := 0; c.wantFail == LinkFailureConnectionRefused && st.Live && i < 5; i++ {
+				st = v.VerifyAll(context.Background(), []string{closedPortURL() + "/x"})[0]
+			}
 			if st.HTTPStatus != 0 || st.Live {
 				t.Fatalf("want status 0 and not live, got %+v", st)
 			}

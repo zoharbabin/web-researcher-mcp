@@ -203,7 +203,7 @@ func registerNewsSearch(srv *mcp.Server, deps Dependencies) {
 		// web/academic/patent. Only configured + healthy alternatives suggested.
 		if len(results) == 0 {
 			used := hintProviderName(provider)
-			output["hints"] = buildNewsHints(input, freshness, used, healthyAlternatives(deps, used))
+			output["hints"] = buildNewsHints(input, freshness, used, healthyAlternatives(deps, used, true))
 		}
 
 		var warnings []string
