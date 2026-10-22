@@ -132,6 +132,8 @@ func (p *RedditProvider) Images(_ context.Context, _ ImageSearchParams) ([]Image
 	return nil, nil
 }
 
+func (p *RedditProvider) SupportsNews() bool { return true }
+
 func (p *RedditProvider) News(ctx context.Context, params NewsSearchParams) ([]NewsResult, error) {
 	webParams := WebSearchParams{
 		Query:      params.Query,

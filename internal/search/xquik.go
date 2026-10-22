@@ -51,6 +51,8 @@ func (p *XQuikProvider) Images(_ context.Context, _ ImageSearchParams) ([]ImageR
 	return nil, nil
 }
 
+func (p *XQuikProvider) SupportsNews() bool { return true }
+
 func (p *XQuikProvider) News(ctx context.Context, params NewsSearchParams) ([]NewsResult, error) {
 	var tweets []xquikTweet
 	err := p.deps.Breaker.Execute(func() error {

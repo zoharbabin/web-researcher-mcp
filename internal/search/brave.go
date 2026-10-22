@@ -70,6 +70,8 @@ func (b *BraveProvider) Images(ctx context.Context, params ImageSearchParams) ([
 	return results, err
 }
 
+func (b *BraveProvider) SupportsNews() bool { return true }
+
 func (b *BraveProvider) News(ctx context.Context, params NewsSearchParams) ([]NewsResult, error) {
 	var results []NewsResult
 	err := b.deps.Breaker.Execute(func() error {

@@ -55,6 +55,8 @@ func (y *YouComProvider) Images(_ context.Context, _ ImageSearchParams) ([]Image
 	return nil, nil
 }
 
+func (y *YouComProvider) SupportsNews() bool { return true }
+
 func (y *YouComProvider) News(ctx context.Context, params NewsSearchParams) ([]NewsResult, error) {
 	var results []NewsResult
 	err := y.deps.Breaker.Execute(func() error {

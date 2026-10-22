@@ -121,16 +121,16 @@ type Provider interface {
 	Name() string
 }
 
-// NewsUnsupported marks a provider whose News method is a no-op stub. Providers
-// without the marker are assumed to serve news. Use SupportsNews to check.
-type NewsUnsupported interface {
-	NewsUnsupported()
+// NewsCapable is implemented by providers whose News method returns real
+// results. Providers that stub News (return nil, nil) leave it out.
+type NewsCapable interface {
+	SupportsNews() bool
 }
 
-// SupportsNews reports whether p can return news results.
+// SupportsNews reports whether p declares news support.
 func SupportsNews(p Provider) bool {
-	_, stub := p.(NewsUnsupported)
-	return !stub
+	c, ok := p.(NewsCapable)
+	return ok && c.SupportsNews()
 }
 
 // PatentSearcher is an optional interface that providers can implement to

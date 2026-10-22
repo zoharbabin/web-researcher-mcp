@@ -121,6 +121,8 @@ func (p *HNProvider) Images(_ context.Context, _ ImageSearchParams) ([]ImageResu
 	return nil, nil
 }
 
+func (p *HNProvider) SupportsNews() bool { return true }
+
 func (p *HNProvider) News(ctx context.Context, params NewsSearchParams) ([]NewsResult, error) {
 	webParams := WebSearchParams{
 		Query:      params.Query,

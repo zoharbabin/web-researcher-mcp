@@ -402,19 +402,19 @@ func TestHealthyAlternativesEmpty(t *testing.T) {
 	}
 }
 
-// newsStubProvider is a mockProvider that declares its News method a stub.
-type newsStubProvider struct{ mockProvider }
+// newsProvider is a mockProvider that declares news support.
+type newsProvider struct{ mockProvider }
 
-func (*newsStubProvider) NewsUnsupported() {}
+func (*newsProvider) SupportsNews() bool { return true }
 
-// TestHealthyAlternativesSkipsNewsStubsForNews checks news hints never suggest
-// a provider whose News method returns nothing, while web hints still do.
-func TestHealthyAlternativesSkipsNewsStubsForNews(t *testing.T) {
+// TestHealthyAlternativesOnlyNewsCapableForNews checks news hints suggest only
+// providers that declare news support, while web hints suggest any.
+func TestHealthyAlternativesOnlyNewsCapableForNews(t *testing.T) {
 	deps := Dependencies{
 		SearchProviders: map[string]search.Provider{
-			"brave":      &mockProvider{},
-			"serper":     &mockProvider{},
-			"duckduckgo": &newsStubProvider{},
+			"brave":      &newsProvider{},
+			"serper":     &newsProvider{},
+			"duckduckgo": &mockProvider{},
 		},
 	}
 	if got := healthyAlternatives(deps, "brave", true); len(got) != 1 || got[0] != "serper" {

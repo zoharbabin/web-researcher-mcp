@@ -167,9 +167,6 @@ func (p *BlueskyProvider) Images(_ context.Context, _ ImageSearchParams) ([]Imag
 	return nil, nil
 }
 
-// NewsUnsupported marks News as a stub (see search.NewsUnsupported).
-func (p *BlueskyProvider) NewsUnsupported() {}
-
 func (p *BlueskyProvider) News(_ context.Context, _ NewsSearchParams) ([]NewsResult, error) {
 	return nil, nil
 }

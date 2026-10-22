@@ -93,6 +93,8 @@ func (e *ExaProvider) Images(_ context.Context, _ ImageSearchParams) ([]ImageRes
 }
 
 // News runs a recency-filtered search via category:"news" + startPublishedDate.
+func (e *ExaProvider) SupportsNews() bool { return true }
+
 func (e *ExaProvider) News(ctx context.Context, params NewsSearchParams) ([]NewsResult, error) {
 	var results []NewsResult
 	err := e.deps.Breaker.Execute(func() error {

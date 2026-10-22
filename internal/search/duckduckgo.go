@@ -44,9 +44,6 @@ func (d *DuckDuckGoProvider) Images(_ context.Context, _ ImageSearchParams) ([]I
 	return nil, nil
 }
 
-// NewsUnsupported marks News as a stub (see search.NewsUnsupported).
-func (d *DuckDuckGoProvider) NewsUnsupported() {}
-
 func (d *DuckDuckGoProvider) News(_ context.Context, _ NewsSearchParams) ([]NewsResult, error) {
 	return nil, nil
 }

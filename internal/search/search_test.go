@@ -3535,10 +3535,14 @@ func (t *rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 
 func TestSupportsNews(t *testing.T) {
 	t.Parallel()
-	if SupportsNews(&DuckDuckGoProvider{}) || SupportsNews(&BlueskyProvider{}) {
-		t.Error("DuckDuckGo and Bluesky News methods are stubs and must be marked")
+	for _, p := range []Provider{&DuckDuckGoProvider{}, &BlueskyProvider{}} {
+		if SupportsNews(p) {
+			t.Errorf("%s stubs News and must not declare support", p.Name())
+		}
 	}
-	if !SupportsNews(&BraveProvider{}) {
-		t.Error("providers without the marker are assumed to support news")
+	for _, p := range []Provider{&BraveProvider{}, &GoogleProvider{}, &ExaProvider{}, &TavilyProvider{}} {
+		if !SupportsNews(p) {
+			t.Errorf("%s serves news and must declare support", p.Name())
+		}
 	}
 }

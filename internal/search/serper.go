@@ -43,6 +43,8 @@ func (s *SerperProvider) Images(ctx context.Context, params ImageSearchParams) (
 	return results, err
 }
 
+func (s *SerperProvider) SupportsNews() bool { return true }
+
 func (s *SerperProvider) News(ctx context.Context, params NewsSearchParams) ([]NewsResult, error) {
 	var results []NewsResult
 	err := s.deps.Breaker.Execute(func() error {
