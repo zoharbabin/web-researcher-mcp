@@ -11,7 +11,8 @@
 // verified OAuth claim on the per-tenant token, or via an explicit Record
 // call); this package VERIFIES, RECORDS (encrypted, per-tenant, audited), and
 // HONORS it. Every regulated write calls Checker.HasConsent(purpose) and
-// no-ops/refuses when false. Withdrawal triggers the #85 erasure path.
+// no-ops/refuses when false. Withdrawal only records a Granted=false decision;
+// erasure is a separate step (DELETE /admin/data, which also withdraws).
 package consent
 
 import (

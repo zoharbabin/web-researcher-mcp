@@ -61,7 +61,7 @@ This server operates in a unique threat environment:
 ## Architecture at a Glance
 
 ```
-User/LLM → [STDIO or HTTP+TLS] → MCP Server
+User/LLM → [STDIO or HTTP (TLS at your ingress)] → MCP Server
                                       │
                 ┌─────────────────────┴──────────────────────┐
                 │                                             │
@@ -100,7 +100,7 @@ The highest-severity risk for a scraping server. Our defense:
 2. Resolve DNS
 3. Validate ALL resolved IPs against private/reserved ranges
 4. Connect directly to the resolved IP (prevents DNS rebinding)
-5. Re-validate on each redirect hop (max 5 redirects)
+5. Re-validate on each redirect hop (max 10 redirects)
 
 Blocked ranges: RFC 1918, link-local (169.254.0.0/16), loopback, multicast, carrier-grade NAT, documentation ranges, IPv6 equivalents. See `internal/scraper/ssrf.go` for the canonical list.
 
@@ -224,7 +224,7 @@ We deliberately minimize what we store:
 
 | Data type | Storage | Retention | Contains PII? |
 |-----------|---------|-----------|---------------|
-| Cached search results | Keyed by query hash (not user ID) | TTL-based (hours) | Rarely |
+| Cached search results | Keyed by query hash (not user ID) | TTL-based (30 min default) | Rarely |
 | Cached scraped pages | Keyed by URL hash | TTL-based (hours) | Possibly |
 | Research sessions | Per-tenant:session compound key | Session TTL (default 4h) | Query context |
 | Audit logs | Structured JSON | Configurable (default 180 days) | User/tenant IDs only |
@@ -233,7 +233,7 @@ We deliberately minimize what we store:
 | Recent-errors ring (`diagnostics://errors/recent`) | Bounded in-memory ring, tenant-aware | None (memory-only, oldest overwritten) | No — causes redacted via `audit.MaskSecrets`; no query text, no full URLs |
 | Operator dashboard / `diagnostics://health` | Derived on read from existing metrics + breaker state | None (computed per request) | No — aggregate-only, no per-user/per-query data |
 
-The **operator-observability** surfaces added in the routing-observability work (`_meta.routing` on results, the `diagnostics://` resources, and the admin-gated `GET /dashboard`) are deliberately privacy-minimal: routing detail exposes only the provider *name* (never upstream URLs, credentials, or breaker internals), the recent-errors ring is memory-only/bounded/redacted/tenant-scoped, and the dashboard is aggregate-only and admin-gated. None of them is a personal-data store, so none adds a GDPR processing obligation. See `docs/DEPLOYMENT.md` → Operator Observability and `docs/TOOLS.md` → Routing Provenance.
+The **operator-observability** surfaces added in the routing-observability work (`_meta.routing` on results, the `diagnostics://` resources, and `GET /dashboard`, whose data endpoint is admin-gated) are deliberately privacy-minimal: routing detail exposes only the provider *name* (never upstream URLs, credentials, or breaker internals), the recent-errors ring is memory-only/bounded/redacted/tenant-scoped, and the dashboard data is aggregate-only and admin-gated. None of them is a personal-data store, so none adds a GDPR processing obligation. See `docs/DEPLOYMENT.md` → Operator Observability and `docs/TOOLS.md` → Routing Provenance.
 
 ### Purpose Limitation
 

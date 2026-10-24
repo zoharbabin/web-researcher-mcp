@@ -201,9 +201,12 @@ The server also ships guided **prompt templates** your AI assistant can pull in 
 | `literature-review` | Systematically review academic literature on a topic |
 | `brand-guidelines` | Research a brand and produce use-case-specific creative direction (landing page, email, video brief) — calls `brand_research` and interprets the structured JSON for you |
 | `company-recon` | Deep OSINT reconnaissance on a company — maps infrastructure, filings, personnel, and public footprint |
+| `rare-disease-research` | Rare-disease differential and gene-disease research over the Monarch knowledge graph, corroborated with literature and trials |
+| `research-panel-factcheck` | Fact-check a claim across a panel of LLMs and chase every disagreement |
+| `research-panel-synthesis` | Synthesize one answer across a panel of LLMs, treating contradictions as uncertainty |
 | `curriculum-research` | Research a subject's syllabus coverage, institutional climate, and academic-freedom context — calls `web_search` with the `curriculum` lens |
 
-In most AI apps these show up wherever you pick a prompt or "/" command. The server exposes live **status resources** (`stats://tools`, `stats://sessions`, `stats://rate-limits`, `stats://providers`), a lens catalog (`lenses://catalog`), diagnostics (`diagnostics://errors/recent`, `diagnostics://health`), and a large-payload artifact store (`research://artifact/{id}`) so you — or your AI — can check usage, limits, and which providers are active. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#mcp-resources--prompts) for the full list.
+In most AI apps these show up wherever you pick a prompt or "/" command. The server exposes live **status resources** (`stats://tools`, `stats://sessions`, `stats://rate-limits`, `stats://providers`), a lens catalog (`lenses://catalog`), diagnostics (`diagnostics://errors/recent`, `diagnostics://health`, `diagnostics://panel/spend`), and a large-payload artifact store (`research://artifact/{id}`) so you — or your AI — can check usage, limits, and which providers are active. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#mcp-resources--prompts) for the full list.
 
 ---
 
@@ -440,12 +443,14 @@ You choose which search engine powers your research. All of them work with lense
 | **Serper.dev** | Yes | Yes | Yes | Google-identical results |
 | **SearXNG** | Yes | Yes | Yes | Self-hosted, privacy-first, air-gapped deployments |
 | **SearchAPI.io** | Yes | Yes | Yes | Unified API with multiple engine backends |
+| **You.com** | Yes | — | Yes | Web and news search via the You.com API |
 | **Tavily** | Yes | — | Yes | AI-agent search; clean, LLM-ready content |
 | **Exa** | Yes | — | Yes | Neural/semantic search; also backs `academic_search` and the optional paid scrape tier |
 | **Hacker News** | HN only | — | Yes | Zero-config (HN Algolia index); searches HN threads, not the full web |
 | **Reddit** | Reddit only | — | Yes | Zero-config (public RSS); searches Reddit posts, not the full web |
 | **Bluesky** | Bluesky only | — | — | Zero-config (public AT Protocol API); searches Bluesky posts, not the full web |
 | **GitHub** | GitHub only | — | Yes | Zero-config (public REST Search API); searches issues/PRs, not the full web |
+| **Xquik** | X/Twitter only | — | Yes | Searches X posts, not the full web; needs `XQUIK_API_KEY` |
 
 ### Multiple Providers (recommended)
 
@@ -557,8 +562,7 @@ Create a directory for your custom lenses and add a JSON file for each one:
     "industry-journal.org",
     "official-database.gov"
   ],
-  "cx": "",
-  "routing": ""
+  "cx": ""
 }
 ```
 
@@ -571,8 +575,8 @@ export CUSTOM_LENSES_PATH=/path/to/my-lenses
 Your AI will now have `my-industry` as an available lens. Custom lenses load after the built-in set — a custom lens with the same `name` as a built-in one overrides it. You can add up to ~10 domains per lens.
 
 **Advanced options** (optional — most users can ignore these):
-- **cx** — If you have a Google Programmable Search Engine with up to 5,000 domains, put the engine ID here
-- **routing** — Force this lens to use a specific search provider (e.g., `"google"`)
+- **cx** — Marks the lens as scoped by a Google Programmable Search Engine. The lens then skips `site:` injection. Set that engine as the global `GOOGLE_CUSTOM_SEARCH_ID`
+- **goggle** — A Brave Goggle URL for server-side re-ranking (Brave only)
 
 </details>
 

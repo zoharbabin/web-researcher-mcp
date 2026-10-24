@@ -20,14 +20,14 @@ Server-Side Request Forgery is the highest-severity risk for a scraping server.
 
 **Cloud-proxy tiers:** The Jina and Exa tiers never dial the target themselves, so the dial-time guard cannot see it. Both call `guardCloudProxy` first and skip any non-public host, even when `ALLOW_PRIVATE_IPS=true`. The URL is never sent to the third party.
 
-**Internet Archive requests:** Save Page Now (`archive_source`) and the Wayback availability lookup (link verification) dial `web.archive.org`, so the dial-time guard cannot see the target either. Both call `scraper.GuardArchiveTarget` first and refuse internal targets (private addresses, single-label names, reserved internal suffixes, non-canonical IPv4 forms, hosts that resolve privately), even when `ALLOW_PRIVATE_IPS=true`. A host that does not resolve is allowed, so dead public sites still get archive lookups.
+**Internet Archive requests:** Save Page Now (`archive_source`) and the Wayback availability lookup (link verification) dial `web.archive.org`, so the dial-time guard cannot see the target either. Both call `scraper.GuardArchiveTarget` first and refuse internal targets, even when `ALLOW_PRIVATE_IPS=true`. Details: `internal/scraper/ssrf.go`.
 
 The approach:
 1. Check hostname against blocklist (cloud metadata endpoints)
 2. Resolve DNS
 3. Validate ALL resolved IPs against private/reserved ranges
 4. Connect directly to the resolved IP (prevents DNS rebinding)
-5. Re-validate on each redirect hop (max 5 redirects)
+5. Re-validate on each redirect hop (max 10 redirects)
 
 **Blocked IP Ranges:**
 
@@ -68,7 +68,7 @@ Matched case-insensitively as an exact hostname or a dot-bounded suffix, so `svc
 **DNS Rebinding Prevention:**
 - Resolve once, connect to the resolved IP directly
 - Re-validate on every redirect hop
-- Max redirect depth: 5
+- Max redirect depth: 10
 
 **Configuration:**
 - `ALLOW_PRIVATE_IPS=true` — Disable for local development only
@@ -316,12 +316,12 @@ Protects against cascading failures when upstream APIs are down.
 
 | Layer | Wraps | Threshold | Reset |
 |-------|-------|-----------|-------|
-| Web provider breaker (`AvailableProviders`) | Each web provider in `search.SupportedProviders` | 3 failures | 120s |
-| Domain provider breaker (`Available{Patent,Academic,Filing,Case,Econ,Trial}Providers`) | Each domain provider's own upstream HTTP calls | 5 failures | 60s |
+| Provider breaker (`Available…Providers`) | Each web and domain provider's own upstream HTTP calls | `CIRCUIT_FAILURE_THRESHOLD` (default 5) | `CIRCUIT_RESET_TIMEOUT_SECONDS` (default 60s) |
+| Monarch breaker | `monarch_search` upstream | 3 failures | 120s |
 | Routing breaker (`SEARCH_ROUTING`) | Fallback decision across the priority list (web, patent, academic) | 3 failures | 30s |
 
 - Half-open attempts: 1 (all layers)
-- Scraping (per domain): optional, prevents hammering broken sites
+- Scraping: no breaker. Recently failed URLs are served from a short negative cache.
 
 ---
 
@@ -353,7 +353,7 @@ Routing decisions, provider health, and recent errors are surfaced to operators 
 - **Routing `_meta`** — per-call routing (which provider served, what was attempted, whether a fallback fired) is attached to the MCP result's `_meta.routing`, never the content body. The provider *name* is the disclosure boundary: no upstream URLs, credentials, or circuit-breaker counts are exposed, and the `fallback_reason` is a coarse enum (`circuit_open` / `primary_unavailable`), never a raw upstream error string.
 - **`diagnostics://errors/recent`** — a bounded, **memory-only**, tenant-scoped ring of recent errors (`internal/metrics/errors.go`). Each cause is redacted through `audit.MaskSecrets` at insert; there is no disk persistence and no unbounded growth (oldest entries are overwritten), consistent with the no-retention posture.
 - **`diagnostics://health`** — live provider/circuit-breaker state (tri-state aggregate), derived on read. No PII.
-- **`GET /dashboard`** (HTTP mode) — an admin-gated, aggregate-only operator dashboard served under a per-request nonce CSP (`internal/server/dashboard.go`); its data endpoint shares the `/admin/*` trust tier. No per-user or per-query data.
+- **`GET /dashboard`** (HTTP mode) — an aggregate-only operator dashboard served under a per-request nonce CSP (`internal/server/dashboard.go`). The HTML page needs no key. Its data endpoint, `/dashboard/data`, is admin-gated and shares the `/admin/*` trust tier. No per-user or per-query data.
 
 None of these is a personal-data store. Field contracts live in `docs/TOOLS.md` (Routing Provenance) and `docs/DEPLOYMENT.md` (Operator Observability).
 
@@ -386,7 +386,7 @@ None of these is a personal-data store. Field contracts live in `docs/TOOLS.md` 
 
 ### In Transit
 - All outbound HTTP: TLS 1.2+ (Go's default)
-- HTTP transport: TLS termination at load balancer or direct
+- HTTP transport: plain HTTP. Terminate TLS at a load balancer or ingress.
 - No sensitive data in URL query parameters
 
 ### FIPS Compliance (Optional)
@@ -478,7 +478,7 @@ How the server's controls counter the ATT&CK techniques most relevant to an inte
 | Initial Access | Exploit Public-Facing Application | T1190 | HTTP timeouts, `MAX_REQUEST_BODY_BYTES`, header-byte cap, per-IP pre-auth rate limit |
 | Credential Access | Unsecured Credentials in cloud metadata | T1552.005 | SSRF blocklist for AWS/GCP/Azure/Oracle/Alibaba/Tencent IMDS endpoints + link-local IP blocking |
 | Credential Access | Steal Application Access Token | T1528 | RS256 JWT validation (iss/aud/exp/nbf), revocation list, OAuth scope gate |
-| Defense Evasion | DNS rebinding / redirect to internal host | T1090 | Resolve-once-connect-to-IP, re-validation on every redirect hop (max 5) |
+| Defense Evasion | DNS rebinding / redirect to internal host | T1090 | Resolve-once-connect-to-IP, re-validation on every redirect hop (max 10) |
 | Impact | Endpoint/Network Denial of Service | T1499 / T1498 | Slowloris-guarding timeouts, per-IP and per-tenant rate limits, circuit breakers, body/header caps |
 | Impact | Resource Hijacking (cost abuse) | T1496 | Per-tenant daily quota (optionally persisted), global rate limit |
 | Collection / Exfiltration | Indirect prompt injection via scraped content | T1059 (analog) | Content sanitization pipeline, a `"trust": "untrusted-external-content"` boundary marker in the JSON envelope, size caps; raw mode is opt-in and clearly flagged. Enforcing the prompt boundary itself is the host's job (the model lives there). |
@@ -524,10 +524,10 @@ Data minimization (implemented): by default audit logs store only the query leng
 
 | Control | Implementation |
 |---------|----------------|
-| **SC-8** Transmission Confidentiality | TLS 1.2+ on all connections |
+| **SC-8** Transmission Confidentiality | TLS 1.2+ on outbound connections. Inbound TLS is terminated by the operator's ingress |
 | **SC-13** Cryptographic Protection | FIPS 140-3 via `GOFIPS140=latest` (Go's native `crypto/fips140` module, CMVP cert [#5247](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/5247)) |
 | **SC-28** Protection at Rest | AES-256-GCM for disk cache |
-| **AC-3** Access Enforcement | OAuth middleware on all HTTP endpoints |
+| **AC-3** Access Enforcement | OAuth middleware on `/mcp/`; admin key (`X-Admin-Key`, constant-time compare) on `/admin/*` and `/dashboard/data` |
 | **AU-2** Audit Events | All tool calls, auth failures, config changes |
 | **SI-2** Flaw Remediation | Automated `go tool govulncheck` + `gosec` in CI (`make vuln`, `make sec`) |
 

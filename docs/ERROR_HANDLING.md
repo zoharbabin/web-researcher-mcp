@@ -23,6 +23,7 @@ The issue link appears **only** for errors where the MCP server could plausibly 
 - `ErrContent` — a page loaded but yielded no usable text
 - `ErrBrowser` — Chrome not available for a JS-heavy site
 - General upstream failures that persist across retries
+- A fully failed `search_and_scrape` (the `note` field)
 
 It does **not** appear for:
 - `ErrAuth` — login-walled pages (user's problem, not ours)
@@ -70,7 +71,7 @@ type ScrapeError struct {
     Message string     // Human-readable description
     Cause   error      // Underlying error (for Unwrap)
     URL     string     // The URL that was being scraped
-    Tier    string     // Which pipeline tier produced this ("markdown", "stealth", "html", "browser", and the optional paid "exa:cached"/"exa:crawled")
+    Tier    string     // Which pipeline tier produced this ("markdown", "stealth", "jina", "html", "browser", the optional paid "exa:cached"/"exa:crawled", or a native route: "youtube", "twitter", "document", "raw")
 }
 ```
 
@@ -169,7 +170,7 @@ Rate limited (google). Wait 60 seconds and retry, or try a different provider.
 | `content_empty` | Page loaded but no text extracted | true | `report_bug` |
 | `not_found` | HTTP 404/410 (page does not exist), or a DNS NXDOMAIN (domain does not exist) | false | `inform_user` |
 | `browser_unavailable` | Chrome not found/failed | false | `report_bug` |
-| `config` | Unknown/unconfigured provider | false | `try_different_provider` or `check_api_key` |
+| `config` | Unknown/unconfigured provider, or a provider that does not support the requested operation (e.g. DuckDuckGo images/news) | false | `try_different_provider` or `check_api_key` |
 | `upstream_unavailable` | General provider failure | true | `try_different_provider` |
 | `session_not_found` | `sequential_search` follow-up step reached a pod that doesn't hold the (in-memory) session, or the session expired | false | `inform_user` (carries a `recoveryHint` with the last known step) |
 
@@ -227,7 +228,7 @@ Layers 1–3 handle a **single** call. Across a multi-step `sequential_search` s
 
 **How it works:**
 
-- Tools that carry a `sessionId` (scrape, academic search, and the `thorough`-depth refinement searches) record a bounded `OutcomeEvent` per call via `trackOutcome` / `trackScrapeOutcome` (`internal/tools/sourcetracker.go`): `{ provider, success, errorKind, url, timestamp }`. Scrape errors map their `ScrapeError.Kind` to the shared `ErrorKind` taxonomy via `mapScrapeErrorKind`, so the cross-call kinds line up with the per-call ones.
+- Tools that carry a `sessionId` (scrape, academic search, and the `thorough`-depth refinement searches) record a bounded `OutcomeEvent` per call via `trackOutcome` / `trackScrapeOutcome` (`internal/tools/sourcetracker.go`): `{ provider, success, errorKind, url, stepNumber, timestamp }`. Scrape errors map their `ScrapeError.Kind` to the shared `ErrorKind` taxonomy via `mapScrapeErrorKind`, so the cross-call kinds line up with the per-call ones.
 - The session layer (`internal/session/outcomes.go`) stores the most-recent **200** events per session (FIFO) — bounded, tenant/user-isolated, honoring the no-unbounded-retention posture.
 - `get_research_session` surfaces the aggregation (`internal/session` `AggregateOutcomes`):
   - `errorPatterns` — only when a kind occurs **≥ 3 times** (`ErrorPatternMinCount`, a false-positive guard). Each carries a session-level `suggestion` from the kind→remediation map.
@@ -277,7 +278,7 @@ When `resultCount` is 0, several tools (including `patent_search`, `academic_sea
 {"resultCount": 0, "hints": {"reason": "coverage_miss", "suggestedActions": [{"action": "switch_provider", "value": "lens"}]}}
 ```
 
-Each entry in `suggestedActions` is a `HintAction` (`internal/tools/errors.go`). This is a separate, free-form vocabulary from the top-level `SuggestedAction` enum above — a `HintAction.Action` value is never one of the `SuggestedAction` values.
+Each entry in `suggestedActions` is a `HintAction` (`internal/tools/errors.go`). This is a separate, free-form vocabulary from the top-level `SuggestedAction` enum above — except that `try_different_provider` appears in both vocabularies.
 
 | `HintAction.Action` | LLM Should |
 |----------------------|------------|
@@ -320,7 +321,7 @@ Each layer enriches without losing information. The pipeline adds multi-tier dia
 
 ### 4. The issue link is surgical
 
-The GitHub issue link appears in exactly two places (`scrapeErrorResponse` cases for `ErrBrowser`, `ErrContent`) and one place in `upstreamErrorResponse` (general upstream failures). These are the only categories where a bug report could lead to an improvement.
+The GitHub issue link appears in `scrapeErrorResponse` (cases `ErrBrowser`, `ErrContent`), in `upstreamErrorResponse` (general upstream failures), and in the `note` of a fully failed `search_and_scrape`. These are the only categories where a bug report could lead to an improvement.
 
 ### 5. Errors are tested
 

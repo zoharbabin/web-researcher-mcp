@@ -7,7 +7,8 @@ One-stop reference for the six workflow files that govern every code change, rel
 ## 🗺️ At a glance
 
 ```
-Every push / PR                         v* tag push
+Push / PR to main, weekly cron,                v* tag push
+manual dispatch
        │                                     │
        ▼                                     ▼
  ┌───────────────────┐             ┌──────────────────────┐
@@ -34,7 +35,7 @@ Every push / PR                         v* tag push
                   📦 packaging     (all parallel)
 ```
 
-Two more files run outside this diagram: `codeql.yml` runs GitHub's CodeQL deep static analysis on push-to-main and a weekly schedule; `provenance.yml` and `scorecard.yml` (below) cover supply-chain security.
+Two more files run outside this diagram: `codeql.yml` runs GitHub's CodeQL deep static analysis on push-to-main, PRs to main, and a weekly schedule; `provenance.yml` and `scorecard.yml` (below) cover supply-chain security.
 
 ---
 
@@ -42,10 +43,10 @@ Two more files run outside this diagram: `codeql.yml` runs GitHub's CodeQL deep 
 
 | File | Trigger | Purpose |
 |------|---------|---------|
-| `.github/workflows/ci.yml` | push to `main`, any PR, `workflow_dispatch` | Gate: prevents broken code from merging |
+| `.github/workflows/ci.yml` | push to `main` or a `v*` tag, PR to `main`, three weekly crons, `workflow_dispatch` | Gate: prevents broken code from merging |
 | `.github/workflows/release.yml` | push of a `v*` tag, `workflow_dispatch` (manual re-run) | Publish: builds, signs, and ships a release |
-| `.github/workflows/docs.yml` | push to `main` (docs paths only) | Deploy: builds the mkdocs site to GitHub Pages |
-| `.github/workflows/codeql.yml` | push to `main`, weekly | Security: deep static analysis via GitHub CodeQL |
+| `.github/workflows/docs.yml` | push to `main` (docs and landing paths only) | Deploy: builds the mkdocs site to GitHub Pages |
+| `.github/workflows/codeql.yml` | push to `main`, PR to `main`, weekly | Security: deep static analysis via GitHub CodeQL |
 | `.github/workflows/provenance.yml` | called by `release.yml` (`workflow_call`) | Supply chain: generates SLSA Level 3 build provenance for release artifacts |
 | `.github/workflows/scorecard.yml` | push to `main`, weekly | Supply chain: runs OpenSSF Scorecard, feeds the README badge |
 
@@ -56,15 +57,16 @@ Two more files run outside this diagram: `codeql.yml` runs GitHub's CodeQL deep 
 ### 📡 Triggers
 
 - Every pull request targeting `main`
-- Every push to `main`
-- Manual: `Actions → ⚙️ CI → Run workflow` (add `run_python_live=true` to run live SDK tests, `run_soak_test=true` to run the sustained-load soak test)
+- Every push to `main` or a `v*` tag
+- Weekly crons (Mondays, UTC): 07:00 soak test, 08:00 trust/GEO/panel eval, 09:00 multi-pod Redis session continuity
+- Manual: `Actions → ⚙️ CI → Run workflow`. Inputs: `run_python_live` (live SDK tests), `run_soak_test` (sustained-load soak test), `run_trust_eval` (trust/GEO/panel eval), `run_multipod_session_test` (multi-pod Redis session continuity)
 
 ### 🔍 Change detector (`changes` job)
 
 The first job classifies every PR. It reads the list of changed files and outputs two flags:
 
 - `code=true` — at least one file outside the harmless/packaging allowlist changed → full CI runs
-- `packaging=true` — every changed file is under `packaging/**` → packaging-only mode (only `validate-packaging` runs)
+- `packaging=true` — every changed file is under `packaging/**` → packaging-only mode (only `changes`, `validate-packaging` and `test-gate` run)
 
 **Harmless files** (skip heavy CI, not packaging-only):
 - `*.md`, `docs/**`, `decks/**`, `assets/**`
@@ -85,7 +87,7 @@ These run on every PR — except packaging-only ones, which can't cause the drif
 | **📄 docs-drift** | `docs/TOOLS.md` ↔ registry drift; tool annotation coverage | Yes |
 | **🐍 python-drift** | Python client (`models.py`/`client.py`) not regenerated after Go schema change | Yes |
 | **🧪 test-python** | Python SDK unit + integration tests (mock HTTP, no binary needed) | Yes |
-| **📦 validate-packaging** | `PKGBUILD` / `.SRCINFO` / `flake.nix` version + hash consistency | No — this is the only job that runs on packaging-only PRs |
+| **📦 validate-packaging** | `PKGBUILD` / `.SRCINFO` / `flake.nix` version + hash consistency | No — with `changes` and `test-gate`, it is one of the three jobs that run on packaging-only PRs |
 
 > **Rule:** If you change a Go tool schema, run `make gen-python-client` before pushing. If you change `docs/TOOLS.md`, the matching tool definition must change in the same commit (or vice versa). These jobs enforce both.
 
@@ -96,6 +98,9 @@ These run on every PR — except packaging-only ones, which can't cause the drif
                       └──────────────► 🐳 docker-smoke
               └──────► 🛡️ security
 🔍 changes ─► 🏗️ build   (parallel, independent of test)
+🧪 test ─► 🧬 fuzz
+🧹 lint ─► 🪟 windows-pipe
+🧪 test ─► 🚦 test-gate   (always runs)
 ```
 
 - `lint` gates both `test` and `security` — a formatting error surfaces before expensive compute starts.
@@ -109,9 +114,12 @@ These run on every PR — except packaging-only ones, which can't cause the drif
 | **🧪 test** | `go test -race` — unit + integration tests with race detector |
 | **🔬 e2e** | Security + lifecycle E2E suite (STDIO, HTTP, OAuth) — network-free |
 | **🐳 docker-smoke** | Builds the Docker image and drives MCP over HTTP end-to-end |
-| **🏗️ build** | Cross-compile for Linux/Darwin/Windows × amd64/arm64 |
+| **🏗️ build** | Cross-compile: linux and darwin on amd64 + arm64, windows on amd64 only |
+| **📦 validate-mcpb** | `make validate-mcpb`: validates `mcpb/manifest.json` against the mcpb schema and checks bundled assets |
+| **🪟 windows-pipe** | Runs on `windows-latest` after `lint`: the profile browser starts over DevTools pipes with no TCP debug port. Not a required check |
+| **🚦 test-gate** | Runs `if: always()` after `test`. Reports under the name branch protection requires, so docs-only PRs pass |
 | **🛡️ security** | `govulncheck` + `gosec` — vulnerability and security scanning |
-| **🧬 fuzz** | `make test-fuzz FUZZTIME=20s` — native Go fuzz targets over untrusted-input parsers (`internal/documents`, `internal/content`) |
+| **🧬 fuzz** | `make test-fuzz FUZZTIME=20s` — native Go fuzz targets over untrusted-input parsers (`internal/documents`, `internal/content`, `internal/scraper` SSRF checks) |
 
 ### 🐍 Manual-dispatch only
 
@@ -126,6 +134,8 @@ These run on every PR — except packaging-only ones, which can't cause the drif
 | Job | How it runs |
 |-----|---------------|
 | **🐢 soak-test** | Automatically every Monday at 07:00 UTC (`schedule` trigger), or on-demand via `Actions → ⚙️ CI → Run workflow` with `run_soak_test=true` |
+| **🎯 trust-eval** | Every Monday at 08:00 UTC, or on-demand with `run_trust_eval=true`. Suites skip cleanly when credentials are absent. See [TRUST_EVAL.md](TRUST_EVAL.md) |
+| **☸️ multipod-redis-session-continuity** | Every Monday at 09:00 UTC, or on-demand with `run_multipod_session_test=true` |
 
 `soak-test` (#480) is network-free but runs for an extended window (default 45min on manual dispatch); it drives the real HTTP binary under moderate concurrent load and asserts `/metrics` shows no unbounded goroutine/heap growth — see `make test-soak`. Being network-free (no external API rate-limit risk), it's safe to run unattended on a schedule, unlike `python-live-e2e`.
 
@@ -166,6 +176,8 @@ git push origin v1.38.0
 
 ```
 [🏗️ GoReleaser · Build & Publish]
+     │
+     ├──► [🔏 Build Provenance]         (SLSA, calls provenance.yml)
      │
      ├──► [🐳 Sign Docker Images]
      │
@@ -282,17 +294,18 @@ Gated on `vars.NIXPKGS_ENABLED == 'true'` + `secrets.NIXPKGS_FORK_GITHUB_TOKEN`.
 
 Push to `main` touching any of:
 - `README.md`, `ARCHITECTURE.md`, `CONTRIBUTING.md`
-- `docs/**`, `decks/**`, `overrides/**`
+- `docs/**`, `decks/**`, `overrides/**`, `landing/**`
 - `assets/logo-final-transparent.svg`, `assets/favicon.ico`
 - `mkdocs.yml`, `.github/workflows/docs.yml`
 
 ### Steps
 
 1. Checkout
-2. Install `mkdocs-material` (pinned version)
+2. Install `mkdocs-material` from `.github/pip/docs-requirements.txt` (hash-pinned)
 3. Assemble `site_src/` from root + `docs/` files (with cross-link rewriting)
-4. Generate `robots.txt`
-5. Deploy to GitHub Pages via `mkdocs gh-deploy --force --remote-branch gh-pages`
+4. `mkdocs build -d publish/docs`
+5. Assemble the landing page at `publish/` root, add redirect stubs and `robots.txt`
+6. Deploy `publish/` to the `gh-pages` branch via `peaceiris/actions-gh-pages` (`force_orphan`)
 
 > All `docs/*.md` links are rewritten from `](docs/FOO.md` → `](foo.md` so the published site URLs are clean. Root policy files (`SECURITY.md`, `CODE_OF_CONDUCT.md`) point to GitHub because they are not published to the site.
 
@@ -301,8 +314,9 @@ Push to `main` touching any of:
 ## 🔍 codeql.yml — Deep static analysis
 
 ### 📡 Triggers
-- Push to `main` (excluding docs/assets)
-- Any PR targeting `main` (same exclusion)
+- Push to `main`
+- Any PR targeting `main`
+- No path filter
 - Weekly schedule: every Monday at 06:00 UTC
 
 Runs GitHub's CodeQL engine with `security-extended,security-and-quality` query suites. Results appear in the **Security → Code scanning** tab. Findings must be addressed or dismissed before they accumulate.
@@ -321,7 +335,7 @@ Runs GitHub's CodeQL engine with `security-extended,security-and-quality` query 
 
 1. Add a new job to `release.yml` with `needs: release`.
 2. Gate it on a repo var (e.g., `vars.MY_CHANNEL_ENABLED == 'true'`) so an unconfigured fork is a clean no-op.
-3. Don't swallow the actual failure signal. A bare `|| echo "::warning::..."` reports the job green even when the publish never happened — a bare warning once hid months of failed publishes (#673). If a failure is expected to be benign (e.g. "already published"), still capture the command's exit code and its output, and only downgrade to a warning after confirming the specific known-benign case (grep the output for the expected message); anything else must fail the job loudly.
+3. Don't swallow the actual failure signal. A bare `|| echo "::warning::..."` reports the job green even when the publish never happened — a bare warning once hid failed publishes across several releases (#673). If a failure is expected to be benign (e.g. "already published"), still capture the command's exit code and its output, and only downgrade to a warning after confirming the specific known-benign case (grep the output for the expected message); anything else must fail the job loudly.
 4. Document the required secret/var in the table above.
 
 ### Cutting a release

@@ -30,7 +30,7 @@
         },
         {
           "name": "SEARCH_PROVIDER",
-          "description": "Search provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, or xquik",
+          "description": "Search provider: google, brave, serper, searxng, searchapi, youcom, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, or xquik",
           "isRequired": false
         },
         {

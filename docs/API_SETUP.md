@@ -104,7 +104,7 @@ The key is sent only in the `x-api-key` header. It never appears in logs or erro
 
 ### Good to know
 
-- **X/Twitter posts only.** `web_search` returns engagement-ranked posts. `news_search` returns latest posts. `image_search` returns empty without error.
+- **X/Twitter posts only.** `web_search` returns engagement-ranked posts. `news_search` returns latest posts. `image_search` with `provider=xquik` returns a `config` error. If Xquik is only the default provider, `image_search` uses the first configured image-capable provider and adds a warning.
 - **Bounded spend.** Every request is capped at 10 results. Xquik charges metered credits, so include it deliberately in `SEARCH_ROUTING`.
 - **Bring your own key.** This client makes direct API calls with the operator's key. It does not pool keys or resell access.
 - **Check permissions.** Xquik's [Terms of Service](https://xquik.com/en/terms) allow REST API and automation use, but require a lawful basis and any needed permissions for search and reuse. Do not redistribute or resell data or access unless you hold every required permission.
