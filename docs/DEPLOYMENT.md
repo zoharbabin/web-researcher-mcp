@@ -360,7 +360,7 @@ Note: Google keys are validated as required only when you explicitly select `SEA
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SEARCH_PROVIDER` | Primary provider: google, brave, serper, searxng, searchapi, youcom, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik | `google` (variable default); at runtime, when `google` is selected but no Google key is set, the server falls back to the zero-config `duckduckgo` provider |
+| `SEARCH_PROVIDER` | Primary provider: google, brave, serper, searxng, searchapi, youcom, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik, parallel | `google` (variable default); at runtime, when `google` is selected but no Google key is set, the server falls back to the zero-config `duckduckgo` provider |
 | `SEARCH_ROUTING` | Multi-provider routing (see below) | — |
 | `BRAVE_API_KEY` | Brave Search API key | — |
 | `BRAVE_EXTRA_SNIPPETS` | Return up to 5 extra snippets per Brave result | `false` |
@@ -373,7 +373,11 @@ Note: Google keys are validated as required only when you explicitly select `SEA
 | `SEARXNG_URL` | SearXNG instance URL | — |
 | `SEARXNG_BASIC_AUTH` | HTTP Basic credential `user:password` for a SearXNG behind Basic auth (malformed value fails startup; never logged) | — |
 | `SEARXNG_HEADERS` | Static request headers for SearXNG as comma-separated `Name: Value` pairs (no commas/newlines in a value; a custom `Authorization` overrides `SEARXNG_BASIC_AUTH`) | — |
+| `PARALLEL_ENABLED` | Opt-in gate for the keyless Parallel provider. While `false`, the provider is never constructed: `SEARCH_PROVIDER=parallel` refuses to start, `parallel` in `SEARCH_ROUTING` is ignored, and `provider: "parallel"` is rejected as unconfigured | `false` |
+| `PARALLEL_API_KEY` | Optional Parallel API key, read only when `PARALLEL_ENABLED=true`; sent as a Bearer token to raise the anonymous rate limit | none (anonymous) |
 | `CUSTOM_LENSES_PATH` | Directory of custom lens JSON files, loaded after (and able to override) the bundled lenses; schema-validated at startup. See `lenses/README.md` | — |
+
+Parallel needs no account, so `PARALLEL_ENABLED`, not a credential, authorizes egress to it. Set `PARALLEL_ENABLED=true`, then select it with `SEARCH_PROVIDER=parallel`, a `parallel` entry in `SEARCH_ROUTING`, or `provider: "parallel"` on a single call. Queries then leave your deployment for a third party you have no account or signed DPA with. Review [Parallel's terms](https://parallel.ai/customer-terms) and [privacy policy](https://parallel.ai/privacy-policy) first, and see [Security & Compliance](SECURITY_AND_COMPLIANCE.md#optional-third-party-search-egress-parallel). Setup details: [Parallel setup and supported options](API_SETUP.md#parallel-keyless-web-search). Existing defaults are unchanged.
 
 ### Patent Providers (Optional)
 

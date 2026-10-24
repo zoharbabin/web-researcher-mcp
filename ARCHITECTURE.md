@@ -157,7 +157,7 @@ type Provider interface {
 }
 ```
 
-Several providers implement this interface — Google PSE, Brave, Serper, SearXNG, SearchAPI.io, Tavily, Exa, DuckDuckGo (the zero-config, no-key fallback), and Hacker News (the no-key HN Algolia index, `internal/search/hackernews.go`). The canonical list is `search.SupportedProviders` in `internal/search/provider.go`. The `Router` also implements `Provider`, enabling transparent multi-provider fallback — tools don't need to know whether they're calling a single provider or a routing layer.
+Several providers implement this interface — Google PSE, Brave, Serper, SearXNG, SearchAPI.io, Tavily, Exa, DuckDuckGo (the zero-config, no-key fallback), Hacker News (the no-key HN Algolia index, `internal/search/hackernews.go`), and Parallel (keyless Search MCP, off unless `PARALLEL_ENABLED=true`, `internal/search/parallel.go`). The canonical list is `search.SupportedProviders` in `internal/search/provider.go`. The `Router` also implements `Provider`, enabling transparent multi-provider fallback — tools don't need to know whether they're calling a single provider or a routing layer.
 
 This HN *search provider* is a separate integration from the HN *scrape-time* fetcher in the Performance table below (`internal/scraper/hackernews.go`) — one indexes and ranks HN stories for `news_search`/`web_search`, the other fetches a specific item/thread/user directly from HN's own Firebase API when `scrape_page` is pointed at an `news.ycombinator.com` URL. They share no code and hit different upstream APIs.
 

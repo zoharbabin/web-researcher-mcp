@@ -132,6 +132,47 @@ func TestLoadXQuikAPIKeyThreaded(t *testing.T) {
 	}
 }
 
+// TestLoadParallelOptIn pins the egress gate: Parallel is keyless, so the
+// PARALLEL_ENABLED toggle, not a credential, authorizes it, and
+// selecting it without one must fail fast at startup.
+func TestLoadParallelOptIn(t *testing.T) {
+	t.Run("selected without opt-in", func(t *testing.T) {
+		t.Setenv("SEARCH_PROVIDER", "parallel")
+
+		_, err := Load()
+		if err == nil {
+			t.Fatal("expected error when SEARCH_PROVIDER=parallel without PARALLEL_ENABLED")
+		}
+		if !strings.Contains(err.Error(), "PARALLEL_ENABLED=true is required") {
+			t.Errorf("expected error about PARALLEL_ENABLED, got: %v", err)
+		}
+	})
+
+	t.Run("default is off", func(t *testing.T) {
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.Search.ParallelEnabled {
+			t.Error("PARALLEL_ENABLED must default to false")
+		}
+	})
+
+	t.Run("opted in with an optional key", func(t *testing.T) {
+		t.Setenv("SEARCH_PROVIDER", "parallel")
+		t.Setenv("PARALLEL_ENABLED", "true")
+		t.Setenv("PARALLEL_API_KEY", "test-parallel-key")
+
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !cfg.Search.ParallelEnabled || cfg.Search.ParallelAPIKey != "test-parallel-key" {
+			t.Errorf("Parallel settings were not threaded through: %+v", cfg.Search.ParallelEnabled)
+		}
+	})
+}
+
 // TestLoadMissingTavilyAPIKey closes the pre-existing coverage gap for the
 // tavily required-key gate (parity with the exa/brave/serper gates).
 func TestLoadMissingTavilyAPIKey(t *testing.T) {

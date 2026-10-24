@@ -726,6 +726,12 @@ func (r *Router) filterAvailable(names []string) []string {
 func (r *Router) allProviderNames() []string {
 	names := make([]string, 0, len(r.providers))
 	for name := range r.providers {
+		// Parallel is opt-in. Adding a keyless provider to the registry must
+		// not send existing partial-routing configurations to a new service.
+		// Explicit operation/default lists are handled by filterAvailable.
+		if name == "parallel" {
+			continue
+		}
 		names = append(names, name)
 	}
 	sort.Strings(names)

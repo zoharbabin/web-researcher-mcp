@@ -30,7 +30,7 @@
         },
         {
           "name": "SEARCH_PROVIDER",
-          "description": "Search provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, or xquik",
+          "description": "Search provider: google, brave, serper, searxng, searchapi, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik, or parallel (requires PARALLEL_ENABLED=true)",
           "isRequired": false
         },
         {
@@ -76,6 +76,18 @@
         {
           "name": "XQUIK_API_KEY",
           "description": "Xquik API key (metered X/Twitter post search provider)",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "PARALLEL_ENABLED",
+          "description": "Set to true to allow the keyless Parallel Search MCP provider. Off by default: queries would go to a third party with no account or signed DPA, so review https://parallel.ai/customer-terms first",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "PARALLEL_API_KEY",
+          "description": "Optional Parallel API key, read only when PARALLEL_ENABLED=true; raises the anonymous rate limit",
           "isRequired": false,
           "isSecret": true
         },

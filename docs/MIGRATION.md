@@ -122,7 +122,7 @@ The new version supports multiple backends for unrestricted whole-web search:
 }
 ```
 
-Supported providers are defined by `search.SupportedProviders`. The list includes general-web engines plus niche Hacker News, Reddit, Bluesky, GitHub, and Xquik sources. DuckDuckGo remains the zero-config fallback.
+Supported providers are defined by `search.SupportedProviders`. The list includes general-web engines plus niche Hacker News, Reddit, Bluesky, GitHub, and Xquik sources, and the opt-in keyless Parallel provider (`parallel`, available only when `PARALLEL_ENABLED=true`; see [`docs/API_SETUP.md`](API_SETUP.md#parallel-keyless-web-search)). DuckDuckGo remains the zero-config fallback.
 
 You can also enable multi-provider routing with automatic fallback:
 

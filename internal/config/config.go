@@ -176,12 +176,21 @@ type SearchConfig struct {
 	TavilyAPIKey       string
 	ExaAPIKey          string
 	XQuikAPIKey        string
-	JinaAPIKey         string // optional; the Jina Reader scraper tier works keyless, a key raises its rate limit
-	SearXNGURL         string
-	SearXNGBasicAuth   string            // raw "user:password" for a SearXNG behind HTTP Basic auth; "" => none (never logged)
-	SearXNGHeaders     map[string]string // validated static request headers for SearXNG; nil/empty => none
-	CustomLensesPath   string
-	ThinThreshold      int // SEARCH_THIN_THRESHOLD: retry same provider with simplified query when result count <= this; 0 disables
+	// ParallelEnabled (PARALLEL_ENABLED) is the operator opt-in for the
+	// Parallel provider. It is keyless, so without an explicit toggle merely
+	// upgrading the binary would make a brand-new egress destination
+	// selectable; the provider is not constructed unless this is true.
+	ParallelEnabled bool
+	// ParallelAPIKey (PARALLEL_API_KEY) is optional and only read when
+	// ParallelEnabled is true. It is sent as a Bearer token to raise the
+	// anonymous rate limit; empty keeps the connection anonymous.
+	ParallelAPIKey   string
+	JinaAPIKey       string // optional; the Jina Reader scraper tier works keyless, a key raises its rate limit
+	SearXNGURL       string
+	SearXNGBasicAuth string            // raw "user:password" for a SearXNG behind HTTP Basic auth; "" => none (never logged)
+	SearXNGHeaders   map[string]string // validated static request headers for SearXNG; nil/empty => none
+	CustomLensesPath string
+	ThinThreshold    int // SEARCH_THIN_THRESHOLD: retry same provider with simplified query when result count <= this; 0 disables
 
 	// Patent-specific providers (optional, enables structured patent search)
 	USPTOAPIKey       string
@@ -390,6 +399,13 @@ func Load() (*Config, error) {
 		errs = append(errs, "XQUIK_API_KEY is required when SEARCH_PROVIDER=xquik")
 	}
 
+	// Parallel is keyless, so the opt-in toggle, not a credential, is what
+	// authorizes egress to it. Fail closed when it is selected without one.
+	parallelEnabled := envBool("PARALLEL_ENABLED", false)
+	if provider == "parallel" && !parallelEnabled {
+		errs = append(errs, "PARALLEL_ENABLED=true is required when SEARCH_PROVIDER=parallel")
+	}
+
 	port := envInt("PORT", 0)
 	encKey := os.Getenv("CACHE_ENCRYPTION_KEY")
 	if encKey != "" && !isHex64(encKey) {
@@ -558,6 +574,8 @@ func Load() (*Config, error) {
 			TavilyAPIKey:          tavilyKey,
 			ExaAPIKey:             exaKey,
 			XQuikAPIKey:           xquikKey,
+			ParallelEnabled:       parallelEnabled,
+			ParallelAPIKey:        os.Getenv("PARALLEL_API_KEY"),
 			JinaAPIKey:            os.Getenv("JINA_API_KEY"),
 			SearXNGURL:            searxngURL,
 			SearXNGBasicAuth:      searxngBasicAuth,
