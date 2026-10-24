@@ -73,7 +73,7 @@ mcpb/             # .mcpb bundle manifest template (consumed by scripts/build-mc
 deploy/k8s-local/ # Generic (non-personal) manifests for local multi-pod k8s parity testing — see docs/K8S_LOCAL_DEV.md
 ```
 
-Registry/manifest files (root, each read by a different external tool): `server.json` (MCP registry), `smithery.yaml` (Smithery), `glama.json` (Glama), `.mcp.json` (local MCP client config — edit this to wire env vars for local testing), `VERSION` (source of truth, synced by `scripts/sync-version.sh`). Two Dockerfiles are intentional: `Dockerfile` (local/Makefile) and `Dockerfile.release` (GoReleaser). Two installers are intentional: root `install.sh`/`install.ps1` (curl installers) and `bin/install.sh` (plugin hook).
+Registry/manifest files (root, each read by a different external tool): `server.json` (MCP registry), `glama.json` (Glama), `.mcp.json` (local MCP client config — edit this to wire env vars for local testing), `VERSION` (source of truth, synced by `scripts/sync-version.sh`). Two Dockerfiles are intentional: `Dockerfile` (local/Makefile) and `Dockerfile.release` (GoReleaser). Two installers are intentional: root `install.sh`/`install.ps1` (curl installers) and `bin/install.sh` (plugin hook).
 
 ## Design Rules
 
@@ -138,7 +138,7 @@ Full list: `.env.example` (authoritative) and `docs/DEPLOYMENT.md`.
 
 ## Release Process
 
-Push a `v*` tag → CI runs GoReleaser → cross-platform binaries + Docker multi-arch (GHCR + Docker Hub) + .mcpb bundles + SBOM + cosign signatures. Downstream gated jobs (each `needs: release`): Docker signing, MCP Registry, Smithery, and PyPI platform wheels (Trusted Publishing OIDC). All automated via `.github/workflows/release.yml` + `.goreleaser.yml`.
+Push a `v*` tag → CI runs GoReleaser → cross-platform binaries + Docker multi-arch (GHCR + Docker Hub) + .mcpb bundles + SBOM + cosign signatures. Downstream gated jobs (each `needs: release`): Docker signing, MCP Registry, and PyPI platform wheels (Trusted Publishing OIDC). All automated via `.github/workflows/release.yml` + `.goreleaser.yml`.
 
 ## Security Rules
 

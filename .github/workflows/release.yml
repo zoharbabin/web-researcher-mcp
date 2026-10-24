@@ -466,71 +466,6 @@ jobs:
           ./mcp-publisher publish \
             || echo "::warning::MCP Registry publish failed — check registry manually (may already exist or OIDC expired)"
 
-  # ── 🔨 Smithery ───────────────────────────────────────────────────────────────
-  # Publishes the .mcpb bundle to Smithery. Downloads the bundle that was already
-  # built and uploaded by the `release` job — no need to rebuild from source.
-  # Gated on SMITHERY_ENABLED so an unconfigured fork is a clean no-op.
-  publish-smithery:
-    name: 🔨 Publish → Smithery
-    runs-on: ubuntu-latest
-    needs: release
-    if: ${{ vars.SMITHERY_ENABLED == 'true' }}
-    permissions:
-      contents: read  # checkout + gh release download
-    steps:
-      - name: Set release tag
-        run: echo "RELEASE_TAG=${{ inputs.tag || github.ref_name }}" >> "$GITHUB_ENV"
-
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-        with:
-          node-version: "22"
-
-      - name: Install Smithery CLI
-        run: |
-          npm ci --prefix .github/npm/smithery-cli
-          echo "$PWD/.github/npm/smithery-cli/node_modules/.bin" >> "$GITHUB_PATH"
-
-      - name: Download .mcpb bundle from release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${RELEASE_TAG#v}"
-          mkdir -p dist/mcpb
-          gh release download "${RELEASE_TAG}" \
-            --pattern "web-researcher-mcp_${VERSION}_linux_amd64.mcpb" \
-            --dir dist/mcpb
-
-      - name: Publish to Smithery
-        env:
-          SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY }}
-        run: |
-          VERSION="${RELEASE_TAG#v}"
-          mkdir -p "$HOME/.config/smithery"
-          echo "{\"apiKey\":\"${SMITHERY_API_KEY}\"}" > "$HOME/.config/smithery/settings.json"
-
-          # Never let this fail silently (see #673): a prior soft `|| echo
-          # "::warning..."` fallback let this job report green while every
-          # release since v1.49.0 actually failed to reach Smithery. Capture
-          # the CLI's own exit code AND grep its output for "Deployment
-          # failed" — smithery-cli has been observed to print that string on
-          # a rejected publish, so either signal alone must fail the job loudly.
-          # `set +e` around the pipeline is required: PIPESTATUS must be read
-          # immediately after the pipeline runs, before any other command
-          # (including a trailing `|| true`) executes and overwrites it.
-          set +e
-          smithery mcp publish "dist/mcpb/web-researcher-mcp_${VERSION}_linux_amd64.mcpb" \
-            -n web-researcher-mcp/web-researcher-mcp \
-            2>&1 | tee smithery-publish.log
-          publish_exit="${PIPESTATUS[0]}"
-          set -e
-
-          if [ "$publish_exit" -ne 0 ] || grep -q "Deployment failed" smithery-publish.log; then
-            echo "::error::Smithery publish failed (exit code ${publish_exit}) — see log above. This used to be silently swallowed as a warning; see issue #673."
-            exit 1
-          fi
-
   # ── 🐍 PyPI platform wheels ───────────────────────────────────────────────────
   # Wraps the cross-compiled binaries (built by the `release` job) into platform
   # wheels for uvx/uv/pip. Publishes via Trusted Publishing (OIDC — no token
@@ -698,7 +633,7 @@ jobs:
   #
   # Gated on NIXPKGS_ENABLED var + NIXPKGS_FORK_GITHUB_TOKEN secret.
   # An unconfigured fork is a clean no-op (same degradation model as all other
-  # optional channels: Smithery, Chocolatey, AUR).
+  # optional channels: Chocolatey, AUR).
   submit-nixpkgs-pr:
     name: 🐧 Submit → nixpkgs proper
     runs-on: ubuntu-latest

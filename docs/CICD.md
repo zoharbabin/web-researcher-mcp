@@ -30,8 +30,8 @@ Every push / PR                         v* tag push
                                           │
                            ┌──────────────┼────────────────────┐
                            ▼              ▼                     ▼
-                  🐳 docker-sign   📋 mcp-registry   🔨 smithery
-                  🐍 pypi          📦 packaging      (all parallel)
+                  🐳 docker-sign   📋 mcp-registry   🐍 pypi
+                  📦 packaging     (all parallel)
 ```
 
 Two more files run outside this diagram: `codeql.yml` runs GitHub's CodeQL deep static analysis on push-to-main and a weekly schedule; `provenance.yml` and `scorecard.yml` (below) cover supply-chain security.
@@ -155,9 +155,7 @@ git push origin v1.38.0
 | `MACOS_SIGN_P12` / `MACOS_SIGN_PASSWORD` | Secret | macOS Developer ID signing |
 | `MACOS_NOTARY_ISSUER_ID` / `MACOS_NOTARY_KEY_ID` / `MACOS_NOTARY_KEY` | Secret | Notarization |
 | `AZURE_TENANT_ID` / `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` | Secret | Windows Authenticode (jsign) |
-| `SMITHERY_API_KEY` | Secret | Smithery publish |
 | `AZURE_SIGNING_ENABLED` | Var | `"true"` to enable Windows signing |
-| `SMITHERY_ENABLED` | Var | `"true"` to enable Smithery job |
 | `PYPI_PUBLISH_ENABLED` | Var | `"true"` to enable PyPI wheels |
 | `AUR_SSH_KEY` | Secret | SSH private key for AUR push (optional — skips gracefully if absent) |
 | `PACKAGING_UPDATE_ENABLED` | Var | `"true"` to enable AUR/Nix manifest generation + upload |
@@ -172,8 +170,6 @@ git push origin v1.38.0
      ├──► [🐳 Sign Docker Images]
      │
      ├──► [📋 Publish → MCP Registry]   (independent of docker-sign)
-     │
-     ├──► [🔨 Publish → Smithery]       (if SMITHERY_ENABLED)
      │
      ├──► [🐍 Publish → PyPI]           (if PYPI_PUBLISH_ENABLED)
      │
@@ -215,7 +211,7 @@ Steps run in cheapest-first order so an early misconfiguration surfaces before s
 | Verify macOS signing chain | Checks p12 contains leaf + intermediate + Apple Root CA (prevents AMFI SIGKILL on launch) |
 | Set up Chocolatey CLI | Installs `choco` under mono; `push` subcommand is non-fatal (Chocolatey moderation can 403) |
 | Run GoReleaser | Cross-compiles 5 platforms; signs macOS (quill+notarize); signs Windows (jsign/Azure); pushes Docker multi-arch; updates Homebrew/Scoop/WinGet; publishes GitHub Release |
-| Build .mcpb bundles | Assembles MCP bundle archives for Smithery + MCPB registries |
+| Build .mcpb bundles | Assembles MCPB bundle archives |
 | Generate SBOM | Syft produces a full SPDX JSON; attached to the release |
 | Sign checksums.txt | Cosign keyless OIDC signature; `.sig` + `.pem` attached to the release |
 | Upload dist binaries | Artifact for the PyPI job to wrap into wheels without re-running GoReleaser |
@@ -227,12 +223,6 @@ Fetches the image digest from GHCR and signs it with cosign using GitHub's OIDC 
 ### 📋 [publish-mcp-registry] — MCP Registry
 
 Depends on `release` directly (not `docker-sign`) — the registry only needs the GitHub Release to exist, not the Docker signature. Re-syncs the version string and publishes via `mcp-publisher` + GitHub OIDC authentication.
-
-### 🔨 [publish-smithery] — Smithery
-
-Downloads the `.mcpb` bundle that was already built and uploaded by the `release` job (no re-build from source). Publishes to [Smithery](https://smithery.ai). Gated on `vars.SMITHERY_ENABLED == 'true'`.
-
-The publish step captures `smithery mcp publish`'s exit code and greps its own output for `Deployment failed`; either signal fails the job with `::error::` (not a warning). Before #673, a soft `|| echo "::warning::..."` fallback let this job report green across multiple releases while every publish actually failed with a 400 from the Smithery API — the `.mcpb` manifest's `tools` field (`mcpb/manifest.json`) only carries `name`/`description` per the [mcpb spec](https://github.com/anthropics/mcpb) (no `inputSchema`), but smithery-cli forwards it as-is into `serverCard.tools`, which the Smithery publish API appears to require full `inputSchema` objects for. The manifest template no longer ships a static `tools`/`tools_generated` list, so Smithery introspects tool schemas from the live server instead of a stub that can never satisfy its schema. If this job fails again, check the log for the exact error before assuming it's just an expired `SMITHERY_API_KEY`.
 
 ### 🐍 [publish-pypi] — PyPI platform wheels
 
@@ -331,7 +321,7 @@ Runs GitHub's CodeQL engine with `security-extended,security-and-quality` query 
 
 1. Add a new job to `release.yml` with `needs: release`.
 2. Gate it on a repo var (e.g., `vars.MY_CHANNEL_ENABLED == 'true'`) so an unconfigured fork is a clean no-op.
-3. Don't swallow the actual failure signal. A bare `|| echo "::warning::..."` reports the job green even when the publish never happened — this hid a real 400 from Smithery across multiple releases (#673). If a failure is expected to be benign (e.g. "already published"), still capture the command's exit code and its output, and only downgrade to a warning after confirming the specific known-benign case (grep the output for the expected message); anything else must fail the job loudly. See `publish-smithery`'s "Publish to Smithery" step for the pattern.
+3. Don't swallow the actual failure signal. A bare `|| echo "::warning::..."` reports the job green even when the publish never happened — a bare warning once hid months of failed publishes (#673). If a failure is expected to be benign (e.g. "already published"), still capture the command's exit code and its output, and only downgrade to a warning after confirming the specific known-benign case (grep the output for the expected message); anything else must fail the job loudly.
 4. Document the required secret/var in the table above.
 
 ### Cutting a release
@@ -374,7 +364,6 @@ git push origin v1.38.0
 | PyPI publish failure | Check `pypi` environment is configured with Trusted Publishing OIDC |
 | Docker sign failure | Check GHCR image exists; check cosign OIDC token permissions |
 | MCP Registry warning | Non-fatal; check `mcp-publisher` OIDC credentials, may already be published |
-| Smithery publish fails | Fatal (fails the job, see #673) — check the step log for the actual `smithery mcp publish` error; check `SMITHERY_API_KEY` secret validity before assuming a schema issue |
 | Release workflow didn't fire on tag push | GitHub infrastructure glitch — use `Actions → 🚀 Release → Run workflow` and supply the tag (e.g. `v1.37.5`) to retrigger manually |
 
 ---

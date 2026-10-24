@@ -81,7 +81,6 @@ archives:
       # nested paths.
       - lenses/*
       - server.json
-      - smithery.yaml
 
 checksum:
   name_template: "checksums.txt"

@@ -736,7 +736,7 @@ pip install web-researcher-mcp
 }
 ```
 
-The wheels are `py3-none-<platform>` (one per OS/arch; the `none` ABI means any Python 3.10+), built by `scripts/build_wheels.py` (stdlib-only — no build backend) from the same GoReleaser binaries every other channel ships, and published on each release via PyPI Trusted Publishing (OIDC). Publishing is gated on the `PYPI_PUBLISH_ENABLED` GitHub Actions **repository variable** (a CI knob, like `SMITHERY_ENABLED`/`AZURE_SIGNING_ENABLED` — not a runtime env var); an unset repo is a clean no-op. The PyPI side uses Trusted Publishing configured against this repo + the release workflow + the `pypi` environment. The wheel is a thin launcher that `exec`s the bundled binary, so behavior is identical to running it directly.
+The wheels are `py3-none-<platform>` (one per OS/arch; the `none` ABI means any Python 3.10+), built by `scripts/build_wheels.py` (stdlib-only — no build backend) from the same GoReleaser binaries every other channel ships, and published on each release via PyPI Trusted Publishing (OIDC). Publishing is gated on the `PYPI_PUBLISH_ENABLED` GitHub Actions **repository variable** (a CI knob, like `AZURE_SIGNING_ENABLED` — not a runtime env var); an unset repo is a clean no-op. The PyPI side uses Trusted Publishing configured against this repo + the release workflow + the `pypi` environment. The wheel is a thin launcher that `exec`s the bundled binary, so behavior is identical to running it directly.
 
 ---
 
@@ -886,7 +886,6 @@ This server is distributed via:
 | Registry | Config File | Status |
 |----------|-------------|--------|
 | Official MCP Registry | `server.json` | Publish with `mcp-publisher publish` |
-| Smithery.ai | `smithery.yaml` | Auto-detected from repo root |
 | Docker Hub | `docker.io/zoharbabin/web-researcher-mcp` | Published on release |
 | GHCR | `ghcr.io/zoharbabin/web-researcher-mcp` | Published on release |
 | GitHub Releases | `.mcpb` bundles | Attached per-platform on release |
