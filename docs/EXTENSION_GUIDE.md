@@ -87,7 +87,7 @@ A Provider is a new backend for a capability the codebase already knows how to s
 
 **Integration checklist:**
 1. `internal/search/<name>.go` — implement the matching interface; `var _ Provider = (*XProvider)(nil)` assertion
-2. `internal/search/provider.go` (for `search.Provider`) or `domain.go` / `synthesis.go` / `structured_domains.go` — add to `Supported…Providers` + `New…ProviderByName` + `Available…Providers`
+2. `internal/search/provider.go` (for `search.Provider`) or `domain.go` / `structured_domains.go` — add to `Supported…Providers` + `New…ProviderByName` + `Available…Providers`
 3. `internal/config/config.go` + `.env.example` — env var + required-when-selected check
 4. Wire `circuit.New(...)` inside `Available…Providers` (every provider gets its own breaker)
 
@@ -101,7 +101,7 @@ A Lens is a JSON domain allowlist. When a caller sets the `lens` parameter on `w
 
 **When to use:**
 - You want to restrict `web_search` to a known-good set of sites for a domain (legal databases, medical publishers, open-access repositories)
-- Optional: add a `cx` field to route to a Google Programmable Search Engine, or a `goggle` URL for Brave re-ranking
+- Optional: add a `cx` field to mark the lens as scoped by a Google Programmable Search Engine (skips `site:` injection; the global `GOOGLE_CUSTOM_SEARCH_ID` engine is used), or a `goggle` URL for Brave re-ranking
 
 **When NOT to use:**
 - You need structured output specific to the domain (e.g. case docket metadata, clinical trial phases) → use **Tool** + **Provider**

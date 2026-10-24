@@ -281,7 +281,7 @@ Find community-curated "awesome list" collections on a topic — good for scouti
 }
 ```
 
-**Response** contains: `query`, `resultCount`, `provider`, `trust`, and `lists` (array with `name`, `fullName`, `url`, `description`, `stars`, `projectsCount`, `topics`, `lastSyncedAt`, `archived`, `source`). Archived lists are excluded automatically. Filter with `min_stars` or `min_projects` to cut noise from small/abandoned lists, and `sort_by` (`stars` (default), `projects`, or `updated`) to change ranking. Pass `query` instead of `topic` for a free-text search when you don't know the exact topic tag.
+**Response** contains: `query`, `resultCount`, `provider`, `trust`, and `lists` (array with `name`, `fullName`, `url`, `description`, `stars`, `projectsCount`, `topics`, `lastSyncedAt`, `source`). Archived lists are excluded automatically. Filter with `min_stars` or `min_projects` to cut noise from small/abandoned lists, and `sort_by` (`stars` (default), `projects`, or `updated`) to change ranking. Pass `query` instead of `topic` for a free-text search when you don't know the exact topic tag.
 
 ---
 
@@ -355,7 +355,7 @@ Extract content from any URL — web pages, PDFs, DOCX, PPTX, YouTube transcript
 }
 ```
 
-**Response** contains: `url`, `content` (extracted text), `contentType` (html/markdown/youtube/pdf/docx/pptx), `contentLength`, `truncated`, `estimatedTokens`, `sizeCategory`, `citation` (with APA/MLA/BibTeX formatted citations), typed source classification (`sourceType`: peer_reviewed/official_docs/government/news_publication/blog/forum/wiki/social_media/unknown; `authorityTier`: high/medium/low; `domainCategory`: academic/legal/medical/financial/technical/general), and optionally `metadata` (`{title, author}`), `extractedBy` (the extraction tier), `structuredData` (JSON-LD / Open Graph / citation meta when present), `detectedDoi` (a DOI the page declares itself — useful for verifying a scrape result against `verify_citation`), and `retractionStatus` (retraction data if the detected DOI is in the Crossref retraction watch). The tool uses the fastest method available and only launches a full browser for sites that require JavaScript — so most pages load in under a second. On a cache hit the result also carries a `_meta` block (`cached`, `ageSeconds`, `maxAgeSeconds`, `freshness`) so you can tell how recent the content is.
+**Response** contains: `url`, `content` (extracted text), `contentType` (html/markdown/pdf/docx/pptx/youtube/hackernews/github/bluesky/twitter), `contentLength`, `truncated`, `estimatedTokens`, `sizeCategory`, `citation` (with APA/MLA/BibTeX formatted citations), typed source classification (`sourceType`: peer_reviewed/official_docs/government/news_publication/blog/forum/wiki/social_media/unknown; `authorityTier`: high/medium/low; `domainCategory`: academic/legal/medical/financial/technical/general), and optionally `metadata` (`{title, author}`), `extractedBy` (the extraction tier), `structuredData` (JSON-LD / Open Graph / citation meta when present), `detectedDoi` (a DOI the page declares itself — useful for verifying a scrape result against `verify_citation`), and `retractionStatus` (retraction data if the detected DOI is in the Crossref retraction watch). The tool uses the fastest method available and only launches a full browser for sites that require JavaScript — so most pages load in under a second. On a cache hit the result also carries a `_meta` block (`cached`, `ageSeconds`, `maxAgeSeconds`, `freshness`) so you can tell how recent the content is.
 
 ### Modes
 
@@ -519,7 +519,7 @@ Before you cite a source, verify it exists, hasn't been retracted, and actually 
 }
 ```
 
-`citation` accepts a DOI, a URL, or a free-text reference string — the tool detects which. **Response** carries: `exists` (boolean), `matchedRecord` (the real bibliographic record from Crossref/academic sources, with a `matchConfidence`), `titleMatch` (does the title you supplied match the real record — catches swapped DOIs), `retractionStatus` (from Crossref Retraction Watch), and link-liveness (`linkLive`, `httpStatus`, `archivedUrl`). When you add a `claim`, you also get `claimSupport` (`addressed` / `partially_addressed` / `not_addressed` → flagged `mischaracterized`), `claimEvidence` (claim-relevant sentences from the source), and a `contrastSignal` if the source contradicts the claim. This is evidence, not a verdict — you decide whether to cite. Use `audit_bibliography` to check an entire reference list at once.
+`citation` accepts a DOI, a URL, or a free-text reference string — the tool detects which. **Response** carries: `exists` (boolean), `matchedRecord` (the real bibliographic record from Crossref/academic sources, with a `matchConfidence`), `titleMatch` (does the title you supplied match the real record — catches swapped DOIs), `retractionStatus` (from Crossref Retraction Watch), and link-liveness (`linkOutcome`, `httpStatus`, `finalUrl`, `archivedUrl`). When you add a `claim`, you also get `claimSupport` (`addressed` / `partially_addressed` / `not_addressed` → flagged `mischaracterized`), `claimEvidence` (claim-relevant sentences from the source), and a `contrastSignal` if the source contradicts the claim. This is evidence, not a verdict — you decide whether to cite. Use `audit_bibliography` to check an entire reference list at once.
 
 ---
 
@@ -557,7 +557,7 @@ Lock in a timestamped snapshot before you cite a page that might change or disap
 }
 ```
 
-This is a **write tool** (as are the opt-in regulated `memory_save`, `workspace_contribute`, `site_login` and `site_logout`) — it asks the Internet Archive's Save Page Now to capture a fresh snapshot. **Response** carries: `status` (`archived` = fresh capture confirmed, `existing` = no new capture made but a recent snapshot exists, `pending` = capture in-flight), `snapshotUrl` (the permanent Wayback URL), `capturedAt` (timestamp), and `provenance`. Run `verify_citation` first to see whether a link is already dead or already archived before capturing.
+This is a **write tool** (as are the opt-in regulated `memory_save`, `workspace_contribute`, `site_login` and `site_logout`) — it asks the Internet Archive's Save Page Now to capture a fresh snapshot. **Response** carries: `status` (`archived` = fresh capture confirmed, `existing` = no new capture made but a recent snapshot exists, `pending` = capture in-flight, `unavailable` = the capture could not be made), `snapshotUrl` (the permanent Wayback URL), `archivedAt` (timestamp), and `provenance`. Run `verify_citation` first to see whether a link is already dead or already archived before capturing.
 
 ---
 
@@ -577,7 +577,7 @@ Map the academic neighborhood of a paper — the works it references and the wor
 }
 ```
 
-`paper` accepts a DOI or an exact title. `direction` is `cited_by` (forward — works that cite the seed), `references` (backward — works the seed cites), or `both` (default). **Response** carries: `seed` (the resolved seed record), `citedBy` and `references` arrays (each with `title`, `doi`, `authors`, `year`, `citationCount`, `isInfluential`, `citationIntents`), and `provider`. Requires at least one academic provider (Semantic Scholar or OpenAlex). Use alongside `academic_search` to discover papers and `verify_citation` to check individual ones.
+`paper` accepts a DOI or an exact title. `direction` is `cited_by` (forward — works that cite the seed), `references` (backward — works the seed cites), or `both` (default). **Response** carries: `seed` (the paper string you supplied), `direction`, `citedBy`/`citedByCount` and `references`/`referencesCount` (each entry has `title`, `doi`, `authors`, `year`, `citationCount`, `isInfluential`, `citationIntents`), and `provider`. Requires at least one academic provider (Semantic Scholar or OpenAlex). Use alongside `academic_search` to discover papers and `verify_citation` to check individual ones.
 
 ---
 
@@ -594,7 +594,7 @@ Pull a company's colors, logo, typography, and tone of voice from its official b
 }
 ```
 
-You can pass a `url` (domain or full URL) or a `company_name` — `url` takes precedence when both are set. **Response** carries a structured `identity` object with `name`, `domain`, `colors` (hex values with their roles), `fonts`, `logo` URLs, `socialHandles`, `toneOfVoice`, and `guidelinesUrl`. Empty fields mean the data wasn't found — not that it doesn't exist. When a brand portal is found, `brand_portal_resource` carries a `research://artifact/{id}` URI — pass it to `read_resource` to get the full rendered portal text for deeper analysis. When no portal is found, the `suggestion` field tells you what to do next. Results are cached for 24 hours; `cache_age` tells you how fresh they are.
+You can pass a `url` (domain or full URL) or a `company_name` — `url` takes precedence when both are set. **Response** carries an `identity` object (`name`, `domain`, `tagline`, `description`, `industry`, `founded`, `location`) plus top-level `colors` (hex values with their roles), `logos`, `typography`, `tone_of_voice`, `social` and `guidelines_url`. Empty fields mean the data wasn't found — not that it doesn't exist. When a brand portal is found, `brand_portal_resource` carries a `research://artifact/{id}` URI — pass it to `read_resource` to get the full rendered portal text for deeper analysis. When no portal is found, the `suggestion` field tells you what to do next. Results are cached for 24 hours; `cache_age` tells you how fresh they are.
 
 ---
 
@@ -647,7 +647,7 @@ Find places near a location — restaurants, services, venues — with distance 
 }
 ```
 
-For precise radius filtering, pass `latitude`, `longitude`, and `radius` (in meters) instead of `near`. **Response** carries `places` (array with `name`, `address`, `phone`, `rating`, `categories`, `url`, `distance`) and `resultCount`. Filter by `country` (ISO 3166-1 alpha-2) and set `units` to `metric` or `imperial`.
+For precise radius filtering, pass `latitude`, `longitude`, and `radius` (in meters) instead of `near`. **Response** carries `places` (array with `name`, `address`, `lat`, `lon`, `phone`, `website`, `categories`, `rating`, `ratingCount`, `hours`, `description`; places are distance-ranked but carry no distance field) and `resultCount`. Filter by `country` (ISO 3166-1 alpha-2) and set `units` to `metric` or `imperial`.
 
 ---
 

@@ -30,7 +30,7 @@ When you ask your AI assistant to search or read a page, here is exactly what ha
 | Your search query | Directly to the search provider you configured (Google, Brave, etc.) | The search provider — not us |
 | Your API keys | Stored locally on your machine, sent only to the respective provider | Only the provider — never us |
 | Search results | Returned to your machine and cached locally | Only you |
-| Scraped page content | Fetched directly from the website to your machine (if you enable the optional paid Exa fallback, pages the local tiers cannot read are extracted via Exa instead) | Only you (and Exa, only for pages routed through that optional fallback) |
+| Scraped page content | Fetched from the website to your machine. Pages the local tiers cannot read are also tried through Jina Reader (the page URL goes to r.jina.ai; turn off with `JINA_READER_DISABLED=true`). x.com and twitter.com URLs go to FxTwitter and xcancel. If you set `EXA_API_KEY`, Exa is a last-resort extractor | You, plus Jina, FxTwitter/xcancel and Exa for pages routed through them |
 | Local cache | Stored on your device, optionally encrypted (AES-256) | Only you |
 
 The key point: **your search queries travel directly from your machine to the search provider.** We are not in the middle. We never see what you search for.
@@ -70,10 +70,16 @@ When you search, your query goes directly to whichever provider you configured. 
 | ClinicalTrials.gov | Your clinical-trial query (keyless) | [clinicaltrials.gov/about-site/privacy-policy](https://clinicaltrials.gov/about-site/privacy-policy) |
 | Monarch Initiative | Your biomedical query (keyless) | [monarchinitiative.org](https://monarchinitiative.org/) |
 | EPO (Open Patent Services) | Your patent query, your API key | [epo.org/en/privacy-and-legal](https://www.epo.org/en/privacy-and-legal) |
-| USPTO | Your patent query (keyless) | [uspto.gov/privacy-policy](https://www.uspto.gov/privacy-policy) |
+| USPTO | Your patent query, your API key | [uspto.gov/privacy-policy](https://www.uspto.gov/privacy-policy) |
 | The Lens | Your patent query, your API token | [lens.org/lens/privacy](https://www.lens.org/lens/privacy) |
 | ecosyste.ms | Your awesome-list query; your optional contact email or API key (raises rate limit) | [ecosyste.ms/privacy](https://ecosyste.ms/privacy) |
-| Internet Archive (Save Page Now) | The page URL being archived (only when `archive_source` is used) | [archive.org/about/terms.php](https://archive.org/about/terms.php) |
+| Internet Archive | The page URL being archived (`archive_source`) or looked up for an archived copy (link checks in `audit_bibliography` and `verify_citation`) | [archive.org/about/terms.php](https://archive.org/about/terms.php) |
+| You.com | Your query, your API key (only when the `youcom` provider is configured) | [you.com/privacy-policy](https://you.com/privacy-policy) |
+| Jina Reader | The page URL being read (on by default; `JINA_READER_DISABLED=true` stops it) | [jina.ai/legal](https://jina.ai/legal) |
+| FxTwitter / xcancel | x.com and twitter.com URLs you scrape | No policy link |
+| Wikidata | A brand name (`verify_recommendation`) | [wikimediafoundation.org/about/policies/privacy-policy](https://wikimediafoundation.org/about/policies/privacy-policy) |
+| crt.sh, Wayback CDX | A domain (`company_recon`) | No policy link |
+| doi.org | A DOI (`verify_citation`) | [doi.org/hs_privacy.html](https://doi.org/hs_privacy.html) |
 | BrandFetch | Company name (only when `BRANDFETCH_CLIENT_ID` is set; used for `brand_research` domain resolution) and/or domain (only when `BRANDFETCH_API_KEY` is set; used for Brand + Context API enrichment) | [brandfetch.com/privacy](https://brandfetch.com/privacy) |
 
 These are public-data APIs queried only when you call the matching tool (`academic_search`/`citation_graph`, `filing_search`, `legal_search`, `econ_search`, `clinical_search`). Only the search term, identifier, and any configured key/contact email are sent — no personal data beyond what you put in the query. EDGAR's contact email is a deliberate disclosure the SEC requires for automated access.
@@ -96,7 +102,7 @@ If you choose to deploy the software as an HTTP server (multi-tenant mode), addi
 
 - **OAuth tokens** — validated for authentication, not stored. Revoked token IDs (JTIs) may be persisted locally to an encrypted store so a revocation survives a restart; the stored value is an opaque ID with an expiry, never the token contents or any claim.
 - **Tenant identifiers** — used to isolate rate limits and sessions between users
-- **Audit logs** — tool invocations are logged locally (no raw queries by default, only the query character count (`query_length`)). Audit files older than the configured retention window are deleted automatically.
+- **Audit logs** — tool invocations are logged locally. Raw query text is never logged. Only the query length in bytes (`query_length`) is recorded, plus a SHA-256 `query_hash` if `AUDIT_INCLUDE_REQUEST_BODY=true`. Audit files older than the configured retention window are deleted automatically.
 - **Rate limit counters** — in-memory by default and cleared on restart. With `RATE_LIMIT_PERSIST=true` the per-tenant daily-quota counters are written to a local encrypted store so quotas survive a restart — still on your own machine, never transmitted.
 - **Tenant aggregate analytics** — the server keeps **aggregate counts** per tenant (total calls, error rate, cache-hit rate, provider breakdown, latency percentiles) for billing and capacity planning, exposed only to the operator via the admin-gated `GET /admin/analytics` endpoint. This is **aggregate-only**: no per-query text, no per-user records, no content — just tallies keyed by tenant identifier. The lawful basis is the operator's **legitimate interest** in running and billing the service; because it is non-identifying at the individual level, it requires no separate consent. It is held in memory and is not transmitted off your infrastructure. (Per-*user* analytics is a distinct, consent-gated, off-by-default feature — see Your Rights.)
 

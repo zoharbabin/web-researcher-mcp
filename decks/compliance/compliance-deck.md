@@ -336,7 +336,7 @@ So the server treats consent as three things it actually does:
 
 - **Records** it — encrypted, logged, with a typed purpose ("memory," "analytics," "workspace").
 - **Verifies** it on every access — no record, no processing (it defaults to *off*).
-- **Honors** it — a withdrawal automatically erases the data it covered.
+- **Honors** it — after a withdrawal the server refuses access (fail-closed). Erasure is a separate step, `DELETE /admin/data`, which also withdraws consent.
 
 <!-- _footer: '↳ proof: internal/consent/consent.go · internal/consent/store.go (HasConsent, fail-closed)' -->
 

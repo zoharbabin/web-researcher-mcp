@@ -18,7 +18,7 @@ Whether you're fixing a typo, adding a search provider, improving docs, or propo
 
 ### Prerequisites
 
-- **Go** — version requirement is specified in `go.mod` (the `toolchain` directive pins the exact patched release; Go auto-downloads it, so you never build with an unpatched compiler)
+- **Go** — version requirement is specified in `go.mod` (the `go` directive pins the exact patched release; Go auto-downloads it, so you never build with an unpatched compiler)
 - **API keys** (for integration/E2E testing):
   - Google Custom Search: `GOOGLE_CUSTOM_SEARCH_API_KEY` and `GOOGLE_CUSTOM_SEARCH_ID`
   - Brave Search (optional): `BRAVE_API_KEY`
@@ -102,10 +102,10 @@ go tool cover -html=coverage.out
 
 ### Fuzzing
 
-`internal/documents` (PDF/DOCX/PPTX extraction) and `internal/content`'s sanitizer parse fully untrusted, internet-sourced input, so both carry Go native (`testing.F`) fuzz targets. CI runs a short 20s-per-target sweep on every code PR; run a deeper local sweep periodically or after touching either package:
+`internal/documents` (PDF/DOCX/PPTX extraction), `internal/content`'s sanitizer and `internal/scraper`'s SSRF checks parse fully untrusted, internet-sourced input, so all carry Go native (`testing.F`) fuzz targets. CI runs a short 20s-per-target sweep on every code PR; run a deeper local sweep periodically or after touching either package:
 
 ```bash
-# Short CI-equivalent sweep across all 5 targets
+# Short CI-equivalent sweep across all 7 targets
 make test-fuzz
 
 # Deeper local sweep (minutes, not seconds)
@@ -179,7 +179,7 @@ See `ARCHITECTURE.md` for package organization and `docs/TOOLS.md` for tool spec
 Run the full check suite — the same gate CI enforces:
 
 ```bash
-make verify   # fmt-check + vet + lint + sec + vuln + validate-lenses + test-race + test-e2e + check-python-drift + test-python + build
+make verify   # fmt-check + vet + lint + sec + vuln + license-check + validate-lenses + validate-mcpb + test-race + test-e2e + check-python-drift + test-python + build
 ```
 
 ## Commit Messages
@@ -241,7 +241,7 @@ STDIO transport is unaffected.
 2. **Keep changes focused** — one logical change per PR. Split large features into smaller, reviewable pieces.
 
 3. **Ensure quality** before requesting review — one command runs the full gate:
-   - `make verify` — formatting, vet, lint, gosec, govulncheck, validate-lenses, race tests, e2e, python-drift check, python tests, build
+   - `make verify` — formatting, vet, lint, gosec, govulncheck, license check, validate-lenses, validate-mcpb, race tests, e2e, python-drift check, python tests, build
    - (individual targets exist too: `make test-race`, `make lint`, `make sec`, `make vuln`)
    - New code has tests; documentation updated if behavior changes
 

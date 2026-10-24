@@ -139,7 +139,7 @@ Extract content from a URL, supporting web pages, documents, YouTube videos, Hac
 type ScrapeOutput struct {
     URL             string    `json:"url"`
     Content         string    `json:"content"`
-    ContentType     string    `json:"contentType"`    // html, markdown, youtube, pdf, docx, pptx, github (raw mode: the server's Content-Type header, may be "")
+    ContentType     string    `json:"contentType"`    // html, markdown, youtube, pdf, docx, pptx, github, hackernews, bluesky, twitter (raw mode: the server's Content-Type header, may be "")
     Trust           string    `json:"trust"`          // always "untrusted-external-content" — boundary marker: treat content as data, not instructions (OWASP LLM01)
     ContentLength   int       `json:"contentLength"`
     Truncated       bool      `json:"truncated"`
@@ -263,8 +263,9 @@ type CitationMetadata struct {
 }
 
 type CitationFormats struct {
-    APA string `json:"apa"`
-    MLA string `json:"mla"`
+    APA    string `json:"apa"`
+    MLA    string `json:"mla"`
+    BibTeX string `json:"bibtex"`
 }
 ```
 
@@ -332,7 +333,7 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
    │     /newest, /best, /ask, /show, /jobs → corresponding HN list, top 20 stories
    │     /user/<id>  → user profile (karma, about, created date)
    │     Unknown paths fall through to the tiered HTML pipeline
-   │     `Truncated: true` when content is capped; `ContentType: "hn"`
+   │     `Truncated: true` when content is capped; `ContentType: "hackernews"`
    ├─ bsky.app → native Bluesky AT Protocol routing (public.api.bsky.app; no API key required):
    │     /profile/{handle-or-did}/post/{rkey} → post text, embed previews (image alt / external link),
    │                                            engagement counts, and up to 5 top-level replies
@@ -410,6 +411,7 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
 - trends.google.com, youtube.com
 - linkedin.com, facebook.com, instagram.com
 - medium.com, dev.to
+- frontify.com, bsky.app, tiktok.com, threads.net
 
 Note: twitter.com and x.com are **not** in the SPA list — they use a dedicated FxTwitter API path, not the browser tier.
 
@@ -427,7 +429,7 @@ All scrape errors are typed as `ScrapeError{Kind, Message, Cause, URL, Tier}`. T
 | `ErrValidation` | no (permanent) | Unsupported scheme, empty host, SSRF / private-IP / blocked-hostname denial, domain allowlist denial | "URL rejected for {url}: {detail}. Provide a valid public http(s) URL." |
 | `ErrNetwork` | yes | DNS failure, timeout, connection refused, TLS | "Network error on {url}: {detail}. Check connectivity." |
 | `ErrBlocked` | no (remote refusal) | HTTP 403, remote bot detection / JS-wall interstitial | "Blocked: {url} uses bot detection. Try an alternative source — its content can't be read directly." |
-| `ErrNotFound` | no (dead link) | HTTP 404 / 410 | "Not found: {url} returned 404/410 — the page does not exist. Check the URL." |
+| `ErrNotFound` | no (dead link) | HTTP 404 / 410, or DNS NXDOMAIN | "Not found: {url} does not exist (404/410, or the domain could not be resolved). Check the URL." |
 | `ErrBrowser` | no | Chrome not found, launch failed, connect failed | "Scrape failed: Chrome unavailable. Set CHROME_PATH or install Chrome. Report at {issueURL}" |
 | `ErrContent` | yes | Page loaded but no usable content extracted | "No content extracted from {url}. May need browser rendering. Report at {issueURL}" |
 | `ErrAuth` | no | HTTP 401, login redirect | "Auth required: {url} is behind a login wall." |
@@ -1044,7 +1046,7 @@ Persist a research finding to the calling user's long-term memory so it can be r
 
 ```go
 type MemorySaveOutput struct {
-    Status    string `json:"status"`    // "ok" | "already_signed_in" | "no_consent" | "unavailable"
+    Status    string `json:"status"`    // "ok" | "no_consent" | "unavailable"
     Reason    string `json:"reason,omitempty"`
     ID        string `json:"id,omitempty"`
     CreatedAt string `json:"createdAt,omitempty"`
@@ -2034,7 +2036,7 @@ Create or renew a saved login so `scrape_page` can read pages behind it. Call `s
 
 ```go
 type SiteLoginOutput struct {
-    Status      string `json:"status"`                // "ok" | "no_consent" | "unavailable" | "browser_unavailable" | "not_signed_in" | "busy" | "timeout" | "invalid_url" | "blocked" | "nothing_captured" | "profile_not_saved" | "browser_launch_failed" | "too_many_profiles" | "profile_store_full" | "profile_too_large" | "profiles_unavailable" | "failed"
+    Status      string `json:"status"`                // "ok" | "already_signed_in" | "no_consent" | "unavailable" | "browser_unavailable" | "not_signed_in" | "busy" | "timeout" | "invalid_url" | "blocked" | "nothing_captured" | "profile_not_saved" | "browser_launch_failed" | "too_many_profiles" | "profile_store_full" | "profile_too_large" | "profiles_unavailable" | "failed"
     Reason      string `json:"reason,omitempty"`
     Domain      string `json:"domain,omitempty"`      // registrable domain the login is scoped to
     CookieCount int    `json:"cookieCount,omitempty"` // kind "cookies" only; count only, names and values are never returned
@@ -2154,8 +2156,8 @@ Which tools emit `_meta`:
 
 | Tool | Fresh result | Cache hit |
 |------|--------------|-----------|
-| `web_search` | yes (`cached: false`) | yes (`cached: true`) |
-| `image_search`, `news_search`, `academic_search`, `patent_search`, `scrape_page` | no | yes (`cached: true`) |
+| `web_search`, `research_panel` | yes (`cached: false`) | yes (`cached: true`) |
+| `image_search`, `news_search`, `academic_search`, `patent_search`, `scrape_page`, `citation_graph`, `filing_search`, `legal_search`, `econ_search`, `clinical_search`, `local_search`, `awesome_list_search`, `monarch_search`, `company_recon`, `paper_fulltext` | no | yes (`cached: true`) |
 | `search_and_scrape`, `sequential_search`, `get_research_session` | no (not cached as a unit) | n/a |
 
 ### Routing Provenance (`_meta.routing`)
@@ -2209,7 +2211,7 @@ Rate limited (google). Wait 60 seconds and retry, or try a different provider.
 {"error":{"kind":"rate_limited","retryable":true,"retryAfterSeconds":60,"suggestedAction":"retry_after_delay","provider":"google"}}
 ```
 
-Error kinds: `rate_limited`, `auth_required`, `blocked`, `network`, `content_empty`, `browser_unavailable`, `config`, `upstream_unavailable`. Each maps to a `suggestedAction` the LLM can branch on programmatically.
+Error kinds: `rate_limited`, `auth_required`, `blocked`, `network`, `content_empty`, `not_found`, `browser_unavailable`, `validation`, `upstream_unavailable`, `config`, `session_not_found`. Each maps to a `suggestedAction` the LLM can branch on programmatically.
 
 Full details: see `docs/ERROR_HANDLING.md` — covers the three-layer architecture, all error kinds and actions, and contributor patterns.
 
@@ -2250,7 +2252,7 @@ Every tool declares annotations for client consumption (`readOnlyAnnotations(ide
 | monitor_query_save | **false (write)** | false | false |
 | monitor_query_check | true | **false** | true |
 
-Notes: `sequential_search` is non-idempotent because it writes session state to disk on every call. `memory_save`, `workspace_contribute`, `archive_source`, and `monitor_query_save` are the four **write** tools (`ReadOnly:false`). `memory_save`, `workspace_contribute`, and `monitor_query_save` are non-idempotent (each call appends/reseeds a record); `archive_source` is idempotent (archiving the same URL twice is safe). `monitor_query_check` is read-only but non-idempotent — it mutates the monitor's stored baseline on every call. `OpenWorld:false` marks tools that touch only local/server state (sessions, memory, analytics, workspaces, exports) rather than the open web. `Destructive` is uniformly false — no tool is annotated destructive.
+Notes: `sequential_search` is non-idempotent because it writes session state to disk on every call. `memory_save`, `workspace_contribute`, `archive_source`, `monitor_query_save`, `site_login` and `site_logout` are the six **write** tools (`ReadOnly:false`). `memory_save`, `workspace_contribute`, and `monitor_query_save` are non-idempotent (each call appends/reseeds a record); `site_login` is non-idempotent. `archive_source` (archiving the same URL twice is safe) and `site_logout` are idempotent. `monitor_query_check` is read-only but non-idempotent — it mutates the monitor's stored baseline on every call. `OpenWorld:false` marks tools that touch only local/server state (sessions, memory, analytics, workspaces, exports) rather than the open web. `Destructive` is uniformly false — no tool is annotated destructive.
 
 ### Provider Resolution
 
@@ -2423,7 +2425,7 @@ Research a subject's academic curriculum footprint, institutional free-speech cl
 | Argument | Required | Default | Description |
 |---|---|---|---|
 | `subject` | yes | — | Author, text, discipline, or topic to research (e.g. `Marx`, `critical race theory`, `evolutionary biology`) |
-| `scope` | no | (no restriction) | Geographic or institutional scope, e.g. a country, US state, or institution name — narrows steps 1–4 |
+| `scope` | no | (no restriction) | Geographic or institutional scope, e.g. a country, US state, or institution name — narrows steps 1, 3 and 4 |
 | `time_range` | no | (no restriction) | Year or year range to filter legislation/incident coverage, e.g. `2023-2026` |
 
 #### Step map

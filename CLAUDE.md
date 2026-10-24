@@ -12,7 +12,7 @@ go test -tags=e2e -count=1 ./tests/e2e/...                  # E2E (needs e2e bui
 go test -tags=live ./...                                    # Live external-API tests (needs API keys)
 go tool golangci-lint run                                   # Lint (pinned version)
 go tool govulncheck ./...                                   # Vulnerability scan (pinned version)
-make verify                                                 # Full CI gate: fmt-check + vet + lint + sec + vuln + validate-lenses + test-race + test-e2e + check-python-drift + test-python + build
+make verify                                                 # Full CI gate: fmt-check + vet + lint + sec + vuln + license-check + validate-lenses + validate-mcpb + test-race + test-e2e + check-python-drift + test-python + build
 make test-python                                            # Python SDK unit + integration tests (mock HTTP server, no binary)
 make test-python-live                                       # Python SDK live E2E tests (builds Go binary; needs internet)
 make rebuild-local                                          # Clear caches + rebuild + reinstall (macOS-SIGKILL-safe); ARGS="--no-install" to build only
@@ -36,7 +36,7 @@ cmd/gen-python-client/           # Emits Go tool schemas as JSON → piped throu
 internal/
 ├── tools/        # One file per tool, typed input structs, registered in registry.go; large-payload resource_link store (artifacts.go: research://artifact/{id})
 ├── search/       # Provider interface + adapters + Router (multi-provider fallback); structured-domain/synthesis/awesome-list/local/context capability interfaces; DOI enrichment: open-access (Unpaywall) + retraction status (Crossref Retraction Watch); custom/validated lenses
-├── scraper/      # 4-tier pipeline by default (markdown → stealth → HTML → browser/go-rod), optional 5th Exa tier when EXA_API_KEY is set; SSRF-safe client; link verifier (liveness + Wayback archive)
+├── scraper/      # 5-tier pipeline by default (markdown → stealth → jina → HTML → browser/go-rod), optional paid Exa tier when EXA_API_KEY is set; SSRF-safe client; link verifier (liveness + Wayback archive)
 ├── documents/    # PDF, DOCX, PPTX extraction
 ├── cache/        # Cache interface + hybrid impl (memory L1 + optional Redis L2 + AES-encrypted disk L3)
 ├── persist/      # Generic TTL key/value Store (memory or AES-256-GCM disk) — backs token revocation + rate-quota durability
@@ -80,8 +80,8 @@ Registry/manifest files (root, each read by a different external tool): `server.
 1. **Zero global state** — all deps flow through `tools.Dependencies` struct (constructed in `main.go`)
 2. **Interface-driven** — `cache.Cache`, `search.Provider`, `audit.Auditor` are interfaces; swap implementations without touching callers. Specialized capability interfaces (each a `…Searcher` + `…Provider` pair): `search.PatentSearcher`/`PatentProvider`, `search.AcademicSearcher`/`AcademicProvider`, `search.CitationSearcher` (on academic providers), and the structured-domain set `search.FilingSearcher`/`FilingProvider`, `search.CaseSearcher`/`CaseProvider`, `search.EconSearcher`/`EconProvider`, `search.TrialSearcher`/`TrialProvider` (`internal/search/structured_domains.go`). Enrichment resolver interfaces: `search.DOIRegistry` (cross-registrar DOI existence check, `doi_registry.go`), `search.DOIResolver` (exact-entity DOI lookup, `domain.go`), `search.OAResolver` (Unpaywall open-access enrichment, `unpaywall.go`), `search.RetractionResolver` (Crossref retraction status, `retraction.go`)
 3. **Errors are values** — tool handlers return `toolError("message")` which sets `IsError: true` on the MCP result; never panic. Upstream errors use `upstreamErrorResponse()`. Scrape errors use typed `ScrapeError{Kind}`. Full error architecture: see `docs/ERROR_HANDLING.md`
-4. **Bounded concurrency** — scraping semaphore (default 5 slots, configurable via `MAX_SCRAPE_CONCURRENCY`), mutex-serialized browser, per-tenant rate limits
-5. **Lens routing** — if `lens` is set, `site:` operators are injected and routed to the configured provider; lenses with a dedicated `cx` route directly to that Google PSE engine
+4. **Bounded concurrency** — scraping semaphore (default 5 slots, configurable via `MAX_SCRAPE_CONCURRENCY`), a separate browser semaphore (default 2, `MAX_SCRAPE_CONCURRENCY_BROWSER`), per-tenant rate limits
+5. **Lens routing** — if `lens` is set, `site:` operators are injected and routed to the configured provider; lenses with a `cx` skip `site:` injection and use the global `GOOGLE_CUSTOM_SEARCH_ID` engine
 6. **Multi-provider routing** — when `SEARCH_ROUTING` is set, the Router wraps all available providers with per-provider circuit breakers and priority-ordered fallback; transparent to tools via the `search.Provider` interface
 7. **Explicit provider honoring** — when a user explicitly requests a provider via the `provider` field, that provider is used exclusively; if it returns empty results (e.g., USPTO for non-US patents), the tool returns empty — no silent fallback
 8. **Provider maps** — `deps.SearchProviders`, `deps.PatentProviders`, `deps.AcademicProviders`, `deps.FilingProviders`, `deps.CaseProviders`, `deps.EconProviders`, `deps.TrialProviders`, `deps.AwesomeListProviders`, `deps.LocalProviders`, `deps.ContextProviders`, `deps.MonarchProviders` hold all configured providers by name; built at startup via `Available…Providers()`, independent of routing config
@@ -115,7 +115,7 @@ Registry/manifest files (root, each read by a different external tool): `server.
 - **Audit**: every tool call logs `audit.AuditEvent{ToolName, Duration, Success, Metadata, ...}` via `deps.Auditor.Log()`
 - **SSRF protection**: `scraper.NewSSRFSafeClient()` validates all resolved IPs before connecting
 - **Content pipeline**: raw HTML → sanitize (bluemonday) → dedup (paragraph hashing) → truncate (sentence boundary) → quality score
-- **Tool annotations**: read tools use `readOnlyAnnotations(idempotent, openWorld)`; write tools (`memory_save`, `archive_source`, `workspace_contribute`, `site_login`, `site_logout`) use `writeAnnotations(idempotent)` — both enforced by `TestAllToolsHaveAnnotations` in CI
+- **Tool annotations**: read tools use `readOnlyAnnotations(idempotent, openWorld)`; write tools (`memory_save`, `archive_source`, `monitor_query_save`, `workspace_contribute`, `site_login`, `site_logout`) use `writeAnnotations(idempotent)` — both enforced by `TestAllToolsHaveAnnotations` in CI
 - **Consent gate (regulated tools)**: `deps.Consent.HasConsent(ctx, consent.PurposeMemory)` (pass one `Purpose` constant per call site) is fail-closed; subject identity comes from `auth.UserIDFromContext`/`auth.TenantIDFromContext`, never a tool param
 - **Data-subject rights**: per-user stores register an `Exporter`/`Eraser` in `internal/datasubject` (keyed `(tenantID,userID)`) so `/admin/data` export+erasure reaches them
 - **Redis isolation**: `internal/redisbackend` is the ONLY package importing go-redis; constructed in one gated place in `main.go` (`Port>0 && REDIS_URL!=""`) — fail-fast, encryption-mandatory

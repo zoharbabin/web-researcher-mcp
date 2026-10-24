@@ -66,7 +66,7 @@ The examples below show the common tools; the full set is generated from the liv
 ```python
 result: WebSearchResponse = await client.web_search(
     query,
-    num_results=5,        # 1–100
+    num_results=5,        # 1–10
     time_range=None,      # "day" | "week" | "month" | "year"
     safe=None,            # "off" | "medium" (default) | "high"
     language=None,        # ISO 639-1 code
@@ -135,7 +135,7 @@ See [`docs/TOOLS.md`](TOOLS.md) for the full parameter schema.
 result: NewsSearchResponse = await client.news_search(
     query,
     num_results=5,
-    time_range=None,      # "day" | "week" | "month" | "year"
+    time_range=None,      # "hour" | "day" | "week" | "month" | "year"
     news_source=None,     # restrict to a specific news outlet
     sort_by=None,
     provider=None,
@@ -213,7 +213,7 @@ result: SequentialSearchResponse = await client.sequential_search(
     knowledgeGap=None,
     researchGoal=None,
     confidence=None,       # "low" | "medium" | "high"
-    depth=None,            # "shallow" | "standard" | "deep"
+    depth=None,            # "quick" | "standard" | "thorough"
     reasoning=None,
     responseMode=None,
     sessionSummary=None,
@@ -221,21 +221,12 @@ result: SequentialSearchResponse = await client.sequential_search(
 )
 ```
 
-### Synthesis tools
-
-```python
-ans:  AnswerResponse          = await client.answer(query, provider=None)
-srch: StructuredSearchResponse = await client.structured_search(query, provider=None, ...)
-```
-
-See [`docs/TOOLS.md`](TOOLS.md) for the full parameter schema.
-
 ### Structured-domain searches
 
-`patent_search`, `econ_search`, `legal_search`, `clinical_search`, `filing_search`, and `local_search` follow the same shape — all keyword arguments, all optional, returning their typed `<Name>Response`. The exact parameters are documented per-tool in [`docs/TOOLS.md`](TOOLS.md):
+`patent_search`, `econ_search`, `legal_search`, `clinical_search`, `filing_search`, and `local_search` follow the same shape and return their typed `<Name>Response`. `legal_search` and `local_search` require `query`; the other four take only optional keyword arguments. The exact parameters are documented per-tool in [`docs/TOOLS.md`](TOOLS.md):
 
 ```python
-patents:  PatentSearchResponse   = await client.patent_search(query="mRNA vaccine", patent_office="USPTO")
+patents:  PatentSearchResponse   = await client.patent_search(query="mRNA vaccine", patent_office="US")
 econ:     EconSearchResponse     = await client.econ_search(series_id="GDP", date_from="2020-01-01")
 cases:    LegalSearchResponse    = await client.legal_search(query="fair use", jurisdiction="ca9")
 trials:   ClinicalSearchResponse = await client.clinical_search(condition="melanoma", status="recruiting")
@@ -249,7 +240,7 @@ local:    LocalSearchResponse    = await client.local_search(query="coffee shops
 result: BrandResearchResponse = await client.brand_research(
     company_name=None,        # company name to look up
     url=None,                 # brand homepage URL (alternative to company_name)
-    depth=None,               # "shallow" | "standard" | "deep"
+    depth=None,               # "quick" | "standard" | "full"
     include_design_tokens=False,
     sessionId=None,
 )
@@ -325,10 +316,10 @@ class ScrapePageResponse:
     contentLength: Optional[int]
     truncated: Optional[bool]
     estimatedTokens: Optional[int]
-    sizeCategory: Optional[str]     # "tiny" | "small" | "medium" | "large" | "huge"
+    sizeCategory: Optional[str]     # "small" | "medium" | "large" | "very_large"
     raw: Optional[bool]
-    extractionQuality: Optional[str]  # "high" | "medium" | "low"
-    extractedBy: Optional[str]        # "markdown" | "stealth" | "html" | "browser"
+    extractionQuality: Optional[str]  # "complete" | "partial"
+    extractedBy: Optional[str]        # "markdown" | "stealth" | "jina" | "html" | "browser" | "exa:cached" | "exa:crawled" (also "github:*" for GitHub routes)
     citation: Optional[Citation]
     metadata: Optional[ScrapePageMetadata]
     structuredData: Optional[StructuredData]
@@ -347,18 +338,18 @@ class ScrapePageResponse:
 @dataclass
 class VerifyCitationResponse:
     input: Optional[str]
-    inputType: Optional[str]        # "doi" | "url" | "text"
+    inputType: Optional[str]        # "doi" | "url" | "reference"
     exists: Optional[bool]
     matchedRecord: Optional[Any]    # raw Crossref/OpenAlex record
-    matchConfidence: Optional[str]  # "exact" | "fuzzy" | "none"
+    matchConfidence: Optional[str]  # "high" | "medium" | "low" | "none"
     detectedDoi: Optional[str]
-    titleMatch: Optional[str]       # "exact" | "partial" | "none"
+    titleMatch: Optional[str]       # "match" | "mismatch" | "not_checked"
     retractionStatus: Optional[RetractionStatus]
     httpStatus: Optional[int]
     archivedUrl: Optional[str]
     provenance: list[str]
     claim: Optional[str]
-    claimSupport: Optional[str]     # "supported" | "partially_supported" | "not_supported" | "unchecked"
+    claimSupport: Optional[str]     # "addressed" | "partially_addressed" | "not_addressed" | "source_unavailable"
     claimEvidence: list[str]
     claimSourceUrl: Optional[str]
     contrastSignal: Optional[bool]
@@ -371,7 +362,7 @@ class VerifyCitationResponse:
 ```python
 @dataclass
 class AuditBibliographyResponse:
-    source: Optional[str]           # "entries" | "bibliography" | "session"
+    source: Optional[str]           # "entries" | "bibliography:<format>" | "session"
     entryCount: Optional[int]
     summary: Optional[AuditBibliographySummary]  # total/retracted/deadLink/notFound/unchecked/mischaracterized/ok
     entries: list[AuditBibliographyEntry]
@@ -390,11 +381,11 @@ class ArchiveSourceResponse:
     snapshotUrl: Optional[str]
     archivedAt: Optional[str]
     captured: Optional[bool]
-    status: Optional[str]           # "captured" | "pending" | "failed" | "already_exists"
+    status: Optional[str]           # "archived" | "existing" | "pending" | "unavailable"
     httpStatus: Optional[int]
     reason: Optional[str]
     pollUrl: Optional[str]
-    source: Optional[str]           # "wayback"
+    source: Optional[str]           # "web.archive.org Save Page Now"
     provenance: list[str]
     trust: Optional[str]
 ```

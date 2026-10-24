@@ -87,7 +87,7 @@ This is the architecture reference for web-researcher-mcp — the tool that give
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-The five boxes above are a schematic, not an exhaustive tool list — the actual tool count has grown well past what fits in five boxes. For the full, current tool inventory grouped by category, see `internal/tools/registry.go`'s `RegisterAll()` (the source of truth) or `docs/TOOLS.md`. As of this writing that includes, beyond the five shown: structured-domain research (`filing_search`, `legal_search`, `econ_search`, `clinical_search`, `awesome_list_search`, `monarch_search`), OSINT/company reconnaissance (`company_recon`), single-call paper retrieval (`paper_fulltext`), place/context search (`local_search`), citation tooling (`citation_graph`, `verify_citation`, `audit_bibliography`, `format_bibliography`, `research_export`), trust/anti-sloptimization (`verify_recommendation`, `archive_source`, `brand_research`), and the opt-in regulated tools (`memory_save`/`memory_recall`, `workspace_contribute`/`workspace_read`, `get_my_analytics`, `site_login`/`site_logout`). The search, citation, trust and structured-domain tools are always registered (keyless backing data sources), except `filing_search` (`EDGAR_CONTACT_EMAIL`). The regulated tools register only when their feature is enabled (for example `COOKIE_VAULT_ENABLED` for `site_login`/`site_logout`).
+The five boxes above are a schematic, not an exhaustive tool list — the actual tool count has grown well past what fits in five boxes. For the full, current tool inventory grouped by category, see `internal/tools/registry.go`'s `RegisterAll()` (the source of truth) or `docs/TOOLS.md`. As of this writing that includes, beyond the five shown: structured-domain research (`filing_search`, `legal_search`, `econ_search`, `clinical_search`, `awesome_list_search`, `monarch_search`), OSINT/company reconnaissance (`company_recon`), single-call paper retrieval (`paper_fulltext`), place/context search (`local_search`), citation tooling (`citation_graph`, `verify_citation`, `audit_bibliography`, `format_bibliography`, `research_export`), trust/anti-sloptimization (`verify_recommendation`, `archive_source`, `brand_research`), and the opt-in regulated tools (`memory_save`/`memory_recall`, `workspace_contribute`/`workspace_read`, `get_my_analytics`, `site_login`/`site_logout`). The search, citation, trust and structured-domain tools register when their keyless or configured backing source exists. `filing_search` needs `EDGAR_CONTACT_EMAIL`, `local_search` needs `BRAVE_API_KEY`, and `citation_graph` and `research_panel` need a configured backing provider. Saved query monitoring (`monitor_query_save`/`monitor_query_check`) and `research_panel` are also part of the suite. The regulated tools register only when their feature is enabled (for example `COOKIE_VAULT_ENABLED` for `site_login`/`site_logout`).
 
 ## Module Layout
 
@@ -115,6 +115,7 @@ web-researcher-mcp/
 │   ├── consent/                  # Consent record-verify-honor for regulated features (Checker + Noop)
 │   ├── datasubject/              # GDPR access/erasure registry — (tenantID,userID) Exporter/Eraser fan-out
 │   ├── useranalytics/            # Opt-in consent-gated per-user analytics (Recorder + Noop)
+│   ├── cookievault/              # Opt-in encrypted per-user login vault (site_login/site_logout): cookie bundles + tool-owned browser profiles
 │   ├── memory/                   # Opt-in consent-gated long-term cross-session memory (Store + Noop)
 │   ├── workspace/                # Opt-in shared workspaces — server-enforced data-plane + isolation, host-owned membership
 │   └── resources/                # MCP Resources + Prompts + completion/complete handler (lens/provider/enum arg autocompletion)
@@ -161,7 +162,7 @@ Several providers implement this interface — Google PSE, Brave, Serper, SearXN
 
 This HN *search provider* is a separate integration from the HN *scrape-time* fetcher in the Performance table below (`internal/scraper/hackernews.go`) — one indexes and ranks HN stories for `news_search`/`web_search`, the other fetches a specific item/thread/user directly from HN's own Firebase API when `scrape_page` is pointed at an `news.ycombinator.com` URL. They share no code and hit different upstream APIs.
 
-When `SEARCH_ROUTING` is configured, the Router wraps all available providers with per-provider circuit breakers and priority-ordered fallback. Search lenses inject `site:` operators and route through the configured provider. Lenses with a dedicated `cx` field route directly to that Google PSE engine.
+When `SEARCH_ROUTING` is configured, the Router wraps all available providers with per-provider circuit breakers and priority-ordered fallback. Search lenses inject `site:` operators and route through the configured provider. Lenses with a `cx` field skip `site:` injection and use the global `GOOGLE_CUSTOM_SEARCH_ID` engine, which should already scope results.
 
 #### Capability Interfaces (Patents, Academic, Structured Domains)
 

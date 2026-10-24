@@ -371,6 +371,7 @@ Note: Google keys are validated as required only when you explicitly select `SEA
 | `EXA_API_KEY` | Exa API key (neural/semantic search; sent as `x-api-key`). Also backs `academic_search` and a paid `/contents` scrape fallback tier | — |
 | `XQUIK_API_KEY` | Xquik API key for metered X/Twitter post search through `web_search` and `news_search`. Sent only as `x-api-key`; never logged | — |
 | `SEARXNG_URL` | SearXNG instance URL | — |
+| `SEARCH_THIN_THRESHOLD` | Result count at or below which a routed search is retried once with stop words stripped | `1` |
 | `SEARXNG_BASIC_AUTH` | HTTP Basic credential `user:password` for a SearXNG behind Basic auth (malformed value fails startup; never logged) | — |
 | `SEARXNG_HEADERS` | Static request headers for SearXNG as comma-separated `Name: Value` pairs (no commas/newlines in a value; a custom `Authorization` overrides `SEARXNG_BASIC_AUTH`) | — |
 | `CUSTOM_LENSES_PATH` | Directory of custom lens JSON files, loaded after (and able to override) the bundled lenses; schema-validated at startup. See `lenses/README.md` | — |
@@ -396,6 +397,7 @@ These enable rich scholarly metadata (DOIs, authors, citation counts, abstracts,
 |----------|-------------|---------|
 | `OPENALEX_EMAIL` | Contact email for the OpenAlex polite pool (287M+ works). Also enables `citation_graph` (counts-only) | — |
 | `CROSSREF_EMAIL` | Contact email for the CrossRef polite pool (140M+ DOI-registered works) | — |
+| `SCHOLAR_API_KEY` | ScholarAPI key. Paid. Used only with an explicit `provider=scholarapi`, never in auto-routing | — |
 | `SEMANTIC_SCHOLAR_API_KEY` | Semantic Scholar API key (200M+ papers + `tldr` + citation intent/influence). Works **without** a key at a lower shared rate; also powers `citation_graph` (rich edges) | — |
 | `PUBMED_API_KEY` | NCBI E-utilities API key for PubMed (biomedical literature). **PubMed is always available** keyless (~3 req/s); this key raises the rate (~10 req/s) | — |
 | `PUBMED_EMAIL` | Optional NCBI contact for PubMed requests (recommended by NCBI). Falls back to `OPENALEX_EMAIL` | — (falls back to `OPENALEX_EMAIL`) |
@@ -422,6 +424,22 @@ These enable dedicated structured-research tools. Each provider is independent. 
 | `GITHUB_TOKEN` | `awesome_list_search`, `web_search`/`news_search` (`provider=github`), `scrape_page` | Optional token raising GitHub's public REST API rate limits (Search API, Contents/Gists API, and the trust-surface calls below). Every surface it touches **is always available** unauthenticated at GitHub's documented public rate limit; the token only raises that ceiling, never gates functionality. No `gh` CLI, no subprocess. Never logged. Create a scopeless fine-grained PAT at github.com/settings/tokens. `scrape_page` on a github.com repo-root README adds 5 REST calls (repo stats, owner/org profile, contributor count, community health, release count) against that same core rate limit (60/hr unauthenticated, 5000/hr with the token) — a 403/rate-limited response on any one of them is never retried and just omits that field (graceful degradation), never the whole scrape | — |
 
 Each structured-domain provider gets an independent circuit breaker and uses the SSRF-safe HTTP client. `filing_search` returns XBRL company facts (with `facts=true`); `econ_search` returns observations passed through exactly as the source provides them — no rounding; `clinical_search` returns trial metadata for discovery (not medical advice); `monarch_search`'s `annotate` operation must never receive identifiable patient data (it forwards free text to a public third-party API with no BAA).
+
+### Research Panel (Optional)
+
+`research_panel` registers only when at least one panel member resolves. Full comments and examples: `.env.example`.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `OPENROUTER_API_KEY` | Covers many models with one key. Takes priority over direct provider keys | — |
+| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_AI_API_KEY` | Direct provider keys | — |
+| `OLLAMA_BASE_URL`, `LM_STUDIO_BASE_URL` | Local model servers. Need `ALLOW_PRIVATE_IPS=true` unless the host is public | — |
+| `RESEARCH_PANEL_DEFAULT_MODELS` | Comma-separated `<provider>/<model-id>` list that replaces the auto-detected panel | — |
+| `RESEARCH_PANEL_MAX_MODELS` | Cap on default panel size | `3` |
+| `RESEARCH_PANEL_PRICE_TABLE_PATH` | JSON price table for cost estimates | — |
+| `RESEARCH_PANEL_MAX_CALL_COST_USD` | Reject a call whose pre-flight estimate exceeds this. `0` = no cap | `0` |
+| `RESEARCH_PANEL_MAX_DAILY_COST_USD` | Per-tenant spend cap over a rolling 24h window. `0` = no cap | `0` |
+| `RESEARCH_PANEL_DRY_RUN` | Return the cost estimate and call no model | `false` |
 
 ### BrandFetch (Optional)
 
@@ -556,6 +574,7 @@ DAILY_QUOTA_PER_TENANT=10000
 | `CHROME_NO_SANDBOX` | `true` runs the saved-login browsers (`site_login` window, profile scrapes) without Chrome's sandbox. Only for containers that cannot run it. The bundled images set it. Running as root always disables the sandbox | `false` |
 | `CHROME_PATH` | Custom Chrome/Chromium binary path; set to `"disabled"` to turn the browser tier off entirely (no autodetect, no download). `site_login` opens the installed Chrome (then Edge, Chromium) when unset | auto-detect |
 | `BROWSER_IDLE_TIMEOUT` | Auto-close the browser tier's Chromium process after this long with no browser-tier scrape (#460), so one scrape doesn't pin Chromium (and its Dock icon on macOS) for the server's full lifetime; a later scrape transparently relaunches it. `0` disables the idle-close timer | `5m` |
+| `JINA_API_KEY` | Optional. Raises the rate limit of the keyless Jina Reader scrape tier | — |
 | `JINA_READER_DISABLED` | Set `true` to turn off the Jina Reader scrape tier (r.jina.ai) entirely, e.g. for hardened deploys or network-free tests | `false` |
 | `MAX_SCRAPE_CONCURRENCY` | Parallel scrape limit for the fast tiers (markdown/stealth/jina/html/exa) | `5` |
 | `MAX_SCRAPE_CONCURRENCY_BROWSER` | Separate parallel scrape limit for the browser (go-rod) tier, which can hold a slot for up to 30s — kept apart from `MAX_SCRAPE_CONCURRENCY` so slow browser scrapes can't starve fast ones (#472) | `2` |
@@ -581,10 +600,13 @@ Regulated features (per-user personal data; each activates the consent subsystem
 | `USER_ANALYTICS_ENABLED` | Opt-in per-user usage analytics (`get_my_analytics`). Consent-gated on the `analytics` purpose | `false` |
 | `WORKSPACES_ENABLED` | Opt-in shared research workspaces (`workspace_contribute`/`workspace_read` + `/admin/workspace/members`). Consent-gated on the `workspace` purpose; membership host-managed | `false` |
 | `WORKSPACE_TTL` | Max lifetime of shared-workspace data | `720h` (30d) |
+| `MONITORING_ENABLED` | Opt-in saved query monitoring (`monitor_query_save`/`monitor_query_check`). Consent-gated | `false` |
+| `MONITORING_TTL` | Max lifetime of a saved query monitor | `720h` (30d) |
 | `COOKIE_VAULT_ENABLED` | Opt-in encrypted login vault (#241, #775): `site_login`/`site_logout` and signed-in `scrape_page`. Consent-gated on the `session_capture` purpose (never auto-granted). Needs `COOKIE_VAULT_ENCRYPTION_KEY` (64 hex, different from `CACHE_ENCRYPTION_KEY`). The login window needs a display on the server host | `false` |
 | `COOKIE_CAPTURE_IN_HTTP` | **HTTP-only.** Lets `site_login` open a visible login window on the server host's display. Self-hosted or single-user use only: whoever can call the tool opens a window on that machine. HTTP mode never reads a browser over a debug port. Ignored without `COOKIE_VAULT_ENABLED=true` or a display | `false` |
 | `COOKIE_VAULT_ENCRYPTION_KEY` | 64 hex characters (32 bytes) that encrypt saved logins. Must differ from `CACHE_ENCRYPTION_KEY`. Required when the vault is enabled | _(unset)_ |
 | `COOKIE_VAULT_TTL` | Max lifetime of a saved cookie bundle (max 720h) | `24h` |
+| `MAX_CONCURRENT_CAPTURES` | Simultaneous login windows (1-5) | `1` |
 | `COOKIE_CAPTURE_TIMEOUT` | How long a login window may stay open (30s-15m) | `5m` |
 | `COOKIE_VAULT_PROFILE_TTL` | Max lifetime of a saved browser profile (1s-720h). Not extended by use | `168h` (7d) |
 | `COOKIE_VAULT_PROFILE_MAX_TOTAL_MB` | Cap on the combined size of all saved browser profiles on this node, all users together (64-102400). When full, a new login returns `profile_store_full`. Expired profiles are removed first | `2048` |
@@ -910,10 +932,12 @@ This server is distributed via:
 On SIGINT/SIGTERM (HTTP mode), or SIGINT/SIGTERM/stdin EOF (STDIO mode):
 1. Stop accepting new connections
 2. Drain in-flight requests (`HTTP_SHUTDOWN_TIMEOUT`, default 30s; hard close on timeout)
-3. Flush cache to disk
-4. Close audit logger (drains buffered events including swap file)
+3. Close audit logger (drains buffered events including swap file)
+4. Close session manager
 5. Terminate headless browsers
-6. Exit 0
+6. Flush cache to disk
+7. Close Redis connections (if `REDIS_URL` is set)
+8. Exit 0
 
 No orphan processes. No watchdog needed.
 
@@ -1012,10 +1036,10 @@ To force immediate re-encryption rather than waiting for natural reads, flush th
 | `stats://tools` | Per-tool execution metrics (totalCalls, avgLatencyMs, etc.) |
 | `stats://sessions` | Count of active sequential research sessions |
 | `stats://rate-limits` | Rate limit config and usage (per-tenant limits, daily quota remaining, reset time) |
-| `stats://providers` | Search, patent, and academic providers currently configured and available |
+| `stats://providers` | Every provider currently configured and available, with its capability type (web, patent, academic, filing, legal, econ, clinical, awesome, local, answer, structured) |
 | `lenses://catalog` | All registered lenses with their names, domains, and descriptions |
 | `diagnostics://errors/recent` | Bounded ring of recent errors for operator diagnostics |
-| `diagnostics://health` | Server health — version, uptime, provider availability |
+| `diagnostics://health` | Live provider health: overall status (`healthy`/`degraded`/`unhealthy`) plus each routed provider's circuit-breaker state. Always `healthy` and empty without multi-provider routing |
 | `diagnostics://panel/spend` | `research_panel` per-tenant daily spend, cap, and remaining budget (#303) |
 | `research://artifact/{id}` | Large-payload resource store for tool results that exceed inline size limits |
 
@@ -1030,3 +1054,6 @@ To force immediate re-encryption rather than waiting for natural reads, flush th
 | `brand-guidelines` | Extract and document a company's brand identity | `company` |
 | `company-recon` | OSINT company reconnaissance profile | `company` |
 | `curriculum-research` | Syllabus coverage, institutional climate, and academic-freedom research | `subject` |
+| `rare-disease-research` | Rare-disease differential and gene research via `monarch_search` | `topic` |
+| `research-panel-factcheck` | Fact-check a claim with a multi-model panel | `claim` |
+| `research-panel-synthesis` | Synthesize an answer across a multi-model panel | `question` |

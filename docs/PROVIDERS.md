@@ -74,7 +74,7 @@ Which tools each web search provider enables. `—` means the provider does not 
 
 **Notes:**
 - `local_search` is Brave-only — it requires `BRAVE_API_KEY`. No other web provider supports the three-call local pipeline (locations → POIs → descriptions).
-- Brave also exposes a LLM context endpoint (`/res/v1/llm/context`) consumed by `search_and_scrape` as a fast-path for RAG/grounding workflows. When Brave is the active provider, `search_and_scrape` tries the server-assembled context first; if that fails, it falls back to the standard search-then-scrape pipeline. Requires `BRAVE_DATA_FOR_AI` plan access.
+- Brave also exposes a LLM context endpoint (`/res/v1/llm/context`) consumed by `search_and_scrape` as a fast-path for RAG/grounding workflows. When Brave is the active provider, `search_and_scrape` tries the server-assembled context first; if that fails, it falls back to the standard search-then-scrape pipeline. Requires a Brave "Data for AI" plan (not an env var).
 - Exa's scrape fallback tier (`/contents`) fires only when all free tiers (markdown → stealth → Jina Reader → HTML → browser) have failed. It charges an Exa credit per call.
 - Tavily's time-range filter is aggressive on web search — for recent content, `news_search` works better; `web_search` may return nothing for narrow windows.
 
@@ -252,7 +252,7 @@ These providers back dedicated tools and are independent of the web search provi
 - World Bank, OECD, Eurostat, ClinicalTrials.gov, CourtListener, ecosyste.ms, the Monarch Initiative, crt.sh, and Wayback CDX are always available — no configuration required. Setting `ECOSYSTEMS_EMAIL` (falls back to `OPENALEX_EMAIL`) opts ecosyste.ms calls into the "polite pool," raising the per-caller rate-limit tier above the shared "anonymous" pool. `ECOSYSTEMS_API_KEY` is also sent but only takes effect on ecosyste.ms's paid plans.
 - SEC EDGAR and FRED activate on their respective env vars (`EDGAR_CONTACT_EMAIL` / `FRED_API_KEY`). `EDGAR_CONTACT_EMAIL` falls back to `OPENALEX_EMAIL`.
 - `brand_research` is always available — without `BRANDFETCH_API_KEY` it runs homepage meta/structured-data extraction and brand-page probing; the key adds a concurrent BrandFetch enrichment tier on top, never a replacement.
-- `archive_source`, `memory_save`, `workspace_contribute`, `site_login` and `site_logout` are the write tools in the suite. `archive_source` triggers a live internet capture; the others are opt-in regulated features.
+- `archive_source`, `memory_save`, `monitor_query_save`, `workspace_contribute`, `site_login` and `site_logout` are the write tools in the suite. `archive_source` triggers a live internet capture; the others are opt-in regulated features.
 
 ---
 
