@@ -11,6 +11,14 @@ const (
 	vaultKeyB = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 )
 
+// clearVaultTTLEnv blanks the TTL variables so default-value assertions do not
+// depend on the developer's shell. An empty value falls back to the default.
+func clearVaultTTLEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("COOKIE_VAULT_TTL", "")
+	t.Setenv("COOKIE_VAULT_PROFILE_TTL", "")
+}
+
 // TestConfigCookieVaultKeyValidation pins the cookie-vault config contract
 // (see issue #241): the vault is off by default and needs no key then; when on,
 // the key must be 64 hex, distinct from the cache keys, and the bounds hold.
@@ -54,6 +62,7 @@ func TestConfigCookieVaultKeyValidation(t *testing.T) {
 
 	t.Run("defaults and consent activation", func(t *testing.T) {
 		setRequiredEnv(t)
+		clearVaultTTLEnv(t)
 		t.Setenv("COOKIE_VAULT_ENABLED", "true")
 		t.Setenv("COOKIE_VAULT_ENCRYPTION_KEY", vaultKeyA)
 		cfg, err := Load()
@@ -129,6 +138,7 @@ func TestConfigProfileTTL(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			setRequiredEnv(t)
+			clearVaultTTLEnv(t)
 			t.Setenv("COOKIE_VAULT_ENABLED", "true")
 			t.Setenv("COOKIE_VAULT_ENCRYPTION_KEY", vaultKeyA)
 			for k, v := range tc.env {
