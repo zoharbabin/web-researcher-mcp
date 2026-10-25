@@ -38,7 +38,7 @@ RUN apk add --no-cache \
     && rm -rf /var/cache/apk/*
 
 LABEL org.opencontainers.image.title="web-researcher-mcp"
-LABEL org.opencontainers.image.description="Your AI research assistant that cites real sources and stays honest"
+LABEL org.opencontainers.image.description="Search the web and primary sources, read full pages, verify citations. Runs on your machine."
 LABEL org.opencontainers.image.source="https://github.com/zoharbabin/web-researcher-mcp"
 LABEL org.opencontainers.image.licenses="MIT"
 

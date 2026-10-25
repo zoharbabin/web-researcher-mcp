@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Web Researcher MCP — Your AI Research Assistant That Cites Real Sources</title>
-<meta name="description" content="Give Claude, Cursor, or any AI assistant real web search, real citations, and a paper trail you can verify. Free, open source, runs on your machine. No made-up sources.">
+<meta name="description" content="Give Claude, Cursor, or any AI assistant web search, full-page reading, and citation checks across papers, filings, court records, and patents. Free, open source, runs on your machine.">
 <link rel="canonical" href="https://zoharbabin.com/web-researcher-mcp/">
 <link rel="icon" href="assets/favicon.ico">
 <link rel="preload" as="image" href="hero-poster.jpg">
@@ -12,12 +12,12 @@
 
 <meta property="og:type" content="website">
 <meta property="og:title" content="Web Researcher MCP — Your AI Research Assistant That Cites Real Sources">
-<meta property="og:description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust. Free, private, open source.">
+<meta property="og:description" content="Search the web and primary sources, read full pages, verify citations. Runs on your machine. Free, open source.">
 <meta property="og:image" content="assets/social-preview.png">
 <meta property="og:url" content="https://zoharbabin.com/web-researcher-mcp/">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Web Researcher MCP — Your AI Research Assistant That Cites Real Sources">
-<meta name="twitter:description" content="Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust. Free, private, open source.">
+<meta name="twitter:description" content="Search the web and primary sources, read full pages, verify citations. Runs on your machine. Free, open source.">
 <meta name="twitter:image" content="assets/social-preview.png">
 
 <script type="application/ld+json">
@@ -32,7 +32,16 @@
   "downloadUrl": "https://github.com/zoharbabin/web-researcher-mcp",
   "codeRepository": "https://github.com/zoharbabin/web-researcher-mcp",
   "license": "https://opensource.org/licenses/MIT",
-  "description": "An MCP (Model Context Protocol) server that gives AI assistants web search, content extraction, and multi-source research with real, verifiable citations. Runs locally; nothing is tracked, no accounts, no server in the middle.",
+  "description": "An MCP (Model Context Protocol) server that gives AI assistants web search, full-page reading, and multi-source research, and checks that each citation exists, was not retracted, and says what is claimed. Runs locally; no account, no server in the middle.",
+  "featureList": [
+    "Citation checks: existence, retraction status, live links, claim match",
+    "Search lenses that limit search to trusted sites",
+    "SEC filings, US court records, patents, clinical trials, economic data, full-text papers",
+    "Full-page reading of web pages, PDFs, Office files, and YouTube transcripts",
+    "Optional saved logins to read pages you can already open",
+    "Multi-model research panels, exportable sessions, bibliography export",
+    "Works with any MCP client; runs locally, no API key needed to start"
+  ],
   "offers": {
     "@type": "Offer",
     "price": "0",
@@ -50,7 +59,7 @@
       "name": "What is web-researcher-mcp?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "It's a free, open-source add-on that gives your AI assistant (Claude, Cursor, or any similar tool) real web search, full-page reading, and multi-source research — academic papers, patents, company financial filings, court cases, economic data, and more. Every result comes from a real, live search, not the AI's memory, so every source it gives you is real and checkable."
+        "text": "It's a free, open-source add-on that gives your AI assistant (Claude, Cursor, or any similar tool) real web search, full-page reading, and multi-source research — academic papers, patents, company financial filings, court cases, clinical trials, economic data, and more. Every result comes from a live search, not the AI's memory, and dedicated tools check that each citation exists, was not retracted, and still resolves."
       }
     },
     {
@@ -66,7 +75,7 @@
       "name": "Do I need to sign up for anything to use it?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "No. It works right away using DuckDuckGo, which needs no account or setup. But DuckDuckGo is just the zero-config default, not a ceiling: it supports a dozen search providers (Google, Brave, Tavily, Exa, SearXNG, and more), can be configured to fall back across several automatically, and can be restricted to curated \"search lenses\" for a field or routed to structured sources like SEC EDGAR, CourtListener, or patent offices instead of general web search. Connecting any of that just means signing up for a free or paid account with the provider and pasting in the access code they give you — nothing is required to get started, and everything past DuckDuckGo is optional."
+        "text": "No. It works right away using DuckDuckGo, which needs no account or setup. But DuckDuckGo is just the zero-config default, not a ceiling: it supports a dozen search providers (Brave, Serper, Tavily, Exa, SearXNG, and more), can be configured to fall back across several automatically, and can be restricted to curated \"search lenses\" for a field or routed to structured sources like SEC EDGAR, CourtListener, or patent offices instead of general web search. Connecting any of that just means signing up for a free or paid account with the provider and pasting in the access code they give you — nothing is required to get started, and everything past DuckDuckGo is optional."
       }
     },
     {
@@ -74,7 +83,7 @@
       "name": "Is my research data private?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Yes. The server runs on your own computer. Your search queries go directly from your computer to whichever search service you've chosen — there's no middleman server collecting or seeing what you research. Nothing is tracked, no account is created, and no usage data is collected unless you explicitly turn that on yourself."
+        "text": "Yes. The server runs on your own computer. Your search queries go directly from your computer to whichever search service you've chosen — there's no middleman server collecting or seeing what you research. No account is created and nothing is tracked. Features that store personal data (saved logins, memory, analytics, shared workspaces) are off by default, need your consent, and are encrypted when on."
       }
     },
     {
@@ -103,10 +112,26 @@
     },
     {
       "@type": "Question",
+      "name": "Does it check that citations are real?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. verify_citation checks that a source exists, matches a real record, was not retracted, and still resolves. audit_bibliography does this for a whole reference list in one pass, and also flags entries whose source does not say what the citation claims. The tools return evidence, not a verdict, so you decide what to believe. Their accuracy is measured on a labeled gold set that is published in the docs."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can it read pages that need a login?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes, if you turn it on. site_login saves a login you create yourself, either as cookies or as a browser profile, and scrape_page then reads pages behind it as you. It is off by default, needs your consent, and the saved login is encrypted and tied to your user. It does not bypass paywalls or sign in for you."
+      }
+    },
+    {
+      "@type": "Question",
       "name": "How many tools does it have, and what can it search?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "37 tools covering web, image, and news search; academic papers with real, checkable source links; patents; company financial filings; court cases; economic data; clinical trials; full-page and document reading; citation checking and bibliography auditing; and multi-step research sessions you can export."
+        "text": "37 tools covering web, image, and news search; academic papers with full text; patents; company financial filings; court cases; economic data; clinical trials; full-page and document reading; citation checking and bibliography auditing; multi-model research panels; and multi-step research sessions you can export. A few opt-in tools (saved logins, saved-query monitoring, memory, shared workspaces, personal analytics) stay off until you turn them on."
       }
     }
   ]
@@ -133,7 +158,7 @@
 
 <section class="hero wrap" id="top">
   <h1>Your AI research assistant that cites real sources and stays honest</h1>
-  <p class="sub">Search the entire web, or narrow it down to just the sites you trust — medical journals, court databases, news outlets, academic papers. Every citation comes from a real search, not a guess.</p>
+  <p class="sub">Search the web and primary sources — court records, SEC filings, patents, clinical trials, full-text papers — and read the whole page. Then check every citation before you rely on it. Runs on your machine, and works with no API key.</p>
 
   <div class="badges" aria-hidden="true">
     <a href="https://github.com/zoharbabin/web-researcher-mcp/actions/workflows/ci.yml"><img src="https://github.com/zoharbabin/web-researcher-mcp/actions/workflows/ci.yml/badge.svg" alt="" loading="lazy"></a>
@@ -158,6 +183,7 @@
     <div>
       <h2 class="section-title" style="text-align:left">AI search tools make things up. That's a problem when your name is on the work.</h2>
       <p>Independent studies keep finding the same problem, no matter who tests it or how. <a href="https://www.cjr.org/tow_center/we-compared-eight-ai-search-engines-theyre-all-bad-at-citing-news.php" target="_blank" rel="nofollow noopener">Columbia Journalism Review</a> tested eight AI search tools on real citations and found <span class="stat">more than 60% wrong</span>. A <a href="https://www.bbc.co.uk/mediacentre/2025/new-ebu-research-ai-assistants-news-content" target="_blank" rel="nofollow noopener">BBC/EBU study</a> across 22 public broadcasters in 18 countries found 45% of AI news answers had a significant issue, most often bad sourcing. A 2026 study of Google's AI Overviews, <a href="https://www.nytimes.com/2026/04/07/technology/google-ai-overviews-accuracy.html" target="_blank" rel="nofollow noopener">reported by The New York Times</a>, found only 39% were both correct and fully backed by the sources they cited. They link to papers that don't exist, invent source records, and present low-quality content with the same confidence as expert-reviewed research.</p>
+      <p>The cost is now public. The <a href="https://www.damiencharlotin.com/hallucinations/" target="_blank" rel="nofollow noopener">Charlotin database</a> lists over <span class="stat">2,200 court decisions</span> that involve AI-hallucinated content. From January 1, 2027, <a href="https://www.bakermckenzie.com/en/insight/publications/2026/10/united-states-california-imposes-new-ai-rules-on-lawyers" target="_blank" rel="nofollow noopener">California SB 574</a> requires attorneys to personally verify every citation in a court filing.</p>
       <p>If your work gets cited, published, submitted to a court, or shown to a client, "probably real" isn't good enough.</p>
       <ul class="who-list">
         <li><strong>Lawyers:</strong> "If I cite a case that doesn't exist, I get fined $50,000"</li>
@@ -198,23 +224,28 @@
 
 <section>
   <div class="wrap">
-    <h2 class="section-title">Fixes the root cause</h2>
-    <p class="section-lede">Search the entire web by default, or narrow it to sources you trust with <strong>search lenses</strong> — curated lists of trusted sites for a field, yours to use or ignore. Either way, every answer traces back to a real, checkable source instead of a guess.</p>
-    <div class="fix-grid">
+    <h2 class="section-title">Search, read, verify</h2>
+    <p class="section-lede">Your AI gets the real pages and records from sources you choose. Then it checks each citation before it reaches you.</p>
+    <div class="fix-grid four">
       <div class="fix-card">
         <span class="fix-num">1</span>
-        <h3>Source authority</h3>
-        <p>When it matters, you choose the sources — search engines, trusted sites, academic libraries, or structured APIs like SEC EDGAR and CourtListener — not a hidden ranking algorithm.</p>
+        <h3>Verified, not asserted</h3>
+        <p>Dedicated tools check that a source exists, was not retracted, still resolves, and says what the citation claims. They return evidence, not a verdict, and their accuracy is measured on a labeled gold set.</p>
       </div>
       <div class="fix-card">
         <span class="fix-num">2</span>
-        <h3>Transparency</h3>
-        <p>Every answer is backed by a real, live search and checked before it reaches you — never pulled from the AI's memory or guessed.</p>
+        <h3>Primary sources, not summaries</h3>
+        <p>Use <strong>search lenses</strong> to limit search to sites you trust, or go straight to SEC EDGAR, CourtListener, patent offices, ClinicalTrials.gov, and full-text papers. Optional saved logins let it read pages you can already open.</p>
       </div>
       <div class="fix-card">
         <span class="fix-num">3</span>
-        <h3>Control</h3>
-        <p>Open source and runs on your machine — you decide what's kept and for how long, and can audit or self-host the code that's searching for you.</p>
+        <h3>Cross-checked and kept</h3>
+        <p>Compare answers from several models, keep a research session that survives context loss, export citations as APA, MLA, BibTeX, RIS, or CSL-JSON, and get told when a saved query finds something new.</p>
+      </div>
+      <div class="fix-card">
+        <span class="fix-num">4</span>
+        <h3>Yours to run</h3>
+        <p>Free, open source, no account. Runs on your machine, so your queries go only to the search services you pick. Anything that stores personal data is off until you turn it on.</p>
       </div>
     </div>
   </div>
@@ -229,7 +260,7 @@
         <div class="terminal-line"><span class="prompt">$</span> curl -LsSf https://astral.sh/uv/install.sh | sh</div>
         <div class="terminal-line"><span class="prompt">$</span> claude mcp add --scope user web-researcher -- uvx web-researcher-mcp</div>
       </div>
-      <p class="install-note">No sign-up required — works right away using DuckDuckGo. You can connect a search service like Google or Brave later for richer results, if you want.</p>
+      <p class="install-note">No sign-up required — works right away using DuckDuckGo. You can connect a search service like Brave or Serper later for richer results, if you want. Works with Claude, Cursor, VS Code, Codex, Gemini CLI, and any MCP client.</p>
       <p class="install-more">Windows, Homebrew, Docker, Go install, or a different AI client? See <a href="docs/">the full documentation</a> for every install path and client config.</p>
     </div>
   </div>
@@ -271,6 +302,11 @@
             <th scope="row">Purpose-built tools for filings, case law, patents, clinical trials, and economic data</th>
             <td class="brand">Yes — dedicated tools reading SEC EDGAR, CourtListener, patent offices, ClinicalTrials.gov, and statistical agencies directly</td>
             <td>General web search only</td>
+          </tr>
+          <tr>
+            <th scope="row">Pages behind your own login</th>
+            <td class="brand">Yes, opt-in — save a login once, and <code>scrape_page</code> reads as you. Encrypted and tied to your user</td>
+            <td>Public pages only</td>
           </tr>
           <tr>
             <th scope="row">Multi-step research you can audit and export</th>
@@ -352,8 +388,12 @@
         <h3>Formatting &amp; recon</h3>
         <code>format_bibliography</code><code>brand_research</code><code>company_recon</code><code>awesome_list_search</code>
       </div>
+      <div class="outcome-card">
+        <h3>Opt-in, off by default</h3>
+        <code>site_login</code><code>site_logout</code><code>monitor_query_save</code><code>monitor_query_check</code><code>memory_save</code><code>memory_recall</code><code>workspace_contribute</code><code>workspace_read</code><code>get_my_analytics</code>
+      </div>
     </div>
-    <p class="tool-count">Every tool below is tested automatically before each release. Full details: <a href="docs/tools/">Tools reference</a>.</p>
+    <p class="tool-count">Every tool listed here is checked against the docs automatically before each release. Full details: <a href="docs/tools/">Tools reference</a>.</p>
   </div>
 </section>
 
@@ -363,7 +403,7 @@
     <div class="faq-list">
       <details class="faq-item" open>
         <summary>What is web-researcher-mcp?</summary>
-        <p>A free, open-source add-on that gives your AI assistant real web search, full-page reading, and multi-source research — academic papers, patents, company financial filings, court cases, economic data, and more. Every result comes from a real, live search, not the AI's memory, so every source it gives you is real and checkable.</p>
+        <p>A free, open-source add-on that gives your AI assistant real web search, full-page reading, and multi-source research — academic papers, patents, company financial filings, court cases, clinical trials, economic data, and more. Every result comes from a live search, not the AI's memory, and dedicated tools check that each citation exists, was not retracted, and still resolves.</p>
       </details>
       <details class="faq-item">
         <summary>How is this different from Perplexity or ChatGPT search?</summary>
@@ -371,11 +411,11 @@
       </details>
       <details class="faq-item">
         <summary>Do I need to sign up for anything to use it?</summary>
-        <p>No. It works right away using DuckDuckGo, which needs no account. But DuckDuckGo is just the zero-config default, not a ceiling — under the hood it supports a dozen search providers (Google, Brave, Tavily, Exa, SearXNG, and more), and you can configure several at once so it automatically falls back to another if one is down or rate-limited. You can also point it at self-hosted or free-tier providers, restrict it to curated "search lenses" for a field like law or medicine, or route straight to structured sources like SEC EDGAR, CourtListener, or patent offices instead of general web search. Connecting any of that just means signing up with the provider and pasting in the key they give you — nothing is required to get started, and everything past DuckDuckGo is optional.</p>
+        <p>No. It works right away using DuckDuckGo, which needs no account. But DuckDuckGo is just the zero-config default, not a ceiling — under the hood it supports a dozen search providers (Brave, Serper, Tavily, Exa, SearXNG, and more), and you can configure several at once so it automatically falls back to another if one is down or rate-limited. You can also point it at self-hosted or free-tier providers, restrict it to curated "search lenses" for a field like law or medicine, or route straight to structured sources like SEC EDGAR, CourtListener, or patent offices instead of general web search. Connecting any of that just means signing up with the provider and pasting in the key they give you — nothing is required to get started, and everything past DuckDuckGo is optional.</p>
       </details>
       <details class="faq-item">
         <summary>Is my research data private?</summary>
-        <p>Yes. The server runs on your own computer. Your search queries go directly from your computer to whichever search service you've chosen — there's no middleman server collecting or seeing what you research. Nothing is tracked, no account is created, and no usage data is collected unless you explicitly turn that on yourself.</p>
+        <p>Yes. The server runs on your own computer. Your search queries go directly from your computer to whichever search service you've chosen — there's no middleman server collecting or seeing what you research. No account is created and nothing is tracked. Features that store personal data (saved logins, memory, analytics, shared workspaces) are off by default, need your consent, and are encrypted when on.</p>
       </details>
       <details class="faq-item">
         <summary>What is a search lens?</summary>
@@ -390,8 +430,16 @@
         <p>Yes — free and open source under the MIT license, forever. There's no paid tier and no usage limits from the project itself. The only cost you might incur is if you choose to sign up for a paid search service for better results, which is entirely optional.</p>
       </details>
       <details class="faq-item">
+        <summary>Does it check that citations are real?</summary>
+        <p>Yes. verify_citation checks that a source exists, matches a real record, was not retracted, and still resolves. audit_bibliography does this for a whole reference list in one pass, and also flags entries whose source does not say what the citation claims. The tools return evidence, not a verdict, so you decide what to believe. Their accuracy is measured on a labeled gold set that is published in the docs.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Can it read pages that need a login?</summary>
+        <p>Yes, if you turn it on. site_login saves a login you create yourself, either as cookies or as a browser profile, and scrape_page then reads pages behind it as you. It is off by default, needs your consent, and the saved login is encrypted and tied to your user. It does not bypass paywalls or sign in for you.</p>
+      </details>
+      <details class="faq-item">
         <summary>How many tools does it have, and what can it search?</summary>
-        <p>37 tools covering web, image, and news search; academic papers with real, checkable source links; patents; company financial filings; court cases; economic data; clinical trials; full-page and document reading; citation checking and bibliography auditing; and multi-step research sessions you can export.</p>
+        <p>37 tools covering web, image, and news search; academic papers with full text; patents; company financial filings; court cases; economic data; clinical trials; full-page and document reading; citation checking and bibliography auditing; multi-model research panels; and multi-step research sessions you can export. A few opt-in tools (saved logins, saved-query monitoring, memory, shared workspaces, personal analytics) stay off until you turn them on.</p>
       </details>
     </div>
   </div>

@@ -114,6 +114,8 @@ The key is sent only in the `x-api-key` header. It never appears in logs or erro
 
 ## Google Custom Search (Programmable Search Engine)
 
+> **Ending 2027-01-01.** Google closed its Custom Search JSON API to new customers and ends it on 2027-01-01 ([Google](https://developers.google.com/custom-search/v1/overview)). Existing keys work until then. Use Brave, Serper, SearXNG or another provider for new setups. Lenses with a `cx` rely on this API; prefer lenses with `domains` and a different provider.
+
 **Free tier**: 100 queries/day (paid: $5 per 1,000 queries)
 
 ### Step 1: Get an API Key

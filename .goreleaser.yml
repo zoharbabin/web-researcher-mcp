@@ -98,7 +98,7 @@ dockers:
     build_flag_templates:
       - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.title={{ .ProjectName }}"
-      - "--label=org.opencontainers.image.description=Your AI research assistant that cites real sources and stays honest"
+      - "--label=org.opencontainers.image.description=Search the web and primary sources, read full pages, verify citations. Runs on your machine."
       - "--label=org.opencontainers.image.version={{ .Version }}"
       - "--label=org.opencontainers.image.created={{ .Date }}"
       - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
@@ -118,7 +118,7 @@ dockers:
     build_flag_templates:
       - "--platform=linux/arm64"
       - "--label=org.opencontainers.image.title={{ .ProjectName }}"
-      - "--label=org.opencontainers.image.description=Your AI research assistant that cites real sources and stays honest"
+      - "--label=org.opencontainers.image.description=Search the web and primary sources, read full pages, verify citations. Runs on your machine."
       - "--label=org.opencontainers.image.version={{ .Version }}"
       - "--label=org.opencontainers.image.created={{ .Date }}"
       - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
@@ -139,7 +139,7 @@ dockers:
     build_flag_templates:
       - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.title={{ .ProjectName }}"
-      - "--label=org.opencontainers.image.description=Your AI research assistant that cites real sources and stays honest"
+      - "--label=org.opencontainers.image.description=Search the web and primary sources, read full pages, verify citations. Runs on your machine."
       - "--label=org.opencontainers.image.version={{ .Version }}"
       - "--label=org.opencontainers.image.created={{ .Date }}"
       - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
@@ -159,7 +159,7 @@ dockers:
     build_flag_templates:
       - "--platform=linux/arm64"
       - "--label=org.opencontainers.image.title={{ .ProjectName }}"
-      - "--label=org.opencontainers.image.description=Your AI research assistant that cites real sources and stays honest"
+      - "--label=org.opencontainers.image.description=Search the web and primary sources, read full pages, verify citations. Runs on your machine."
       - "--label=org.opencontainers.image.version={{ .Version }}"
       - "--label=org.opencontainers.image.created={{ .Date }}"
       - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
@@ -200,7 +200,7 @@ brews:
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     directory: Formula
     homepage: "https://github.com/zoharbabin/web-researcher-mcp"
-    description: "Your AI research assistant that cites real sources and stays honest"
+    description: "Search the web and primary sources, read full pages, verify citations. Runs on your machine."
     license: "MIT"
     skip_upload: auto
     test: |
@@ -225,7 +225,7 @@ homebrew_casks:
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     directory: Casks
     homepage: "https://github.com/zoharbabin/web-researcher-mcp"
-    description: "Your AI research assistant that cites real sources and stays honest"
+    description: "Search the web and primary sources, read full pages, verify citations. Runs on your machine."
     skip_upload: auto
     binaries:
       - web-researcher-mcp
@@ -255,7 +255,7 @@ scoops:
       branch: main
     directory: bucket
     homepage: "https://github.com/zoharbabin/web-researcher-mcp"
-    description: "Your AI research assistant that cites real sources and stays honest"
+    description: "Search the web and primary sources, read full pages, verify citations. Runs on your machine."
     license: "MIT"
     skip_upload: '{{ if isEnvSet "SCOOP_BUCKET_GITHUB_TOKEN" }}auto{{ else }}true{{ end }}'
 
@@ -274,7 +274,7 @@ scoops:
 winget:
   - name: web-researcher-mcp
     publisher: zoharbabin
-    short_description: "Your AI research assistant that cites real sources and stays honest"
+    short_description: "Search the web and primary sources, read full pages, verify citations. Runs on your machine."
     license: "MIT"
     homepage: "https://github.com/zoharbabin/web-researcher-mcp"
     publisher_url: "https://github.com/zoharbabin"
@@ -307,7 +307,7 @@ chocolateys:
     bug_tracker_url: "https://github.com/zoharbabin/web-researcher-mcp/issues"
     icon_url: "https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/assets/logo-final-512.png"
     copyright: "2026 Zohar Babin"
-    summary: "Your AI research assistant that cites real sources and stays honest"
+    summary: "Search the web and primary sources, read full pages, verify citations. Runs on your machine."
     description: |
       Web Researcher MCP is an MCP server that gives AI assistants web search,
       content extraction, academic / patent / SEC-filing / case-law / economic

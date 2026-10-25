@@ -1,7 +1,7 @@
 {
   "name": "web-researcher-mcp",
   "displayName": "Web Researcher",
-  "description": "Your AI research assistant that cites real sources and stays honest. Search the entire web or narrow it down to just the sites you trust; medical journals, court databases, news outlets, academic papers. Analyze the full source, not just snippets. Links that work, citations you can trust, no made up closed garden pre-synthesized results.",
+  "description": "Search the web and primary sources, read full pages, verify citations. Runs on your machine. Lenses for trusted sites, plus SEC filings, court records, patents, clinical trials and full-text papers. Checks that each citation exists, was not retracted, and says what is claimed.",
   "version": "1.50.4",
   "author": {
     "name": "Zohar Babin",

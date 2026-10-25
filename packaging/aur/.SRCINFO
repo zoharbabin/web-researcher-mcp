@@ -1,5 +1,5 @@
 pkgbase = web-researcher-mcp
-	pkgdesc = Your AI research assistant that cites real sources and stays honest
+	pkgdesc = Search the web and primary sources, read full pages, verify citations. Runs on your machine.
 	pkgver = 1.37.3
 	pkgrel = 1
 	url = https://github.com/zoharbabin/web-researcher-mcp

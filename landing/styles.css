@@ -286,6 +286,7 @@ section.tint { background: var(--canvas-tint); }
   grid-template-columns: repeat(3, 1fr);
   gap: 20px;
 }
+.fix-grid.four { grid-template-columns: repeat(2, 1fr); }
 .fix-card {
   border: 1.5px solid var(--border);
   border-radius: 14px;
@@ -316,7 +317,7 @@ section.tint { background: var(--canvas-tint); }
   font-size: 0.92rem;
 }
 @media (max-width: 860px) {
-  .fix-grid { grid-template-columns: 1fr; }
+  .fix-grid, .fix-grid.four { grid-template-columns: 1fr; }
 }
 
 /* ---------- Pills ---------- */

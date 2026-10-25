@@ -1020,3 +1020,52 @@ func TestEnumErrorMessageParity(t *testing.T) {
 		})
 	}
 }
+
+// TestMessagingSurfacesConsistent keeps the one-line product description in
+// sync across the registry, plugin and bundle manifests. The source of truth
+// is the "Short description" in docs/BRAND_GUIDELINES.md.
+func TestMessagingSurfacesConsistent(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	read := func(rel string) string {
+		data, err := os.ReadFile(filepath.Join(root, rel)) // #nosec G304 -- fixed in-repo path, not user input
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		return string(data)
+	}
+
+	brand := read("docs/BRAND_GUIDELINES.md")
+	_, after, ok := strings.Cut(brand, "### Short description\n\n")
+	if !ok {
+		t.Fatal("docs/BRAND_GUIDELINES.md has no '### Short description' section")
+	}
+	short, _, _ := strings.Cut(after, "\n")
+	short = strings.TrimSpace(short)
+	// MCP registry limit for server.json "description".
+	if n := len([]rune(short)); n == 0 || n > 100 {
+		t.Fatalf("short description must be 1-100 chars, got %d: %q", n, short)
+	}
+
+	for _, rel := range []string{"server.json", "glama.json", ".claude-plugin/plugin.json", "mcpb/manifest.json"} {
+		var doc struct {
+			Description string `json:"description"`
+		}
+		if err := json.Unmarshal([]byte(read(rel)), &doc); err != nil {
+			t.Fatalf("parse %s: %v", rel, err)
+		}
+		if !strings.HasPrefix(doc.Description, short) {
+			t.Errorf("%s description does not start with the short description in docs/BRAND_GUIDELINES.md\n got: %q\nwant prefix: %q", rel, doc.Description, short)
+		}
+	}
+	for _, rel := range []string{"Dockerfile", "Dockerfile.release", ".goreleaser.yml", "packaging/aur/PKGBUILD", "packaging/nix/flake.nix", "scripts/build_wheels.py"} {
+		// build_wheels.py wraps the string over two lines, so compare the first words.
+		want := short
+		if rel == "scripts/build_wheels.py" {
+			want = "Search the web and primary sources, read full pages, verify citations."
+		}
+		if !strings.Contains(read(rel), want) {
+			t.Errorf("%s does not contain the short description from docs/BRAND_GUIDELINES.md", rel)
+		}
+	}
+}

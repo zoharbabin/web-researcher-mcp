@@ -47,6 +47,8 @@ Understanding what backs each provider helps you reason about result overlap and
 | **[GitHub](https://docs.github.com/en/rest/search/search)** | Niche | GitHub REST Search API — issues and pull requests only |
 | **[Xquik](https://xquik.com/)** | Niche | Xquik REST API — public X/Twitter posts with engagement counts only |
 
+> **Google PSE is ending.** Google closed its Custom Search JSON API to new customers and ends it on 2027-01-01 ([Google](https://developers.google.com/custom-search/v1/overview)). Existing keys work until then. Use Brave, Serper, SearXNG or another provider for new setups.
+
 **Practical implication**: Google PSE, Serper, and SearchAPI.io draw from the same index — using more than one adds no coverage, only redundancy. Brave and Exa bring genuinely independent results. Tavily and SearXNG aggregate results from others rather than crawling themselves.
 
 ---

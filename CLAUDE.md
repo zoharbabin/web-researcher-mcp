@@ -124,7 +124,7 @@ Registry/manifest files (root, each read by a different external tool): `server.
 ## Environment
 
 Required: none — DuckDuckGo works as zero-config fallback (no API key needed).  
-For better results: set `GOOGLE_CUSTOM_SEARCH_API_KEY` + `GOOGLE_CUSTOM_SEARCH_ID`.  
+For better results: set `BRAVE_API_KEY` (or another provider key). Google PSE ends 2027-01-01.  
 Full list: `.env.example` (authoritative) and `docs/DEPLOYMENT.md`.
 
 ## Testing
