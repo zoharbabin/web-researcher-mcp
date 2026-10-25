@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="https://zoharbabin.com/web-researcher-mcp/"><img src="https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/landing/assets/demo-teaser.gif" width="720" alt="Cartoon: an AI genie pulls a citation out of a hat, and it poofs. Then real tool runs catch fake citations."></a><br/>
-  <sub>A cartoon of the problem, then real tool output. <a href="https://zoharbabin.com/web-researcher-mcp/">Watch the 40-second video</a>.</sub>
+  <sub>A cartoon of the problem, then real tool output. <a href="https://zoharbabin.com/web-researcher-mcp/">Watch the 43-second video</a>.</sub>
 </p>
 
 <p align="center">
