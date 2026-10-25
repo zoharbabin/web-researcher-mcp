@@ -13,7 +13,7 @@
 ⭐ If you're tired of AI making things up, and [web-researcher-mcp](https://github.com/zoharbabin/web-researcher-mcp/) helps you, give us a star ⭐ — it helps more teams discover the project.  
 
 <p align="center">
-  <a href="https://zoharbabin.com/web-researcher-mcp/"><img src="https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/landing/assets/demo-teaser.gif" width="720" alt="Real tool runs: verify_citation returns exists:false for a made-up case, and audit_bibliography flags a fake DOI, a retraction and a dead link. Click for the 40-second video."></a><br/>
+  <a href="https://zoharbabin.com/web-researcher-mcp/"><img src="https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/landing/assets/demo-teaser.gif" width="720" alt="Real tool runs: a made-up case gets no match, and a reference list is audited."></a><br/>
   <sub>Real tool output, no mock-ups. <a href="https://zoharbabin.com/web-researcher-mcp/">Watch the 40-second video</a>.</sub>
 </p>
 
