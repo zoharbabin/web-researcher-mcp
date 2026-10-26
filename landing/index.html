@@ -3,21 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Web Researcher MCP — Your AI Research Assistant That Cites Real Sources</title>
-<meta name="description" content="Give Claude, Cursor, or any AI assistant web search, full-page reading, and citation checks across papers, filings, court records, and patents. Free, open source, runs on your machine.">
+<title>Web Researcher MCP: Your AI Research Assistant That Searches, Reads What You Can Open, and Checks Its Sources</title>
+<meta name="description" content="Give Claude, Cursor, or any AI assistant web search, SEC filings, court records and papers, plus the pages behind your own logins, like LinkedIn and X. It checks every citation. Free, open source, runs on your machine.">
 <link rel="canonical" href="https://zoharbabin.com/web-researcher-mcp/">
 <link rel="icon" href="assets/favicon.ico">
 <link rel="preload" as="image" href="hero-poster.jpg">
 <link rel="stylesheet" href="styles.css">
 
 <meta property="og:type" content="website">
-<meta property="og:title" content="Web Researcher MCP — Your AI Research Assistant That Cites Real Sources">
-<meta property="og:description" content="Search the web and primary sources, read full pages, verify citations. Runs on your machine. Free, open source.">
+<meta property="og:title" content="Web Researcher MCP: Search, Read Pages Behind Your Logins, Verify Citations">
+<meta property="og:description" content="Search the web and primary sources, read pages behind your logins, verify citations. Runs locally. Free, open source.">
 <meta property="og:image" content="assets/social-preview.png">
 <meta property="og:url" content="https://zoharbabin.com/web-researcher-mcp/">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Web Researcher MCP — Your AI Research Assistant That Cites Real Sources">
-<meta name="twitter:description" content="Search the web and primary sources, read full pages, verify citations. Runs on your machine. Free, open source.">
+<meta name="twitter:title" content="Web Researcher MCP: Search, Read Pages Behind Your Logins, Verify Citations">
+<meta name="twitter:description" content="Search the web and primary sources, read pages behind your logins, verify citations. Runs locally. Free, open source.">
 <meta name="twitter:image" content="assets/social-preview.png">
 
 <script type="application/ld+json">
@@ -32,14 +32,15 @@
   "downloadUrl": "https://github.com/zoharbabin/web-researcher-mcp",
   "codeRepository": "https://github.com/zoharbabin/web-researcher-mcp",
   "license": "https://opensource.org/licenses/MIT",
-  "description": "An MCP (Model Context Protocol) server that gives AI assistants web search, full-page reading, and multi-source research, and checks that each citation exists, was not retracted, and says what is claimed. Runs locally; no account, no server in the middle.",
+  "description": "An MCP (Model Context Protocol) server that gives AI assistants web search, primary sources, and full-page reading, including pages behind your own logins (opt-in). It checks that each citation exists, was not retracted, and says what is claimed, and it keeps research sessions, saved searches and memory. Runs locally; no account, no server in the middle.",
   "featureList": [
+    "Reads pages behind your own logins (opt-in, encrypted): LinkedIn, X, Facebook, Instagram, YouTube and more",
     "Citation checks: existence, retraction status, live links, claim match",
     "Search lenses that limit search to trusted sites",
     "SEC filings, US court records, patents, clinical trials, economic data, full-text papers",
     "Full-page reading of web pages, PDFs, Office files, and YouTube transcripts",
-    "Optional saved logins to read pages you can already open",
     "Multi-model research panels, exportable sessions, bibliography export",
+    "Saved-query monitoring, opt-in memory and shared team workspaces",
     "Works with any MCP client; runs locally, no API key needed to start"
   ],
   "offers": {
@@ -59,7 +60,7 @@
       "name": "What is web-researcher-mcp?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "It's a free, open-source add-on that gives your AI assistant (Claude, Cursor, or any similar tool) real web search, full-page reading, and multi-source research — academic papers, patents, company financial filings, court cases, clinical trials, economic data, and more. Every result comes from a live search, not the AI's memory, and dedicated tools check that each citation exists, was not retracted, and still resolves."
+        "text": "It's a free, open-source add-on that gives your AI assistant (Claude, Cursor, or any similar tool) real web search, full-page reading, and multi-source research: academic papers, patents, company financial filings, court cases, clinical trials, economic data, and more. With an opt-in saved login, it can also read pages you can already open, such as LinkedIn or X. Every result comes from a live search, not the AI's memory, and dedicated tools check that each citation exists, was not retracted, and still resolves. It keeps your research sessions and can watch a search for new results."
       }
     },
     {
@@ -120,10 +121,10 @@
     },
     {
       "@type": "Question",
-      "name": "Can it read pages that need a login?",
+      "name": "Can it read pages that need a login, like LinkedIn?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Yes, if you turn it on. site_login saves a login you create yourself, either as cookies or as a browser profile, and scrape_page then reads pages behind it as you. It is off by default, needs your consent, and the saved login is encrypted and tied to your user. It does not bypass paywalls or sign in for you."
+        "text": "Yes, if you turn it on. site_login saves a login you create yourself, either from your own browser or from a private login window where you sign in by hand (2FA works). scrape_page then reads pages behind it as you. We have tested LinkedIn, X, Facebook, Instagram and YouTube. It is off by default, needs your consent, and the saved login is encrypted, tied to your user, and removed by site_logout. Your password is never saved. It does not bypass paywalls. Some sites, such as LinkedIn, forbid automated access in their terms, so use it only where yours allow."
       }
     },
     {
@@ -157,8 +158,8 @@
 <main id="main">
 
 <section class="hero wrap" id="top">
-  <h1>Your AI research assistant that cites real sources and stays honest</h1>
-  <p class="sub">Search the web and primary sources — court records, SEC filings, patents, clinical trials, full-text papers — and read the whole page. Then check every citation before you rely on it. Runs on your machine, and works with no API key.</p>
+  <h1>Your AI research assistant. It searches, reads what you can open, and checks its sources.</h1>
+  <p class="sub">Real search and primary sources. The pages behind your own logins, like LinkedIn and X. Then it checks every citation, keeps your research, and runs on your machine. No API key needed to start.</p>
 
   <div class="badges" aria-hidden="true">
     <a href="https://github.com/zoharbabin/web-researcher-mcp/actions/workflows/ci.yml"><img src="https://github.com/zoharbabin/web-researcher-mcp/actions/workflows/ci.yml/badge.svg" alt="" loading="lazy"></a>
@@ -175,10 +176,78 @@
       <a href="https://github.com/zoharbabin/web-researcher-mcp#readme">Watch the demo on GitHub</a> instead.
     </video>
   </div>
-  <p class="video-caption">43 seconds. A cartoon of the problem, then real tool runs: a made-up case comes back not found, and a reference list is checked for fake DOIs, retractions and dead links.</p>
+  <p class="video-caption">43 seconds on one part of it, checking citations. A cartoon of the problem, then real tool runs: a made-up case comes back not found, and a reference list is checked for fake DOIs, retractions and dead links.</p>
 </section>
 
-<section class="tint">
+<section id="what">
+  <div class="wrap">
+    <h2 class="section-title">A research desk your AI can use</h2>
+    <p class="section-lede">It finds the sources, reads them as you would, checks them, and keeps the work. All on your machine.</p>
+    <div class="fix-grid">
+      <div class="fix-card">
+        <span class="fix-num">1</span>
+        <h3>Search everywhere you'd look</h3>
+        <p>Web search you can limit to sites you trust (<strong>lenses</strong>), plus SEC filings, US court records, patents, clinical trials, economic data and full-text papers. It works with no API key.</p>
+      </div>
+      <div class="fix-card">
+        <span class="fix-num">2</span>
+        <h3>Work as you</h3>
+        <p>Opt-in saved logins let it read pages you can already open: LinkedIn, X, Facebook, Instagram, YouTube and more. You sign in yourself. The login is encrypted and yours alone.</p>
+      </div>
+      <div class="fix-card">
+        <span class="fix-num">3</span>
+        <h3>Check before you rely</h3>
+        <p>Dedicated tools check that a source exists, was not retracted, still resolves, and says what is claimed. They return evidence, not a verdict, and their accuracy is measured.</p>
+      </div>
+      <div class="fix-card">
+        <span class="fix-num">4</span>
+        <h3>Read the whole page</h3>
+        <p>Web pages, PDFs, Word and PowerPoint files, YouTube transcripts and forum threads, in full. Not a snippet and not a summary of a summary.</p>
+      </div>
+      <div class="fix-card">
+        <span class="fix-num">5</span>
+        <h3>Keep it and watch it</h3>
+        <p>Research sessions survive context loss. Compare answers from several models. Export citations as APA, MLA, BibTeX, RIS or CSL-JSON. Opt-in monitors flag new results, memory keeps findings across chats, and team workspaces share them.</p>
+      </div>
+      <div class="fix-card">
+        <span class="fix-num">6</span>
+        <h3>Yours to run</h3>
+        <p>Free, open source, no account. Your queries go only to the search services you pick. Run it on your laptop, or as a shared server for a team. Anything that stores personal data is off until you turn it on.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="tint" id="logins">
+  <div class="wrap">
+    <h2 class="section-title">It can work as you, safely</h2>
+    <p class="section-lede">A lot of the best information sits behind a sign-in: your LinkedIn network, an X thread, a forum, a site you pay for. With a saved login, your AI reads those pages for you. You don't paste anything in.</p>
+    <div class="fix-grid">
+      <div class="fix-card">
+        <span class="fix-num">1</span>
+        <h3>You sign in, once</h3>
+        <p>When a page needs a login, your AI asks. You sign in yourself, in your own browser or in a private login window. 2FA and CAPTCHA work as normal. Your password is never saved.</p>
+      </div>
+      <div class="fix-card">
+        <span class="fix-num">2</span>
+        <h3>It reads as you</h3>
+        <p>From then on it reads pages on that site automatically, as you would see them. The login goes only to that site, and pages read this way never enter a shared cache.</p>
+      </div>
+      <div class="fix-card">
+        <span class="fix-num">3</span>
+        <h3>You stay in charge</h3>
+        <p>Logins are encrypted, tied to your user, and expire on their own (cookies after 24 hours and browser profiles after 7 days, by default). <code>site_logout</code> deletes one at any time.</p>
+      </div>
+    </div>
+    <div class="pill-row" style="margin-top:28px">
+      <span class="pill"><span class="dot"></span>Tested on LinkedIn, X, Facebook, Instagram and YouTube</span>
+      <span class="pill"><span class="dot" style="background:var(--green)"></span>Off by default. You consent first.</span>
+    </div>
+    <p class="demo-note" style="color:var(--secondary);font-size:0.88rem">Some sites, such as LinkedIn, forbid automated access in their terms. Use saved logins only where yours allow. It does not bypass paywalls, and it never signs in for you. Pages you read this way are treated as untrusted: your AI is told not to follow instructions hidden in them.</p>
+  </div>
+</section>
+
+<section>
   <div class="wrap problem-grid">
     <div>
       <h2 class="section-title" style="text-align:left">AI search tools make things up. That's a problem when your name is on the work.</h2>
@@ -193,65 +262,134 @@
       </ul>
     </div>
     <div class="proof-demo">
-      <p class="proof-demo-label">Same question. Two different answers.</p>
-      <p class="proof-query">"Find me the 2023 study on remote work and productivity, with a source I can check."</p>
+      <p class="proof-demo-label">A real fake case, checked.</p>
+      <p class="proof-query">"Is this case real? Varghese v. China Southern Airlines, 925 F.3d 1339"</p>
       <div class="proof-cards">
         <div class="proof-card bad">
           <div class="proof-card-head">
-            <span class="proof-who">Typical AI search answer</span>
+            <span class="proof-who">What ChatGPT gave a lawyer in 2023</span>
             <span class="proof-badge bad">✗ Made up</span>
           </div>
-          <p class="proof-cite">Chen, L. et al. (2023). <em>Remote Work and Productivity Outcomes</em>. Journal of Applied Psychology.</p>
-          <p class="proof-note">This paper doesn't exist. No such study, issue, or author is on record anywhere — the AI invented it to sound plausible.</p>
+          <p class="proof-cite">Varghese v. China Southern Airlines Co., 925 F.3d 1339 (11th Cir. 2009)</p>
+          <p class="proof-note">No such case exists. The lawyers filed it anyway and the court sanctioned them in <em>Mata v. Avianca</em>.</p>
         </div>
         <div class="proof-card good">
           <div class="proof-card-head">
-            <span class="proof-who">web-researcher-mcp</span>
-            <span class="proof-badge good">✓ Checked and real</span>
+            <span class="proof-who">web-researcher-mcp: verify_citation</span>
+            <span class="proof-badge good">✓ No match found</span>
           </div>
-          <p class="proof-cite">Bloom, N. et al. (2023). <em>Hybrid Working from Home</em>. American Economic Review.</p>
-          <p class="proof-note">Confirmed against the publisher's own record — the title, authors, and journal all match — before the answer reached you.</p>
+          <p class="proof-cite">No court record for this case.</p>
+          <p class="proof-note">The closest hit is a 2017 conference paper about the airline. That is not a court opinion, so it is not a match. Run on 2026-10-25.</p>
         </div>
       </div>
       <div class="pill-row proof-pills">
         <span class="pill"><span class="dot" style="background:var(--red)"></span>Only 39% of Google AI Overviews are correct and fully sourced</span>
-        <span class="pill"><span class="dot" style="background:var(--green)"></span>Real sources, checked every time</span>
+        <span class="pill"><span class="dot" style="background:var(--green)"></span>Evidence you can check, not a verdict</span>
       </div>
-      <p class="proof-source">Sources: <a href="https://www.cjr.org/tow_center/we-compared-eight-ai-search-engines-theyre-all-bad-at-citing-news.php" target="_blank" rel="nofollow noopener">Columbia Journalism Review, 2025</a>; <a href="https://www.bbc.co.uk/mediacentre/2025/new-ebu-research-ai-assistants-news-content" target="_blank" rel="nofollow noopener">BBC/EBU, 2025</a>; <a href="https://www.nytimes.com/2026/04/07/technology/google-ai-overviews-accuracy.html" target="_blank" rel="nofollow noopener">The New York Times, 2026</a>. The example answers above are for illustration.</p>
+      <p class="proof-source">Sources: <a href="https://law.justia.com/cases/federal/district-courts/new-york/nysdce/1:2022cv01461/575368/54/" target="_blank" rel="nofollow noopener">Mata v. Avianca, S.D.N.Y. 2023</a>; <a href="https://www.cjr.org/tow_center/we-compared-eight-ai-search-engines-theyre-all-bad-at-citing-news.php" target="_blank" rel="nofollow noopener">Columbia Journalism Review, 2025</a>; <a href="https://www.bbc.co.uk/mediacentre/2025/new-ebu-research-ai-assistants-news-content" target="_blank" rel="nofollow noopener">BBC/EBU, 2025</a>; <a href="https://www.nytimes.com/2026/04/07/technology/google-ai-overviews-accuracy.html" target="_blank" rel="nofollow noopener">The New York Times, 2026</a>.</p>
     </div>
+  </div>
+</section>
+
+<section class="tint" id="examples">
+  <div class="wrap">
+    <h2 class="section-title">See it work on real runs</h2>
+    <p class="section-lede">Three actual tool runs, not mock-ups. Each one tells you what it found and how sure it is, so you decide.</p>
+    <div class="demo-grid">
+      <div class="demo-card">
+        <h3>Catch a made-up case</h3>
+        <div class="terminal">
+          <div class="terminal-line"><span class="t-dim">&gt;</span> <span class="t-cmd">Is this case real? Varghese v. China Southern Airlines, 925 F.3d 1339</span></div>
+          <div class="terminal-line t-dim">Calling verify_citation...</div>
+          <div class="terminal-line"><span class="t-badge red">NO MATCH</span> <span class="t-red">No court record for this case.</span></div>
+          <div class="terminal-line"><span class="t-dim">Closest hit:</span> a 2017 conference paper about the airline. That is not a court opinion, so it is not a match.</div>
+        </div>
+        <p>The tool also shows the nearest thing it found, so you can see why it said no.</p>
+      </div>
+      <div class="demo-card">
+        <h3>Audit a whole reference list</h3>
+        <div class="terminal">
+          <div class="terminal-line"><span class="t-dim">&gt;</span> <span class="t-cmd">Audit these 4 references before I submit.</span></div>
+          <div class="terminal-line t-dim">Calling audit_bibliography...</div>
+          <div class="terminal-line"><span class="t-green">✓ ok</span>         AlphaFold, Nature 2021</div>
+          <div class="terminal-line"><span class="t-red">✗ not_found</span>  Neural protein folding breakthrough<br><span class="t-dim">  DOI not found in Crossref</span></div>
+          <div class="terminal-line"><span class="t-amber">! retracted</span>  Ileal-lymphoid-nodular hyperplasia (1998)<br><span class="t-dim">  retraction notice 2010-02-06</span></div>
+          <div class="terminal-line"><span class="t-red">✗ dead_link</span>  Opinion of the Court <span class="t-dim">HTTP 404</span></div>
+        </div>
+        <p>One pass flags the fake DOI, the retraction and the dead link. It marks what it could not check as unchecked, not fake.</p>
+      </div>
+      <div class="demo-card">
+        <h3>Search only trusted sites</h3>
+        <div class="terminal">
+          <div class="terminal-line"><span class="t-dim">&gt;</span> <span class="t-cmd">Miranda v. Arizona holding right to remain silent</span></div>
+          <div class="terminal-line t-dim">Calling web_search lens=legal...<br>4 results, restricted to legal and court sources</div>
+          <div class="terminal-line"><span class="t-green">✓</span> Miranda v. Arizona | 384 U.S. 436 (1966)<br><span class="t-link">supreme.justia.com/cases/federal/us/384/436</span></div>
+          <div class="terminal-line"><span class="t-green">✓</span> Facts and Case Summary - Miranda v. Arizona<br><span class="t-link">uscourts.gov/about-federal-courts/...</span> <span class="t-dim">source tier: high</span></div>
+          <div class="terminal-line"><span class="t-green">✓</span> Miranda v. Arizona | Oyez<br><span class="t-link">oyez.org/cases/1965/759</span></div>
+          <div class="terminal-line"><span class="t-green">✓</span> Berghuis v. Thompkins | 560 U.S. 370 (2010)<br><span class="t-link">supreme.justia.com/cases/federal/us/560/370</span></div>
+        </div>
+        <p>A search lens keeps results on court and legal sites. Every link is a live page you can open.</p>
+      </div>
+    </div>
+    <p class="demo-note">Real tool output from runs on 2026-10-25, trimmed and reformatted for display. Results change over time, and every result is evidence for you to judge.</p>
   </div>
 </section>
 
 <section>
   <div class="wrap">
-    <h2 class="section-title">Search, read, verify</h2>
-    <p class="section-lede">Your AI gets the real pages and records from sources you choose. Then it checks each citation before it reaches you.</p>
-    <div class="fix-grid four">
-      <div class="fix-card">
-        <span class="fix-num">1</span>
-        <h3>Verified, not asserted</h3>
-        <p>Dedicated tools check that a source exists, was not retracted, still resolves, and says what the citation claims. They return evidence, not a verdict, and their accuracy is measured on a labeled gold set.</p>
+    <h2 class="section-title">Measured, not just claimed</h2>
+    <p class="section-lede">We test the citation checks against a labeled set of real, invented and retracted papers. These are the numbers from the latest published run.</p>
+    <div class="stat-row">
+      <div class="stat-card"><span class="big">26 of 26</span><span class="small">real papers confirmed to exist</span></div>
+      <div class="stat-card"><span class="big">11 of 11</span><span class="small">invented DOIs reported as not found</span></div>
+      <div class="stat-card"><span class="big">11 of 11</span><span class="small">retracted papers flagged</span></div>
+      <div class="stat-card"><span class="big">0</span><span class="small">real papers wrongly accused</span></div>
+      <div class="stat-card"><span class="big">64 of 64</span><span class="small">lens results stayed on the lens's sites</span></div>
+    </div>
+    <p class="demo-note">Run on 2026-08-07 against a small, curated set, and re-run weekly in CI. Other citations will vary. The weakest check is "does the source say what is claimed": it under-flags on purpose so it never falsely accuses. <a href="https://github.com/zoharbabin/web-researcher-mcp/blob/main/docs/TRUST_EVAL.md">Full results and how to reproduce them</a>.</p>
+  </div>
+</section>
+
+<section class="tint">
+  <div class="wrap">
+    <h2 class="section-title">What you can ask</h2>
+    <p class="section-lede">Plain requests. Your AI picks the tools.</p>
+    <div class="prompt-grid">
+      <div class="prompt-card">
+        <h3>Lawyers</h3>
+        <blockquote>"Check every case in this brief. Which ones can't be found, and which were overruled or retracted?"</blockquote>
+        <p class="uses">Uses <code>audit_bibliography</code> <code>verify_citation</code> <code>legal_search</code></p>
       </div>
-      <div class="fix-card">
-        <span class="fix-num">2</span>
-        <h3>Primary sources, not summaries</h3>
-        <p>Use <strong>search lenses</strong> to limit search to sites you trust, or go straight to SEC EDGAR, CourtListener, patent offices, ClinicalTrials.gov, and full-text papers. Optional saved logins let it read pages you can already open.</p>
+      <div class="prompt-card">
+        <h3>Researchers</h3>
+        <blockquote>"Find the full text of recent papers on this topic and tell me if any were retracted."</blockquote>
+        <p class="uses">Uses <code>academic_search</code> <code>paper_fulltext</code> <code>verify_citation</code></p>
       </div>
-      <div class="fix-card">
-        <span class="fix-num">3</span>
-        <h3>Cross-checked and kept</h3>
-        <p>Compare answers from several models, keep a research session that survives context loss, export citations as APA, MLA, BibTeX, RIS, or CSL-JSON, and get told when a saved query finds something new.</p>
+      <div class="prompt-card">
+        <h3>Journalists</h3>
+        <blockquote>"Pull this company's latest 10-K risk factors and any court cases that name it."</blockquote>
+        <p class="uses">Uses <code>filing_search</code> <code>legal_search</code> <code>scrape_page</code></p>
       </div>
-      <div class="fix-card">
-        <span class="fix-num">4</span>
-        <h3>Yours to run</h3>
-        <p>Free, open source, no account. Runs on your machine, so your queries go only to the search services you pick. Anything that stores personal data is off until you turn it on.</p>
+      <div class="prompt-card">
+        <h3>Students</h3>
+        <blockquote>"Put these sources in APA and tell me which links are dead."</blockquote>
+        <p class="uses">Uses <code>format_bibliography</code> <code>audit_bibliography</code></p>
+      </div>
+      <div class="prompt-card">
+        <h3>Market research</h3>
+        <blockquote>"Read this competitor's company page and recent posts on LinkedIn and X, then pull their latest SEC filing."</blockquote>
+        <p class="uses">Uses <code>site_login</code> <code>scrape_page</code> <code>filing_search</code></p>
+      </div>
+      <div class="prompt-card">
+        <h3>Teams</h3>
+        <blockquote>"Save this search. When I ask again, show me only what's new, and share the best finds with the team."</blockquote>
+        <p class="uses">Uses <code>monitor_query_save</code> <code>monitor_query_check</code> <code>workspace_contribute</code></p>
       </div>
     </div>
   </div>
 </section>
 
-<section class="tint">
+<section>
   <div class="wrap">
     <h2 class="section-title">Get started in 30 seconds</h2>
     <div class="install-box">
@@ -260,7 +398,7 @@
         <div class="terminal-line"><span class="prompt">$</span> curl -LsSf https://astral.sh/uv/install.sh | sh</div>
         <div class="terminal-line"><span class="prompt">$</span> claude mcp add --scope user web-researcher -- uvx web-researcher-mcp</div>
       </div>
-      <p class="install-note">No sign-up required — works right away using DuckDuckGo. You can connect a search service like Brave or Serper later for richer results, if you want. Works with Claude, Cursor, VS Code, Codex, Gemini CLI, and any MCP client.</p>
+      <p class="install-note"><strong>Try this first:</strong> ask your AI <em>"Is Varghese v. China Southern Airlines, 925 F.3d 1339 a real case?"</em> No sign-up is needed. It works right away using DuckDuckGo. You can connect a search service like Brave or Serper later for richer results. Works with Claude, Cursor, VS Code, Codex, Gemini CLI, and any MCP client.</p>
       <p class="install-more">Windows, Homebrew, Docker, Go install, or a different AI client? See <a href="docs/">the full documentation</a> for every install path and client config.</p>
     </div>
   </div>
@@ -366,31 +504,69 @@
     <div class="outcomes">
       <div class="outcome-card">
         <h3>Catch fake citations</h3>
-        <code>verify_citation</code><code>audit_bibliography</code><code>verify_recommendation</code><code>archive_source</code>
+        <ul class="tool-lines">
+          <li><code>verify_citation</code>Does this source exist, was it retracted, does it say what is claimed?</li>
+          <li><code>audit_bibliography</code>The same checks on a whole reference list.</li>
+          <li><code>verify_recommendation</code>Spots self-promotion and missing outside backing in "best of" lists.</li>
+          <li><code>archive_source</code>Saves a Wayback Machine snapshot of a page (writes to an outside service).</li>
+        </ul>
       </div>
       <div class="outcome-card">
         <h3>Search everything</h3>
-        <code>web_search</code><code>image_search</code><code>news_search</code><code>scrape_page</code><code>search_and_scrape</code>
+        <ul class="tool-lines">
+          <li><code>web_search</code>Any provider you set up, or only trusted sites with a lens.</li>
+          <li><code>scrape_page</code>Reads a page, PDF, Office file or YouTube transcript.</li>
+          <li><code>search_and_scrape</code>Searches and reads the top pages in one step.</li>
+          <li><code>news_search</code>Recent news with date filters.</li>
+          <li><code>image_search</code>Finds images.</li>
+        </ul>
       </div>
       <div class="outcome-card">
         <h3>Academic &amp; scientific</h3>
-        <code>academic_search</code><code>paper_fulltext</code><code>citation_graph</code><code>clinical_search</code><code>monarch_search</code>
+        <ul class="tool-lines">
+          <li><code>academic_search</code>Papers from scholarly sources.</li>
+          <li><code>paper_fulltext</code>Full text of a paper from a DOI or link.</li>
+          <li><code>citation_graph</code>What cites a paper, and what it cites.</li>
+          <li><code>clinical_search</code>Studies from ClinicalTrials.gov.</li>
+          <li><code>monarch_search</code>Ranks diseases and genes by phenotype.</li>
+        </ul>
       </div>
       <div class="outcome-card">
         <h3>Legal, filings &amp; markets</h3>
-        <code>legal_search</code><code>filing_search</code><code>patent_search</code><code>econ_search</code>
+        <ul class="tool-lines">
+          <li><code>legal_search</code>US court opinions.</li>
+          <li><code>filing_search</code>SEC filings: 10-K, 10-Q, 8-K and more.</li>
+          <li><code>patent_search</code>Patents.</li>
+          <li><code>econ_search</code>FRED, World Bank, OECD and other economic data.</li>
+        </ul>
       </div>
       <div class="outcome-card">
         <h3>Deep, multi-step research</h3>
-        <code>sequential_search</code><code>get_research_session</code><code>research_export</code><code>research_panel</code>
+        <ul class="tool-lines">
+          <li><code>sequential_search</code>Multi-step research that keeps its sources.</li>
+          <li><code>get_research_session</code>Picks a session back up after context loss.</li>
+          <li><code>research_export</code>Exports a session as a report.</li>
+          <li><code>research_panel</code>Asks several models and shows where they disagree.</li>
+        </ul>
       </div>
       <div class="outcome-card">
         <h3>Formatting &amp; recon</h3>
-        <code>format_bibliography</code><code>brand_research</code><code>company_recon</code><code>awesome_list_search</code>
+        <ul class="tool-lines">
+          <li><code>format_bibliography</code>APA, MLA, BibTeX, RIS and CSL-JSON.</li>
+          <li><code>brand_research</code>A company's public brand identity: colors, logos, type.</li>
+          <li><code>company_recon</code>Certificate and Wayback records for a domain.</li>
+          <li><code>awesome_list_search</code>Community "awesome" lists on a GitHub topic.</li>
+        </ul>
       </div>
       <div class="outcome-card">
         <h3>Opt-in, off by default</h3>
-        <code>site_login</code><code>site_logout</code><code>monitor_query_save</code><code>monitor_query_check</code><code>memory_save</code><code>memory_recall</code><code>workspace_contribute</code><code>workspace_read</code><code>get_my_analytics</code>
+        <ul class="tool-lines">
+          <li><code>site_login</code>Sign in once, by hand, so pages you can open can be read as you. <code>site_logout</code> removes the login.</li>
+          <li><code>monitor_query_save</code>Save a search and get told when it finds something new. <code>monitor_query_check</code> runs it.</li>
+          <li><code>memory_save</code>Keep findings across sessions. <code>memory_recall</code> brings them back.</li>
+          <li><code>workspace_contribute</code>Share findings with a team. <code>workspace_read</code> reads them.</li>
+          <li><code>get_my_analytics</code>See your own usage.</li>
+        </ul>
       </div>
     </div>
     <p class="tool-count">Every tool listed here is checked against the docs automatically before each release. Full details: <a href="docs/tools/">Tools reference</a>.</p>
@@ -434,8 +610,8 @@
         <p>Yes. verify_citation checks that a source exists, matches a real record, was not retracted, and still resolves. audit_bibliography does this for a whole reference list in one pass, and also flags entries whose source does not say what the citation claims. The tools return evidence, not a verdict, so you decide what to believe. Their accuracy is measured on a labeled gold set that is published in the docs.</p>
       </details>
       <details class="faq-item">
-        <summary>Can it read pages that need a login?</summary>
-        <p>Yes, if you turn it on. site_login saves a login you create yourself, either as cookies or as a browser profile, and scrape_page then reads pages behind it as you. It is off by default, needs your consent, and the saved login is encrypted and tied to your user. It does not bypass paywalls or sign in for you.</p>
+        <summary>Can it read pages that need a login, like LinkedIn?</summary>
+        <p>Yes, if you turn it on. site_login saves a login you create yourself, either from your own browser or from a private login window where you sign in by hand (2FA works). scrape_page then reads pages behind it as you. We have tested LinkedIn, X, Facebook, Instagram and YouTube. It is off by default, needs your consent, and the saved login is encrypted, tied to your user, and removed by site_logout. Your password is never saved. It does not bypass paywalls. Some sites, such as LinkedIn, forbid automated access in their terms, so use it only where yours allow.</p>
       </details>
       <details class="faq-item">
         <summary>How many tools does it have, and what can it search?</summary>
@@ -447,7 +623,7 @@
 
 <section class="final-cta tint">
   <div class="wrap">
-    <h2>Give your AI a research assistant that doesn't lie to you</h2>
+    <h2>Give your AI a research desk that reaches what you can, and checks its work</h2>
     <div class="terminal" style="margin:0 auto;">
       <div class="terminal-line"><span class="prompt">$</span> claude mcp add --scope user web-researcher -- uvx web-researcher-mcp</div>
     </div>

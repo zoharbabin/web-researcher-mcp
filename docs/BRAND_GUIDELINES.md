@@ -10,24 +10,27 @@ This covers voice, logo, color tokens, and typography. For the visual system gov
 
 ### Tagline
 
-**Your AI research assistant that cites real sources and stays honest.**
+**Your AI research assistant. It searches, reads what you can open, and checks its sources.**
 
 ### Short description
 
-Search the web and primary sources, read full pages, verify citations. Runs on your machine.
+Search the web and primary sources, read pages behind your logins, verify citations. Runs locally.
 
 Max 100 characters (MCP registry limit). `TestMessagingSurfacesConsistent` checks that `server.json`, `glama.json`, `.claude-plugin/plugin.json` and `mcpb/manifest.json` start with this exact line. Change it here first, then sync those files.
 
 ### Supporting message
 
-Search the web or narrow it to sites you trust. Reach primary sources: SEC filings, court records, patents, clinical trials, full-text papers, and community threads. Read the whole page, not a snippet. Then check every citation before you rely on it: does it exist, was it retracted, does the link work, does the page say what is claimed. Runs on your machine. No API key needed to start.
+Search the web or narrow it to sites you trust. Reach primary sources: SEC filings, court records, patents, clinical trials, full-text papers, and community threads. Read the whole page, not a snippet, including pages behind your own login, such as LinkedIn or X (opt-in, encrypted). Check every citation before you rely on it: does it exist, was it retracted, does the link work, does the page say what is claimed. Keep your research across chats, watch topics for new results, and share findings with a team. Runs on your machine. No API key needed to start.
 
-### Four positioning pillars
+### Five positioning pillars
 
-1. **Verified, not asserted** — `verify_citation`, `audit_bibliography` and `verify_recommendation` check existence, retraction, dead links and mischaracterization. They return evidence, not a verdict. Accuracy is measured on a labeled gold set (`docs/TRUST_EVAL.md`).
-2. **Primary sources, not summaries** — Search lenses, plus filings, courts, patents, trials, economic data and full-text papers. Optional saved logins let the AI read pages you can already open (`site_login`).
-3. **Cross-checked and kept** — `research_panel` compares models, `sequential_search` keeps a session, `research_export` writes citations in 5 formats, and monitors flag new results.
-4. **Yours to run** — Local binary or your own server. Free, open source (MIT). No account. Nothing is stored unless you turn it on.
+Trust is one pillar of five. Do not lead every surface with citations alone.
+
+1. **Search everywhere you would look** — Web search with lenses for sites you trust, plus filings, courts, patents, trials, economic data, full-text papers and community threads. Works with no API key.
+2. **Works as you** — Optional saved logins (`site_login`, opt-in, encrypted, per user) let the AI read pages you can already open: LinkedIn, X, Facebook, Instagram, YouTube and more. You sign in yourself, 2FA included. The password is never saved, and `site_logout` removes the login.
+3. **Verified, not asserted** — `verify_citation`, `audit_bibliography` and `verify_recommendation` check existence, retraction, dead links and mischaracterization. They return evidence, not a verdict. Accuracy is measured on a labeled gold set (`docs/TRUST_EVAL.md`).
+4. **Keeps and watches** — `sequential_search` keeps a session, `research_panel` compares models, `research_export` writes citations in 5 formats, monitors flag new results, and opt-in memory and team workspaces carry findings forward.
+5. **Yours to run** — Local binary or your own server. Free, open source (MIT). No account. Nothing is stored unless you turn it on.
 
 ### Claims we can back
 
@@ -36,7 +39,8 @@ Search the web or narrow it to sites you trust. Reach primary sources: SEC filin
 | "Checks every citation" | "Never fabricates", "100% accurate" |
 | "Evidence, not a verdict" | "Proves a source is real" |
 | "Runs on your machine. Your queries go only to the search providers you pick." | "Nobody ever sees your searches" |
-| "Reads pages behind your own login, opt-in, encrypted" | "Bypasses paywalls" |
+| "Reads pages behind your own login, opt-in, encrypted" | "Bypasses paywalls", "gets around bot protection", "scrapes LinkedIn at scale" |
+| "Some sites, such as LinkedIn, forbid automated access in their terms. Use it where yours allow." (state this in the section that explains saved logins) | Naming a site without that note |
 | A stat with its source and date | A stat without a link |
 | "Works with any MCP client" | A client name we have not tested |
 

@@ -3,7 +3,7 @@
   "name": "web-researcher-mcp",
   "display_name": "Web Researcher MCP",
   "version": "0.0.0-template",
-  "description": "Search the web and primary sources, read full pages, verify citations. Runs on your machine. Lenses for trusted sites, plus SEC filings, court records, patents, clinical trials and full-text papers. Checks that each citation exists, was not retracted, and says what is claimed.",
+  "description": "Search the web and primary sources, read pages behind your logins, verify citations. Runs locally. Lenses for trusted sites, plus SEC filings, court records, patents, clinical trials and full-text papers. Checks that each citation exists, was not retracted, and says what is claimed.",
   "long_description": "Give Claude real web research: search, read full page content (including PDFs, Office docs, and YouTube transcripts), and cross-check citations before they ship. Works zero-config with the DuckDuckGo fallback — no API key needed to try it. Connect Brave, Serper, Tavily, Exa or others for richer results, or set multiple providers with automatic fallback so one outage never stops your research. The trust suite (`verify_citation`, `audit_bibliography`, `verify_recommendation`) catches fabricated, retracted, or mischaracterized sources — evidence, never a verdict, so you stay in control of what to believe.\n\nThis bundle ships only the binary needed for Claude Desktop; the full server exposes far more tools (academic, patent, legal, filings, clinical and economic search, multi-model research panels, and more) — see the documentation link for the complete registry.",
   "author": {
     "name": "Zohar Babin",

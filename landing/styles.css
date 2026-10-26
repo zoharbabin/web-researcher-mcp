@@ -540,3 +540,82 @@ footer a { color: var(--secondary); margin: 0 10px; }
   .topnav nav a:not(.cta) { display: none; }
   section { padding: 48px 0; }
 }
+
+/* ---------- Real-output examples ---------- */
+.demo-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.demo-card { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.demo-card h3 { margin: 0; font-size: 1.05rem; color: var(--heading); }
+.demo-card p { margin: 0; font-size: 0.92rem; }
+.demo-card .terminal { font-size: 0.74rem; padding: 16px 18px; line-height: 1.6; }
+.t-dim { color: #64748B; }
+.t-cmd { color: #fff; font-weight: 600; }
+.t-red { color: #E06C75; }
+.t-green { color: #3FB950; }
+.t-amber { color: #D29922; }
+.t-link { color: var(--accent); text-decoration: underline; }
+.t-badge { padding: 0 6px; font-weight: 700; color: #0A0E14; }
+.t-badge.red { background: #E06C75; }
+.t-badge.cyan { background: var(--accent); }
+.demo-note { text-align: center; margin: 24px auto 0; max-width: 720px; font-size: 0.82rem; color: var(--tertiary); }
+
+/* ---------- Measured results ---------- */
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 16px;
+}
+.stat-card {
+  background: #fff;
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  text-align: center;
+}
+.stat-card .big { display: block; font-size: 1.9rem; font-weight: 700; color: var(--primary); letter-spacing: -1px; }
+.stat-card .small { font-size: 0.88rem; color: var(--body); }
+
+/* ---------- What to ask ---------- */
+.prompt-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+.prompt-card {
+  background: #fff;
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  padding: 22px;
+}
+.prompt-card h3 { margin: 0 0 10px; font-size: 1rem; color: var(--heading); }
+.prompt-card blockquote {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  background: var(--canvas-tint);
+  border-left: 3px solid var(--primary);
+  border-radius: 0 8px 8px 0;
+  font-size: 0.92rem;
+  color: var(--heading);
+}
+.prompt-card .uses { font-size: 0.82rem; color: var(--secondary); margin: 0; }
+.prompt-card code, .tool-lines code {
+  background: var(--canvas-tint);
+  color: var(--primary-dark);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+
+/* ---------- Tool lists ---------- */
+.tool-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.tool-lines li { font-size: 0.86rem; line-height: 1.45; }
+.tool-lines code { display: block; width: fit-content; margin-bottom: 2px; }
+
+@media (max-width: 860px) {
+  .demo-grid, .prompt-grid { grid-template-columns: 1fr; }
+}

@@ -1,6 +1,6 @@
 site_name: Web Researcher MCP
 site_url: https://zoharbabin.com/web-researcher-mcp/docs/
-site_description: Search the web and primary sources, read full pages, verify citations. Runs on your machine.
+site_description: Search the web and primary sources, read pages behind your logins, verify citations. Runs locally.
 repo_url: https://github.com/zoharbabin/web-researcher-mcp
 repo_name: zoharbabin/web-researcher-mcp
 

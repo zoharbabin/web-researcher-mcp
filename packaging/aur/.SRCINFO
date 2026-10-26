@@ -1,5 +1,5 @@
 pkgbase = web-researcher-mcp
-	pkgdesc = Search the web and primary sources, read full pages, verify citations. Runs on your machine.
+	pkgdesc = Search the web and primary sources, read pages behind your logins, verify citations. Runs locally.
 	pkgver = 1.37.3
 	pkgrel = 1
 	url = https://github.com/zoharbabin/web-researcher-mcp
