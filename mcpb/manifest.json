@@ -66,9 +66,8 @@
     "SEARCH_PROVIDER": {
       "type": "string",
       "title": "Search Provider",
-      "description": "Search provider (google, brave, serper, searxng, searchapi, youcom, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik). Leave unset to use Google when its keys are provided, or DuckDuckGo (no key needed) otherwise.",
-      "required": false,
-      "default": "google"
+      "description": "Search provider (google, brave, serper, searxng, searchapi, youcom, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik). Leave empty to use DuckDuckGo (no key needed). Choose google only if you also set both Google keys.",
+      "required": false
     },
     "BRAVE_API_KEY": {
       "type": "string",
