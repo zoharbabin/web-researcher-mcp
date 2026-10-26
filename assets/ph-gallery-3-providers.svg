@@ -25,10 +25,10 @@
     <text x="69" y="178" font-size="13" font-weight="600" fill="#0F172A">Brave Search</text>
     <text x="306" y="178" font-size="11" fill="#64748B" text-anchor="end">primary</text>
 
-    <!-- Google CSE -->
+    <!-- Tavily -->
     <rect x="35" y="198" width="285" height="32" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
     <circle cx="53" cy="214" r="5" fill="#2563EB"/>
-    <text x="69" y="218" font-size="13" font-weight="600" fill="#0F172A">Google CSE</text>
+    <text x="69" y="218" font-size="13" font-weight="600" fill="#0F172A">Tavily</text>
     <text x="306" y="218" font-size="11" fill="#64748B" text-anchor="end">fallback</text>
 
     <!-- Serper -->
@@ -53,8 +53,8 @@
     <!-- +7 more (tall pill, 2 lines) -->
     <rect x="35" y="358" width="285" height="44" rx="18" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
     <circle cx="53" cy="374" r="5" fill="#93C5FD"/>
-    <text x="69" y="378" font-size="13" font-weight="600" fill="#0F172A">+ 7 more providers</text>
-    <text x="69" y="394" font-size="10" fill="#94A3B8">Tavily · Exa · SearchAPI · +4 more</text>
+    <text x="69" y="378" font-size="13" font-weight="600" fill="#0F172A">+ more providers</text>
+    <text x="69" y="394" font-size="10" fill="#94A3B8">Exa · SearchAPI · You.com · and more</text>
   </g>
 
   <!-- ============ COLUMN 2: ACADEMIC ============ -->

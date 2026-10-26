@@ -1,5 +1,5 @@
 {
-  description = "Your AI research assistant that cites real sources and stays honest";
+  description = "Search the web and primary sources, read full pages, verify citations. Runs on your machine.";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -65,7 +65,7 @@
           '';
 
           meta = with pkgs.lib; {
-            description = "Your AI research assistant that cites real sources and stays honest";
+            description = "Search the web and primary sources, read full pages, verify citations. Runs on your machine.";
             longDescription = ''
               web-researcher-mcp is an MCP server that gives AI assistants web search,
               content extraction, academic/patent/SEC/case-law/economic data lookup,

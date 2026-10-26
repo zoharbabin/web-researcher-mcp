@@ -4,7 +4,7 @@ This guide is designed for AI coding agents (Cline, Claude Code, Cursor) to auto
 
 ## What this is
 
-An MCP server that gives AI assistants web search, content extraction, academic paper lookup, patent search, SEC filings, US case law, economic data, and multi-step research capabilities — with real, verifiable citations.
+An MCP server that gives AI assistants web search, full-page reading, academic paper lookup, patent search, SEC filings, US case law, clinical trials, economic data, and multi-step research. It also checks citations: whether each source exists, was retracted, has a live link, and says what is claimed. Works with no API key (DuckDuckGo fallback).
 
 ## Prerequisites
 

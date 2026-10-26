@@ -51,8 +51,8 @@ DIST_NAME = "web-researcher-mcp"
 PKG_NAME = "web_researcher_mcp"
 BINARY = "web-researcher-mcp"
 SUMMARY = (
-    "Your AI research assistant that cites real sources and stays honest — "
-    "web search, content extraction, and multi-source research over MCP."
+    "Search the web and primary sources, read full pages, verify citations. "
+    "Runs on your machine."
 )
 HOMEPAGE = "https://github.com/zoharbabin/web-researcher-mcp"
 AUTHOR = "Zohar Babin"

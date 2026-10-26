@@ -7,12 +7,15 @@
   <strong>Your AI research assistant that cites real sources and stays honest.</strong>
 </p>
 <p align="center">
-  Search the entire web or narrow it down to just the sites you trust;<br/> medical journals, court databases, news outlets, academic papers.<br/> Analyze the full source, not just snippets. Links that work, citations you can trust,<br/> no made up closed garden pre-synthesized results.
+  Search the web and primary sources: SEC filings, court records, patents, clinical trials, full-text papers.<br/> Read the whole page, then check every citation before you rely on it.<br/> Runs on your machine. No API key needed to start.
 </p>
 
 ⭐ If you're tired of AI making things up, and [web-researcher-mcp](https://github.com/zoharbabin/web-researcher-mcp/) helps you, give us a star ⭐ — it helps more teams discover the project.  
 
-<video src="https://github.com/user-attachments/assets/cbf46fe1-f629-4540-b2bf-1282c69729a3" width="352" height="720"></video>
+<p align="center">
+  <a href="https://zoharbabin.com/web-researcher-mcp/"><img src="https://raw.githubusercontent.com/zoharbabin/web-researcher-mcp/main/landing/assets/demo-teaser.gif" width="720" alt="Cartoon: an AI genie pulls a citation out of a hat, and it poofs. Then real tool runs catch fake citations."></a><br/>
+  <sub>A cartoon of the problem, then real tool output. <a href="https://zoharbabin.com/web-researcher-mcp/">Watch the 43-second video</a>.</sub>
+</p>
 
 <p align="center">
   <a href="https://github.com/zoharbabin/web-researcher-mcp/actions/workflows/ci.yml"><img src="https://github.com/zoharbabin/web-researcher-mcp/actions/workflows/ci.yml/badge.svg" height="20" alt="CI"></a>
@@ -38,29 +41,6 @@ curl -LsSf https://astral.sh/uv/install.sh | sh        # macOS/Linux  (Windows: 
 claude mcp add --scope user web-researcher -- uvx web-researcher-mcp
 ```
 [`uv`](https://docs.astral.sh/uv/) fetches the right prebuilt binary for your platform and runs it — no Go, no compile, no manual PATH. Point any MCP client at `uvx web-researcher-mcp`. Also works with `uv tool install web-researcher-mcp` or `pip install web-researcher-mcp`.
-
-## Python SDK
-
-```python
-from web_researcher_mcp import WebResearcherClient
-
-async with WebResearcherClient() as client:
-    response = await client.web_search("CRISPR off-target effects 2024", num_results=5)
-    for r in response.results:
-        verified = await client.verify_citation(r.url)
-        print(r.title, "—", "✓" if verified.exists else "?")
-```
-
-Full documentation: [docs/PYTHON_CLIENT.md](docs/PYTHON_CLIENT.md)
-
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/zoharbabin/web-researcher-mcp/blob/main/examples/web_researcher_sdk_examples.ipynb)
-
-Sync wrapper (for scripts and notebooks that don't use async):
-```python
-with WebResearcherClient.sync() as client:
-    response = client.web_search("climate change 2024")
-    print(response.results[0].title)
-```
 
 **macOS (Homebrew):**
 ```bash
@@ -92,29 +72,54 @@ The Cursor / VS Code / LM Studio buttons install the zero-config `uvx` setup (yo
 
 **Using a different MCP client** or want to pass API keys? See [Connect to Your AI Assistant](#connect-to-your-ai-assistant) for the per-app config, and [Configuration](#configuration) to pick a search provider.
 
-Your AI can now search the web, read full articles, find academic papers, look up patents, and run multi-step research — only from sources you pick.
+Your AI can now search the web and primary sources, read full pages, check citations, and run multi-step research. Pick the sources you trust.
+
+### Python SDK
+
+```python
+from web_researcher_mcp import WebResearcherClient
+
+async with WebResearcherClient() as client:
+    response = await client.web_search("CRISPR off-target effects 2024", num_results=5)
+    for r in response.results:
+        verified = await client.verify_citation(r.url)
+        print(r.title, "—", "✓" if verified.exists else "?")
+```
+
+Full documentation: [docs/PYTHON_CLIENT.md](docs/PYTHON_CLIENT.md)
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/zoharbabin/web-researcher-mcp/blob/main/examples/web_researcher_sdk_examples.ipynb)
+
+Sync wrapper (for scripts and notebooks that don't use async):
+```python
+with WebResearcherClient.sync() as client:
+    response = client.web_search("climate change 2024")
+    print(response.results[0].title)
+```
 
 ---
 
 ## Why does this exist?
 
-Perplexity [gets its citations wrong over a third of the time](https://www.cjr.org/tow_center/we-compared-eight-ai-search-engines-theyre-all-bad-at-citing-news.php). It links to papers that don't exist, invents DOIs, and presents SEO spam with the same confidence as peer-reviewed research. ChatGPT's web search isn't much better — it can't tell a blog post from a court filing.
+AI answers look sourced and often aren't.
 
-If your work gets cited, published, submitted to a court, or shown to a client — you can't afford "probably real" sources.
+- **Courts:** the [Charlotin database](https://www.damiencharlotin.com/hallucinations/) lists over 2,200 court decisions that involve AI-hallucinated content. From 2027-01-01, [California SB 574](https://www.bakermckenzie.com/en/insight/publications/2026/10/united-states-california-imposes-new-ai-rules-on-lawyers) requires attorneys to personally verify every citation in a court filing.
+- **Search:** a 2026 [WashU audit](https://source.washu.edu/2026/09/washu-research-finds-gaps-in-google-ai-overview-citations-claims/) found that about 1 in 9 verifiable claims in Google AI Overviews was not backed by the page it cited (the authors call this an upper bound). The [Tow Center at CJR](https://www.cjr.org/tow_center/we-compared-eight-ai-search-engines-theyre-all-bad-at-citing-news.php) tested eight AI search engines and found all of them bad at citing news.
+- **Your work:** if it gets cited, published, filed, or shown to a client, "probably real" is not enough.
 
-**This tool fixes the root cause:** instead of searching the entire web and hoping, you tell your AI *exactly which sources to search*. We call these "search lenses" — curated lists of trusted sites for each field.
+**What this does about it:** your AI reads the real pages and records, from sources you choose, and then checks the citations. Every claim traces to a link you can open.
 
 | What you get | What that means for you |
 |---|---|
-| **Search lenses** — choose your sources by field | Your AI only sees the sites you trust (PubMed, SEC.gov, arXiv — not random blogs) |
-| **Research tools for every source type** | Papers, patents, SEC filings, US court records, economic data, news, web pages, images, full-text reading, grounded answers with citations, structured extraction, and multi-step deep research |
-| **Always has a backup** | Multiple search engines working together — if one has issues, the others pick up automatically |
-| **Reads full articles** | Doesn't just give you snippets — extracts and reads entire pages, PDFs, Word docs, even YouTube transcripts and Hacker News threads |
-| **Real citations, formatted** | Every source comes with a proper APA/MLA citation and a link that actually works |
-| **Your queries stay private** | Runs on your machine — nobody sees what you're researching. Not us, not anyone. |
-| **Paper trail** | Every search is logged so you can reproduce your research process months later |
+| **Verify before you rely** | `verify_citation`, `audit_bibliography` and `verify_recommendation` check that a source exists, was not retracted, has a live link, and says what is claimed. They return evidence, not a verdict. Accuracy is measured on a labeled gold set ([docs/TRUST_EVAL.md](docs/TRUST_EVAL.md)). |
+| **Primary sources** | Search lenses limit your AI to sites you trust. Dedicated tools cover SEC filings, US court records, patents, clinical trials, economic data and full-text papers. |
+| **Reads the whole page** | PDFs, Word and PowerPoint files, YouTube transcripts and Hacker News threads, not just snippets. Optional saved logins (`site_login`, opt-in, encrypted) let it read pages you can already open. |
+| **Cross-check and keep** | `research_panel` compares answers from several models. Sessions survive context loss. Export citations as APA, MLA, BibTeX, RIS or CSL-JSON. Saved-query monitors flag new results. |
+| **Runs on your machine** | Free, open source (MIT), no account. Your queries go only to the search providers you choose. |
+| **Always has a backup** | Several search engines work together. If one fails, the next takes over. |
+| **Paper trail** | An opt-in audit log records every tool call in a tamper-evident hash chain. Releases ship with signatures and SLSA provenance. |
 
-Works with Claude, Claude Desktop, Cursor, and any AI assistant that supports tool use.
+Works with Claude, Claude Desktop, Cursor, VS Code, Codex, Gemini CLI, and any AI assistant that supports MCP.
 
 ### Who uses this
 
@@ -125,6 +130,7 @@ Works with Claude, Claude Desktop, Cursor, and any AI assistant that supports to
 - **Medical researchers** — "Clinical decisions based on a health blog could hurt someone"
 - **Graduate students** — "I spent 3 hours tracking down a citation my AI invented"
 - **Enterprise teams** — "Our competitive research can't go through a third party's servers"
+- **Developers building agents** — "I want search and page reading without a per-query bill or a vendor lock-in"
 
 ---
 
@@ -134,22 +140,24 @@ Works with Claude, Claude Desktop, Cursor, and any AI assistant that supports to
 
 ## How It Compares
 
-|  | web-researcher-mcp | Perplexity | Scite.ai | Elicit |
+|  | web-researcher-mcp | Built-in AI search (Perplexity, ChatGPT, Google AI) | Search APIs (Tavily, Exa, Brave) | Paper tools (Scite, Consensus, Elicit) |
 |---|---|---|---|---|
-| You pick which sources are searched | **Yes** (built-in + custom lenses) | No | No | No |
-| Makes up citations | **Never** — every link is real | ~37% incorrect | Rare (journals only) | Rare |
-| Works across all fields | **Yes** — legal, medical, news, patents, everything | Yes | Journals only | Papers only |
-| Keeps your research private | **Yes** — runs on your machine | No (they see everything) | No | No |
-| Works inside your existing AI (Claude, Cursor, etc.) | **Yes** | No (separate app) | Partially | No (separate app) |
-| Can read full articles, not just snippets | **Yes** — pages, PDFs, Word docs, YouTube | No | No | Limited |
-| Cost | **Free forever** (open source) | $20/mo | $20/mo | $10-49/mo |
+| Checks that citations exist, are not retracted, and say what is claimed | **Yes** | No | No | Papers only |
+| You pick which sources are searched | **Yes** (lenses) | No | Domain filters | No |
+| SEC filings, court records, patents, clinical trials | **Yes** | Web pages only | Web pages only | No |
+| Reads full pages, PDFs, YouTube transcripts | **Yes** | Snippets and summaries | Varies | No |
+| Runs on your machine, no account | **Yes** | No | No (hosted API) | No (hosted) |
+| Works inside your existing AI client | **Yes** | Separate app | Yes | Partly |
+| Cost | **Free**, open source (MIT) | Subscription or bundled | Metered API key | Subscription |
+
+Based on each vendor's public docs, October 2026. If something is out of date, [open an issue](https://github.com/zoharbabin/web-researcher-mcp/issues).
 
 ### When to use what
 
-- **Perplexity** — Quick casual lookups where you don't need to cite your sources
-- **Scite.ai / Elicit** — Browsing a specific database of academic papers
+- **Built-in AI search** — Quick casual lookups where you don't need to cite your sources
+- **Search APIs** — You only need ranked links. Pair one with this tool (any of them plugs in as a provider) to also read pages and check citations
+- **Paper tools** — Browsing one database of academic papers
 - **web-researcher-mcp** — Anything where your reputation is attached to the research: client work, court filings, publications, grant proposals, medical decisions, journalism
-- **Claude built-in search** — Quick one-off lookups mid-conversation
 
 ---
 
@@ -187,7 +195,19 @@ Works with Claude, Claude Desktop, Cursor, and any AI assistant that supports to
 | `format_bibliography` | Turn collected sources into a formatted bibliography — APA, MLA, BibTeX, RIS, or CSL-JSON (Zotero/EndNote/Mendeley-ready) |
 | `research_panel` | Ask the same question to a panel of independently configured LLMs and compare answers — consensus, contradictions, and model-unique points, computed deterministically, never smoothed over by an arbiter model |
 
-Most tools above are always available. A few activate only when the right provider or config is present: `citation_graph` and `research_panel` require at least one configured backing provider; `filing_search` requires `EDGAR_CONTACT_EMAIL`; `local_search` requires `BRAVE_API_KEY`. Operators can also enable opt-in, consent-gated tools (per-user analytics, long-term memory, shared workspaces, saved-query monitoring) that appear only when their feature is turned on — see [`docs/TOOLS.md`](docs/TOOLS.md) for the authoritative, CI-verified tool list and full schemas.
+Most tools above are always available. A few activate only when the right provider or config is present: `citation_graph` and `research_panel` require at least one configured backing provider; `filing_search` requires `EDGAR_CONTACT_EMAIL`; `local_search` requires `BRAVE_API_KEY`.
+
+**Opt-in tools.** These stay off until you turn the feature on. Personal-data features also need recorded consent.
+
+| Tool | What it does | Turn on with |
+|------|-------------|--------------|
+| `site_login`, `site_logout` | Save or remove a login (cookies or a browser profile) so `scrape_page` can read pages behind it. Encrypted, per user. | `COOKIE_VAULT_ENABLED=true` |
+| `monitor_query_save`, `monitor_query_check` | Save a query, then ask later for only the results that are new | `MONITORING_ENABLED=true` |
+| `memory_save`, `memory_recall` | Keep findings across sessions, per user, with a retention limit | `MEMORY_ENABLED=true` |
+| `workspace_contribute`, `workspace_read` | Share findings into a team workspace, with provenance | `WORKSPACES_ENABLED=true` |
+| `get_my_analytics` | See your own usage stats | `USER_ANALYTICS_ENABLED=true` |
+
+See [`docs/TOOLS.md`](docs/TOOLS.md) for the authoritative, CI-verified tool list and full schemas.
 
 ### Ready-made research templates
 
@@ -305,8 +325,8 @@ claude mcp add --scope user web-researcher -- web-researcher-mcp
 ```bash
 # STDIO mode needs -i so the container's stdin stays attached for MCP JSON-RPC
 docker run -i --rm \
-           -e GOOGLE_CUSTOM_SEARCH_API_KEY=YOUR_KEY \
-           -e GOOGLE_CUSTOM_SEARCH_ID=YOUR_CX \
+           -e SEARCH_PROVIDER=brave \
+           -e BRAVE_API_KEY=YOUR_KEY \
            docker.io/zoharbabin/web-researcher-mcp:latest
 ```
 
@@ -329,22 +349,6 @@ The install script registers with Claude Code automatically. For other apps, add
     "web-researcher": {
       "command": "web-researcher-mcp",
       "env": {
-        "GOOGLE_CUSTOM_SEARCH_API_KEY": "YOUR_GOOGLE_API_KEY",
-        "GOOGLE_CUSTOM_SEARCH_ID": "YOUR_SEARCH_ENGINE_ID"
-      }
-    }
-  }
-}
-```
-
-Any provider works — pick one and set its key. For example, Brave (no Google keys needed):
-
-```json
-{
-  "mcpServers": {
-    "web-researcher": {
-      "command": "web-researcher-mcp",
-      "env": {
         "SEARCH_PROVIDER": "brave",
         "BRAVE_API_KEY": "YOUR_BRAVE_API_KEY"
       }
@@ -352,6 +356,15 @@ Any provider works — pick one and set its key. For example, Brave (no Google k
   }
 }
 ```
+
+No key yet? Leave `env` out. DuckDuckGo works with no setup.
+
+**Other clients:**
+
+| Client | Where |
+|---|---|
+| Gemini CLI | `gemini mcp add web-researcher uvx web-researcher-mcp`, or the JSON block above in `~/.gemini/settings.json` |
+| Codex | `~/.codex/config.toml`: `[mcp_servers.web-researcher]` with `command = "uvx"` and `args = ["web-researcher-mcp"]` |
 
 Swap in any provider from the [Configuration](#configuration) table by setting `SEARCH_PROVIDER` and that provider's key. Done — your AI assistant now has access to all research tools.
 
@@ -383,6 +396,8 @@ Set `SEARCH_PROVIDER=<name>` and supply that provider's key. Every provider work
 | Bluesky | `bluesky` | none | Built in — zero config (public AT Protocol API) |
 | GitHub | `github` | none (`GITHUB_TOKEN` optional, raises rate limit) | Built in — zero config (public REST Search API) |
 | Xquik | `xquik` | `XQUIK_API_KEY` | [dashboard.xquik.com](https://dashboard.xquik.com/) |
+
+> **Google PSE is ending.** Google closed its Custom Search JSON API to new customers and shuts it down on 2027-01-01 ([Google](https://developers.google.com/custom-search/v1/overview)). Existing keys work until then. For new setups, use Brave, Serper, SearXNG, or another provider.
 
 > Each provider has its own free tier, signup flow, and capability mix (images, news, freshness). See **[docs/PROVIDERS.md](docs/PROVIDERS.md)** for a full comparison (index classification, capability matrix, quick-pick guide) and **[docs/API_SETUP.md](docs/API_SETUP.md)** for step-by-step key setup. Set up more than one and the server fails over automatically — see [Search Providers](#search-providers).
 
@@ -438,7 +453,7 @@ You choose which search engine powers your research. All of them work with lense
 | Provider | Whole-Web | Images | News | Notes |
 |----------|:---------:|:------:|:----:|-------|
 | **DuckDuckGo** | Yes | — | — | Zero-config default (no API key needed); rate-limited for heavy use |
-| **Google PSE** | Yes | Yes | Yes | Programmable Search Engine; free tier: 100 queries/day |
+| **Google PSE** | Yes | Yes | Yes | Closed to new customers; ends 2027-01-01. Free tier: 100 queries/day |
 | **Brave Search** | Yes | Yes | Yes | Independent index; free tier available |
 | **Serper.dev** | Yes | Yes | Yes | Google-identical results |
 | **SearXNG** | Yes | Yes | Yes | Self-hosted, privacy-first, air-gapped deployments |
@@ -457,10 +472,10 @@ You choose which search engine powers your research. All of them work with lense
 Set up multiple search engines so if one has issues, your research doesn't stop:
 
 ```bash
-export SEARCH_ROUTING=brave,google,serper
+export SEARCH_ROUTING=brave,serper,duckduckgo
 ```
 
-If Brave is down, it automatically tries Google. If Google is rate-limited, it falls through to Serper. Your research just works.
+If Brave is down, it automatically tries Serper. If Serper is rate-limited, it falls through to DuckDuckGo. Your research just works.
 
 See **[docs/PROVIDERS.md](docs/PROVIDERS.md)** for a full provider comparison (index classification, capabilities, free tiers) and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#multi-provider-routing) for advanced routing options (per-topic routing, patent-specific providers, etc.).
 
@@ -473,10 +488,8 @@ If you only have one search API key, that works too — just set it up and go.
 
 **Multi-provider routing (recommended):**
 ```bash
-export SEARCH_ROUTING=brave,google,serper
+export SEARCH_ROUTING=brave,serper
 export BRAVE_API_KEY=BSAxxxxxxxxxx
-export GOOGLE_CUSTOM_SEARCH_API_KEY=AIza...
-export GOOGLE_CUSTOM_SEARCH_ID=017...
 export SERPER_API_KEY=...
 ```
 
@@ -498,11 +511,10 @@ export SEARCH_PROVIDER=exa
 export EXA_API_KEY=...
 ```
 
-**Single provider — Google PSE:**
+**Single provider — Brave:**
 ```bash
-export SEARCH_PROVIDER=google
-export GOOGLE_CUSTOM_SEARCH_API_KEY=AIza...
-export GOOGLE_CUSTOM_SEARCH_ID=017...
+export SEARCH_PROVIDER=brave
+export BRAVE_API_KEY=BSA...
 ```
 
 Any provider from the [Configuration](#configuration) table works the same way — set `SEARCH_PROVIDER` and its key(s).
@@ -575,7 +587,7 @@ export CUSTOM_LENSES_PATH=/path/to/my-lenses
 Your AI will now have `my-industry` as an available lens. Custom lenses load after the built-in set — a custom lens with the same `name` as a built-in one overrides it. You can add up to ~10 domains per lens.
 
 **Advanced options** (optional — most users can ignore these):
-- **cx** — Marks the lens as scoped by a Google Programmable Search Engine. The lens then skips `site:` injection. Set that engine as the global `GOOGLE_CUSTOM_SEARCH_ID`
+- **cx** — Marks the lens as scoped by a Google Programmable Search Engine. The lens then skips `site:` injection. Set that engine as the global `GOOGLE_CUSTOM_SEARCH_ID`. Google's API ends 2027-01-01, so prefer `domains` lenses
 - **goggle** — A Brave Goggle URL for server-side re-ranking (Brave only)
 
 </details>
@@ -585,6 +597,8 @@ Your AI will now have `my-industry` as an available lens. Custom lenses load aft
 ## Privacy & Security
 
 Your research queries go directly from your machine to the search provider you chose. They never pass through our servers (we don't have servers). The tool runs entirely on your computer.
+
+Features that store personal data (saved logins, memory, analytics, workspaces) are off by default. Each needs an opt-in, a recorded consent, and encrypted storage.
 
 <details>
 <summary><strong>Technical security details (for enterprise / compliance teams)</strong></summary>
@@ -604,7 +618,7 @@ For the full threat model, see [docs/SECURITY.md](docs/SECURITY.md).
 
 ### Claude Code
 
-Add to your MCP config (`~/.claude.json`). Set `SEARCH_PROVIDER` and the matching key for whichever provider you use (see the [Configuration](#configuration) table) — this example uses Google:
+Add to your MCP config (`~/.claude.json`). Set `SEARCH_PROVIDER` and the matching key for whichever provider you use (see the [Configuration](#configuration) table) — this example uses Brave:
 
 ```json
 {
@@ -612,9 +626,8 @@ Add to your MCP config (`~/.claude.json`). Set `SEARCH_PROVIDER` and the matchin
     "web-researcher": {
       "command": "/path/to/web-researcher-mcp",
       "env": {
-        "SEARCH_PROVIDER": "google",
-        "GOOGLE_CUSTOM_SEARCH_API_KEY": "AIza...",
-        "GOOGLE_CUSTOM_SEARCH_ID": "017..."
+        "SEARCH_PROVIDER": "brave",
+        "BRAVE_API_KEY": "BSA..."
       }
     }
   }
@@ -631,8 +644,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
     "web-researcher": {
       "command": "/path/to/web-researcher-mcp",
       "env": {
-        "GOOGLE_CUSTOM_SEARCH_API_KEY": "AIza...",
-        "GOOGLE_CUSTOM_SEARCH_ID": "017..."
+        "SEARCH_PROVIDER": "brave",
+        "BRAVE_API_KEY": "BSA..."
       }
     }
   }
@@ -649,8 +662,8 @@ Add to `.cursor/mcp.json` in your project root:
     "web-researcher": {
       "command": "/path/to/web-researcher-mcp",
       "env": {
-        "GOOGLE_CUSTOM_SEARCH_API_KEY": "AIza...",
-        "GOOGLE_CUSTOM_SEARCH_ID": "017..."
+        "SEARCH_PROVIDER": "brave",
+        "BRAVE_API_KEY": "BSA..."
       }
     }
   }
@@ -737,9 +750,9 @@ The disk cache lives at your OS cache directory (e.g., `~/Library/Caches/web-res
 <details>
 <summary><strong>Hitting search limits (429 errors)</strong></summary>
 
-If your provider's free tier runs out (e.g. Google PSE allows 100 searches/day):
+If your provider's free tier runs out:
 - Switch to a different provider — set `SEARCH_PROVIDER` to any other option (see [Configuration](#configuration)); each has its own free tier
-- Set up multiple providers (e.g. `SEARCH_ROUTING=brave,google`) — if one is rate-limited, it automatically falls through to the next
+- Set up multiple providers (e.g. `SEARCH_ROUTING=brave,serper`) — if one is rate-limited, it automatically falls through to the next
 - Or upgrade your provider's plan
 
 </details>

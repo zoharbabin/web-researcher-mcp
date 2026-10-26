@@ -20,32 +20,24 @@
 
   <!-- Terminal content -->
   <g font-family="'JetBrains Mono', 'SF Mono', monospace" font-size="16" fill="#E2E8F0">
-    <text x="130" y="170" fill="#06B6D4">$</text>
-    <text x="150" y="170">go install github.com/zoharbabin/web-researcher-mcp/cmd/web-researcher-mcp@latest</text>
+    <text x="130" y="180" fill="#64748B"># One line. Works now. DuckDuckGo needs no API key.</text>
+    <text x="130" y="215" fill="#06B6D4">$</text>
+    <text x="150" y="215">claude mcp add --scope user web-researcher -- uvx web-researcher-mcp</text>
 
-    <text x="130" y="210" fill="#64748B"># Add to your Claude Code MCP config:</text>
+    <text x="130" y="290" fill="#64748B"># Optional: add a Brave key for richer results.</text>
+    <text x="130" y="325" fill="#06B6D4">$</text>
+    <text x="150" y="325">claude mcp add --scope user web-researcher \</text>
+    <text x="190" y="355">-e SEARCH_PROVIDER=brave -e BRAVE_API_KEY=<tspan fill="#86EFAC">your-key</tspan> \</text>
+    <text x="190" y="385">-- uvx web-researcher-mcp</text>
 
-    <text x="130" y="250" fill="#06B6D4">$</text>
-    <text x="150" y="250">cat ~/.claude/mcp_servers.json</text>
-
-    <text x="130" y="290" fill="#A78BFA">{</text>
-    <text x="150" y="320" fill="#94A3B8">"web-researcher"</text><text x="320" y="320" fill="#E2E8F0">: {</text>
-    <text x="170" y="350" fill="#94A3B8">"command"</text><text x="280" y="350" fill="#E2E8F0">: </text><text x="300" y="350" fill="#86EFAC">"web-researcher-mcp"</text><text x="510" y="350" fill="#E2E8F0">,</text>
-    <text x="170" y="380" fill="#94A3B8">"env"</text><text x="230" y="380" fill="#E2E8F0">: {</text>
-    <text x="190" y="410" fill="#94A3B8">"GOOGLE_CUSTOM_SEARCH_API_KEY"</text><text x="540" y="410" fill="#E2E8F0">: </text><text x="560" y="410" fill="#86EFAC">"your-key"</text><text x="665" y="410" fill="#E2E8F0">,</text>
-    <text x="190" y="440" fill="#94A3B8">"GOOGLE_CUSTOM_SEARCH_ID"</text><text x="490" y="440" fill="#E2E8F0">: </text><text x="510" y="440" fill="#86EFAC">"your-cx"</text>
-    <text x="170" y="470" fill="#E2E8F0">}</text>
-    <text x="150" y="500" fill="#E2E8F0">}</text>
-    <text x="130" y="530" fill="#A78BFA">}</text>
-
-    <text x="130" y="580" fill="#06B6D4">$</text>
-    <text x="150" y="580">claude</text>
-    <text x="220" y="580" fill="#64748B"># That's it. Your AI can now research the web.</text>
+    <text x="130" y="460" fill="#06B6D4">$</text>
+    <text x="150" y="460">claude</text>
+    <text x="220" y="460" fill="#64748B"># Your AI can now search, read pages and verify citations.</text>
   </g>
 
   <!-- Bottom caption -->
   <text x="635" y="680"
         font-family="'Inter', 'SF Pro Display', sans-serif"
         font-size="18" font-weight="400" fill="#64748B"
-        text-anchor="middle" text-rendering="optimizeLegibility">Single static binary. Zero dependencies. Works with Claude, Cursor, and any MCP client.</text>
+        text-anchor="middle" text-rendering="optimizeLegibility">Needs uv. No API key to start. Works with Claude, Cursor, and any MCP client.</text>
 </svg>

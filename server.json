@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.zoharbabin/web-researcher-mcp",
   "title": "Web Researcher MCP",
-  "description": "Your AI research assistant that cites real sources and stays honest",
+  "description": "Search the web and primary sources, read full pages, verify citations. Runs on your machine.",
   "repository": {
     "url": "https://github.com/zoharbabin/web-researcher-mcp",
     "source": "github"
