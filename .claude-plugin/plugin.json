@@ -1,7 +1,7 @@
 {
   "name": "web-researcher-mcp",
   "displayName": "Web Researcher",
-  "description": "Search the web and primary sources, read full pages, verify citations. Runs on your machine. Lenses for trusted sites, plus SEC filings, court records, patents, clinical trials and full-text papers. Checks that each citation exists, was not retracted, and says what is claimed.",
+  "description": "Search the web and primary sources, read pages behind your logins, verify citations. Runs locally. Lenses for trusted sites, plus SEC filings, court records, patents, clinical trials and full-text papers. Opt-in encrypted logins let it read pages you can already open, such as LinkedIn or X. Checks that each citation exists, was not retracted, and says what is claimed. Keeps sessions, saved searches and memory across chats.",
   "version": "1.50.4",
   "author": {
     "name": "Zohar Babin",

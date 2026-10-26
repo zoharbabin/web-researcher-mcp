@@ -4,10 +4,10 @@
 </p>
 <h1 align="center">web-researcher-mcp</h1>
 <p align="center">
-  <strong>Your AI research assistant that cites real sources and stays honest.</strong>
+  <strong>Your AI research assistant. It searches, reads what you can open, and checks its sources.</strong>
 </p>
 <p align="center">
-  Search the web and primary sources: SEC filings, court records, patents, clinical trials, full-text papers.<br/> Read the whole page, then check every citation before you rely on it.<br/> Runs on your machine. No API key needed to start.
+  Search the web and primary sources: SEC filings, court records, patents, clinical trials, full-text papers.<br/> Read whole pages, including pages behind your own logins, like LinkedIn and X.<br/> Check every citation, keep your research across chats, and run it all on your machine.<br/> No API key needed to start.
 </p>
 
 ⭐ If you're tired of AI making things up, and [web-researcher-mcp](https://github.com/zoharbabin/web-researcher-mcp/) helps you, give us a star ⭐ — it helps more teams discover the project.  
@@ -72,7 +72,7 @@ The Cursor / VS Code / LM Studio buttons install the zero-config `uvx` setup (yo
 
 **Using a different MCP client** or want to pass API keys? See [Connect to Your AI Assistant](#connect-to-your-ai-assistant) for the per-app config, and [Configuration](#configuration) to pick a search provider.
 
-Your AI can now search the web and primary sources, read full pages, check citations, and run multi-step research. Pick the sources you trust.
+Your AI can now search the web and primary sources, read pages (including ones behind your logins), check citations, and run multi-step research. Pick the sources you trust.
 
 ### Python SDK
 
@@ -99,6 +99,19 @@ with WebResearcherClient.sync() as client:
 
 ---
 
+## What it does
+
+| | What it means for you |
+|---|---|
+| **Search everywhere you'd look** | Web search that you can limit to sites you trust (lenses). Dedicated tools for SEC filings, US court records, patents, clinical trials, economic data and full-text papers. Works with no API key. |
+| **Work as you** | Opt-in `site_login` lets your AI read pages you can already open: LinkedIn, X, Facebook, Instagram, YouTube and more. You sign in yourself, 2FA included, in your own browser or a private login window. Your password is never saved. Logins are encrypted, per user, expire, and `site_logout` removes them. Some sites, such as LinkedIn, forbid automated access in their terms. Use it where yours allow. |
+| **Check before you rely** | `verify_citation`, `audit_bibliography` and `verify_recommendation` check that a source exists, was not retracted, has a live link, and says what is claimed. They return evidence, not a verdict. Accuracy is measured on a labeled gold set ([docs/TRUST_EVAL.md](docs/TRUST_EVAL.md)). |
+| **Read the whole page** | PDFs, Word and PowerPoint files, YouTube transcripts and Hacker News threads, not just snippets. |
+| **Keep it and watch it** | Sessions survive context loss. `research_panel` compares answers from several models. Export citations as APA, MLA, BibTeX, RIS or CSL-JSON. Opt-in saved-query monitors flag new results, memory keeps findings across chats, and team workspaces share them. |
+| **Run it yourself** | Free, open source (MIT), no account. Your queries go only to the search providers you choose. Use one binary on your laptop, or a shared server for a team. |
+| **Always has a backup** | Several search engines work together. If one fails, the next takes over. |
+| **Paper trail** | An opt-in audit log records every tool call in a tamper-evident hash chain. Releases ship with signatures and SLSA provenance. |
+
 ## Why does this exist?
 
 AI answers look sourced and often aren't.
@@ -108,16 +121,6 @@ AI answers look sourced and often aren't.
 - **Your work:** if it gets cited, published, filed, or shown to a client, "probably real" is not enough.
 
 **What this does about it:** your AI reads the real pages and records, from sources you choose, and then checks the citations. Every claim traces to a link you can open.
-
-| What you get | What that means for you |
-|---|---|
-| **Verify before you rely** | `verify_citation`, `audit_bibliography` and `verify_recommendation` check that a source exists, was not retracted, has a live link, and says what is claimed. They return evidence, not a verdict. Accuracy is measured on a labeled gold set ([docs/TRUST_EVAL.md](docs/TRUST_EVAL.md)). |
-| **Primary sources** | Search lenses limit your AI to sites you trust. Dedicated tools cover SEC filings, US court records, patents, clinical trials, economic data and full-text papers. |
-| **Reads the whole page** | PDFs, Word and PowerPoint files, YouTube transcripts and Hacker News threads, not just snippets. Optional saved logins (`site_login`, opt-in, encrypted) let it read pages you can already open. |
-| **Cross-check and keep** | `research_panel` compares answers from several models. Sessions survive context loss. Export citations as APA, MLA, BibTeX, RIS or CSL-JSON. Saved-query monitors flag new results. |
-| **Runs on your machine** | Free, open source (MIT), no account. Your queries go only to the search providers you choose. |
-| **Always has a backup** | Several search engines work together. If one fails, the next takes over. |
-| **Paper trail** | An opt-in audit log records every tool call in a tamper-evident hash chain. Releases ship with signatures and SLSA provenance. |
 
 Works with Claude, Claude Desktop, Cursor, VS Code, Codex, Gemini CLI, and any AI assistant that supports MCP.
 
@@ -129,6 +132,7 @@ Works with Claude, Claude Desktop, Cursor, VS Code, Codex, Gemini CLI, and any A
 - **Journalists** — "I need to cross-check government records and court filings, not Perplexity summaries"
 - **Medical researchers** — "Clinical decisions based on a health blog could hurt someone"
 - **Graduate students** — "I spent 3 hours tracking down a citation my AI invented"
+- **Market and sales researchers** — "The best context is on pages I can only open when I'm signed in"
 - **Enterprise teams** — "Our competitive research can't go through a third party's servers"
 - **Developers building agents** — "I want search and page reading without a per-query bill or a vendor lock-in"
 

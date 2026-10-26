@@ -1062,7 +1062,7 @@ func TestMessagingSurfacesConsistent(t *testing.T) {
 		// build_wheels.py wraps the string over two lines, so compare the first words.
 		want := short
 		if rel == "scripts/build_wheels.py" {
-			want = "Search the web and primary sources, read full pages, verify citations."
+			want = "Search the web and primary sources, read pages behind your logins, verify citations."
 		}
 		if !strings.Contains(read(rel), want) {
 			t.Errorf("%s does not contain the short description from docs/BRAND_GUIDELINES.md", rel)

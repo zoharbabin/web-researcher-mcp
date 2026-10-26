@@ -2,7 +2,7 @@
 pkgname=web-researcher-mcp
 pkgver=1.37.3
 pkgrel=1
-pkgdesc="Search the web and primary sources, read full pages, verify citations. Runs on your machine."
+pkgdesc="Search the web and primary sources, read pages behind your logins, verify citations. Runs locally."
 arch=('x86_64' 'aarch64')
 url="https://github.com/zoharbabin/web-researcher-mcp"
 license=('MIT')

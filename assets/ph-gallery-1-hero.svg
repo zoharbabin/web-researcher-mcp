@@ -34,7 +34,7 @@
   <text x="635" y="516"
         font-family="'Inter', 'SF Pro Display', sans-serif"
         font-size="24" font-weight="400" fill="#475569" letter-spacing="-0.3"
-        text-anchor="middle" text-rendering="optimizeLegibility">Search the web and primary sources, read full pages, verify citations</text>
+        text-anchor="middle" text-rendering="optimizeLegibility">Search the web and primary sources, read pages behind your logins, verify citations</text>
 
   <!-- Stats row -->
   <g font-family="'Inter', 'SF Pro Display', sans-serif" text-rendering="optimizeLegibility">

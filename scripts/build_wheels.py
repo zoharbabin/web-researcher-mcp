@@ -51,8 +51,8 @@ DIST_NAME = "web-researcher-mcp"
 PKG_NAME = "web_researcher_mcp"
 BINARY = "web-researcher-mcp"
 SUMMARY = (
-    "Search the web and primary sources, read full pages, verify citations. "
-    "Runs on your machine."
+    "Search the web and primary sources, read pages behind your logins, verify citations. "
+    "Runs locally."
 )
 HOMEPAGE = "https://github.com/zoharbabin/web-researcher-mcp"
 AUTHOR = "Zohar Babin"
