@@ -175,6 +175,7 @@ type SearchConfig struct {
 	YouDotComAPIKey    string
 	TavilyAPIKey       string
 	ExaAPIKey          string
+	KeenableAPIKey     string
 	XQuikAPIKey        string
 	JinaAPIKey         string // optional; the Jina Reader scraper tier works keyless, a key raises its rate limit
 	SearXNGURL         string
@@ -380,6 +381,11 @@ func Load() (*Config, error) {
 		errs = append(errs, "TAVILY_API_KEY is required when SEARCH_PROVIDER=tavily")
 	}
 
+	keenableKey := os.Getenv("KEENABLE_API_KEY")
+	if provider == "keenable" && keenableKey == "" {
+		errs = append(errs, "KEENABLE_API_KEY is required when SEARCH_PROVIDER=keenable")
+	}
+
 	exaKey := os.Getenv("EXA_API_KEY")
 	if provider == "exa" && exaKey == "" {
 		errs = append(errs, "EXA_API_KEY is required when SEARCH_PROVIDER=exa")
@@ -557,6 +563,7 @@ func Load() (*Config, error) {
 			YouDotComAPIKey:       youDotComKey,
 			TavilyAPIKey:          tavilyKey,
 			ExaAPIKey:             exaKey,
+			KeenableAPIKey:        keenableKey,
 			XQuikAPIKey:           xquikKey,
 			JinaAPIKey:            os.Getenv("JINA_API_KEY"),
 			SearXNGURL:            searxngURL,
