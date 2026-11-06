@@ -435,6 +435,7 @@ Each structured-domain provider gets an independent circuit breaker and uses the
 | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_AI_API_KEY` | Direct provider keys | — |
 | `OLLAMA_BASE_URL`, `LM_STUDIO_BASE_URL` | Local model servers. Need `ALLOW_PRIVATE_IPS=true` unless the host is public | — |
 | `RESEARCH_PANEL_DEFAULT_MODELS` | Comma-separated `<provider>/<model-id>` list that replaces the auto-detected panel | — |
+| `CHEAPER_INFERENCE_API_KEY` | Cheaper Inference key. Not auto-detected: used only by `cheaperinference/<model-id>` entries in `RESEARCH_PANEL_DEFAULT_MODELS` | — |
 | `RESEARCH_PANEL_MAX_MODELS` | Cap on default panel size | `3` |
 | `RESEARCH_PANEL_PRICE_TABLE_PATH` | JSON price table for cost estimates | — |
 | `RESEARCH_PANEL_MAX_CALL_COST_USD` | Reject a call whose pre-flight estimate exceeds this. `0` = no cap | `0` |
