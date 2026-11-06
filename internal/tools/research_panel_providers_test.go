@@ -176,6 +176,36 @@ func TestResolveModelProviderSpec_MalformedSpec(t *testing.T) {
 	}
 }
 
+func TestAvailableModelProviders_CheaperInferenceExplicitOnly(t *testing.T) {
+	t.Setenv("AWS_ACCESS_KEY_ID", "")
+	t.Setenv("AWS_REGION", "")
+
+	// The key alone does not add a panel member: Cheaper Inference is not auto-detected.
+	if providers := AvailableModelProviders(config.ResearchPanelConfig{CheaperInferenceAPIKey: "test-key"}, false); len(providers) != 0 {
+		t.Errorf("expected no auto-detected providers from CHEAPER_INFERENCE_API_KEY alone, got %d", len(providers))
+	}
+
+	cfg := config.ResearchPanelConfig{
+		CheaperInferenceAPIKey: "test-key",
+		DefaultModels:          []string{"cheaperinference/gpt-5.4-mini", "cheaperinference/claude-sonnet-5"},
+	}
+	providers := AvailableModelProviders(cfg, false)
+	if len(providers) != 2 {
+		t.Fatalf("expected 2 cheaperinference panel members, got %d", len(providers))
+	}
+	for i, want := range []string{"gpt-5.4-mini", "claude-sonnet-5"} {
+		if providers[i].Name() != "cheaperinference" || providers[i].ModelID() != want {
+			t.Errorf("member %d = %s/%s, want cheaperinference/%s", i, providers[i].Name(), providers[i].ModelID(), want)
+		}
+	}
+}
+
+func TestResolveModelProviderSpec_CheaperInferenceNeedsKey(t *testing.T) {
+	if p := resolveModelProviderSpec("cheaperinference/gpt-5.4-mini", config.ResearchPanelConfig{}, false); p != nil {
+		t.Errorf("expected nil for a cheaperinference spec without CHEAPER_INFERENCE_API_KEY, got %v", p)
+	}
+}
+
 func TestClampModelProviders_ZeroOrNegativeMaxUsesDefault(t *testing.T) {
 	providers := []ModelProvider{
 		&mockModelProvider{name: "a"}, &mockModelProvider{name: "b"},

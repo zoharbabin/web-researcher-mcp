@@ -6,6 +6,7 @@ import (
 
 	"github.com/zendev-sh/goai/provider/anthropic"
 	"github.com/zendev-sh/goai/provider/bedrock"
+	"github.com/zendev-sh/goai/provider/cheaperinference"
 	"github.com/zendev-sh/goai/provider/compat"
 	"github.com/zendev-sh/goai/provider/google"
 	"github.com/zendev-sh/goai/provider/ollama"
@@ -160,6 +161,11 @@ func resolveModelProviderSpec(spec string, cfg config.ResearchPanelConfig, allow
 			return nil
 		}
 		return newGoaiModelProvider("openrouter", modelID, openrouter.Chat(modelID, openrouter.WithAPIKey(cfg.OpenRouterAPIKey)))
+	case "cheaperinference":
+		if cfg.CheaperInferenceAPIKey == "" {
+			return nil
+		}
+		return newGoaiModelProvider("cheaperinference", modelID, cheaperinference.Chat(modelID, cheaperinference.WithAPIKey(cfg.CheaperInferenceAPIKey)))
 	case "anthropic":
 		if cfg.AnthropicAPIKey == "" {
 			return nil

@@ -276,6 +276,10 @@ type ResearchPanelConfig struct {
 	DefaultModels    []string
 	MaxModels        int
 
+	// Cheaper Inference gateway key. Not auto-detected: it is used only by
+	// "cheaperinference/<model-id>" entries in RESEARCH_PANEL_DEFAULT_MODELS.
+	CheaperInferenceAPIKey string // CHEAPER_INFERENCE_API_KEY
+
 	// Per-provider default-model overrides for the auto-detected panel (no
 	// RESEARCH_PANEL_DEFAULT_MODELS set). Each is optional; empty falls back
 	// to the built-in default in research_panel_providers.go. Use
@@ -706,6 +710,8 @@ func Load() (*Config, error) {
 			MaxCallCostUSD:   envFloat("RESEARCH_PANEL_MAX_CALL_COST_USD", 0),
 			MaxDailyCostUSD:  envFloat("RESEARCH_PANEL_MAX_DAILY_COST_USD", 0),
 			DryRun:           envBool("RESEARCH_PANEL_DRY_RUN", false),
+
+			CheaperInferenceAPIKey: os.Getenv("CHEAPER_INFERENCE_API_KEY"),
 
 			OpenAIModel:              os.Getenv("RESEARCH_PANEL_OPENAI_MODEL"),
 			AnthropicModel:           os.Getenv("RESEARCH_PANEL_ANTHROPIC_MODEL"),
