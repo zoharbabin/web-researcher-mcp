@@ -55,24 +55,30 @@ func TestSearchCacheKey_VariesByPart(t *testing.T) {
 	}
 }
 
-// TestScrapeCacheKey_VariesByModeAndMaxLength guards the scrape cache key:
-// content is truncated to max_length before caching, so the key must vary by
-// URL, mode, AND max_length — otherwise a small-max_length request could serve
-// a later larger request a truncated body.
-func TestScrapeCacheKey_VariesByModeAndMaxLength(t *testing.T) {
+// TestScrapeCacheKey guards the scrape cache key. It varies by URL and mode.
+// max_length is in the key only for raw mode, where the body is cut before
+// caching. Full mode caches the whole page and cuts it per request (#824), so
+// a different max_length must hit the same entry.
+func TestScrapeCacheKey(t *testing.T) {
 	t.Parallel()
 	base := scrapeCacheKey("https://example.com", "full", 50000)
 	variants := map[string]string{
-		"url":       scrapeCacheKey("https://other.com", "full", 50000),
-		"mode":      scrapeCacheKey("https://example.com", "preview", 50000),
-		"maxLength": scrapeCacheKey("https://example.com", "full", 2000),
+		"url":  scrapeCacheKey("https://other.com", "full", 50000),
+		"mode": scrapeCacheKey("https://example.com", "preview", 50000),
+		"raw":  scrapeCacheKey("https://example.com", "raw", 50000),
 	}
 	for name, key := range variants {
 		if key == base {
 			t.Errorf("changing %q must change the scrape cache key", name)
 		}
 	}
-	// Determinism: identical inputs → identical key.
+	if scrapeCacheKey("https://example.com", "raw", 2000) == scrapeCacheKey("https://example.com", "raw", 50000) {
+		t.Error("raw mode key must vary by max_length")
+	}
+	if scrapeCacheKey("https://example.com", "full", 2000) != base {
+		t.Error("full mode key must not vary by max_length")
+	}
+	// Determinism: identical inputs give an identical key.
 	if scrapeCacheKey("https://example.com", "full", 50000) != base {
 		t.Error("scrape cache key must be deterministic for identical inputs")
 	}

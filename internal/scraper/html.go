@@ -13,9 +13,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/html"
 )
 
 // redditPostRe parses subreddit and post ID from any reddit.com post URL.
@@ -112,13 +114,15 @@ func (p *Pipeline) parseHTMLBody(ctx context.Context, url string, body []byte, c
 	// carrying the real content (e.g. a HuggingFace Space wrapper) is stripped
 	// by that same call. Capture first.
 	iframes := extractIframeCandidates(doc, url)
+	// MUST precede the Remove() calls below: JSON-LD, <header> and byline nodes
+	// are stripped by them.
+	meta := extractHTMLMetadata(doc)
 
 	doc.Find("script, style, nav, footer, aside, header, noscript, iframe, form").Remove()
 	doc.Find("[role='navigation'], [role='banner'], [role='complementary']").Remove()
 	doc.Find(".ad, .ads, .advertisement, .sidebar, .nav, .footer, .header, .menu").Remove()
 
-	meta := extractHTMLMetadata(doc)
-	content := extractMainContent(doc)
+	content := extractMainContent(doc, documentBase(doc, url))
 
 	content = cleanText(content)
 	truncated := false
@@ -130,10 +134,13 @@ func (p *Pipeline) parseHTMLBody(ctx context.Context, url string, body []byte, c
 	// Raw mode's returned body must respect the caller's maxLength the same
 	// way Content does — body itself is only bounded by MaxHTMLBytes, which is
 	// deliberately larger so extraction reaches the real article text.
+	// The raw cut sets rawTruncated only: the flag for full mode describes the
+	// returned text, not these bytes (#823).
 	rawBody := string(body)
+	rawTruncated := false
 	if len(rawBody) > maxLength {
 		rawBody = truncateBytes(rawBody, maxLength)
-		truncated = true
+		rawTruncated = true
 	}
 
 	res := &ScrapeResult{
@@ -154,6 +161,7 @@ func (p *Pipeline) parseHTMLBody(ctx context.Context, url string, body []byte, c
 		// extractMainContent stripped it down to Content — raw mode returns
 		// this instead of Content once tieredFallback picks a winner.
 		rawBody:        rawBody,
+		rawTruncated:   rawTruncated,
 		rawContentType: ct,
 	}
 	// Attach structured data only when something was captured, so ordinary pages
@@ -175,55 +183,322 @@ type htmlMetadata struct {
 	publishDate string
 }
 
+// extractHTMLMetadata is the one metadata extractor shared by every HTML tier
+// (html, stealth). It MUST run before anything removes elements: the JSON-LD
+// <script>, <header> and byline nodes it reads are all stripped later.
+//
+// For author and publish date the first source that yields a value wins, in the
+// order listed on dateFromDoc and authorFromDoc. Publish dates are normalized to
+// ISO YYYY-MM-DD (or YYYY / YYYY-MM when the page gives no more). A value that
+// cannot be parsed is skipped, never guessed.
 func extractHTMLMetadata(doc *goquery.Document) htmlMetadata {
 	title := doc.Find("title").First().Text()
 	if ogTitle, exists := doc.Find(`meta[property="og:title"]`).Attr("content"); exists {
 		title = ogTitle
 	}
 
-	var author, siteName, publishDate string
-	if a, exists := doc.Find(`meta[name="author"]`).Attr("content"); exists {
-		author = a
-	}
+	var siteName string
 	if s, exists := doc.Find(`meta[property="og:site_name"]`).Attr("content"); exists {
 		siteName = s
 	}
-	if d, exists := doc.Find(`meta[property="article:published_time"]`).Attr("content"); exists {
-		publishDate = d
-	} else if d, exists := doc.Find(`meta[name="date"]`).Attr("content"); exists {
-		publishDate = d
-	}
+
+	metas := collectMetaTags(doc)
+	jsonld := parseJSONLDObjects(doc)
 
 	return htmlMetadata{
 		title:       strings.TrimSpace(title),
-		author:      author,
+		author:      authorFromDoc(doc, metas, jsonld),
 		siteName:    siteName,
-		publishDate: publishDate,
+		publishDate: dateFromDoc(doc, metas, jsonld),
 	}
 }
 
-func extractMainContent(doc *goquery.Document) string {
+// collectMetaTags maps each lower-cased meta name/property to its first
+// non-empty content value.
+func collectMetaTags(doc *goquery.Document) map[string]string {
+	metas := map[string]string{}
+	doc.Find("meta").Each(func(_ int, s *goquery.Selection) {
+		content := strings.TrimSpace(mustAttr(s, "content"))
+		if content == "" {
+			return
+		}
+		for _, attr := range []string{"name", "property"} {
+			if k := strings.ToLower(strings.TrimSpace(mustAttr(s, attr))); k != "" {
+				if _, seen := metas[k]; !seen {
+					metas[k] = content
+				}
+			}
+		}
+	})
+	return metas
+}
+
+// parseJSONLDObjects returns every JSON-LD object in the page, flattening
+// top-level arrays and @graph lists. Invalid blocks are skipped.
+func parseJSONLDObjects(doc *goquery.Document) []map[string]any {
+	var out []map[string]any
+	var walk func(v any, depth int)
+	walk = func(v any, depth int) {
+		if depth > 3 {
+			return
+		}
+		switch t := v.(type) {
+		case []any:
+			for _, e := range t {
+				walk(e, depth+1)
+			}
+		case map[string]any:
+			out = append(out, t)
+			if g, ok := t["@graph"]; ok {
+				walk(g, depth+1)
+			}
+		}
+	}
+	doc.Find(`script[type="application/ld+json"]`).Each(func(_ int, s *goquery.Selection) {
+		raw := strings.TrimSpace(s.Text())
+		if raw == "" || len(raw) > maxJSONLDBlockBytes {
+			return
+		}
+		var v any
+		if json.Unmarshal([]byte(raw), &v) != nil {
+			return
+		}
+		walk(v, 0)
+	})
+	return out
+}
+
+// dateFromDoc returns the publish date, first match wins: article:published_time,
+// og:article:published_time, meta name=date, DC.date, dcterms.created,
+// citation_publication_date, JSON-LD datePublished, <time datetime> inside
+// article or header, [itemprop=datePublished], then the byline pattern.
+func dateFromDoc(doc *goquery.Document, metas map[string]string, jsonld []map[string]any) string {
+	for _, k := range []string{
+		"article:published_time", "og:article:published_time", "date",
+		"dc.date", "dcterms.created", "citation_publication_date",
+	} {
+		if d := normalizeDate(metas[k]); d != "" {
+			return d
+		}
+	}
+	for _, obj := range jsonld {
+		if v, ok := obj["datePublished"].(string); ok {
+			if d := normalizeDate(v); d != "" {
+				return d
+			}
+		}
+	}
+	var found string
+	doc.Find("article time[datetime], header time[datetime]").EachWithBreak(func(_ int, s *goquery.Selection) bool {
+		found = normalizeDate(mustAttr(s, "datetime"))
+		return found == ""
+	})
+	if found != "" {
+		return found
+	}
+	doc.Find(`[itemprop="datePublished"]`).EachWithBreak(func(_ int, s *goquery.Selection) bool {
+		for _, v := range []string{mustAttr(s, "datetime"), mustAttr(s, "content"), s.Text()} {
+			if found = normalizeDate(v); found != "" {
+				break
+			}
+		}
+		return found == ""
+	})
+	if found != "" {
+		return found
+	}
+	return dateFromByline(doc)
+}
+
+// maxBylineTextBytes bounds the byline text scanned for a date, so a byline
+// container wrapping the whole page cannot match a date from the body.
+const maxBylineTextBytes = 400
+
+var (
+	// bylineOnDateRe matches "on 14 Sep, 2026" (day, abbreviated or full month).
+	bylineOnDateRe = regexp.MustCompile(`\bon (\d{1,2} [A-Z][a-z]{2,8},? \d{4})\b`)
+	// bylineMonthDateRe matches "September 14, 2026".
+	bylineMonthDateRe = regexp.MustCompile(`\b([A-Z][a-z]{2,8} \d{1,2}, \d{4})\b`)
+)
+
+// dateFromByline reads a visible byline such as "Alicia Malone on 14 Sep, 2026".
+// It only looks inside a byline container (a[rel=author], .author-link,
+// [class*=byline]) and its parent. A date that does not parse yields no date.
+func dateFromByline(doc *goquery.Document) string {
+	var found string
+	doc.Find(`a[rel="author"], .author-link, [class*="byline"]`).EachWithBreak(func(_ int, s *goquery.Selection) bool {
+		for _, text := range []string{s.Text(), s.Parent().Text()} {
+			text = truncateBytes(collapseSpace(text), maxBylineTextBytes)
+			for _, re := range []*regexp.Regexp{bylineOnDateRe, bylineMonthDateRe} {
+				if m := re.FindStringSubmatch(text); m != nil {
+					if found = normalizeDate(m[1]); found != "" {
+						return false
+					}
+				}
+			}
+		}
+		return true
+	})
+	return found
+}
+
+// authorFromDoc returns the author, first match wins: meta name=author,
+// article:author, JSON-LD author name, [itemprop=author], a[rel=author] text.
+func authorFromDoc(doc *goquery.Document, metas map[string]string, jsonld []map[string]any) string {
+	for _, k := range []string{"author", "article:author"} {
+		if a := cleanAuthor(metas[k]); a != "" {
+			return a
+		}
+	}
+	for _, obj := range jsonld {
+		if a := cleanAuthor(jsonLDAuthorNames(obj["author"])); a != "" {
+			return a
+		}
+	}
+	var found string
+	doc.Find(`[itemprop="author"]`).EachWithBreak(func(_ int, s *goquery.Selection) bool {
+		text := s.Find(`[itemprop="name"]`).First().Text()
+		if strings.TrimSpace(text) == "" {
+			text = mustAttr(s, "content")
+		}
+		if strings.TrimSpace(text) == "" {
+			text = s.Text()
+		}
+		found = cleanAuthor(text)
+		return found == ""
+	})
+	if found != "" {
+		return found
+	}
+	doc.Find(`a[rel="author"]`).EachWithBreak(func(_ int, s *goquery.Selection) bool {
+		found = cleanAuthor(s.Text())
+		return found == ""
+	})
+	return found
+}
+
+// jsonLDAuthorNames reads the name(s) from a JSON-LD author value: a string, an
+// object with name, or a list of either. Several names are joined with ", ".
+func jsonLDAuthorNames(v any) string {
+	switch t := v.(type) {
+	case string:
+		return t
+	case map[string]any:
+		name, _ := t["name"].(string)
+		return name
+	case []any:
+		var names []string
+		for _, e := range t {
+			if n := cleanAuthor(jsonLDAuthorNames(e)); n != "" {
+				names = append(names, n)
+			}
+		}
+		return strings.Join(names, ", ")
+	}
+	return ""
+}
+
+// maxAuthorBytes caps an extracted author so a mis-matched container cannot
+// return a paragraph.
+const maxAuthorBytes = 200
+
+// cleanAuthor trims and collapses whitespace. A URL (some sites put a profile
+// link in article:author) or an over-long value is not a name and yields "".
+func cleanAuthor(s string) string {
+	s = collapseSpace(s)
+	if s == "" || len(s) > maxAuthorBytes {
+		return ""
+	}
+	if l := strings.ToLower(s); strings.HasPrefix(l, "http://") || strings.HasPrefix(l, "https://") {
+		return ""
+	}
+	return s
+}
+
+func collapseSpace(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
+var (
+	partialDateRe = regexp.MustCompile(`^\d{4}(-\d{2})?$`)
+	// dateLayouts are tried in order. The result keeps the date as written on
+	// the page (no time zone shift).
+	dateLayouts = []string{
+		time.RFC3339, "2006-01-02T15:04:05", "2006-01-02T15:04", "2006-01-02 15:04:05",
+		"2006-01-02", "2006/01/02", "2006.01.02",
+		time.RFC1123Z, time.RFC1123, time.RFC822Z, time.RFC822,
+		"January 2, 2006", "Jan 2, 2006", "2 January 2006", "2 Jan 2006",
+		"2 Jan, 2006", "2 January, 2006",
+	}
+)
+
+// normalizeDate turns a page date into ISO YYYY-MM-DD. A bare year or year and
+// month is kept as given (no day is invented). Anything else that does not
+// parse returns "".
+func normalizeDate(s string) string {
+	s = collapseSpace(s)
+	if s == "" {
+		return ""
+	}
+	if partialDateRe.MatchString(s) {
+		return s
+	}
+	for _, layout := range dateLayouts {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t.Format("2006-01-02")
+		}
+	}
+	return ""
+}
+
+func extractMainContent(doc *goquery.Document, base *url.URL) string {
 	selectors := []string{"article", "main", "[role='main']", ".content", ".post-content", "#content", "body"}
 	for _, sel := range selectors {
 		node := doc.Find(sel).First()
 		if node.Length() > 0 {
-			content := extractText(node)
+			content := extractText(node, base)
 			if len(content) > 100 {
 				return content
 			}
 		}
 	}
-	return extractText(doc.Find("body"))
+	return extractText(doc.Find("body"), base)
 }
 
-func extractText(sel *goquery.Selection) string {
+// textBlockSelector lists the elements extractText renders as blocks.
+const textBlockSelector = "p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, table, figcaption, dt, dd"
+
+// extractText renders the block elements under sel as Markdown-ish text. base is
+// the page URL that relative links resolve against (#827): in-page links with an
+// http(s) target are kept as [text](url). A nil base turns links off, so the
+// text is exactly what the elements hold.
+func extractText(sel *goquery.Selection, base *url.URL) string {
 	var parts []string
 	// "table" is walked here and "td, th" are deliberately NOT — table cells are
 	// emitted ONLY through their owning <table> (as a GFM pipe table), which
 	// eliminates the old bug where a data table became disconnected cell
 	// fragments (#48).
-	sel.Find("p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, table, figcaption, dt, dd").Each(func(_ int, s *goquery.Selection) {
+	//
+	// "a" is walked too, but only for a link that sits outside every other walked
+	// element and holds none (a bare <a> in a <div> or <figure>, as report
+	// download links often are), which would otherwise be dropped (#827).
+	// base == nil turns links off, so then no "a" is visited.
+	selector := textBlockSelector
+	if base != nil {
+		selector += ", a"
+	}
+	sel.Find(selector).Each(func(_ int, s *goquery.Selection) {
 		tag := goquery.NodeName(s)
+		if tag == "a" {
+			if s.ParentsFiltered(textBlockSelector).Length() > 0 || s.Find(textBlockSelector).Length() > 0 {
+				return
+			}
+			var link strings.Builder
+			if writeInlineText(&link, s.Nodes[0], base) && strings.TrimSpace(link.String()) != "" {
+				parts = append(parts, strings.TrimSpace(link.String()))
+			}
+			return
+		}
 		if tag == "table" {
 			// Only the OUTERMOST table emits: a table nested inside another is
 			// skipped here (its text surfaces via the outer table's fallback),
@@ -245,7 +520,13 @@ func extractText(sel *goquery.Selection) string {
 		if s.ParentsFiltered("table").Length() > 0 {
 			return
 		}
-		text := strings.TrimSpace(s.Text())
+		// <pre> is literal text (code): links are not rewritten there.
+		var text string
+		if tag == "pre" {
+			text = strings.TrimSpace(s.Text())
+		} else {
+			text = strings.TrimSpace(inlineText(s, base))
+		}
 		if text != "" {
 			switch {
 			case strings.HasPrefix(tag, "h") && len(tag) == 2 && tag[1] >= '1' && tag[1] <= '6':
@@ -267,6 +548,124 @@ func extractText(sel *goquery.Selection) string {
 		}
 	})
 	return strings.Join(parts, "\n\n")
+}
+
+// documentBase is the URL that relative links on the page resolve against: the
+// page URL, moved by a <base href> if the page has one. It returns nil when the
+// page URL is not an absolute http(s) URL, which turns links off.
+func documentBase(doc *goquery.Document, pageURL string) *url.URL {
+	base, err := url.Parse(pageURL)
+	if err != nil || !isHTTPURL(base) {
+		return nil
+	}
+	if href, ok := doc.Find("base[href]").First().Attr("href"); ok {
+		if ref, err := url.Parse(strings.TrimSpace(href)); err == nil {
+			if b := base.ResolveReference(ref); isHTTPURL(b) {
+				return b
+			}
+		}
+	}
+	return base
+}
+
+func isHTTPURL(u *url.URL) bool {
+	return u != nil && u.Host != "" && (u.Scheme == "http" || u.Scheme == "https")
+}
+
+// linkTextEscaper escapes the characters that would end a Markdown link text.
+var linkTextEscaper = strings.NewReplacer(`[`, `\[`, `]`, `\]`)
+
+// linkURLEscaper escapes the characters that would end a Markdown link target.
+var linkURLEscaper = strings.NewReplacer(" ", "%20", "(", "%28", ")", "%29", "\n", "%0A", "\t", "%09", "\r", "%0D")
+
+// inlineText returns the text under s with every usable link written as
+// [text](absolute-url). It is s.Text() for a page without usable links, byte for
+// byte. A link is usable when its href resolves against base to an http(s) URL
+// and its text is not empty. Fragment-only, javascript:, mailto:, tel: and other
+// schemes are dropped to plain text. A link whose text is the URL is written as
+// the URL alone. A nil base turns links off. Link text and URLs are untrusted
+// page content, like the rest of the text. Nothing is fetched.
+func inlineText(s *goquery.Selection, base *url.URL) string {
+	var b strings.Builder
+	for _, n := range s.Nodes {
+		writeInlineText(&b, n, base)
+	}
+	return b.String()
+}
+
+// writeInlineText writes the text under n to b. It reports whether n itself was
+// written as a link.
+func writeInlineText(b *strings.Builder, n *html.Node, base *url.URL) bool {
+	switch n.Type {
+	case html.TextNode:
+		b.WriteString(n.Data)
+		return false
+	case html.ElementNode:
+		if n.Data == "a" && base != nil {
+			if target, ok := linkTarget(n, base); ok {
+				var inner strings.Builder
+				for c := n.FirstChild; c != nil; c = c.NextSibling {
+					writeInlineText(&inner, c, nil) // no links inside a link
+				}
+				return writeLink(b, inner.String(), target)
+			}
+		}
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		writeInlineText(b, c, base)
+	}
+	return false
+}
+
+// linkTarget resolves the href of anchor a against base. ok is false when the
+// anchor is not a usable link.
+func linkTarget(a *html.Node, base *url.URL) (string, bool) {
+	var href string
+	for _, attr := range a.Attr {
+		if attr.Key == "href" {
+			href = strings.TrimSpace(attr.Val)
+			break
+		}
+	}
+	if href == "" || strings.HasPrefix(href, "#") {
+		return "", false
+	}
+	ref, err := url.Parse(href)
+	if err != nil {
+		return "", false
+	}
+	target := base.ResolveReference(ref)
+	if !isHTTPURL(target) {
+		return "", false
+	}
+	return target.String(), true
+}
+
+// writeLink writes the link text as [text](target) and reports true. Spaces
+// around the text stay outside the brackets, and inner whitespace is collapsed
+// so the link stays on one line. With no text it writes raw as is and reports
+// false.
+func writeLink(b *strings.Builder, raw, target string) bool {
+	text := collapseSpace(raw)
+	if text == "" {
+		b.WriteString(raw)
+		return false
+	}
+	lead, trail := "", ""
+	if raw != strings.TrimLeftFunc(raw, unicode.IsSpace) {
+		lead = " "
+	}
+	if raw != strings.TrimRightFunc(raw, unicode.IsSpace) {
+		trail = " "
+	}
+	b.WriteString(lead)
+	if text == target || text == strings.TrimSuffix(target, "/") {
+		b.WriteString(linkURLEscaper.Replace(target))
+	} else {
+		b.WriteString("[" + linkTextEscaper.Replace(text) + "](" + linkURLEscaper.Replace(target) + ")")
+	}
+	b.WriteString(trail)
+	return true
 }
 
 // extractTable renders an HTML <table> as a GitHub-flavored markdown pipe table

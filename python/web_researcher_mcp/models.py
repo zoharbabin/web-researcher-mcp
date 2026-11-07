@@ -1986,6 +1986,8 @@ class ScrapePageHighlight:
 @dataclass
 class ScrapePageMetadata:
     author: Optional[str] = None
+    publishedDate: Optional[str] = None
+    siteName: Optional[str] = None
     title: Optional[str] = None
 
     @classmethod
@@ -1994,6 +1996,8 @@ class ScrapePageMetadata:
             return None
         return cls(
             author=d.get('author'),
+            publishedDate=d.get('publishedDate'),
+            siteName=d.get('siteName'),
             title=d.get('title'),
         )
 
@@ -2016,13 +2020,17 @@ class ScrapePageResponse:
     highlights: list[ScrapePageHighlight] = field(default_factory=list)
     loginHint: Optional[str] = None
     loginRequired: Optional[bool] = None
+    maxLengthApplied: Optional[int] = None
     metadata: Optional[ScrapePageMetadata] = None
+    nextOffset: Optional[int] = None
+    offset: Optional[int] = None
     raw: Optional[bool] = None
     retractionStatus: Optional[Any] = None
     sizeCategory: Optional[str] = None
     sourceType: Optional[str] = None
     sparsityWarning: Optional[str] = None
     structuredData: Optional[StructuredData] = None
+    totalLength: Optional[int] = None
     truncated: Optional[bool] = None
     trust: Optional[str] = None
     url: Optional[str] = None
@@ -2050,13 +2058,17 @@ class ScrapePageResponse:
             highlights=[ScrapePageHighlight.from_dict(i) for i in (d.get('highlights') or [])],
             loginHint=d.get('loginHint'),
             loginRequired=d.get('loginRequired'),
+            maxLengthApplied=d.get('maxLengthApplied'),
             metadata=ScrapePageMetadata.from_dict(d.get('metadata')) if d.get('metadata') else None,
+            nextOffset=d.get('nextOffset'),
+            offset=d.get('offset'),
             raw=d.get('raw'),
             retractionStatus=d.get('retractionStatus') or None,
             sizeCategory=d.get('sizeCategory'),
             sourceType=d.get('sourceType'),
             sparsityWarning=d.get('sparsityWarning'),
             structuredData=StructuredData.from_dict(d.get('structuredData')) if d.get('structuredData') else None,
+            totalLength=d.get('totalLength'),
             truncated=d.get('truncated'),
             trust=d.get('trust'),
             url=d.get('url'),

@@ -92,12 +92,10 @@ func sanitizeClaimFetchError(err error) string {
 	return msg
 }
 
-// sparseWordThreshold mirrors scraper's content-volume floor (#358): below this
-// many words, a claim-coverage result is annotated as unreliable. Kept as an
-// independent constant (not imported from internal/scraper) because the two
-// packages' thresholds are conceptually related but not contractually coupled —
-// each package owns its own quality-signal cutoff.
-const sparseWordThreshold = 150
+// sparseWordThreshold is the content-volume floor (#358): below this many
+// words, a claim-coverage result is annotated as unreliable. One definition,
+// shared with the scraper via internal/content.
+const sparseWordThreshold = content.SparseWordThreshold
 
 // claimCoverageFromContent runs the lexical, model-free coverage check against
 // already-fetched content — no scrape. It lets a caller that already has the

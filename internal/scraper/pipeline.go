@@ -167,6 +167,10 @@ type ScrapeResult struct {
 	// threshold. Callers (verify_citation, audit_bibliography, search_and_scrape)
 	// surface this alongside — never instead of — Partial.
 	SparsityWarning string
+	// scannedPages is the page count of a PDF that parsed but had no text layer
+	// (scanned images). Not exported: stampSparsity turns it into SparsityWarning
+	// and the document-route fallback uses it to keep the result (#828).
+	scannedPages int
 	// StructuredData holds machine-readable page metadata (JSON-LD, Open Graph,
 	// citation_* tags) extracted by the HTML-extraction tiers (#46) — scrapeStealth
 	// and scrapeHTML, the only tiers that parse a goquery.Document. The remaining
@@ -222,6 +226,10 @@ type ScrapeResult struct {
 	// content) — ScrapeRaw falls back to Content for those. Unexported:
 	// pipeline-internal, never serialized.
 	rawBody string
+	// rawTruncated reports whether rawBody was cut to maxLength. Every tier
+	// that sets rawBody sets this too. ScrapeRaw copies it into Truncated.
+	// Truncated itself describes Content only (#823). Unexported.
+	rawTruncated bool
 	// rawContentType is the real HTTP Content-Type header (or equivalent)
 	// paired with rawBody, reported by ScrapeRaw instead of Content's coarse
 	// constant ("html", "markdown", "pdf"). Unexported: pipeline-internal,
@@ -487,8 +495,11 @@ func (p *Pipeline) Scrape(ctx context.Context, rawURL string, maxLength int) (*S
 		// or a document-parse error because the fetched bytes turned out to
 		// be HTML) retry through the same tiered HTML pipeline ordinary pages
 		// use, instead of giving up outright.
-		if isDocRoute && err != nil {
+		// It also runs when the route returns empty content or a bot-wall stub
+		// with a nil error (an Imperva page at a .pdf URL, #828).
+		if isDocRoute && needsDocFallback(result, err) {
 			result, err = p.scrapeWithTieredFallback(ctx, url, maxLength)
+			result, err = docFallbackResult(url, result, err)
 		}
 	} else {
 		result, err = p.scrapeWithTieredFallback(ctx, url, maxLength)
@@ -510,9 +521,8 @@ func (p *Pipeline) Scrape(ctx context.Context, rawURL string, maxLength int) (*S
 }
 
 // sparseWordThreshold is the WordCount below which SparsityWarning fires.
-// 150 words is roughly one short paragraph — below a real article's lede,
-// above the placeholder text a bot-wall or stub page typically ships.
-const sparseWordThreshold = 150
+// Shared with the tool layer via content.SparseWordThreshold.
+const sparseWordThreshold = content.SparseWordThreshold
 
 // stampSparsity populates WordCount and SparsityWarning from r.Content.
 // Deliberately called once, at the single point every scrape path (direct
@@ -526,10 +536,40 @@ func stampSparsity(r *ScrapeResult) {
 	if r == nil {
 		return
 	}
-	r.WordCount = content.WordCount(r.Content)
-	if r.WordCount < sparseWordThreshold {
-		r.SparsityWarning = fmt.Sprintf("Extracted content is thin (%d words); claim checks against this source may be unreliable.", r.WordCount)
+	r.WordCount, r.SparsityWarning = content.SparsityWarning(r.Content)
+	if r.WordCount == 0 && r.scannedPages > 0 {
+		r.SparsityWarning = fmt.Sprintf("PDF has %d pages but no text layer (scanned images). OCR is not supported.", r.scannedPages)
 	}
+}
+
+// needsDocFallback reports whether a document-route result should be retried
+// through the tiered pipeline: it failed, came back empty, or is a bot-wall stub
+// (e.g. an Imperva HTML page served at a .pdf URL, #828). A PDF that parsed with
+// pages but no text layer is a real answer, so it is kept.
+func needsDocFallback(r *ScrapeResult, err error) bool {
+	if err != nil || r == nil {
+		return true
+	}
+	if r.scannedPages > 0 {
+		return false
+	}
+	return strings.TrimSpace(r.Content) == "" || looksLikeBotWall(r.Content)
+}
+
+// docFallbackResult turns a still-empty result of the document-route fallback
+// into an error. Every tier came back empty or walled, so an empty success
+// would be misleading (#828). A scanned PDF is not an error.
+func docFallbackResult(url string, r *ScrapeResult, err error) (*ScrapeResult, error) {
+	if err != nil || r == nil || r.scannedPages > 0 {
+		return r, err
+	}
+	if looksLikeBotWall(r.Content) {
+		return nil, blockedError(url, r.Tier, nil, "document URL returned a bot-wall page and every tier failed")
+	}
+	if strings.TrimSpace(r.Content) == "" {
+		return nil, contentError(url, "document URL returned no extractable content from any tier")
+	}
+	return r, nil
 }
 
 // scrapeWithTieredFallback runs the free-tier ladder (markdown -> stealth ->
@@ -1014,8 +1054,9 @@ func (p *Pipeline) ScrapeRaw(ctx context.Context, rawURL string, maxLength int) 
 		result, err = nativeRoute()
 		release()
 		// Same document/HTML mismatch fallback as Scrape (#631).
-		if isDocRoute && err != nil {
+		if isDocRoute && needsDocFallback(result, err) {
 			result, err = p.tieredFallback(ctx, url, maxLength, 0, true)
+			result, err = docFallbackResult(url, result, err)
 		}
 	} else {
 		// tieredFallback acquires per-tier-attempt internally (#472).
@@ -1034,6 +1075,7 @@ func (p *Pipeline) ScrapeRaw(ctx context.Context, rawURL string, maxLength int) 
 	// path of its own) that never populate rawBody.
 	if result.rawBody != "" {
 		result.Content = result.rawBody
+		result.Truncated = result.rawTruncated
 		result.ContentType = result.rawContentType
 	}
 	result.Tier = "raw:" + result.Tier
