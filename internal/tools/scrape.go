@@ -236,11 +236,8 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 			output["sparsityWarning"] = sparsityWarning
 		}
 
-		if result.Title != "" {
-			output["metadata"] = map[string]any{
-				"title":  result.Title,
-				"author": result.Author,
-			}
+		if md := scrapeMetadata(result); md != nil {
+			output["metadata"] = md
 		}
 
 		// Extraction provenance: which tier produced the content. Surfaced so a
@@ -510,6 +507,28 @@ func detectScholarlyDOI(sd *scraper.StructuredData, body, pageURL string) string
 	return detectDOI(top)
 }
 
+// scrapeMetadata builds the scrape_page metadata block. It is written when any
+// of title, author, publishedDate or siteName is set, so a page with a date but
+// no title still reports it. author and title are always present in the block
+// (possibly empty); publishedDate and siteName are omitted when empty. Returns
+// nil when there is nothing to report.
+func scrapeMetadata(r *scraper.ScrapeResult) map[string]any {
+	if r.Title == "" && r.Author == "" && r.PublishDate == "" && r.SiteName == "" {
+		return nil
+	}
+	md := map[string]any{
+		"title":  r.Title,
+		"author": r.Author,
+	}
+	if r.PublishDate != "" {
+		md["publishedDate"] = r.PublishDate
+	}
+	if r.SiteName != "" {
+		md["siteName"] = r.SiteName
+	}
+	return md
+}
+
 // scrapeCacheKey keys a cached scrape by URL, mode, AND the effective
 // max_length. max_length must be part of the key because content is truncated
 // to it before caching — without it, a small-max_length request could serve a
@@ -532,9 +551,10 @@ func scrapeCacheKey(url, mode string, maxLength int) string {
 	// never produced. v10 adds the githubTrustSignals field (#546). v11 makes
 	// wordCount/sparsityWarning count the delivered (post-dedup) content (#822)
 	// and fixes the truncated flag, which no longer reports a cut of the raw
-	// HTML/PDF bytes in full mode (#823). A v10 blob would serve the old values.
-	// Bump on any future shape change.
-	fmt.Fprintf(h, "scrape|v11|%s|%s|%d", url, mode, maxLength)
+	// HTML/PDF bytes in full mode (#823). v12 adds metadata.publishedDate and
+	// metadata.siteName, and writes the metadata block when any field is set
+	// (#826). Bump on any future shape change.
+	fmt.Fprintf(h, "scrape|v12|%s|%s|%d", url, mode, maxLength)
 	return "scrape:" + hex.EncodeToString(h.Sum(nil))[:32]
 }
 

@@ -247,8 +247,10 @@ var scrapePageOutputSchema = map[string]any{
 		"metadata": map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"title":  map[string]any{"type": "string"},
-				"author": map[string]any{"type": "string"},
+				"title":         map[string]any{"type": "string"},
+				"author":        map[string]any{"type": "string"},
+				"publishedDate": map[string]any{"type": "string", "description": "Publish date as ISO YYYY-MM-DD (YYYY or YYYY-MM when the page gives no more). Read from page meta, JSON-LD, <time>, or a visible byline. Omitted when the page has no parsable date."},
+				"siteName":      map[string]any{"type": "string", "description": "Site name from og:site_name. Omitted when absent."},
 			},
 		},
 		"structuredData": map[string]any{

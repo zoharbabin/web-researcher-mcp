@@ -75,6 +75,10 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int,
 	// Capture cross-origin iframe candidates (#399) BEFORE extractArticleContent
 	// strips <iframe> — same precedent as structured data above.
 	iframes := extractIframeCandidates(doc, url)
+	// Capture author, site name and publish date BEFORE extractArticleContent
+	// strips <script>, <header> and other nodes they live in. Same extractor as
+	// the html tier.
+	meta := extractHTMLMetadata(doc)
 
 	content := extractArticleContent(doc)
 	// A near-empty shell with no iframe candidates has nothing further to
@@ -120,6 +124,9 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int,
 		Content:     content,
 		ContentType: "html",
 		Title:       title,
+		Author:      meta.author,
+		SiteName:    meta.siteName,
+		PublishDate: meta.publishDate,
 		Truncated:   truncated,
 		// Surface the decompressed HTML size so the pipeline can detect a
 		// JS-rendered SPA shell (large HTML, little extracted text) and keep

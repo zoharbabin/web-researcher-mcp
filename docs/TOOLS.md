@@ -154,7 +154,7 @@ type ScrapeOutput struct {
     ExtractionQuality string  `json:"extractionQuality,omitempty"` // complete when the pipeline returned a confident extraction; partial when every tier was exhausted and the best-quality candidate was returned instead. Never an error. Omitted in raw mode.
     WordCount         int     `json:"wordCount,omitempty"`         // words in the delivered `content` (#358, #822); orthogonal to ExtractionQuality — a "complete" extraction can still be a thin paywall/bot-wall stub. Omitted in raw mode.
     SparsityWarning   string  `json:"sparsityWarning,omitempty"`   // present only when WordCount (of the delivered content) is below ~150 — the content may be too thin for a reliable claim check (#358). Omitted in raw mode and whenever content is not thin.
-    Metadata        *Metadata `json:"metadata,omitempty"` // present only when a title was extracted (full/preview only)
+    Metadata        *Metadata `json:"metadata,omitempty"` // present when any of title, author, publishedDate or siteName was found (full/preview only)
     StructuredData  *StructuredData `json:"structuredData,omitempty"` // page-embedded machine-readable metadata; present only when found (full/preview, HTML pages)
     ForumSignals    *ForumSignals   `json:"forumSignals,omitempty"`   // Reddit engagement metadata extracted from JSON-LD (#247), or Bluesky post engagement read natively via the AT Protocol API (#285); present only for Reddit posts where the HTML tier ran, or Bluesky posts
     SourceType      string    `json:"sourceType"`     // typed classification (#62): peer_reviewed|official_docs|government|news_publication|blog|forum|wiki|social_media|unknown
@@ -182,8 +182,10 @@ type RetractionStatus struct {
 }
 
 type Metadata struct {
-    Title  string `json:"title"`
-    Author string `json:"author"`
+    Title         string `json:"title"`
+    Author        string `json:"author"`
+    PublishedDate string `json:"publishedDate,omitempty"` // ISO YYYY-MM-DD (YYYY or YYYY-MM if the page gives no more); omitted when no parsable date
+    SiteName      string `json:"siteName,omitempty"`      // og:site_name; omitted when absent
 }
 
 type ForumSignals struct {
@@ -272,6 +274,15 @@ type CitationFormats struct {
 On a **cache hit**, the result also carries a top-level `_meta` block with cache-freshness provenance (`cached: true`, `ageSeconds`, `maxAgeSeconds`, `freshness`) — see [Cache Freshness Provenance](#cache-freshness-provenance). Freshly fetched scrapes have no `_meta`.
 
 In `raw` mode the output additionally carries `"raw": true`, and `contentType` is the server's real `Content-Type` header (it may be empty). No `metadata` block is emitted.
+
+**Author, date and site name (#826).** The html and stealth tiers share one extractor, so both fill `metadata.author`, `metadata.publishedDate` and `metadata.siteName`, and the citation uses them. The first source that gives a value wins.
+
+| Field | Sources, in order |
+|---|---|
+| `publishedDate` | `article:published_time`, `og:article:published_time`, `meta[name=date]`, `DC.date`, `dcterms.created`, `citation_publication_date`, JSON-LD `datePublished`, `<time datetime>` in `article` or `header`, `[itemprop=datePublished]`, visible byline |
+| `author` | `meta[name=author]`, `article:author`, JSON-LD `author.name`, `[itemprop=author]`, `a[rel=author]` text |
+
+The byline fallback reads text like `Alicia Malone on 14 Sep, 2026` or `September 14, 2026`, only inside a byline element (`a[rel=author]`, `.author-link`, `[class*=byline]`) or its parent. A date that does not parse gives no date. No day is ever guessed. The browser tier still returns the title only.
 
 **Tables in content (#48).** HTML `<table>` elements are rendered as GitHub-flavored markdown pipe tables inside `content` (header row + `---` separator + data rows), preserving row/column structure instead of flattening cells into disconnected fragments. Pipe characters in cells are escaped and multi-line cells are collapsed to a single row. Layout, malformed, single-column, and nested tables degrade gracefully to plain text — never an error, never a panic.
 
