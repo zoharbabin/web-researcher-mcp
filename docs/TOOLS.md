@@ -129,7 +129,7 @@ Extract content from a URL, supporting web pages, documents, YouTube videos, Hac
 |-------|------|----------|---------|-------------|
 | `url` | string | yes | — | Valid HTTP(S) URL |
 | `mode` | string | no | `full` | `full` (cleaned readable text), `preview` (first ~5000 bytes), `raw` (verbatim unsanitized bytes — see [Raw Mode](#raw-mode)) |
-| `max_length` | int | no | 50000 | Bytes returned by this call. Capped at 5,000,000 (5 MB) for all modes; in `preview` mode it is forced to 5000. Applies to `raw` mode as an `io.LimitReader` cap on the fetched bytes. When the result has `nextOffset`, call again with `offset=nextOffset` |
+| `max_length` | int | no | 30000 (`raw`: 50000) | Bytes returned by this call. Capped at 5,000,000 (5 MB) for all modes; in `preview` mode it is forced to 5000. In `full` mode the serialized result is also capped near 35,000 chars, so a large value can be cut earlier (see `maxLengthApplied`). Applies to `raw` mode as an `io.LimitReader` cap on the fetched bytes. When the result has `nextOffset`, call again with `offset=nextOffset` |
 | `offset` | int | no | 0 | Byte position in the cleaned text where this call starts. `full` mode only: a negative value, or any value above 0 with `preview` or `raw`, returns a tool error. See [Reading a long page in parts](#reading-a-long-page-in-parts) |
 | `sessionId` | string | no | — | Link to a `sequential_search` session |
 | `anonymous` | bool | no | `false` | `true` skips any saved `site_login` (cookies or browser profile) and reads the page as a signed-out visitor |
@@ -147,6 +147,7 @@ type ScrapeOutput struct {
     TotalLength     int       `json:"totalLength"`     // full mode only (omitted in preview/raw): bytes of cleaned text for the whole page (after dedup), up to the 2,000,000-byte scrape cap (#824)
     Offset          int       `json:"offset"`          // full mode only (omitted in preview/raw): start of this part; echoes the `offset` input (#824)
     NextOffset      int       `json:"nextOffset,omitempty"`  // full mode only: where the next part starts; omitted on the last part (#824)
+    MaxLengthApplied int      `json:"maxLengthApplied,omitempty"` // full mode only: the byte cap used when the part was cut shorter than max_length to keep the result near 35,000 chars; omitted otherwise (#825)
     EstimatedTokens int       `json:"estimatedTokens"`
     SizeCategory    string    `json:"sizeCategory"`   // small, medium, large, very_large
     Citation        *Citation `json:"citation"`       // always present
@@ -426,7 +427,7 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
 
 4. CONTENT PROCESSING
    ├─ Sanitize: strip hidden text, zero-width chars, dangerous patterns
-   ├─ Slice (full mode): cut `max_length` bytes at `offset`, at a paragraph/sentence boundary (preview: Truncate)
+   ├─ Slice (full mode): cut `max_length` bytes at `offset` (less if the result would pass ~35,000 chars), at a paragraph/sentence boundary (preview: Truncate)
    ├─ Estimate tokens: length / 4
    └─ Extract citation: from <meta> tags, URL, response headers
 ```
@@ -441,6 +442,9 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
 | `offset` | Start of this part |
 | `nextOffset` | Start of the next part. Omitted on the last part |
 | `truncated` | `true` exactly when `nextOffset` is present |
+| `maxLengthApplied` | Byte cap used for this part. Present only when it is below `max_length` (see below) |
+
+**Result size budget.** The client rejects tool results over a size limit, so a `full` result stays under 35,000 serialized chars. The server subtracts the size of every other field (citation, structured data, metadata) from that budget, and the part gets what is left, up to `max_length`. JSON escaping can make text larger, so the server measures the final result and shrinks the part until it fits. When the part is cut shorter than `max_length`, `maxLengthApplied` reports the cap, `truncated` is `true` and `nextOffset` is the true continuation. Do not retry with a larger `max_length`: read the next part with `offset=nextOffset`. A page that fits is returned unchanged, with no `maxLengthApplied`. If `structuredData` (up to 64 KB) would leave under 8,000 bytes for the text, it is left out of that response (and so are `highlights`, `githubTrustSignals` and `forumSignals` if still needed); the cached page keeps them. Raw mode is not affected: it returns a `resource_link` above the link threshold.
 
 When `nextOffset` is present, call again with `offset=nextOffset` and the same `max_length`. The parts join with no gap and no overlap. Each cut part ends with `[content truncated, continue with offset=N]`, which is not page text: remove it before joining. Cuts fall on a paragraph, sentence, line, or word boundary, and always on a UTF-8 character start. An `offset` inside a multi-byte character moves forward to the next character. An `offset` at or past `totalLength` returns empty `content`, `truncated: false`, and no `nextOffset`.
 
@@ -2170,7 +2174,8 @@ Scrape-tier timeouts are hardcoded in source; only HTTP server timeouts are env-
 ### Content Size Limits
 | Content | Limit |
 |---------|-------|
-| `scrape_page` content — default `max_length` | 50 KB |
+| `scrape_page` content — default `max_length` | 30 KB (`raw`: 50 KB) |
+| `scrape_page` full mode — serialized result | about 35,000 chars (`maxInlineResultBytes`) |
 | `scrape_page` content — hard cap (`maxScrapeLength`, all modes incl. `raw`) | 5 MB |
 | `search_and_scrape` per-source content — default | 50 KB |
 | `search_and_scrape` combined content — default `total_max_length` | 300 KB |

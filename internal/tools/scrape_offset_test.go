@@ -70,18 +70,11 @@ func TestScrapePage_OffsetReadsLongPageInPartsWithOneScrape(t *testing.T) {
 	defer ts.Close()
 	ctx, session := scrapeOffsetSession(t, ts)
 
-	// One large read is the reference.
-	whole, _ := callScrape(ctx, t, session, map[string]any{"url": ts.URL, "max_length": 500000})
-	if whole["truncated"] != false {
-		t.Fatalf("large read: truncated = %v, want false", whole["truncated"])
-	}
-	if _, has := whole["nextOffset"]; has {
-		t.Error("large read: nextOffset must be omitted on the last page")
-	}
-	want, _ := whole["content"].(string)
-	total := int(whole["totalLength"].(float64))
+	// The reference is the page read in parts at the default size. A single
+	// large read is not possible: results are capped near 35,000 chars.
+	want, total, _ := readAllParts(ctx, t, session, ts.URL, 0)
 	if total != len(want) || total < 100000 {
-		t.Fatalf("totalLength = %d, len(content) = %d, want equal and >= 100000", total, len(want))
+		t.Fatalf("totalLength = %d, len(joined) = %d, want equal and >= 100000", total, len(want))
 	}
 	scrapeHits := hits.Load()
 	if scrapeHits == 0 {
@@ -95,7 +88,7 @@ func TestScrapePage_OffsetReadsLongPageInPartsWithOneScrape(t *testing.T) {
 		if pages > 10 {
 			t.Fatal("paging did not finish")
 		}
-		out, _ := callScrape(ctx, t, session, map[string]any{"url": ts.URL, "max_length": 40000, "offset": offset})
+		out, _ := callScrape(ctx, t, session, map[string]any{"url": ts.URL, "max_length": 20000, "offset": offset})
 		if int(out["offset"].(float64)) != offset {
 			t.Errorf("page %d: offset = %v, want %d", pages, out["offset"], offset)
 		}
@@ -124,7 +117,7 @@ func TestScrapePage_OffsetReadsLongPageInPartsWithOneScrape(t *testing.T) {
 		t.Errorf("read in %d pages, want at least 3", pages)
 	}
 	if got.String() != want {
-		t.Errorf("joined pages differ from the single read (len %d vs %d)", got.Len(), len(want))
+		t.Errorf("joined pages differ from the reference read (len %d vs %d)", got.Len(), len(want))
 	}
 	if n := hits.Load(); n != scrapeHits {
 		t.Errorf("server saw %d requests after the first scrape, want %d: later pages must come from the cache", n, scrapeHits)
@@ -230,5 +223,34 @@ func TestPageScrapeEnvelope(t *testing.T) {
 	}
 	if _, ok := pageScrapeEnvelope([]byte(`{"x":1}`), 0, 9); ok {
 		t.Error("cache body without content must report not ok")
+	}
+}
+
+// readAllParts reads a page to the end in parts of maxLength bytes (0 = default)
+// and returns the joined text, the reported totalLength and the part count. It
+// fails the test when a part is out of order or the loop does not end.
+func readAllParts(ctx context.Context, t *testing.T, session *mcp.ClientSession, url string, maxLength int) (string, int, int) {
+	t.Helper()
+	var got strings.Builder
+	offset, pages, total := 0, 0, 0
+	for {
+		pages++
+		if pages > 200 {
+			t.Fatal("paging did not finish")
+		}
+		args := map[string]any{"url": url, "offset": offset}
+		if maxLength > 0 {
+			args["max_length"] = maxLength
+		}
+		out, _ := callScrape(ctx, t, session, args)
+		total = int(out["totalLength"].(float64))
+		page := out["content"].(string)
+		next, hasNext := out["nextOffset"]
+		if !hasNext {
+			got.WriteString(page)
+			return got.String(), total, pages
+		}
+		got.WriteString(offsetMarkerRe.ReplaceAllString(page, ""))
+		offset = int(next.(float64))
 	}
 }
