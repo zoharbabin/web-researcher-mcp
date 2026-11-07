@@ -421,20 +421,26 @@ func TestSizeCategory(t *testing.T) {
 // Dedup Tests
 // =============================================================================
 
+// longPara returns a paragraph that clears the dedup floor (dedupMinBytes and
+// dedupMinWords), so it is eligible for removal when repeated.
+func longPara(label string) string {
+	return label + " paragraph with enough words and bytes to count as repeated boilerplate text."
+}
+
 func TestDedup_RemovesDuplicates(t *testing.T) {
 	paragraphs := []string{
-		"First paragraph",
-		"Second paragraph",
-		"First paragraph",
-		"Third paragraph",
-		"Second paragraph",
+		longPara("First"),
+		longPara("Second"),
+		longPara("First"),
+		longPara("Third"),
+		longPara("Second"),
 	}
 
 	result := Dedup(paragraphs)
 	if len(result) != 3 {
 		t.Errorf("expected 3 unique paragraphs, got %d: %v", len(result), result)
 	}
-	expected := []string{"First paragraph", "Second paragraph", "Third paragraph"}
+	expected := []string{longPara("First"), longPara("Second"), longPara("Third")}
 	for i, want := range expected {
 		if result[i] != want {
 			t.Errorf("result[%d] = %q, want %q", i, result[i], want)
@@ -472,7 +478,7 @@ func TestDedup_SkipsEmptyParagraphs(t *testing.T) {
 }
 
 func TestDedup_AllDuplicates(t *testing.T) {
-	paragraphs := []string{"Same", "Same", "Same"}
+	paragraphs := []string{longPara("Same"), longPara("Same"), longPara("Same")}
 	result := Dedup(paragraphs)
 	if len(result) != 1 {
 		t.Errorf("expected 1 unique paragraph, got %d", len(result))
@@ -494,8 +500,8 @@ func TestDedupContent(t *testing.T) {
 	}{
 		{
 			name:  "removes duplicate paragraphs from text",
-			input: "First para\n\nSecond para\n\nFirst para\n\nThird para",
-			want:  "First para\n\nSecond para\n\nThird para",
+			input: longPara("First") + "\n\n" + longPara("Second") + "\n\n" + longPara("First") + "\n\n" + longPara("Third"),
+			want:  longPara("First") + "\n\n" + longPara("Second") + "\n\n" + longPara("Third"),
 		},
 		{
 			name:  "preserves unique content",
@@ -1002,10 +1008,10 @@ func TestProcessor_Process_SanitizesAndDedupsAndTruncates(t *testing.T) {
 	p := NewProcessor()
 
 	// Input with zero-width chars, duplicates, and excessive length
-	raw := "​First paragraph\n\n" +
-		"Second paragraph\n\n" +
-		"First paragraph\n\n" + // duplicate
-		"Third paragraph‍"
+	raw := "​" + longPara("First") + "\n\n" +
+		longPara("Second") + "\n\n" +
+		longPara("First") + "\n\n" + // duplicate
+		longPara("Third") + "‍"
 
 	result, truncated := p.Process(raw, 1000)
 	if truncated {
@@ -1156,7 +1162,7 @@ func TestDedup_LargeInput(t *testing.T) {
 	// Test with many paragraphs
 	var paragraphs []string
 	for i := 0; i < 1000; i++ {
-		paragraphs = append(paragraphs, "Repeated paragraph")
+		paragraphs = append(paragraphs, longPara("Repeated"))
 	}
 	paragraphs = append(paragraphs, "Unique one")
 
