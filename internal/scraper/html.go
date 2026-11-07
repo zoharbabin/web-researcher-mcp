@@ -13,9 +13,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/html"
 )
 
 // redditPostRe parses subreddit and post ID from any reddit.com post URL.
@@ -120,7 +122,7 @@ func (p *Pipeline) parseHTMLBody(ctx context.Context, url string, body []byte, c
 	doc.Find("[role='navigation'], [role='banner'], [role='complementary']").Remove()
 	doc.Find(".ad, .ads, .advertisement, .sidebar, .nav, .footer, .header, .menu").Remove()
 
-	content := extractMainContent(doc)
+	content := extractMainContent(doc, documentBase(doc, url))
 
 	content = cleanText(content)
 	truncated := false
@@ -449,28 +451,54 @@ func normalizeDate(s string) string {
 	return ""
 }
 
-func extractMainContent(doc *goquery.Document) string {
+func extractMainContent(doc *goquery.Document, base *url.URL) string {
 	selectors := []string{"article", "main", "[role='main']", ".content", ".post-content", "#content", "body"}
 	for _, sel := range selectors {
 		node := doc.Find(sel).First()
 		if node.Length() > 0 {
-			content := extractText(node)
+			content := extractText(node, base)
 			if len(content) > 100 {
 				return content
 			}
 		}
 	}
-	return extractText(doc.Find("body"))
+	return extractText(doc.Find("body"), base)
 }
 
-func extractText(sel *goquery.Selection) string {
+// textBlockSelector lists the elements extractText renders as blocks.
+const textBlockSelector = "p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, table, figcaption, dt, dd"
+
+// extractText renders the block elements under sel as Markdown-ish text. base is
+// the page URL that relative links resolve against (#827): in-page links with an
+// http(s) target are kept as [text](url). A nil base turns links off, so the
+// text is exactly what the elements hold.
+func extractText(sel *goquery.Selection, base *url.URL) string {
 	var parts []string
 	// "table" is walked here and "td, th" are deliberately NOT — table cells are
 	// emitted ONLY through their owning <table> (as a GFM pipe table), which
 	// eliminates the old bug where a data table became disconnected cell
 	// fragments (#48).
-	sel.Find("p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, table, figcaption, dt, dd").Each(func(_ int, s *goquery.Selection) {
+	//
+	// "a" is walked too, but only for a link that sits outside every other walked
+	// element and holds none (a bare <a> in a <div> or <figure>, as report
+	// download links often are), which would otherwise be dropped (#827).
+	// base == nil turns links off, so then no "a" is visited.
+	selector := textBlockSelector
+	if base != nil {
+		selector += ", a"
+	}
+	sel.Find(selector).Each(func(_ int, s *goquery.Selection) {
 		tag := goquery.NodeName(s)
+		if tag == "a" {
+			if s.ParentsFiltered(textBlockSelector).Length() > 0 || s.Find(textBlockSelector).Length() > 0 {
+				return
+			}
+			var link strings.Builder
+			if writeInlineText(&link, s.Nodes[0], base) && strings.TrimSpace(link.String()) != "" {
+				parts = append(parts, strings.TrimSpace(link.String()))
+			}
+			return
+		}
 		if tag == "table" {
 			// Only the OUTERMOST table emits: a table nested inside another is
 			// skipped here (its text surfaces via the outer table's fallback),
@@ -492,7 +520,13 @@ func extractText(sel *goquery.Selection) string {
 		if s.ParentsFiltered("table").Length() > 0 {
 			return
 		}
-		text := strings.TrimSpace(s.Text())
+		// <pre> is literal text (code): links are not rewritten there.
+		var text string
+		if tag == "pre" {
+			text = strings.TrimSpace(s.Text())
+		} else {
+			text = strings.TrimSpace(inlineText(s, base))
+		}
 		if text != "" {
 			switch {
 			case strings.HasPrefix(tag, "h") && len(tag) == 2 && tag[1] >= '1' && tag[1] <= '6':
@@ -514,6 +548,124 @@ func extractText(sel *goquery.Selection) string {
 		}
 	})
 	return strings.Join(parts, "\n\n")
+}
+
+// documentBase is the URL that relative links on the page resolve against: the
+// page URL, moved by a <base href> if the page has one. It returns nil when the
+// page URL is not an absolute http(s) URL, which turns links off.
+func documentBase(doc *goquery.Document, pageURL string) *url.URL {
+	base, err := url.Parse(pageURL)
+	if err != nil || !isHTTPURL(base) {
+		return nil
+	}
+	if href, ok := doc.Find("base[href]").First().Attr("href"); ok {
+		if ref, err := url.Parse(strings.TrimSpace(href)); err == nil {
+			if b := base.ResolveReference(ref); isHTTPURL(b) {
+				return b
+			}
+		}
+	}
+	return base
+}
+
+func isHTTPURL(u *url.URL) bool {
+	return u != nil && u.Host != "" && (u.Scheme == "http" || u.Scheme == "https")
+}
+
+// linkTextEscaper escapes the characters that would end a Markdown link text.
+var linkTextEscaper = strings.NewReplacer(`[`, `\[`, `]`, `\]`)
+
+// linkURLEscaper escapes the characters that would end a Markdown link target.
+var linkURLEscaper = strings.NewReplacer(" ", "%20", "(", "%28", ")", "%29", "\n", "%0A", "\t", "%09", "\r", "%0D")
+
+// inlineText returns the text under s with every usable link written as
+// [text](absolute-url). It is s.Text() for a page without usable links, byte for
+// byte. A link is usable when its href resolves against base to an http(s) URL
+// and its text is not empty. Fragment-only, javascript:, mailto:, tel: and other
+// schemes are dropped to plain text. A link whose text is the URL is written as
+// the URL alone. A nil base turns links off. Link text and URLs are untrusted
+// page content, like the rest of the text. Nothing is fetched.
+func inlineText(s *goquery.Selection, base *url.URL) string {
+	var b strings.Builder
+	for _, n := range s.Nodes {
+		writeInlineText(&b, n, base)
+	}
+	return b.String()
+}
+
+// writeInlineText writes the text under n to b. It reports whether n itself was
+// written as a link.
+func writeInlineText(b *strings.Builder, n *html.Node, base *url.URL) bool {
+	switch n.Type {
+	case html.TextNode:
+		b.WriteString(n.Data)
+		return false
+	case html.ElementNode:
+		if n.Data == "a" && base != nil {
+			if target, ok := linkTarget(n, base); ok {
+				var inner strings.Builder
+				for c := n.FirstChild; c != nil; c = c.NextSibling {
+					writeInlineText(&inner, c, nil) // no links inside a link
+				}
+				return writeLink(b, inner.String(), target)
+			}
+		}
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		writeInlineText(b, c, base)
+	}
+	return false
+}
+
+// linkTarget resolves the href of anchor a against base. ok is false when the
+// anchor is not a usable link.
+func linkTarget(a *html.Node, base *url.URL) (string, bool) {
+	var href string
+	for _, attr := range a.Attr {
+		if attr.Key == "href" {
+			href = strings.TrimSpace(attr.Val)
+			break
+		}
+	}
+	if href == "" || strings.HasPrefix(href, "#") {
+		return "", false
+	}
+	ref, err := url.Parse(href)
+	if err != nil {
+		return "", false
+	}
+	target := base.ResolveReference(ref)
+	if !isHTTPURL(target) {
+		return "", false
+	}
+	return target.String(), true
+}
+
+// writeLink writes the link text as [text](target) and reports true. Spaces
+// around the text stay outside the brackets, and inner whitespace is collapsed
+// so the link stays on one line. With no text it writes raw as is and reports
+// false.
+func writeLink(b *strings.Builder, raw, target string) bool {
+	text := collapseSpace(raw)
+	if text == "" {
+		b.WriteString(raw)
+		return false
+	}
+	lead, trail := "", ""
+	if raw != strings.TrimLeftFunc(raw, unicode.IsSpace) {
+		lead = " "
+	}
+	if raw != strings.TrimRightFunc(raw, unicode.IsSpace) {
+		trail = " "
+	}
+	b.WriteString(lead)
+	if text == target || text == strings.TrimSuffix(target, "/") {
+		b.WriteString(linkURLEscaper.Replace(target))
+	} else {
+		b.WriteString("[" + linkTextEscaper.Replace(text) + "](" + linkURLEscaper.Replace(target) + ")")
+	}
+	b.WriteString(trail)
+	return true
 }
 
 // extractTable renders an HTML <table> as a GitHub-flavored markdown pipe table
