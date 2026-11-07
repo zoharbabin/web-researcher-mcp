@@ -460,3 +460,26 @@ func TestDetectColumnBands_AdversarialGaps_BoundedCost(t *testing.T) {
 		t.Fatal("detectColumnBands took longer than 20s on adversarial non-clustering gaps — columnMaxClusters cap not bounding cost")
 	}
 }
+
+// TestParsePDF_NoTextLayer_ReturnsPageCount (#828): a PDF whose pages carry no
+// text (scanned images) parses without error, with empty text and the page count.
+func TestParsePDF_NoTextLayer_ReturnsPageCount(t *testing.T) {
+	t.Parallel()
+	c := pdf.NewCreator()
+	c.NewPage(612, 792)
+	c.NewPage(612, 792)
+	data, err := c.Build()
+	if err != nil {
+		t.Fatalf("building fixture PDF: %v", err)
+	}
+	text, meta, err := Parse(data, "pdf")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if text != "" {
+		t.Errorf("text = %q, want empty", text)
+	}
+	if meta.PageCount != 2 {
+		t.Errorf("PageCount = %d, want 2", meta.PageCount)
+	}
+}

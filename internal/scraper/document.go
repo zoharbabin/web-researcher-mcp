@@ -87,7 +87,17 @@ func (p *Pipeline) scrapeBodyAsPDF(rawURL string, body []byte, maxLength int, ra
 		rawBody:        rawBody,
 		rawTruncated:   rawTruncated,
 		rawContentType: rawContentType,
+		scannedPages:   scannedPageCount(text, meta),
 	}, nil
+}
+
+// scannedPageCount returns the page count when a PDF parsed with pages but no
+// text (scanned images), else 0.
+func scannedPageCount(text string, meta documents.Metadata) int {
+	if strings.TrimSpace(text) == "" {
+		return meta.PageCount
+	}
+	return 0
 }
 
 func (p *Pipeline) scrapeDocument(ctx context.Context, url string, maxLength int) (*ScrapeResult, error) {
@@ -147,6 +157,9 @@ func (p *Pipeline) scrapeDocument(ctx context.Context, url string, maxLength int
 		Title:       meta.Title,
 		Author:      meta.Author,
 		Truncated:   truncated,
+	}
+	if contentType == "pdf" {
+		result.scannedPages = scannedPageCount(text, meta)
 	}
 
 	return result, nil
