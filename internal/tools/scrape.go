@@ -181,6 +181,9 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		}
 
 		contentLen := len(processedContent)
+		// Count the delivered content, not the pre-Process scrape, so wordCount
+		// and sparsityWarning describe what the caller receives.
+		wordCount, sparsityWarning := content.SparsityWarning(processedContent)
 		citation := content.ExtractCitation(input.URL, result.Title, result.Author, result.SiteName, result.PublishDate)
 
 		output := map[string]any{
@@ -213,10 +216,10 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		// for a caller to run a reliable claim check against. Both may be present
 		// at once. wordCount is always emitted; sparsityWarning is omitted
 		// (zero-value "") when content is not thin.
-		output["wordCount"] = result.WordCount
+		output["wordCount"] = wordCount
 		// Login-wall signal: the page is probably a sign-in page, not the content.
 		// With saved cookies it means the login expired; without, that none exists.
-		wall := looksLikeLoginWall(input.URL, result.Title, processedContent, result.WordCount)
+		wall := looksLikeLoginWall(input.URL, result.Title, processedContent, wordCount)
 		if hint := hintFor(); hint != "" && wall {
 			output["loginRequired"] = true
 			output["loginHint"] = hint
@@ -229,8 +232,8 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		default:
 			profileStatus = "ok"
 		}
-		if result.SparsityWarning != "" {
-			output["sparsityWarning"] = result.SparsityWarning
+		if sparsityWarning != "" {
+			output["sparsityWarning"] = sparsityWarning
 		}
 
 		if result.Title != "" {
@@ -526,9 +529,11 @@ func scrapeCacheKey(url, mode string, maxLength int) string {
 	// (#247) for Reddit engagement metadata. v8 adds wordCount/sparsityWarning
 	// (#358) — the content-volume signal. v9 adds the native Bluesky post/profile
 	// scraper route (#285), whose forumSignals.platform="bluesky" value a v8 blob
-	// never produced. v10 adds the githubTrustSignals field (#546). Bump on any
-	// future shape change.
-	fmt.Fprintf(h, "scrape|v10|%s|%s|%d", url, mode, maxLength)
+	// never produced. v10 adds the githubTrustSignals field (#546). v11 makes
+	// wordCount/sparsityWarning count the delivered (post-dedup) content (#822),
+	// so a v10 blob would serve a pre-dedup count. Bump on any future shape
+	// change.
+	fmt.Fprintf(h, "scrape|v11|%s|%s|%d", url, mode, maxLength)
 	return "scrape:" + hex.EncodeToString(h.Sum(nil))[:32]
 }
 
