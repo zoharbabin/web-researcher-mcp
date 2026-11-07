@@ -1053,6 +1053,44 @@ func TestScrapeStealth_ExtractsArticleContent(t *testing.T) {
 	}
 }
 
+// #826: the stealth tier returns author, site name and publish date from the
+// same extractor as the html tier, including a byline-only date (PCI blog shape).
+func TestScrapeStealth_ExtractsMetadata(t *testing.T) {
+	t.Parallel()
+	body := `<!doctype html><html><head>
+<meta name="author" content="Alicia Malone">
+<meta property="og:site_name" content="PCI Perspectives">
+<title>Just Published: PCI KMO Standard v1.0</title></head><body>
+<header><div class="post-details-meta">Posted by
+<a class="author-link" href="/author/alicia-malone">Alicia Malone</a> on 14 Sep, 2026 in
+<a class="topic-link" href="/topic/x">Topic</a></div></header>
+<article><p>` + strings.Repeat("The new standard covers key management and operations for entities that handle cryptographic keys. ", 4) + `</p></article>
+</body></html>`
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(body))
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	result, err := p.scrapeStealth(context.Background(), ts.URL, 50000, false)
+	if err != nil {
+		t.Fatalf("scrapeStealth error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result.Author != "Alicia Malone" {
+		t.Errorf("Author = %q, want Alicia Malone", result.Author)
+	}
+	if result.PublishDate != "2026-09-14" {
+		t.Errorf("PublishDate = %q, want 2026-09-14", result.PublishDate)
+	}
+	if result.SiteName != "PCI Perspectives" {
+		t.Errorf("SiteName = %q, want PCI Perspectives", result.SiteName)
+	}
+}
+
 func TestScrapeStealth_ReturnsNilForThinContent(t *testing.T) {
 	html := `<!DOCTYPE html><html><head><title>Thin</title></head><body><p>Short.</p></body></html>`
 
@@ -4303,5 +4341,127 @@ func TestPipeline_ThinIframeBearingNonShellStillEscalates(t *testing.T) {
 	// of short-circuiting at stealth purely because an iframe was present.
 	if got := htmlHits.Load(); got != 2 {
 		t.Errorf("expected escalation past stealth to the html tier (2 requests), got %d", got)
+	}
+}
+
+// =============================================================================
+// Truncated flag describes the returned content, not the raw bytes (#823)
+// =============================================================================
+
+// bigHTMLSmallText builds a page with textBytes of article text and about
+// 100 KB of HTML in total (the padding is a comment the extractor drops).
+func bigHTMLSmallText(textBytes int) string {
+	return `<!DOCTYPE html><html><head><title>Flag</title></head><body>` +
+		`<!-- ` + strings.Repeat("x", 100_000) + ` -->` +
+		`<article><p>` + strings.Repeat("word ", textBytes/5) + `</p></article></body></html>`
+}
+
+func newHTMLServer(t *testing.T, page string) *httptest.Server {
+	t.Helper()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(page)) //nolint:errcheck
+	}))
+	t.Cleanup(ts.Close)
+	return ts
+}
+
+func TestTruncatedFlag_HTMLTiers(t *testing.T) {
+	t.Parallel()
+	const maxLength = 8000
+	tiers := map[string]func(*Pipeline, string) (*ScrapeResult, error){
+		"stealth": func(p *Pipeline, u string) (*ScrapeResult, error) {
+			return p.scrapeStealth(context.Background(), u, maxLength, false)
+		},
+		"html": func(p *Pipeline, u string) (*ScrapeResult, error) {
+			return p.scrapeHTML(context.Background(), u, maxLength, false)
+		},
+	}
+	cases := []struct {
+		name      string
+		textBytes int
+		want      bool
+	}{
+		{"small text, big raw HTML is not truncated", 2000, false},
+		{"text over maxLength is truncated", 20_000, true},
+	}
+	for tier, scrape := range tiers {
+		for _, tc := range cases {
+			t.Run(tier+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				ts := newHTMLServer(t, bigHTMLSmallText(tc.textBytes))
+				p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+				res, err := scrape(p, ts.URL)
+				if err != nil || res == nil {
+					t.Fatalf("scrape: res=%v err=%v", res, err)
+				}
+				if res.Truncated != tc.want {
+					t.Errorf("Truncated = %v, want %v (content %d bytes)", res.Truncated, tc.want, len(res.Content))
+				}
+				if tc.want && len(res.Content) < maxLength-200 {
+					t.Errorf("truncated content is %d bytes, want close to %d", len(res.Content), maxLength)
+				}
+			})
+		}
+	}
+}
+
+func TestScrapeRaw_TruncatedFlagFollowsRawBytes(t *testing.T) {
+	t.Parallel()
+	ts := newHTMLServer(t, bigHTMLSmallText(2000))
+	p := NewPipeline(PipelineConfig{AllowPrivateIPs: true})
+	res, err := p.ScrapeRaw(context.Background(), ts.URL, 8000)
+	if err != nil {
+		t.Fatalf("ScrapeRaw error: %v", err)
+	}
+	if !res.Truncated {
+		t.Error("expected Truncated=true: raw bytes exceed maxLength")
+	}
+	if len(res.Content) > 8000 {
+		t.Errorf("raw content %d bytes exceeds maxLength", len(res.Content))
+	}
+
+	small := newHTMLServer(t, "<html><body><p>tiny</p></body></html>")
+	res, err = p.ScrapeRaw(context.Background(), small.URL, 8000)
+	if err != nil {
+		t.Fatalf("ScrapeRaw error: %v", err)
+	}
+	if res.Truncated {
+		t.Error("expected Truncated=false: raw bytes fit in maxLength")
+	}
+}
+
+func TestTruncatedFlag_PDFAtNonPDFURL(t *testing.T) {
+	t.Parallel()
+	pdf := minimalPDF(t)
+	// Bytes exceed maxLength, extracted text ("Hello PDF test content") does not.
+	maxLength := len(pdf) / 2
+	if maxLength < 100 {
+		t.Fatalf("test PDF too small (%d bytes)", len(pdf))
+	}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Write(pdf) //nolint:errcheck
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	res, err := p.scrapeStealth(context.Background(), ts.URL+"/download/paper", maxLength, false)
+	if err != nil || res == nil {
+		t.Fatalf("scrapeStealth: res=%v err=%v", res, err)
+	}
+	if res.Tier != "document" {
+		t.Fatalf("Tier = %q, want document", res.Tier)
+	}
+	if res.Truncated {
+		t.Errorf("Truncated = true, want false (text %d bytes, maxLength %d)", len(res.Content), maxLength)
+	}
+
+	raw, err := p.ScrapeRaw(context.Background(), ts.URL+"/download/paper", maxLength)
+	if err != nil {
+		t.Fatalf("ScrapeRaw: %v", err)
+	}
+	if !raw.Truncated {
+		t.Error("raw mode: Truncated = false, want true (PDF bytes cut)")
 	}
 }

@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -23,10 +24,16 @@ import (
 type scrapePageInput struct {
 	URL       string `json:"url" jsonschema:"The HTTP/HTTPS URL to extract content from. Supports web pages, PDFs, DOCX, PPTX, YouTube video URLs, Hacker News item/user/list pages (news.ycombinator.com, read natively via the HN API), GitHub README/file/gist URLs (github.com repo root, /blob/ file, or gist.github.com, read natively via the GitHub API), and Bluesky posts and profiles (bsky.app).,required"`
 	Mode      string `json:"mode,omitempty" jsonschema:"Extraction depth (preview = first 5000 bytes, faster; raw = verbatim unsanitized bytes, see tool description before using). Default: full (cleaned readable text up to max_length)."`
-	MaxLength int    `json:"max_length,omitempty" jsonschema:"Maximum content length in bytes (default: 50000). Reduce for faster responses when you only need a summary."`
+	MaxLength int    `json:"max_length,omitempty" jsonschema:"Maximum content length in bytes for this call (default: 50000). When the result has nextOffset, the page was cut: call again with offset=nextOffset to read the next part. Reduce for faster responses when you only need a summary."`
+	Offset    int    `json:"offset,omitempty" jsonschema:"Byte position in the cleaned text where this call starts (default: 0). Use the nextOffset value of the previous result to read the next part of a long page. Full mode only; not allowed with mode=preview or mode=raw."`
 	SessionID string `json:"sessionId,omitempty" jsonschema:"Link this page to a sequential_search session. The URL and title are automatically recorded as a source for recovery after context loss."`
 	Anonymous bool   `json:"anonymous,omitempty" jsonschema:"Set true to read the page without your saved login (see site_login), as a signed-out visitor. Use it for public research so your account is not used. Default false: a saved login for the site is used automatically."`
 }
+
+// fullTextCap is the scrape cap for full mode. The whole cleaned page up to this
+// size is scraped once and cached; each call then returns a max_length slice of
+// it starting at offset. Text past the cap is not available.
+const fullTextCap = 2_000_000
 
 // maxScrapeLength caps the requested max_length to bound memory for a single
 // scrape. Applies to all modes including raw.
@@ -70,6 +77,13 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		mode := input.Mode
 		if mode == "" {
 			mode = "full"
+		}
+
+		if input.Offset < 0 {
+			return toolError("offset must be 0 or greater"), nil, nil
+		}
+		if input.Offset > 0 && mode != "full" {
+			return toolError("offset is only supported with mode=full; use the default mode to read a long page in parts"), nil, nil
 		}
 
 		maxLength := input.MaxLength
@@ -138,12 +152,24 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 			return scrapeRaw(ctx, deps, input, maxLength, start, authed)
 		}
 
+		// Full mode scrapes the whole page (up to fullTextCap) and caches it once,
+		// so every offset is served from one entry. Preview keeps its own small cap.
+		scrapeLimit := maxLength
+		if mode == "full" {
+			scrapeLimit = fullTextCap
+		}
+
 		cacheKey := scrapeCacheKey(input.URL, mode, maxLength)
 		if !authed {
 			if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
-				recordToolCall(deps, "scrape_page", time.Since(start), nil, "", true)
-				auditToolCall(ctx, deps, "scrape_page", time.Since(start), nil, "")
-				return cachedResultWithMeta(cached, meta), nil, nil
+				if mode == "full" {
+					cached, ok = pageScrapeEnvelope(cached, input.Offset, maxLength)
+				}
+				if ok {
+					recordToolCall(deps, "scrape_page", time.Since(start), nil, "", true)
+					auditToolCall(ctx, deps, "scrape_page", time.Since(start), nil, "")
+					return cachedResultWithMeta(cached, meta), nil, nil
+				}
 			}
 
 			// Negative-cache short-circuit: a recently-failed URL returns its cached
@@ -159,10 +185,10 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		var result *scraper.ScrapeResult
 		var err error
 		if lease != nil {
-			result, err = deps.Scraper.ScrapeWithProfile(ctx, input.URL, maxLength,
+			result, err = deps.Scraper.ScrapeWithProfile(ctx, input.URL, scrapeLimit,
 				scraper.ProfileSpec{Dir: lease.Dir, Domain: lease.Meta.Domain, Browser: lease.Meta.Browser})
 		} else {
-			result, err = deps.Scraper.Scrape(ctx, input.URL, maxLength)
+			result, err = deps.Scraper.Scrape(ctx, input.URL, scrapeLimit)
 		}
 		if err != nil {
 			recordToolCall(deps, "scrape_page", time.Since(start), err, "upstream_error", false)
@@ -175,12 +201,24 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 			return scrapeErrorResponseHint(err, input.URL, hintFor()), nil, nil
 		}
 
-		processedContent, truncated := deps.Content.Process(result.Content, maxLength)
-		if truncated {
-			result.Truncated = true
+		// Full mode keeps the whole cleaned page here and cuts it per request below.
+		// Preview cuts at once, as before.
+		var processedContent string
+		if mode == "full" {
+			processedContent = deps.Content.Clean(result.Content)
+		} else {
+			var truncated bool
+			processedContent, truncated = deps.Content.Process(result.Content, maxLength)
+			if truncated {
+				result.Truncated = true
+			}
 		}
 
 		contentLen := len(processedContent)
+		// Count the cleaned page, not the pre-Process scrape. In full mode this is
+		// the whole page, not just the requested part, so a short last part is not
+		// flagged as thin.
+		wordCount, sparsityWarning := content.SparsityWarning(processedContent)
 		citation := content.ExtractCitation(input.URL, result.Title, result.Author, result.SiteName, result.PublishDate)
 
 		output := map[string]any{
@@ -213,10 +251,10 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		// for a caller to run a reliable claim check against. Both may be present
 		// at once. wordCount is always emitted; sparsityWarning is omitted
 		// (zero-value "") when content is not thin.
-		output["wordCount"] = result.WordCount
+		output["wordCount"] = wordCount
 		// Login-wall signal: the page is probably a sign-in page, not the content.
 		// With saved cookies it means the login expired; without, that none exists.
-		wall := looksLikeLoginWall(input.URL, result.Title, processedContent, result.WordCount)
+		wall := looksLikeLoginWall(input.URL, result.Title, processedContent, wordCount)
 		if hint := hintFor(); hint != "" && wall {
 			output["loginRequired"] = true
 			output["loginHint"] = hint
@@ -229,15 +267,12 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		default:
 			profileStatus = "ok"
 		}
-		if result.SparsityWarning != "" {
-			output["sparsityWarning"] = result.SparsityWarning
+		if sparsityWarning != "" {
+			output["sparsityWarning"] = sparsityWarning
 		}
 
-		if result.Title != "" {
-			output["metadata"] = map[string]any{
-				"title":  result.Title,
-				"author": result.Author,
-			}
+		if md := scrapeMetadata(result); md != nil {
+			output["metadata"] = md
 		}
 
 		// Extraction provenance: which tier produced the content. Surfaced so a
@@ -311,6 +346,10 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		if !authed {
 			deps.Cache.Set(ctx, cacheKey, jsonBytes, time.Hour)
 		}
+		if mode == "full" {
+			applyScrapePage(output, input.Offset, maxLength)
+			jsonBytes, _ = json.Marshal(output)
+		}
 		recordToolCall(deps, "scrape_page", time.Since(start), nil, "", false)
 		auditToolCallQuery(ctx, deps, "scrape_page", time.Since(start), nil, "", "", auditExtra)
 
@@ -323,6 +362,48 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 
 		return structuredResult(jsonBytes), nil, nil
 	})
+}
+
+// applyScrapePage replaces the whole-page content in a full-mode envelope with
+// the part that starts at offset and holds up to maxLength bytes, and sets the
+// fields that describe that part. truncated is true exactly when nextOffset is
+// present. Fields that describe the page as a whole (wordCount, citation, ...)
+// are left as they are.
+func applyScrapePage(output map[string]any, offset, maxLength int) {
+	full, _ := output["content"].(string)
+	page, next, more := content.Slice(full, offset, maxLength)
+	output["content"] = page
+	output["contentLength"] = len(page)
+	output["estimatedTokens"] = content.EstimateTokens(page)
+	output["sizeCategory"] = content.SizeCategory(len(page))
+	output["totalLength"] = len(full)
+	output["offset"] = offset
+	output["truncated"] = more
+	if more {
+		output["nextOffset"] = next
+	} else {
+		delete(output, "nextOffset")
+	}
+}
+
+// pageScrapeEnvelope applies applyScrapePage to a cached full-mode envelope. ok
+// is false when the cached body cannot be read, so the caller scrapes again.
+func pageScrapeEnvelope(cached []byte, offset, maxLength int) ([]byte, bool) {
+	dec := json.NewDecoder(bytes.NewReader(cached))
+	dec.UseNumber() // keep numbers in structuredData exact
+	var output map[string]any
+	if err := dec.Decode(&output); err != nil {
+		return nil, false
+	}
+	if _, ok := output["content"].(string); !ok {
+		return nil, false
+	}
+	applyScrapePage(output, offset, maxLength)
+	paged, err := json.Marshal(output)
+	if err != nil {
+		return nil, false
+	}
+	return paged, true
 }
 
 // scrapeAuditExtra is the audit metadata of a scrape that used a saved login: the
@@ -507,10 +588,32 @@ func detectScholarlyDOI(sd *scraper.StructuredData, body, pageURL string) string
 	return detectDOI(top)
 }
 
-// scrapeCacheKey keys a cached scrape by URL, mode, AND the effective
-// max_length. max_length must be part of the key because content is truncated
-// to it before caching — without it, a small-max_length request could serve a
-// later larger request a truncated body (breaking consistency across calls).
+// scrapeMetadata builds the scrape_page metadata block. It is written when any
+// of title, author, publishedDate or siteName is set, so a page with a date but
+// no title still reports it. author and title are always present in the block
+// (possibly empty); publishedDate and siteName are omitted when empty. Returns
+// nil when there is nothing to report.
+func scrapeMetadata(r *scraper.ScrapeResult) map[string]any {
+	if r.Title == "" && r.Author == "" && r.PublishDate == "" && r.SiteName == "" {
+		return nil
+	}
+	md := map[string]any{
+		"title":  r.Title,
+		"author": r.Author,
+	}
+	if r.PublishDate != "" {
+		md["publishedDate"] = r.PublishDate
+	}
+	if r.SiteName != "" {
+		md["siteName"] = r.SiteName
+	}
+	return md
+}
+
+// scrapeCacheKey keys a cached scrape by URL and mode. maxLength is part of the
+// key only in raw mode, where the body is cut to it before caching. Full mode
+// caches the whole cleaned page and cuts it per request (offset and max_length),
+// and preview always uses 5000, so for both the key ignores maxLength.
 func scrapeCacheKey(url, mode string, maxLength int) string {
 	h := sha256.New()
 	// The version segment invalidates pre-existing cached blobs whenever the
@@ -526,9 +629,18 @@ func scrapeCacheKey(url, mode string, maxLength int) string {
 	// (#247) for Reddit engagement metadata. v8 adds wordCount/sparsityWarning
 	// (#358) — the content-volume signal. v9 adds the native Bluesky post/profile
 	// scraper route (#285), whose forumSignals.platform="bluesky" value a v8 blob
-	// never produced. v10 adds the githubTrustSignals field (#546). Bump on any
-	// future shape change.
-	fmt.Fprintf(h, "scrape|v10|%s|%s|%d", url, mode, maxLength)
+	// never produced. v10 adds the githubTrustSignals field (#546). v11 makes
+	// wordCount/sparsityWarning count the delivered (post-dedup) content (#822)
+	// and fixes the truncated flag, which no longer reports a cut of the raw
+	// HTML/PDF bytes in full mode (#823). v12 adds metadata.publishedDate and
+	// metadata.siteName, and writes the metadata block when any field is set
+	// (#826). v13 caches the whole cleaned page in full mode (#824) instead of the
+	// part cut to max_length, and adds totalLength/offset/nextOffset. A v12 blob
+	// holds a cut page and has no paging fields. Bump on any future shape change.
+	if mode != "raw" {
+		maxLength = 0
+	}
+	fmt.Fprintf(h, "scrape|v13|%s|%s|%d", url, mode, maxLength)
 	return "scrape:" + hex.EncodeToString(h.Sum(nil))[:32]
 }
 
