@@ -19,6 +19,7 @@ func TestParamAliasHints(t *testing.T) {
 		{"web_search max_results", "web_search", map[string]any{"query": "go", "max_results": "5"}, `Use "num_results"`},
 		{"web_search limit", "web_search", map[string]any{"query": "go", "limit": 5}, `Use "num_results"`},
 		{"news_search max_results", "news_search", map[string]any{"query": "go", "max_results": 5}, `Use "num_results"`},
+		{"scrape_page start_index", "scrape_page", map[string]any{"url": "https://example.com", "start_index": 100}, `Use "offset"`},
 		{"unknown property gets no hint", "web_search", map[string]any{"query": "go", "bogus": 1}, ""},
 		{"other tool gets no hint", "scrape_page", map[string]any{"url": "https://example.com", "max_results": 1}, ""},
 	}
