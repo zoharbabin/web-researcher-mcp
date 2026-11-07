@@ -441,7 +441,10 @@ func normalizeDate(s string) string {
 		return ""
 	}
 	if partialDateRe.MatchString(s) {
-		return s
+		if validPartialDate(s) {
+			return s
+		}
+		return ""
 	}
 	for _, layout := range dateLayouts {
 		if t, err := time.Parse(layout, s); err == nil {
@@ -449,6 +452,16 @@ func normalizeDate(s string) string {
 		}
 	}
 	return ""
+}
+
+// validPartialDate reports whether s ("YYYY" or "YYYY-MM") is a real year or
+// month. A year below 1000 is treated as a page error, not a date.
+func validPartialDate(s string) bool {
+	if len(s) == 4 {
+		return s >= "1000"
+	}
+	_, err := time.Parse("2006-01", s)
+	return err == nil && s >= "1000"
 }
 
 func extractMainContent(doc *goquery.Document, base *url.URL) string {
