@@ -75,6 +75,10 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int,
 	// Capture cross-origin iframe candidates (#399) BEFORE extractArticleContent
 	// strips <iframe> — same precedent as structured data above.
 	iframes := extractIframeCandidates(doc, url)
+	// Capture author, site name and publish date BEFORE extractArticleContent
+	// strips <script>, <header> and other nodes they live in. Same extractor as
+	// the html tier.
+	meta := extractHTMLMetadata(doc)
 
 	content := extractArticleContent(doc)
 	// A near-empty shell with no iframe candidates has nothing further to
@@ -106,10 +110,13 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int,
 	// Raw mode's returned body must respect the caller's maxLength the same
 	// way Content does — body itself is only bounded by MaxHTMLBytes, which is
 	// deliberately larger so extraction reaches the real article text.
+	// The raw cut sets rawTruncated only: the flag for full mode describes the
+	// returned text, not these bytes (#823).
 	rawBody := string(body)
+	rawTruncated := false
 	if len(rawBody) > maxLength {
 		rawBody = truncateBytes(rawBody, maxLength)
-		truncated = true
+		rawTruncated = true
 	}
 
 	res := &ScrapeResult{
@@ -117,6 +124,9 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int,
 		Content:     content,
 		ContentType: "html",
 		Title:       title,
+		Author:      meta.author,
+		SiteName:    meta.siteName,
+		PublishDate: meta.publishDate,
 		Truncated:   truncated,
 		// Surface the decompressed HTML size so the pipeline can detect a
 		// JS-rendered SPA shell (large HTML, little extracted text) and keep
@@ -127,6 +137,7 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int,
 		// extractArticleContent stripped it down to Content — raw mode
 		// returns this instead of Content once tieredFallback picks a winner.
 		rawBody:        rawBody,
+		rawTruncated:   rawTruncated,
 		rawContentType: ct,
 	}
 	if !sd.IsEmpty() {
