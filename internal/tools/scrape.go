@@ -24,7 +24,7 @@ import (
 type scrapePageInput struct {
 	URL       string `json:"url" jsonschema:"The HTTP/HTTPS URL to extract content from. Supports web pages, PDFs, DOCX, PPTX, YouTube video URLs, Hacker News item/user/list pages (news.ycombinator.com, read natively via the HN API), GitHub README/file/gist URLs (github.com repo root, /blob/ file, or gist.github.com, read natively via the GitHub API), and Bluesky posts and profiles (bsky.app).,required"`
 	Mode      string `json:"mode,omitempty" jsonschema:"Extraction depth (preview = first 5000 bytes, faster; raw = verbatim unsanitized bytes, see tool description before using). Default: full (cleaned readable text up to max_length)."`
-	MaxLength int    `json:"max_length,omitempty" jsonschema:"Maximum content length in bytes for this call (default: 50000). When the result has nextOffset, the page was cut: call again with offset=nextOffset to read the next part. Reduce for faster responses when you only need a summary."`
+	MaxLength int    `json:"max_length,omitempty" jsonschema:"Maximum content length in bytes for this call (default: 30000; raw mode: 50000). Results are capped near 35,000 serialized chars, so a larger value can be cut earlier: maxLengthApplied then shows the cap used. When the result has nextOffset, the page was cut: call again with offset=nextOffset to read the next part. Reduce for faster responses when you only need a summary."`
 	Offset    int    `json:"offset,omitempty" jsonschema:"Byte position in the cleaned text where this call starts (default: 0). Use the nextOffset value of the previous result to read the next part of a long page. Full mode only; not allowed with mode=preview or mode=raw."`
 	SessionID string `json:"sessionId,omitempty" jsonschema:"Link this page to a sequential_search session. The URL and title are automatically recorded as a source for recovery after context loss."`
 	Anonymous bool   `json:"anonymous,omitempty" jsonschema:"Set true to read the page without your saved login (see site_login), as a signed-out visitor. Use it for public research so your account is not used. Default false: a saved login for the site is used automatically."`
@@ -34,6 +34,42 @@ type scrapePageInput struct {
 // size is scraped once and cached; each call then returns a max_length slice of
 // it starting at offset. Text past the cap is not available.
 const fullTextCap = 2_000_000
+
+// maxInlineResultBytes is the size a full-mode result stays under once
+// serialized: the content plus the citation, structured data and JSON escaping.
+// The client rejects larger tool results, and its exact limit is unknown, so this
+// leaves a margin below the ~40,000 chars seen to fail.
+const maxInlineResultBytes = 35_000
+
+// defaultFullMaxLength is the max_length of a full-mode call that sets none. It
+// leaves room for the non-content fields inside maxInlineResultBytes.
+const defaultFullMaxLength = 30_000
+
+// defaultRawMaxLength is the max_length of a raw-mode call that sets none. Raw
+// results over linkThresholdBytes are returned as a resource_link, so the inline
+// budget does not apply and the earlier default stays.
+const defaultRawMaxLength = 50_000
+
+// Inline budget tuning for fitScrapePage.
+const (
+	// continuationMarkerReserve covers "\n\n[content truncated, continue with
+	// offset=N]" appended to a cut part.
+	continuationMarkerReserve = 64
+	// minInlineContentBytes is the least content a part keeps. When the other
+	// fields leave less room, the heavy optional ones are dropped from this
+	// response (the cached copy keeps them).
+	minInlineContentBytes = 8_000
+	// budgetShrinkRounds is the number of re-marshal rounds that shrink by the
+	// excess plus 10%. Later rounds shrink harder, so the loop always ends.
+	budgetShrinkRounds = 3
+	// budgetMaxRounds bounds the loop. Each round at least halves the cut part
+	// after budgetShrinkRounds, so it ends well before this.
+	budgetMaxRounds = 40
+)
+
+// scrapeOptionalHeavyFields are dropped from a part when the other fields leave
+// under minInlineContentBytes of room. structuredData can reach 64 KB alone.
+var scrapeOptionalHeavyFields = []string{"structuredData", "highlights", "githubTrustSignals", "forumSignals"}
 
 // maxScrapeLength caps the requested max_length to bound memory for a single
 // scrape. Applies to all modes including raw.
@@ -88,7 +124,10 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 
 		maxLength := input.MaxLength
 		if maxLength <= 0 {
-			maxLength = 50000
+			maxLength = defaultFullMaxLength
+			if mode == "raw" {
+				maxLength = defaultRawMaxLength
+			}
 		}
 		if maxLength > maxScrapeLength {
 			maxLength = maxScrapeLength
@@ -339,8 +378,7 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 			deps.Cache.Set(ctx, cacheKey, jsonBytes, time.Hour)
 		}
 		if mode == "full" {
-			applyScrapePage(output, input.Offset, maxLength)
-			jsonBytes, _ = json.Marshal(output)
+			jsonBytes, _ = fitScrapePage(output, input.Offset, maxLength)
 		}
 		recordToolCall(deps, "scrape_page", time.Since(start), nil, "", false)
 		auditToolCallQuery(ctx, deps, "scrape_page", time.Since(start), nil, "", "", auditExtra)
@@ -356,19 +394,17 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 	})
 }
 
-// applyScrapePage replaces the whole-page content in a full-mode envelope with
-// the part that starts at offset and holds up to maxLength bytes, and sets the
-// fields that describe that part. truncated is true exactly when nextOffset is
-// present. Fields that describe the page as a whole (wordCount, citation, ...)
-// are left as they are.
-func applyScrapePage(output map[string]any, offset, maxLength int) {
-	full, _ := output["content"].(string)
-	page, next, more := content.Slice(full, offset, maxLength)
+// setScrapePage replaces the whole-page content in a full-mode envelope with
+// page, the part that starts at offset, and sets the fields that describe it.
+// truncated is true exactly when nextOffset is present. appliedCap > 0 sets
+// maxLengthApplied. Fields that describe the page as a whole (wordCount,
+// citation, ...) are left as they are.
+func setScrapePage(output map[string]any, totalLength, offset int, page string, next int, more bool, appliedCap int) {
 	output["content"] = page
 	output["contentLength"] = len(page)
 	output["estimatedTokens"] = content.EstimateTokens(page)
 	output["sizeCategory"] = content.SizeCategory(len(page))
-	output["totalLength"] = len(full)
+	output["totalLength"] = totalLength
 	output["offset"] = offset
 	output["truncated"] = more
 	if more {
@@ -376,9 +412,82 @@ func applyScrapePage(output map[string]any, offset, maxLength int) {
 	} else {
 		delete(output, "nextOffset")
 	}
+	if appliedCap > 0 {
+		output["maxLengthApplied"] = appliedCap
+	} else {
+		delete(output, "maxLengthApplied")
+	}
 }
 
-// pageScrapeEnvelope applies applyScrapePage to a cached full-mode envelope. ok
+// fitScrapePage cuts the whole-page content in a full-mode envelope to the part
+// that starts at offset, and returns the marshaled result. The part holds up to
+// maxLength bytes, and less when the result would pass maxInlineResultBytes
+// once serialized. Then maxLengthApplied reports the cap used, truncated is
+// true and nextOffset points at the true continuation.
+//
+// The cap is maxInlineResultBytes minus the size of every other field. JSON
+// escaping can make the content larger than its text, so the result is
+// re-measured and the part shrunk until it fits.
+func fitScrapePage(output map[string]any, offset, maxLength int) ([]byte, error) {
+	full, _ := output["content"].(string)
+	total := len(full)
+
+	// Size of everything but the content. The placeholders are as wide as the
+	// real values can be.
+	overhead := func() int {
+		setScrapePage(output, total, offset, "", total, true, maxScrapeLength)
+		b, _ := json.Marshal(output)
+		return len(b)
+	}
+	size := overhead()
+	for _, k := range scrapeOptionalHeavyFields {
+		if maxInlineResultBytes-size-continuationMarkerReserve >= minInlineContentBytes {
+			break
+		}
+		if _, ok := output[k]; ok {
+			delete(output, k)
+			size = overhead()
+		}
+	}
+
+	limit := min(maxLength, max(1, maxInlineResultBytes-size-continuationMarkerReserve))
+	for round := 0; ; round++ {
+		page, next, more := content.Slice(full, offset, limit)
+		applied := 0
+		if more && limit < maxLength {
+			applied = limit
+		}
+		setScrapePage(output, total, offset, page, next, more, applied)
+		b, err := json.Marshal(output)
+		if err != nil || len(b) <= maxInlineResultBytes || limit <= 1 || round >= budgetMaxRounds {
+			return b, err
+		}
+
+		// Shrink by the excess plus 10%. The excess is serialized bytes, and
+		// escaping can turn one text byte into up to six, so divide by this
+		// part's own expansion ratio to get text bytes.
+		used := len(page)
+		if more {
+			used = next - offset
+		}
+		expansion := 1.0
+		if cj, jerr := json.Marshal(page); jerr == nil && len(page) > 0 {
+			expansion = max(1.0, float64(len(cj)-2)/float64(len(page)))
+		}
+		excess := float64(len(b) - maxInlineResultBytes)
+		margin := 1.1
+		if round >= budgetShrinkRounds {
+			margin = 2.0
+		}
+		cut := int(excess*margin/expansion) + 1
+		if round >= budgetShrinkRounds {
+			cut += used / 8
+		}
+		limit = max(1, min(limit, used)-cut)
+	}
+}
+
+// pageScrapeEnvelope applies fitScrapePage to a cached full-mode envelope. ok
 // is false when the cached body cannot be read, so the caller scrapes again.
 func pageScrapeEnvelope(cached []byte, offset, maxLength int) ([]byte, bool) {
 	dec := json.NewDecoder(bytes.NewReader(cached))
@@ -390,8 +499,7 @@ func pageScrapeEnvelope(cached []byte, offset, maxLength int) ([]byte, bool) {
 	if _, ok := output["content"].(string); !ok {
 		return nil, false
 	}
-	applyScrapePage(output, offset, maxLength)
-	paged, err := json.Marshal(output)
+	paged, err := fitScrapePage(output, offset, maxLength)
 	if err != nil {
 		return nil, false
 	}
