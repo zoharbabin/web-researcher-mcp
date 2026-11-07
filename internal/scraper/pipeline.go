@@ -222,6 +222,10 @@ type ScrapeResult struct {
 	// content) — ScrapeRaw falls back to Content for those. Unexported:
 	// pipeline-internal, never serialized.
 	rawBody string
+	// rawTruncated reports whether rawBody was cut to maxLength. Every tier
+	// that sets rawBody sets this too. ScrapeRaw copies it into Truncated.
+	// Truncated itself describes Content only (#823). Unexported.
+	rawTruncated bool
 	// rawContentType is the real HTTP Content-Type header (or equivalent)
 	// paired with rawBody, reported by ScrapeRaw instead of Content's coarse
 	// constant ("html", "markdown", "pdf"). Unexported: pipeline-internal,
@@ -1030,6 +1034,7 @@ func (p *Pipeline) ScrapeRaw(ctx context.Context, rawURL string, maxLength int) 
 	// path of its own) that never populate rawBody.
 	if result.rawBody != "" {
 		result.Content = result.rawBody
+		result.Truncated = result.rawTruncated
 		result.ContentType = result.rawContentType
 	}
 	result.Tier = "raw:" + result.Tier

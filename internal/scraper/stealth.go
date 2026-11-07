@@ -106,10 +106,13 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int,
 	// Raw mode's returned body must respect the caller's maxLength the same
 	// way Content does — body itself is only bounded by MaxHTMLBytes, which is
 	// deliberately larger so extraction reaches the real article text.
+	// The raw cut sets rawTruncated only: the flag for full mode describes the
+	// returned text, not these bytes (#823).
 	rawBody := string(body)
+	rawTruncated := false
 	if len(rawBody) > maxLength {
 		rawBody = truncateBytes(rawBody, maxLength)
-		truncated = true
+		rawTruncated = true
 	}
 
 	res := &ScrapeResult{
@@ -127,6 +130,7 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int,
 		// extractArticleContent stripped it down to Content — raw mode
 		// returns this instead of Content once tieredFallback picks a winner.
 		rawBody:        rawBody,
+		rawTruncated:   rawTruncated,
 		rawContentType: ct,
 	}
 	if !sd.IsEmpty() {
