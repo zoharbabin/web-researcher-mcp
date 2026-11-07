@@ -50,7 +50,7 @@ type webSearchInput struct {
 	Lens         string   `json:"lens,omitempty" jsonschema:"Focus your search on trusted sites in a specific field: docs, academic, academic-extended, clinical, security, investigative_records, programming, devops, news, tech, legal, medical, finance, science, government, awesome-lists. For engineering/API questions use docs (official references) or programming (docs, tutorials, Q&A) — tech is technology news and industry journalism, not engineering documentation. Only one lens can be active at a time (overrides the site/sites parameters)."`
 	Provider     string   `json:"provider,omitempty" jsonschema:"Choose which search engine to use for this query. Leave empty to use the default. Returns an error if the chosen provider isn't set up."`
 	SessionID    string   `json:"sessionId,omitempty" jsonschema:"Link results to a sequential_search session. Sources are automatically recorded in the session for recovery after context loss."`
-	Claim        string   `json:"claim,omitempty" jsonschema:"Optional claim to evaluate against each result's title, snippet, and extra snippets. When set, each result gains a claimSignal (the most claim-relevant sentence found) to help triage which links to read; for full-text evidence use search_and_scrape with claim. Evidence only — the server never decides supports/contradicts."`
+	Claim        string   `json:"claim,omitempty" jsonschema:"When you are checking a specific claim, set claim. Each result is evaluated against its title, snippet, and extra snippets and gains a claimSignal (the most claim-relevant sentence found), so you can choose which pages to read; for full-text evidence use search_and_scrape with claim. Evidence only — the server never decides supports/contradicts."`
 }
 
 func registerWebSearch(srv *mcp.Server, deps Dependencies) {
@@ -60,7 +60,7 @@ func registerWebSearch(srv *mcp.Server, deps Dependencies) {
 	inputSchema.Properties["provider"].Enum = webProviderEnum()
 	addTool(srv, &mcp.Tool{
 		Name:         "web_search",
-		Description:  "Search the web and get a list of relevant pages with titles and snippets — without reading the full page content. Narrow results to one domain with the site parameter, or apply a search lens to restrict to trusted sites in a field (see the lens parameter for the full list). Use search_and_scrape if you need full page text, news_search for current events, or academic_search for research papers. Results stay fresh for 30 minutes; use time_range to get more recent results. Snippets are not the full source — use scrape_page before asserting a claim. Zero results do not confirm a fact is false.",
+		Description:  "Search the web and get a list of relevant pages with titles and snippets — without reading the full page content. Narrow results to one domain with the site parameter. When the question belongs to a field (docs, security, government, academic, and so on), set lens to search trusted sites for that field (see the lens parameter for the full list). Use search_and_scrape if you need full page text, news_search for current events, or academic_search for research papers. Results stay fresh for 30 minutes; use time_range to get more recent results. Snippets are not the full source — use scrape_page before asserting a claim. Zero results do not confirm a fact is false.",
 		Annotations:  readOnlyAnnotations(true, true),
 		InputSchema:  inputSchema,
 		OutputSchema: webSearchOutputSchema,

@@ -17,6 +17,7 @@ import (
 var paramAliases = map[string]map[string]string{
 	"web_search":  {"max_results": "num_results", "limit": "num_results"},
 	"news_search": {"max_results": "num_results", "limit": "num_results"},
+	"scrape_page": {"start_index": "offset"},
 }
 
 // unexpectedPropsRe matches the SDK's schema-validation message and captures

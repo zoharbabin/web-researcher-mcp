@@ -32,7 +32,7 @@ The heaviest tools — `scrape_page` (`mode: raw`), `search_and_scrape`, and `re
 ## Tool 1: `web_search`
 
 ### Purpose
-Perform a web search and return structured result URLs with metadata.
+Perform a web search and return structured result URLs with metadata. When the question belongs to a field (docs, security, government, academic, and so on), set `lens` to search trusted sites for that field. When you are checking a specific claim, set `claim`.
 
 ### Input Schema
 
@@ -51,7 +51,7 @@ Perform a web search and return structured result URLs with metadata.
 | `lens` | string | no | — | Domain lens (overrides `site`/`sites`). See `lenses/` directory for available lenses. For engineering/API questions use `docs` (official references) or `programming` (docs, tutorials, Q&A) — `tech` is technology news and industry journalism, not engineering documentation |
 | `provider` | string | no | — | Force search provider: google, brave, serper, searxng, searchapi, youcom, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik. Returns error listing available providers if unknown |
 | `sessionId` | string | no | — | Link results to a `sequential_search` session |
-| `claim` | string | no | — | Optional claim to evaluate against each result's title, snippet, and extra snippets; when set, each result gains a `claimSignal` (#66, #633). Evidence only — never a verdict |
+| `claim` | string | no | — | When you are checking a specific claim, set `claim`. Each result is evaluated against its title, snippet, and extra snippets and gains a `claimSignal`, so you can choose which pages to read (#66, #633). Evidence only — never a verdict |
 
 ### Output Schema
 
@@ -488,7 +488,7 @@ When all tiers fail, the composite error message lists each tier's outcome (e.g.
 ## Tool 3: `search_and_scrape`
 
 ### Purpose
-Combined search + scrape pipeline with quality scoring, deduplication, and source ranking.
+Combined search + scrape pipeline with quality scoring, deduplication, and source ranking. When you need the text of several results, call `search_and_scrape` instead of `web_search` followed by many `scrape_page` calls.
 
 ### Input Schema
 
