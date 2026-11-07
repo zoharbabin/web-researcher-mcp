@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/razvandimescu/gopdf/pdf"
 	"golang.org/x/sync/singleflight"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/audit"
@@ -1427,8 +1428,8 @@ func TestScrapePageRawVsFullDistinctCache(t *testing.T) {
 // TestScrapePageSparsityWarning (#358): a page whose extracted content clears
 // the pipeline's >100-byte admission gate but stays under the 150-word
 // sparsity floor must surface wordCount + sparsityWarning — the content-volume
-// signal is orthogonal to extractionQuality (still "complete" here: no tier
-// was exhausted, the page is just genuinely short).
+// signal drives extractionQuality "thin" (#828) when no tier was exhausted and
+// the page is just genuinely short.
 func TestScrapePageSparsityWarning(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -1472,11 +1473,9 @@ func TestScrapePageSparsityWarning(t *testing.T) {
 	if warning == "" {
 		t.Fatal("expected non-empty sparsityWarning for thin content")
 	}
-	// The sparsity signal must be orthogonal to extractionQuality: this page's
-	// content is genuinely short, not a tier-exhaustion partial extraction, so
-	// extractionQuality must stay "complete" even though sparsityWarning fires.
-	if quality, _ := output["extractionQuality"].(string); quality != "complete" {
-		t.Fatalf("expected extractionQuality \"complete\" for a short-but-complete page, got %v", output["extractionQuality"])
+	// A short page that no tier gave up on is "thin", not "complete" (#828).
+	if quality, _ := output["extractionQuality"].(string); quality != "thin" {
+		t.Fatalf("expected extractionQuality \"thin\" for a short page, got %v", output["extractionQuality"])
 	}
 }
 
@@ -2784,5 +2783,83 @@ func TestGetMyAnalyticsResponse(t *testing.T) {
 	// Verify the response text contains no errors
 	if result.IsError {
 		t.Error("result should not be marked as error")
+	}
+}
+
+// TestExtractionQualityLabel (#828): precedence is empty, partial, thin, complete.
+func TestExtractionQualityLabel(t *testing.T) {
+	t.Parallel()
+	const warn = "thin"
+	tests := []struct {
+		name    string
+		words   int
+		partial bool
+		warning string
+		want    string
+	}{
+		{"zero words", 0, false, warn, "empty"},
+		{"zero words beats partial", 0, true, warn, "empty"},
+		{"zero words without warning", 0, false, "", "empty"},
+		{"partial beats thin", 10, true, warn, "partial"},
+		{"partial with enough words", 500, true, "", "partial"},
+		{"thin", 10, false, warn, "thin"},
+		{"complete", 500, false, "", "complete"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := extractionQualityLabel(tt.words, tt.partial, tt.warning); got != tt.want {
+				t.Errorf("extractionQualityLabel(%d, %v, %q) = %q, want %q", tt.words, tt.partial, tt.warning, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestScrapePageScannedPDF (#828): a PDF with pages and no text layer returns
+// extractionQuality "empty" and a warning that names the scanned PDF.
+func TestScrapePageScannedPDF(t *testing.T) {
+	c := pdf.NewCreator()
+	c.NewPage(612, 792)
+	c.NewPage(612, 792)
+	data, err := c.Build()
+	if err != nil {
+		t.Fatalf("building fixture PDF: %v", err)
+	}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Write(data)
+	}))
+	defer ts.Close()
+
+	ctx := context.Background()
+	deps := setupTestDeps()
+	deps.Scraper = scraper.NewPipeline(scraper.PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	srv := createTestServer(deps)
+	session := connectTestClient(ctx, t, srv)
+	defer session.Close()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "scrape_page",
+		Arguments: map[string]any{"url": ts.URL + "/scan.pdf"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("unexpected tool error: %s", res.Content[0].(*mcp.TextContent).Text)
+	}
+	var output map[string]any
+	if err := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &output); err != nil {
+		t.Fatalf("failed to parse output: %v", err)
+	}
+	if output["extractionQuality"] != "empty" {
+		t.Errorf("extractionQuality = %v, want empty", output["extractionQuality"])
+	}
+	if wc, _ := output["wordCount"].(float64); wc != 0 {
+		t.Errorf("wordCount = %v, want 0", output["wordCount"])
+	}
+	want := "PDF has 2 pages but no text layer (scanned images). OCR is not supported."
+	if output["sparsityWarning"] != want {
+		t.Errorf("sparsityWarning = %v, want %q", output["sparsityWarning"], want)
 	}
 }

@@ -219,6 +219,10 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		// the whole page, not just the requested part, so a short last part is not
 		// flagged as thin.
 		wordCount, sparsityWarning := content.SparsityWarning(processedContent)
+		// A scanned PDF carries a more specific warning from the scraper (#828).
+		if wordCount == 0 && result.SparsityWarning != "" {
+			sparsityWarning = result.SparsityWarning
+		}
 		citation := content.ExtractCitation(input.URL, result.Title, result.Author, result.SiteName, result.PublishDate)
 
 		output := map[string]any{
@@ -233,24 +237,12 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 			"citation":        citation,
 		}
 
-		// Extraction completeness signal (#240). Informational only: "partial"
-		// means the pipeline exhausted every tier and returned the best-quality
-		// candidate it could find (e.g. a SPA shell or a low-prose page) rather
-		// than a confidently complete extraction; "complete" otherwise. Never an
-		// error or a rejection — callers may still use partial content.
-		if result.Partial {
-			output["extractionQuality"] = "partial"
-		} else {
-			output["extractionQuality"] = "complete"
-		}
+		// Extraction quality (#240, #828). Informational only, never an error.
+		// See extractionQualityLabel for the precedence.
+		output["extractionQuality"] = extractionQualityLabel(wordCount, result.Partial, sparsityWarning)
 
-		// Content-volume signal (#358), orthogonal to extractionQuality above:
-		// extractionQuality reflects PIPELINE TIER EXHAUSTION, while wordCount/
-		// sparsityWarning reflect how much prose was actually extracted — a
-		// paywall/bot-wall stub can clear every tier check and still be too thin
-		// for a caller to run a reliable claim check against. Both may be present
-		// at once. wordCount is always emitted; sparsityWarning is omitted
-		// (zero-value "") when content is not thin.
+		// Content-volume signal (#358). wordCount is always emitted;
+		// sparsityWarning is omitted (zero-value "") when content is not thin.
 		output["wordCount"] = wordCount
 		// Login-wall signal: the page is probably a sign-in page, not the content.
 		// With saved cookies it means the login expired; without, that none exists.
@@ -636,11 +628,12 @@ func scrapeCacheKey(url, mode string, maxLength int) string {
 	// metadata.siteName, and writes the metadata block when any field is set
 	// (#826). v13 caches the whole cleaned page in full mode (#824) instead of the
 	// part cut to max_length, and adds totalLength/offset/nextOffset. A v12 blob
-	// holds a cut page and has no paging fields. Bump on any future shape change.
+	// holds a cut page and has no paging fields. v14 adds the thin/empty
+	// extractionQuality values (#828). Bump on any future shape change.
 	if mode != "raw" {
 		maxLength = 0
 	}
-	fmt.Fprintf(h, "scrape|v13|%s|%s|%d", url, mode, maxLength)
+	fmt.Fprintf(h, "scrape|v14|%s|%s|%d", url, mode, maxLength)
 	return "scrape:" + hex.EncodeToString(h.Sum(nil))[:32]
 }
 
@@ -770,4 +763,24 @@ func scrapeErrorResponseHint(err error, url, loginHint string) *mcp.CallToolResu
 	}
 
 	return structuredError(msg, te)
+}
+
+// extractionQualityLabel derives the extractionQuality value from the delivered
+// word count (#828). Precedence: empty, partial, thin, complete.
+//
+//	empty    no words were delivered
+//	partial  every tier was exhausted and the best candidate was returned
+//	thin     sparsityWarning is set (fewer words than content.SparseWordThreshold)
+//	complete otherwise
+func extractionQualityLabel(wordCount int, partial bool, sparsityWarning string) string {
+	switch {
+	case wordCount == 0:
+		return "empty"
+	case partial:
+		return "partial"
+	case sparsityWarning != "":
+		return "thin"
+	default:
+		return "complete"
+	}
 }

@@ -155,8 +155,8 @@ type ScrapeOutput struct {
     LoginRequired   bool      `json:"loginRequired,omitempty"` // true when the page looks like a sign-in page, not the content asked for (heuristic, #241); present only when site_login is available
     LoginHint       string    `json:"loginHint,omitempty"`     // next step when loginRequired: call site_login (replace=true when a saved login was sent); the text says when to add use_login_window=true.
     ExtractedBy     string    `json:"extractedBy,omitempty"` // extraction tier: markdown|stealth|jina|html|browser|exa:cached|exa:crawled; omitted when unknown
-    ExtractionQuality string  `json:"extractionQuality,omitempty"` // complete when the pipeline returned a confident extraction; partial when every tier was exhausted and the best-quality candidate was returned instead. Never an error. Omitted in raw mode.
-    WordCount         int     `json:"wordCount,omitempty"`         // words in the cleaned page (in full mode the whole page, not only this part) (#358, #822); orthogonal to ExtractionQuality — a "complete" extraction can still be a thin paywall/bot-wall stub. Omitted in raw mode.
+    ExtractionQuality string  `json:"extractionQuality,omitempty"` // empty (no words delivered) > partial (every tier exhausted, best candidate returned) > thin (sparsityWarning set) > complete. Never an error. Omitted in raw mode.
+    WordCount         int     `json:"wordCount,omitempty"`         // words in the cleaned page (in full mode the whole page, not only this part) (#358, #822); ExtractionQuality "empty" and "thin" are derived from it. Omitted in raw mode.
     SparsityWarning   string  `json:"sparsityWarning,omitempty"`   // present only when WordCount (of the cleaned page) is below ~150 — the content may be too thin for a reliable claim check (#358). Omitted in raw mode and whenever content is not thin.
     Metadata        *Metadata `json:"metadata,omitempty"` // present when any of title, author, publishedDate or siteName was found (full/preview only)
     StructuredData  *StructuredData `json:"structuredData,omitempty"` // page-embedded machine-readable metadata; present only when found (full/preview, HTML pages)
@@ -304,7 +304,18 @@ The byline fallback reads text like `Alicia Malone on 14 Sep, 2026` or `Septembe
 
 **Extraction provenance (`extractedBy`).** When known, the response names the tier that produced the content: `markdown`, `stealth`, `jina`, `html`, `browser`, `github:raw`/`github:contents-api`/`github:gist-api`, or — for the paid Exa fallback — `exa:cached` / `exa:crawled`. It lets a caller see whether content came from a free local tier or the metered Exa `/contents` API (Tier 5, present only when `EXA_API_KEY` is set). Omitted when unknown (e.g. document/YouTube routes).
 
-**Content-volume signal (#358).** `wordCount` is emitted for every non-raw scrape and counts the words in the cleaned page after dedup. In full mode that is the whole page, not only the part you asked for, so a short last part is not flagged as thin. It is a cheap, deterministic proxy for how much prose came back, and it is **orthogonal** to `extractionQuality`, which reflects pipeline tier exhaustion, not content volume: a `complete` extraction can still be a thin paywall/bot-wall stub (a few sentences behind a subscribe wall) if that stub was returned confidently by an early tier. When `wordCount` falls below ~150, `sparsityWarning` is added with a human-readable note that claim checks against this source may be unreliable. Both fields are omitted in raw mode. `verify_citation`, `audit_bibliography`, and `search_and_scrape` surface the same signal (see their sections below) so a caller can tell a thin stub from a genuinely well-supported claim check.
+**Content-volume signal (#358).** `wordCount` is emitted for every non-raw scrape and counts the words in the cleaned page after dedup. In full mode that is the whole page, not only the part you asked for, so a short last part is not flagged as thin. It is a cheap, deterministic proxy for how much prose came back. `extractionQuality` `empty` and `thin` are derived from it. When `wordCount` falls below ~150, `sparsityWarning` is added with a human-readable note that claim checks against this source may be unreliable. Both fields are omitted in raw mode. `verify_citation`, `audit_bibliography`, and `search_and_scrape` surface the same signal (see their sections below) so a caller can tell a thin stub from a genuinely well-supported claim check.
+
+**`extractionQuality` values (#828).** First match wins. Clients that switch on `complete` or `partial` will now also see `thin` and `empty`.
+
+| Value | Meaning |
+|---|---|
+| `empty` | No words were delivered. `sparsityWarning` says why when known, e.g. "PDF has N pages but no text layer (scanned images). OCR is not supported." |
+| `partial` | Every tier was exhausted and the best candidate was returned. |
+| `thin` | `sparsityWarning` is set (under ~150 words). |
+| `complete` | Anything else. |
+
+A bot-wall stub served at a document URL (`.pdf`, `.docx`, `.pptx`) is retried through the tiered pipeline. If every tier is still empty or walled, the call fails with a `blocked` or `content` error, never an empty success.
 
 **Typed source classification (#62).** Every scrape response (full and raw) carries three categorical fields alongside the numeric content: `sourceType` (the kind of source — derived from Schema.org `@type` / Highwire `citation_*` meta when present, else a domain heuristic, else `unknown`), `authorityTier` (`high`/`medium`/`low`, a banding of the internal authority score), and `domainCategory` (`academic`/`legal`/`medical`/`financial`/`technical`/`general`, from a domain heuristic). They let the model hedge in natural language by source type. They are best-effort hints derived from untrusted page data — treat them as signals, not guarantees. (In raw mode, with no structured-data extraction, `sourceType` falls back to the host heuristic.)
 
