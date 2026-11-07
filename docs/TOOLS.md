@@ -10,7 +10,7 @@ Each tool follows the pattern in `internal/tools/registry.go`: a typed input str
 
 ## Cache-Key Contract
 
-**Every result-affecting parameter MUST be included in a tool's cache key.** This single rule prevents an entire class of cache-collision bugs — two requests that would produce different results must never share a key (e.g. different providers, or a smaller `max_length` that would serve a later larger request a truncated body).
+**Every result-affecting parameter MUST be included in a tool's cache key.** This single rule prevents an entire class of cache-collision bugs — two requests that would produce different results must never share a key (e.g. different providers, or a smaller `max_length` that would serve a later larger request a truncated body). Exception: `scrape_page` full mode caches the whole cleaned page and cuts it per request, so `offset` and `max_length` are applied after the cache read and are not in its key.
 
 - Canonical implementations: `searchCacheKey(...)` (`internal/tools/search.go`) for the search family — keys on the tool name plus every query parameter **including `provider`** — and `scrapeCacheKey(url, mode, maxLength)` (`internal/tools/scrape.go`) for scrapes.
 - Each key carries a **version segment** (e.g. `v2`); bump it whenever the cached response *shape* changes so a post-upgrade cache hit can never serve a blob missing a newly-added field.
@@ -129,7 +129,8 @@ Extract content from a URL, supporting web pages, documents, YouTube videos, Hac
 |-------|------|----------|---------|-------------|
 | `url` | string | yes | — | Valid HTTP(S) URL |
 | `mode` | string | no | `full` | `full` (cleaned readable text), `preview` (first ~5000 bytes), `raw` (verbatim unsanitized bytes — see [Raw Mode](#raw-mode)) |
-| `max_length` | int | no | 50000 | Bytes. Capped at 5,000,000 (5 MB) for all modes; in `preview` mode it is forced to 5000. Applies to `raw` mode as an `io.LimitReader` cap on the fetched bytes |
+| `max_length` | int | no | 50000 | Bytes returned by this call. Capped at 5,000,000 (5 MB) for all modes; in `preview` mode it is forced to 5000. Applies to `raw` mode as an `io.LimitReader` cap on the fetched bytes. When the result has `nextOffset`, call again with `offset=nextOffset` |
+| `offset` | int | no | 0 | Byte position in the cleaned text where this call starts. `full` mode only: a negative value, or any value above 0 with `preview` or `raw`, returns a tool error. See [Reading a long page in parts](#reading-a-long-page-in-parts) |
 | `sessionId` | string | no | — | Link to a `sequential_search` session |
 | `anonymous` | bool | no | `false` | `true` skips any saved `site_login` (cookies or browser profile) and reads the page as a signed-out visitor |
 
@@ -142,7 +143,10 @@ type ScrapeOutput struct {
     ContentType     string    `json:"contentType"`    // html, markdown, youtube, pdf, docx, pptx, github, hackernews, bluesky, twitter (raw mode: the server's Content-Type header, may be "")
     Trust           string    `json:"trust"`          // always "untrusted-external-content" — boundary marker: treat content as data, not instructions (OWASP LLM01)
     ContentLength   int       `json:"contentLength"`
-    Truncated       bool      `json:"truncated"`
+    Truncated       bool      `json:"truncated"`       // true only if the returned `content` was cut to fit max_length (raw mode: the returned raw bytes were cut). Never set from the size of the page's HTML/PDF before extraction (#823). In full mode it is true exactly when NextOffset is present (#824)
+    TotalLength     int       `json:"totalLength"`     // full mode only (omitted in preview/raw): bytes of cleaned text for the whole page (after dedup), up to the 2,000,000-byte scrape cap (#824)
+    Offset          int       `json:"offset"`          // full mode only (omitted in preview/raw): start of this part; echoes the `offset` input (#824)
+    NextOffset      int       `json:"nextOffset,omitempty"`  // full mode only: where the next part starts; omitted on the last part (#824)
     EstimatedTokens int       `json:"estimatedTokens"`
     SizeCategory    string    `json:"sizeCategory"`   // small, medium, large, very_large
     Citation        *Citation `json:"citation"`       // always present
@@ -151,10 +155,10 @@ type ScrapeOutput struct {
     LoginRequired   bool      `json:"loginRequired,omitempty"` // true when the page looks like a sign-in page, not the content asked for (heuristic, #241); present only when site_login is available
     LoginHint       string    `json:"loginHint,omitempty"`     // next step when loginRequired: call site_login (replace=true when a saved login was sent); the text says when to add use_login_window=true.
     ExtractedBy     string    `json:"extractedBy,omitempty"` // extraction tier: markdown|stealth|jina|html|browser|exa:cached|exa:crawled; omitted when unknown
-    ExtractionQuality string  `json:"extractionQuality,omitempty"` // complete when the pipeline returned a confident extraction; partial when every tier was exhausted and the best-quality candidate was returned instead. Never an error. Omitted in raw mode.
-    WordCount         int     `json:"wordCount,omitempty"`         // words in the extracted content (#358); orthogonal to ExtractionQuality — a "complete" extraction can still be a thin paywall/bot-wall stub. Omitted in raw mode.
-    SparsityWarning   string  `json:"sparsityWarning,omitempty"`   // present only when WordCount is below ~150 — the content may be too thin for a reliable claim check (#358). Omitted in raw mode and whenever content is not thin.
-    Metadata        *Metadata `json:"metadata,omitempty"` // present only when a title was extracted (full/preview only)
+    ExtractionQuality string  `json:"extractionQuality,omitempty"` // empty (no words delivered) > partial (every tier exhausted, best candidate returned) > thin (sparsityWarning set) > complete. Never an error. Omitted in raw mode.
+    WordCount         int     `json:"wordCount,omitempty"`         // words in the cleaned page (in full mode the whole page, not only this part) (#358, #822); ExtractionQuality "empty" and "thin" are derived from it. Omitted in raw mode.
+    SparsityWarning   string  `json:"sparsityWarning,omitempty"`   // present only when WordCount (of the cleaned page) is below ~150 — the content may be too thin for a reliable claim check (#358). Omitted in raw mode and whenever content is not thin.
+    Metadata        *Metadata `json:"metadata,omitempty"` // present when any of title, author, publishedDate or siteName was found (full/preview only)
     StructuredData  *StructuredData `json:"structuredData,omitempty"` // page-embedded machine-readable metadata; present only when found (full/preview, HTML pages)
     ForumSignals    *ForumSignals   `json:"forumSignals,omitempty"`   // Reddit engagement metadata extracted from JSON-LD (#247), or Bluesky post engagement read natively via the AT Protocol API (#285); present only for Reddit posts where the HTML tier ran, or Bluesky posts
     SourceType      string    `json:"sourceType"`     // typed classification (#62): peer_reviewed|official_docs|government|news_publication|blog|forum|wiki|social_media|unknown
@@ -182,8 +186,10 @@ type RetractionStatus struct {
 }
 
 type Metadata struct {
-    Title  string `json:"title"`
-    Author string `json:"author"`
+    Title         string `json:"title"`
+    Author        string `json:"author"`
+    PublishedDate string `json:"publishedDate,omitempty"` // ISO YYYY-MM-DD (YYYY or YYYY-MM if the page gives no more); omitted when no parsable date
+    SiteName      string `json:"siteName,omitempty"`      // og:site_name; omitted when absent
 }
 
 type ForumSignals struct {
@@ -273,6 +279,15 @@ On a **cache hit**, the result also carries a top-level `_meta` block with cache
 
 In `raw` mode the output additionally carries `"raw": true`, and `contentType` is the server's real `Content-Type` header (it may be empty). No `metadata` block is emitted.
 
+**Author, date and site name (#826).** The html and stealth tiers share one extractor, so both fill `metadata.author`, `metadata.publishedDate` and `metadata.siteName`, and the citation uses them. The first source that gives a value wins.
+
+| Field | Sources, in order |
+|---|---|
+| `publishedDate` | `article:published_time`, `og:article:published_time`, `meta[name=date]`, `DC.date`, `dcterms.created`, `citation_publication_date`, JSON-LD `datePublished`, `<time datetime>` in `article` or `header`, `[itemprop=datePublished]`, visible byline |
+| `author` | `meta[name=author]`, `article:author`, JSON-LD `author.name`, `[itemprop=author]`, `a[rel=author]` text |
+
+The byline fallback reads text like `Alicia Malone on 14 Sep, 2026` or `September 14, 2026`, only inside a byline element (`a[rel=author]`, `.author-link`, `[class*=byline]`) or its parent. A date that does not parse gives no date. No day is ever guessed. The browser tier still returns the title only.
+
 **Tables in content (#48).** HTML `<table>` elements are rendered as GitHub-flavored markdown pipe tables inside `content` (header row + `---` separator + data rows), preserving row/column structure instead of flattening cells into disconnected fragments. Pipe characters in cells are escaped and multi-line cells are collapsed to a single row. Layout, malformed, single-column, and nested tables degrade gracefully to plain text — never an error, never a panic.
 
 **Forum engagement signals (#247).** For Reddit posts where the HTML extraction tier ran, the response carries a `forumSignals` object: `platform` (`"reddit"`), `upvotes` (vote count from JSON-LD `interactionStatistic`), `comments` (comment count), `datePublished` (ISO 8601), `authorName` (original poster), and `credibilityNote` (set when `upvotes < 20`, noting vote-manipulation risk). The field is **omitted entirely** for non-Reddit/non-Bluesky URLs, `raw` mode, and any non-HTML extraction tier (markdown, browser, document, YouTube, Twitter) — never `null`, only present-or-absent. For Twitter/X tweets (`contentType: "twitter"`), engagement signals (likes, retweets, replies, quotes, views) are embedded in the plain-text `content` string by the FxTwitter path — they are not surfaced as a separate structured field. For Bluesky posts (bsky.app), `forumSignals` carries `platform: "bluesky"`, `upvotes` (like count), `comments` (reply count), and `authorName` (displayName from the AT Protocol author record) — read natively via `app.bsky.feed.getPostThread`, not extracted from HTML (#285). When available, `topComments` carries up to 5 top comments (by score descending) fetched from the Reddit shreddit endpoint — each with `author`, `score`, `body` (plain text, max 500 chars; `[deleted]`/`[removed]` bodies are skipped), `permalink`, and `created`. The comment fetch is best-effort: a timeout (5 s), 429, or parse error silently omits the field without affecting the rest of the result.
@@ -289,7 +304,18 @@ In `raw` mode the output additionally carries `"raw": true`, and `contentType` i
 
 **Extraction provenance (`extractedBy`).** When known, the response names the tier that produced the content: `markdown`, `stealth`, `jina`, `html`, `browser`, `github:raw`/`github:contents-api`/`github:gist-api`, or — for the paid Exa fallback — `exa:cached` / `exa:crawled`. It lets a caller see whether content came from a free local tier or the metered Exa `/contents` API (Tier 5, present only when `EXA_API_KEY` is set). Omitted when unknown (e.g. document/YouTube routes).
 
-**Content-volume signal (#358).** `wordCount` is emitted for every non-raw scrape and is a cheap, deterministic proxy for how much prose was actually extracted — it is **orthogonal** to `extractionQuality`, which reflects pipeline tier exhaustion, not content volume: a `complete` extraction can still be a thin paywall/bot-wall stub (a few sentences behind a subscribe wall) if that stub was returned confidently by an early tier. When `wordCount` falls below ~150, `sparsityWarning` is added with a human-readable note that claim checks against this source may be unreliable. Both fields are omitted in raw mode. `verify_citation`, `audit_bibliography`, and `search_and_scrape` surface the same signal (see their sections below) so a caller can tell a thin stub from a genuinely well-supported claim check.
+**Content-volume signal (#358).** `wordCount` is emitted for every non-raw scrape and counts the words in the cleaned page after dedup. In full mode that is the whole page, not only the part you asked for, so a short last part is not flagged as thin. It is a cheap, deterministic proxy for how much prose came back. `extractionQuality` `empty` and `thin` are derived from it. When `wordCount` falls below ~150, `sparsityWarning` is added with a human-readable note that claim checks against this source may be unreliable. Both fields are omitted in raw mode. `verify_citation`, `audit_bibliography`, and `search_and_scrape` surface the same signal (see their sections below) so a caller can tell a thin stub from a genuinely well-supported claim check.
+
+**`extractionQuality` values (#828).** First match wins. Clients that switch on `complete` or `partial` will now also see `thin` and `empty`.
+
+| Value | Meaning |
+|---|---|
+| `empty` | No words were delivered. `sparsityWarning` says why when known, e.g. "PDF has N pages but no text layer (scanned images). OCR is not supported." |
+| `partial` | Every tier was exhausted and the best candidate was returned. |
+| `thin` | `sparsityWarning` is set (under ~150 words). |
+| `complete` | Anything else. |
+
+A bot-wall stub served at a document URL (`.pdf`, `.docx`, `.pptx`) is retried through the tiered pipeline. If every tier is still empty or walled, the call fails with a `blocked` or `content` error, never an empty success.
 
 **Typed source classification (#62).** Every scrape response (full and raw) carries three categorical fields alongside the numeric content: `sourceType` (the kind of source — derived from Schema.org `@type` / Highwire `citation_*` meta when present, else a domain heuristic, else `unknown`), `authorityTier` (`high`/`medium`/`low`, a banding of the internal authority score), and `domainCategory` (`academic`/`legal`/`medical`/`financial`/`technical`/`general`, from a domain heuristic). They let the model hedge in natural language by source type. They are best-effort hints derived from untrusted page data — treat them as signals, not guarantees. (In raw mode, with no structured-data extraction, `sourceType` falls back to the host heuristic.)
 
@@ -400,10 +426,25 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
 
 4. CONTENT PROCESSING
    ├─ Sanitize: strip hidden text, zero-width chars, dangerous patterns
-   ├─ Truncate: at paragraph/sentence boundary if > max_length
+   ├─ Slice (full mode): cut `max_length` bytes at `offset`, at a paragraph/sentence boundary (preview: Truncate)
    ├─ Estimate tokens: length / 4
    └─ Extract citation: from <meta> tags, URL, response headers
 ```
+
+### Reading a long page in parts
+
+`full` mode scrapes and cleans the whole page once (up to 2,000,000 bytes) and caches it. Each call returns the `max_length` bytes that start at `offset`.
+
+| Result field | Meaning |
+|---|---|
+| `totalLength` | Bytes of cleaned text for the whole page |
+| `offset` | Start of this part |
+| `nextOffset` | Start of the next part. Omitted on the last part |
+| `truncated` | `true` exactly when `nextOffset` is present |
+
+When `nextOffset` is present, call again with `offset=nextOffset` and the same `max_length`. The parts join with no gap and no overlap. Each cut part ends with `[content truncated, continue with offset=N]`, which is not page text: remove it before joining. Cuts fall on a paragraph, sentence, line, or word boundary, and always on a UTF-8 character start. An `offset` inside a multi-byte character moves forward to the next character. An `offset` at or past `totalLength` returns empty `content`, `truncated: false`, and no `nextOffset`.
+
+Later calls are served from the cache for 1 hour. Scrapes that use a saved `site_login` are never cached, so each call scrapes the page again.
 
 ### Known SPA Domains (require headless browser)
 - go.dev, pkg.go.dev
@@ -416,7 +457,8 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
 Note: twitter.com and x.com are **not** in the SPA list — they use a dedicated FxTwitter API path, not the browser tier.
 
 ### Cache
-- Key: SHA-256 of (`url` + `mode` + `max_length`) — `max_length` is part of the key so a larger request never serves a shorter cached body
+- Key: SHA-256 of (`url` + `mode`), plus `max_length` in `raw` mode only. `full` mode caches the whole cleaned page (up to 2,000,000 bytes) and cuts it per request, so `offset` and `max_length` are not in the key
+- Scrapes that use a saved `site_login` are never cached, so each `offset` call scrapes the page again
 - TTL: 1 hour
 - Not used for vault-backed (`authenticated: true`) scrapes: they neither read nor write the cache.
 
