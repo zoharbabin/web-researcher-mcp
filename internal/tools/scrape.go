@@ -181,6 +181,9 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		}
 
 		contentLen := len(processedContent)
+		// Count the delivered content, not the pre-Process scrape, so wordCount
+		// and sparsityWarning describe what the caller receives.
+		wordCount, sparsityWarning := content.SparsityWarning(processedContent)
 		citation := content.ExtractCitation(input.URL, result.Title, result.Author, result.SiteName, result.PublishDate)
 
 		output := map[string]any{
@@ -213,10 +216,10 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		// for a caller to run a reliable claim check against. Both may be present
 		// at once. wordCount is always emitted; sparsityWarning is omitted
 		// (zero-value "") when content is not thin.
-		output["wordCount"] = result.WordCount
+		output["wordCount"] = wordCount
 		// Login-wall signal: the page is probably a sign-in page, not the content.
 		// With saved cookies it means the login expired; without, that none exists.
-		wall := looksLikeLoginWall(input.URL, result.Title, processedContent, result.WordCount)
+		wall := looksLikeLoginWall(input.URL, result.Title, processedContent, wordCount)
 		if hint := hintFor(); hint != "" && wall {
 			output["loginRequired"] = true
 			output["loginHint"] = hint
@@ -229,15 +232,12 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		default:
 			profileStatus = "ok"
 		}
-		if result.SparsityWarning != "" {
-			output["sparsityWarning"] = result.SparsityWarning
+		if sparsityWarning != "" {
+			output["sparsityWarning"] = sparsityWarning
 		}
 
-		if result.Title != "" {
-			output["metadata"] = map[string]any{
-				"title":  result.Title,
-				"author": result.Author,
-			}
+		if md := scrapeMetadata(result); md != nil {
+			output["metadata"] = md
 		}
 
 		// Extraction provenance: which tier produced the content. Surfaced so a
@@ -507,6 +507,28 @@ func detectScholarlyDOI(sd *scraper.StructuredData, body, pageURL string) string
 	return detectDOI(top)
 }
 
+// scrapeMetadata builds the scrape_page metadata block. It is written when any
+// of title, author, publishedDate or siteName is set, so a page with a date but
+// no title still reports it. author and title are always present in the block
+// (possibly empty); publishedDate and siteName are omitted when empty. Returns
+// nil when there is nothing to report.
+func scrapeMetadata(r *scraper.ScrapeResult) map[string]any {
+	if r.Title == "" && r.Author == "" && r.PublishDate == "" && r.SiteName == "" {
+		return nil
+	}
+	md := map[string]any{
+		"title":  r.Title,
+		"author": r.Author,
+	}
+	if r.PublishDate != "" {
+		md["publishedDate"] = r.PublishDate
+	}
+	if r.SiteName != "" {
+		md["siteName"] = r.SiteName
+	}
+	return md
+}
+
 // scrapeCacheKey keys a cached scrape by URL, mode, AND the effective
 // max_length. max_length must be part of the key because content is truncated
 // to it before caching — without it, a small-max_length request could serve a
@@ -526,9 +548,13 @@ func scrapeCacheKey(url, mode string, maxLength int) string {
 	// (#247) for Reddit engagement metadata. v8 adds wordCount/sparsityWarning
 	// (#358) — the content-volume signal. v9 adds the native Bluesky post/profile
 	// scraper route (#285), whose forumSignals.platform="bluesky" value a v8 blob
-	// never produced. v10 adds the githubTrustSignals field (#546). Bump on any
-	// future shape change.
-	fmt.Fprintf(h, "scrape|v10|%s|%s|%d", url, mode, maxLength)
+	// never produced. v10 adds the githubTrustSignals field (#546). v11 makes
+	// wordCount/sparsityWarning count the delivered (post-dedup) content (#822)
+	// and fixes the truncated flag, which no longer reports a cut of the raw
+	// HTML/PDF bytes in full mode (#823). v12 adds metadata.publishedDate and
+	// metadata.siteName, and writes the metadata block when any field is set
+	// (#826). Bump on any future shape change.
+	fmt.Fprintf(h, "scrape|v12|%s|%s|%d", url, mode, maxLength)
 	return "scrape:" + hex.EncodeToString(h.Sum(nil))[:32]
 }
 

@@ -222,6 +222,10 @@ type ScrapeResult struct {
 	// content) — ScrapeRaw falls back to Content for those. Unexported:
 	// pipeline-internal, never serialized.
 	rawBody string
+	// rawTruncated reports whether rawBody was cut to maxLength. Every tier
+	// that sets rawBody sets this too. ScrapeRaw copies it into Truncated.
+	// Truncated itself describes Content only (#823). Unexported.
+	rawTruncated bool
 	// rawContentType is the real HTTP Content-Type header (or equivalent)
 	// paired with rawBody, reported by ScrapeRaw instead of Content's coarse
 	// constant ("html", "markdown", "pdf"). Unexported: pipeline-internal,
@@ -510,9 +514,8 @@ func (p *Pipeline) Scrape(ctx context.Context, rawURL string, maxLength int) (*S
 }
 
 // sparseWordThreshold is the WordCount below which SparsityWarning fires.
-// 150 words is roughly one short paragraph — below a real article's lede,
-// above the placeholder text a bot-wall or stub page typically ships.
-const sparseWordThreshold = 150
+// Shared with the tool layer via content.SparseWordThreshold.
+const sparseWordThreshold = content.SparseWordThreshold
 
 // stampSparsity populates WordCount and SparsityWarning from r.Content.
 // Deliberately called once, at the single point every scrape path (direct
@@ -526,10 +529,7 @@ func stampSparsity(r *ScrapeResult) {
 	if r == nil {
 		return
 	}
-	r.WordCount = content.WordCount(r.Content)
-	if r.WordCount < sparseWordThreshold {
-		r.SparsityWarning = fmt.Sprintf("Extracted content is thin (%d words); claim checks against this source may be unreliable.", r.WordCount)
-	}
+	r.WordCount, r.SparsityWarning = content.SparsityWarning(r.Content)
 }
 
 // scrapeWithTieredFallback runs the free-tier ladder (markdown -> stealth ->
@@ -1034,6 +1034,7 @@ func (p *Pipeline) ScrapeRaw(ctx context.Context, rawURL string, maxLength int) 
 	// path of its own) that never populate rawBody.
 	if result.rawBody != "" {
 		result.Content = result.rawBody
+		result.Truncated = result.rawTruncated
 		result.ContentType = result.rawContentType
 	}
 	result.Tier = "raw:" + result.Tier
