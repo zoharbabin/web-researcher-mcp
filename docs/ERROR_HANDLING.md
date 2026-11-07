@@ -220,6 +220,8 @@ All error responses set `IsError: true` on the MCP `CallToolResult`. The text co
 
 Tools never panic. Tools never return Go errors from the handler function (the third return value is always `nil`). All failures are communicated via the MCP result.
 
+**Schema rejections.** The SDK rejects unknown properties before a handler runs, with `unexpected additional properties [...]`. A receiving middleware (`registerParamAliasHints`, `internal/tools/param_hints.go`) appends the valid name for known guesses, for example `max_results` on `web_search` gets `Use "num_results"`. To cover a new guess, add it to `paramAliases`.
+
 ---
 
 ## Layer 4: Session-level Error Aggregation

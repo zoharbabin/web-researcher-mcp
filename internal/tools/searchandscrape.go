@@ -372,6 +372,8 @@ func parallelScrape(ctx context.Context, deps Dependencies, searchResults []sear
 				return
 			}
 			processedContent, _ := deps.Content.Process(result.Content, maxLen)
+			// Count the delivered content, not the pre-Process scrape (#822).
+			wordCount := content.WordCount(processedContent)
 			results[idx] = scrapeResult{
 				url:         url,
 				title:       title,
@@ -380,7 +382,7 @@ func parallelScrape(ctx context.Context, deps Dependencies, searchResults []sear
 				cType:       result.ContentType,
 				structured:  result.StructuredData,
 				partial:     result.Partial,
-				wordCount:   result.WordCount,
+				wordCount:   wordCount,
 			}
 		}(i, sr.URL, sr.Title, sr.PublishedAt)
 	}
