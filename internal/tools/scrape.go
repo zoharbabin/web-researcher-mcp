@@ -530,9 +530,10 @@ func scrapeCacheKey(url, mode string, maxLength int) string {
 	// (#358) — the content-volume signal. v9 adds the native Bluesky post/profile
 	// scraper route (#285), whose forumSignals.platform="bluesky" value a v8 blob
 	// never produced. v10 adds the githubTrustSignals field (#546). v11 makes
-	// wordCount/sparsityWarning count the delivered (post-dedup) content (#822),
-	// so a v10 blob would serve a pre-dedup count. Bump on any future shape
-	// change.
+	// wordCount/sparsityWarning count the delivered (post-dedup) content (#822)
+	// and fixes the truncated flag, which no longer reports a cut of the raw
+	// HTML/PDF bytes in full mode (#823). A v10 blob would serve the old values.
+	// Bump on any future shape change.
 	fmt.Fprintf(h, "scrape|v11|%s|%s|%d", url, mode, maxLength)
 	return "scrape:" + hex.EncodeToString(h.Sum(nil))[:32]
 }

@@ -68,10 +68,13 @@ func (p *Pipeline) scrapeBodyAsPDF(rawURL string, body []byte, maxLength int, ra
 	}
 	// Raw mode's returned body must respect the caller's maxLength the same
 	// way Content does, even though the underlying PDF bytes may be larger.
+	// The raw cut sets rawTruncated only: the flag for full mode describes the
+	// returned text, not these bytes (#823).
 	rawBody := string(body)
+	rawTruncated := false
 	if len(rawBody) > maxLength {
 		rawBody = rawBody[:maxLength]
-		truncated = true
+		rawTruncated = true
 	}
 	return &ScrapeResult{
 		URL:            rawURL,
@@ -82,6 +85,7 @@ func (p *Pipeline) scrapeBodyAsPDF(rawURL string, body []byte, maxLength int, ra
 		Truncated:      truncated,
 		Tier:           "document",
 		rawBody:        rawBody,
+		rawTruncated:   rawTruncated,
 		rawContentType: rawContentType,
 	}, nil
 }
