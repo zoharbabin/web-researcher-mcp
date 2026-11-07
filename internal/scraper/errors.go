@@ -237,6 +237,10 @@ var botWallMarkers = []string{
 	"view full profile",
 	"unlock full access",
 	"sign up for free to view",
+	// Imperva/Incapsula bot-wall stub (a tiny HTML page with a script from
+	// /_Incapsula_Resource, often served at a .pdf URL, #828).
+	"_incapsula_resource",
+	"incapsula incident",
 }
 
 // looksLikeBotWall reports whether short extracted content is a bot/JS-wall

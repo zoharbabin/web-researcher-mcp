@@ -100,7 +100,12 @@ func parsePDF(_ io.ReaderAt, size int64, data []byte) (string, Metadata, error) 
 	}
 
 	text := sb.String()
-	if text == "" {
+	if strings.TrimSpace(text) == "" {
+		// A PDF with pages but no text layer (scanned images) parses fine: return
+		// empty text with the page count so the caller can say so (#828).
+		if meta.PageCount > 0 {
+			return "", meta, nil
+		}
 		return "", meta, fmt.Errorf("no extractable text in PDF (may be image-based)")
 	}
 

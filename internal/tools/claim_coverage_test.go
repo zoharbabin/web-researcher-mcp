@@ -71,8 +71,9 @@ func TestClaimCoverageFromContent_CJKNotMisflaggedAsSparse(t *testing.T) {
 // bot-wall/challenge page served as a plain 200 with no prose) must still
 // record SourceURL — a fetch was actually attempted at this URL,
 // distinguishable from fetchURL=="" (never attempted, claimCoverageFor's
-// other empty-Support branch). FetchError stays empty: this is empty
-// *content*, not a scrape *error*.
+// other empty-Support branch). Since #828 a document URL that yields no text
+// from any tier fails with a content_empty scrape error instead of an empty
+// success, so FetchError carries that error.
 func TestClaimCoverageFor_EmptyContentSetsSourceURL(t *testing.T) {
 	docx := buildEmptyDOCX()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -91,8 +92,8 @@ func TestClaimCoverageFor_EmptyContentSetsSourceURL(t *testing.T) {
 	if cc.SourceURL != fetchURL {
 		t.Errorf("SourceURL = %q, want %q (a fetch was attempted, so this must be attributable)", cc.SourceURL, fetchURL)
 	}
-	if cc.FetchError != "" {
-		t.Errorf("FetchError = %q, want empty (empty content, not a scrape error)", cc.FetchError)
+	if !strings.HasPrefix(cc.FetchError, "content_empty") {
+		t.Errorf("FetchError = %q, want a content_empty scrape error (#828)", cc.FetchError)
 	}
 }
 
