@@ -52,3 +52,45 @@ func TestClaimCheck_2MBFindsEvidence(t *testing.T) {
 		t.Errorf("evidence missed the supporting sentence: %v", ev.KeySentences)
 	}
 }
+
+// A page that hard-wraps its lines (RFCs, plain text) must not turn each line
+// into its own "sentence". Otherwise the sentence that states the claim is
+// cut into fragments and loses to unrelated lines (#852).
+func TestExtractClaimEvidence_HardWrappedSentence(t *testing.T) {
+	t.Parallel()
+	text := "Section 9.2.2\n\n" +
+		"HTTP does not define exactly how a PUT method affects the state\n" +
+		"of an origin server.\n\n" +
+		"Of the request methods defined by this\n" +
+		"specification, PUT, DELETE, and safe request\n" +
+		"methods are idempotent.\n"
+	ev := ExtractClaimEvidence(text, "PUT and DELETE methods are idempotent")
+	want := "Of the request methods defined by this specification, PUT, DELETE, and safe request methods are idempotent."
+	if ev.Signal != want {
+		t.Errorf("Signal = %q, want %q", ev.Signal, want)
+	}
+}
+
+func TestSplitSentences_SoftWrap(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		in   string
+		want []string
+	}{
+		{"wrapped line joins", "the quick brown fox\njumps over the lazy dog.", []string{"the quick brown fox jumps over the lazy dog."}},
+		{"uppercase next line splits", "Introduction to the topic\nThe next heading here", []string{"Introduction to the topic", "The next heading here"}},
+		{"terminal period splits", "A full sentence ends here.\nand a lowercase tail follows", []string{"A full sentence ends here.", "and a lowercase tail follows"}},
+		{"blank line splits", "no punctuation here at all\n\nnext paragraph starts low", []string{"no punctuation here at all", "next paragraph starts low"}},
+		{"colon splits", "the list follows:\nitem one is here", []string{"the list follows:", "item one is here"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := splitSentences(tt.in)
+			if strings.Join(got, "|") != strings.Join(tt.want, "|") {
+				t.Errorf("splitSentences(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
