@@ -782,6 +782,9 @@ func splitSentences(text string) []string {
 	}
 	runes := []rune(text)
 	for i, r := range runes {
+		if r == '\r' {
+			continue // CRLF: the "\n" decides the break
+		}
 		if r == '\n' && isSoftWrap(runes, i) {
 			b.WriteRune(' ')
 			continue
@@ -802,14 +805,34 @@ func splitSentences(text string) []string {
 	return sentences
 }
 
+// softWrapMinLine is the shortest line that can be a wrapped line. Wrapped text
+// fills its lines (RFC 9110 uses about 70 columns, and breaks early before a long word). Shorter lines are list
+// items, keywords or headings, which stay separate sentences.
+const softWrapMinLine = 30
+
 // isSoftWrap reports whether the newline at runes[i] only wraps a long line in
 // the middle of a sentence, as RFC pages and plain-text documents do. It does
-// when the text before it does not end a sentence, clause or paragraph and the
-// next line starts in lowercase. A heading, list item or new sentence starts in
-// uppercase or follows terminal punctuation, so it still ends the sentence.
+// when the line before it is long, its text does not end a sentence, clause or
+// paragraph (a closing quote or bracket after the period still counts as an
+// end), and the next line starts in lowercase. A heading, list item or new
+// sentence starts in uppercase or follows terminal punctuation, so it still
+// ends the sentence.
 func isSoftWrap(runes []rune, i int) bool {
 	j := i - 1
 	for j >= 0 && (runes[j] == ' ' || runes[j] == '\t' || runes[j] == '\r') {
+		j--
+	}
+	if j < 0 {
+		return false
+	}
+	start := j
+	for start >= 0 && runes[start] != '\n' {
+		start--
+	}
+	if j-start < softWrapMinLine {
+		return false
+	}
+	for j >= 0 && strings.ContainsRune("\"')]}*_\u201d\u2019", runes[j]) {
 		j--
 	}
 	if j < 0 {

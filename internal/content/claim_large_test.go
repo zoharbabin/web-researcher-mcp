@@ -78,7 +78,10 @@ func TestSplitSentences_SoftWrap(t *testing.T) {
 		in   string
 		want []string
 	}{
-		{"wrapped line joins", "the quick brown fox\njumps over the lazy dog.", []string{"the quick brown fox jumps over the lazy dog."}},
+		{"wrapped line joins", "the quick brown fox jumps over the lazy cat today\nand then the lazy dog.", []string{"the quick brown fox jumps over the lazy cat today and then the lazy dog."}},
+		{"crlf wrapped line joins", "the quick brown fox jumps over the lazy cat today\r\nand then the lazy dog.", []string{"the quick brown fox jumps over the lazy cat today and then the lazy dog."}},
+		{"short lowercase lines stay apart", "machine learning models\nneural networks and more", []string{"machine learning models", "neural networks and more"}},
+		{"closing quote ends the sentence", "He said the whole team must act now and quickly \"we must act.\"\nand then he left", []string{"He said the whole team must act now and quickly \"we must act.\"", "and then he left"}},
 		{"uppercase next line splits", "Introduction to the topic\nThe next heading here", []string{"Introduction to the topic", "The next heading here"}},
 		{"terminal period splits", "A full sentence ends here.\nand a lowercase tail follows", []string{"A full sentence ends here.", "and a lowercase tail follows"}},
 		{"blank line splits", "no punctuation here at all\n\nnext paragraph starts low", []string{"no punctuation here at all", "next paragraph starts low"}},
