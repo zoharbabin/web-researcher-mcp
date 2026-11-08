@@ -105,7 +105,7 @@ func (l *LensProvider) doSearch(ctx context.Context, params PatentSearchParams) 
 			Granted:  doc.grantDate(),
 		}
 		if len(result.Abstract) > 500 {
-			result.Abstract = result.Abstract[:500] + "..."
+			result.Abstract = strings.ToValidUTF8(result.Abstract[:500], "") + "..."
 		}
 		if result.Number != "" {
 			result.URL = "https://patents.google.com/patent/" + result.Number

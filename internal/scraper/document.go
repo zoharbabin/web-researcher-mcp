@@ -73,7 +73,7 @@ func (p *Pipeline) scrapeBodyAsPDF(rawURL string, body []byte, maxLength int, ra
 	rawBody := string(body)
 	rawTruncated := false
 	if len(rawBody) > maxLength {
-		rawBody = rawBody[:maxLength]
+		rawBody = truncateBytes(rawBody, maxLength)
 		rawTruncated = true
 	}
 	return &ScrapeResult{
