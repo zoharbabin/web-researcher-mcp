@@ -217,7 +217,11 @@ func splitAndSegment(seg string) []string {
 		i += from
 		left, right := strings.TrimSpace(seg[:i]), strings.TrimSpace(seg[i+len(sep):])
 		if left != "" && right != "" && len(strings.Fields(right)) >= 2 {
-			personThenOrg := len(strings.Fields(left)) >= 2 && !isOrganizationName(left) && isOrganizationName(right)
+			// A person before an organization needs a long organization name
+			// (3+ words) and no comma in the person part. Shorter splits cut
+			// agencies such as "Occupational Safety and Health Administration".
+			personThenOrg := len(strings.Fields(left)) >= 2 && !strings.Contains(left, ",") &&
+				len(strings.Fields(right)) >= 3 && !isOrganizationName(left) && isOrganizationName(right)
 			orgThenPerson := endsWithCorporateSuffix(left) && !isOrganizationName(right)
 			if personThenOrg || orgThenPerson {
 				return append(splitAndSegment(left), splitAndSegment(right)...)

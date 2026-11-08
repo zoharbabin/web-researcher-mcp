@@ -293,6 +293,9 @@ func TestSplitAuthors_CorporateSuffix(t *testing.T) {
 		{"Acme Inc and Globex Corp", []string{"Acme Inc", "Globex Corp"}},
 		{"Department of Health and Human Services", []string{"Department of Health and Human Services"}},
 		{"Acme Inc", []string{"Acme Inc"}},
+		{"Occupational Safety and Health Administration", []string{"Occupational Safety and Health Administration"}},
+		{"Alcohol, Tobacco and Firearms Bureau", []string{"Alcohol, Tobacco and Firearms Bureau"}},
+		{"Alicia Malone and U.S. Government Accountability Office", []string{"Alicia Malone", "U.S. Government Accountability Office"}},
 	}
 	for _, tt := range tests {
 		got := splitAuthors(tt.in)
