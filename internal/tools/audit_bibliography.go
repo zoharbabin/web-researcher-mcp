@@ -66,9 +66,7 @@ const maxClaimLen = 2000
 // clampClaim trims and length-bounds a claim (validate at the boundary).
 func clampClaim(claim string) string {
 	claim = strings.TrimSpace(claim)
-	if len(claim) > maxClaimLen {
-		claim = claim[:maxClaimLen]
-	}
+	claim = content.CutAt(claim, maxClaimLen)
 	return claim
 }
 

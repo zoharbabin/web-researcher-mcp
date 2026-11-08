@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
+	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 )
 
 // LensProvider searches The Lens patent database (lens.org).
@@ -105,7 +106,7 @@ func (l *LensProvider) doSearch(ctx context.Context, params PatentSearchParams) 
 			Granted:  doc.grantDate(),
 		}
 		if len(result.Abstract) > 500 {
-			result.Abstract = result.Abstract[:500] + "..."
+			result.Abstract = content.CutAt(result.Abstract, 500) + "..."
 		}
 		if result.Number != "" {
 			result.URL = "https://patents.google.com/patent/" + result.Number

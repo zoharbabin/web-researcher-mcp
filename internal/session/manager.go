@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 )
 
 type Config struct {
@@ -582,7 +584,7 @@ func buildIndexFromSession(sess *Session) *SessionIndex {
 	for _, step := range sess.Steps {
 		oneLiner := step.Description
 		if len(oneLiner) > 120 {
-			oneLiner = oneLiner[:120]
+			oneLiner = content.CutAt(oneLiner, 120)
 		}
 		idx.StepIndex = append(idx.StepIndex, StepIndexEntry{
 			StepNumber:   step.StepNumber,
@@ -612,7 +614,7 @@ func buildIndexFromSession(sess *Session) *SessionIndex {
 		for _, s := range sess.Steps[start:] {
 			ol := s.Description
 			if len(ol) > 80 {
-				ol = ol[:80]
+				ol = content.CutAt(ol, 80)
 			}
 			parts = append(parts, ol)
 		}
