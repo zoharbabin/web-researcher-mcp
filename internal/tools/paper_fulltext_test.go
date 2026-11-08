@@ -88,7 +88,7 @@ func callPaperFulltext(t *testing.T, deps Dependencies, args map[string]any) map
 	return out
 }
 
-// TestPaperFulltextURLPath: a direct URL scrapes as-is with no metadata lookup —
+// TestPaperFulltextURLPath: a direct (non-arXiv) URL scrapes as-is with no metadata lookup —
 // source:"direct-url", no authors/doi/abstract fields.
 func TestPaperFulltextURLPath(t *testing.T) {
 	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -583,5 +583,64 @@ func TestPaperFulltextIdentifierTooLarge(t *testing.T) {
 	}
 	if !res.IsError {
 		t.Fatal("expected a validation error for an oversized identifier")
+	}
+}
+
+func TestArxivDOIFromURL(t *testing.T) {
+	t.Parallel()
+	tests := []struct{ in, want string }{
+		{"https://arxiv.org/abs/1706.03762", "10.48550/arXiv.1706.03762"},
+		{"https://arxiv.org/pdf/1706.03762", "10.48550/arXiv.1706.03762"},
+		{"https://arxiv.org/pdf/1706.03762.pdf", "10.48550/arXiv.1706.03762"},
+		{"https://arxiv.org/pdf/1706.03762v7", "10.48550/arXiv.1706.03762"},
+		{"https://www.arxiv.org/abs/2005.14165v2", "10.48550/arXiv.2005.14165"},
+		{"https://arxiv.org/abs/hep-th/9901001", "10.48550/arXiv.hep-th/9901001"},
+		{"https://arxiv.org/abs/math.GT/0309136v1", "10.48550/arXiv.math.GT/0309136"},
+		{"https://arxiv.org/list/cs.AI/recent", ""},
+		{"https://arxiv.org/abs/not-an-id", ""},
+		{"https://arxiv.org/abs/", ""},
+		{"https://evil.example/arxiv.org/abs/1706.03762", ""},
+		{"https://notarxiv.org/abs/1706.03762", ""},
+		{"https://example.com/paper.pdf", ""},
+		{"not a url", ""},
+	}
+	for _, tt := range tests {
+		if got := arxivDOIFromURL(tt.in); got != tt.want {
+			t.Errorf("arxivDOIFromURL(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+// arxivResolver resolves only the arXiv DOI of "Attention Is All You Need".
+type arxivResolver struct{ mockAcademicProvider }
+
+func (arxivResolver) ResolveByDOI(_ context.Context, doi string) (*search.AcademicResult, error) {
+	if doi == "10.48550/arXiv.1706.03762" {
+		return &search.AcademicResult{Title: "Attention Is All You Need", DOI: doi, Source: "openalex"}, nil
+	}
+	return nil, nil
+}
+
+// A direct arXiv URL is scraped as given and enriched with the record for its
+// arXiv DOI, so a PDF with no title of its own still gets a real title. Any
+// other URL gets no metadata lookup.
+func TestPaperFulltextArxivURLMetadata(t *testing.T) {
+	deps := setupTestDeps()
+	deps.AcademicProviders = map[string]search.AcademicProvider{"openalex": &arxivResolver{}}
+
+	url, meta, errResult, fetchErr := resolvePaperURL(context.Background(), deps, "https://arxiv.org/pdf/1706.03762v7")
+	if errResult != nil || fetchErr != nil {
+		t.Fatalf("unexpected result: %+v / %v", errResult, fetchErr)
+	}
+	if url != "https://arxiv.org/pdf/1706.03762v7" {
+		t.Errorf("url = %q, want the URL as given", url)
+	}
+	if meta == nil || meta.Title != "Attention Is All You Need" {
+		t.Fatalf("meta = %+v, want the record resolved through the arXiv DOI", meta)
+	}
+
+	_, meta, _, _ = resolvePaperURL(context.Background(), deps, "https://example.com/paper.pdf")
+	if meta != nil {
+		t.Errorf("non-arXiv URL got metadata: %+v", meta)
 	}
 }
