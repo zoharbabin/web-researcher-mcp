@@ -2002,6 +2002,22 @@ class ScrapePageMetadata:
         )
 
 @dataclass
+class ScrapePageOutline:
+    heading: Optional[str] = None
+    level: Optional[int] = None
+    offset: Optional[int] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "ScrapePageOutline | None":
+        if d is None:
+            return None
+        return cls(
+            heading=d.get('heading'),
+            level=d.get('level'),
+            offset=d.get('offset'),
+        )
+
+@dataclass
 class ScrapePageResponse:
     authenticated: Optional[bool] = None
     authorityTier: Optional[str] = None
@@ -2024,6 +2040,7 @@ class ScrapePageResponse:
     metadata: Optional[ScrapePageMetadata] = None
     nextOffset: Optional[int] = None
     offset: Optional[int] = None
+    outline: list[ScrapePageOutline] = field(default_factory=list)
     raw: Optional[bool] = None
     retractionStatus: Optional[Any] = None
     sizeCategory: Optional[str] = None
@@ -2062,6 +2079,7 @@ class ScrapePageResponse:
             metadata=ScrapePageMetadata.from_dict(d.get('metadata')) if d.get('metadata') else None,
             nextOffset=d.get('nextOffset'),
             offset=d.get('offset'),
+            outline=[ScrapePageOutline.from_dict(i) for i in (d.get('outline') or [])],
             raw=d.get('raw'),
             retractionStatus=d.get('retractionStatus') or None,
             sizeCategory=d.get('sizeCategory'),
