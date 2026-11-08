@@ -2020,6 +2020,7 @@ class ScrapePageResponse:
     highlights: list[ScrapePageHighlight] = field(default_factory=list)
     loginHint: Optional[str] = None
     loginRequired: Optional[bool] = None
+    maxLengthApplied: Optional[int] = None
     metadata: Optional[ScrapePageMetadata] = None
     nextOffset: Optional[int] = None
     offset: Optional[int] = None
@@ -2057,6 +2058,7 @@ class ScrapePageResponse:
             highlights=[ScrapePageHighlight.from_dict(i) for i in (d.get('highlights') or [])],
             loginHint=d.get('loginHint'),
             loginRequired=d.get('loginRequired'),
+            maxLengthApplied=d.get('maxLengthApplied'),
             metadata=ScrapePageMetadata.from_dict(d.get('metadata')) if d.get('metadata') else None,
             nextOffset=d.get('nextOffset'),
             offset=d.get('offset'),
