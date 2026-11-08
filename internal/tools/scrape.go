@@ -737,11 +737,13 @@ func scrapeCacheKey(url, mode string, maxLength int) string {
 	// (#826). v13 caches the whole cleaned page in full mode (#824) instead of the
 	// part cut to max_length, and adds totalLength/offset/nextOffset. A v12 blob
 	// holds a cut page and has no paging fields. v14 adds the thin/empty
-	// extractionQuality values (#828). Bump on any future shape change.
+	// extractionQuality values (#828). v15 keeps in-page links as Markdown in
+	// the extracted text (#827), so a v14 blob has the same text without them.
+	// Bump on any future shape change.
 	if mode != "raw" {
 		maxLength = 0
 	}
-	fmt.Fprintf(h, "scrape|v14|%s|%s|%d", url, mode, maxLength)
+	fmt.Fprintf(h, "scrape|v15|%s|%s|%d", url, mode, maxLength)
 	return "scrape:" + hex.EncodeToString(h.Sum(nil))[:32]
 }
 

@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -80,7 +81,7 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int,
 	// the html tier.
 	meta := extractHTMLMetadata(doc)
 
-	content := extractArticleContent(doc)
+	content := extractArticleContent(doc, documentBase(doc, url))
 	// A near-empty shell with no iframe candidates has nothing further to
 	// recover from this tier — bail as before. But when iframes were found,
 	// fall through and build the result anyway: the shell's own thin content
@@ -194,7 +195,7 @@ func applyBrowserHeaders(req *http.Request) {
 	req.Header.Set("Cache-Control", "max-age=0")
 }
 
-func extractArticleContent(doc *goquery.Document) string {
+func extractArticleContent(doc *goquery.Document, base *url.URL) string {
 	// Remove noise
 	doc.Find("script, style, nav, footer, aside, header, noscript, iframe, form").Remove()
 	doc.Find("[role='navigation'], [role='banner'], [role='complementary']").Remove()
@@ -215,14 +216,14 @@ func extractArticleContent(doc *goquery.Document) string {
 	for _, sel := range selectors {
 		el := doc.Find(sel).First()
 		if el.Length() > 0 {
-			if text := bestText(el); len(text) > 200 {
+			if text := bestText(el, base); len(text) > 200 {
 				return text
 			}
 		}
 	}
 
 	// Fall back to body with the same structured-vs-flat reconciliation.
-	return bestText(doc.Find("body"))
+	return bestText(doc.Find("body"), base)
 }
 
 // bestText renders a selection's content, preferring extractText (which emits
@@ -233,10 +234,18 @@ func extractArticleContent(doc *goquery.Document) string {
 // as flat and is kept; flat only wins on genuine div-soup pages, restoring the
 // stealth tier's pre-#48 completeness (this tier wins for most pages, so this
 // prevents silent body-text loss).
-func bestText(sel *goquery.Selection) string {
-	structured := cleanText(extractText(sel))
-	if flat := cleanText(sel.Text()); len(flat) > len(structured)*3/2 {
+func bestText(sel *goquery.Selection, base *url.URL) string {
+	structured := cleanText(extractText(sel, base))
+	flat := cleanText(sel.Text())
+	if len(flat) > len(structured)*3/2 {
 		return flat
+	}
+	// Link markup (#827) makes structured longer than its text. Compare the
+	// text alone, so links never change which rendering wins.
+	if base != nil {
+		if linkFree := cleanText(extractText(sel, nil)); len(flat) > len(linkFree)*3/2 {
+			return flat
+		}
 	}
 	return structured
 }
