@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/razvandimescu/gopdf/pdf"
 )
 
 // =============================================================================
@@ -4463,5 +4464,143 @@ func TestTruncatedFlag_PDFAtNonPDFURL(t *testing.T) {
 	}
 	if !raw.Truncated {
 		t.Error("raw mode: Truncated = false, want true (PDF bytes cut)")
+	}
+}
+
+// =============================================================================
+// Empty / bot-wall / scanned document-route results (#828)
+// =============================================================================
+
+const incapsulaStub = `<html style="height:100%"><head><META NAME="ROBOTS" CONTENT="NOINDEX, NOFOLLOW"></head><body style="margin:0px;height:100%"><script type="text/javascript" src="/_Incapsula_Resource?SWJIYLWA=abc"></script></body></html>`
+
+func TestLooksLikeBotWall_Incapsula(t *testing.T) {
+	t.Parallel()
+	for _, c := range []string{
+		"Request unsuccessful. Incapsula incident ID: 123-456",
+		`<script src="/_Incapsula_Resource?x=1"></script>`,
+	} {
+		if !looksLikeBotWall(c) {
+			t.Errorf("looksLikeBotWall(%q) = false, want true", c)
+		}
+	}
+}
+
+func TestNeedsDocFallback(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		r    *ScrapeResult
+		err  error
+		want bool
+	}{
+		{"error", nil, errors.New("boom"), true},
+		{"nil result", nil, nil, true},
+		{"empty content", &ScrapeResult{}, nil, true},
+		{"whitespace content", &ScrapeResult{Content: " \n "}, nil, true},
+		{"bot wall", &ScrapeResult{Content: "Just a moment..."}, nil, true},
+		{"real content", &ScrapeResult{Content: strings.Repeat("word ", 50)}, nil, false},
+		{"scanned pdf kept", &ScrapeResult{scannedPages: 22}, nil, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := needsDocFallback(tt.r, tt.err); got != tt.want {
+				t.Errorf("needsDocFallback = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// An Imperva stub served at a .pdf path must not return as an empty success.
+func TestScrape_DocumentRouteBotWallStub_NotEmptySuccess(t *testing.T) {
+	t.Parallel()
+	var hits atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "text/html")
+		io.WriteString(w, incapsulaStub) //nolint:errcheck
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	for _, raw := range []bool{false, true} {
+		hits.Store(0)
+		var res *ScrapeResult
+		var err error
+		if raw {
+			res, err = p.ScrapeRaw(context.Background(), ts.URL+"/doc.pdf", 50_000)
+		} else {
+			res, err = p.Scrape(context.Background(), ts.URL+"/doc.pdf", 50_000)
+		}
+		if err == nil {
+			t.Fatalf("raw=%v: want an error for an all-stub document URL, got success with %d bytes", raw, len(res.Content))
+		}
+		var se *ScrapeError
+		if !errors.As(err, &se) {
+			t.Fatalf("raw=%v: error type = %T, want *ScrapeError", raw, err)
+		}
+		if hits.Load() < 2 {
+			t.Errorf("raw=%v: server hit %d times, want the tiered fallback to run (>=2)", raw, hits.Load())
+		}
+	}
+}
+
+// The fallback finds real content when a later fetch gets past the stub.
+func TestScrape_DocumentRouteBotWallStub_FallbackRescues(t *testing.T) {
+	t.Parallel()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		if r.Header.Get("User-Agent") == "web-researcher-mcp/1.0" {
+			io.WriteString(w, incapsulaStub) //nolint:errcheck
+			return
+		}
+		io.WriteString(w, "<html><body><article><p>"+strings.Repeat("Real document text. ", 20)+"</p></article></body></html>") //nolint:errcheck
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	res, err := p.Scrape(context.Background(), ts.URL+"/doc.pdf", 50_000)
+	if err != nil {
+		t.Fatalf("Scrape error: %v", err)
+	}
+	if !strings.Contains(res.Content, "Real document text") {
+		t.Errorf("Content = %q, want the rescued text", res.Content)
+	}
+}
+
+// A PDF with pages and no text layer is a real answer: no fallback, a warning
+// that names the page count.
+func TestScrape_ScannedPDF_WarnsAboutNoTextLayer(t *testing.T) {
+	t.Parallel()
+	c := pdf.NewCreator()
+	for i := 0; i < 3; i++ {
+		c.NewPage(612, 792)
+	}
+	data, err := c.Build()
+	if err != nil {
+		t.Fatalf("building fixture PDF: %v", err)
+	}
+	var hits atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Write(data) //nolint:errcheck
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	res, err := p.Scrape(context.Background(), ts.URL+"/scan.pdf", 50_000)
+	if err != nil {
+		t.Fatalf("Scrape error: %v", err)
+	}
+	if res.WordCount != 0 || res.Content != "" {
+		t.Errorf("want empty content, got %d words %q", res.WordCount, res.Content)
+	}
+	want := "PDF has 3 pages but no text layer (scanned images). OCR is not supported."
+	if res.SparsityWarning != want {
+		t.Errorf("SparsityWarning = %q, want %q", res.SparsityWarning, want)
+	}
+	if hits.Load() != 1 {
+		t.Errorf("server hit %d times, want 1 (no fallback for a scanned PDF)", hits.Load())
 	}
 }
