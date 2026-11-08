@@ -106,8 +106,8 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 				}
 
 				combined := ctxResult.Context
-				if totalMaxLen > 0 && len(combined) > totalMaxLen {
-					combined = combined[:totalMaxLen]
+				if totalMaxLen > 0 {
+					combined = content.CutAt(combined, totalMaxLen)
 				}
 
 				output := map[string]any{
@@ -522,8 +522,11 @@ func assembleCombined(parts []string, deduplicate bool, totalMaxLen int) (string
 		if len(combined)+len(part) > totalMaxLen {
 			remaining := totalMaxLen - len(combined)
 			if remaining > 0 {
-				combined += part[:remaining]
-				includedLens[i] = remaining
+				// Cut on a word or sentence boundary, never inside a character.
+				// includedLens counts the bytes kept, not the budget left.
+				kept := content.CutAt(part, remaining)
+				combined += kept
+				includedLens[i] = len(kept)
 			}
 			break
 		}
