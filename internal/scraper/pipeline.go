@@ -69,6 +69,13 @@ type PipelineConfig struct {
 	// the only way to remove its outbound dependency on r.jina.ai — e.g. for
 	// hardened deployments or e2e tests that must stay network-free.
 	JinaDisabled bool
+	// TotalTimeout is the one overall deadline for a single Scrape, ScrapeRaw or
+	// ScrapeWithProfile call (#853). It covers every tier, the document fallback
+	// and the wait for a scrape slot, so per-tier timeouts can no longer add up
+	// to minutes. Only this deadline becomes a typed ScrapeError; the caller's
+	// own cancellation or deadline still passes through unchanged. Zero or
+	// negative ⇒ NewPipeline defaults it to DefaultTotalTimeout.
+	TotalTimeout time.Duration
 	// MaxHTMLBytes bounds the decompressed HTML body each HTML-parsing tier reads
 	// before extraction (stealth, html, patents). Zero ⇒ the NewPipeline default.
 	MaxHTMLBytes int
@@ -344,6 +351,9 @@ func NewPipeline(cfg PipelineConfig) *Pipeline {
 	if cfg.MaxConcurrencyPerTenant <= 0 {
 		cfg.MaxConcurrencyPerTenant = cfg.MaxConcurrency
 	}
+	if cfg.TotalTimeout <= 0 {
+		cfg.TotalTimeout = DefaultTotalTimeout
+	}
 	if cfg.MaxHTMLBytes <= 0 {
 		cfg.MaxHTMLBytes = 8 << 20 // 8 MB
 	}
@@ -433,7 +443,7 @@ func tenantBucketKey(ctx context.Context) string {
 	return defaultTenantBucket
 }
 
-func (p *Pipeline) Scrape(ctx context.Context, rawURL string, maxLength int) (*ScrapeResult, error) {
+func (p *Pipeline) scrape(ctx context.Context, rawURL string, maxLength int) (*ScrapeResult, error) {
 	// Single validation chokepoint for every entry path (scrape_page and
 	// search_and_scrape both flow through here). Rejects non-http(s) schemes
 	// and empty hosts before any network or semaphore work.
@@ -677,7 +687,13 @@ func (p *Pipeline) tieredFallback(ctx context.Context, url string, maxLength, de
 	for _, tier := range tiers {
 		release, aerr := p.acquireTier(ctx, tier.name)
 		if aerr != nil {
-			return nil, aerr
+			// Keep what the earlier tiers saw, so an overall-deadline error can
+			// name the tiers tried (#853). The wrappers unwrap it again.
+			var tried []string
+			for _, o := range outcomes {
+				tried = append(tried, tierSummary(o.name, o.result, o.err))
+			}
+			return nil, &tierAbortError{cause: aerr, tried: strings.Join(tried, ", ")}
 		}
 		result, err := tier.fn(ctx, url, maxLength, raw)
 		release()
@@ -992,7 +1008,7 @@ func betterResult(incumbent, candidate *ScrapeResult) *ScrapeResult {
 	return incumbent
 }
 
-// ScrapeRaw returns the page's unfiltered bytes by reusing the exact same
+// scrapeRaw is the body of ScrapeRaw. It returns the page's unfiltered bytes by reusing the exact same
 // tiered pipeline as Scrape (markdown -> stealth -> html -> browser, with the
 // SPA-domain-first and iframe-follow escalation logic, all under the same
 // anti-bot header spoofing) and SKIPPING ONLY the final extraction/
@@ -1009,7 +1025,7 @@ func betterResult(incumbent, candidate *ScrapeResult) *ScrapeResult {
 // their normal extracted Content since they have no separate raw body to
 // return). Callers MUST treat the body as untrusted (it may contain active
 // <script>/HTML) — raw mode is opt-in for scrape_page only.
-func (p *Pipeline) ScrapeRaw(ctx context.Context, rawURL string, maxLength int) (*ScrapeResult, error) {
+func (p *Pipeline) scrapeRaw(ctx context.Context, rawURL string, maxLength int) (*ScrapeResult, error) {
 	if err := validateScrapeURL(rawURL); err != nil {
 		return nil, validationError(rawURL, "", err, err.Error())
 	}

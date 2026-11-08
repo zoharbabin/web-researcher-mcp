@@ -493,6 +493,7 @@ func main() {
 		ExaAPIKey:               cfg.Search.ExaAPIKey,   // enables the paid Exa /contents fallback tier
 		JinaAPIKey:              cfg.Search.JinaAPIKey,  // raises the keyless Jina Reader tier's rate limit
 		JinaDisabled:            cfg.JinaDisabled,       // JINA_READER_DISABLED: opt out of the Jina Reader tier entirely
+		TotalTimeout:            cfg.ScrapeTotalTimeout, // SCRAPE_TOTAL_TIMEOUT: one deadline for a whole scrape call (#853)
 		MaxHTMLBytes:            cfg.MaxHTMLBytes,
 		MaxDocumentBytes:        cfg.MaxDocumentBytes,
 		GitHubToken:             cfg.Search.GitHubToken, // raises GitHub's unauth rate limit for native README/blob/gist routing (#395)

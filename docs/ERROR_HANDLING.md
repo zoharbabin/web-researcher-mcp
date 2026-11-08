@@ -79,7 +79,7 @@ type ScrapeError struct {
 
 | Kind | Constant | Triggers | Tier Examples |
 |------|----------|----------|---------------|
-| Network | `ErrNetwork` | Transient fault: timeout, connection refused, TLS error (NOT a DNS NXDOMAIN — see Not Found) | Any tier's HTTP client |
+| Network | `ErrNetwork` | Transient fault: timeout, connection refused, TLS error (NOT a DNS NXDOMAIN — see Not Found). Also the overall `SCRAPE_TOTAL_TIMEOUT` deadline (default 90s): the message reads `scrape timed out after …` and names the tiers tried; the error unwraps to `context.DeadlineExceeded`. A caller's own cancel or deadline is not wrapped | Any tier's HTTP client; `withTotalDeadline` (`deadline.go`) |
 | Validation | `ErrValidation` | Unsupported scheme, empty host, SSRF / private-IP / blocked-hostname denial, domain allowlist | pipeline (validation chokepoint) |
 | Blocked | `ErrBlocked` | HTTP 403, remote bot detection (a real site refusing us) — hard interstitials (Cloudflare/CAPTCHA/Anubis PoW) and soft signup/login/subscribe gates (Crunchbase/SimilarWeb-style anti-bot pages) alike | stealth/html (403) |
 | Browser | `ErrBrowser` | Chrome not found, launch failed, connect failed | browser tier only |
