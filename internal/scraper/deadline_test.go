@@ -224,3 +224,33 @@ func TestNewPipeline_TotalTimeoutDefault(t *testing.T) {
 		t.Errorf("TotalTimeout = %s, want 5s", got)
 	}
 }
+
+// A caller cancel that lands while the last tier runs leaves the tier loop with
+// a composite error, not a context error. The caller's cancellation must still
+// win (this was a timing flake in TestScrape_TotalDeadline_CallerContextStillWins).
+func TestWithTotalDeadline_CallerCancelDuringLastTier(t *testing.T) {
+	p := deadlinePipeline(time.Minute)
+	for name, mkCtx := range map[string]func() (context.Context, context.CancelFunc){
+		"cancel": func() (context.Context, context.CancelFunc) { return context.WithCancel(context.Background()) },
+		"deadline": func() (context.Context, context.CancelFunc) {
+			return context.WithTimeout(context.Background(), time.Nanosecond)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := mkCtx()
+			defer cancel()
+			_, err := p.withTotalDeadline(ctx, "http://example.test", func(context.Context) (*ScrapeResult, error) {
+				cancel()
+				<-ctx.Done()
+				return nil, &ScrapeError{Kind: ErrNetwork, Message: "no content extracted (html: context canceled)"}
+			})
+			if !errors.Is(err, ctx.Err()) {
+				t.Fatalf("got %T: %v, want the caller's %v", err, err, ctx.Err())
+			}
+			var se *ScrapeError
+			if errors.As(err, &se) {
+				t.Fatalf("caller context error was wrapped in a ScrapeError: %v", err)
+			}
+		})
+	}
+}

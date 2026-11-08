@@ -58,8 +58,13 @@ func (p *Pipeline) withTotalDeadline(ctx context.Context, url string, fn func(co
 		err = abort.cause
 	}
 
-	ours := ctx.Err() == nil && errors.Is(sctx.Err(), context.DeadlineExceeded)
-	if !ours {
+	// The caller gave up (cancel or its own deadline). Whatever tier error
+	// raced with that, the answer is the caller's context error, never a
+	// composite scrape error or our typed timeout.
+	if cerr := ctx.Err(); cerr != nil {
+		return nil, cerr
+	}
+	if !errors.Is(sctx.Err(), context.DeadlineExceeded) {
 		return nil, err
 	}
 	var se *ScrapeError
