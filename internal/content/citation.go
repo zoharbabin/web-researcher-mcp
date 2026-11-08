@@ -117,6 +117,8 @@ func splitPersonalName(name string) (family, given string, isLiteral bool) {
 
 // orgKeywords are tokens that mark a name as an organization. Matched
 // case-insensitively against whole tokens with surrounding punctuation removed.
+// Words that are also common surnames (Bank, Court, Church, Press, Fund) are left
+// out on purpose, so a person is never turned into an organization.
 var orgKeywords = map[string]bool{
 	"office": true, "agency": true, "department": true, "ministry": true,
 	"commission": true, "council": true, "committee": true, "institute": true,
@@ -125,6 +127,13 @@ var orgKeywords = map[string]bool{
 	"inc": true, "ltd": true, "llc": true, "gmbh": true, "contributors": true,
 	"team": true, "staff": true, "editors": true, "bureau": true,
 	"administration": true, "authority": true,
+	"international": true, "federation": true, "alliance": true, "consortium": true,
+	"coalition": true, "initiative": true, "network": true, "group": true,
+	"academy": true, "research": true, "laboratory": true, "laboratories": true,
+	"center": true, "centre": true, "museum": true, "library": true,
+	"hospital": true, "college": true, "institution": true, "parliament": true,
+	"congress": true, "senate": true, "secretariat": true, "union": true,
+	"watch": true, "without": true,
 }
 
 // isOrganizationName reports whether name looks like an organization or group
