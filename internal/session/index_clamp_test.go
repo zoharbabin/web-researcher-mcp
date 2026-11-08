@@ -31,3 +31,25 @@ func TestBuildIndexFromSession_NeverSplitsCharacter(t *testing.T) {
 		t.Errorf("summary is not valid UTF-8: %q", idx.Summary)
 	}
 }
+
+// The one-liner and summary cuts land on a word boundary, not inside a word.
+func TestBuildIndexFromSession_CutsOnWordBoundary(t *testing.T) {
+	t.Parallel()
+
+	// 9-byte words: the 120 and 80 byte limits both fall inside a word.
+	sess := &Session{
+		ID:           "s2",
+		ResearchGoal: "goal",
+		Steps: []ResearchStep{
+			{StepNumber: 1, Description: strings.Repeat("alphabet ", 40)},
+		},
+	}
+	idx := buildIndexFromSession(sess)
+
+	if got := idx.StepIndex[0].OneLiner; !strings.HasSuffix(got, "alphabet") || len(got) > 120 {
+		t.Errorf("one-liner not cut on a word boundary (%d bytes): %q", len(got), got)
+	}
+	if !strings.Contains(idx.Summary, "alphabet") || strings.Contains(idx.Summary, "alphabe ") {
+		t.Errorf("summary split a word: %q", idx.Summary)
+	}
+}
