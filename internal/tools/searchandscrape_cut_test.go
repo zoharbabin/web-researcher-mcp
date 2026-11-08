@@ -1,9 +1,12 @@
 package tools
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/search"
 )
 
 // TestAssembleCombined_CutsOnBoundaryAndKeepsValidUTF8 is the #850 regression:
@@ -58,4 +61,66 @@ func TestAssembleCombined_CutsOnBoundaryAndKeepsValidUTF8(t *testing.T) {
 			t.Errorf("includedLens = %d, want %d", lens[0], len(combined))
 		}
 	})
+}
+
+// contextProvider is a search provider that also answers with server-side
+// assembled context, which takes the search_and_scrape fast path.
+type contextProvider struct {
+	mockProvider
+	text string
+}
+
+func (c *contextProvider) Context(_ context.Context, _ search.ContextParams) (*search.ContextResult, error) {
+	return &search.ContextResult{
+		Context:  c.text,
+		Snippets: []search.ContextSnippet{{URL: "https://example.com/a", Title: "A", Text: "snippet"}},
+		Source:   "ctx",
+	}, nil
+}
+
+// TestSearchAndScrape_ContextPathCutsOnBoundary covers the context fast path
+// of #850: the assembled context is cut to total_max_length on a word boundary,
+// never inside a character.
+func TestSearchAndScrape_ContextPathCutsOnBoundary(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		text string
+		want func(t *testing.T, got string)
+	}{
+		"words": {
+			// 9-byte words: the 100-byte limit falls inside a word.
+			text: strings.Repeat("alphabet ", 50),
+			want: func(t *testing.T, got string) {
+				if !strings.HasSuffix(got, "alphabet") {
+					t.Errorf("cut inside a word: %q", got)
+				}
+			},
+		},
+		"multi-byte": {
+			// 3-byte characters, no spaces: 100 is not a multiple of 3.
+			text: strings.Repeat("日本語", 50),
+			want: func(t *testing.T, got string) {
+				if !utf8.ValidString(got) {
+					t.Errorf("cut inside a character: %q", got)
+				}
+			},
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			deps := setupTestDeps()
+			deps.Search = &contextProvider{text: tc.text}
+			out := callToolJSON(t, deps, "search_and_scrape", map[string]any{
+				"query":            "q",
+				"total_max_length": 100,
+			})
+			got, _ := out["combinedContent"].(string)
+			if got == "" || len(got) > 100 {
+				t.Fatalf("combinedContent len %d, want 1..100: %q", len(got), got)
+			}
+			tc.want(t, got)
+		})
+	}
 }
