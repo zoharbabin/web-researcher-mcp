@@ -182,6 +182,10 @@ func TestNormalizeDate(t *testing.T) {
 		{"", ""},
 		{"yesterday", ""},
 		{"2026-13-40", ""},
+		{"2026-13", ""},
+		{"2026-00", ""},
+		{"0000", ""},
+		{"0999", ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.in, func(t *testing.T) {
