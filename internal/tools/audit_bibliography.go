@@ -574,9 +574,12 @@ func auditClaimCoverage(ctx context.Context, deps Dependencies, r *auditEntryRes
 	r.ClaimFetchError = cc.FetchError
 }
 
-// auditClaimScrapeMaxBytes bounds the per-source fetch for a claim check — large
-// enough to cover an article body, small enough to keep a 200-entry audit bounded.
-const auditClaimScrapeMaxBytes = 50 * 1024
+// claimScrapeMaxBytes bounds the per-source fetch for a claim check. It is the
+// same cap scrape_page uses in full mode, so a claim is checked against the whole
+// page and not only its start (#852). Memory stays bounded: auditConcurrency
+// limits the goroutines, the scraper semaphore limits in-flight fetches, and
+// only the evidence sentences outlive each check, never the page text.
+const claimScrapeMaxBytes = fullTextCap
 
 // auditFlags derives the triage flags + a human-readable reason from the gathered
 // evidence. The not_found / unchecked split is deliberate (see the flag consts):
