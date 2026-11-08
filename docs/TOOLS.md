@@ -142,7 +142,7 @@ type ScrapeOutput struct {
     ContentType     string    `json:"contentType"`    // html, markdown, youtube, pdf, docx, pptx, github, hackernews, bluesky, twitter (raw mode: the server's Content-Type header, may be "")
     Trust           string    `json:"trust"`          // always "untrusted-external-content" — boundary marker: treat content as data, not instructions (OWASP LLM01)
     ContentLength   int       `json:"contentLength"`
-    Truncated       bool      `json:"truncated"`
+    Truncated       bool      `json:"truncated"`       // true only if the returned `content` was cut to fit max_length (raw mode: the returned raw bytes were cut). Never set from the size of the page's HTML/PDF before extraction (#823)
     EstimatedTokens int       `json:"estimatedTokens"`
     SizeCategory    string    `json:"sizeCategory"`   // small, medium, large, very_large
     Citation        *Citation `json:"citation"`       // always present

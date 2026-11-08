@@ -455,7 +455,7 @@ func (p *Pipeline) scrapeBrowser(ctx context.Context, url string, maxLength int,
 		if html, herr := page.HTML(); herr == nil {
 			if len(html) > maxLength {
 				html = truncateBytes(html, maxLength)
-				res.Truncated = true
+				res.rawTruncated = true
 			}
 			res.rawBody = html
 			res.rawContentType = "text/html; charset=utf-8"
