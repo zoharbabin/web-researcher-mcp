@@ -187,7 +187,7 @@ func classifyRawError(err error, url string) *ScrapeError {
 // bot-wall interstitial. A real article is far larger; an interstitial ("Checking
 // your browser…", a CAPTCHA shell, or an Anubis PoW gate) is small. Set to 2048
 // to cover Anubis (~1075 B) while remaining well below any real article body.
-// The claim-fetch cap is 50KB so there is no risk of false-positives on real content.
+// Real article bodies, including claim-check fetches, are far larger, so there is no risk of false positives on real content.
 const botWallMaxBytes = 2048
 
 // botWallMarkers are phrases that, in SHORT extracted content, indicate a bot/JS

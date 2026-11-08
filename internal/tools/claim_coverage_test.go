@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -177,5 +178,49 @@ func TestClaimCoverageFromContent_GenericClaimUnaffected(t *testing.T) {
 	out := claimCoverageFromContent(body, "https://example.com/paper", claim)
 	if out.Support != claimAddressed {
 		t.Errorf("fully generic claim with strong overlap should still be claimAddressed, got %q", out.Support)
+	}
+}
+
+// TestClaimCoverageFor_FindsEvidenceDeepInLongPage is the #852 regression. A
+// 400 KB page carries the one supporting sentence at about byte 300,000. With
+// the old 50 KB cap the scraper cut the page long before that and the check
+// returned no evidence. The claim check now reads up to the scrape_page cap.
+func TestClaimCoverageFor_FindsEvidenceDeepInLongPage(t *testing.T) {
+	const support = "Zirconium flange gaskets tolerate repeated thermal cycling without leaking."
+	var b strings.Builder
+	b.WriteString("<!DOCTYPE html><html><head><title>Long page</title></head><body><article><h1>Long page</h1>")
+	supportAt := 0
+	for i := 0; b.Len() < 400_000; i++ {
+		if supportAt == 0 && b.Len() >= 300_000 {
+			supportAt = b.Len()
+			fmt.Fprintf(&b, "<p>%s</p>", support)
+		}
+		fmt.Fprintf(&b, "<p>Paragraph %d covers general plant maintenance schedules and inspection routines for site %d.</p>", i, i*13)
+	}
+	b.WriteString("</article></body></html>")
+	page := b.String()
+	if supportAt < 300_000 || len(page) < 400_000 {
+		t.Fatalf("test page misbuilt: supportAt=%d len=%d", supportAt, len(page))
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(page))
+	}))
+	defer server.Close()
+
+	deps := verifyClaimDeps(t)
+	cc := claimCoverageFor(context.Background(), deps, server.URL, "zirconium flange gaskets tolerate thermal cycling")
+
+	found := false
+	for _, ev := range cc.Evidence {
+		if strings.Contains(ev, "Zirconium flange gaskets") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("evidence missed the sentence at byte %d: support=%v evidence=%v", supportAt, cc.Support, cc.Evidence)
+	}
+	if cc.Support != claimAddressed {
+		t.Errorf("Support = %v, want %v", cc.Support, claimAddressed)
 	}
 }

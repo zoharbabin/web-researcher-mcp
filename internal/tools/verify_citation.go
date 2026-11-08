@@ -500,7 +500,7 @@ func enrichURLWithScholarlyDOI(ctx context.Context, deps Dependencies, fetchURL,
 	if deps.Scraper == nil || fetchURL == "" {
 		return ""
 	}
-	res, err := deps.Scraper.Scrape(ctx, fetchURL, auditClaimScrapeMaxBytes)
+	res, err := deps.Scraper.Scrape(ctx, fetchURL, claimScrapeMaxBytes)
 	if err != nil || res == nil || strings.TrimSpace(res.Content) == "" {
 		return ""
 	}
