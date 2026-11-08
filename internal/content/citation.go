@@ -2,6 +2,7 @@ package content
 
 import (
 	"fmt"
+	neturl "net/url"
 	"strings"
 	"time"
 	"unicode"
@@ -41,13 +42,30 @@ func ExtractCitation(url, title, author, siteName, pubDate string) Citation {
 		},
 	}
 
+	// An empty title falls back to the URL host in the formatted strings so the
+	// title slot is never silently dropped (#854). Metadata.Title stays raw so
+	// callers can still detect a missing title.
+	effectiveTitle := title
+	if effectiveTitle == "" {
+		effectiveTitle = urlHost(url)
+	}
+
 	c.Formatted = CitationFormats{
-		APA:    formatAPA(title, author, siteName, pubDate, url, accessed),
-		MLA:    formatMLA(title, author, siteName, pubDate, url, accessed),
-		BibTeX: formatBibTeX(title, author, siteName, pubDate, url, accessed),
+		APA:    formatAPA(effectiveTitle, author, siteName, pubDate, url, accessed),
+		MLA:    formatMLA(effectiveTitle, author, siteName, pubDate, url, accessed),
+		BibTeX: formatBibTeX(effectiveTitle, author, siteName, pubDate, url, accessed),
 	}
 
 	return c
+}
+
+// urlHost returns the hostname of rawURL (no port), or "" when it has none.
+func urlHost(rawURL string) string {
+	u, err := neturl.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	return u.Hostname()
 }
 
 // ensureTerminalPeriod appends a period unless the string already ends with one,
