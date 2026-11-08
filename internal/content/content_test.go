@@ -1,9 +1,11 @@
 package content
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 // =============================================================================
@@ -1258,5 +1260,110 @@ func TestNewlineTruncation(t *testing.T) {
 	}
 	if !strings.HasSuffix(result, "[content truncated]") {
 		t.Errorf("expected truncation marker, got %q", result)
+	}
+}
+
+func TestSlice(t *testing.T) {
+	t.Parallel()
+	// "é" is 2 bytes, "日" is 3 bytes.
+	cases := []struct {
+		name     string
+		text     string
+		offset   int
+		n        int
+		wantPage string // page without the marker
+		wantNext int
+		wantMore bool
+	}{
+		{"whole text fits", "hello world", 0, 100, "hello world", 11, false},
+		{"exact fit", "hello", 0, 5, "hello", 5, false},
+		{"offset 0 word cut", "aaaa bbbb cccc", 0, 10, "aaaa bbbb", 9, true},
+		{"paragraph cut", "aaaa aaaa\n\nbbbb bbbb\n\ncccc", 0, 22, "aaaa aaaa\n\nbbbb bbbb", 20, true},
+		{"sentence cut", "One two three. Four five six seven", 0, 20, "One two three.", 14, true},
+		{"offset in middle", "aaaa bbbb cccc dddd", 10, 100, "cccc dddd", 19, false},
+		{"offset in middle with more", "aaaa bbbb cccc dddd eeee", 5, 9, "bbbb cccc", 14, true},
+		{"last page", "aaaa bbbb cccc", 10, 10, "cccc", 14, false},
+		{"offset at end", "hello", 5, 10, "", 5, false},
+		{"offset past end", "hello", 99, 10, "", 5, false},
+		{"empty text", "", 0, 10, "", 0, false},
+		{"negative offset treated as 0", "hello world", -4, 100, "hello world", 11, false},
+		{"hard cut keeps 2-byte rune whole", "ééééééééééé", 0, 5, "éé", 4, true},
+		{"hard cut keeps 3-byte rune whole", "日本語日本語日本語", 0, 7, "日本", 6, true},
+		{"offset inside rune moves forward", "日本語日本語", 1, 100, "本語日本語", 18, false},
+		{"n smaller than first rune still advances", "日本語", 0, 1, "日", 3, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			page, next, more := Slice(tc.text, tc.offset, tc.n)
+			if more != tc.wantMore {
+				t.Fatalf("more = %v, want %v (page %q)", more, tc.wantMore, page)
+			}
+			if next != tc.wantNext {
+				t.Errorf("next = %d, want %d", next, tc.wantNext)
+			}
+			got := page
+			if more {
+				marker := fmt.Sprintf("\n\n[content truncated, continue with offset=%d]", next)
+				if !strings.HasSuffix(page, marker) {
+					t.Fatalf("page %q does not end with marker %q", page, marker)
+				}
+				got = strings.TrimSuffix(page, marker)
+			}
+			if got != tc.wantPage {
+				t.Errorf("page = %q, want %q", got, tc.wantPage)
+			}
+			if !utf8.ValidString(page) {
+				t.Errorf("page is not valid UTF-8: %q", page)
+			}
+		})
+	}
+}
+
+// Reading with nextOffset rebuilds the text exactly, for any page size.
+func TestSlice_PagesRebuildText(t *testing.T) {
+	t.Parallel()
+	var b strings.Builder
+	for i := 0; i < 400; i++ {
+		fmt.Fprintf(&b, "Paragraph %d: données 日本語 text goes here. Another sentence follows.\n\n", i)
+	}
+	text := b.String()
+	for _, n := range []int{1, 2, 3, 7, 50, 333, 1000, 4096} {
+		var out strings.Builder
+		offset := 0
+		for pages := 0; ; pages++ {
+			if pages > len(text)+1 {
+				t.Fatalf("n=%d: paging did not finish", n)
+			}
+			page, next, more := Slice(text, offset, n)
+			if !more {
+				out.WriteString(page)
+				break
+			}
+			if next <= offset {
+				t.Fatalf("n=%d: next %d did not move past offset %d", n, next, offset)
+			}
+			out.WriteString(strings.TrimSuffix(page, fmt.Sprintf("\n\n[content truncated, continue with offset=%d]", next)))
+			offset = next
+		}
+		if out.String() != text {
+			t.Errorf("n=%d: rebuilt text differs from the original", n)
+		}
+	}
+}
+
+func TestProcessor_Clean_DoesNotCut(t *testing.T) {
+	t.Parallel()
+	p := NewProcessor()
+	var b strings.Builder
+	for i := 0; i < 3000; i++ {
+		fmt.Fprintf(&b, "A sentence that is unique number %d.\n\n", i)
+	}
+	got := p.Clean(b.String())
+	if strings.Contains(got, "[content truncated") {
+		t.Error("Clean must not add a truncation marker")
+	}
+	if len(got) < 90000 {
+		t.Errorf("Clean cut the text: %d bytes", len(got))
 	}
 }
