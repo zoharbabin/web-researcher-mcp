@@ -109,6 +109,13 @@ func TestExtractCitation_OrganizationAuthor(t *testing.T) {
 			wantBibTX: "author = {Alicia Malone and {U.S. Government Accountability Office}},",
 		},
 		{
+			name:      "company plus person joined by and",
+			author:    "Acme Inc and Bob Smith",
+			wantAPA:   "Acme Inc, & Smith, B. (2024).",
+			wantMLA:   "Acme Inc, and Bob Smith. \"Title.\"",
+			wantBibTX: "author = {{Acme Inc} and Bob Smith},",
+		},
+		{
 			name:      "organization with internal and",
 			author:    "Department of Health and Human Services",
 			wantAPA:   "Department of Health and Human Services. (2024).",
@@ -272,5 +279,25 @@ func TestBibTeXOrganizationRoundTrip(t *testing.T) {
 				t.Errorf("round-trip author = %q, want %q", e.Author, tt.want)
 			}
 		})
+	}
+}
+
+func TestSplitAuthors_CorporateSuffix(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		in   string
+		want []string
+	}{
+		{"Acme Inc and Bob Smith", []string{"Acme Inc", "Bob Smith"}},
+		{"Acme Ltd. and Bob Smith", []string{"Acme Ltd.", "Bob Smith"}},
+		{"Acme Inc and Globex Corp", []string{"Acme Inc", "Globex Corp"}},
+		{"Department of Health and Human Services", []string{"Department of Health and Human Services"}},
+		{"Acme Inc", []string{"Acme Inc"}},
+	}
+	for _, tt := range tests {
+		got := splitAuthors(tt.in)
+		if strings.Join(got, "|") != strings.Join(tt.want, "|") {
+			t.Errorf("splitAuthors(%q) = %q, want %q", tt.in, got, tt.want)
+		}
 	}
 }

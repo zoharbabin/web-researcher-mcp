@@ -195,8 +195,9 @@ func splitAuthors(author string) []string {
 // segment that is an organization name as a whole keeps its internal "and"
 // ("Department of Health and Human Services"), except where a person-like
 // name (2+ words, not an organization) is followed by " and " and an
-// organization ("Alicia Malone and U.S. Government Accountability Office")
-// (#848). A comma list inside an organization segment is not split.
+// organization ("Alicia Malone and U.S. Government Accountability Office"), or
+// an organization ending in a corporate suffix is followed by a person
+// ("Acme Inc and Bob Smith") (#848). A comma list inside an organization segment is not split.
 func splitAndSegment(seg string) []string {
 	const sep = " and "
 	if !isOrganizationName(seg) {
@@ -215,12 +216,32 @@ func splitAndSegment(seg string) []string {
 		}
 		i += from
 		left, right := strings.TrimSpace(seg[:i]), strings.TrimSpace(seg[i+len(sep):])
-		if left != "" && right != "" && len(strings.Fields(left)) >= 2 &&
-			!isOrganizationName(left) && isOrganizationName(right) {
-			return append(splitAndSegment(left), splitAndSegment(right)...)
+		if left != "" && right != "" && len(strings.Fields(right)) >= 2 {
+			personThenOrg := len(strings.Fields(left)) >= 2 && !isOrganizationName(left) && isOrganizationName(right)
+			orgThenPerson := endsWithCorporateSuffix(left) && !isOrganizationName(right)
+			if personThenOrg || orgThenPerson {
+				return append(splitAndSegment(left), splitAndSegment(right)...)
+			}
 		}
 		from = i + len(sep)
 	}
+}
+
+// corporateSuffixes end a company name ("Acme Inc"). Only these words, not any
+// organization keyword, mark where a company name stops.
+var corporateSuffixes = map[string]bool{
+	"inc": true, "ltd": true, "llc": true, "gmbh": true, "corp": true, "co": true,
+}
+
+// endsWithCorporateSuffix reports whether name's last word is a corporate
+// suffix such as "Inc." or "Ltd".
+func endsWithCorporateSuffix(name string) bool {
+	tokens := strings.Fields(name)
+	if len(tokens) < 2 {
+		return false
+	}
+	last := strings.ToLower(strings.Trim(tokens[len(tokens)-1], ".,;:()"))
+	return corporateSuffixes[last]
 }
 
 // splitBareCommaNames detects a bare comma-separated list of names within a
