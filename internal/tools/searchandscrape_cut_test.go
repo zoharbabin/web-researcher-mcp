@@ -124,3 +124,15 @@ func TestSearchAndScrape_ContextPathCutsOnBoundary(t *testing.T) {
 		})
 	}
 }
+
+// TestClampClaim_NeverSplitsCharacter covers the #850 sweep: a claim over the
+// limit is cut on a character boundary.
+func TestClampClaim_NeverSplitsCharacter(t *testing.T) {
+	got := clampClaim(strings.Repeat("日", maxClaimLen))
+	if !utf8.ValidString(got) {
+		t.Errorf("clampClaim returned invalid UTF-8")
+	}
+	if len(got) > maxClaimLen {
+		t.Errorf("clampClaim kept %d bytes, limit %d", len(got), maxClaimLen)
+	}
+}

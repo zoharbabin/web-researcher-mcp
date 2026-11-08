@@ -411,7 +411,7 @@ func parseEPOResponse(data []byte) ([]PatentResult, error) {
 			}
 		}
 		if len(result.Abstract) > 500 {
-			result.Abstract = result.Abstract[:500] + "..."
+			result.Abstract = strings.ToValidUTF8(result.Abstract[:500], "") + "..."
 		}
 
 		// Google Patents is used as the universal viewer link across every

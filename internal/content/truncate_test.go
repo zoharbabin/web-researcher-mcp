@@ -57,3 +57,14 @@ func TestCutAt_MatchesTruncatePrefix(t *testing.T) {
 		t.Errorf("CutAt result %q is not the prefix of Truncate output %q", got, trunc)
 	}
 }
+
+func TestClampSnippet_NeverSplitsCharacter(t *testing.T) {
+	t.Parallel()
+	got := clampSnippet(strings.Repeat("日本語", 100))
+	if !utf8.ValidString(got) {
+		t.Errorf("clampSnippet returned invalid UTF-8: %q", got)
+	}
+	if !strings.HasSuffix(got, "…") {
+		t.Errorf("clampSnippet lost the ellipsis: %q", got)
+	}
+}
