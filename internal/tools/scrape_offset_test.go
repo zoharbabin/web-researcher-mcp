@@ -164,6 +164,9 @@ func TestScrapePage_OffsetValidation(t *testing.T) {
 		{"negative offset", map[string]any{"offset": -1}, "offset must be 0 or greater"},
 		{"raw with offset", map[string]any{"mode": "raw", "offset": 10}, "only supported with mode=full"},
 		{"preview with offset", map[string]any{"mode": "preview", "offset": 10}, "only supported with mode=full"},
+		{"raw with query", map[string]any{"mode": "raw", "query": "topic"}, "query is only supported with mode=full"},
+		{"preview with query", map[string]any{"mode": "preview", "query": "topic"}, "query is only supported with mode=full"},
+		{"query too long", map[string]any{"query": strings.Repeat("a", 501)}, "query must be 500 characters or fewer"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -204,7 +207,7 @@ func TestScrapePage_RawAndPreviewHaveNoPagingFields(t *testing.T) {
 func TestPageScrapeEnvelope(t *testing.T) {
 	t.Parallel()
 	cached := []byte(`{"content":"aaaa bbbb cccc","truncated":false,"id":9007199254740993,"nextOffset":3}`)
-	out, ok := pageScrapeEnvelope(cached, 0, 9)
+	out, ok := pageScrapeEnvelope(cached, 0, 9, "")
 	if !ok {
 		t.Fatal("expected ok")
 	}
@@ -218,10 +221,10 @@ func TestPageScrapeEnvelope(t *testing.T) {
 	if !strings.Contains(string(out), "9007199254740993") {
 		t.Errorf("large number lost precision: %s", out)
 	}
-	if _, ok := pageScrapeEnvelope([]byte("not json"), 0, 9); ok {
+	if _, ok := pageScrapeEnvelope([]byte("not json"), 0, 9, ""); ok {
 		t.Error("invalid cache body must report not ok")
 	}
-	if _, ok := pageScrapeEnvelope([]byte(`{"x":1}`), 0, 9); ok {
+	if _, ok := pageScrapeEnvelope([]byte(`{"x":1}`), 0, 9, ""); ok {
 		t.Error("cache body without content must report not ok")
 	}
 }
@@ -252,5 +255,42 @@ func readAllParts(ctx context.Context, t *testing.T, session *mcp.ClientSession,
 		}
 		got.WriteString(offsetMarkerRe.ReplaceAllString(page, ""))
 		offset = int(next.(float64))
+	}
+}
+
+// #845: query finds a passage far past the first part, and its offset reads
+// from there, all from one scrape.
+func TestScrapePage_QueryMatchesThenOffsetReadsFromMatch(t *testing.T) {
+	var hits atomic.Int64
+	ts := httptest.NewServer(longArticleHandler(&hits))
+	defer ts.Close()
+	ctx, session := scrapeOffsetSession(t, ts)
+
+	out, res := callScrape(ctx, t, session, map[string]any{"url": ts.URL, "query": "Paragraph 900 topic 6300"})
+	if res.IsError {
+		t.Fatalf("tool error: %v", res.Content)
+	}
+	scrapeHits := hits.Load()
+	matches, _ := out["matches"].([]any)
+	if len(matches) == 0 {
+		t.Fatalf("no matches: %v", out["matches"])
+	}
+	first := matches[0].(map[string]any)
+	if !strings.Contains(first["text"].(string), "Paragraph 900:") {
+		t.Fatalf("first match is not paragraph 900: %q", first["text"])
+	}
+
+	part, res := callScrape(ctx, t, session, map[string]any{"url": ts.URL, "offset": first["offset"], "max_length": 2000})
+	if res.IsError {
+		t.Fatalf("tool error: %v", res.Content)
+	}
+	if !strings.HasPrefix(part["content"].(string), "Paragraph 900:") {
+		t.Errorf("part at the match offset starts %q", part["content"].(string)[:30])
+	}
+	if _, has := part["matches"]; has {
+		t.Error("matches must be absent without a query")
+	}
+	if n := hits.Load(); n != scrapeHits {
+		t.Errorf("the second call must read the cached page: %d requests, want %d", n, scrapeHits)
 	}
 }

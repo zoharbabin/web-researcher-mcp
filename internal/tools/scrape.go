@@ -26,6 +26,7 @@ type scrapePageInput struct {
 	Mode      string `json:"mode,omitempty" jsonschema:"Extraction depth (preview = first 5000 bytes, faster; raw = verbatim unsanitized bytes, see tool description before using). Default: full (cleaned readable text up to max_length)."`
 	MaxLength int    `json:"max_length,omitempty" jsonschema:"Maximum content length in bytes for this call (default: 30000; raw mode: 50000). Results are capped near 35,000 serialized chars, so a larger value can be cut earlier: maxLengthApplied then shows the cap used. When the result has nextOffset, the page was cut: call again with offset=nextOffset to read the next part. Reduce for faster responses when you only need a summary."`
 	Offset    int    `json:"offset,omitempty" jsonschema:"Byte position in the cleaned text where this call starts (default: 0). Use the nextOffset value of the previous result to read the next part of a long page, or an outline entry's offset to start at that section. Full mode only; not allowed with mode=preview or mode=raw."`
+	Query     string `json:"query,omitempty" jsonschema:"Words to look for in the page (full mode only, up to 500 characters). The result gets a matches list: the best-matching passages of the whole page, each with an offset. Call again with offset set to a match offset to read from there. Use it when you cannot name the section you need."`
 	SessionID string `json:"sessionId,omitempty" jsonschema:"Link this page to a sequential_search session. The URL and title are automatically recorded as a source for recovery after context loss."`
 	Anonymous bool   `json:"anonymous,omitempty" jsonschema:"Set true to read the page without your saved login (see site_login), as a signed-out visitor. Use it for public research so your account is not used. Default false: a saved login for the site is used automatically."`
 }
@@ -69,7 +70,13 @@ const (
 
 // scrapeOptionalHeavyFields are dropped from a part when the other fields leave
 // under minInlineContentBytes of room. structuredData can reach 64 KB alone.
-var scrapeOptionalHeavyFields = []string{"structuredData", "highlights", "githubTrustSignals", "forumSignals", "outline"}
+var scrapeOptionalHeavyFields = []string{"structuredData", "highlights", "githubTrustSignals", "forumSignals", "outline", "matches"}
+
+// maxScrapeQueryLength caps the query of a full-mode call (bytes).
+const maxScrapeQueryLength = 500
+
+// maxScrapeMatches is the most passages the matches field holds.
+const maxScrapeMatches = 5
 
 // maxScrapeLength caps the requested max_length to bound memory for a single
 // scrape. Applies to all modes including raw.
@@ -120,6 +127,13 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		}
 		if input.Offset > 0 && mode != "full" {
 			return toolError("offset is only supported with mode=full; use the default mode to read a long page in parts"), nil, nil
+		}
+
+		if input.Query != "" && mode != "full" {
+			return toolError("query is only supported with mode=full"), nil, nil
+		}
+		if len(input.Query) > maxScrapeQueryLength {
+			return toolError(fmt.Sprintf("query must be %d characters or fewer", maxScrapeQueryLength)), nil, nil
 		}
 
 		maxLength := input.MaxLength
@@ -202,7 +216,7 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		if !authed {
 			if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
 				if mode == "full" {
-					cached, ok = pageScrapeEnvelope(cached, input.Offset, maxLength)
+					cached, ok = pageScrapeEnvelope(cached, input.Offset, maxLength, input.Query)
 				}
 				if ok {
 					recordToolCall(deps, "scrape_page", time.Since(start), nil, "", true)
@@ -378,7 +392,7 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 			deps.Cache.Set(ctx, cacheKey, jsonBytes, time.Hour)
 		}
 		if mode == "full" {
-			jsonBytes, _ = fitScrapePage(output, input.Offset, maxLength)
+			jsonBytes, _ = fitScrapePage(output, input.Offset, maxLength, input.Query)
 		}
 		recordToolCall(deps, "scrape_page", time.Since(start), nil, "", false)
 		auditToolCallQuery(ctx, deps, "scrape_page", time.Since(start), nil, "", "", auditExtra)
@@ -428,7 +442,7 @@ func setScrapePage(output map[string]any, totalLength, offset int, page string, 
 // The cap is maxInlineResultBytes minus the size of every other field. JSON
 // escaping can make the content larger than its text, so the result is
 // re-measured and the part shrunk until it fits.
-func fitScrapePage(output map[string]any, offset, maxLength int) ([]byte, error) {
+func fitScrapePage(output map[string]any, offset, maxLength int, query string) ([]byte, error) {
 	full, _ := output["content"].(string)
 	total := len(full)
 
@@ -438,6 +452,15 @@ func fitScrapePage(output map[string]any, offset, maxLength int) ([]byte, error)
 	if offset > 0 || total > maxLength {
 		if outline := content.Outline(full); outline != nil {
 			output["outline"] = outline
+		}
+	}
+
+	// With a query, the best-matching passages of the whole page, each with
+	// the offset to read from (#845).
+	delete(output, "matches")
+	if query != "" {
+		if matches := content.RankPassages(full, query, maxScrapeMatches); matches != nil {
+			output["matches"] = matches
 		}
 	}
 
@@ -498,7 +521,7 @@ func fitScrapePage(output map[string]any, offset, maxLength int) ([]byte, error)
 
 // pageScrapeEnvelope applies fitScrapePage to a cached full-mode envelope. ok
 // is false when the cached body cannot be read, so the caller scrapes again.
-func pageScrapeEnvelope(cached []byte, offset, maxLength int) ([]byte, bool) {
+func pageScrapeEnvelope(cached []byte, offset, maxLength int, query string) ([]byte, bool) {
 	dec := json.NewDecoder(bytes.NewReader(cached))
 	dec.UseNumber() // keep numbers in structuredData exact
 	var output map[string]any
@@ -508,7 +531,7 @@ func pageScrapeEnvelope(cached []byte, offset, maxLength int) ([]byte, bool) {
 	if _, ok := output["content"].(string); !ok {
 		return nil, false
 	}
-	paged, err := fitScrapePage(output, offset, maxLength)
+	paged, err := fitScrapePage(output, offset, maxLength, query)
 	if err != nil {
 		return nil, false
 	}

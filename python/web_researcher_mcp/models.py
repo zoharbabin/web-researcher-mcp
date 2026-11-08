@@ -1984,6 +1984,20 @@ class ScrapePageHighlight:
         )
 
 @dataclass
+class ScrapePageMatch:
+    offset: Optional[int] = None
+    text: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "ScrapePageMatch | None":
+        if d is None:
+            return None
+        return cls(
+            offset=d.get('offset'),
+            text=d.get('text'),
+        )
+
+@dataclass
 class ScrapePageMetadata:
     author: Optional[str] = None
     publishedDate: Optional[str] = None
@@ -2036,6 +2050,7 @@ class ScrapePageResponse:
     highlights: list[ScrapePageHighlight] = field(default_factory=list)
     loginHint: Optional[str] = None
     loginRequired: Optional[bool] = None
+    matches: list[ScrapePageMatch] = field(default_factory=list)
     maxLengthApplied: Optional[int] = None
     metadata: Optional[ScrapePageMetadata] = None
     nextOffset: Optional[int] = None
@@ -2075,6 +2090,7 @@ class ScrapePageResponse:
             highlights=[ScrapePageHighlight.from_dict(i) for i in (d.get('highlights') or [])],
             loginHint=d.get('loginHint'),
             loginRequired=d.get('loginRequired'),
+            matches=[ScrapePageMatch.from_dict(i) for i in (d.get('matches') or [])],
             maxLengthApplied=d.get('maxLengthApplied'),
             metadata=ScrapePageMetadata.from_dict(d.get('metadata')) if d.get('metadata') else None,
             nextOffset=d.get('nextOffset'),

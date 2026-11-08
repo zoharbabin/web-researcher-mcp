@@ -84,7 +84,7 @@ func TestFitScrapePage_StaysUnderBudgetAndPagesWithoutGap(t *testing.T) {
 					if pages > 200 {
 						t.Fatal("paging did not finish")
 					}
-					b, err := fitScrapePage(cloneEnvelope(t, env), offset, maxLength)
+					b, err := fitScrapePage(cloneEnvelope(t, env), offset, maxLength, "")
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -125,7 +125,7 @@ func TestFitScrapePage_ClampReportsAppliedCap(t *testing.T) {
 	t.Parallel()
 	full := hostileText("ascii", 200_000)
 
-	b, err := fitScrapePage(budgetEnvelope(full, 0), 0, 120_000)
+	b, err := fitScrapePage(budgetEnvelope(full, 0), 0, 120_000, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +149,7 @@ func TestFitScrapePage_SmallPageIsUnchanged(t *testing.T) {
 	t.Parallel()
 	full := hostileText("ascii", 5000)
 	for _, maxLength := range []int{30000, 120000} {
-		b, err := fitScrapePage(budgetEnvelope(full, 0), 0, maxLength)
+		b, err := fitScrapePage(budgetEnvelope(full, 0), 0, maxLength, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -173,7 +173,7 @@ func TestFitScrapePage_LargeStructuredDataIsDroppedToKeepRoom(t *testing.T) {
 	t.Parallel()
 	full := hostileText("ascii", 100_000)
 
-	b, err := fitScrapePage(budgetEnvelope(full, 60_000), 0, 30000)
+	b, err := fitScrapePage(budgetEnvelope(full, 60_000), 0, 30000, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +192,7 @@ func TestFitScrapePage_LargeStructuredDataIsDroppedToKeepRoom(t *testing.T) {
 	}
 
 	// Small structured data stays.
-	b, err = fitScrapePage(budgetEnvelope(full, 2_000), 0, 30000)
+	b, err = fitScrapePage(budgetEnvelope(full, 2_000), 0, 30000, "")
 	if err != nil {
 		t.Fatal(err)
 	}
