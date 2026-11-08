@@ -213,18 +213,43 @@ func extractArticleContent(doc *goquery.Document, base *url.URL) string {
 		".content",
 	}
 
+	// A selector wins only when it holds a real share of the page text. A
+	// short wrapper such as RFC 9110's #content (1% of the page) would
+	// otherwise hide the rest of the document (#838).
+	body := doc.Find("body")
+	var bodyText string
+	var bodyDone bool
 	for _, sel := range selectors {
 		el := doc.Find(sel).First()
-		if el.Length() > 0 {
-			if text := bestText(el, base); len(text) > 200 {
-				return text
-			}
+		if el.Length() == 0 {
+			continue
+		}
+		text := bestText(el, base)
+		if len(text) <= 200 {
+			continue
+		}
+		if !bodyDone {
+			bodyText, bodyDone = bestText(body, base), true
+		}
+		if len(text)*minSelectorShareDen >= len(bodyText)*minSelectorShareNum {
+			return text
 		}
 	}
 
 	// Fall back to body with the same structured-vs-flat reconciliation.
-	return bestText(doc.Find("body"), base)
+	if bodyDone {
+		return bodyText
+	}
+	return bestText(body, base)
 }
+
+// A structured selector must hold at least minSelectorShareNum/Den of the
+// body text. Measured on 25 real pages: every correct hit held 64% or more,
+// the broken one (RFC 9110 #content) held 1%.
+const (
+	minSelectorShareNum = 1
+	minSelectorShareDen = 4
+)
 
 // bestText renders a selection's content, preferring extractText (which emits
 // GFM tables #48, headings, and lists) but falling back to flat .Text() when the
