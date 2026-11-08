@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 )
 
 type Citation struct {
@@ -60,13 +61,14 @@ func ensureTerminalPeriod(s string) string {
 }
 
 // invertNameAPA converts a single "First [Middle] Last" name to APA7's
-// surname-first, initialized form: "Last, F. M.". A name that already contains
+// surname-first, initialized form: "Last, F. M.". An organization name (see
+// isOrganizationName) is returned whole. A name that already contains
 // a comma is assumed pre-inverted ("Last, First" or "Last, F.") and is returned
 // unchanged, so a correctly formatted input is never double-inverted. A single
 // token (no space) has nothing to invert and is also returned unchanged.
 func invertNameAPA(name string) string {
 	name = strings.TrimSpace(name)
-	if name == "" || strings.Contains(name, ",") {
+	if name == "" || strings.Contains(name, ",") || isOrganizationName(name) {
 		return name
 	}
 	tokens := strings.Fields(name)
@@ -91,11 +93,15 @@ func invertNameAPA(name string) string {
 // share it (#621). A name already containing a comma is assumed pre-inverted
 // ("Family, Given") and is split on the comma. A single token (no space) has
 // nothing to split — a bare surname or an organization name — and is returned
-// with isLiteral=true so the caller keeps it verbatim instead of guessing.
+// with isLiteral=true so the caller keeps it verbatim instead of guessing. A
+// multi-word organization name (isOrganizationName) is literal too (#848).
 func splitPersonalName(name string) (family, given string, isLiteral bool) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return "", "", true
+	}
+	if isOrganizationName(name) {
+		return name, "", true
 	}
 	if idx := strings.Index(name, ","); idx != -1 {
 		return strings.TrimSpace(name[:idx]), strings.TrimSpace(name[idx+1:]), false
@@ -107,6 +113,62 @@ func splitPersonalName(name string) (family, given string, isLiteral bool) {
 	family = tokens[len(tokens)-1]
 	given = strings.Join(tokens[:len(tokens)-1], " ")
 	return family, given, false
+}
+
+// orgKeywords are tokens that mark a name as an organization. Matched
+// case-insensitively against whole tokens with surrounding punctuation removed.
+var orgKeywords = map[string]bool{
+	"office": true, "agency": true, "department": true, "ministry": true,
+	"commission": true, "council": true, "committee": true, "institute": true,
+	"university": true, "foundation": true, "association": true, "society": true,
+	"organization": true, "organisation": true, "company": true, "corporation": true,
+	"inc": true, "ltd": true, "llc": true, "gmbh": true, "contributors": true,
+	"team": true, "staff": true, "editors": true, "bureau": true,
+	"administration": true, "authority": true,
+}
+
+// isOrganizationName reports whether name looks like an organization or group
+// author rather than a person (#848). True when it has a keyword token
+// (orgKeywords), starts with "The ", or has a lowercase connector ("of",
+// "for", "and the") between capitalized words. It is a heuristic: a name that
+// matches none of these is treated as a person.
+func isOrganizationName(name string) bool {
+	tokens := strings.Fields(name)
+	if len(tokens) == 0 {
+		return false
+	}
+	if len(tokens) > 1 && tokens[0] == "The" {
+		return true
+	}
+	for _, t := range tokens {
+		if orgKeywords[strings.ToLower(strings.Trim(t, ".,;:()[]{}\"'"))] {
+			return true
+		}
+	}
+	for i := 1; i+1 < len(tokens); i++ {
+		switch tokens[i] {
+		case "of", "for":
+			if startsUpper(tokens[i-1]) && startsUpper(tokens[i+1]) {
+				return true
+			}
+		case "and":
+			if tokens[i+1] == "the" && startsUpper(tokens[i-1]) &&
+				(i+2 >= len(tokens) || startsUpper(tokens[i+2])) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// startsUpper reports whether the first letter of s is an uppercase letter.
+func startsUpper(s string) bool {
+	for _, r := range s {
+		if unicode.IsLetter(r) {
+			return unicode.IsUpper(r)
+		}
+	}
+	return false
 }
 
 // formatAuthorsAPA renders a free-form (";"/" and "-delimited) author string in
@@ -129,11 +191,11 @@ func formatAuthorsAPA(author string) string {
 
 // invertNameMLA converts a single "First [Middle] Last" name to MLA9's
 // surname-first form: "Last, First Middle" (full given name, not initialized —
-// unlike APA). A name already containing a comma is assumed pre-inverted and
-// returned unchanged.
+// unlike APA). An organization name is returned whole. A name already
+// containing a comma is assumed pre-inverted and returned unchanged.
 func invertNameMLA(name string) string {
 	name = strings.TrimSpace(name)
-	if name == "" || strings.Contains(name, ",") {
+	if name == "" || strings.Contains(name, ",") || isOrganizationName(name) {
 		return name
 	}
 	tokens := strings.Fields(name)
@@ -230,7 +292,7 @@ func formatBibTeX(title, author, site, date, url, accessed string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "@misc{%s,\n", key)
 	if author != "" {
-		fmt.Fprintf(&b, "  author = {%s},\n", bibtexEscape(normalizeBibTeXAuthor(author)))
+		fmt.Fprintf(&b, "  author = {%s},\n", normalizeBibTeXAuthor(author))
 	}
 	if title != "" {
 		fmt.Fprintf(&b, "  title = {%s},\n", bibtexEscape(title))
@@ -331,9 +393,19 @@ func allDigits(s string) bool {
 // the input boundary — bibliography tool, format_bibliography) and a bare
 // comma-separated list (full names or pre-inverted "Family, Given" pairs,
 // #639/#680) are both split via splitAuthors so multiple authors never
-// collapse into one BibTeX author field.
+// collapse into one BibTeX author field. Each name is escaped here, and an
+// organization name is wrapped in its own braces so BibTeX keeps it as one
+// literal name instead of parsing it as "First Last" (#848). The result is
+// ready to place inside the field's outer braces.
 func normalizeBibTeXAuthor(author string) string {
-	return strings.Join(splitAuthors(author), " and ")
+	names := splitAuthors(author)
+	for i, n := range names {
+		names[i] = bibtexEscape(n)
+		if isOrganizationName(n) {
+			names[i] = "{" + names[i] + "}"
+		}
+	}
+	return strings.Join(names, " and ")
 }
 
 // bibtexEscape escapes the BibTeX-significant characters so a value can't break

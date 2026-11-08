@@ -181,16 +181,46 @@ func splitAuthors(author string) []string {
 	if author == "" {
 		return nil
 	}
-	// Normalize " and " (BibTeX-style) to ";" then split.
-	normalized := strings.ReplaceAll(author, " and ", ";")
-	parts := strings.Split(normalized, ";")
+	parts := strings.Split(author, ";")
 	out := make([]string, 0, len(parts))
 	for _, p := range parts {
 		if t := strings.TrimSpace(p); t != "" {
-			out = append(out, splitBareCommaNames(t)...)
+			out = append(out, splitAndSegment(t)...)
 		}
 	}
 	return out
+}
+
+// splitAndSegment splits one ";"-free segment on " and " (BibTeX-style). A
+// segment that is an organization name as a whole keeps its internal "and"
+// ("Department of Health and Human Services"), except where a person-like
+// name (2+ words, not an organization) is followed by " and " and an
+// organization ("Alicia Malone and U.S. Government Accountability Office")
+// (#848). A comma list inside an organization segment is not split.
+func splitAndSegment(seg string) []string {
+	const sep = " and "
+	if !isOrganizationName(seg) {
+		var out []string
+		for _, p := range strings.Split(seg, sep) {
+			if t := strings.TrimSpace(p); t != "" {
+				out = append(out, splitBareCommaNames(t)...)
+			}
+		}
+		return out
+	}
+	for from := 0; ; {
+		i := strings.Index(seg[from:], sep)
+		if i < 0 {
+			return []string{seg}
+		}
+		i += from
+		left, right := strings.TrimSpace(seg[:i]), strings.TrimSpace(seg[i+len(sep):])
+		if left != "" && right != "" && len(strings.Fields(left)) >= 2 &&
+			!isOrganizationName(left) && isOrganizationName(right) {
+			return append(splitAndSegment(left), splitAndSegment(right)...)
+		}
+		from = i + len(sep)
+	}
 }
 
 // splitBareCommaNames detects a bare comma-separated list of names within a
