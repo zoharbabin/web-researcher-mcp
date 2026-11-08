@@ -320,7 +320,7 @@ func arxivDOIFromURL(raw string) string {
 	default:
 		return ""
 	}
-	id := arxivVersionSuffix.ReplaceAllString(path, "")
+	id := arxivVersionSuffix.ReplaceAllString(strings.TrimSuffix(path, "/"), "")
 	if !arxivIDPattern.MatchString(id) {
 		return ""
 	}

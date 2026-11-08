@@ -596,6 +596,8 @@ func TestArxivDOIFromURL(t *testing.T) {
 		{"https://www.arxiv.org/abs/2005.14165v2", "10.48550/arXiv.2005.14165"},
 		{"https://arxiv.org/abs/hep-th/9901001", "10.48550/arXiv.hep-th/9901001"},
 		{"https://arxiv.org/abs/math.GT/0309136v1", "10.48550/arXiv.math.GT/0309136"},
+		{"https://arxiv.org/abs/1706.03762/", "10.48550/arXiv.1706.03762"},
+		{"https://arxiv.org/pdf/1706.03762v7/", "10.48550/arXiv.1706.03762"},
 		{"https://arxiv.org/list/cs.AI/recent", ""},
 		{"https://arxiv.org/abs/not-an-id", ""},
 		{"https://arxiv.org/abs/", ""},
