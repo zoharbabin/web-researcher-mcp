@@ -2,6 +2,17 @@ package content
 
 import "strings"
 
+// A paragraph can be removed as a repeat only when it is at least this long.
+// Shorter repeats are data values (IDs, "N/A", "Active"), not boilerplate, and
+// removing them leaves labels with no value next to them.
+const (
+	dedupMinBytes = 80
+	dedupMinWords = 8
+)
+
+// Dedup drops repeated paragraphs, keeping the first copy. Only paragraphs of
+// at least dedupMinBytes bytes and dedupMinWords words are eligible. Shorter
+// paragraphs always pass through.
 func Dedup(paragraphs []string) []string {
 	seen := make(map[uint64]bool)
 	var result []string
@@ -12,11 +23,13 @@ func Dedup(paragraphs []string) []string {
 			continue
 		}
 
-		h := djb2(p)
-		if seen[h] {
-			continue
+		if len(p) >= dedupMinBytes && WordCount(p) >= dedupMinWords {
+			h := djb2(p)
+			if seen[h] {
+				continue
+			}
+			seen[h] = true
 		}
-		seen[h] = true
 		result = append(result, p)
 	}
 	return result
