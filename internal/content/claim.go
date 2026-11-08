@@ -767,7 +767,8 @@ func stripReferencesSection(text string) string {
 }
 
 // splitSentences breaks text into sentences on ., !, ? boundaries while keeping
-// the split lightweight (no NLP dependency). Newlines also terminate a sentence.
+// the split lightweight (no NLP dependency). A newline also terminates a sentence,
+// unless it only wraps a long line (see isSoftWrap).
 // Fragments shorter than a few chars are dropped.
 func splitSentences(text string) []string {
 	var sentences []string
@@ -781,6 +782,10 @@ func splitSentences(text string) []string {
 	}
 	runes := []rune(text)
 	for i, r := range runes {
+		if r == '\n' && isSoftWrap(runes, i) {
+			b.WriteRune(' ')
+			continue
+		}
 		b.WriteRune(r)
 		switch r {
 		case '\n':
@@ -795,6 +800,30 @@ func splitSentences(text string) []string {
 	}
 	flush()
 	return sentences
+}
+
+// isSoftWrap reports whether the newline at runes[i] only wraps a long line in
+// the middle of a sentence, as RFC pages and plain-text documents do. It does
+// when the text before it does not end a sentence, clause or paragraph and the
+// next line starts in lowercase. A heading, list item or new sentence starts in
+// uppercase or follows terminal punctuation, so it still ends the sentence.
+func isSoftWrap(runes []rune, i int) bool {
+	j := i - 1
+	for j >= 0 && (runes[j] == ' ' || runes[j] == '\t' || runes[j] == '\r') {
+		j--
+	}
+	if j < 0 {
+		return false
+	}
+	switch runes[j] {
+	case '.', '!', '?', ':', ';', '\u00b6', '\n':
+		return false
+	}
+	k := i + 1
+	for k < len(runes) && (runes[k] == ' ' || runes[k] == '\t' || runes[k] == '\r') {
+		k++
+	}
+	return k < len(runes) && unicode.IsLower(runes[k])
 }
 
 // claimStopWords are common words excluded from claim term matching.
