@@ -28,7 +28,7 @@ func TestFitScrapePage_OutlineJumpsToSection(t *testing.T) {
 	t.Parallel()
 	full := sectionedPage(30, 5_000) // about 150 KB, 30 sections
 
-	b, err := fitScrapePage(budgetEnvelope(full, 0), 0, 30_000)
+	b, err := fitScrapePage(budgetEnvelope(full, 0), 0, 30_000, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestFitScrapePage_OutlineJumpsToSection(t *testing.T) {
 
 	// Jump to section 20: the part must start at its heading.
 	target := out.Outline[20]
-	b, err = fitScrapePage(budgetEnvelope(full, 0), target.Offset, 30_000)
+	b, err = fitScrapePage(budgetEnvelope(full, 0), target.Offset, 30_000, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestFitScrapePage_OutlineJumpsToSection(t *testing.T) {
 
 func TestFitScrapePage_NoOutlineForSinglePart(t *testing.T) {
 	t.Parallel()
-	b, err := fitScrapePage(budgetEnvelope(sectionedPage(5, 1_000), 0), 0, 30_000)
+	b, err := fitScrapePage(budgetEnvelope(sectionedPage(5, 1_000), 0), 0, 30_000, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestFitScrapePage_OutlineSameForEveryPart(t *testing.T) {
 	full := sectionedPage(30, 5_000)
 	var first []outlineEntry
 	for _, offset := range []int{0, 60_000} {
-		b, err := fitScrapePage(budgetEnvelope(full, 0), offset, 30_000)
+		b, err := fitScrapePage(budgetEnvelope(full, 0), offset, 30_000, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -102,5 +102,53 @@ func TestFitScrapePage_OutlineSameForEveryPart(t *testing.T) {
 		} else if fmt.Sprint(first) != fmt.Sprint(out.Outline) {
 			t.Error("outline differs between parts")
 		}
+	}
+}
+
+// #845: with a query the result lists the best passages of the whole page, not
+// only of the returned part, and each offset starts the passage.
+func TestFitScrapePage_QueryMatches(t *testing.T) {
+	t.Parallel()
+	full := sectionedPage(30, 5_000)
+	needle := "The retention period for audit logs is 400 days under policy."
+	at := len(full) * 3 / 4
+	full = full[:at] + "\n\n" + needle + "\n\n" + full[at:]
+
+	b, err := fitScrapePage(budgetEnvelope(full, 0), 0, 30_000, "audit logs retention period")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(b) > maxInlineResultBytes {
+		t.Fatalf("result %d bytes passes the budget %d", len(b), maxInlineResultBytes)
+	}
+	var out struct {
+		Matches []struct {
+			Offset int    `json:"offset"`
+			Text   string `json:"text"`
+		} `json:"matches"`
+	}
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Matches) == 0 || !strings.Contains(out.Matches[0].Text, "400 days") {
+		t.Fatalf("answer passage not first: %+v", out.Matches)
+	}
+	if !strings.HasPrefix(full[out.Matches[0].Offset:], out.Matches[0].Text) {
+		t.Error("match offset does not start the passage")
+	}
+}
+
+func TestFitScrapePage_NoQueryNoMatches(t *testing.T) {
+	t.Parallel()
+	b, err := fitScrapePage(budgetEnvelope(sectionedPage(30, 5_000), 0), 0, 30_000, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatal(err)
+	}
+	if _, has := out["matches"]; has {
+		t.Error("matches must be absent without a query")
 	}
 }

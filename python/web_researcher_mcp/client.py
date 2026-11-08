@@ -885,6 +885,7 @@ class WebResearcherClient:
         max_length: int = None,
         mode: str = None,
         offset: int = None,
+        query: str = None,
         sessionId: str = None,
         anonymous: bool = False,
     ) -> ScrapePageResponse:
@@ -896,6 +897,7 @@ class WebResearcherClient:
                 "max_length": max_length,
                 "mode": mode,
                 "offset": offset,
+                "query": query,
                 "sessionId": sessionId,
                 "anonymous": anonymous,
             },
@@ -1776,6 +1778,7 @@ class SyncWebResearcherClient:
         max_length: int = None,
         mode: str = None,
         offset: int = None,
+        query: str = None,
         sessionId: str = None,
         anonymous: bool = False,
     ) -> ScrapePageResponse:
@@ -1785,6 +1788,7 @@ class SyncWebResearcherClient:
             max_length=max_length,
             mode=mode,
             offset=offset,
+            query=query,
             sessionId=sessionId,
             anonymous=anonymous,
             )
