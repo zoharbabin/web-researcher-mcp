@@ -566,11 +566,15 @@ func verifyByReference(ctx context.Context, deps Dependencies, ref, claim string
 	// is worse than an honest miss (it can validate a misattribution), so when the
 	// first hit is low confidence, scan the remaining academic providers (notably
 	// OpenAlex, which indexes arXiv by title) for a higher-confidence match (#226).
-	if rec == nil || conf == "low" {
+	//
+	// The same scan runs when the first hit has the right title but a different
+	// year or author than the reference names (#851): the agreeing record, such as
+	// the original preprint, may sit further down another provider's results.
+	if rec == nil || conf == "low" || referenceDisagrees(ref, rec) {
 		if better, betterConf := bestReferenceMatch(ctx, deps, ref); better != nil &&
-			confidenceRank(betterConf) > confidenceRank(conf) {
+			betterReferenceMatch(ref, better, betterConf, rec, conf) {
 			rec, conf = better, betterConf
-			*prov = append(*prov, "low-confidence first match — re-resolved across academic providers")
+			*prov = append(*prov, "first match was low-confidence or differs from the reference — re-resolved across academic providers")
 		}
 	}
 	if rec == nil {
@@ -604,6 +608,9 @@ func verifyByReference(ctx context.Context, deps Dependencies, ref, claim string
 		out["possibleMatch"] = rec
 		out["matchConfidence"] = conf
 		*prov = append(*prov, "best-match academic lookup ("+rec.Source+") — confidence "+conf+", below the high-confidence bar required for exists:true; surfaced as possibleMatch, not confirmed")
+		if referenceDisagrees(ref, rec) {
+			*prov = append(*prov, "year or author in the reference differs from the matched record")
+		}
 	}
 	// If the matched record has a DOI, check retraction too — informative even
 	// for an uncertain match (a retracted UNRELATED paper is still worth flagging
@@ -706,31 +713,56 @@ func bestReferenceMatch(ctx context.Context, deps Dependencies, ref string) (*se
 	consider := func(results []search.AcademicResult) {
 		for i := range results {
 			c := referenceMatchConfidence(ref, &results[i])
-			if best == nil || confidenceRank(c) > confidenceRank(bestConf) {
+			if betterReferenceMatch(ref, &results[i], c, best, bestConf) {
 				r := results[i]
 				best, bestConf = &r, c
 			}
 		}
 	}
-	params := search.AcademicSearchParams{Query: ref, NumResults: 5}
-	if as, errResult := resolveAcademicSearcher(deps, ""); errResult == nil && as != nil {
-		if results, err := as.Scholarly(ctx, params); err == nil {
-			consider(results)
-		}
+	// The full reference first. Then the reference without its author and year
+	// cues (#851): a provider ranks the bare title better, and the original work
+	// may only surface there. Scoring always uses the full reference.
+	queries := []string{ref}
+	if q := referenceTitleQuery(ref); q != "" {
+		queries = append(queries, q)
 	}
-	for _, name := range search.SupportedAcademicProviders {
-		ap, ok := deps.AcademicProviders[name]
-		if !ok {
-			continue
-		}
-		if results, err := ap.Scholarly(ctx, params); err == nil {
-			consider(results)
-		}
+	for _, q := range queries {
 		if bestConf == "high" {
-			break // can't do better; stop querying further providers
+			break // can't do better; skip further queries
+		}
+		params := search.AcademicSearchParams{Query: q, NumResults: 5}
+		if as, errResult := resolveAcademicSearcher(deps, ""); errResult == nil && as != nil {
+			if results, err := as.Scholarly(ctx, params); err == nil {
+				consider(results)
+			}
+		}
+		for _, name := range search.SupportedAcademicProviders {
+			ap, ok := deps.AcademicProviders[name]
+			if !ok {
+				continue
+			}
+			if results, err := ap.Scholarly(ctx, params); err == nil {
+				consider(results)
+			}
+			if bestConf == "high" {
+				break // can't do better; stop querying further providers
+			}
 		}
 	}
 	return best, bestConf
+}
+
+// betterReferenceMatch reports whether cand beats current: a higher confidence
+// wins, and on a tie a candidate that agrees with the reference's year and author
+// beats one that does not (#851). current may be nil.
+func betterReferenceMatch(ref string, cand *search.AcademicResult, candConf string, current *search.AcademicResult, curConf string) bool {
+	if current == nil {
+		return true
+	}
+	if cr, br := confidenceRank(candConf), confidenceRank(curConf); cr != br {
+		return cr > br
+	}
+	return referenceDisagrees(ref, current) && !referenceDisagrees(ref, cand)
 }
 
 // confidenceRank orders the coarse confidence labels so they can be compared
@@ -750,8 +782,10 @@ func confidenceRank(c string) int {
 }
 
 // referenceMatchConfidence is a coarse, transparent heuristic: high when the
-// matched title appears (token-wise) in the reference text, else medium. It is
-// evidence to help the caller judge — not a precision claim.
+// matched title appears (token-wise) in the reference text, else medium. A title
+// match is capped at medium when the reference names a year or an author that the
+// record contradicts (#851). It is evidence to help the caller judge — not a
+// precision claim.
 func referenceMatchConfidence(ref string, rec *search.AcademicResult) string {
 	if rec.Title == "" {
 		return "low"
@@ -785,6 +819,9 @@ func referenceMatchConfidence(ref string, rec *search.AcademicResult) string {
 		return "low"
 	}
 	if total > 0 && hit*100/total >= 70 {
+		if referenceDisagrees(ref, rec) {
+			return "medium"
+		}
 		return "high"
 	}
 	if total > 0 && hit*100/total >= 40 {
