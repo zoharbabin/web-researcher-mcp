@@ -25,7 +25,7 @@ type scrapePageInput struct {
 	URL       string `json:"url" jsonschema:"The HTTP/HTTPS URL to extract content from. Supports web pages, PDFs, DOCX, PPTX, YouTube video URLs, Hacker News item/user/list pages (news.ycombinator.com, read natively via the HN API), GitHub README/file/gist URLs (github.com repo root, /blob/ file, or gist.github.com, read natively via the GitHub API), and Bluesky posts and profiles (bsky.app).,required"`
 	Mode      string `json:"mode,omitempty" jsonschema:"Extraction depth (preview = first 5000 bytes, faster; raw = verbatim unsanitized bytes, see tool description before using). Default: full (cleaned readable text up to max_length)."`
 	MaxLength int    `json:"max_length,omitempty" jsonschema:"Maximum content length in bytes for this call (default: 30000; raw mode: 50000). Results are capped near 35,000 serialized chars, so a larger value can be cut earlier: maxLengthApplied then shows the cap used. When the result has nextOffset, the page was cut: call again with offset=nextOffset to read the next part. Reduce for faster responses when you only need a summary."`
-	Offset    int    `json:"offset,omitempty" jsonschema:"Byte position in the cleaned text where this call starts (default: 0). Use the nextOffset value of the previous result to read the next part of a long page. Full mode only; not allowed with mode=preview or mode=raw."`
+	Offset    int    `json:"offset,omitempty" jsonschema:"Byte position in the cleaned text where this call starts (default: 0). Use the nextOffset value of the previous result to read the next part of a long page, or an outline entry's offset to start at that section. Full mode only; not allowed with mode=preview or mode=raw."`
 	SessionID string `json:"sessionId,omitempty" jsonschema:"Link this page to a sequential_search session. The URL and title are automatically recorded as a source for recovery after context loss."`
 	Anonymous bool   `json:"anonymous,omitempty" jsonschema:"Set true to read the page without your saved login (see site_login), as a signed-out visitor. Use it for public research so your account is not used. Default false: a saved login for the site is used automatically."`
 }
@@ -69,7 +69,7 @@ const (
 
 // scrapeOptionalHeavyFields are dropped from a part when the other fields leave
 // under minInlineContentBytes of room. structuredData can reach 64 KB alone.
-var scrapeOptionalHeavyFields = []string{"structuredData", "highlights", "githubTrustSignals", "forumSignals"}
+var scrapeOptionalHeavyFields = []string{"structuredData", "highlights", "githubTrustSignals", "forumSignals", "outline"}
 
 // maxScrapeLength caps the requested max_length to bound memory for a single
 // scrape. Applies to all modes including raw.
@@ -431,6 +431,15 @@ func setScrapePage(output map[string]any, totalLength, offset int, page string, 
 func fitScrapePage(output map[string]any, offset, maxLength int) ([]byte, error) {
 	full, _ := output["content"].(string)
 	total := len(full)
+
+	// A page that needs more than one part gets a map of its sections, so the
+	// reader can jump with offset instead of reading every part (#843).
+	delete(output, "outline")
+	if offset > 0 || total > maxLength {
+		if outline := content.Outline(full); outline != nil {
+			output["outline"] = outline
+		}
+	}
 
 	// Size of everything but the content. The placeholders are as wide as the
 	// real values can be.

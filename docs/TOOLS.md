@@ -147,6 +147,7 @@ type ScrapeOutput struct {
     TotalLength     int       `json:"totalLength"`     // full mode only (omitted in preview/raw): bytes of cleaned text for the whole page (after dedup), up to the 2,000,000-byte scrape cap (#824)
     Offset          int       `json:"offset"`          // full mode only (omitted in preview/raw): start of this part; echoes the `offset` input (#824)
     NextOffset      int       `json:"nextOffset,omitempty"`  // full mode only: where the next part starts; omitted on the last part (#824)
+    Outline         []OutlineEntry `json:"outline,omitempty"` // full mode only: section headings with byte offsets; present when the page takes more than one part and has 3+ headings (#843)
     MaxLengthApplied int      `json:"maxLengthApplied,omitempty"` // full mode only: the byte cap used when the part was cut shorter than max_length to keep the result near 35,000 chars; omitted otherwise (#825)
     EstimatedTokens int       `json:"estimatedTokens"`
     SizeCategory    string    `json:"sizeCategory"`   // small, medium, large, very_large
@@ -444,9 +445,12 @@ Raw responses are keyed like any other scrape: the cache key includes `mode` (so
 | `offset` | Start of this part |
 | `nextOffset` | Start of the next part. Omitted on the last part |
 | `truncated` | `true` exactly when `nextOffset` is present |
+| `outline` | Section headings (`heading`, `level`, `offset`). Present when the page takes more than one part and has at least 3 headings. Call again with `offset` set to an entry's `offset` to start at that section (see below) |
 | `maxLengthApplied` | Byte cap used for this part. Present only when it is below `max_length` (see below) |
 
 **Result size budget.** The client rejects tool results over a size limit, so a `full` result stays under 35,000 serialized chars. The server subtracts the size of every other field (citation, structured data, metadata) from that budget, and the part gets what is left, up to `max_length`. JSON escaping can make text larger, so the server measures the final result and shrinks the part until it fits. When the part is cut shorter than `max_length`, `maxLengthApplied` reports the cap, `truncated` is `true` and `nextOffset` is the true continuation. Do not retry with a larger `max_length`: read the next part with `offset=nextOffset`. A page that fits is returned unchanged, with no `maxLengthApplied`. If `structuredData` (up to 64 KB) would leave under 8,000 bytes for the text, it is left out of that response (and so are `highlights`, `githubTrustSignals` and `forumSignals` if still needed); the cached page keeps them. Raw mode is not affected: it returns a `resource_link` above the link threshold.
+
+**Jump to a section.** A long page returns an `outline` on every part. Read the outline, then call with `offset` set to the section you need and a `max_length` that fits it (for example 8,000 on a small-context model). Each entry's offset is the start of its heading line, and the next entry's offset is where the section ends. The outline lists up to 60 headings; past that it keeps the shallowest levels. It is dropped, last, when other fields leave too little room for text (see the size budget above).
 
 When `nextOffset` is present, call again with `offset=nextOffset` and the same `max_length`. The parts join with no gap and no overlap. Each cut part ends with `[content truncated, continue with offset=N]`, which is not page text: remove it before joining. Cuts fall on a paragraph, sentence, line, or word boundary, and always on a UTF-8 character start. An `offset` inside a multi-byte character moves forward to the next character. An `offset` at or past `totalLength` returns empty `content`, `truncated: false`, and no `nextOffset`.
 
