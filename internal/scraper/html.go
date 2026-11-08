@@ -112,12 +112,14 @@ func (p *Pipeline) parseHTMLBody(ctx context.Context, url string, body []byte, c
 	// carrying the real content (e.g. a HuggingFace Space wrapper) is stripped
 	// by that same call. Capture first.
 	iframes := extractIframeCandidates(doc, url)
+	// MUST precede the Remove() calls below: JSON-LD, <header> and byline nodes
+	// are stripped by them.
+	meta := extractHTMLMetadata(doc)
 
 	doc.Find("script, style, nav, footer, aside, header, noscript, iframe, form").Remove()
 	doc.Find("[role='navigation'], [role='banner'], [role='complementary']").Remove()
 	doc.Find(".ad, .ads, .advertisement, .sidebar, .nav, .footer, .header, .menu").Remove()
 
-	meta := extractHTMLMetadata(doc)
 	content := extractMainContent(doc)
 
 	content = cleanText(content)
@@ -179,31 +181,272 @@ type htmlMetadata struct {
 	publishDate string
 }
 
+// extractHTMLMetadata is the one metadata extractor shared by every HTML tier
+// (html, stealth). It MUST run before anything removes elements: the JSON-LD
+// <script>, <header> and byline nodes it reads are all stripped later.
+//
+// For author and publish date the first source that yields a value wins, in the
+// order listed on dateFromDoc and authorFromDoc. Publish dates are normalized to
+// ISO YYYY-MM-DD (or YYYY / YYYY-MM when the page gives no more). A value that
+// cannot be parsed is skipped, never guessed.
 func extractHTMLMetadata(doc *goquery.Document) htmlMetadata {
 	title := doc.Find("title").First().Text()
 	if ogTitle, exists := doc.Find(`meta[property="og:title"]`).Attr("content"); exists {
 		title = ogTitle
 	}
 
-	var author, siteName, publishDate string
-	if a, exists := doc.Find(`meta[name="author"]`).Attr("content"); exists {
-		author = a
-	}
+	var siteName string
 	if s, exists := doc.Find(`meta[property="og:site_name"]`).Attr("content"); exists {
 		siteName = s
 	}
-	if d, exists := doc.Find(`meta[property="article:published_time"]`).Attr("content"); exists {
-		publishDate = d
-	} else if d, exists := doc.Find(`meta[name="date"]`).Attr("content"); exists {
-		publishDate = d
-	}
+
+	metas := collectMetaTags(doc)
+	jsonld := parseJSONLDObjects(doc)
 
 	return htmlMetadata{
 		title:       strings.TrimSpace(title),
-		author:      author,
+		author:      authorFromDoc(doc, metas, jsonld),
 		siteName:    siteName,
-		publishDate: publishDate,
+		publishDate: dateFromDoc(doc, metas, jsonld),
 	}
+}
+
+// collectMetaTags maps each lower-cased meta name/property to its first
+// non-empty content value.
+func collectMetaTags(doc *goquery.Document) map[string]string {
+	metas := map[string]string{}
+	doc.Find("meta").Each(func(_ int, s *goquery.Selection) {
+		content := strings.TrimSpace(mustAttr(s, "content"))
+		if content == "" {
+			return
+		}
+		for _, attr := range []string{"name", "property"} {
+			if k := strings.ToLower(strings.TrimSpace(mustAttr(s, attr))); k != "" {
+				if _, seen := metas[k]; !seen {
+					metas[k] = content
+				}
+			}
+		}
+	})
+	return metas
+}
+
+// parseJSONLDObjects returns every JSON-LD object in the page, flattening
+// top-level arrays and @graph lists. Invalid blocks are skipped.
+func parseJSONLDObjects(doc *goquery.Document) []map[string]any {
+	var out []map[string]any
+	var walk func(v any, depth int)
+	walk = func(v any, depth int) {
+		if depth > 3 {
+			return
+		}
+		switch t := v.(type) {
+		case []any:
+			for _, e := range t {
+				walk(e, depth+1)
+			}
+		case map[string]any:
+			out = append(out, t)
+			if g, ok := t["@graph"]; ok {
+				walk(g, depth+1)
+			}
+		}
+	}
+	doc.Find(`script[type="application/ld+json"]`).Each(func(_ int, s *goquery.Selection) {
+		raw := strings.TrimSpace(s.Text())
+		if raw == "" || len(raw) > maxJSONLDBlockBytes {
+			return
+		}
+		var v any
+		if json.Unmarshal([]byte(raw), &v) != nil {
+			return
+		}
+		walk(v, 0)
+	})
+	return out
+}
+
+// dateFromDoc returns the publish date, first match wins: article:published_time,
+// og:article:published_time, meta name=date, DC.date, dcterms.created,
+// citation_publication_date, JSON-LD datePublished, <time datetime> inside
+// article or header, [itemprop=datePublished], then the byline pattern.
+func dateFromDoc(doc *goquery.Document, metas map[string]string, jsonld []map[string]any) string {
+	for _, k := range []string{
+		"article:published_time", "og:article:published_time", "date",
+		"dc.date", "dcterms.created", "citation_publication_date",
+	} {
+		if d := normalizeDate(metas[k]); d != "" {
+			return d
+		}
+	}
+	for _, obj := range jsonld {
+		if v, ok := obj["datePublished"].(string); ok {
+			if d := normalizeDate(v); d != "" {
+				return d
+			}
+		}
+	}
+	var found string
+	doc.Find("article time[datetime], header time[datetime]").EachWithBreak(func(_ int, s *goquery.Selection) bool {
+		found = normalizeDate(mustAttr(s, "datetime"))
+		return found == ""
+	})
+	if found != "" {
+		return found
+	}
+	doc.Find(`[itemprop="datePublished"]`).EachWithBreak(func(_ int, s *goquery.Selection) bool {
+		for _, v := range []string{mustAttr(s, "datetime"), mustAttr(s, "content"), s.Text()} {
+			if found = normalizeDate(v); found != "" {
+				break
+			}
+		}
+		return found == ""
+	})
+	if found != "" {
+		return found
+	}
+	return dateFromByline(doc)
+}
+
+// maxBylineTextBytes bounds the byline text scanned for a date, so a byline
+// container wrapping the whole page cannot match a date from the body.
+const maxBylineTextBytes = 400
+
+var (
+	// bylineOnDateRe matches "on 14 Sep, 2026" (day, abbreviated or full month).
+	bylineOnDateRe = regexp.MustCompile(`\bon (\d{1,2} [A-Z][a-z]{2,8},? \d{4})\b`)
+	// bylineMonthDateRe matches "September 14, 2026".
+	bylineMonthDateRe = regexp.MustCompile(`\b([A-Z][a-z]{2,8} \d{1,2}, \d{4})\b`)
+)
+
+// dateFromByline reads a visible byline such as "Alicia Malone on 14 Sep, 2026".
+// It only looks inside a byline container (a[rel=author], .author-link,
+// [class*=byline]) and its parent. A date that does not parse yields no date.
+func dateFromByline(doc *goquery.Document) string {
+	var found string
+	doc.Find(`a[rel="author"], .author-link, [class*="byline"]`).EachWithBreak(func(_ int, s *goquery.Selection) bool {
+		for _, text := range []string{s.Text(), s.Parent().Text()} {
+			text = truncateBytes(collapseSpace(text), maxBylineTextBytes)
+			for _, re := range []*regexp.Regexp{bylineOnDateRe, bylineMonthDateRe} {
+				if m := re.FindStringSubmatch(text); m != nil {
+					if found = normalizeDate(m[1]); found != "" {
+						return false
+					}
+				}
+			}
+		}
+		return true
+	})
+	return found
+}
+
+// authorFromDoc returns the author, first match wins: meta name=author,
+// article:author, JSON-LD author name, [itemprop=author], a[rel=author] text.
+func authorFromDoc(doc *goquery.Document, metas map[string]string, jsonld []map[string]any) string {
+	for _, k := range []string{"author", "article:author"} {
+		if a := cleanAuthor(metas[k]); a != "" {
+			return a
+		}
+	}
+	for _, obj := range jsonld {
+		if a := cleanAuthor(jsonLDAuthorNames(obj["author"])); a != "" {
+			return a
+		}
+	}
+	var found string
+	doc.Find(`[itemprop="author"]`).EachWithBreak(func(_ int, s *goquery.Selection) bool {
+		text := s.Find(`[itemprop="name"]`).First().Text()
+		if strings.TrimSpace(text) == "" {
+			text = mustAttr(s, "content")
+		}
+		if strings.TrimSpace(text) == "" {
+			text = s.Text()
+		}
+		found = cleanAuthor(text)
+		return found == ""
+	})
+	if found != "" {
+		return found
+	}
+	doc.Find(`a[rel="author"]`).EachWithBreak(func(_ int, s *goquery.Selection) bool {
+		found = cleanAuthor(s.Text())
+		return found == ""
+	})
+	return found
+}
+
+// jsonLDAuthorNames reads the name(s) from a JSON-LD author value: a string, an
+// object with name, or a list of either. Several names are joined with ", ".
+func jsonLDAuthorNames(v any) string {
+	switch t := v.(type) {
+	case string:
+		return t
+	case map[string]any:
+		name, _ := t["name"].(string)
+		return name
+	case []any:
+		var names []string
+		for _, e := range t {
+			if n := cleanAuthor(jsonLDAuthorNames(e)); n != "" {
+				names = append(names, n)
+			}
+		}
+		return strings.Join(names, ", ")
+	}
+	return ""
+}
+
+// maxAuthorBytes caps an extracted author so a mis-matched container cannot
+// return a paragraph.
+const maxAuthorBytes = 200
+
+// cleanAuthor trims and collapses whitespace. A URL (some sites put a profile
+// link in article:author) or an over-long value is not a name and yields "".
+func cleanAuthor(s string) string {
+	s = collapseSpace(s)
+	if s == "" || len(s) > maxAuthorBytes {
+		return ""
+	}
+	if l := strings.ToLower(s); strings.HasPrefix(l, "http://") || strings.HasPrefix(l, "https://") {
+		return ""
+	}
+	return s
+}
+
+func collapseSpace(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
+var (
+	partialDateRe = regexp.MustCompile(`^\d{4}(-\d{2})?$`)
+	// dateLayouts are tried in order. The result keeps the date as written on
+	// the page (no time zone shift).
+	dateLayouts = []string{
+		time.RFC3339, "2006-01-02T15:04:05", "2006-01-02T15:04", "2006-01-02 15:04:05",
+		"2006-01-02", "2006/01/02", "2006.01.02",
+		time.RFC1123Z, time.RFC1123, time.RFC822Z, time.RFC822,
+		"January 2, 2006", "Jan 2, 2006", "2 January 2006", "2 Jan 2006",
+		"2 Jan, 2006", "2 January, 2006",
+	}
+)
+
+// normalizeDate turns a page date into ISO YYYY-MM-DD. A bare year or year and
+// month is kept as given (no day is invented). Anything else that does not
+// parse returns "".
+func normalizeDate(s string) string {
+	s = collapseSpace(s)
+	if s == "" {
+		return ""
+	}
+	if partialDateRe.MatchString(s) {
+		return s
+	}
+	for _, layout := range dateLayouts {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t.Format("2006-01-02")
+		}
+	}
+	return ""
 }
 
 func extractMainContent(doc *goquery.Document) string {

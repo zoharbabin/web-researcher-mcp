@@ -1986,6 +1986,8 @@ class ScrapePageHighlight:
 @dataclass
 class ScrapePageMetadata:
     author: Optional[str] = None
+    publishedDate: Optional[str] = None
+    siteName: Optional[str] = None
     title: Optional[str] = None
 
     @classmethod
@@ -1994,6 +1996,8 @@ class ScrapePageMetadata:
             return None
         return cls(
             author=d.get('author'),
+            publishedDate=d.get('publishedDate'),
+            siteName=d.get('siteName'),
             title=d.get('title'),
         )
 

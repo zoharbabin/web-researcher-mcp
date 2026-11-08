@@ -1053,6 +1053,44 @@ func TestScrapeStealth_ExtractsArticleContent(t *testing.T) {
 	}
 }
 
+// #826: the stealth tier returns author, site name and publish date from the
+// same extractor as the html tier, including a byline-only date (PCI blog shape).
+func TestScrapeStealth_ExtractsMetadata(t *testing.T) {
+	t.Parallel()
+	body := `<!doctype html><html><head>
+<meta name="author" content="Alicia Malone">
+<meta property="og:site_name" content="PCI Perspectives">
+<title>Just Published: PCI KMO Standard v1.0</title></head><body>
+<header><div class="post-details-meta">Posted by
+<a class="author-link" href="/author/alicia-malone">Alicia Malone</a> on 14 Sep, 2026 in
+<a class="topic-link" href="/topic/x">Topic</a></div></header>
+<article><p>` + strings.Repeat("The new standard covers key management and operations for entities that handle cryptographic keys. ", 4) + `</p></article>
+</body></html>`
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(body))
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	result, err := p.scrapeStealth(context.Background(), ts.URL, 50000, false)
+	if err != nil {
+		t.Fatalf("scrapeStealth error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result.Author != "Alicia Malone" {
+		t.Errorf("Author = %q, want Alicia Malone", result.Author)
+	}
+	if result.PublishDate != "2026-09-14" {
+		t.Errorf("PublishDate = %q, want 2026-09-14", result.PublishDate)
+	}
+	if result.SiteName != "PCI Perspectives" {
+		t.Errorf("SiteName = %q, want PCI Perspectives", result.SiteName)
+	}
+}
+
 func TestScrapeStealth_ReturnsNilForThinContent(t *testing.T) {
 	html := `<!DOCTYPE html><html><head><title>Thin</title></head><body><p>Short.</p></body></html>`
 
