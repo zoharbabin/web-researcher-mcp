@@ -116,6 +116,62 @@ func TestPaperFulltextURLPath(t *testing.T) {
 	}
 }
 
+// TestPaperFulltextDirectURLCitationTitle guards #854: a direct URL uses the
+// scraped page title in the citation, and falls back to the URL host when the
+// page has none, so the title slot is never blank.
+func TestPaperFulltextDirectURLCitationTitle(t *testing.T) {
+	const body = "Some paper content that is long enough to extract cleanly for the test."
+	tests := []struct {
+		name         string
+		html         string
+		wantTitle    string
+		wantAPATitle string
+		wantMissing  bool
+	}{
+		{
+			name:         "scraped title is used",
+			html:         `<html><head><title>A Paper</title></head><body><article><p>` + body + `</p></article></body></html>`,
+			wantTitle:    "A Paper",
+			wantAPATitle: " A Paper. ",
+		},
+		{
+			name:         "no title falls back to host",
+			html:         `<html><body><article><p>` + body + `</p></article></body></html>`,
+			wantTitle:    "",
+			wantAPATitle: " 127.0.0.1. ",
+			wantMissing:  true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/html")
+				_, _ = w.Write([]byte(tt.html))
+			}))
+			defer page.Close()
+
+			out := callPaperFulltext(t, scrapeTestDeps(), map[string]any{"identifier": page.URL})
+
+			if got, _ := out["title"].(string); got != tt.wantTitle {
+				t.Errorf("title = %q, want %q", got, tt.wantTitle)
+			}
+			cit, _ := out["citation"].(map[string]any)
+			formatted, _ := cit["formatted"].(map[string]any)
+			apa, _ := formatted["apa"].(string)
+			if !strings.Contains(apa, tt.wantAPATitle) {
+				t.Errorf("APA = %q, want it to contain %q", apa, tt.wantAPATitle)
+			}
+			meta, _ := cit["metadata"].(map[string]any)
+			if got, _ := meta["title"].(string); got != tt.wantTitle {
+				t.Errorf("citation.metadata.title = %q, want raw %q", got, tt.wantTitle)
+			}
+			if _, flagged := out["metadataIncomplete"]; flagged != tt.wantMissing {
+				t.Errorf("metadataIncomplete present = %v, want %v", flagged, tt.wantMissing)
+			}
+		})
+	}
+}
+
 // TestPaperFulltextEmptyIdentifier: an empty/whitespace identifier is a
 // validation error, not a panic or an upstream call.
 func TestPaperFulltextEmptyIdentifier(t *testing.T) {
