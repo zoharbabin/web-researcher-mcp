@@ -1392,7 +1392,7 @@ func sanitizeTierError(err error) string {
 	msg = strings.TrimSpace(msg)
 	const maxLen = 120
 	if len(msg) > maxLen {
-		msg = msg[:maxLen] + "…"
+		msg = truncateBytes(msg, maxLen) + "…"
 	}
 	return msg
 }
