@@ -215,12 +215,14 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		cacheKey := scrapeCacheKey(input.URL, mode, maxLength)
 		if !authed {
 			if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok {
+				title := cachedScrapeTitle(cached)
 				if mode == "full" {
 					cached, ok = pageScrapeEnvelope(cached, input.Offset, maxLength, input.Query)
 				}
 				if ok {
 					recordToolCall(deps, "scrape_page", time.Since(start), nil, "", true)
 					auditToolCall(ctx, deps, "scrape_page", time.Since(start), nil, "")
+					trackScrapedSource(ctx, deps, input.SessionID, input.URL, title)
 					return cachedResultWithMeta(cached, meta), nil, nil
 				}
 			}
@@ -231,6 +233,7 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 			if neg := negCacheLookup(ctx, deps, input.URL); neg != nil {
 				recordToolCall(deps, "scrape_page", time.Since(start), neg, "upstream_error", true)
 				auditToolCall(ctx, deps, "scrape_page", time.Since(start), neg, "upstream_error")
+				trackScrapeOutcome(ctx, deps, input.SessionID, input.URL, neg)
 				return scrapeErrorResponseHint(neg, input.URL, hintFor()), nil, nil
 			}
 		}
@@ -397,12 +400,7 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		recordToolCall(deps, "scrape_page", time.Since(start), nil, "", false)
 		auditToolCallQuery(ctx, deps, "scrape_page", time.Since(start), nil, "", "", auditExtra)
 
-		if input.SessionID != "" {
-			trackSources(ctx, deps, input.SessionID, []session.ResearchSource{
-				{URL: input.URL, Title: result.Title, Relevance: "scraped"},
-			})
-			trackOutcome(ctx, deps, input.SessionID, "", true, "", input.URL)
-		}
+		trackScrapedSource(ctx, deps, input.SessionID, input.URL, result.Title)
 
 		return structuredResult(jsonBytes), nil, nil
 	})
@@ -519,6 +517,36 @@ func fitScrapePage(output map[string]any, offset, maxLength int, query string) (
 	}
 }
 
+// trackScrapedSource records a successful scrape as a session source and
+// outcome. Fresh fetches and cache hits both call it, so a session lists every
+// page it read. No-op when sessionID is empty.
+func trackScrapedSource(ctx context.Context, deps Dependencies, sessionID, pageURL, title string) {
+	if sessionID == "" {
+		return
+	}
+	trackSources(ctx, deps, sessionID, []session.ResearchSource{
+		{URL: pageURL, Title: title, Relevance: "scraped"},
+	})
+	trackOutcome(ctx, deps, sessionID, "", true, "", pageURL)
+}
+
+// cachedScrapeTitle reads the page title from a cached scrape envelope, where
+// it lives in citation.metadata.title. Returns "" when it is missing. Call it
+// on the stored envelope, before pageScrapeEnvelope re-cuts it.
+func cachedScrapeTitle(cached []byte) string {
+	var probe struct {
+		Citation struct {
+			Metadata struct {
+				Title string `json:"title"`
+			} `json:"metadata"`
+		} `json:"citation"`
+	}
+	if err := json.Unmarshal(cached, &probe); err != nil {
+		return ""
+	}
+	return probe.Citation.Metadata.Title
+}
+
 // pageScrapeEnvelope applies fitScrapePage to a cached full-mode envelope. ok
 // is false when the cached body cannot be read, so the caller scrapes again.
 func pageScrapeEnvelope(cached []byte, offset, maxLength int, query string) ([]byte, bool) {
@@ -605,6 +633,7 @@ func scrapeRaw(ctx context.Context, deps Dependencies, input scrapePageInput, ma
 	if cached, meta, ok := deps.Cache.GetWithMeta(ctx, cacheKey); ok && !authed {
 		recordToolCall(deps, "scrape_page", time.Since(start), nil, "", true)
 		auditToolCall(ctx, deps, "scrape_page", time.Since(start), nil, "")
+		trackScrapedSource(ctx, deps, input.SessionID, input.URL, cachedScrapeTitle(cached))
 		// A cached raw body can be large; link it past the threshold (#181) while
 		// keeping the cache-freshness _meta. Small bodies inline as before.
 		// contentSizeBytes (#508) surfaces the raw content's byte length on the
@@ -624,6 +653,7 @@ func scrapeRaw(ctx context.Context, deps Dependencies, input scrapePageInput, ma
 	if neg := negCacheLookup(ctx, deps, input.URL); neg != nil && neg.Kind != scraper.ErrContent && !authed {
 		recordToolCall(deps, "scrape_page", time.Since(start), neg, "upstream_error", true)
 		auditToolCall(ctx, deps, "scrape_page", time.Since(start), neg, "upstream_error")
+		trackScrapeOutcome(ctx, deps, input.SessionID, input.URL, neg)
 		return scrapeErrorResponseHint(neg, input.URL, loginHintForKind(deps, rawAuthKind(authed), input.URL)), nil, nil
 	}
 
