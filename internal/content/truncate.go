@@ -15,6 +15,19 @@ func Truncate(content string, maxLength int) (string, bool) {
 	return content[:cutPoint(content, maxLength)] + "\n\n[content truncated]", true
 }
 
+// CutAt returns text cut to at most n bytes on the same boundaries as Truncate
+// (paragraph, sentence, line, word), never inside a character, with no marker.
+// n <= 0 gives "". Text that already fits is returned unchanged.
+func CutAt(text string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	if len(text) <= n {
+		return text
+	}
+	return text[:cutPoint(text, n)]
+}
+
 // Slice returns the page of text that starts at byte offset and holds at most n
 // bytes, cut on the same boundaries as Truncate. next is the offset where the
 // following page starts. When more is true the page ends with a continuation
