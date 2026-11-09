@@ -767,7 +767,8 @@ func stripReferencesSection(text string) string {
 }
 
 // splitSentences breaks text into sentences on ., !, ? boundaries while keeping
-// the split lightweight (no NLP dependency). Newlines also terminate a sentence.
+// the split lightweight (no NLP dependency). A newline also terminates a sentence,
+// unless it only wraps a long line (see isSoftWrap).
 // Fragments shorter than a few chars are dropped.
 func splitSentences(text string) []string {
 	var sentences []string
@@ -781,6 +782,13 @@ func splitSentences(text string) []string {
 	}
 	runes := []rune(text)
 	for i, r := range runes {
+		if r == '\r' {
+			continue // CRLF: the "\n" decides the break
+		}
+		if r == '\n' && isSoftWrap(runes, i) {
+			b.WriteRune(' ')
+			continue
+		}
 		b.WriteRune(r)
 		switch r {
 		case '\n':
@@ -795,6 +803,50 @@ func splitSentences(text string) []string {
 	}
 	flush()
 	return sentences
+}
+
+// softWrapMinLine is the shortest line that can be a wrapped line. Wrapped text
+// fills its lines (RFC 9110 uses about 70 columns, and breaks early before a long word). Shorter lines are list
+// items, keywords or headings, which stay separate sentences.
+const softWrapMinLine = 30
+
+// isSoftWrap reports whether the newline at runes[i] only wraps a long line in
+// the middle of a sentence, as RFC pages and plain-text documents do. It does
+// when the line before it is long, its text does not end a sentence, clause or
+// paragraph (a closing quote or bracket after the period still counts as an
+// end), and the next line starts in lowercase. A heading, list item or new
+// sentence starts in uppercase or follows terminal punctuation, so it still
+// ends the sentence.
+func isSoftWrap(runes []rune, i int) bool {
+	j := i - 1
+	for j >= 0 && (runes[j] == ' ' || runes[j] == '\t' || runes[j] == '\r') {
+		j--
+	}
+	if j < 0 {
+		return false
+	}
+	start := j
+	for start >= 0 && runes[start] != '\n' {
+		start--
+	}
+	if j-start < softWrapMinLine {
+		return false
+	}
+	for j >= 0 && strings.ContainsRune("\"')]}*_\u201d\u2019", runes[j]) {
+		j--
+	}
+	if j < 0 {
+		return false
+	}
+	switch runes[j] {
+	case '.', '!', '?', ':', ';', '\u00b6', '\n':
+		return false
+	}
+	k := i + 1
+	for k < len(runes) && (runes[k] == ' ' || runes[k] == '\t' || runes[k] == '\r') {
+		k++
+	}
+	return k < len(runes) && unicode.IsLower(runes[k])
 }
 
 // claimStopWords are common words excluded from claim term matching.
