@@ -413,7 +413,7 @@ These enable dedicated structured-research tools. Each provider is independent. 
 | Variable | Tool | Description | Default |
 |----------|------|-------------|---------|
 | `EDGAR_CONTACT_EMAIL` | `filing_search` | Contact email for SEC EDGAR's required User-Agent (no API key). Falls back to `OPENALEX_EMAIL`; `filing_search` registers only when one is set | — (falls back to `OPENALEX_EMAIL`) |
-| `COURTLISTENER_API_TOKEN` | `legal_search` | Optional token raising the CourtListener rate limit (~100→~5000 req/day). **`legal_search` is always available** (CourtListener works keyless) | — |
+| `COURTLISTENER_API_TOKEN` | `legal_search` | Free CourtListener API token. **Required for `legal_search` to return results:** the tool is registered without it, but CourtListener answers anonymous calls with 401 | — |
 | `FRED_API_KEY` | `econ_search` | Federal Reserve Economic Data API key (free at fred.stlouisfed.org). **`econ_search` is always available** via keyless World Bank / OECD / Eurostat providers; this key *adds* FRED's US macro series | — |
 | — (none) | `econ_search` | World Bank Open Data (global development indicators, 200+ economies), OECD (SDMX economy indicators), and Eurostat (European official statistics). All keyless; no configuration | — |
 | — (none) | `clinical_search` | ClinicalTrials.gov v2 — 400K+ clinical-trial registrations as typed data. Keyless; no configuration. **Always available** | — |
