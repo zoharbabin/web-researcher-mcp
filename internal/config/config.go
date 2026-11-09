@@ -54,6 +54,7 @@ type Config struct {
 	ChromeNoSandbox               bool // CHROME_NO_SANDBOX: run saved-login browsers without Chrome's sandbox (containers)
 	JinaDisabled                  bool
 	BrowserIdleTimeout            time.Duration
+	ScrapeTotalTimeout            time.Duration // SCRAPE_TOTAL_TIMEOUT: overall deadline for one scrape call (#853)
 	MaxScrapeConcurrency          int
 	MaxBrowserConcurrency         int
 	MaxScrapeConcurrencyPerTenant int
@@ -437,6 +438,22 @@ func Load() (*Config, error) {
 		}
 	}
 
+	// SCRAPE_TOTAL_TIMEOUT caps one whole scrape call (#853). Unlike the lenient
+	// envDuration, a bad value is a startup error: a silent fallback would hide
+	// a typo behind the default.
+	scrapeTotalTimeout := defaultScrapeTotalTimeout
+	if v := os.Getenv("SCRAPE_TOTAL_TIMEOUT"); v != "" {
+		d, perr := time.ParseDuration(v)
+		switch {
+		case perr != nil:
+			errs = append(errs, fmt.Sprintf("SCRAPE_TOTAL_TIMEOUT must be a Go duration such as 90s (got %q)", v))
+		case d <= 0:
+			errs = append(errs, "SCRAPE_TOTAL_TIMEOUT must be greater than 0")
+		default:
+			scrapeTotalTimeout = d
+		}
+	}
+
 	// ADMIN_API_KEY gates every /admin/* endpoint (cache flush, session flush,
 	// GDPR data-subject rights, tenant analytics, workspace membership). The
 	// legacy CACHE_ADMIN_KEY name is still accepted for backward compatibility
@@ -647,6 +664,7 @@ func Load() (*Config, error) {
 		// for the full server lifetime. Explicit "0" disables the idle-close
 		// timer entirely (env unset ⇒ the 5-minute default; env="0" ⇒ disabled).
 		BrowserIdleTimeout:    envDuration("BROWSER_IDLE_TIMEOUT", 5*time.Minute),
+		ScrapeTotalTimeout:    scrapeTotalTimeout,
 		MaxScrapeConcurrency:  envInt("MAX_SCRAPE_CONCURRENCY", 5),
 		MaxBrowserConcurrency: envInt("MAX_SCRAPE_CONCURRENCY_BROWSER", 2),
 		// MaxScrapeConcurrencyPerTenant defaults to the global MaxScrapeConcurrency
@@ -785,6 +803,10 @@ func envBool(key string, fallback bool) bool {
 // matching the AES-256 key encoding used for CACHE_ENCRYPTION_KEY.
 // Cookie vault bundle lifetime: 24h default (session cookies must not outlive a
 // working day), hard-capped at 30 days (#241).
+// defaultScrapeTotalTimeout is the SCRAPE_TOTAL_TIMEOUT default. Keep in sync
+// with scraper.DefaultTotalTimeout (config does not import the scraper).
+const defaultScrapeTotalTimeout = 90 * time.Second
+
 const (
 	maxCookieVaultTTLDefault = 24 * time.Hour
 	maxCookieVaultTTL        = 30 * 24 * time.Hour
