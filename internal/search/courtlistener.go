@@ -37,7 +37,7 @@ type CourtListenerProvider struct {
 	deps    Deps
 }
 
-// NewCourtListenerProvider creates the provider. token may be "" (keyless).
+// NewCourtListenerProvider creates the provider. token may be "", but CourtListener then answers 401.
 func NewCourtListenerProvider(token string, deps Deps) *CourtListenerProvider {
 	return &CourtListenerProvider{
 		token:   token,

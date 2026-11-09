@@ -238,7 +238,7 @@ These providers back dedicated tools and are independent of the web search provi
 | Tool | Provider | Coverage | Key Required |
 |---|---|---|---|
 | `filing_search` | **[SEC EDGAR](https://www.sec.gov/edgar/)** | US public-company filings (10-K, 10-Q, 8-K, XBRL company facts) | No (contact email required) |
-| `legal_search` | **[CourtListener](https://www.courtlistener.com/)** | US federal and state court opinions | No (token raises limit to ~5,000/day) |
+| `legal_search` | **[CourtListener](https://www.courtlistener.com/)** | US federal and state court opinions | Yes (free `COURTLISTENER_API_TOKEN`) |
 | `econ_search` | **[World Bank](https://data.worldbank.org/)** | Global development indicators, 200+ economies | No |
 | `econ_search` | **[OECD](https://data.oecd.org/)** | OECD economy indicators via SDMX | No |
 | `econ_search` | **[Eurostat](https://ec.europa.eu/eurostat/)** | European official statistics | No |
@@ -251,7 +251,8 @@ These providers back dedicated tools and are independent of the web search provi
 | `company_recon` | **[crt.sh](https://crt.sh/)** + **[Wayback CDX](https://web.archive.org/cdx/search/cdx)** | Certificate Transparency log SANs, historical URL inventory, derived subdomains, lightweight web-search company summary | No |
 
 **Notes:**
-- World Bank, OECD, Eurostat, ClinicalTrials.gov, CourtListener, ecosyste.ms, the Monarch Initiative, crt.sh, and Wayback CDX are always available — no configuration required. Setting `ECOSYSTEMS_EMAIL` (falls back to `OPENALEX_EMAIL`) opts ecosyste.ms calls into the "polite pool," raising the per-caller rate-limit tier above the shared "anonymous" pool. `ECOSYSTEMS_API_KEY` is also sent but only takes effect on ecosyste.ms's paid plans.
+- World Bank, OECD, Eurostat, ClinicalTrials.gov, ecosyste.ms, the Monarch Initiative, crt.sh, and Wayback CDX are always available — no configuration required. Setting `ECOSYSTEMS_EMAIL` (falls back to `OPENALEX_EMAIL`) opts ecosyste.ms calls into the "polite pool," raising the per-caller rate-limit tier above the shared "anonymous" pool. `ECOSYSTEMS_API_KEY` is also sent but only takes effect on ecosyste.ms's paid plans.
+- CourtListener (`legal_search`) needs a free `COURTLISTENER_API_TOKEN`. Without it the tool is still registered, but CourtListener answers anonymous calls with 401 and the tool reports an authentication error.
 - SEC EDGAR and FRED activate on their respective env vars (`EDGAR_CONTACT_EMAIL` / `FRED_API_KEY`). `EDGAR_CONTACT_EMAIL` falls back to `OPENALEX_EMAIL`.
 - `brand_research` is always available — without `BRANDFETCH_API_KEY` it runs homepage meta/structured-data extraction and brand-page probing; the key adds a concurrent BrandFetch enrichment tier on top, never a replacement.
 - `archive_source`, `memory_save`, `monitor_query_save`, `workspace_contribute`, `site_login` and `site_logout` are the write tools in the suite. `archive_source` triggers a live internet capture; the others are opt-in regulated features.
