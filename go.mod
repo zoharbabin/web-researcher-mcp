@@ -17,7 +17,7 @@ require (
 	github.com/redis/go-redis/v9 v9.23.0
 	github.com/zendev-sh/goai v0.10.9
 	golang.org/x/net v0.62.0
-	golang.org/x/sync v0.24.0
+	golang.org/x/sync v0.25.0
 	golang.org/x/time v0.16.0
 )
 
