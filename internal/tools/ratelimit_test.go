@@ -99,6 +99,7 @@ func TestExtractProviderName(t *testing.T) {
 		{"ecosystems rate limited", fmt.Errorf("ecosystems: rate limited"), "ecosystems"},
 		{"ecosystems api error", fmt.Errorf("ecosystems: API error 429: too many requests"), "ecosystems"},
 		{"google prefix", fmt.Errorf("google: quota exceeded"), "google"},
+		{"keenable rate limited", fmt.Errorf("keenable: rate limited: %w", circuit.ErrRateLimit), "keenable"},
 		{"unknown provider", fmt.Errorf("connection timeout"), ""},
 		// #656: semanticscholar was missing from the allowlist, so its 429s
 		// surfaced an empty ToolError.Provider. Mirrors the existing searchapi

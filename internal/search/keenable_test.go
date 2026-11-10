@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
@@ -66,5 +67,18 @@ func TestKeenable_RateLimitAndUnsupportedOps(t *testing.T) {
 	}
 	if r, err := p.News(context.Background(), NewsSearchParams{}); r != nil || err != nil {
 		t.Errorf("News should be (nil, nil)")
+	}
+}
+
+func TestKeenableCapsDescriptionAndCleansErrorBody(t *testing.T) {
+	long := strings.Repeat("d", 2000)
+	if got := truncateRunes(long, keenableSnippetMaxRunes); len([]rune(got)) != keenableSnippetMaxRunes {
+		t.Fatalf("description not capped: %d runes", len([]rune(got)))
+	}
+	// "é" is two bytes; cutting after the first leaves an invalid trailing byte.
+	body := []byte("bad request é")
+	cut := body[:len(body)-1]
+	if got := validUTF8Prefix(cut); !utf8.ValidString(got) || got != "bad request " {
+		t.Fatalf("validUTF8Prefix = %q", got)
 	}
 }

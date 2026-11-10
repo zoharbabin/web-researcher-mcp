@@ -7,13 +7,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
 )
 
 const (
 	keenableSearchURL       = "https://api.keenable.ai/v1/search"
-	keenableSnippetMaxRunes = 500 // fallback page excerpts can be long; descriptions are preferred
+	keenableSnippetMaxRunes = 500 // cap both description and snippet fallback, same as Exa
 )
 
 // KeenableProvider serves web search from the Keenable Search API
@@ -75,16 +76,16 @@ func (k *KeenableProvider) doWebSearch(ctx context.Context, params WebSearchPara
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 429 {
-		return nil, fmt.Errorf("keenable API rate limited: %w", circuit.ErrRateLimit)
+		return nil, fmt.Errorf("keenable: rate limited: %w", circuit.ErrRateLimit)
 	}
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return nil, fmt.Errorf("keenable API error %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("keenable: API error %d: %s", resp.StatusCode, validUTF8Prefix(body))
 	}
 
 	var parsed keenableResponse
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 5*1024*1024)).Decode(&parsed); err != nil {
-		return nil, fmt.Errorf("failed to parse keenable response: %w", err)
+		return nil, fmt.Errorf("keenable: failed to parse response: %w", err)
 	}
 
 	var results []SearchResult
@@ -94,8 +95,9 @@ func (k *KeenableProvider) doWebSearch(ctx context.Context, params WebSearchPara
 		}
 		snippet := r.Description
 		if snippet == "" {
-			snippet = truncateRunes(r.Snippet, keenableSnippetMaxRunes)
+			snippet = r.Snippet
 		}
+		snippet = truncateRunes(snippet, keenableSnippetMaxRunes)
 		results = append(results, SearchResult{
 			Title:       r.Title,
 			URL:         r.URL,
@@ -112,6 +114,12 @@ func truncateRunes(s string, max int) string {
 		return string(r[:max])
 	}
 	return s
+}
+
+// validUTF8Prefix turns a byte-limited error body into a string without a
+// broken trailing rune (a 1024-byte read can end mid-character).
+func validUTF8Prefix(b []byte) string {
+	return strings.ToValidUTF8(string(b), "")
 }
 
 // keenableResponse: results[]{title,url,description,snippet}.
