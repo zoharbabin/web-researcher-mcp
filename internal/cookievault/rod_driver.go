@@ -101,6 +101,32 @@ func (s *rodSession) Cookies(ctx context.Context) ([]Cookie, error) {
 	return fromRodCookies(raw), nil
 }
 
+// pageTextMax caps what PageText reads. Block pages are short.
+const pageTextMax = 4096
+
+// pageTextJS returns the page's visible text. A challenge page (DataDome on
+// WSJ) is an empty shell around one frame, so with no text it returns the frame
+// URLs instead. The frame itself is a separate process rod cannot read.
+const pageTextJS = `() => {
+	const text = (document.body ? document.body.innerText : "").trim();
+	if (text) return text.slice(0, %d);
+	return [...document.querySelectorAll("iframe")].map(f => f.src).join("\n").slice(0, %d);
+}`
+
+// PageText returns the first pageTextMax characters of the first page's text,
+// or its frame URLs when it has no text.
+func (s *rodSession) PageText(ctx context.Context) (string, error) {
+	pages, err := s.pb.Browser.Context(ctx).Pages()
+	if err != nil || len(pages) == 0 {
+		return "", err
+	}
+	res, err := pages[0].Eval(fmt.Sprintf(pageTextJS, pageTextMax, pageTextMax))
+	if err != nil {
+		return "", err
+	}
+	return res.Value.Str(), nil
+}
+
 // Close shuts the browser down cleanly and waits for it to exit, so the profile
 // is fully written. It leaves the profile dir to the caller.
 func (s *rodSession) Close() error {

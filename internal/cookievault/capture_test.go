@@ -20,6 +20,7 @@ func persistCookie(name, value, domain string) Cookie {
 type fakeSession struct {
 	cookies  []Cookie
 	cookErr  error
+	text     string // what PageText returns
 	done     chan struct{}
 	closed   atomic.Int32
 	doneOnce sync.Once
@@ -30,9 +31,17 @@ func newFakeSession(cookies ...Cookie) *fakeSession {
 }
 
 func (s *fakeSession) Cookies(context.Context) ([]Cookie, error) { return s.cookies, s.cookErr }
-func (s *fakeSession) Done() <-chan struct{}                     { return s.done }
-func (s *fakeSession) Close() error                              { s.closed.Add(1); return nil }
-func (s *fakeSession) userClosesWindow()                         { s.doneOnce.Do(func() { close(s.done) }) }
+func (s *fakeSession) PageText(context.Context) (string, error) {
+	select {
+	case <-s.done: // like the real driver: no page left, no text
+		return "", nil
+	default:
+		return s.text, nil
+	}
+}
+func (s *fakeSession) Done() <-chan struct{} { return s.done }
+func (s *fakeSession) Close() error          { s.closed.Add(1); return nil }
+func (s *fakeSession) userClosesWindow()     { s.doneOnce.Do(func() { close(s.done) }) }
 
 type fakeDriver struct {
 	mu     sync.Mutex
@@ -463,6 +472,62 @@ func TestLoginWindowNeedsNewCookie(t *testing.T) {
 	if err := run(t, true); err != nil {
 		t.Fatalf("signing in: %v", err)
 	}
+}
+
+func TestLoginWindowSiteBlocked(t *testing.T) {
+	const blockPage = "Access is temporarily restricted\nWe detected unusual activity from your device or network."
+	run := func(t *testing.T, text string, cookies ...Cookie) error {
+		t.Helper()
+		sess := newFakeSession(cookies...)
+		sess.text = text
+		c := fastCapturer(t, &fakeDriver{sess: sess}, 1, 5*time.Second)
+		c.baseline = time.Minute // cookies present at open are not a sign-in
+		go func() {
+			time.Sleep(50 * time.Millisecond)
+			sess.userClosesWindow()
+		}()
+		_, err := c.LoginWindow(context.Background(), subjA, "https://www.example.com/login")
+		return err
+	}
+	tracker := persistCookie("_ga", "x", ".example.com")
+	tests := []struct {
+		name    string
+		text    string
+		cookies []Cookie
+		want    error
+	}{
+		{"block page, no cookies", blockPage, nil, ErrSiteBlocked},
+		{"block page, tracking cookie only", blockPage, []Cookie{tracker}, ErrSiteBlocked},
+		{"normal page, tracking cookie only", "Sign in to your account", []Cookie{tracker}, ErrNoSignInSeen},
+		{"normal page, no cookies", "Sign in to your account", nil, ErrNothingCaptured},
+		{"normal page, no text", "", nil, ErrNothingCaptured},
+		{"login gate page, tracking cookie only", "Log in to continue\nEmail\nPassword", []Cookie{tracker}, ErrNoSignInSeen},
+		{"login gate page, no cookies", "Sign in\nCreate a free account", nil, ErrNothingCaptured},
+		{"challenge shell seen as frame URL", "https://geo.captcha-delivery.com/captcha/?cid=abc", nil, ErrSiteBlocked},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := run(t, tt.text, tt.cookies...); !errors.Is(err, tt.want) {
+				t.Fatalf("got %v, want %v", err, tt.want)
+			}
+		})
+	}
+	t.Run("signed in despite block-page text", func(t *testing.T) {
+		sess := newFakeSession(tracker)
+		sess.text = blockPage
+		ms := &mutableSession{fakeSession: sess}
+		c := fastCapturer(t, &mutableDriver{fakeDriver: &fakeDriver{sess: sess}, sess: ms}, 1, 5*time.Second)
+		c.baseline = 100 * time.Millisecond
+		go func() {
+			time.Sleep(250 * time.Millisecond)
+			ms.set(tracker, persistCookie("li_at", "s", ".example.com"))
+			time.Sleep(50 * time.Millisecond)
+			sess.userClosesWindow()
+		}()
+		if _, err := c.LoginWindow(context.Background(), subjA, "https://www.example.com/login"); err != nil {
+			t.Fatalf("a sign-in must win over page text: %v", err)
+		}
+	})
 }
 
 // mutableDriver returns the mutable session from Open.

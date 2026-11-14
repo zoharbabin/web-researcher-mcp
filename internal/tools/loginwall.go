@@ -43,21 +43,33 @@ func loginHintFor(deps Dependencies, authed bool, rawURL string) string {
 	return loginHintForKind(deps, rawAuthKind(authed), rawURL)
 }
 
+// savedLoginSite names the site a login is saved for: the registrable domain of
+// rawURL, or rawURL itself when it has none.
+func savedLoginSite(rawURL string) string {
+	if u, err := url.Parse(rawURL); err == nil {
+		if d := cookievault.RegistrableDomain(u.Hostname()); d != "" {
+			return d
+		}
+	}
+	return rawURL
+}
+
+// siteLoginAvailable reports whether site_login is registered. It needs a vault
+// and a capturer, so hints that point at it are omitted without them.
+func siteLoginAvailable(deps Dependencies) bool {
+	return deps.CookieVault != nil && deps.CookieCapturer != nil
+}
+
 // loginHintForKind returns the next step for an agent that hit a login wall, or
 // "" when site_login is not available (it registers only with a vault and a
 // capturer). authKind says which saved login was already used ("cookies",
 // "profile") or "" for none, so the hint says expired rather than missing. A
 // profile can only be renewed in a login window.
 func loginHintForKind(deps Dependencies, authKind, rawURL string) string {
-	if deps.CookieVault == nil || deps.CookieCapturer == nil {
+	if !siteLoginAvailable(deps) {
 		return ""
 	}
-	site := rawURL
-	if u, err := url.Parse(rawURL); err == nil {
-		if d := cookievault.RegistrableDomain(u.Hostname()); d != "" {
-			site = d
-		}
-	}
+	site := savedLoginSite(rawURL)
 	switch authKind {
 	case "profile":
 		return "The saved sign-in for " + site + " looks expired or was rejected. Call site_login with use_login_window=true, replace=true and the site's login URL to sign in again, then retry."
@@ -65,4 +77,20 @@ func loginHintForKind(deps Dependencies, authKind, rawURL string) string {
 		return "The saved login for " + site + " looks expired or was rejected. Call site_login with replace=true and the site's login URL to sign in again, then retry. When it is still rejected, add use_login_window=true."
 	}
 	return "This page needs a login and none is saved for " + site + ". Call site_login with " + site + "'s login URL, then retry. The default reads your signed-in Chrome, Edge or Brave and suits Facebook, X, Instagram, YouTube and most untested sites. For LinkedIn, or when a site still asks for a login after the default, call site_login again with use_login_window=true and replace=true."
+}
+
+// paywallHintForKind returns the next step for an agent that got the free
+// preview of a paywalled article, or "" when site_login is not available. When a
+// saved login was already sent and still got the preview, it is the login-wall
+// hint: the login looks expired. Otherwise it points at site_login for a reader
+// who has a subscription.
+func paywallHintForKind(deps Dependencies, authKind, rawURL string) string {
+	if authKind != "" {
+		return loginHintForKind(deps, authKind, rawURL)
+	}
+	if !siteLoginAvailable(deps) {
+		return ""
+	}
+	site := savedLoginSite(rawURL)
+	return "This looks like the free preview of a paywalled article, not the full text. If the user has a subscription to " + site + ", call site_login with " + site + "'s home page, then retry. The default reads their signed-in Chrome, Edge or Brave. Do not use use_login_window unless the default fails: some publishers block automated login windows."
 }

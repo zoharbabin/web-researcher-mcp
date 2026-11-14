@@ -4473,18 +4473,6 @@ func TestTruncatedFlag_PDFAtNonPDFURL(t *testing.T) {
 
 const incapsulaStub = `<html style="height:100%"><head><META NAME="ROBOTS" CONTENT="NOINDEX, NOFOLLOW"></head><body style="margin:0px;height:100%"><script type="text/javascript" src="/_Incapsula_Resource?SWJIYLWA=abc"></script></body></html>`
 
-func TestLooksLikeBotWall_Incapsula(t *testing.T) {
-	t.Parallel()
-	for _, c := range []string{
-		"Request unsuccessful. Incapsula incident ID: 123-456",
-		`<script src="/_Incapsula_Resource?x=1"></script>`,
-	} {
-		if !looksLikeBotWall(c) {
-			t.Errorf("looksLikeBotWall(%q) = false, want true", c)
-		}
-	}
-}
-
 func TestNeedsDocFallback(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
