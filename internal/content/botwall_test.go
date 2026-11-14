@@ -20,6 +20,8 @@ func TestLooksLikeBotWall(t *testing.T) {
 		// is fingerprinted as a bot on public portals).
 		"Please enter your viewer credentials or request access to the Brand Owner.",
 		"request access to the brand owner",
+		// DataDome shell: no text of its own, one frame from the challenge host.
+		"https://geo.captcha-delivery.com/captcha/?initialCid=abc",
 		// Reddit challenge page, HTTP 200 (live search_and_scrape finding).
 		"Prove your humanity\n\nWe’re committed to safety and security. But not for bots. Complete the challenge below and let us know you’re a real person.\n\nReddit, Inc. © \"2026\". All rights reserved.\nUser Agreement\nPrivacy Policy\nContent Policy\nHelp",
 	}

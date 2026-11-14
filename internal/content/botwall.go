@@ -60,6 +60,9 @@ var botWallMarkers = []string{
 	// network (the wall WSJ shows an automated browser). Same short-content gate.
 	"access is temporarily restricted",
 	"unusual activity from your device or network",
+	// DataDome challenge host. The block page is an empty shell around one frame
+	// from here, so a browser window shows no text of its own (WSJ).
+	"captcha-delivery.com",
 	// Imperva/Incapsula bot-wall stub (a tiny HTML page with a script from
 	// /_Incapsula_Resource, often served at a .pdf URL, #828).
 	"_incapsula_resource",

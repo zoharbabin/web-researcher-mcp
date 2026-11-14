@@ -104,13 +104,23 @@ func (s *rodSession) Cookies(ctx context.Context) ([]Cookie, error) {
 // pageTextMax caps what PageText reads. Block pages are short.
 const pageTextMax = 4096
 
-// PageText returns the first pageTextMax characters of the first page's text.
+// pageTextJS returns the page's visible text. A challenge page (DataDome on
+// WSJ) is an empty shell around one frame, so with no text it returns the frame
+// URLs instead. The frame itself is a separate process rod cannot read.
+const pageTextJS = `() => {
+	const text = (document.body ? document.body.innerText : "").trim();
+	if (text) return text.slice(0, %d);
+	return [...document.querySelectorAll("iframe")].map(f => f.src).join("\n").slice(0, %d);
+}`
+
+// PageText returns the first pageTextMax characters of the first page's text,
+// or its frame URLs when it has no text.
 func (s *rodSession) PageText(ctx context.Context) (string, error) {
 	pages, err := s.pb.Browser.Context(ctx).Pages()
 	if err != nil || len(pages) == 0 {
 		return "", err
 	}
-	res, err := pages[0].Eval(fmt.Sprintf(`() => (document.body ? document.body.innerText : "").slice(0, %d)`, pageTextMax))
+	res, err := pages[0].Eval(fmt.Sprintf(pageTextJS, pageTextMax, pageTextMax))
 	if err != nil {
 		return "", err
 	}

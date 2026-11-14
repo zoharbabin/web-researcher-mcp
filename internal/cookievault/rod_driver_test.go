@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/go-rod/rod/lib/launcher"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 )
 
 // TestRodDriverReadsCookiesAndSignalsClose drives a real headless Chromium.
@@ -88,6 +90,39 @@ func TestRodDriverReadsCookiesAndSignalsClose(t *testing.T) {
 		if len(entries) != 0 {
 			t.Logf("profile dir has %d leftovers (Capturer removes the dir itself)", len(entries))
 		}
+	}
+}
+
+// TestRodDriverPageTextEmptyShell: a page with no text of its own, like a
+// DataDome challenge, reports its frame URLs so the block page is still seen.
+func TestRodDriverPageTextEmptyShell(t *testing.T) {
+	path, ok := launcher.LookPath()
+	if !ok {
+		t.Skip("chrome not available")
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<html><body><iframe src="https://geo.captcha-delivery.com.invalid/captcha/"></iframe></body></html>`))
+	}))
+	defer srv.Close()
+	dir, err := os.MkdirTemp("", "rod-driver-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { removeDir(dir) })
+	d := &RodDriver{chromePath: path, headless: true}
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+	defer cancel()
+	sess, err := d.Open(ctx, srv.URL, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sess.Close()
+	var text string
+	for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline) && text == ""; time.Sleep(200 * time.Millisecond) {
+		text, _ = sess.PageText(ctx)
+	}
+	if !content.LooksLikeBotWall(text) {
+		t.Errorf("PageText = %q, want a bot-wall match", text)
 	}
 }
 

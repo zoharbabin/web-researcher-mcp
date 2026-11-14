@@ -71,8 +71,8 @@ type Session interface {
 	// Cookies returns every cookie currently held by the browser.
 	Cookies(ctx context.Context) ([]Cookie, error)
 	// PageText returns the first few KB of visible text on the window's first
-	// page, or "" when there is no page. The caller only matches it against
-	// block-page markers and never stores it.
+	// page (its frame URLs when it has no text), or "" when there is no page.
+	// The caller only matches it against block-page markers and never stores it.
 	PageText(ctx context.Context) (string, error)
 	// Done is closed when the user closes the browser.
 	Done() <-chan struct{}
