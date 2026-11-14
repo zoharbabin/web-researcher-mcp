@@ -1,6 +1,7 @@
 package documents
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -481,5 +482,62 @@ func TestParsePDF_NoTextLayer_ReturnsPageCount(t *testing.T) {
 	}
 	if meta.PageCount != 2 {
 		t.Errorf("PageCount = %d, want 2", meta.PageCount)
+	}
+}
+
+func TestLigaturesFoldedToLetters(t *testing.T) {
+	cases := map[string]string{
+		"\ufb01ne-tuned":        "fine-tuned",
+		"\ufb02ow":              "flow",
+		"e\ufb00ect":            "effect",
+		"o\ufb03ce":             "office",
+		"ba\ufb04e":             "baffle",
+		"\ufb05op \ufb06ill":    "stop still",
+		"plain text, no change": "plain text, no change",
+	}
+	for in, want := range cases {
+		if got := ligatures.Replace(in); got != want {
+			t.Errorf("ligatures.Replace(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// ligaturePDF builds a one-page PDF whose font maps code 1 to the "fi" ligature
+// glyph and code 2 to "fl", the way real PDF fonts emit them. Octal escapes in
+// text select those codes.
+func ligaturePDF(text string) []byte {
+	stream := "BT /F1 12 Tf 72 700 Td (" + text + ") Tj ET"
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(stream), stream),
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding << /Type /Encoding /BaseEncoding /WinAnsiEncoding /Differences [1 /fi /fl] >> >>",
+	}
+	var b strings.Builder
+	b.WriteString("%PDF-1.4\n")
+	offs := make([]int, len(objs))
+	for i, o := range objs {
+		offs[i] = b.Len()
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, o)
+	}
+	x := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \n", len(objs)+1)
+	for _, o := range offs {
+		fmt.Fprintf(&b, "%010d 00000 n \n", o)
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, x)
+	return []byte(b.String())
+}
+
+// The ligature glyphs a PDF font emits come out of parsePDF as plain letters.
+func TestParsePDF_FoldsLigatures(t *testing.T) {
+	data := ligaturePDF("the \\001ne-tuned \\002ow")
+	text, _, err := parsePDF(nil, int64(len(data)), data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if text != "the fine-tuned flow" {
+		t.Errorf("text = %q, want ligatures folded", text)
 	}
 }

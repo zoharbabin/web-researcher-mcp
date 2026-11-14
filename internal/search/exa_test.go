@@ -284,3 +284,22 @@ func TestPublishYear(t *testing.T) {
 		}
 	}
 }
+
+func TestExaScholarlySplitsJoinedAuthors(t *testing.T) {
+	p, _ := newExaTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"results":[
+			{"title":"A","url":"https://x.example/a","author":"Ashish Vaswani, Noam Shazeer, Niki Parmar, et al."},
+			{"title":"B","url":"https://x.example/b","author":""}
+		]}`))
+	})
+	results, err := p.Scholarly(context.Background(), AcademicSearchParams{Query: "q", NumResults: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := results[0].Authors; len(got) != 3 || got[0] != "Ashish Vaswani" || got[2] != "Niki Parmar" {
+		t.Errorf("authors = %q, want one name per item", got)
+	}
+	if len(results[1].Authors) != 0 {
+		t.Errorf("empty author must give no authors, got %q", results[1].Authors)
+	}
+}

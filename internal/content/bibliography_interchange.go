@@ -1,6 +1,7 @@
 package content
 
 import (
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -168,6 +169,20 @@ func cslAuthors(author string) string {
 		objs = append(objs, obj)
 	}
 	return "[" + strings.Join(objs, ", ") + "]"
+}
+
+// etAlTail matches a trailing "et al." that stands alone (not the end of a name).
+var etAlTail = regexp.MustCompile(`(?i)(?:^|[\s,])et al\.?$`)
+
+// SplitAuthorList splits a joined author string ("A B, C D, et al.") into one
+// name per item. A trailing "et al." is dropped: it is not a name. Returns nil
+// for an empty string.
+func SplitAuthorList(author string) []string {
+	author = strings.TrimSpace(author)
+	if m := etAlTail.FindStringIndex(author); m != nil {
+		author = strings.TrimRight(author[:m[0]], ", ")
+	}
+	return splitAuthors(author)
 }
 
 // splitAuthors splits a free-form author string into individual names on the

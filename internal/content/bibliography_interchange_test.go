@@ -519,3 +519,30 @@ func TestCSLAuthorsOrgNameStaysLiteral(t *testing.T) {
 		t.Errorf("org author = %v, want literal=NASA", org)
 	}
 }
+
+func TestSplitAuthorList(t *testing.T) {
+	cases := []struct {
+		in   string
+		want []string
+	}{
+		{"", nil},
+		{"Vaswani", []string{"Vaswani"}},
+		{"Ashish Vaswani, Noam Shazeer, et al.", []string{"Ashish Vaswani", "Noam Shazeer"}},
+		{"Ashish Vaswani, Noam Shazeer, Niki Parmar et al", []string{"Ashish Vaswani", "Noam Shazeer", "Niki Parmar"}},
+		{"Ashish Vaswani and Noam Shazeer", []string{"Ashish Vaswani", "Noam Shazeer"}},
+		{"Smith, J.", []string{"Smith, J."}},
+		{"Chet Al", []string{"Chet Al"}}, // a name that ends in the letters "et al" is not "et al."
+	}
+	for _, c := range cases {
+		got := SplitAuthorList(c.in)
+		if len(got) != len(c.want) {
+			t.Errorf("SplitAuthorList(%q) = %q, want %q", c.in, got, c.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Errorf("SplitAuthorList(%q)[%d] = %q, want %q", c.in, i, got[i], c.want[i])
+			}
+		}
+	}
+}

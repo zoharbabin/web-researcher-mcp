@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -112,7 +113,8 @@ func registerPaperFulltext(srv *mcp.Server, deps Dependencies) {
 		if meta != nil && meta.Title != "" {
 			title = meta.Title
 		}
-		citation := content.ExtractCitation(scrapeURL, title, result.Author, result.SiteName, result.PublishDate)
+		author, date := citationAuthorDate(meta, result.Author, result.PublishDate)
+		citation := content.ExtractCitation(scrapeURL, title, author, result.SiteName, date)
 
 		output := map[string]any{
 			"identifier":  identifier,
@@ -126,7 +128,7 @@ func registerPaperFulltext(srv *mcp.Server, deps Dependencies) {
 		// #658: title/author/date all empty means citation is a bare
 		// "(n.d.)."-style placeholder — flag it explicitly rather than let it
 		// pass for a real, complete citation.
-		if title == "" && result.Author == "" && result.PublishDate == "" {
+		if title == "" && author == "" && date == "" {
 			output["metadataIncomplete"] = true
 		}
 		if result.Tier != "" {
@@ -168,12 +170,39 @@ func registerPaperFulltext(srv *mcp.Server, deps Dependencies) {
 		}
 
 		jsonBytes, _ := json.Marshal(output)
-		deps.Cache.Set(ctx, cacheKey, jsonBytes, time.Hour)
+		// A result whose record lookup failed is not cached: the next call
+		// should retry the lookup instead of replaying the bare result (#865).
+		if !recordLookupFailed(scrapeURL, meta, fetchErr) {
+			deps.Cache.Set(ctx, cacheKey, jsonBytes, time.Hour)
+		}
 		recordToolCall(deps, "paper_fulltext", time.Since(start), nil, "", false)
 		auditToolCallQuery(ctx, deps, "paper_fulltext", time.Since(start), nil, "", identifier, map[string]any{"source": output["source"]})
 
 		return structuredResult(jsonBytes), nil, nil
 	})
+}
+
+// citationAuthorDate returns the author and date for the citation. The resolved
+// record wins because a PDF page carries neither reliably; the scraped page
+// values are the fallback when the record has none (#866).
+func citationAuthorDate(meta *search.AcademicResult, pageAuthor, pageDate string) (author, date string) {
+	author, date = pageAuthor, pageDate
+	if meta == nil {
+		return author, date
+	}
+	if len(meta.Authors) > 0 {
+		author = strings.Join(meta.Authors, "; ")
+	}
+	if meta.Year > 0 {
+		date = strconv.Itoa(meta.Year)
+	}
+	return author, date
+}
+
+// recordLookupFailed reports whether metadata that should have resolved is
+// missing: no record came back for an arXiv URL, or the lookup returned an error.
+func recordLookupFailed(scrapeURL string, meta *search.AcademicResult, fetchErr error) bool {
+	return meta == nil && (fetchErr != nil || arxivDOIFromURL(scrapeURL) != "")
 }
 
 // resolvePaperURL determines the URL to scrape for a given identifier and
