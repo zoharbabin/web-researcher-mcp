@@ -101,6 +101,22 @@ func (s *rodSession) Cookies(ctx context.Context) ([]Cookie, error) {
 	return fromRodCookies(raw), nil
 }
 
+// pageTextMax caps what PageText reads. Block pages are short.
+const pageTextMax = 4096
+
+// PageText returns the first pageTextMax characters of the first page's text.
+func (s *rodSession) PageText(ctx context.Context) (string, error) {
+	pages, err := s.pb.Browser.Context(ctx).Pages()
+	if err != nil || len(pages) == 0 {
+		return "", err
+	}
+	res, err := pages[0].Eval(fmt.Sprintf(`() => (document.body ? document.body.innerText : "").slice(0, %d)`, pageTextMax))
+	if err != nil {
+		return "", err
+	}
+	return res.Value.Str(), nil
+}
+
 // Close shuts the browser down cleanly and waits for it to exit, so the profile
 // is fully written. It leaves the profile dir to the caller.
 func (s *rodSession) Close() error {

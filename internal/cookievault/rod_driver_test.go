@@ -41,6 +41,14 @@ func TestRodDriverReadsCookiesAndSignalsClose(t *testing.T) {
 	}
 	defer sess.Close()
 
+	var text string
+	for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline) && text == ""; time.Sleep(200 * time.Millisecond) {
+		text, _ = sess.PageText(ctx)
+	}
+	if text != "login" {
+		t.Errorf("PageText = %q, want %q", text, "login")
+	}
+
 	var got map[string]Cookie
 	for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline); time.Sleep(200 * time.Millisecond) {
 		cookies, err := sess.Cookies(ctx)

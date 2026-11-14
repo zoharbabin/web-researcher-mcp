@@ -46,6 +46,7 @@ const (
 type fakeLoginDriver struct {
 	mu      sync.Mutex
 	cookies []cookievault.Cookie
+	text    string // the page text the window shows
 	opens   int
 }
 
@@ -55,7 +56,7 @@ func (d *fakeLoginDriver) Open(_ context.Context, _, _ string) (cookievault.Sess
 	d.opens++
 	done := make(chan struct{})
 	close(done)
-	return &fakeLoginSession{cookies: append([]cookievault.Cookie(nil), d.cookies...), done: done}, nil
+	return &fakeLoginSession{cookies: append([]cookievault.Cookie(nil), d.cookies...), text: d.text, done: done}, nil
 }
 
 // ReadCookies returns what the browser would hold after a restart: the same
@@ -76,8 +77,11 @@ func (d *fakeLoginDriver) openCount() int {
 
 type fakeLoginSession struct {
 	cookies []cookievault.Cookie
+	text    string
 	done    chan struct{}
 }
+
+func (s *fakeLoginSession) PageText(context.Context) (string, error) { return s.text, nil }
 
 func (s *fakeLoginSession) Cookies(context.Context) ([]cookievault.Cookie, error) {
 	return s.cookies, nil
@@ -502,6 +506,29 @@ func TestCanaryCookieNeverLeaks(t *testing.T) {
 		if strings.Contains(s, canaryValue) {
 			t.Errorf("surface %d leaked the cookie value: %.200s", i, s)
 		}
+	}
+}
+
+func TestSiteLoginWindowBlockedBySite(t *testing.T) {
+	e := newVaultEnv(t)
+	e.grant(t, "default", "alice")
+	alice := e.client(t, "default", "alice")
+	// The window shows the site's bot-block page and no cookies are set.
+	e.driver.cookies = nil
+	e.driver.text = "Access is temporarily restricted\n\nWe detected unusual activity from your device or network."
+	out, text := callVaultTool(t, alice, "site_login", map[string]any{"url": "http://" + vaultTestHost + "/login", "use_login_window": true})
+	if out["status"] != "blocked_by_site" || !strings.Contains(text, "remote-debugging") || !strings.Contains(text, "Do not retry") {
+		t.Fatalf("blocked window: %s", text)
+	}
+	if got := e.deps.ProfileStore.List(context.Background(), cookievault.Subject{TenantID: "default", UserID: "alice"}); len(got) != 0 {
+		t.Errorf("blocked window saved %d profiles, want 0", len(got))
+	}
+
+	// An ordinary page with no sign-in keeps the generic message.
+	e.driver.text = "Sign in to your account"
+	out, text = callVaultTool(t, alice, "site_login", map[string]any{"url": "http://" + vaultTestHost + "/login", "use_login_window": true})
+	if out["status"] == "blocked_by_site" {
+		t.Errorf("ordinary login page reported as blocked: %s", text)
 	}
 }
 
