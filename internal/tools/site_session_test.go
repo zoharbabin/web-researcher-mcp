@@ -905,6 +905,21 @@ func TestScrapeProfileGating(t *testing.T) {
 	}
 }
 
+// A host with no registrable domain (an IP, localhost) can have no saved login.
+// scrape_page must treat it as "none" and scrape normally, not report a broken
+// saved sign-in.
+func TestScrapeHostWithoutRegistrableDomainIgnoresProfileStore(t *testing.T) {
+	e := newVaultEnv(t)
+	e.grant(t, "default", "alice")
+	alice := e.client(t, "default", "alice")
+	for _, u := range []string{"http://127.0.0.1:1/", "http://localhost:1/"} {
+		_, text := callVaultTool(t, alice, "scrape_page", map[string]any{"url": u})
+		if strings.Contains(text, "saved sign-in") {
+			t.Errorf("%s: no-domain host reported a saved sign-in error: %s", u, text)
+		}
+	}
+}
+
 func TestScrapeAnonymousSkipsCookieLogin(t *testing.T) {
 	e := newVaultEnv(t)
 	e.grant(t, "default", "alice")
