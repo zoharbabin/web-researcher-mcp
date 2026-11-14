@@ -328,6 +328,7 @@ func jsonLDAccess(raw json.RawMessage) (free, paywalled bool) {
 			}
 			walk(v["@graph"])
 			walk(v["hasPart"])
+			walk(v["mainEntity"])
 		}
 	}
 	walk(node)

@@ -2111,7 +2111,7 @@ type SiteLoginOutput struct {
 
 Requires an identified user and recorded consent for the `session_capture` purpose, which is never granted by default (HTTP: host asserts it via `POST /admin/consent`; STDIO: the operator sets `COOKIE_VAULT_STDIO_CONSENT=true`); otherwise returns `unavailable` / `no_consent` and opens no browser. When a valid saved login for the site's registrable domain exists and `replace` is not set, it returns `already_signed_in` and opens no browser. The host is checked for SSRF before any browser is touched.
 
-`expiresAt` is the longest the server keeps the login (`COOKIE_VAULT_TTL`, or the earliest cookie expiry when every cookie is persistent). It is not the site's session life: the site can end the session sooner. `scrape_page` signals that with `loginRequired` or `paywallSuspected`, and then `site_login` with `replace=true` renews it.
+`expiresAt` is the longest the server keeps the login: `COOKIE_VAULT_TTL` for cookies (or the last cookie's expiry, when every cookie is persistent and that is sooner), `COOKIE_VAULT_PROFILE_TTL` for a profile. It is not the site's session life: the site can end the session sooner. `scrape_page` signals that with `loginRequired` or `paywallSuspected`, and then `site_login` with `replace=true` renews it.
 
 **Which way, by site.**
 

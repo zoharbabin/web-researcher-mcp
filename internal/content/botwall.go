@@ -37,6 +37,20 @@ var botWallMarkers = []string{
 	"protect the server against the scourge of",
 	"anubis uses a proof-of-work scheme",
 	"this is a placeholder solution",
+	// Akamai/DataDome-style access block pages, served for a flagged device or
+	// network (the wall WSJ shows an automated browser). Same short-content gate.
+	"access is temporarily restricted",
+	"unusual activity from your device or network",
+	// Imperva/Incapsula bot-wall stub (a tiny HTML page with a script from
+	// /_Incapsula_Resource, often served at a .pdf URL, #828).
+	"_incapsula_resource",
+	"incapsula incident",
+}
+
+// softGateMarkers are login, signup and brand-portal gates. They suit a scrape,
+// where such a page is not the content. They do not suit a login window, where a
+// login page is exactly what the user is meant to see.
+var softGateMarkers = []string{
 	// Frontify brand-portal login wall — returned with HTTP 200 when the portal
 	// requires viewer credentials. go-rod's headless fingerprint triggers this
 	// even on public portals; the pipeline must reject it and not cache it.
@@ -56,17 +70,13 @@ var botWallMarkers = []string{
 	"view full profile",
 	"unlock full access",
 	"sign up for free to view",
-	// Akamai/DataDome-style access block pages, served for a flagged device or
-	// network (the wall WSJ shows an automated browser). Same short-content gate.
-	"access is temporarily restricted",
-	"unusual activity from your device or network",
-	// DataDome challenge host. The block page is an empty shell around one frame
-	// from here, so a browser window shows no text of its own (WSJ).
+}
+
+// frameChallengeMarkers match what a login window reports for a challenge page
+// with no text of its own: the URL of its one frame. DataDome (WSJ) is a shell
+// around a frame from this host. Scrapes never see frame URLs, so they skip it.
+var frameChallengeMarkers = []string{
 	"captcha-delivery.com",
-	// Imperva/Incapsula bot-wall stub (a tiny HTML page with a script from
-	// /_Incapsula_Resource, often served at a .pdf URL, #828).
-	"_incapsula_resource",
-	"incapsula incident",
 }
 
 // LooksLikeBotWall reports whether short extracted content is a bot/JS-wall
@@ -75,13 +85,26 @@ var botWallMarkers = []string{
 // placeholder text masquerades as the page's content. Only short content is
 // considered, so a legitimate long article is never flagged.
 func LooksLikeBotWall(text string) bool {
+	return shortContains(text, botWallMarkers, softGateMarkers)
+}
+
+// LooksLikeAccessBlock reports whether the text of a page a person is looking at
+// is a bot-block page. It leaves out login and signup gates, so an ordinary
+// sign-in page is never taken for a block.
+func LooksLikeAccessBlock(text string) bool {
+	return shortContains(text, botWallMarkers, frameChallengeMarkers)
+}
+
+func shortContains(text string, lists ...[]string) bool {
 	if len(text) > BotWallMaxBytes {
 		return false
 	}
 	lower := strings.ToLower(text)
-	for _, m := range botWallMarkers {
-		if strings.Contains(lower, m) {
-			return true
+	for _, list := range lists {
+		for _, m := range list {
+			if strings.Contains(lower, m) {
+				return true
+			}
 		}
 	}
 	return false

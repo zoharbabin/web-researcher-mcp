@@ -501,6 +501,9 @@ func TestLoginWindowSiteBlocked(t *testing.T) {
 		{"normal page, tracking cookie only", "Sign in to your account", []Cookie{tracker}, ErrNoSignInSeen},
 		{"normal page, no cookies", "Sign in to your account", nil, ErrNothingCaptured},
 		{"normal page, no text", "", nil, ErrNothingCaptured},
+		{"login gate page, tracking cookie only", "Log in to continue\nEmail\nPassword", []Cookie{tracker}, ErrNoSignInSeen},
+		{"login gate page, no cookies", "Sign in\nCreate a free account", nil, ErrNothingCaptured},
+		{"challenge shell seen as frame URL", "https://geo.captcha-delivery.com/captcha/?cid=abc", nil, ErrSiteBlocked},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

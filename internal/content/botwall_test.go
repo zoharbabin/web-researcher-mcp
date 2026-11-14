@@ -20,8 +20,6 @@ func TestLooksLikeBotWall(t *testing.T) {
 		// is fingerprinted as a bot on public portals).
 		"Please enter your viewer credentials or request access to the Brand Owner.",
 		"request access to the brand owner",
-		// DataDome shell: no text of its own, one frame from the challenge host.
-		"https://geo.captcha-delivery.com/captcha/?initialCid=abc",
 		// Reddit challenge page, HTTP 200 (live search_and_scrape finding).
 		"Prove your humanity\n\nWe’re committed to safety and security. But not for bots. Complete the challenge below and let us know you’re a real person.\n\nReddit, Inc. © \"2026\". All rights reserved.\nUser Agreement\nPrivacy Policy\nContent Policy\nHelp",
 	}
@@ -162,5 +160,41 @@ func TestLooksLikeBotWall_AccessRestricted(t *testing.T) {
 		strings.Repeat("The report examines how publishers detect automated traffic and what readers can do. ", 40)
 	if LooksLikeBotWall(long) {
 		t.Errorf("a long article quoting the phrase (len=%d) must not be flagged", len(long))
+	}
+}
+
+// TestLooksLikeAccessBlock: hard blocks count, login and signup gates do not,
+// and a DataDome shell is seen through its frame URL.
+func TestLooksLikeAccessBlock(t *testing.T) {
+	t.Parallel()
+	blocks := []string{
+		"Access is temporarily restricted\nWe detected unusual activity from your device or network.",
+		"Checking your browser before accessing example.com",
+		"https://geo.captcha-delivery.com/captcha/?initialCid=abc",
+	}
+	for _, c := range blocks {
+		if !LooksLikeAccessBlock(c) {
+			t.Errorf("expected access block for %q", c)
+		}
+	}
+	notBlocks := []string{
+		"Log in to continue\nEmail\nPassword",
+		"Sign in\nCreate a free account",
+		"Sign up to continue",
+		"Please enter your viewer credentials or request access to the Brand Owner.",
+		"",
+	}
+	for _, c := range notBlocks {
+		if LooksLikeAccessBlock(c) {
+			t.Errorf("login page %q must not be an access block", c)
+		}
+	}
+	// A scrape never sees frame URLs, so a short page naming the host stays a page.
+	if LooksLikeBotWall("tracker list: geo.captcha-delivery.com") {
+		t.Error("the frame-URL marker must not apply to scraped content")
+	}
+	// Soft gates still stop a scrape.
+	if !LooksLikeBotWall("Log in to continue") {
+		t.Error("a short login gate must still be a bot wall for scrapes")
 	}
 }

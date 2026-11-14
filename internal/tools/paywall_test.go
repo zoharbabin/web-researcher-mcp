@@ -85,6 +85,37 @@ func TestScrapePaywallHintWithoutVault(t *testing.T) {
 	}
 }
 
+// loginWallSite serves a short "Sign in" page on a paywalled publisher's host.
+func loginWallSite(t *testing.T, host string) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><head><title>Sign In - Reader</title></head><body><article><p>Please sign in to read this story with your subscriber account today.</p></article></body></html>`))
+	}))
+	t.Cleanup(srv.Close)
+	_, port, _ := net.SplitHostPort(srv.Listener.Addr().String())
+	return "http://" + host + ":" + port + "/articles/story"
+}
+
+// A login wall is reported once. With site_login it is loginRequired. Without
+// it there is no hint to give, so the paywall signal still tells the agent the
+// page needs a login.
+func TestScrapeLoginWallAndPaywallAreNotDoubled(t *testing.T) {
+	e := newVaultEnv(t)
+	useFakeDNS(t, "www.wsj.com")
+	bob := e.client(t, "default", "bob")
+	out, text := callVaultTool(t, bob, "scrape_page", map[string]any{"url": loginWallSite(t, "www.wsj.com")})
+	if out["loginRequired"] != true || out["paywallSuspected"] == true {
+		t.Fatalf("with site_login: want loginRequired only: %s", text)
+	}
+
+	e.deps.CookieVault, e.deps.CookieCapturer = nil, nil
+	out, text = callVaultTool(t, e.client(t, "default", "bob"), "scrape_page", map[string]any{"url": loginWallSite(t, "www.wsj.com")})
+	if out["loginRequired"] != nil || out["paywallSuspected"] != true {
+		t.Fatalf("without site_login: want paywallSuspected only: %s", text)
+	}
+}
+
 func TestScrapePaywallWithSavedLoginSaysExpired(t *testing.T) {
 	e := newVaultEnv(t)
 	e.grant(t, "default", "alice")

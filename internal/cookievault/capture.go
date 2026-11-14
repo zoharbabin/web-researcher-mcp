@@ -242,7 +242,7 @@ func (c *Capturer) LoginWindow(ctx context.Context, sub Subject, loginURL string
 		// An empty reading means no page is left (the user just closed the
 		// window), so keep what the last real page said.
 		if text, err := sess.PageText(windowCtx); err == nil && text != "" {
-			blocked = content.LooksLikeBotWall(text)
+			blocked = content.LooksLikeAccessBlock(text)
 		}
 		cookies, err := sess.Cookies(windowCtx)
 		if err != nil {

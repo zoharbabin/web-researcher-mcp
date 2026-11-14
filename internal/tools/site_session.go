@@ -256,7 +256,7 @@ func siteLoginFailure(ctx context.Context, deps Dependencies, start time.Time, k
 	case errors.Is(err, cookievault.ErrNoSignInSeen):
 		status, msg = "not_signed_in", "no sign-in was seen in the window (only the site's own tracking cookies); nothing was saved. Call site_login again and sign in before you close the window"
 	case errors.Is(err, cookievault.ErrSiteBlocked):
-		status, msg = "blocked_by_site", "the site blocked the login window as automated, so nothing was saved. Do not retry the window. Sign in to the site in your own Chrome, Edge or Brave, turn on chrome://inspect/#remote-debugging, and call site_login again without use_login_window"
+		status, msg = "blocked_by_site", "the site blocked the login window as automated, so nothing was saved. Do not retry the window. Sign in to the site in your own Chrome, Edge or Brave, turn on chrome://inspect/#remote-debugging, and call site_login again without use_login_window. Over HTTP only the login window exists, so this site cannot be signed in there"
 	case errors.Is(err, cookievault.ErrNothingCaptured):
 		status, msg = "nothing_captured", "no cookies were captured for that site; nothing was saved. Sign in before you close the window"
 	case errors.Is(err, cookievault.ErrProfileNotSaved):

@@ -310,7 +310,7 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		// Paywall signal: a thin page that is probably the free preview of a
 		// paywalled article, not the article. A login wall is more specific and
 		// wins. With a saved login the hint says it looks expired.
-		if !wall && content.PaywallSuspected(input.URL, wordCount, result.StructuredData.Signals()) {
+		if output["loginRequired"] != true && content.PaywallSuspected(input.URL, wordCount, result.StructuredData.Signals()) {
 			output["paywallSuspected"] = true
 			if hint := paywallHintForKind(deps, authKind, input.URL); hint != "" {
 				output["loginHint"] = hint

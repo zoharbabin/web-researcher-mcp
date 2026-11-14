@@ -20,6 +20,7 @@ func TestJSONLDAccess(t *testing.T) {
 		{"schema.org URL true", `{"isAccessibleForFree":"https://schema.org/True"}`, true, false},
 		{"in @graph", `{"@graph":[{"@type":"WebSite"},{"@type":"Article","isAccessibleForFree":false}]}`, false, true},
 		{"in hasPart", `{"@type":"Article","isAccessibleForFree":true,"hasPart":{"@type":"WebPageElement","isAccessibleForFree":false,"cssSelector":".body"}}`, true, true},
+		{"in mainEntity", `{"@type":"WebPage","mainEntity":{"@type":"NewsArticle","isAccessibleForFree":false}}`, false, true},
 		{"top-level array", `[{"@type":"Person"},{"@type":"Article","isAccessibleForFree":false}]`, false, true},
 		{"absent", `{"@type":"Article","headline":"x"}`, false, false},
 		{"unknown string", `{"isAccessibleForFree":"maybe"}`, false, false},

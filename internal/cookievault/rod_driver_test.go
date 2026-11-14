@@ -121,7 +121,7 @@ func TestRodDriverPageTextEmptyShell(t *testing.T) {
 	for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline) && text == ""; time.Sleep(200 * time.Millisecond) {
 		text, _ = sess.PageText(ctx)
 	}
-	if !content.LooksLikeBotWall(text) {
+	if !content.LooksLikeAccessBlock(text) {
 		t.Errorf("PageText = %q, want a bot-wall match", text)
 	}
 }

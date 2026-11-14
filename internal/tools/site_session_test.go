@@ -55,7 +55,9 @@ func (d *fakeLoginDriver) Open(_ context.Context, _, _ string) (cookievault.Sess
 	defer d.mu.Unlock()
 	d.opens++
 	done := make(chan struct{})
-	close(done)
+	if d.text == "" {
+		close(done)
+	}
 	return &fakeLoginSession{cookies: append([]cookievault.Cookie(nil), d.cookies...), text: d.text, done: done}, nil
 }
 
@@ -75,13 +77,25 @@ func (d *fakeLoginDriver) openCount() int {
 	return d.opens
 }
 
+// fakeLoginSession shows its page text once. The "user" then closes the window,
+// and later reads return nothing, like the real driver.
 type fakeLoginSession struct {
 	cookies []cookievault.Cookie
 	text    string
 	done    chan struct{}
+	once    sync.Once
 }
 
-func (s *fakeLoginSession) PageText(context.Context) (string, error) { return s.text, nil }
+func (s *fakeLoginSession) PageText(context.Context) (string, error) {
+	text := ""
+	s.once.Do(func() {
+		text = s.text
+		if s.text != "" {
+			close(s.done)
+		}
+	})
+	return text, nil
+}
 
 func (s *fakeLoginSession) Cookies(context.Context) ([]cookievault.Cookie, error) {
 	return s.cookies, nil
@@ -524,8 +538,9 @@ func TestSiteLoginWindowBlockedBySite(t *testing.T) {
 		t.Errorf("blocked window saved %d profiles, want 0", len(got))
 	}
 
-	// An ordinary page with no sign-in keeps the generic message.
-	e.driver.text = "Sign in to your account"
+	// An ordinary page with no sign-in keeps the generic message, even when it
+	// says "log in to continue".
+	e.driver.text = "Log in to continue"
 	out, text = callVaultTool(t, alice, "site_login", map[string]any{"url": "http://" + vaultTestHost + "/login", "use_login_window": true})
 	if out["status"] == "blocked_by_site" {
 		t.Errorf("ordinary login page reported as blocked: %s", text)
