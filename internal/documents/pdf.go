@@ -67,6 +67,19 @@ const (
 	columnMaxClusters = 64
 )
 
+// ligatures folds the Latin ligature glyphs (U+FB00 to U+FB06) that PDF fonts
+// emit into plain letters, so a word such as "fine-tuned" can be found by text
+// search.
+var ligatures = strings.NewReplacer(
+	"\ufb00", "ff",
+	"\ufb01", "fi",
+	"\ufb02", "fl",
+	"\ufb03", "ffi",
+	"\ufb04", "ffl",
+	"\ufb05", "st", // long s + t
+	"\ufb06", "st",
+)
+
 func parsePDF(_ io.ReaderAt, size int64, data []byte) (string, Metadata, error) {
 	meta := Metadata{
 		FileSize: size,
@@ -99,7 +112,7 @@ func parsePDF(_ io.ReaderAt, size int64, data []byte) (string, Metadata, error) 
 		sb.WriteString(pageTextInReadingOrder(spans))
 	}
 
-	text := sb.String()
+	text := ligatures.Replace(sb.String())
 	if strings.TrimSpace(text) == "" {
 		// A PDF with pages but no text layer (scanned images) parses fine: return
 		// empty text with the page count so the caller can say so (#828).

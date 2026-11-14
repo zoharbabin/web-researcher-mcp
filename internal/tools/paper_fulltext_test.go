@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -644,5 +646,127 @@ func TestPaperFulltextArxivURLMetadata(t *testing.T) {
 	_, meta, _, _ = resolvePaperURL(context.Background(), deps, "https://example.com/paper.pdf")
 	if meta != nil {
 		t.Errorf("non-arXiv URL got metadata: %+v", meta)
+	}
+}
+
+// flakyArxivResolver resolves the Attention paper's arXiv DOI with authors and
+// a year, but only while down is false.
+type flakyArxivResolver struct {
+	mockAcademicProvider
+	down    atomic.Bool
+	authors []string
+}
+
+func (r *flakyArxivResolver) ResolveByDOI(_ context.Context, doi string) (*search.AcademicResult, error) {
+	if r.down.Load() || doi != "10.48550/arXiv.1706.03762" {
+		return nil, nil
+	}
+	return &search.AcademicResult{Title: "Attention Is All You Need", DOI: doi, Year: 2017, Authors: r.authors, Source: "openalex"}, nil
+}
+
+// arxivPaperURL serves a scraped page on an arxiv.org host name, so the arXiv
+// DOI lookup runs against the fake resolver.
+func arxivPaperURL(t *testing.T) string {
+	t.Helper()
+	useFakeDNS(t, "arxiv.org")
+	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><article><p>The dominant sequence transduction models are based on complex recurrent networks.</p></article></body></html>`))
+	}))
+	t.Cleanup(page.Close)
+	_, port, _ := net.SplitHostPort(page.Listener.Addr().String())
+	return "http://arxiv.org:" + port + "/pdf/1706.03762v7"
+}
+
+func apaOf(out map[string]any) string {
+	cit, _ := out["citation"].(map[string]any)
+	formatted, _ := cit["formatted"].(map[string]any)
+	apa, _ := formatted["apa"].(string)
+	return apa
+}
+
+// #866: the citation takes its authors and year from the resolved record, not
+// the page, which carries neither.
+func TestPaperFulltextCitationUsesRecordAuthorsAndYear(t *testing.T) {
+	deps := scrapeTestDeps()
+	deps.AcademicProviders = map[string]search.AcademicProvider{"openalex": &flakyArxivResolver{authors: []string{"Ashish Vaswani", "Noam Shazeer"}}}
+	out := callPaperFulltext(t, deps, map[string]any{"identifier": arxivPaperURL(t)})
+
+	apa := apaOf(out)
+	if !strings.HasPrefix(apa, "Vaswani, A., & Shazeer, N. (2017). Attention Is All You Need.") {
+		t.Errorf("APA = %q", apa)
+	}
+	if _, flagged := out["metadataIncomplete"]; flagged {
+		t.Error("a citation with record authors must not be flagged incomplete")
+	}
+}
+
+// #866: a record with no authors or year keeps the page-only output.
+func TestPaperFulltextCitationRecordWithoutAuthorsKeepsPageValues(t *testing.T) {
+	author, date := citationAuthorDate(&search.AcademicResult{Title: "T"}, "Page Author", "2020-01-02")
+	if author != "Page Author" || date != "2020-01-02" {
+		t.Errorf("got (%q, %q), want the page values", author, date)
+	}
+	author, date = citationAuthorDate(nil, "Page Author", "2020-01-02")
+	if author != "Page Author" || date != "2020-01-02" {
+		t.Errorf("nil record: got (%q, %q), want the page values", author, date)
+	}
+	deps := scrapeTestDeps()
+	deps.AcademicProviders = map[string]search.AcademicProvider{"openalex": &flakyArxivResolver{}}
+	out := callPaperFulltext(t, deps, map[string]any{"identifier": arxivPaperURL(t)})
+	if apa := apaOf(out); !strings.HasPrefix(apa, "(2017). Attention Is All You Need.") {
+		t.Errorf("APA = %q, want no author slot", apa)
+	}
+}
+
+// #865: a result whose arXiv record lookup failed is not cached, so the next
+// call retries the lookup and returns full metadata.
+func TestPaperFulltextDoesNotCacheFailedRecordLookup(t *testing.T) {
+	resolver := &flakyArxivResolver{authors: []string{"Ashish Vaswani"}}
+	deps := scrapeTestDeps()
+	deps.Cache = newMapCache()
+	deps.AcademicProviders = map[string]search.AcademicProvider{"openalex": resolver}
+	url := arxivPaperURL(t)
+
+	resolver.down.Store(true)
+	first := callPaperFulltext(t, deps, map[string]any{"identifier": url})
+	if first["metadataIncomplete"] != true {
+		t.Fatalf("lookup down: want metadataIncomplete, got %v", first)
+	}
+
+	resolver.down.Store(false)
+	second := callPaperFulltext(t, deps, map[string]any{"identifier": url})
+	if second["title"] != "Attention Is All You Need" || second["metadataIncomplete"] != nil {
+		t.Errorf("after recovery: title=%v incomplete=%v", second["title"], second["metadataIncomplete"])
+	}
+
+	// A complete result is cached.
+	resolver.down.Store(true)
+	third := callPaperFulltext(t, deps, map[string]any{"identifier": url})
+	if third["title"] != "Attention Is All You Need" {
+		t.Errorf("complete result must be served from cache, got title %v", third["title"])
+	}
+}
+
+func TestRecordLookupFailed(t *testing.T) {
+	t.Parallel()
+	rec := &search.AcademicResult{}
+	cases := []struct {
+		name string
+		url  string
+		meta *search.AcademicResult
+		err  error
+		want bool
+	}{
+		{"arxiv, no record", "https://arxiv.org/abs/1706.03762", nil, nil, true},
+		{"arxiv, record", "https://arxiv.org/abs/1706.03762", rec, nil, false},
+		{"other URL, no record", "https://example.com/p.pdf", nil, nil, false},
+		{"doi fetch error, no record", "https://doi.org/10.1/x", nil, errors.New("rate limited"), true},
+		{"doi fetch error, record from fallback", "https://doi.org/10.1/x", rec, errors.New("rate limited"), false},
+	}
+	for _, c := range cases {
+		if got := recordLookupFailed(c.url, c.meta, c.err); got != c.want {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+		}
 	}
 }
