@@ -239,7 +239,9 @@ func (c *Capturer) LoginWindow(ctx context.Context, sub Subject, loginURL string
 	before := map[cookieID]bool{} // persistent cookies seen before anyone could sign in
 	blocked := false              // the last readable page was a bot-block page
 	snapshot := func() {
-		if text, err := sess.PageText(windowCtx); err == nil {
+		// An empty reading means no page is left (the user just closed the
+		// window), so keep what the last real page said.
+		if text, err := sess.PageText(windowCtx); err == nil && text != "" {
 			blocked = content.LooksLikeBotWall(text)
 		}
 		cookies, err := sess.Cookies(windowCtx)

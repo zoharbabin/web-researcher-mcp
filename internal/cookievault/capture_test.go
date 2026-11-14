@@ -31,10 +31,17 @@ func newFakeSession(cookies ...Cookie) *fakeSession {
 }
 
 func (s *fakeSession) Cookies(context.Context) ([]Cookie, error) { return s.cookies, s.cookErr }
-func (s *fakeSession) PageText(context.Context) (string, error)  { return s.text, nil }
-func (s *fakeSession) Done() <-chan struct{}                     { return s.done }
-func (s *fakeSession) Close() error                              { s.closed.Add(1); return nil }
-func (s *fakeSession) userClosesWindow()                         { s.doneOnce.Do(func() { close(s.done) }) }
+func (s *fakeSession) PageText(context.Context) (string, error) {
+	select {
+	case <-s.done: // like the real driver: no page left, no text
+		return "", nil
+	default:
+		return s.text, nil
+	}
+}
+func (s *fakeSession) Done() <-chan struct{} { return s.done }
+func (s *fakeSession) Close() error          { s.closed.Add(1); return nil }
+func (s *fakeSession) userClosesWindow()     { s.doneOnce.Do(func() { close(s.done) }) }
 
 type fakeDriver struct {
 	mu     sync.Mutex
