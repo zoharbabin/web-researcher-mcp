@@ -2056,6 +2056,7 @@ class ScrapePageResponse:
     nextOffset: Optional[int] = None
     offset: Optional[int] = None
     outline: list[ScrapePageOutline] = field(default_factory=list)
+    paywallSuspected: Optional[bool] = None
     raw: Optional[bool] = None
     retractionStatus: Optional[Any] = None
     sizeCategory: Optional[str] = None
@@ -2096,6 +2097,7 @@ class ScrapePageResponse:
             nextOffset=d.get('nextOffset'),
             offset=d.get('offset'),
             outline=[ScrapePageOutline.from_dict(i) for i in (d.get('outline') or [])],
+            paywallSuspected=d.get('paywallSuspected'),
             raw=d.get('raw'),
             retractionStatus=d.get('retractionStatus') or None,
             sizeCategory=d.get('sizeCategory'),

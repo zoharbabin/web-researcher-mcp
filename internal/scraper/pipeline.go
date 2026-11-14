@@ -279,12 +279,59 @@ func (s *StructuredData) Signals() content.StructuredSignals {
 		return content.StructuredSignals{}
 	}
 	sig := content.StructuredSignals{HasCitationMeta: len(s.Citation) > 0}
+	var free, paywalled bool
 	for _, raw := range s.JSONLD {
 		if t := jsonLDTopType(raw); t != "" {
 			sig.SchemaTypes = append(sig.SchemaTypes, t)
 		}
+		f, p := jsonLDAccess(raw)
+		free, paywalled = free || f, paywalled || p
+	}
+	switch {
+	case paywalled:
+		v := false
+		sig.AccessibleForFree = &v
+	case free:
+		v := true
+		sig.AccessibleForFree = &v
 	}
 	return sig
+}
+
+// jsonLDAccess walks a JSON-LD block (object, array, @graph, hasPart) and
+// reports whether any node declares schema.org isAccessibleForFree true (free)
+// or false (paywalled). The value may be a JSON bool or a string such as
+// "False" (schema.org Boolean). Neither is set when the markup is absent.
+func jsonLDAccess(raw json.RawMessage) (free, paywalled bool) {
+	var node any
+	if err := json.Unmarshal(raw, &node); err != nil {
+		return false, false
+	}
+	var walk func(any)
+	walk = func(n any) {
+		switch v := n.(type) {
+		case []any:
+			for _, e := range v {
+				walk(e)
+			}
+		case map[string]any:
+			switch a := v["isAccessibleForFree"].(type) {
+			case bool:
+				free, paywalled = free || a, paywalled || !a
+			case string:
+				switch strings.ToLower(strings.TrimSpace(a)) {
+				case "true", "https://schema.org/true":
+					free = true
+				case "false", "https://schema.org/false":
+					paywalled = true
+				}
+			}
+			walk(v["@graph"])
+			walk(v["hasPart"])
+		}
+	}
+	walk(node)
+	return free, paywalled
 }
 
 // jsonLDTopType extracts the top-level "@type" from a JSON-LD block. Schema.org
@@ -563,7 +610,7 @@ func needsDocFallback(r *ScrapeResult, err error) bool {
 	if r.scannedPages > 0 {
 		return false
 	}
-	return strings.TrimSpace(r.Content) == "" || looksLikeBotWall(r.Content)
+	return strings.TrimSpace(r.Content) == "" || content.LooksLikeBotWall(r.Content)
 }
 
 // docFallbackResult turns a still-empty result of the document-route fallback
@@ -573,7 +620,7 @@ func docFallbackResult(url string, r *ScrapeResult, err error) (*ScrapeResult, e
 	if err != nil || r == nil || r.scannedPages > 0 {
 		return r, err
 	}
-	if looksLikeBotWall(r.Content) {
+	if content.LooksLikeBotWall(r.Content) {
 		return nil, blockedError(url, r.Tier, nil, "document URL returned a bot-wall page and every tier failed")
 	}
 	if strings.TrimSpace(r.Content) == "" {
@@ -621,7 +668,7 @@ func (p *Pipeline) tieredFallback(ctx context.Context, url string, maxLength, de
 		}
 		result, err := p.scrapeBrowser(ctx, url, maxLength, raw)
 		release()
-		if err == nil && result != nil && len(result.Content) > 100 && !looksLikeBotWall(result.Content) {
+		if err == nil && result != nil && len(result.Content) > 100 && !content.LooksLikeBotWall(result.Content) {
 			return stampTier(result, "browser"), nil
 		}
 	}
@@ -701,7 +748,7 @@ func (p *Pipeline) tieredFallback(ctx context.Context, url string, maxLength, de
 		// is returned with a 200 and short placeholder text. Do NOT accept it as
 		// content — record it as a blocked outcome so the composite error is
 		// ErrBlocked, not a misleading low-quality success.
-		if err == nil && result != nil && looksLikeBotWall(result.Content) {
+		if err == nil && result != nil && content.LooksLikeBotWall(result.Content) {
 			outcomes = append(outcomes, tierOutcome{tier.name, nil, blockedError(url, tier.name, nil, "bot/JS-wall interstitial")})
 			continue
 		}
@@ -779,7 +826,7 @@ func (p *Pipeline) tieredFallback(ctx context.Context, url string, maxLength, de
 			return stamped, nil
 		}
 		outcomes = append(outcomes, tierOutcome{tier.name, result, err})
-		if result != nil && len(result.Content) > 0 && !looksLikeBotWall(result.Content) {
+		if result != nil && len(result.Content) > 0 && !content.LooksLikeBotWall(result.Content) {
 			best = betterResult(best, stampTier(result, tier.name))
 		}
 	}
@@ -888,7 +935,7 @@ func (p *Pipeline) followIframeCandidates(ctx context.Context, shell *ScrapeResu
 		}
 		tried++
 		inner, ierr := p.tieredFallback(ctx, candidate, maxLength, depth+1, raw)
-		if ierr != nil || inner == nil || looksLikeBotWall(inner.Content) {
+		if ierr != nil || inner == nil || content.LooksLikeBotWall(inner.Content) {
 			continue
 		}
 		best = betterResult(best, inner)

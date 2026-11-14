@@ -21,85 +21,6 @@ func newBotWallServer() *httptest.Server {
 	}))
 }
 
-// TestLooksLikeBotWall: short interstitial content is detected; a long real
-// article that merely mentions a marker word is NOT (size-bounded guard).
-func TestLooksLikeBotWall(t *testing.T) {
-	t.Parallel()
-	botWalls := []string{
-		"Checking your browser before accessing example.com",
-		"Please verify you are a human by completing the security check.",
-		"Just a moment... cf-browser-verification",
-		"Enable JavaScript and cookies to continue",
-		"Please verify that you're not a robot to continue.", // CourtListener-style
-		"JavaScript is disabled in your browser.",
-		// Frontify brand-portal login wall (returned with HTTP 200 when go-rod
-		// is fingerprinted as a bot on public portals).
-		"Please enter your viewer credentials or request access to the Brand Owner.",
-		"request access to the brand owner",
-		// Reddit challenge page, HTTP 200 (live search_and_scrape finding).
-		"Prove your humanity\n\nWe’re committed to safety and security. But not for bots. Complete the challenge below and let us know you’re a real person.\n\nReddit, Inc. © \"2026\". All rights reserved.\nUser Agreement\nPrivacy Policy\nContent Policy\nHelp",
-	}
-	for _, c := range botWalls {
-		if !looksLikeBotWall(c) {
-			t.Errorf("expected bot-wall detection for %q", c)
-		}
-	}
-	// A long article that happens to contain "captcha" must NOT be flagged.
-	long := "This paper studies CAPTCHA usability. " + strings.Repeat("Real article body discussing the methodology and results in depth. ", 30)
-	if looksLikeBotWall(long) {
-		t.Error("a long article mentioning captcha must not be classified as a bot-wall")
-	}
-	// Empty / ordinary short content is not a bot-wall.
-	if looksLikeBotWall("Welcome to my homepage.") {
-		t.Error("ordinary short content must not be a bot-wall")
-	}
-}
-
-// TestLooksLikeBotWall_Anubis: regression guard for GitHub issue #263.
-// Anubis (github.com/TecharoHQ/anubis) returns HTTP 200 with a ~1075-byte PoW
-// interstitial. Before the fix, its phrases were absent from botWallMarkers AND
-// botWallMaxBytes=600 was smaller than the Anubis body, so both guards failed.
-func TestLooksLikeBotWall_Anubis(t *testing.T) {
-	t.Parallel()
-
-	// Representative Anubis interstitial body (~1075 bytes in production).
-	// Contains the three canonical Anubis template phrases.
-	anubisBody := `Making sure you're not a bot!
-Anubis is checking to make sure that you are actually a human,
-and to protect the server against the scourge of AI companies
-that scrape sites without regard for the wishes of the site owners.
-Anubis uses a Proof-of-Work scheme in the vein of Hashcash,
-a proposed proof-of-work scheme for reducing email spam.
-This is a placeholder solution so that more time can be spent
-on building better solutions to this problem.`
-
-	if !looksLikeBotWall(anubisBody) {
-		t.Error("Anubis PoW interstitial must be detected as a bot-wall")
-	}
-
-	// Each Anubis marker must trigger independently on a minimal short string.
-	anubisMarkers := []string{
-		"Making sure you're not a bot!",
-		"protect the server against the scourge of AI companies",
-		"Anubis uses a proof-of-work scheme in the vein of Hashcash",
-		"This is a placeholder solution so that more time can be spent",
-	}
-	for _, m := range anubisMarkers {
-		if !looksLikeBotWall(m) {
-			t.Errorf("Anubis marker must be detected as bot-wall: %q", m)
-		}
-	}
-
-	// A legitimate academic article ABOUT proof-of-work / anti-scraping that is
-	// long enough (> botWallMaxBytes) must NOT be flagged — size gate must hold.
-	longPoWArticle := "We study proof-of-work schemes for spam prevention. " +
-		"Anubis uses a proof-of-work scheme in the vein of Hashcash. " +
-		strings.Repeat("The methodology examines computational hardness assumptions and the trade-off between verifier cost and prover work in distributed systems. ", 20)
-	if looksLikeBotWall(longPoWArticle) {
-		t.Errorf("a long article about PoW (len=%d) must not be flagged as a bot-wall", len(longPoWArticle))
-	}
-}
-
 // TestClassifyRawError_DNSNotFound: a DNS NXDOMAIN ("no such host") is a
 // permanent failure and must map to ErrNotFound (non-retryable), not the
 // generic ErrNetwork bucket (which implies a retry will help). Regression
@@ -130,48 +51,6 @@ func TestClassifyRawError_TransientNetworkStillRetryable(t *testing.T) {
 		if se.Kind != ErrNetwork {
 			t.Errorf("%q → kind %v, want ErrNetwork", msg, se.Kind)
 		}
-	}
-}
-
-// TestLooksLikeBotWall_SoftGate: regression guard for GitHub issue #661.
-// Crunchbase/SimilarWeb-style anti-bot pages return HTTP 200 with a short,
-// well-formed page whose real content ends in a login/signup/subscribe CTA
-// instead of a hard CAPTCHA/JS-challenge interstitial. These must be detected
-// as a bot-wall when short, but a long real article that merely mentions one
-// of the same phrases in passing (e.g. a footer CTA) must NOT be flagged.
-func TestLooksLikeBotWall_SoftGate(t *testing.T) {
-	t.Parallel()
-
-	// Short, gate-dominated content — the entire extracted page IS the gate.
-	softGates := []string{
-		"Create a free account to see this company's full profile.",
-		"Sign up to continue reading this report.",
-		"Log in to continue viewing SimilarWeb traffic estimates.",
-		"Subscribe to continue reading this article.",
-		"View full profile: sign up for free to view detailed company data.",
-		"Unlock full access to this report by creating an account.",
-		"Sign up for free to view the complete traffic analysis.",
-	}
-	for _, c := range softGates {
-		if !looksLikeBotWall(c) {
-			t.Errorf("expected soft-gate bot-wall detection for %q", c)
-		}
-	}
-
-	// Negative: a long, real article that happens to contain one of the new
-	// soft-gate phrases once, in a footer-like trailing sentence, must NOT be
-	// flagged — the size gate (botWallMaxBytes) must hold exactly as it does
-	// for the pre-existing hard-challenge markers.
-	longArticleWithFooterCTA := strings.Repeat(
-		"This in-depth analysis covers the company's market position, funding history, and competitive landscape in detail. ", 30,
-	) + "Sign up to continue receiving our newsletter with more analysis like this."
-	if looksLikeBotWall(longArticleWithFooterCTA) {
-		t.Errorf("a long real article (len=%d) mentioning a soft-gate phrase in a footer must not be flagged as a bot-wall", len(longArticleWithFooterCTA))
-	}
-
-	// Ordinary short content that doesn't match any marker is not a bot-wall.
-	if looksLikeBotWall("Welcome to our company page. We build great products.") {
-		t.Error("ordinary short content must not be a soft-gate bot-wall")
 	}
 }
 
