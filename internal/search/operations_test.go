@@ -20,7 +20,7 @@ func fullSearchConfig() config.SearchConfig {
 	return config.SearchConfig{
 		GoogleAPIKey: "k", GoogleCX: "cx", BraveAPIKey: "k", SerperAPIKey: "k",
 		SearXNGURL: "http://127.0.0.1:1", SearchAPIKey: "k", YouDotComAPIKey: "k",
-		TavilyAPIKey: "k", ExaAPIKey: "k", GitHubToken: "k", XQuikAPIKey: "k",
+		TavilyAPIKey: "k", ExaAPIKey: "k", KeenableAPIKey: "k", GitHubToken: "k", XQuikAPIKey: "k",
 	}
 }
 
@@ -119,7 +119,7 @@ func TestProvidersDocCapabilityMatrix(t *testing.T) {
 	labels := map[string]string{
 		"DuckDuckGo": "duckduckgo", "Google PSE": "google", "Serper": "serper",
 		"SearchAPI.io": "searchapi", "You.com": "youcom", "Brave": "brave", "Exa": "exa",
-		"Tavily": "tavily", "SearXNG": "searxng", "HackerNews": "hackernews",
+		"Tavily": "tavily", "Keenable": "keenable", "SearXNG": "searxng", "HackerNews": "hackernews",
 		"Reddit": "reddit", "Bluesky": "bluesky", "GitHub": "github", "Xquik": "xquik",
 	}
 	providers := allProviders(t, &http.Client{})
