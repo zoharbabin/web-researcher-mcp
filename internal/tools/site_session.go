@@ -70,8 +70,8 @@ func profileLeaseFor(ctx context.Context, deps Dependencies, rawURL string) (*co
 		return nil, nil
 	}
 	lease, err := deps.ProfileStore.Acquire(ctx, sub, host)
-	if errors.Is(err, cookievault.ErrNoProfile) {
-		return nil, nil // none, expired or unreadable: scrape anonymously
+	if errors.Is(err, cookievault.ErrNoProfile) || errors.Is(err, cookievault.ErrInvalidDomain) {
+		return nil, nil // none, expired, unreadable, or a host (IP, localhost) that cannot have one: scrape anonymously
 	}
 	if err != nil {
 		return nil, err // busy, cancelled or a disk failure: do not hide it behind an anonymous page
