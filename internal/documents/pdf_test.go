@@ -541,3 +541,22 @@ func TestParsePDF_FoldsLigatures(t *testing.T) {
 		t.Errorf("text = %q, want ligatures folded", text)
 	}
 }
+
+// TeX fonts without a ToUnicode map emit control characters for ligatures.
+// These cases come from a real journal PDF.
+func TestFoldTeXLigatures(t *testing.T) {
+	cases := map[string]string{
+		"Over\x0ctting":                "Overfitting",
+		"Geo\x0brey":                   "Geoffrey",
+		"di\x0ecult":                   "difficult",
+		"ba\x0fe":                      "baffle",
+		"in\x0duence the \x0dow":       "influence the flow",
+		"\x0dc 2014 Nitish Srivastava": "\x0dc 2014 Nitish Srivastava", // circle + c, not "fl"
+		"plain text":                   "plain text",
+	}
+	for in, want := range cases {
+		if got := foldTeXLigatures(in); got != want {
+			t.Errorf("foldTeXLigatures(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/razvandimescu/gopdf/pdf"
@@ -80,6 +81,41 @@ var ligatures = strings.NewReplacer(
 	"\ufb06", "st",
 )
 
+// foldTeXLigatures replaces the raw control characters that TeX fonts (OT1
+// encoding) use for ligatures when a PDF carries no ToUnicode map: 0x0B ff,
+// 0x0C fi, 0x0E ffi, 0x0F ffl. These are never real text, so they always fold.
+// 0x0D is "fl" in a text font but also a circle symbol (as in the (c) mark), so
+// it folds only when two letters follow, as in "flow" and not "\rc 2014".
+func foldTeXLigatures(text string) string {
+	if !strings.ContainsAny(text, "\x0b\x0c\x0d\x0e\x0f") {
+		return text
+	}
+	runes := []rune(text)
+	var sb strings.Builder
+	sb.Grow(len(text) + 8)
+	for i, r := range runes {
+		switch r {
+		case 0x0b:
+			sb.WriteString("ff")
+		case 0x0c:
+			sb.WriteString("fi")
+		case 0x0e:
+			sb.WriteString("ffi")
+		case 0x0f:
+			sb.WriteString("ffl")
+		case 0x0d:
+			if i+2 < len(runes) && unicode.IsLetter(runes[i+1]) && unicode.IsLetter(runes[i+2]) {
+				sb.WriteString("fl")
+			} else {
+				sb.WriteRune(r)
+			}
+		default:
+			sb.WriteRune(r)
+		}
+	}
+	return sb.String()
+}
+
 func parsePDF(_ io.ReaderAt, size int64, data []byte) (string, Metadata, error) {
 	meta := Metadata{
 		FileSize: size,
@@ -112,7 +148,7 @@ func parsePDF(_ io.ReaderAt, size int64, data []byte) (string, Metadata, error) 
 		sb.WriteString(pageTextInReadingOrder(spans))
 	}
 
-	text := ligatures.Replace(sb.String())
+	text := foldTeXLigatures(ligatures.Replace(sb.String()))
 	if strings.TrimSpace(text) == "" {
 		// A PDF with pages but no text layer (scanned images) parses fine: return
 		// empty text with the page count so the caller can say so (#828).

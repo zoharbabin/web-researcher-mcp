@@ -770,3 +770,36 @@ func TestRecordLookupFailed(t *testing.T) {
 		}
 	}
 }
+
+// scrape_page on an arXiv URL takes title, authors and year from the paper's
+// record, as paper_fulltext does. A PDF has no metadata of its own.
+func TestScrapePageArxivURLCitationUsesRecord(t *testing.T) {
+	deps := scrapeTestDeps()
+	deps.AcademicProviders = map[string]search.AcademicProvider{"openalex": &flakyArxivResolver{authors: []string{"Ashish Vaswani", "Noam Shazeer"}}}
+	out := callScrapeDOI(t, deps, arxivPaperURL(t), "")
+
+	if apa := apaOf(out); !strings.HasPrefix(apa, "Vaswani, A., & Shazeer, N. (2017). Attention Is All You Need.") {
+		t.Errorf("APA = %q", apa)
+	}
+}
+
+// A failed record lookup must not pin a bare citation in the cache: once the
+// resolver recovers, the next call gets the full citation.
+func TestScrapePageArxivLookupFailureIsNotCached(t *testing.T) {
+	resolver := &flakyArxivResolver{authors: []string{"Ashish Vaswani"}}
+	resolver.down.Store(true)
+	deps := scrapeTestDeps()
+	deps.Cache = newMapCache()
+	deps.AcademicProviders = map[string]search.AcademicProvider{"openalex": resolver}
+	url := arxivPaperURL(t)
+
+	first := callScrapeDOI(t, deps, url, "")
+	if strings.Contains(apaOf(first), "Attention Is All You Need") {
+		t.Fatalf("lookup was down, but the citation has the title: %q", apaOf(first))
+	}
+	resolver.down.Store(false)
+	second := callScrapeDOI(t, deps, url, "")
+	if !strings.Contains(apaOf(second), "Attention Is All You Need") {
+		t.Errorf("second call served the stale citation: %q", apaOf(second))
+	}
+}

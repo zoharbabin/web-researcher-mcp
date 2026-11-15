@@ -279,7 +279,7 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 		if wordCount == 0 && result.SparsityWarning != "" {
 			sparsityWarning = result.SparsityWarning
 		}
-		citation := content.ExtractCitation(input.URL, result.Title, result.Author, result.SiteName, result.PublishDate)
+		citation, lookupFailed := scrapeCitation(ctx, deps, input.URL, result)
 
 		output := map[string]any{
 			"url":             input.URL,
@@ -400,7 +400,7 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 			output["authenticated"] = true
 		}
 		jsonBytes, _ := json.Marshal(output)
-		if !authed {
+		if !authed && !lookupFailed {
 			deps.Cache.Set(ctx, cacheKey, jsonBytes, time.Hour)
 		}
 		if mode == "full" {
@@ -413,6 +413,28 @@ func registerScrapePage(srv *mcp.Server, deps Dependencies) {
 
 		return structuredResult(jsonBytes), nil, nil
 	})
+}
+
+// scrapeCitation builds the citation for a scraped page. For an arXiv abs or
+// pdf URL, the page carries no reliable title or authors (a PDF has none), so
+// they come from the paper's record, found by its arXiv DOI, as in
+// paper_fulltext. lookupFailed is true when that record should have resolved
+// but did not. The caller then skips the cache write so a transient upstream
+// miss does not pin a bare citation for the cache lifetime.
+func scrapeCitation(ctx context.Context, deps Dependencies, pageURL string, result *scraper.ScrapeResult) (citation content.Citation, lookupFailed bool) {
+	title, author, date := result.Title, result.Author, result.PublishDate
+	if doi := arxivDOIFromURL(pageURL); doi != "" {
+		meta := lookupRecordByDOI(ctx, deps, doi)
+		if meta == nil {
+			lookupFailed = true
+		} else {
+			if meta.Title != "" {
+				title = meta.Title
+			}
+			author, date = citationAuthorDate(meta, author, date)
+		}
+	}
+	return content.ExtractCitation(pageURL, title, author, result.SiteName, date), lookupFailed
 }
 
 // setScrapePage replaces the whole-page content in a full-mode envelope with
@@ -679,7 +701,7 @@ func scrapeRaw(ctx context.Context, deps Dependencies, input scrapePageInput, ma
 	}
 
 	contentLen := len(result.Content)
-	citation := content.ExtractCitation(input.URL, result.Title, result.Author, result.SiteName, result.PublishDate)
+	citation, lookupFailed := scrapeCitation(ctx, deps, input.URL, result)
 
 	output := map[string]any{
 		"url":             input.URL,
@@ -705,7 +727,7 @@ func scrapeRaw(ctx context.Context, deps Dependencies, input scrapePageInput, ma
 		output["authenticated"] = true
 	}
 	jsonBytes, _ := json.Marshal(output)
-	if !authed {
+	if !authed && !lookupFailed {
 		deps.Cache.Set(ctx, cacheKey, jsonBytes, time.Hour)
 	}
 	recordToolCall(deps, "scrape_page", time.Since(start), nil, "", false)

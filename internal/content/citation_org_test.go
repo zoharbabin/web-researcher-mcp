@@ -304,3 +304,26 @@ func TestSplitAuthors_CorporateSuffix(t *testing.T) {
 		}
 	}
 }
+
+func TestStrayTrailingInitial(t *testing.T) {
+	t.Parallel()
+	tests := []struct{ in, apa, mla, family, given string }{
+		{"Jared Kaplan A", "Kaplan, J. A.", "Kaplan, Jared A", "Kaplan", "Jared A"},
+		{"Smith J", "Smith, J.", "Smith, J", "Smith", "J"},
+		{"Smith J.", "Smith, J.", "Smith, J.", "Smith", "J."},
+		{"John Smith", "Smith, J.", "Smith, John", "Smith", "John"},
+		{"Ada Lovelace", "Lovelace, A.", "Lovelace, Ada", "Lovelace", "Ada"},
+	}
+	for _, tc := range tests {
+		if got := invertNameAPA(tc.in); got != tc.apa {
+			t.Errorf("invertNameAPA(%q) = %q, want %q", tc.in, got, tc.apa)
+		}
+		if got := invertNameMLA(tc.in); got != tc.mla {
+			t.Errorf("invertNameMLA(%q) = %q, want %q", tc.in, got, tc.mla)
+		}
+		f, g, lit := splitPersonalName(tc.in)
+		if f != tc.family || g != tc.given || lit {
+			t.Errorf("splitPersonalName(%q) = %q, %q, %v; want %q, %q, false", tc.in, f, g, lit, tc.family, tc.given)
+		}
+	}
+}
