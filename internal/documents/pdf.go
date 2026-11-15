@@ -182,17 +182,32 @@ func pageTextInReadingOrder(spans []pdf.TextSpan) string {
 	return sb.String()
 }
 
-// joinLines mirrors gopdf's own pdf.Page.Text() line-joining behavior
-// exactly, so the single-column fallback path stays byte-identical.
+// joinLines joins a page's lines with newlines, as gopdf's own pdf.Page.Text()
+// does, with one change: a line that ends in a hyphen after a letter and is
+// followed by a line that starts with a lowercase letter is a word split at a
+// line break ("fine-" then "tuned"). Those two lines join into one word with
+// the hyphen kept ("fine-tuned"), so the word is not left as "fine- tuned".
+// The hyphen stays because "fine-" could be a real compound or a split word.
 func joinLines(lines []pdf.TextLine) string {
 	var sb strings.Builder
 	for i, line := range lines {
-		if i > 0 {
+		if i > 0 && !splitsWordAtHyphen(lines[i-1].Text, line.Text) {
 			sb.WriteString("\n")
 		}
 		sb.WriteString(line.Text)
 	}
 	return sb.String()
+}
+
+// splitsWordAtHyphen reports whether prev ends in "<letter>-" and next starts
+// with a lowercase letter.
+func splitsWordAtHyphen(prev, next string) bool {
+	if !strings.HasSuffix(prev, "-") {
+		return false
+	}
+	before, _ := utf8.DecodeLastRuneInString(prev[:len(prev)-1])
+	first, _ := utf8.DecodeRuneInString(next)
+	return unicode.IsLetter(before) && unicode.IsLower(first)
 }
 
 // detectColumnBands partitions a page's text spans into left-to-right

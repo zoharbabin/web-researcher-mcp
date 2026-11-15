@@ -560,3 +560,33 @@ func TestFoldTeXLigatures(t *testing.T) {
 		}
 	}
 }
+
+// A word split at a line break keeps its hyphen but loses the line break.
+func TestJoinLines_JoinsWordSplitAtHyphen(t *testing.T) {
+	t.Parallel()
+	lines := func(texts ...string) []pdf.TextLine {
+		out := make([]pdf.TextLine, len(texts))
+		for i, s := range texts {
+			out[i] = pdf.TextLine{Text: s}
+		}
+		return out
+	}
+	cases := []struct {
+		name string
+		in   []pdf.TextLine
+		want string
+	}{
+		{"split word", lines("the pre-trained model can be fine-", "tuned with one layer"), "the pre-trained model can be fine-tuned with one layer"},
+		{"next line is capitalized", lines("see the results in the paper -", "Figure 1"), "see the results in the paper -\nFigure 1"},
+		{"bare dash", lines("a list item", "- next item"), "a list item\n- next item"},
+		{"hyphen not after a letter", lines("range 1990-", "2000 was"), "range 1990-\n2000 was"},
+		{"next line starts with digit", lines("state-of-the-", "2 art"), "state-of-the-\n2 art"},
+		{"no hyphen", lines("first line", "second line"), "first line\nsecond line"},
+		{"empty", nil, ""},
+	}
+	for _, tc := range cases {
+		if got := joinLines(tc.in); got != tc.want {
+			t.Errorf("%s: joinLines = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
