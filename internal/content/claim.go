@@ -157,7 +157,16 @@ func ExtractClaimEvidence(text, claim string) ClaimEvidence {
 		score float64
 	}
 	var hits []scored
+	seen := make(map[string]bool, len(sentences))
 	for i, s := range sentences {
+		s = cleanEvidenceSentence(s)
+		// The same sentence often appears twice (abstract and body, or a
+		// repeated page element). Show it once.
+		key := strings.ToLower(s)
+		if len(s) < 12 || seen[key] {
+			continue
+		}
+		seen[key] = true
 		lower := strings.ToLower(s)
 		words := wordSet(lower)
 		matched := 0
@@ -179,7 +188,7 @@ func ExtractClaimEvidence(text, claim string) ClaimEvidence {
 			// from it (#594) — weight it at least as high as the stance bonus.
 			score += 1.5
 		}
-		hits = append(hits, scored{idx: i, text: strings.TrimSpace(s), score: score})
+		hits = append(hits, scored{idx: i, text: s, score: score})
 	}
 	if len(hits) == 0 {
 		return ClaimEvidence{}
@@ -205,6 +214,25 @@ func ExtractClaimEvidence(text, claim string) ClaimEvidence {
 		out = append(out, h.text)
 	}
 	return ClaimEvidence{Signal: signal, KeySentences: out}
+}
+
+var (
+	// evidenceMarkupRe matches an HTML/JATS/XML tag such as "</abstract>" or
+	// "<jats:p>". It needs a letter (or "/" then a letter) right after "<", so
+	// a comparison like "p < 0.05" is left alone.
+	evidenceMarkupRe = regexp.MustCompile(`</?[A-Za-z][A-Za-z0-9:_.-]*(?:\s[^<>]*)?/?>`)
+	// evidenceTeXEscapeRe matches a TeX-escaped special character, optionally
+	// wrapped in braces: "{\%}", "\%", "\&".
+	evidenceTeXEscapeRe = regexp.MustCompile(`\{?\\([%&$#_])\}?`)
+)
+
+// cleanEvidenceSentence removes markup left in scraped or API abstracts so an
+// evidence sentence reads as plain text: tags like "</abstract>" are dropped
+// and TeX escapes like "{\%}" become "%".
+func cleanEvidenceSentence(s string) string {
+	s = evidenceMarkupRe.ReplaceAllString(s, " ")
+	s = evidenceTeXEscapeRe.ReplaceAllString(s, "$1")
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // ClaimTermCoverage reports how many of a claim's distinct significant terms

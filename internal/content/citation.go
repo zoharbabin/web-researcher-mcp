@@ -78,6 +78,27 @@ func ensureTerminalPeriod(s string) string {
 	return s + "."
 }
 
+// splitTrailingInitial handles names from sources like OpenAlex where a stray
+// initial trails the surname: "Jared Kaplan A" is "Jared A. Kaplan" and "Smith
+// J" is "J. Smith". When the last token is a single capital letter (with or
+// without a period) and at least one token precedes it, it returns the tokens
+// with that initial moved before the surname. Otherwise it returns tokens as is.
+func splitTrailingInitial(tokens []string) []string {
+	n := len(tokens)
+	if n < 2 {
+		return tokens
+	}
+	last := strings.TrimSuffix(tokens[n-1], ".")
+	r := []rune(last)
+	if len(r) != 1 || !unicode.IsUpper(r[0]) {
+		return tokens
+	}
+	out := make([]string, 0, n)
+	out = append(out, tokens[:n-2]...)
+	out = append(out, tokens[n-1], tokens[n-2])
+	return out
+}
+
 // invertNameAPA converts a single "First [Middle] Last" name to APA7's
 // surname-first, initialized form: "Last, F. M.". An organization name (see
 // isOrganizationName) is returned whole. A name that already contains
@@ -93,6 +114,7 @@ func invertNameAPA(name string) string {
 	if len(tokens) < 2 {
 		return name
 	}
+	tokens = splitTrailingInitial(tokens)
 	last := tokens[len(tokens)-1]
 	initials := make([]string, 0, len(tokens)-1)
 	for _, t := range tokens[:len(tokens)-1] {
@@ -128,6 +150,7 @@ func splitPersonalName(name string) (family, given string, isLiteral bool) {
 	if len(tokens) < 2 {
 		return name, "", true
 	}
+	tokens = splitTrailingInitial(tokens)
 	family = tokens[len(tokens)-1]
 	given = strings.Join(tokens[:len(tokens)-1], " ")
 	return family, given, false
@@ -229,6 +252,7 @@ func invertNameMLA(name string) string {
 	if len(tokens) < 2 {
 		return name
 	}
+	tokens = splitTrailingInitial(tokens)
 	last := tokens[len(tokens)-1]
 	rest := strings.Join(tokens[:len(tokens)-1], " ")
 	return last + ", " + rest

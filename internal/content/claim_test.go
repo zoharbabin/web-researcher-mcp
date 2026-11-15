@@ -701,3 +701,35 @@ func BenchmarkClaimTermCoverageWindowedWithReferenceSection(b *testing.B) {
 		ClaimTermCoverageWindowed(longDoc, claim, 0)
 	}
 }
+
+func TestExtractClaimEvidence_DedupesRepeatedSentences(t *testing.T) {
+	t.Parallel()
+	text := "Vitamin D reduced fracture risk by 20 percent in older adults.\n" +
+		"Unrelated filler sentence about something else entirely here.\n" +
+		"Vitamin D reduced fracture risk by 20 percent in older adults.\n"
+	ev := ExtractClaimEvidence(text, "Vitamin D reduces fracture risk")
+	if len(ev.KeySentences) != 1 {
+		t.Fatalf("want 1 sentence after dedup, got %d: %q", len(ev.KeySentences), ev.KeySentences)
+	}
+}
+
+func TestExtractClaimEvidence_StripsMarkupAndTeXEscapes(t *testing.T) {
+	t.Parallel()
+	text := "Vitamin D cut fracture risk by 20{\\%} in older adults.</abstract>\n"
+	ev := ExtractClaimEvidence(text, "Vitamin D reduces fracture risk")
+	if len(ev.KeySentences) != 1 {
+		t.Fatalf("want 1 sentence, got %q", ev.KeySentences)
+	}
+	got := ev.KeySentences[0]
+	if got != "Vitamin D cut fracture risk by 20% in older adults." {
+		t.Errorf("sentence not cleaned: %q", got)
+	}
+}
+
+func TestCleanEvidenceSentence_KeepsComparisons(t *testing.T) {
+	t.Parallel()
+	in := "The effect held (p < 0.05) and (n > 30)."
+	if got := cleanEvidenceSentence(in); got != in {
+		t.Errorf("comparison altered: %q", got)
+	}
+}
