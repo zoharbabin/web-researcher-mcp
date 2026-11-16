@@ -110,7 +110,7 @@ func BuildComponents(sources []ScoredSource, snippets map[string]string) []Compo
 func clampSnippet(s string) string {
 	const max = 200
 	if len(s) > max {
-		return s[:max] + "…"
+		return CutAt(s, max) + "…"
 	}
 	return s
 }

@@ -65,6 +65,7 @@ func (p *Pipeline) scrapeMarkdown(ctx context.Context, url string, maxLength int
 		ContentType:    "markdown",
 		Truncated:      truncated,
 		rawBody:        content,
+		rawTruncated:   truncated,
 		rawContentType: ct,
 	}, nil
 }

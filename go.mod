@@ -1,6 +1,6 @@
 module github.com/zoharbabin/web-researcher-mcp
 
-go 1.27.3
+go 1.27.4
 
 require (
 	github.com/PuerkitoBio/goquery v1.13.0
@@ -15,9 +15,9 @@ require (
 	github.com/prometheus/client_golang v1.25.0
 	github.com/razvandimescu/gopdf v0.11.2
 	github.com/redis/go-redis/v9 v9.23.0
-	github.com/zendev-sh/goai v0.10.9
-	golang.org/x/net v0.61.0
-	golang.org/x/sync v0.24.0
+	github.com/zendev-sh/goai v0.11.0
+	golang.org/x/net v0.62.0
+	golang.org/x/sync v0.25.0
 	golang.org/x/time v0.16.0
 )
 
@@ -251,9 +251,10 @@ require (
 	go.augendre.info/fatcontext v0.10.1 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0 // indirect
-	go.opentelemetry.io/otel v1.45.0 // indirect
-	go.opentelemetry.io/otel/metric v1.45.0 // indirect
-	go.opentelemetry.io/otel/trace v1.45.0 // indirect
+	go.opentelemetry.io/otel v1.47.0 // indirect
+	go.opentelemetry.io/otel/log v1.47.0 // indirect
+	go.opentelemetry.io/otel/metric v1.47.0 // indirect
+	go.opentelemetry.io/otel/trace v1.47.0 // indirect
 	go.uber.org/atomic v1.12.0 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect

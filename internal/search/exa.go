@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
+	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 )
 
 // Exa (exa.ai) is a neural/semantic search API exposing a single rich /search
@@ -218,9 +219,8 @@ func (e *ExaProvider) doScholarly(ctx context.Context, params AcademicSearchPara
 			Source:   "exa",
 			Year:     publishYear(r.PublishedDate),
 		}
-		if r.Author != "" {
-			res.Authors = []string{r.Author}
-		}
+		// Exa returns every author in one string; give each name its own item.
+		res.Authors = content.SplitAuthorList(r.Author)
 		results = append(results, res)
 	}
 	return results, nil

@@ -79,7 +79,7 @@ type ScrapeError struct {
 
 | Kind | Constant | Triggers | Tier Examples |
 |------|----------|----------|---------------|
-| Network | `ErrNetwork` | Transient fault: timeout, connection refused, TLS error (NOT a DNS NXDOMAIN — see Not Found) | Any tier's HTTP client |
+| Network | `ErrNetwork` | Transient fault: timeout, connection refused, TLS error (NOT a DNS NXDOMAIN — see Not Found). Also the overall `SCRAPE_TOTAL_TIMEOUT` deadline (default 90s): the message reads `scrape timed out after …` and names the tiers tried; the error unwraps to `context.DeadlineExceeded`. A caller's own cancel or deadline is not wrapped | Any tier's HTTP client; `withTotalDeadline` (`deadline.go`) |
 | Validation | `ErrValidation` | Unsupported scheme, empty host, SSRF / private-IP / blocked-hostname denial, domain allowlist | pipeline (validation chokepoint) |
 | Blocked | `ErrBlocked` | HTTP 403, remote bot detection (a real site refusing us) — hard interstitials (Cloudflare/CAPTCHA/Anubis PoW) and soft signup/login/subscribe gates (Crunchbase/SimilarWeb-style anti-bot pages) alike | stealth/html (403) |
 | Browser | `ErrBrowser` | Chrome not found, launch failed, connect failed | browser tier only |
@@ -219,6 +219,8 @@ All error responses set `IsError: true` on the MCP `CallToolResult`. The text co
 `StructuredContent` is always nil on error responses (per MCP spec — SDKs exempt `isError: true` from outputSchema validation).
 
 Tools never panic. Tools never return Go errors from the handler function (the third return value is always `nil`). All failures are communicated via the MCP result.
+
+**Schema rejections.** The SDK rejects unknown properties before a handler runs, with `unexpected additional properties [...]`. A receiving middleware (`registerParamAliasHints`, `internal/tools/param_hints.go`) appends the valid name for known guesses, for example `max_results` on `web_search` gets `Use "num_results"`. To cover a new guess, add it to `paramAliases`.
 
 ---
 

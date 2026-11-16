@@ -235,7 +235,7 @@ func detectSelfPromotionForURL(ctx context.Context, deps Dependencies, rawURL st
 	if deps.Scraper == nil || rawURL == "" {
 		return nil
 	}
-	res, err := deps.Scraper.Scrape(ctx, rawURL, auditClaimScrapeMaxBytes)
+	res, err := deps.Scraper.Scrape(ctx, rawURL, claimScrapeMaxBytes)
 	if err != nil || res == nil || res.Content == "" {
 		return nil
 	}

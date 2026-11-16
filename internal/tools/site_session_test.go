@@ -46,6 +46,7 @@ const (
 type fakeLoginDriver struct {
 	mu      sync.Mutex
 	cookies []cookievault.Cookie
+	text    string // the page text the window shows
 	opens   int
 }
 
@@ -54,8 +55,10 @@ func (d *fakeLoginDriver) Open(_ context.Context, _, _ string) (cookievault.Sess
 	defer d.mu.Unlock()
 	d.opens++
 	done := make(chan struct{})
-	close(done)
-	return &fakeLoginSession{cookies: append([]cookievault.Cookie(nil), d.cookies...), done: done}, nil
+	if d.text == "" {
+		close(done)
+	}
+	return &fakeLoginSession{cookies: append([]cookievault.Cookie(nil), d.cookies...), text: d.text, done: done}, nil
 }
 
 // ReadCookies returns what the browser would hold after a restart: the same
@@ -74,9 +77,24 @@ func (d *fakeLoginDriver) openCount() int {
 	return d.opens
 }
 
+// fakeLoginSession shows its page text once. The "user" then closes the window,
+// and later reads return nothing, like the real driver.
 type fakeLoginSession struct {
 	cookies []cookievault.Cookie
+	text    string
 	done    chan struct{}
+	once    sync.Once
+}
+
+func (s *fakeLoginSession) PageText(context.Context) (string, error) {
+	text := ""
+	s.once.Do(func() {
+		text = s.text
+		if s.text != "" {
+			close(s.done)
+		}
+	})
+	return text, nil
 }
 
 func (s *fakeLoginSession) Cookies(context.Context) ([]cookievault.Cookie, error) {
@@ -505,6 +523,30 @@ func TestCanaryCookieNeverLeaks(t *testing.T) {
 	}
 }
 
+func TestSiteLoginWindowBlockedBySite(t *testing.T) {
+	e := newVaultEnv(t)
+	e.grant(t, "default", "alice")
+	alice := e.client(t, "default", "alice")
+	// The window shows the site's bot-block page and no cookies are set.
+	e.driver.cookies = nil
+	e.driver.text = "Access is temporarily restricted\n\nWe detected unusual activity from your device or network."
+	out, text := callVaultTool(t, alice, "site_login", map[string]any{"url": "http://" + vaultTestHost + "/login", "use_login_window": true})
+	if out["status"] != "blocked_by_site" || !strings.Contains(text, "remote-debugging") || !strings.Contains(text, "Do not retry") {
+		t.Fatalf("blocked window: %s", text)
+	}
+	if got := e.deps.ProfileStore.List(context.Background(), cookievault.Subject{TenantID: "default", UserID: "alice"}); len(got) != 0 {
+		t.Errorf("blocked window saved %d profiles, want 0", len(got))
+	}
+
+	// An ordinary page with no sign-in keeps the generic message, even when it
+	// says "log in to continue".
+	e.driver.text = "Log in to continue"
+	out, text = callVaultTool(t, alice, "site_login", map[string]any{"url": "http://" + vaultTestHost + "/login", "use_login_window": true})
+	if out["status"] == "blocked_by_site" {
+		t.Errorf("ordinary login page reported as blocked: %s", text)
+	}
+}
+
 func TestSiteLoginRequiresConsent(t *testing.T) {
 	e := newVaultEnv(t)
 	anon := e.client(t, "default", "anonymous")
@@ -860,6 +902,21 @@ func TestScrapeProfileGating(t *testing.T) {
 	e.grant(t, "default", "bob")
 	if _, text = callVaultTool(t, bob, "scrape_page", args); !strings.Contains(text, publicMarker) {
 		t.Fatalf("another user's profile was used: %s", text)
+	}
+}
+
+// A host with no registrable domain (an IP, localhost) can have no saved login.
+// scrape_page must treat it as "none" and scrape normally, not report a broken
+// saved sign-in.
+func TestScrapeHostWithoutRegistrableDomainIgnoresProfileStore(t *testing.T) {
+	e := newVaultEnv(t)
+	e.grant(t, "default", "alice")
+	alice := e.client(t, "default", "alice")
+	for _, u := range []string{"http://127.0.0.1:1/", "http://localhost:1/"} {
+		_, text := callVaultTool(t, alice, "scrape_page", map[string]any{"url": u})
+		if strings.Contains(text, "saved sign-in") {
+			t.Errorf("%s: no-domain host reported a saved sign-in error: %s", u, text)
+		}
 	}
 }
 

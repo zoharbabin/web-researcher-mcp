@@ -33,7 +33,7 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 	inputSchema.Properties["provider"].Enum = webProviderEnum()
 	addTool(srv, &mcp.Tool{
 		Name:         "search_and_scrape",
-		Description:  "Search the web and read the full content from the top results, all in one step. Combines content from multiple sources, removes duplicates, and scores each source for quality and relevance. Returns a status field (complete/partial/failed) and per-source quality scores. If some pages fail, scrapeFailures lists each with kind, retryable, and suggestedAction. Use web_search if you only need links, or scrape_page to read one specific URL you already have.",
+		Description:  "Search the web and read the full content from the top results, all in one step. Combines content from multiple sources, removes duplicates, and scores each source for quality and relevance. Returns a status field (complete/partial/failed) and per-source quality scores. If some pages fail, scrapeFailures lists each with kind, retryable, and suggestedAction. When you need the text of several results, call search_and_scrape instead of web_search followed by many scrape_page calls. Use web_search if you only need links, or scrape_page to read one specific URL you already have.",
 		Annotations:  readOnlyAnnotations(true, true),
 		InputSchema:  inputSchema,
 		OutputSchema: searchAndScrapeOutputSchema,
@@ -106,8 +106,8 @@ func registerSearchAndScrape(srv *mcp.Server, deps Dependencies) {
 				}
 
 				combined := ctxResult.Context
-				if totalMaxLen > 0 && len(combined) > totalMaxLen {
-					combined = combined[:totalMaxLen]
+				if totalMaxLen > 0 {
+					combined = content.CutAt(combined, totalMaxLen)
 				}
 
 				output := map[string]any{
@@ -372,6 +372,8 @@ func parallelScrape(ctx context.Context, deps Dependencies, searchResults []sear
 				return
 			}
 			processedContent, _ := deps.Content.Process(result.Content, maxLen)
+			// Count the delivered content, not the pre-Process scrape (#822).
+			wordCount := content.WordCount(processedContent)
 			results[idx] = scrapeResult{
 				url:         url,
 				title:       title,
@@ -380,7 +382,7 @@ func parallelScrape(ctx context.Context, deps Dependencies, searchResults []sear
 				cType:       result.ContentType,
 				structured:  result.StructuredData,
 				partial:     result.Partial,
-				wordCount:   result.WordCount,
+				wordCount:   wordCount,
 			}
 		}(i, sr.URL, sr.Title, sr.PublishedAt)
 	}
@@ -520,8 +522,11 @@ func assembleCombined(parts []string, deduplicate bool, totalMaxLen int) (string
 		if len(combined)+len(part) > totalMaxLen {
 			remaining := totalMaxLen - len(combined)
 			if remaining > 0 {
-				combined += part[:remaining]
-				includedLens[i] = remaining
+				// Cut on a word or sentence boundary, never inside a character.
+				// includedLens counts the bytes kept, not the budget left.
+				kept := content.CutAt(part, remaining)
+				combined += kept
+				includedLens[i] = len(kept)
 			}
 			break
 		}

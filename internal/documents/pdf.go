@@ -6,6 +6,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/razvandimescu/gopdf/pdf"
@@ -67,6 +68,54 @@ const (
 	columnMaxClusters = 64
 )
 
+// ligatures folds the Latin ligature glyphs (U+FB00 to U+FB06) that PDF fonts
+// emit into plain letters, so a word such as "fine-tuned" can be found by text
+// search.
+var ligatures = strings.NewReplacer(
+	"\ufb00", "ff",
+	"\ufb01", "fi",
+	"\ufb02", "fl",
+	"\ufb03", "ffi",
+	"\ufb04", "ffl",
+	"\ufb05", "st", // long s + t
+	"\ufb06", "st",
+)
+
+// foldTeXLigatures replaces the raw control characters that TeX fonts (OT1
+// encoding) use for ligatures when a PDF carries no ToUnicode map: 0x0B ff,
+// 0x0C fi, 0x0E ffi, 0x0F ffl. These are never real text, so they always fold.
+// 0x0D is "fl" in a text font but also a circle symbol (as in the (c) mark), so
+// it folds only when two letters follow, as in "flow" and not "\rc 2014".
+func foldTeXLigatures(text string) string {
+	if !strings.ContainsAny(text, "\x0b\x0c\x0d\x0e\x0f") {
+		return text
+	}
+	runes := []rune(text)
+	var sb strings.Builder
+	sb.Grow(len(text) + 8)
+	for i, r := range runes {
+		switch r {
+		case 0x0b:
+			sb.WriteString("ff")
+		case 0x0c:
+			sb.WriteString("fi")
+		case 0x0e:
+			sb.WriteString("ffi")
+		case 0x0f:
+			sb.WriteString("ffl")
+		case 0x0d:
+			if i+2 < len(runes) && unicode.IsLetter(runes[i+1]) && unicode.IsLetter(runes[i+2]) {
+				sb.WriteString("fl")
+			} else {
+				sb.WriteRune(r)
+			}
+		default:
+			sb.WriteRune(r)
+		}
+	}
+	return sb.String()
+}
+
 func parsePDF(_ io.ReaderAt, size int64, data []byte) (string, Metadata, error) {
 	meta := Metadata{
 		FileSize: size,
@@ -99,8 +148,13 @@ func parsePDF(_ io.ReaderAt, size int64, data []byte) (string, Metadata, error) 
 		sb.WriteString(pageTextInReadingOrder(spans))
 	}
 
-	text := sb.String()
-	if text == "" {
+	text := foldTeXLigatures(ligatures.Replace(sb.String()))
+	if strings.TrimSpace(text) == "" {
+		// A PDF with pages but no text layer (scanned images) parses fine: return
+		// empty text with the page count so the caller can say so (#828).
+		if meta.PageCount > 0 {
+			return "", meta, nil
+		}
 		return "", meta, fmt.Errorf("no extractable text in PDF (may be image-based)")
 	}
 
@@ -128,17 +182,32 @@ func pageTextInReadingOrder(spans []pdf.TextSpan) string {
 	return sb.String()
 }
 
-// joinLines mirrors gopdf's own pdf.Page.Text() line-joining behavior
-// exactly, so the single-column fallback path stays byte-identical.
+// joinLines joins a page's lines with newlines, as gopdf's own pdf.Page.Text()
+// does, with one change: a line that ends in a hyphen after a letter and is
+// followed by a line that starts with a lowercase letter is a word split at a
+// line break ("fine-" then "tuned"). Those two lines join into one word with
+// the hyphen kept ("fine-tuned"), so the word is not left as "fine- tuned".
+// The hyphen stays because "fine-" could be a real compound or a split word.
 func joinLines(lines []pdf.TextLine) string {
 	var sb strings.Builder
 	for i, line := range lines {
-		if i > 0 {
+		if i > 0 && !splitsWordAtHyphen(lines[i-1].Text, line.Text) {
 			sb.WriteString("\n")
 		}
 		sb.WriteString(line.Text)
 	}
 	return sb.String()
+}
+
+// splitsWordAtHyphen reports whether prev ends in "<letter>-" and next starts
+// with a lowercase letter.
+func splitsWordAtHyphen(prev, next string) bool {
+	if !strings.HasSuffix(prev, "-") {
+		return false
+	}
+	before, _ := utf8.DecodeLastRuneInString(prev[:len(prev)-1])
+	first, _ := utf8.DecodeRuneInString(next)
+	return unicode.IsLetter(before) && unicode.IsLower(first)
 }
 
 // detectColumnBands partitions a page's text spans into left-to-right

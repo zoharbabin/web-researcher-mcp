@@ -1,6 +1,7 @@
 package documents
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -458,5 +459,134 @@ func TestDetectColumnBands_AdversarialGaps_BoundedCost(t *testing.T) {
 	case <-done:
 	case <-time.After(20 * time.Second):
 		t.Fatal("detectColumnBands took longer than 20s on adversarial non-clustering gaps — columnMaxClusters cap not bounding cost")
+	}
+}
+
+// TestParsePDF_NoTextLayer_ReturnsPageCount (#828): a PDF whose pages carry no
+// text (scanned images) parses without error, with empty text and the page count.
+func TestParsePDF_NoTextLayer_ReturnsPageCount(t *testing.T) {
+	t.Parallel()
+	c := pdf.NewCreator()
+	c.NewPage(612, 792)
+	c.NewPage(612, 792)
+	data, err := c.Build()
+	if err != nil {
+		t.Fatalf("building fixture PDF: %v", err)
+	}
+	text, meta, err := Parse(data, "pdf")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if text != "" {
+		t.Errorf("text = %q, want empty", text)
+	}
+	if meta.PageCount != 2 {
+		t.Errorf("PageCount = %d, want 2", meta.PageCount)
+	}
+}
+
+func TestLigaturesFoldedToLetters(t *testing.T) {
+	cases := map[string]string{
+		"\ufb01ne-tuned":        "fine-tuned",
+		"\ufb02ow":              "flow",
+		"e\ufb00ect":            "effect",
+		"o\ufb03ce":             "office",
+		"ba\ufb04e":             "baffle",
+		"\ufb05op \ufb06ill":    "stop still",
+		"plain text, no change": "plain text, no change",
+	}
+	for in, want := range cases {
+		if got := ligatures.Replace(in); got != want {
+			t.Errorf("ligatures.Replace(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// ligaturePDF builds a one-page PDF whose font maps code 1 to the "fi" ligature
+// glyph and code 2 to "fl", the way real PDF fonts emit them. Octal escapes in
+// text select those codes.
+func ligaturePDF(text string) []byte {
+	stream := "BT /F1 12 Tf 72 700 Td (" + text + ") Tj ET"
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(stream), stream),
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding << /Type /Encoding /BaseEncoding /WinAnsiEncoding /Differences [1 /fi /fl] >> >>",
+	}
+	var b strings.Builder
+	b.WriteString("%PDF-1.4\n")
+	offs := make([]int, len(objs))
+	for i, o := range objs {
+		offs[i] = b.Len()
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, o)
+	}
+	x := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \n", len(objs)+1)
+	for _, o := range offs {
+		fmt.Fprintf(&b, "%010d 00000 n \n", o)
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, x)
+	return []byte(b.String())
+}
+
+// The ligature glyphs a PDF font emits come out of parsePDF as plain letters.
+func TestParsePDF_FoldsLigatures(t *testing.T) {
+	data := ligaturePDF("the \\001ne-tuned \\002ow")
+	text, _, err := parsePDF(nil, int64(len(data)), data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if text != "the fine-tuned flow" {
+		t.Errorf("text = %q, want ligatures folded", text)
+	}
+}
+
+// TeX fonts without a ToUnicode map emit control characters for ligatures.
+// These cases come from a real journal PDF.
+func TestFoldTeXLigatures(t *testing.T) {
+	cases := map[string]string{
+		"Over\x0ctting":                "Overfitting",
+		"Geo\x0brey":                   "Geoffrey",
+		"di\x0ecult":                   "difficult",
+		"ba\x0fe":                      "baffle",
+		"in\x0duence the \x0dow":       "influence the flow",
+		"\x0dc 2014 Nitish Srivastava": "\x0dc 2014 Nitish Srivastava", // circle + c, not "fl"
+		"plain text":                   "plain text",
+	}
+	for in, want := range cases {
+		if got := foldTeXLigatures(in); got != want {
+			t.Errorf("foldTeXLigatures(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// A word split at a line break keeps its hyphen but loses the line break.
+func TestJoinLines_JoinsWordSplitAtHyphen(t *testing.T) {
+	t.Parallel()
+	lines := func(texts ...string) []pdf.TextLine {
+		out := make([]pdf.TextLine, len(texts))
+		for i, s := range texts {
+			out[i] = pdf.TextLine{Text: s}
+		}
+		return out
+	}
+	cases := []struct {
+		name string
+		in   []pdf.TextLine
+		want string
+	}{
+		{"split word", lines("the pre-trained model can be fine-", "tuned with one layer"), "the pre-trained model can be fine-tuned with one layer"},
+		{"next line is capitalized", lines("see the results in the paper -", "Figure 1"), "see the results in the paper -\nFigure 1"},
+		{"bare dash", lines("a list item", "- next item"), "a list item\n- next item"},
+		{"hyphen not after a letter", lines("range 1990-", "2000 was"), "range 1990-\n2000 was"},
+		{"next line starts with digit", lines("state-of-the-", "2 art"), "state-of-the-\n2 art"},
+		{"no hyphen", lines("first line", "second line"), "first line\nsecond line"},
+		{"empty", nil, ""},
+	}
+	for _, tc := range cases {
+		if got := joinLines(tc.in); got != tc.want {
+			t.Errorf("%s: joinLines = %q, want %q", tc.name, got, tc.want)
+		}
 	}
 }

@@ -296,9 +296,7 @@ func registerSequentialSearch(srv *mcp.Server, deps Dependencies) {
 			goal := input.ResearchGoal
 			if goal == "" && len(input.SearchStep) > 0 {
 				goal = input.SearchStep
-				if len(goal) > 200 {
-					goal = goal[:200]
-				}
+				goal = content.CutAt(goal, 200)
 			}
 			if goal != "" {
 				_ = deps.Sessions.SetResearchGoal(tenantID, userID, idx.ID, goal)

@@ -430,7 +430,63 @@ func normalizeBibTeXAuthors(author string) string {
 	if author == "" {
 		return ""
 	}
-	return strings.Join(splitAuthors(author), "; ")
+	names := splitBibTeXAuthorList(author)
+	out := make([]string, 0, len(names))
+	for _, n := range names {
+		out = append(out, splitAuthors(n)...)
+	}
+	return strings.Join(out, "; ")
+}
+
+// splitBibTeXAuthorList splits on " and " at brace depth 0 only and strips a
+// brace pair that wraps a whole name, so the writer's `{{Org and Co}}` form
+// (#848) reads back as one author "Org and Co" instead of being cut at "and".
+func splitBibTeXAuthorList(author string) []string {
+	const sep = " and "
+	var names []string
+	depth, start := 0, 0
+	for i := 0; i < len(author); i++ {
+		switch author[i] {
+		case '{':
+			depth++
+		case '}':
+			if depth > 0 {
+				depth--
+			}
+		case ' ':
+			if depth == 0 && strings.HasPrefix(author[i:], sep) {
+				names = append(names, author[start:i])
+				start = i + len(sep)
+				i += len(sep) - 1
+			}
+		}
+	}
+	names = append(names, author[start:])
+	for i, n := range names {
+		n = strings.TrimSpace(n)
+		if len(n) >= 2 && n[0] == '{' && n[len(n)-1] == '}' && wrapsWhole(n) {
+			n = strings.TrimSpace(n[1 : len(n)-1])
+		}
+		names[i] = n
+	}
+	return names
+}
+
+// wrapsWhole reports whether the first "{" of s closes at its last byte.
+func wrapsWhole(s string) bool {
+	depth := 0
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return i == len(s)-1
+			}
+		}
+	}
+	return false
 }
 
 // bibtexUnescape reverses bibtexEscape for the field values we read back.

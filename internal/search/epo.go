@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/zoharbabin/web-researcher-mcp/internal/circuit"
+	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 )
 
 // EPOProvider searches the European Patent Office Open Patent Services (OPS) API.
@@ -411,7 +412,7 @@ func parseEPOResponse(data []byte) ([]PatentResult, error) {
 			}
 		}
 		if len(result.Abstract) > 500 {
-			result.Abstract = result.Abstract[:500] + "..."
+			result.Abstract = content.CutAt(result.Abstract, 500) + "..."
 		}
 
 		// Google Patents is used as the universal viewer link across every

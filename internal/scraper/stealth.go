@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -75,8 +76,12 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int,
 	// Capture cross-origin iframe candidates (#399) BEFORE extractArticleContent
 	// strips <iframe> — same precedent as structured data above.
 	iframes := extractIframeCandidates(doc, url)
+	// Capture author, site name and publish date BEFORE extractArticleContent
+	// strips <script>, <header> and other nodes they live in. Same extractor as
+	// the html tier.
+	meta := extractHTMLMetadata(doc)
 
-	content := extractArticleContent(doc)
+	content := extractArticleContent(doc, documentBase(doc, url))
 	// A near-empty shell with no iframe candidates has nothing further to
 	// recover from this tier — bail as before. But when iframes were found,
 	// fall through and build the result anyway: the shell's own thin content
@@ -106,10 +111,13 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int,
 	// Raw mode's returned body must respect the caller's maxLength the same
 	// way Content does — body itself is only bounded by MaxHTMLBytes, which is
 	// deliberately larger so extraction reaches the real article text.
+	// The raw cut sets rawTruncated only: the flag for full mode describes the
+	// returned text, not these bytes (#823).
 	rawBody := string(body)
+	rawTruncated := false
 	if len(rawBody) > maxLength {
 		rawBody = truncateBytes(rawBody, maxLength)
-		truncated = true
+		rawTruncated = true
 	}
 
 	res := &ScrapeResult{
@@ -117,6 +125,9 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int,
 		Content:     content,
 		ContentType: "html",
 		Title:       title,
+		Author:      meta.author,
+		SiteName:    meta.siteName,
+		PublishDate: meta.publishDate,
 		Truncated:   truncated,
 		// Surface the decompressed HTML size so the pipeline can detect a
 		// JS-rendered SPA shell (large HTML, little extracted text) and keep
@@ -127,6 +138,7 @@ func (p *Pipeline) scrapeStealth(ctx context.Context, url string, maxLength int,
 		// extractArticleContent stripped it down to Content — raw mode
 		// returns this instead of Content once tieredFallback picks a winner.
 		rawBody:        rawBody,
+		rawTruncated:   rawTruncated,
 		rawContentType: ct,
 	}
 	if !sd.IsEmpty() {
@@ -183,7 +195,7 @@ func applyBrowserHeaders(req *http.Request) {
 	req.Header.Set("Cache-Control", "max-age=0")
 }
 
-func extractArticleContent(doc *goquery.Document) string {
+func extractArticleContent(doc *goquery.Document, base *url.URL) string {
 	// Remove noise
 	doc.Find("script, style, nav, footer, aside, header, noscript, iframe, form").Remove()
 	doc.Find("[role='navigation'], [role='banner'], [role='complementary']").Remove()
@@ -201,18 +213,43 @@ func extractArticleContent(doc *goquery.Document) string {
 		".content",
 	}
 
+	// A selector wins only when it holds a real share of the page text. A
+	// short wrapper such as RFC 9110's #content (1% of the page) would
+	// otherwise hide the rest of the document (#838).
+	body := doc.Find("body")
+	var bodyText string
+	var bodyDone bool
 	for _, sel := range selectors {
 		el := doc.Find(sel).First()
-		if el.Length() > 0 {
-			if text := bestText(el); len(text) > 200 {
-				return text
-			}
+		if el.Length() == 0 {
+			continue
+		}
+		text := bestText(el, base)
+		if len(text) <= 200 {
+			continue
+		}
+		if !bodyDone {
+			bodyText, bodyDone = bestText(body, base), true
+		}
+		if len(text)*minSelectorShareDen >= len(bodyText)*minSelectorShareNum {
+			return text
 		}
 	}
 
 	// Fall back to body with the same structured-vs-flat reconciliation.
-	return bestText(doc.Find("body"))
+	if bodyDone {
+		return bodyText
+	}
+	return bestText(body, base)
 }
+
+// A structured selector must hold at least minSelectorShareNum/Den of the
+// body text. Measured on 25 real pages: every correct hit held 64% or more,
+// the broken one (RFC 9110 #content) held 1%.
+const (
+	minSelectorShareNum = 1
+	minSelectorShareDen = 4
+)
 
 // bestText renders a selection's content, preferring extractText (which emits
 // GFM tables #48, headings, and lists) but falling back to flat .Text() when the
@@ -222,10 +259,18 @@ func extractArticleContent(doc *goquery.Document) string {
 // as flat and is kept; flat only wins on genuine div-soup pages, restoring the
 // stealth tier's pre-#48 completeness (this tier wins for most pages, so this
 // prevents silent body-text loss).
-func bestText(sel *goquery.Selection) string {
-	structured := cleanText(extractText(sel))
-	if flat := cleanText(sel.Text()); len(flat) > len(structured)*3/2 {
+func bestText(sel *goquery.Selection, base *url.URL) string {
+	structured := cleanText(extractText(sel, base))
+	flat := cleanText(sel.Text())
+	if len(flat) > len(structured)*3/2 {
 		return flat
+	}
+	// Link markup (#827) makes structured longer than its text. Compare the
+	// text alone, so links never change which rendering wins.
+	if base != nil {
+		if linkFree := cleanText(extractText(sel, nil)); len(flat) > len(linkFree)*3/2 {
+			return flat
+		}
 	}
 	return structured
 }

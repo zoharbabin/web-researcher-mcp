@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -182,7 +183,7 @@ func TestExtractText_TableIntegratedNoFragments(t *testing.T) {
 			<tr><td>Cost</td><td>low</td></tr>
 		</table>
 	</article></body>`)
-	out := extractText(doc.Find("article").First())
+	out := extractText(doc.Find("article").First(), nil)
 	if !strings.Contains(out, "| Metric | Value |") || !strings.Contains(out, "| --- | --- |") {
 		t.Errorf("expected one markdown table block, got:\n%s", out)
 	}
@@ -196,7 +197,7 @@ func TestExtractText_TableSurvivesCleanText(t *testing.T) {
 	doc := docFrom(t, `<body><article>
 		<table><tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2</td></tr></table>
 	</article></body>`)
-	raw := extractText(doc.Find("article").First())
+	raw := extractText(doc.Find("article").First(), nil)
 	cleaned := cleanText(raw)
 	if !strings.Contains(cleaned, "| A | B |") || !strings.Contains(cleaned, "| --- | --- |") || !strings.Contains(cleaned, "| 1 | 2 |") {
 		t.Errorf("table did not survive cleanText:\n%s", cleaned)
@@ -207,7 +208,7 @@ func TestExtractText_NestedTableNoDoubleEmit(t *testing.T) {
 	doc := docFrom(t, `<body><div>
 		<table><tr><td>outer cell<table><tr><td>inner1</td><td>inner2</td></tr></table></td><td>right</td></tr></table>
 	</div></body>`)
-	out := extractText(doc.Find("body").First())
+	out := extractText(doc.Find("body").First(), nil)
 	// inner table must be skipped (ParentsFiltered guard); its text appears at
 	// most once via the outer table's plain-text fallback.
 	if strings.Count(out, "inner1") > 1 {
@@ -219,7 +220,7 @@ func TestExtractText_FallbackTableCellsStillSurface(t *testing.T) {
 	// A single-column (layout) table is rejected by extractTable but its text
 	// must still surface via the s.Text() fallback (no content loss).
 	doc := docFrom(t, `<body><div><table><tr><td>important sidebar note</td></tr></table></div></body>`)
-	out := extractText(doc.Find("body").First())
+	out := extractText(doc.Find("body").First(), nil)
 	if !strings.Contains(out, "important sidebar note") {
 		t.Errorf("rejected table lost its text:\n%s", out)
 	}
@@ -344,7 +345,7 @@ func TestExtractText_TableCellBlocksNotDoubleEmitted(t *testing.T) {
 		<table><tr><th>K</th><th>V</th></tr>
 		<tr><td>row</td><td><p>cellpara</p></td></tr></table>
 	</article></body>`)
-	out := extractText(doc.Find("article").First())
+	out := extractText(doc.Find("article").First(), nil)
 	if strings.Count(out, "cellpara") != 1 {
 		t.Errorf("table-cell block double-emitted (want exactly 1 'cellpara'):\n%s", out)
 	}
@@ -459,7 +460,7 @@ func TestScrapeStealth_DivSoupContentPreserved(t *testing.T) {
 // extractText alone misses bare-div prose (it only walks block elements).
 func TestExtractText_DivSoupYieldsLittle(t *testing.T) {
 	doc := docFrom(t, `<body><article><div>`+strings.Repeat("bare div prose ", 20)+`</div></article></body>`)
-	if got := extractText(doc.Find("article").First()); got != "" {
+	if got := extractText(doc.Find("article").First(), nil); got != "" {
 		t.Errorf("expected extractText to miss bare-div text (justifies bestText fallback), got: %q", got)
 	}
 }
@@ -651,5 +652,230 @@ func TestFetchShredditComments_BodyTruncated(t *testing.T) {
 	}
 	if !utf8.ValidString(comments[0].Body) {
 		t.Error("truncated body is not valid UTF-8")
+	}
+}
+
+func mustParseURL(t *testing.T, raw string) *url.URL {
+	t.Helper()
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return u
+}
+
+func TestInlineText(t *testing.T) {
+	t.Parallel()
+	base := mustParseURL(t, "https://example.com/docs/page.html")
+	tests := []struct {
+		name string
+		html string
+		base *url.URL
+		want string
+	}{
+		{"no links is plain text", `<p>Just text, <b>bold</b> and <i>italic</i>.</p>`, base, "Just text, bold and italic."},
+		{"absolute link", `<p>See <a href="https://other.org/a">the report</a> now.</p>`, base, "See [the report](https://other.org/a) now."},
+		{"root-relative link", `<p><a href="/files/r.pdf">Report</a></p>`, base, "[Report](https://example.com/files/r.pdf)"},
+		{"relative link", `<p><a href="r.pdf">Report</a></p>`, base, "[Report](https://example.com/docs/r.pdf)"},
+		{"protocol-relative link", `<p><a href="//cdn.example.org/x">CDN</a></p>`, base, "[CDN](https://cdn.example.org/x)"},
+		{"query kept", `<p><a href="/s?q=a&amp;b=2">Search</a></p>`, base, "[Search](https://example.com/s?q=a&b=2)"},
+		{"fragment only is plain", `<p><a href="#top">Back to top</a></p>`, base, "Back to top"},
+		{"javascript is plain", `<p><a href="javascript:void(0)">Click</a></p>`, base, "Click"},
+		{"mailto is plain", `<p><a href="mailto:a@b.org">Mail us</a></p>`, base, "Mail us"},
+		{"tel is plain", `<p><a href="tel:+123">Call</a></p>`, base, "Call"},
+		{"ftp is plain", `<p><a href="ftp://x.org/f">FTP</a></p>`, base, "FTP"},
+		{"data is plain", `<p><a href="data:text/plain,hi">Data</a></p>`, base, "Data"},
+		{"empty href is plain", `<p><a href="">Empty</a></p>`, base, "Empty"},
+		{"no href is plain", `<p><a name="x">Anchor</a></p>`, base, "Anchor"},
+		{"empty text emits nothing", `<p>A<a href="/x"><img src="i.png"></a>B</p>`, base, "AB"},
+		{"nested markup in the anchor", `<p><a href="/x"><strong>Bold</strong> and <em>em</em></a></p>`, base, "[Bold and em](https://example.com/x)"},
+		{"text equal to the URL is written once", `<p><a href="https://example.com/x">https://example.com/x</a></p>`, base, "https://example.com/x"},
+		{"text equal to the URL without slash", `<p><a href="https://example.com/">https://example.com</a></p>`, base, "https://example.com/"},
+		{"spaces around the text stay outside", `<p>See<a href="/x"> the report </a>now</p>`, base, "See [the report](https://example.com/x) now"},
+		{"inner whitespace collapses", "<p><a href=\"/x\">two\n   lines</a></p>", base, "[two lines](https://example.com/x)"},
+		{"brackets in the text are escaped", `<p><a href="/x">a [b] c</a></p>`, base, `[a \[b\] c](https://example.com/x)`},
+		{"parentheses and spaces in the URL are encoded", `<p><a href="/a_(b)/c d">T</a></p>`, base, "[T](https://example.com/a_%28b%29/c%20d)"},
+		{"two links", `<p><a href="/a">A</a> and <a href="/b">B</a></p>`, base, "[A](https://example.com/a) and [B](https://example.com/b)"},
+		{"nil base turns links off", `<p>See <a href="https://other.org/a">the report</a>.</p>`, nil, "See the report."},
+		{"relative link with a path-only base is plain", `<p><a href="/x">X</a></p>`, mustParseURL(t, "/just/a/path"), "X"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc := docFrom(t, "<body>"+tc.html+"</body>")
+			base := tc.base
+			if base != nil && !isHTTPURL(base) {
+				base = nil // documentBase gives nil for such a page URL; mirror it
+			}
+			if got := inlineText(doc.Find("p").First(), base); got != tc.want {
+				t.Errorf("inlineText = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestDocumentBase(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name, html, page, want string
+	}{
+		{"page URL", `<html><head></head><body></body></html>`, "https://a.org/x/y", "https://a.org/x/y"},
+		{"base href moves it", `<html><head><base href="/other/"></head><body></body></html>`, "https://a.org/x/y", "https://a.org/other/"},
+		{"absolute base href", `<html><head><base href="https://b.org/z/"></head><body></body></html>`, "https://a.org/x/y", "https://b.org/z/"},
+		{"non-http base href is ignored", `<html><head><base href="javascript:void(0)"></head><body></body></html>`, "https://a.org/x/y", "https://a.org/x/y"},
+		{"non-http page gives nil", `<html><body></body></html>`, "ftp://a.org/x", ""},
+		{"bad page URL gives nil", `<html><body></body></html>`, "://bad", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := ""
+			if b := documentBase(docFrom(t, tc.html), tc.page); b != nil {
+				got = b.String()
+			}
+			if got != tc.want {
+				t.Errorf("documentBase = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// A page without usable links must extract exactly as it did before links were kept.
+func TestExtractText_PageWithoutUsableLinksIsUnchanged(t *testing.T) {
+	t.Parallel()
+	doc := docFrom(t, `<body><article>
+		<h2>Heading</h2>
+		<p>Plain paragraph with <b>bold</b> and a <a href="#note">fragment link</a>, a <a href="javascript:void(0)">script link</a> and <a href="mailto:a@b.org">mail</a>.</p>
+		<ul><li>One</li><li>Two <a href="tel:+1">phone</a></li></ul>
+		<pre>code <a href="/x">not a link</a></pre>
+	</article></body>`)
+	sel := doc.Find("article").First()
+	base := mustParseURL(t, "https://example.com/")
+	with, without := extractText(sel, base), extractText(sel, nil)
+	if with != without {
+		t.Errorf("links changed a page that has none:\nwith:    %q\nwithout: %q", with, without)
+	}
+}
+
+// GAO-style product page: the heading has the report PDF link under it.
+func TestExtractText_FullReportLinkKept(t *testing.T) {
+	t.Parallel()
+	doc := docFrom(t, `<body><main>
+		<h2>Highlights</h2><p>What GAO found, in a paragraph of enough length to look like prose on the page.</p>
+		<h2>Full Report</h2>
+		<ul><li><a href="/assets/gao-24-106591.pdf">Full Report (PDF, 54 pages)</a></li></ul>
+		<p>Related: <a href="https://www.gao.gov/products/gao-24-000001">GAO-24-000001</a></p>
+	</main></body>`)
+	out := cleanText(extractText(doc.Find("main").First(), mustParseURL(t, "https://www.gao.gov/products/gao-24-106591")))
+	want := "## Full Report\n\n- [Full Report (PDF, 54 pages)](https://www.gao.gov/assets/gao-24-106591.pdf)"
+	if !strings.Contains(out, want) {
+		t.Errorf("PDF link missing under the Full Report heading:\n%s", out)
+	}
+	if !strings.Contains(out, "[GAO-24-000001](https://www.gao.gov/products/gao-24-000001)") {
+		t.Errorf("related link missing:\n%s", out)
+	}
+}
+
+// GAO wraps the report links in <figure>/<div> containers with no <p> or <li>,
+// so they sit outside every element extractText walks. Such a link is kept as
+// its own line, once. A link inside a walked block is not repeated, and nil
+// base keeps the old output.
+func TestExtractText_StandaloneAnchors(t *testing.T) {
+	t.Parallel()
+	page := `<body><main>
+		<section><h2>Full Report</h2>
+			<div class="field__item"><figure><a href="/assets/gao-24-106591.pdf"><div>Full Report</div>
+				<div>(37 pages)</div></a></figure></div>
+			<div><a href="#top">Back to top</a></div>
+			<div><a href="/card"><h3>Card title</h3></a></div>
+			<p>Read <a href="/inside">the inside link</a> here.</p>
+		</section>
+	</main></body>`
+	sel := docFrom(t, page).Find("main").First()
+	out := cleanText(extractText(sel, mustParseURL(t, "https://www.gao.gov/products/gao-24-106591")))
+	if !strings.Contains(out, "## Full Report\n\n[Full Report (37 pages)](https://www.gao.gov/assets/gao-24-106591.pdf)") {
+		t.Errorf("standalone report link missing under its heading:\n%s", out)
+	}
+	if strings.Contains(out, "Back to top") {
+		t.Errorf("fragment-only standalone link kept:\n%s", out)
+	}
+	if strings.Count(out, "the inside link") != 1 {
+		t.Errorf("link inside a paragraph should appear once:\n%s", out)
+	}
+	if strings.Count(out, "Card title") != 1 {
+		t.Errorf("anchor wrapping a heading should not be duplicated:\n%s", out)
+	}
+	if got := cleanText(extractText(sel, nil)); strings.Contains(got, "37 pages") || strings.Contains(got, "](") {
+		t.Errorf("nil base must not emit links:\n%s", got)
+	}
+}
+
+// bestText picks the flat text on a div-soup page whether or not the page has
+// links. Link URLs make the structured text longer, but must not hide the bare
+// prose that only the flat text sees.
+func TestBestText_LinksDoNotDecideWhichTextWins(t *testing.T) {
+	t.Parallel()
+	longPath := strings.Repeat("segment/", 25)
+	page := `<body><article>
+		<p>` + strings.Repeat("word ", 20) + `<a href="https://example.com/` + longPath + `">linked text</a></p>
+		<div>` + strings.Repeat("bare div prose that only the flat text sees. ", 4) + `</div>
+	</article></body>`
+	sel := docFrom(t, page).Find("article").First()
+	base := mustParseURL(t, "https://example.com/")
+
+	withLinks := bestText(sel, base)
+	without := bestText(sel, nil)
+	if !strings.Contains(without, "bare div prose") {
+		t.Fatalf("setup: flat text should win without links, got %q", without)
+	}
+	if !strings.Contains(withLinks, "bare div prose") {
+		t.Errorf("link markup made the structured text win and dropped the bare-div prose:\n%s", withLinks)
+	}
+}
+
+// Structured text that keeps its links still wins when the page is ordinary.
+func TestBestText_KeepsLinksWhenStructuredWins(t *testing.T) {
+	t.Parallel()
+	sel := docFrom(t, `<body><article><p>`+strings.Repeat("word ", 50)+`<a href="/report.pdf">the report</a></p></article></body>`).Find("article").First()
+	got := bestText(sel, mustParseURL(t, "https://example.com/"))
+	if !strings.Contains(got, "[the report](https://example.com/report.pdf)") {
+		t.Errorf("link lost:\n%s", got)
+	}
+}
+
+// End to end through both HTML tiers: a relative link on the page comes out as
+// an absolute Markdown link.
+func TestScrapeHTMLTiers_KeepLinks(t *testing.T) {
+	t.Parallel()
+	page := `<html><head><title>Product</title></head><body><article>
+		<h1>Product page</h1>
+		<p>` + strings.Repeat("This paragraph gives the page enough prose to count as an article body. ", 5) + `</p>
+		<h2>Full Report</h2>
+		<p><a href="/assets/report.pdf">Download the report</a> or <a href="javascript:void(0)">print it</a>.</p>
+	</article></body></html>`
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(page))
+	}))
+	defer ts.Close()
+
+	p := NewPipeline(PipelineConfig{MaxConcurrency: 2, AllowPrivateIPs: true})
+	for name, scrape := range map[string]func() (*ScrapeResult, error){
+		"stealth": func() (*ScrapeResult, error) { return p.scrapeStealth(context.Background(), ts.URL, 50000, false) },
+		"html":    func() (*ScrapeResult, error) { return p.scrapeHTML(context.Background(), ts.URL, 50000, false) },
+	} {
+		res, err := scrape()
+		if err != nil || res == nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if want := "[Download the report](" + ts.URL + "/assets/report.pdf)"; !strings.Contains(res.Content, want) {
+			t.Errorf("%s: missing %q in:\n%s", name, want, res.Content)
+		}
+		if strings.Contains(res.Content, "javascript:") {
+			t.Errorf("%s: javascript: link in output:\n%s", name, res.Content)
+		}
+		if !strings.Contains(res.Content, "or print it.") {
+			t.Errorf("%s: skipped link text lost:\n%s", name, res.Content)
+		}
 	}
 }

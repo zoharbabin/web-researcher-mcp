@@ -196,7 +196,7 @@ Search US federal and state court opinions for precedent. Query by legal topic, 
 }
 ```
 
-**Response** contains: `query`, `resultCount`, `provider`, `trust`, and `cases` (array with `caseName`, `url`, `source`, and where present `citation` (Bluebook), `court`, `courtId`, `dateFiled`, `docketNumber`, `citationCount`). Open the full opinion via `scrape_page` on a case `url`. Filter with `jurisdiction` (e.g. `scotus`, `ca9`, `ny`), `date_from`, and `date_to`. Set `COURTLISTENER_API_TOKEN` to raise the rate limit (it works keyless otherwise). Results stay fresh for 24 hours.
+**Response** contains: `query`, `resultCount`, `provider`, `trust`, and `cases` (array with `caseName`, `url`, `source`, and where present `citation` (Bluebook), `court`, `courtId`, `dateFiled`, `docketNumber`, `citationCount`). Open the full opinion via `scrape_page` on a case `url`. Filter with `jurisdiction` (e.g. `scotus`, `ca9`, `ny`), `date_from`, and `date_to`. Set `COURTLISTENER_API_TOKEN` (required; CourtListener rejects anonymous calls). Results stay fresh for 24 hours.
 
 ---
 

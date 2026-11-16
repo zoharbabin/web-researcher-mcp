@@ -10,11 +10,13 @@ func NewProcessor() *Processor {
 	}
 }
 
+// Clean sanitizes and dedups raw text without cutting it to a length.
+func (p *Processor) Clean(raw string) string {
+	return DedupContent(p.sanitizer.SanitizeText(raw))
+}
+
 func (p *Processor) Process(raw string, maxLength int) (string, bool) {
-	cleaned := p.sanitizer.SanitizeText(raw)
-	cleaned = DedupContent(cleaned)
-	result, truncated := Truncate(cleaned, maxLength)
-	return result, truncated
+	return Truncate(p.Clean(raw), maxLength)
 }
 
 func (p *Processor) SanitizeHTML(html string) string {

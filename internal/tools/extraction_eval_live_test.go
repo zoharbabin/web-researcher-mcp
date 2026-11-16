@@ -103,10 +103,14 @@ func TestExtractionFidelity_KeyFactsSurvive(t *testing.T) {
 			}
 
 			var out struct {
-				Content string `json:"content"`
+				Content          string `json:"content"`
+				PaywallSuspected bool   `json:"paywallSuspected"`
 			}
 			if e := json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &out); e != nil {
 				t.Fatalf("parse scrape_page result: %v", e)
+			}
+			if out.PaywallSuspected {
+				t.Errorf("%s: a free gold-set page was flagged paywallSuspected (false positive)", c.name)
 			}
 			lower := strings.ToLower(out.Content)
 

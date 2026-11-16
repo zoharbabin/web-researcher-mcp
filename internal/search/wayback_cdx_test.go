@@ -50,6 +50,9 @@ func TestWaybackCDX_ParsesHeaderAndFiltersStatus(t *testing.T) {
 	if !strings.Contains(gotQuery, "url=acme.com%2F%2A") {
 		t.Errorf("query should search url=<domain>/* , got %q", gotQuery)
 	}
+	if !strings.Contains(gotQuery, "filter=statuscode%3A%28200%7C301%7C302%29") {
+		t.Errorf("query should filter status server-side (limit applies before client filtering), got %q", gotQuery)
+	}
 }
 
 func TestWaybackCDX_ColumnReorderTolerant(t *testing.T) {

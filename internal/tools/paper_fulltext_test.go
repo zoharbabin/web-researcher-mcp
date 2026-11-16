@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -88,7 +90,7 @@ func callPaperFulltext(t *testing.T, deps Dependencies, args map[string]any) map
 	return out
 }
 
-// TestPaperFulltextURLPath: a direct URL scrapes as-is with no metadata lookup —
+// TestPaperFulltextURLPath: a direct (non-arXiv) URL scrapes as-is with no metadata lookup —
 // source:"direct-url", no authors/doi/abstract fields.
 func TestPaperFulltextURLPath(t *testing.T) {
 	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -113,6 +115,62 @@ func TestPaperFulltextURLPath(t *testing.T) {
 	}
 	if out["trust"] != "untrusted-external-content" {
 		t.Errorf("trust marker missing: %v", out["trust"])
+	}
+}
+
+// TestPaperFulltextDirectURLCitationTitle guards #854: a direct URL uses the
+// scraped page title in the citation, and falls back to the URL host when the
+// page has none, so the title slot is never blank.
+func TestPaperFulltextDirectURLCitationTitle(t *testing.T) {
+	const body = "Some paper content that is long enough to extract cleanly for the test."
+	tests := []struct {
+		name         string
+		html         string
+		wantTitle    string
+		wantAPATitle string
+		wantMissing  bool
+	}{
+		{
+			name:         "scraped title is used",
+			html:         `<html><head><title>A Paper</title></head><body><article><p>` + body + `</p></article></body></html>`,
+			wantTitle:    "A Paper",
+			wantAPATitle: " A Paper. ",
+		},
+		{
+			name:         "no title falls back to host",
+			html:         `<html><body><article><p>` + body + `</p></article></body></html>`,
+			wantTitle:    "",
+			wantAPATitle: " 127.0.0.1. ",
+			wantMissing:  true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/html")
+				_, _ = w.Write([]byte(tt.html))
+			}))
+			defer page.Close()
+
+			out := callPaperFulltext(t, scrapeTestDeps(), map[string]any{"identifier": page.URL})
+
+			if got, _ := out["title"].(string); got != tt.wantTitle {
+				t.Errorf("title = %q, want %q", got, tt.wantTitle)
+			}
+			cit, _ := out["citation"].(map[string]any)
+			formatted, _ := cit["formatted"].(map[string]any)
+			apa, _ := formatted["apa"].(string)
+			if !strings.Contains(apa, tt.wantAPATitle) {
+				t.Errorf("APA = %q, want it to contain %q", apa, tt.wantAPATitle)
+			}
+			meta, _ := cit["metadata"].(map[string]any)
+			if got, _ := meta["title"].(string); got != tt.wantTitle {
+				t.Errorf("citation.metadata.title = %q, want raw %q", got, tt.wantTitle)
+			}
+			if _, flagged := out["metadataIncomplete"]; flagged != tt.wantMissing {
+				t.Errorf("metadataIncomplete present = %v, want %v", flagged, tt.wantMissing)
+			}
+		})
 	}
 }
 
@@ -527,5 +585,221 @@ func TestPaperFulltextIdentifierTooLarge(t *testing.T) {
 	}
 	if !res.IsError {
 		t.Fatal("expected a validation error for an oversized identifier")
+	}
+}
+
+func TestArxivDOIFromURL(t *testing.T) {
+	t.Parallel()
+	tests := []struct{ in, want string }{
+		{"https://arxiv.org/abs/1706.03762", "10.48550/arXiv.1706.03762"},
+		{"https://arxiv.org/pdf/1706.03762", "10.48550/arXiv.1706.03762"},
+		{"https://arxiv.org/pdf/1706.03762.pdf", "10.48550/arXiv.1706.03762"},
+		{"https://arxiv.org/pdf/1706.03762v7", "10.48550/arXiv.1706.03762"},
+		{"https://www.arxiv.org/abs/2005.14165v2", "10.48550/arXiv.2005.14165"},
+		{"https://arxiv.org/abs/hep-th/9901001", "10.48550/arXiv.hep-th/9901001"},
+		{"https://arxiv.org/abs/math.GT/0309136v1", "10.48550/arXiv.math.GT/0309136"},
+		{"https://arxiv.org/abs/1706.03762/", "10.48550/arXiv.1706.03762"},
+		{"https://arxiv.org/pdf/1706.03762v7/", "10.48550/arXiv.1706.03762"},
+		{"https://arxiv.org/list/cs.AI/recent", ""},
+		{"https://arxiv.org/abs/not-an-id", ""},
+		{"https://arxiv.org/abs/", ""},
+		{"https://evil.example/arxiv.org/abs/1706.03762", ""},
+		{"https://notarxiv.org/abs/1706.03762", ""},
+		{"https://example.com/paper.pdf", ""},
+		{"not a url", ""},
+	}
+	for _, tt := range tests {
+		if got := arxivDOIFromURL(tt.in); got != tt.want {
+			t.Errorf("arxivDOIFromURL(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+// arxivResolver resolves only the arXiv DOI of "Attention Is All You Need".
+type arxivResolver struct{ mockAcademicProvider }
+
+func (arxivResolver) ResolveByDOI(_ context.Context, doi string) (*search.AcademicResult, error) {
+	if doi == "10.48550/arXiv.1706.03762" {
+		return &search.AcademicResult{Title: "Attention Is All You Need", DOI: doi, Source: "openalex"}, nil
+	}
+	return nil, nil
+}
+
+// A direct arXiv URL is scraped as given and enriched with the record for its
+// arXiv DOI, so a PDF with no title of its own still gets a real title. Any
+// other URL gets no metadata lookup.
+func TestPaperFulltextArxivURLMetadata(t *testing.T) {
+	deps := setupTestDeps()
+	deps.AcademicProviders = map[string]search.AcademicProvider{"openalex": &arxivResolver{}}
+
+	url, meta, errResult, fetchErr := resolvePaperURL(context.Background(), deps, "https://arxiv.org/pdf/1706.03762v7")
+	if errResult != nil || fetchErr != nil {
+		t.Fatalf("unexpected result: %+v / %v", errResult, fetchErr)
+	}
+	if url != "https://arxiv.org/pdf/1706.03762v7" {
+		t.Errorf("url = %q, want the URL as given", url)
+	}
+	if meta == nil || meta.Title != "Attention Is All You Need" {
+		t.Fatalf("meta = %+v, want the record resolved through the arXiv DOI", meta)
+	}
+
+	_, meta, _, _ = resolvePaperURL(context.Background(), deps, "https://example.com/paper.pdf")
+	if meta != nil {
+		t.Errorf("non-arXiv URL got metadata: %+v", meta)
+	}
+}
+
+// flakyArxivResolver resolves the Attention paper's arXiv DOI with authors and
+// a year, but only while down is false.
+type flakyArxivResolver struct {
+	mockAcademicProvider
+	down    atomic.Bool
+	authors []string
+}
+
+func (r *flakyArxivResolver) ResolveByDOI(_ context.Context, doi string) (*search.AcademicResult, error) {
+	if r.down.Load() || doi != "10.48550/arXiv.1706.03762" {
+		return nil, nil
+	}
+	return &search.AcademicResult{Title: "Attention Is All You Need", DOI: doi, Year: 2017, Authors: r.authors, Source: "openalex"}, nil
+}
+
+// arxivPaperURL serves a scraped page on an arxiv.org host name, so the arXiv
+// DOI lookup runs against the fake resolver.
+func arxivPaperURL(t *testing.T) string {
+	t.Helper()
+	useFakeDNS(t, "arxiv.org")
+	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><article><p>The dominant sequence transduction models are based on complex recurrent networks.</p></article></body></html>`))
+	}))
+	t.Cleanup(page.Close)
+	_, port, _ := net.SplitHostPort(page.Listener.Addr().String())
+	return "http://arxiv.org:" + port + "/pdf/1706.03762v7"
+}
+
+func apaOf(out map[string]any) string {
+	cit, _ := out["citation"].(map[string]any)
+	formatted, _ := cit["formatted"].(map[string]any)
+	apa, _ := formatted["apa"].(string)
+	return apa
+}
+
+// #866: the citation takes its authors and year from the resolved record, not
+// the page, which carries neither.
+func TestPaperFulltextCitationUsesRecordAuthorsAndYear(t *testing.T) {
+	deps := scrapeTestDeps()
+	deps.AcademicProviders = map[string]search.AcademicProvider{"openalex": &flakyArxivResolver{authors: []string{"Ashish Vaswani", "Noam Shazeer"}}}
+	out := callPaperFulltext(t, deps, map[string]any{"identifier": arxivPaperURL(t)})
+
+	apa := apaOf(out)
+	if !strings.HasPrefix(apa, "Vaswani, A., & Shazeer, N. (2017). Attention Is All You Need.") {
+		t.Errorf("APA = %q", apa)
+	}
+	if _, flagged := out["metadataIncomplete"]; flagged {
+		t.Error("a citation with record authors must not be flagged incomplete")
+	}
+}
+
+// #866: a record with no authors or year keeps the page-only output.
+func TestPaperFulltextCitationRecordWithoutAuthorsKeepsPageValues(t *testing.T) {
+	author, date := citationAuthorDate(&search.AcademicResult{Title: "T"}, "Page Author", "2020-01-02")
+	if author != "Page Author" || date != "2020-01-02" {
+		t.Errorf("got (%q, %q), want the page values", author, date)
+	}
+	author, date = citationAuthorDate(nil, "Page Author", "2020-01-02")
+	if author != "Page Author" || date != "2020-01-02" {
+		t.Errorf("nil record: got (%q, %q), want the page values", author, date)
+	}
+	deps := scrapeTestDeps()
+	deps.AcademicProviders = map[string]search.AcademicProvider{"openalex": &flakyArxivResolver{}}
+	out := callPaperFulltext(t, deps, map[string]any{"identifier": arxivPaperURL(t)})
+	if apa := apaOf(out); !strings.HasPrefix(apa, "(2017). Attention Is All You Need.") {
+		t.Errorf("APA = %q, want no author slot", apa)
+	}
+}
+
+// #865: a result whose arXiv record lookup failed is not cached, so the next
+// call retries the lookup and returns full metadata.
+func TestPaperFulltextDoesNotCacheFailedRecordLookup(t *testing.T) {
+	resolver := &flakyArxivResolver{authors: []string{"Ashish Vaswani"}}
+	deps := scrapeTestDeps()
+	deps.Cache = newMapCache()
+	deps.AcademicProviders = map[string]search.AcademicProvider{"openalex": resolver}
+	url := arxivPaperURL(t)
+
+	resolver.down.Store(true)
+	first := callPaperFulltext(t, deps, map[string]any{"identifier": url})
+	if first["metadataIncomplete"] != true {
+		t.Fatalf("lookup down: want metadataIncomplete, got %v", first)
+	}
+
+	resolver.down.Store(false)
+	second := callPaperFulltext(t, deps, map[string]any{"identifier": url})
+	if second["title"] != "Attention Is All You Need" || second["metadataIncomplete"] != nil {
+		t.Errorf("after recovery: title=%v incomplete=%v", second["title"], second["metadataIncomplete"])
+	}
+
+	// A complete result is cached.
+	resolver.down.Store(true)
+	third := callPaperFulltext(t, deps, map[string]any{"identifier": url})
+	if third["title"] != "Attention Is All You Need" {
+		t.Errorf("complete result must be served from cache, got title %v", third["title"])
+	}
+}
+
+func TestRecordLookupFailed(t *testing.T) {
+	t.Parallel()
+	rec := &search.AcademicResult{}
+	cases := []struct {
+		name string
+		url  string
+		meta *search.AcademicResult
+		err  error
+		want bool
+	}{
+		{"arxiv, no record", "https://arxiv.org/abs/1706.03762", nil, nil, true},
+		{"arxiv, record", "https://arxiv.org/abs/1706.03762", rec, nil, false},
+		{"other URL, no record", "https://example.com/p.pdf", nil, nil, false},
+		{"doi fetch error, no record", "https://doi.org/10.1/x", nil, errors.New("rate limited"), true},
+		{"doi fetch error, record from fallback", "https://doi.org/10.1/x", rec, errors.New("rate limited"), false},
+	}
+	for _, c := range cases {
+		if got := recordLookupFailed(c.url, c.meta, c.err); got != c.want {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// scrape_page on an arXiv URL takes title, authors and year from the paper's
+// record, as paper_fulltext does. A PDF has no metadata of its own.
+func TestScrapePageArxivURLCitationUsesRecord(t *testing.T) {
+	deps := scrapeTestDeps()
+	deps.AcademicProviders = map[string]search.AcademicProvider{"openalex": &flakyArxivResolver{authors: []string{"Ashish Vaswani", "Noam Shazeer"}}}
+	out := callScrapeDOI(t, deps, arxivPaperURL(t), "")
+
+	if apa := apaOf(out); !strings.HasPrefix(apa, "Vaswani, A., & Shazeer, N. (2017). Attention Is All You Need.") {
+		t.Errorf("APA = %q", apa)
+	}
+}
+
+// A failed record lookup must not pin a bare citation in the cache: once the
+// resolver recovers, the next call gets the full citation.
+func TestScrapePageArxivLookupFailureIsNotCached(t *testing.T) {
+	resolver := &flakyArxivResolver{authors: []string{"Ashish Vaswani"}}
+	resolver.down.Store(true)
+	deps := scrapeTestDeps()
+	deps.Cache = newMapCache()
+	deps.AcademicProviders = map[string]search.AcademicProvider{"openalex": resolver}
+	url := arxivPaperURL(t)
+
+	first := callScrapeDOI(t, deps, url, "")
+	if strings.Contains(apaOf(first), "Attention Is All You Need") {
+		t.Fatalf("lookup was down, but the citation has the title: %q", apaOf(first))
+	}
+	resolver.down.Store(false)
+	second := callScrapeDOI(t, deps, url, "")
+	if !strings.Contains(apaOf(second), "Attention Is All You Need") {
+		t.Errorf("second call served the stale citation: %q", apaOf(second))
 	}
 }

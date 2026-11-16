@@ -414,7 +414,7 @@ These enable dedicated structured-research tools. Each provider is independent. 
 | Variable | Tool | Description | Default |
 |----------|------|-------------|---------|
 | `EDGAR_CONTACT_EMAIL` | `filing_search` | Contact email for SEC EDGAR's required User-Agent (no API key). Falls back to `OPENALEX_EMAIL`; `filing_search` registers only when one is set | — (falls back to `OPENALEX_EMAIL`) |
-| `COURTLISTENER_API_TOKEN` | `legal_search` | Optional token raising the CourtListener rate limit (~100→~5000 req/day). **`legal_search` is always available** (CourtListener works keyless) | — |
+| `COURTLISTENER_API_TOKEN` | `legal_search` | Free CourtListener API token. **Required for `legal_search` to return results:** the tool is registered without it, but CourtListener answers anonymous calls with 401 | — |
 | `FRED_API_KEY` | `econ_search` | Federal Reserve Economic Data API key (free at fred.stlouisfed.org). **`econ_search` is always available** via keyless World Bank / OECD / Eurostat providers; this key *adds* FRED's US macro series | — |
 | — (none) | `econ_search` | World Bank Open Data (global development indicators, 200+ economies), OECD (SDMX economy indicators), and Eurostat (European official statistics). All keyless; no configuration | — |
 | — (none) | `clinical_search` | ClinicalTrials.gov v2 — 400K+ clinical-trial registrations as typed data. Keyless; no configuration. **Always available** | — |
@@ -577,6 +577,7 @@ DAILY_QUOTA_PER_TENANT=10000
 | `BROWSER_IDLE_TIMEOUT` | Auto-close the browser tier's Chromium process after this long with no browser-tier scrape (#460), so one scrape doesn't pin Chromium (and its Dock icon on macOS) for the server's full lifetime; a later scrape transparently relaunches it. `0` disables the idle-close timer | `5m` |
 | `JINA_API_KEY` | Optional. Raises the rate limit of the keyless Jina Reader scrape tier | — |
 | `JINA_READER_DISABLED` | Set `true` to turn off the Jina Reader scrape tier (r.jina.ai) entirely, e.g. for hardened deploys or network-free tests | `false` |
+| `SCRAPE_TOTAL_TIMEOUT` | One overall deadline for a whole scrape call (#853), covering every tier, the document fallback and the wait for a scrape slot. On expiry the call fails with a retryable `network` error that names the tiers tried. A Go duration greater than `0`; an invalid value stops startup. Applies to `scrape_page` (including saved-login scrapes) and every tool that scrapes | `90s` |
 | `MAX_SCRAPE_CONCURRENCY` | Parallel scrape limit for the fast tiers (markdown/stealth/jina/html/exa) | `5` |
 | `MAX_SCRAPE_CONCURRENCY_BROWSER` | Separate parallel scrape limit for the browser (go-rod) tier, which can hold a slot for up to 30s — kept apart from `MAX_SCRAPE_CONCURRENCY` so slow browser scrapes can't starve fast ones (#472) | `2` |
 | `MAX_SCRAPE_CONCURRENCY_PER_TENANT` | Per-tenant sub-limiter bounded by the global `MAX_SCRAPE_CONCURRENCY`/`MAX_SCRAPE_CONCURRENCY_BROWSER` ceilings — a tenant acquires its own slot before the global one, so one tenant's saturation can't starve another tenant's scrapes in a shared multi-tenant HTTP deployment (#463). Tenant identity comes only from the authenticated request context; requests without one share a single "default" bucket | `MAX_SCRAPE_CONCURRENCY` |

@@ -157,7 +157,16 @@ func ExtractClaimEvidence(text, claim string) ClaimEvidence {
 		score float64
 	}
 	var hits []scored
+	seen := make(map[string]bool, len(sentences))
 	for i, s := range sentences {
+		s = cleanEvidenceSentence(s)
+		// The same sentence often appears twice (abstract and body, or a
+		// repeated page element). Show it once.
+		key := strings.ToLower(s)
+		if len(s) < 12 || seen[key] {
+			continue
+		}
+		seen[key] = true
 		lower := strings.ToLower(s)
 		words := wordSet(lower)
 		matched := 0
@@ -179,7 +188,7 @@ func ExtractClaimEvidence(text, claim string) ClaimEvidence {
 			// from it (#594) — weight it at least as high as the stance bonus.
 			score += 1.5
 		}
-		hits = append(hits, scored{idx: i, text: strings.TrimSpace(s), score: score})
+		hits = append(hits, scored{idx: i, text: s, score: score})
 	}
 	if len(hits) == 0 {
 		return ClaimEvidence{}
@@ -205,6 +214,25 @@ func ExtractClaimEvidence(text, claim string) ClaimEvidence {
 		out = append(out, h.text)
 	}
 	return ClaimEvidence{Signal: signal, KeySentences: out}
+}
+
+var (
+	// evidenceMarkupRe matches an HTML/JATS/XML tag such as "</abstract>" or
+	// "<jats:p>". It needs a letter (or "/" then a letter) right after "<", so
+	// a comparison like "p < 0.05" is left alone.
+	evidenceMarkupRe = regexp.MustCompile(`</?[A-Za-z][A-Za-z0-9:_.-]*(?:\s[^<>]*)?/?>`)
+	// evidenceTeXEscapeRe matches a TeX-escaped special character, optionally
+	// wrapped in braces: "{\%}", "\%", "\&".
+	evidenceTeXEscapeRe = regexp.MustCompile(`\{?\\([%&$#_])\}?`)
+)
+
+// cleanEvidenceSentence removes markup left in scraped or API abstracts so an
+// evidence sentence reads as plain text: tags like "</abstract>" are dropped
+// and TeX escapes like "{\%}" become "%".
+func cleanEvidenceSentence(s string) string {
+	s = evidenceMarkupRe.ReplaceAllString(s, " ")
+	s = evidenceTeXEscapeRe.ReplaceAllString(s, "$1")
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // ClaimTermCoverage reports how many of a claim's distinct significant terms
@@ -767,7 +795,8 @@ func stripReferencesSection(text string) string {
 }
 
 // splitSentences breaks text into sentences on ., !, ? boundaries while keeping
-// the split lightweight (no NLP dependency). Newlines also terminate a sentence.
+// the split lightweight (no NLP dependency). A newline also terminates a sentence,
+// unless it only wraps a long line (see isSoftWrap).
 // Fragments shorter than a few chars are dropped.
 func splitSentences(text string) []string {
 	var sentences []string
@@ -781,6 +810,13 @@ func splitSentences(text string) []string {
 	}
 	runes := []rune(text)
 	for i, r := range runes {
+		if r == '\r' {
+			continue // CRLF: the "\n" decides the break
+		}
+		if r == '\n' && isSoftWrap(runes, i) {
+			b.WriteRune(' ')
+			continue
+		}
 		b.WriteRune(r)
 		switch r {
 		case '\n':
@@ -795,6 +831,50 @@ func splitSentences(text string) []string {
 	}
 	flush()
 	return sentences
+}
+
+// softWrapMinLine is the shortest line that can be a wrapped line. Wrapped text
+// fills its lines (RFC 9110 uses about 70 columns, and breaks early before a long word). Shorter lines are list
+// items, keywords or headings, which stay separate sentences.
+const softWrapMinLine = 30
+
+// isSoftWrap reports whether the newline at runes[i] only wraps a long line in
+// the middle of a sentence, as RFC pages and plain-text documents do. It does
+// when the line before it is long, its text does not end a sentence, clause or
+// paragraph (a closing quote or bracket after the period still counts as an
+// end), and the next line starts in lowercase. A heading, list item or new
+// sentence starts in uppercase or follows terminal punctuation, so it still
+// ends the sentence.
+func isSoftWrap(runes []rune, i int) bool {
+	j := i - 1
+	for j >= 0 && (runes[j] == ' ' || runes[j] == '\t' || runes[j] == '\r') {
+		j--
+	}
+	if j < 0 {
+		return false
+	}
+	start := j
+	for start >= 0 && runes[start] != '\n' {
+		start--
+	}
+	if j-start < softWrapMinLine {
+		return false
+	}
+	for j >= 0 && strings.ContainsRune("\"')]}*_\u201d\u2019", runes[j]) {
+		j--
+	}
+	if j < 0 {
+		return false
+	}
+	switch runes[j] {
+	case '.', '!', '?', ':', ';', '\u00b6', '\n':
+		return false
+	}
+	k := i + 1
+	for k < len(runes) && (runes[k] == ' ' || runes[k] == '\t' || runes[k] == '\r') {
+		k++
+	}
+	return k < len(runes) && unicode.IsLower(runes[k])
 }
 
 // claimStopWords are common words excluded from claim term matching.

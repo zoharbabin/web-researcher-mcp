@@ -91,6 +91,11 @@ type StructuredSignals struct {
 	// HasCitationMeta is true when Highwire citation_* meta was present — a strong
 	// peer-reviewed signal.
 	HasCitationMeta bool
+	// AccessibleForFree is the publisher's schema.org isAccessibleForFree
+	// declaration: false when any JSON-LD node (or its hasPart) says the page is
+	// paywalled, true when nodes say it is free and none says otherwise, nil when
+	// the markup is absent.
+	AccessibleForFree *bool
 }
 
 // ClassifySource derives the typed classification for a source.

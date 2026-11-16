@@ -21,7 +21,7 @@ func newLiveTestDeps(t *testing.T) Dependencies {
 	t.Helper()
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 
-	// Create a real CourtListener provider (works keyless at lower rate)
+	// Create a real CourtListener provider (token comes from the environment)
 	caseProvider := search.NewCourtListenerProvider(os.Getenv("COURTLISTENER_API_TOKEN"), search.Deps{
 		HTTPClient: httpClient,
 		Breaker:    circuit.New(circuit.Config{FailureThreshold: 5, ResetTimeout: 60}),

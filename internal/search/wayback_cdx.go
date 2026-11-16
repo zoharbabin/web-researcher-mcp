@@ -127,6 +127,10 @@ func (w *WaybackCDXResolver) Lookup(ctx context.Context, domain string, maxResul
 		q.Set("url", domain+"/*")
 		q.Set("output", "json")
 		q.Set("collapse", "urlkey")
+		// Filter server-side: CDX applies limit before any client-side
+		// status filter, so unfiltered pages of 404/"-" rows would leave
+		// fewer than maxResults usable entries.
+		q.Set("filter", "statuscode:(200|301|302)")
 		q.Set("limit", strconv.Itoa(limit))
 		q.Set("fl", "original,timestamp,statuscode,mimetype")
 		reqURL := w.baseURL + "?" + q.Encode()

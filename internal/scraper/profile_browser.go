@@ -35,14 +35,14 @@ const (
 	profilePollEvery     = 400 * time.Millisecond
 )
 
-// ScrapeWithProfile reads rawURL in a headless browser started on spec.Dir, so
+// scrapeWithProfile is the body of ScrapeWithProfile. It reads rawURL in a headless browser started on spec.Dir, so
 // the page sees the sign-in the user made in that same profile. Unlike the
 // cookie paths it sets no user-agent, timezone or stealth override: a replayed
 // session is rejected by sites such as LinkedIn, an in-profile one is not
 // (issue #775, rule 7). It goes through the browser-tier limits, and every
 // main-frame hop is checked, so the profile never leaves its own site or
 // reaches a private address. The caller repacks spec.Dir afterwards.
-func (p *Pipeline) ScrapeWithProfile(ctx context.Context, rawURL string, maxLength int, spec ProfileSpec) (*ScrapeResult, error) {
+func (p *Pipeline) scrapeWithProfile(ctx context.Context, rawURL string, maxLength int, spec ProfileSpec) (*ScrapeResult, error) {
 	if err := validateScrapeURL(rawURL); err != nil {
 		return nil, validationError(rawURL, "", err, err.Error())
 	}

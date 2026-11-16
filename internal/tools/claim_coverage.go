@@ -48,14 +48,14 @@ type claimCoverageResult struct {
 // {Support: claimSourceUnavailable} — never an error, never a panic.
 //
 // The claim-coverage consts (claimAddressed/…/claimSourceUnavailable,
-// claimAddressedThreshold, auditClaimScrapeMaxBytes) live in audit_bibliography.go
+// claimAddressedThreshold, claimScrapeMaxBytes) live in audit_bibliography.go
 // in this same package; referenced directly, not duplicated.
 func claimCoverageFor(ctx context.Context, deps Dependencies, fetchURL, claim string) claimCoverageResult {
 	if deps.Scraper == nil || fetchURL == "" {
 		return claimCoverageResult{Support: claimSourceUnavailable}
 	}
 
-	res, err := deps.Scraper.Scrape(ctx, fetchURL, auditClaimScrapeMaxBytes)
+	res, err := deps.Scraper.Scrape(ctx, fetchURL, claimScrapeMaxBytes)
 	if err != nil {
 		return claimCoverageResult{Support: claimSourceUnavailable, SourceURL: fetchURL, FetchError: sanitizeClaimFetchError(err)}
 	}
@@ -92,12 +92,10 @@ func sanitizeClaimFetchError(err error) string {
 	return msg
 }
 
-// sparseWordThreshold mirrors scraper's content-volume floor (#358): below this
-// many words, a claim-coverage result is annotated as unreliable. Kept as an
-// independent constant (not imported from internal/scraper) because the two
-// packages' thresholds are conceptually related but not contractually coupled —
-// each package owns its own quality-signal cutoff.
-const sparseWordThreshold = 150
+// sparseWordThreshold is the content-volume floor (#358): below this many
+// words, a claim-coverage result is annotated as unreliable. One definition,
+// shared with the scraper via internal/content.
+const sparseWordThreshold = content.SparseWordThreshold
 
 // claimCoverageFromContent runs the lexical, model-free coverage check against
 // already-fetched content — no scrape. It lets a caller that already has the

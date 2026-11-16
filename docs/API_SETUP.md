@@ -604,17 +604,17 @@ export EDGAR_CONTACT_EMAIL=you@example.com
 
 ### CourtListener (US Case Law)
 
-Backs `legal_search`. Works **keyless** — `legal_search` is always available. An optional token raises the rate limit.
+Backs `legal_search`. Needs a free token. Without one, CourtListener answers with 401 and `legal_search` reports an authentication error.
 
-**Step 1**: (Optional) Register at [courtlistener.com](https://www.courtlistener.com) and create an API token in your account settings.
+**Step 1**: Register at [courtlistener.com](https://www.courtlistener.com) and create an API token in your account settings.
 
-**Step 2**: Configure (optional)
+**Step 2**: Configure
 
 ```bash
 export COURTLISTENER_API_TOKEN=your-token
 ```
 
-**Notes**: Without a token, roughly 100 requests/day; a token raises this to ~5000/day. Coverage is US federal and state court opinions.
+**Notes**: Coverage is US federal and state court opinions.
 
 ### World Bank + OECD + Eurostat (keyless) + FRED (key)
 

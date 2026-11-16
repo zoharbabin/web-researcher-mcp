@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"sync"
 	"time"
+
+	"github.com/zoharbabin/web-researcher-mcp/internal/content"
 )
 
 // Errors returned by Capturer.
@@ -21,6 +23,9 @@ var (
 	// opened, so the user did not sign in (only the site's tracking cookies are
 	// there). Nothing is stored.
 	ErrNoSignInSeen = errors.New("cookievault: no sign-in was seen in the login window")
+	// ErrSiteBlocked: the site showed a bot-block page in the window and the
+	// user never signed in. Retrying the window will not help. Nothing is stored.
+	ErrSiteBlocked = errors.New("cookievault: the site blocked the login window")
 	// ErrProfileNotSaved: the browser did not write the sign-in to disk, so a
 	// later headless scrape would not be signed in. Nothing is stored.
 	ErrProfileNotSaved = errors.New("cookievault: the browser did not save the sign-in")
@@ -65,6 +70,10 @@ type Driver interface {
 type Session interface {
 	// Cookies returns every cookie currently held by the browser.
 	Cookies(ctx context.Context) ([]Cookie, error)
+	// PageText returns the first few KB of visible text on the window's first
+	// page (its frame URLs when it has no text), or "" when there is no page.
+	// The caller only matches it against block-page markers and never stores it.
+	PageText(ctx context.Context) (string, error)
 	// Done is closed when the user closes the browser.
 	Done() <-chan struct{}
 	// Close shuts the browser down and waits until it has exited and written
@@ -228,7 +237,13 @@ func (c *Capturer) LoginWindow(ctx context.Context, sub Subject, loginURL string
 	var last []Cookie
 	opened := time.Now()
 	before := map[cookieID]bool{} // persistent cookies seen before anyone could sign in
+	blocked := false              // the last readable page was a bot-block page
 	snapshot := func() {
+		// An empty reading means no page is left (the user just closed the
+		// window), so keep what the last real page said.
+		if text, err := sess.PageText(windowCtx); err == nil && text != "" {
+			blocked = content.LooksLikeAccessBlock(text)
+		}
 		cookies, err := sess.Cookies(windowCtx)
 		if err != nil {
 			return
@@ -261,9 +276,17 @@ wait:
 		return ProfileSummary{}, err
 	}
 
+	// With no sign-in evidence, a block page explains why better than the
+	// generic errors do.
+	noSignIn := func(err error) error {
+		if blocked {
+			return ErrSiteBlocked
+		}
+		return err
+	}
 	seen := FilterToDomain(last, domain, time.Now())
 	if len(seen) == 0 {
-		return ProfileSummary{}, ErrNothingCaptured
+		return ProfileSummary{}, noSignIn(ErrNothingCaptured)
 	}
 	persistent := persistentCookies(seen)
 	if len(persistent) == 0 {
@@ -274,7 +297,7 @@ wait:
 	// A first login must have added a persistent cookie after the page loaded.
 	// Re-signing in over a saved profile may only refresh existing ones.
 	if lease.Fresh && !hasNewCookie(persistent, before) {
-		return ProfileSummary{}, ErrNoSignInSeen
+		return ProfileSummary{}, noSignIn(ErrNoSignInSeen)
 	}
 
 	// The window is gone. Finish within a bounded time even if the caller's
