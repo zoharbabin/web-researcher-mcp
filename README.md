@@ -394,6 +394,7 @@ Set `SEARCH_PROVIDER=<name>` and supply that provider's key. Every provider work
 | You.com | `youcom` | `YOUDOTCOM_API_KEY` | [you.com/docs/api-reference/search/v1-search](https://you.com/docs/api-reference/search/v1-search) |
 | SearXNG | `searxng` | `SEARXNG_URL` | [self-hosted](https://docs.searxng.org/) |
 | Tavily | `tavily` | `TAVILY_API_KEY` | [app.tavily.com](https://app.tavily.com/) |
+| Keenable | `keenable` | `KEENABLE_API_KEY` | [keenable.ai](https://keenable.ai/) |
 | Exa | `exa` | `EXA_API_KEY` | [dashboard.exa.ai](https://dashboard.exa.ai/) |
 | Hacker News | `hackernews` | none | Built in — zero config (HN Algolia index) |
 | Reddit | `reddit` | none | Built in — zero config (public RSS) |
@@ -464,6 +465,7 @@ You choose which search engine powers your research. All of them work with lense
 | **SearchAPI.io** | Yes | Yes | Yes | Unified API with multiple engine backends |
 | **You.com** | Yes | — | Yes | Web and news search via the You.com API |
 | **Tavily** | Yes | — | Yes | AI-agent search; clean, LLM-ready content |
+| **Keenable** | Yes | — | — | Web search API with page excerpts |
 | **Exa** | Yes | — | Yes | Neural/semantic search; also backs `academic_search` and the optional paid scrape tier |
 | **Hacker News** | HN only | — | Yes | Zero-config (HN Algolia index); searches HN threads, not the full web |
 | **Reddit** | Reddit only | — | Yes | Zero-config (public RSS); searches Reddit posts, not the full web |

@@ -46,6 +46,7 @@ When you search, your query goes directly to whichever provider you configured. 
 | Serper.dev | Your query, your API key | [serper.dev/privacy](https://serper.dev/privacy) |
 | SearchAPI.io | Your query, your API key | [searchapi.io/privacy](https://www.searchapi.io/privacy-policy) |
 | Tavily | Your query, your API key | [tavily.com/privacy](https://www.tavily.com/privacy) |
+| Keenable | Your query, your API key (only when `SEARCH_PROVIDER=keenable`) | [keenable.ai/privacy](https://keenable.ai/privacy) |
 | Exa | Your query, your API key — and, only if you enable the optional paid scrape fallback, the page URL being read | [exa.ai/privacy-policy](https://exa.ai/privacy-policy) |
 | SearXNG | Your query (self-hosted — no third party) | N/A (you control the server) |
 | DuckDuckGo | Your query (zero-config default when no provider is configured) | [duckduckgo.com/privacy](https://duckduckgo.com/privacy) |

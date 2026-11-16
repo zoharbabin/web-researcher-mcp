@@ -67,6 +67,7 @@ Which tools each web search provider enables. `—` means the provider does not 
 | **[Brave](https://brave.com/search/api/)** | ✓ | ✓ | ✓ | ✓ | — |
 | **[Exa](https://exa.ai/)** | ✓ | — | ✓ | — | ✓ (paid, last-resort) |
 | **[Tavily](https://app.tavily.com/)** | ✓ | — | ✓ | — | — |
+| **[Keenable](https://keenable.ai/)** | ✓ | — | — | — | — |
 | **[SearXNG](https://docs.searxng.org/)** | ✓ | ✓ | ✓ | — | — |
 | **[HackerNews](https://hn.algolia.com/)** | ✓ | — | ✓ | — | — |
 | **[Reddit](https://www.reddit.com/)** | ✓ | — | ✓ | — | — |
