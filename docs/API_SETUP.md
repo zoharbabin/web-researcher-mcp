@@ -226,6 +226,23 @@ The key is sent as an `Authorization: Bearer` header (never in the request body)
 
 ---
 
+## Context.dev
+
+Configure an optional web-search provider using an existing [Context.dev](https://www.context.dev/) account:
+
+```bash
+export SEARCH_PROVIDER=context
+export CONTEXT_DEV_API_KEY=your-context-key
+```
+
+Calls consume account credits. Query-relevant Highlights supply snippets by default; missing or failed Highlights are explicitly labeled as search descriptions. Incomplete responses fail rather than appearing as complete or empty results.
+
+- Web search only: `image_search` and `news_search` return the existing unsupported-provider configuration error. Other configured providers can serve those operations through the Router.
+- Supports `site`, `sites`, `lens`, `num_results`, `country`, `language`, and `time_range` values `day`, `week`, `month`, `year`. Hourly filtering is rejected. Combined queries including site/lens operators must fit 500 characters; they are not silently truncated.
+- `safe`, exact/exclude-term filters, and pagination offsets are not forwarded. Existing caching, logging and privacy settings still apply; this integration does not request zero data retention.
+
+---
+
 ## Exa
 
 **Free tier**: 1,000 requests/month; paid per call beyond that

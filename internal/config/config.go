@@ -175,6 +175,7 @@ type SearchConfig struct {
 	SearchAPIKey       string
 	YouDotComAPIKey    string
 	TavilyAPIKey       string
+	ContextDevAPIKey   string
 	ExaAPIKey          string
 	XQuikAPIKey        string
 	JinaAPIKey         string // optional; the Jina Reader scraper tier works keyless, a key raises its rate limit
@@ -381,6 +382,11 @@ func Load() (*Config, error) {
 		errs = append(errs, "TAVILY_API_KEY is required when SEARCH_PROVIDER=tavily")
 	}
 
+	contextDevKey := strings.TrimSpace(os.Getenv("CONTEXT_DEV_API_KEY"))
+	if provider == "context" && contextDevKey == "" {
+		errs = append(errs, "CONTEXT_DEV_API_KEY is required when SEARCH_PROVIDER=context")
+	}
+
 	exaKey := os.Getenv("EXA_API_KEY")
 	if provider == "exa" && exaKey == "" {
 		errs = append(errs, "EXA_API_KEY is required when SEARCH_PROVIDER=exa")
@@ -573,6 +579,7 @@ func Load() (*Config, error) {
 			SearchAPIKey:          searchAPIKey,
 			YouDotComAPIKey:       youDotComKey,
 			TavilyAPIKey:          tavilyKey,
+			ContextDevAPIKey:      contextDevKey,
 			ExaAPIKey:             exaKey,
 			XQuikAPIKey:           xquikKey,
 			JinaAPIKey:            os.Getenv("JINA_API_KEY"),

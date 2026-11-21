@@ -394,6 +394,7 @@ Set `SEARCH_PROVIDER=<name>` and supply that provider's key. Every provider work
 | You.com | `youcom` | `YOUDOTCOM_API_KEY` | [you.com/docs/api-reference/search/v1-search](https://you.com/docs/api-reference/search/v1-search) |
 | SearXNG | `searxng` | `SEARXNG_URL` | [self-hosted](https://docs.searxng.org/) |
 | Tavily | `tavily` | `TAVILY_API_KEY` | [app.tavily.com](https://app.tavily.com/) |
+| Context.dev | `context` | `CONTEXT_DEV_API_KEY` | [context.dev](https://www.context.dev/) |
 | Exa | `exa` | `EXA_API_KEY` | [dashboard.exa.ai](https://dashboard.exa.ai/) |
 | Hacker News | `hackernews` | none | Built in — zero config (HN Algolia index) |
 | Reddit | `reddit` | none | Built in — zero config (public RSS) |

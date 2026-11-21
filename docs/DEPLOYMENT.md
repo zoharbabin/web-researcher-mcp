@@ -360,7 +360,7 @@ Note: Google keys are validated as required only when you explicitly select `SEA
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SEARCH_PROVIDER` | Primary provider: google, brave, serper, searxng, searchapi, youcom, duckduckgo, tavily, exa, hackernews, reddit, bluesky, github, xquik | `google` (variable default); at runtime, when `google` is selected but no Google key is set, the server falls back to the zero-config `duckduckgo` provider |
+| `SEARCH_PROVIDER` | Primary provider: google, brave, serper, searxng, searchapi, youcom, duckduckgo, tavily, context, exa, hackernews, reddit, bluesky, github, xquik | `google` (variable default); at runtime, when `google` is selected but no Google key is set, the server falls back to the zero-config `duckduckgo` provider |
 | `SEARCH_ROUTING` | Multi-provider routing (see below) | — |
 | `BRAVE_API_KEY` | Brave Search API key | — |
 | `BRAVE_EXTRA_SNIPPETS` | Return up to 5 extra snippets per Brave result | `false` |
@@ -368,6 +368,7 @@ Note: Google keys are validated as required only when you explicitly select `SEA
 | `SEARCHAPI_API_KEY` | SearchAPI.io API key | — |
 | `YOUDOTCOM_API_KEY` | You.com Search API key for web/news search results and query-aware snippets | — |
 | `TAVILY_API_KEY` | Tavily API key (AI-agent search; sent as a Bearer token) | — |
+| `CONTEXT_DEV_API_KEY` | Context.dev API key for web search with Highlights; Bearer-header authentication, account credits apply | — |
 | `EXA_API_KEY` | Exa API key (neural/semantic search; sent as `x-api-key`). Also backs `academic_search` and a paid `/contents` scrape fallback tier | — |
 | `XQUIK_API_KEY` | Xquik API key for metered X/Twitter post search through `web_search` and `news_search`. Sent only as `x-api-key`; never logged | — |
 | `SEARXNG_URL` | SearXNG instance URL | — |
