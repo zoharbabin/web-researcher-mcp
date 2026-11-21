@@ -2508,12 +2508,13 @@ func TestParseRoutingConfig_SpacesHandled(t *testing.T) {
 
 func TestAvailableProviders(t *testing.T) {
 	cfg := config.SearchConfig{
-		GoogleAPIKey:    "gkey",
-		GoogleCX:        "gcx",
-		BraveAPIKey:     "bkey",
-		SearchAPIKey:    "skey",
-		YouDotComAPIKey: "ydc",
-		TavilyAPIKey:    "tkey",
+		GoogleAPIKey:     "gkey",
+		GoogleCX:         "gcx",
+		BraveAPIKey:      "bkey",
+		SearchAPIKey:     "skey",
+		YouDotComAPIKey:  "ydc",
+		TavilyAPIKey:     "tkey",
+		ContextDevAPIKey: "ckey",
 	}
 	deps := newTestDeps(http.DefaultClient)
 	providers := AvailableProviders(cfg, deps)
@@ -2532,6 +2533,9 @@ func TestAvailableProviders(t *testing.T) {
 	}
 	if _, ok := providers["tavily"]; !ok {
 		t.Error("expected tavily provider")
+	}
+	if _, ok := providers["context"]; !ok {
+		t.Error("expected context provider")
 	}
 	if _, ok := providers["serper"]; ok {
 		t.Error("did not expect serper provider (no key)")

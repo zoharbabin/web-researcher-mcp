@@ -40,6 +40,7 @@ Understanding what backs each provider helps you reason about result overlap and
 | **[Brave](https://brave.com/search/api/)** | Own independent | Brave's own web crawler and index |
 | **[Exa](https://exa.ai/)** | Own independent | Neural/embedding-based web index |
 | **[Tavily](https://app.tavily.com/)** | Aggregator | Queries multiple existing engines at runtime; scrapes top results; applies AI re-ranking — no proprietary crawled index |
+| **[Context.dev](https://www.context.dev/)** | Hosted search API | Web search with query-relevant Highlights; index architecture is not characterized here |
 | **[SearXNG](https://docs.searxng.org/)** | Meta-search | Configurable — routes to whatever backends you point it at (Bing, Google, DuckDuckGo, and others) |
 | **[HackerNews](https://hn.algolia.com/)** | Niche | HN Algolia index — Hacker News stories and submissions only |
 | **[Reddit](https://www.reddit.com/)** | Niche | Reddit Atom RSS — Reddit posts and community discussions only |
@@ -67,6 +68,7 @@ Which tools each web search provider enables. `—` means the provider does not 
 | **[Brave](https://brave.com/search/api/)** | ✓ | ✓ | ✓ | ✓ | — |
 | **[Exa](https://exa.ai/)** | ✓ | — | ✓ | — | ✓ (paid, last-resort) |
 | **[Tavily](https://app.tavily.com/)** | ✓ | — | ✓ | — | — |
+| **[Context.dev](https://www.context.dev/)** | ✓ | — | — | — | — |
 | **[SearXNG](https://docs.searxng.org/)** | ✓ | ✓ | ✓ | — | — |
 | **[HackerNews](https://hn.algolia.com/)** | ✓ | — | ✓ | — | — |
 | **[Reddit](https://www.reddit.com/)** | ✓ | — | ✓ | — | — |
@@ -99,6 +101,7 @@ Which tools each web search provider enables. `—` means the provider does not 
 | **[You.com](https://you.com/docs/api-reference/search/v1-search)** | API key with free credits | $5 / 1,000 calls |
 | **[Exa](https://exa.ai/)** | 1,000 requests/month | Per call beyond free tier |
 | **[Tavily](https://app.tavily.com/)** | Monthly dev credits | Paid plans |
+| **[Context.dev](https://www.context.dev/)** | See account plan | Metered account credits |
 | **[Xquik](https://xquik.com/#pricing)** | No free tier documented | Metered credits; current rates appear on the pricing and checkout pages |
 
 ---

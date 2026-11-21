@@ -13,6 +13,7 @@
         "SERPER_API_KEY": "${SERPER_API_KEY:-}",
         "SEARCHAPI_API_KEY": "${SEARCHAPI_API_KEY:-}",
         "TAVILY_API_KEY": "${TAVILY_API_KEY:-}",
+        "CONTEXT_DEV_API_KEY": "${CONTEXT_DEV_API_KEY:-}",
         "EXA_API_KEY": "${EXA_API_KEY:-}",
         "XQUIK_API_KEY": "${XQUIK_API_KEY:-}",
         "SEARXNG_URL": "${SEARXNG_URL:-}",
